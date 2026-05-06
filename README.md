@@ -10,7 +10,7 @@ LP 전문 이커머스 백엔드 — 인증, 카탈로그, 주문/결제/배송 
 |------|------|
 | Language | Java 21 |
 | Framework | Spring Boot 4.0 |
-| Security | Spring Security + JWT (JJWT) |
+| Security | Spring Security + JWT ([JJWT](docs/decisions/jwt-library.md)) |
 | DB | MySQL 8 + Flyway |
 | ORM | Spring Data JPA (Hibernate) |
 | Build | Gradle (Kotlin DSL) |
@@ -46,7 +46,9 @@ curl http://localhost:8080/actuator/health
 ## 진행 현황
 
 ```
-Progress: ▓▓░░░░░░░░░░ 2/12 weeks
+Progress: ▓▓▓░░░░░░░░░ 3/12 weeks
 ```
+
+**현재 단계**: W3 인프라/스켈레톤 완료 (G1 게이트 통과) → W4 인증 도메인 진입.
 
 GitHub Milestones 페이지에서 상세 진행률 확인 가능.
