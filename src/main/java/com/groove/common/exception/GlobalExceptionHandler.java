@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -69,8 +68,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         pd.setProperty("timestamp", Instant.now());
         pd.setProperty("traceId", traceId());
 
-        Map<String, Object> properties = pd.getProperties();
-        if (properties == null || !properties.containsKey("code")) {
+        if (!pd.getProperties().containsKey("code")) {
             pd.setProperty("code", "HTTP_" + statusCode);
         }
     }

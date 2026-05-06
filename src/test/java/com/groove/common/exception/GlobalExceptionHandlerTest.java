@@ -40,16 +40,6 @@ class GlobalExceptionHandlerTest {
     @Autowired
     MockMvc mockMvc;
 
-    // ── 공통 필드 검증 헬퍼 ──────────────────────────────────────────────
-
-    private static org.springframework.test.web.servlet.ResultMatcher hasCommonFields() {
-        return result -> {
-            jsonPath("$.code").exists().match(result);
-            jsonPath("$.timestamp").exists().match(result);
-            jsonPath("$.traceId").exists().match(result);
-        };
-    }
-
     // ── BusinessException 계열 ───────────────────────────────────────────
 
     @Test
@@ -88,35 +78,38 @@ class GlobalExceptionHandlerTest {
     // ── Spring 내장 예외 ─────────────────────────────────────────────────
 
     @Test
-    @DisplayName("@Valid 실패(MethodArgumentNotValidException) → 400, application/problem+json, 공통 필드 존재")
+    @DisplayName("@Valid 실패(MethodArgumentNotValidException) → 400, code=HTTP_400, application/problem+json")
     void validationFailed() throws Exception {
         mockMvc.perform(post("/stub/valid")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\": \"\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.code").value("HTTP_400"))
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.traceId").exists());
     }
 
     @Test
-    @DisplayName("JSON 파싱 실패(HttpMessageNotReadableException) → 400, application/problem+json")
+    @DisplayName("JSON 파싱 실패(HttpMessageNotReadableException) → 400, code=HTTP_400, application/problem+json")
     void jsonParseFailed() throws Exception {
         mockMvc.perform(post("/stub/valid")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("not-json"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.code").value("HTTP_400"))
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.traceId").exists());
     }
 
     @Test
-    @DisplayName("존재하지 않는 경로 → 404, application/problem+json")
+    @DisplayName("존재하지 않는 경로 → 404, code=HTTP_404, application/problem+json")
     void notFound() throws Exception {
         mockMvc.perform(get("/does-not-exist"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.code").value("HTTP_404"))
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.traceId").exists());
     }
