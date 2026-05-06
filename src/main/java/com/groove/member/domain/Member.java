@@ -69,6 +69,17 @@ public class Member extends BaseTimeEntity {
         return new Member(email, passwordHash, name, phone);
     }
 
+    /**
+     * 탈퇴 처리(soft delete) 시점 기록. 같은 패키지에서만 호출 가능.
+     *
+     * <p>현재는 Repository 슬라이스 테스트에서 {@code findByEmailAndDeletedAtIsNull} 의
+     * 제외 동작 검증용으로만 사용. 회원 탈퇴 API(#W4 후속) 구현 시 도메인 정책이 부착된
+     * 공개 메서드({@code withdraw()}) 로 승격할 예정.
+     */
+    void markDeleted(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
     public Long getId() {
         return id;
     }

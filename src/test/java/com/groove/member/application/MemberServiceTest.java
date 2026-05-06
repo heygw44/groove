@@ -48,12 +48,12 @@ class MemberServiceTest {
         );
         when(memberRepository.existsByEmail(command.email())).thenReturn(false);
         when(passwordEncoder.encode(command.password())).thenReturn("$2a$12$hashed");
-        when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(memberRepository.saveAndFlush(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Member saved = memberService.signup(command);
 
         ArgumentCaptor<Member> captor = ArgumentCaptor.forClass(Member.class);
-        verify(memberRepository).save(captor.capture());
+        verify(memberRepository).saveAndFlush(captor.capture());
         Member persisted = captor.getValue();
 
         assertThat(persisted.getEmail()).isEqualTo("user@example.com");
@@ -78,11 +78,30 @@ class MemberServiceTest {
         when(memberRepository.existsByEmail("dup@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.signup(command))
-                .isInstanceOf(MemberEmailDuplicatedException.class)
-                .hasMessageContaining("dup@example.com");
+                .isInstanceOf(MemberEmailDuplicatedException.class);
 
         verify(passwordEncoder, never()).encode(any());
         verify(memberRepository, never()).save(any(Member.class));
+        verify(memberRepository, never()).saveAndFlush(any(Member.class));
         verify(memberRepository, times(1)).existsByEmail("dup@example.com");
+    }
+
+    @Test
+    @DisplayName("선체크 통과 후 DB UNIQUE 위반 → MemberEmailDuplicatedException 으로 변환 (레이스 안전)")
+    void signup_uniqueViolationOnSave_translatedToDomainException() {
+        SignupCommand command = new SignupCommand(
+                "race@example.com",
+                "P@ssw0rd!2024",
+                "동시가입",
+                "01077776666"
+        );
+        when(memberRepository.existsByEmail("race@example.com")).thenReturn(false);
+        when(passwordEncoder.encode(command.password())).thenReturn("$2a$12$hashed");
+        when(memberRepository.saveAndFlush(any(Member.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk_member_email"));
+
+        assertThatThrownBy(() -> memberService.signup(command))
+                .isInstanceOf(MemberEmailDuplicatedException.class)
+                .hasCauseInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 }

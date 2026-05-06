@@ -18,7 +18,7 @@ public record SignupRequest(
         String email,
 
         @NotBlank
-        @Size(min = 10, max = 100)
+        @Size(min = 10, max = 72, message = "비밀번호는 10~72자여야 합니다 (BCrypt 72-byte 한계)")
         @Pattern(
                 regexp = "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).+$",
                 message = "비밀번호는 영문, 숫자, 특수문자를 각각 1자 이상 포함해야 합니다"

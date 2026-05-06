@@ -70,6 +70,18 @@ class MemberRepositoryTest {
     }
 
     @Test
+    @DisplayName("findByEmailAndDeletedAtIsNull → 탈퇴(deleted_at 있음) 회원은 제외")
+    void findByEmailAndDeletedAtIsNull_excludesSoftDeleted() {
+        Member deleted = Member.register("gone@example.com", "$2a$12$hash", "탈퇴자", "01077778888");
+        deleted.markDeleted(Instant.now());
+        memberRepository.saveAndFlush(deleted);
+
+        assertThat(memberRepository.findByEmailAndDeletedAtIsNull("gone@example.com")).isEmpty();
+        // 패턴 A: existsByEmail 은 탈퇴자도 점유한 것으로 본다 (재가입 차단).
+        assertThat(memberRepository.existsByEmail("gone@example.com")).isTrue();
+    }
+
+    @Test
     @DisplayName("동일 이메일 두 번 저장 → DB UNIQUE 제약 위반")
     void uniqueEmailConstraint_violationThrows() {
         memberRepository.saveAndFlush(
