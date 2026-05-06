@@ -38,10 +38,11 @@ public final class BizEventLogger {
                 .map(e -> renderKey(e.getKey()) + "=" + renderValue(String.valueOf(e.getValue())))
                 .collect(Collectors.joining(" "));
 
+        String renderedType = renderValue(type);
         if (tail.isEmpty()) {
-            return PREFIX + " type=" + type;
+            return PREFIX + " type=" + renderedType;
         }
-        return PREFIX + " type=" + type + " " + tail;
+        return PREFIX + " type=" + renderedType + " " + tail;
     }
 
     public static Map<String, Object> attrs() {

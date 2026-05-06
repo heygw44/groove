@@ -15,6 +15,8 @@ public class RateLimitRegistry {
 
     private static final long MAX_BUCKETS = 50_000L;
     private static final Duration BUCKET_TTL = Duration.ofHours(1);
+    /** ASCII Unit Separator (0x1F) — 일반 정책명/키에는 등장하지 않으므로 충돌이 방지된다. */
+    private static final char BUCKET_KEY_SEPARATOR = (char) 0x1F;
 
     private final List<RateLimitPolicy> policies;
     private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
@@ -34,7 +36,7 @@ public class RateLimitRegistry {
         for (RateLimitPolicy policy : policies) {
             if (policy.appliesTo(request)) {
                 String key = policy.keyResolver().resolveKey(request);
-                String bucketKey = policy.name() + ":" + key;
+                String bucketKey = policy.name() + BUCKET_KEY_SEPARATOR + key;
                 Bucket bucket = buckets.get(bucketKey, ignored -> policy.bucketFactory().get());
                 return Optional.of(new MatchedBucket(policy, key, bucket));
             }

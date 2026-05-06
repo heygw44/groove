@@ -63,8 +63,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (nanos <= 0) {
             return 1L;
         }
-        long seconds = (nanos + NANOS_PER_SECOND - 1) / NANOS_PER_SECOND;
-        return Math.max(1L, seconds);
+        return (nanos + NANOS_PER_SECOND - 1) / NANOS_PER_SECOND;
     }
 
     private void writeTooManyRequests(HttpServletResponse response, long retryAfterSeconds) throws IOException {

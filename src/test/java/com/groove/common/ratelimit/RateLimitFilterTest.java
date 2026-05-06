@@ -45,6 +45,7 @@ class RateLimitFilterTest {
         filter.doFilter(requestFrom("1.1.1.1"), second, chain);
 
         assertThat(first.getStatus()).isEqualTo(200);
+        assertThat(second.getStatus()).isEqualTo(200);
         assertThat(first.getHeader(RateLimitFilter.HEADER_REMAINING)).isEqualTo("1");
         assertThat(second.getHeader(RateLimitFilter.HEADER_REMAINING)).isEqualTo("0");
     }

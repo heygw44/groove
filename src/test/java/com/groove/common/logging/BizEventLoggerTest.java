@@ -21,11 +21,17 @@ class BizEventLoggerTest {
     @Test
     void appendsSortedAttributes() {
         Map<String, Object> attrs = new LinkedHashMap<>();
-        attrs.put("orderId", 123);
         attrs.put("userId", "u-1");
+        attrs.put("orderId", 123);
 
         assertThat(BizEventLogger.format("ORDER_CREATED", attrs))
                 .isEqualTo("BIZ_EVENT type=ORDER_CREATED orderId=123 userId=u-1");
+    }
+
+    @Test
+    void escapesTypeWithControlChars() {
+        assertThat(BizEventLogger.format("evil\nfake", Map.of()))
+                .isEqualTo("BIZ_EVENT type=\"evil\\nfake\"");
     }
 
     @Test
