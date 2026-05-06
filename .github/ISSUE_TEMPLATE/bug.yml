@@ -1,0 +1,68 @@
+name: 버그 리포트
+description: 버그 또는 의도치 않은 동작 리포트
+title: "[bug] "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 목적
+      description: 버그의 영향 및 수정이 필요한 이유를 설명해주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 방법
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 작업 내용
+      value: |
+        - [ ] 원인 분석
+        - [ ] 수정 구현
+        - [ ] 회귀 테스트 추가
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: 완료 조건 (DoD)
+      value: |
+        - [ ] 버그 재현 불가
+        - [ ] 관련 테스트 통과
+    validations:
+      required: true
+
+  - type: textarea
+    id: depends
+    attributes:
+      label: 선행 / 관련
+      value: |
+        - Related: #
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 비고

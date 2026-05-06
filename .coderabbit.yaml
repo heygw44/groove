@@ -1,0 +1,67 @@
+language: "ko-KR"
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  commit_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+  path_filters:
+    - "!**/*.md"
+    - "!.gitignore"
+    - "!.dockerignore"
+    - "!.env.example"
+  path_instructions:
+    - path: "src/main/java/**/*.java"
+      instructions: |
+        Spring Boot 4.0 / Java 21 코드 리뷰:
+        - Spring 컨벤션 및 레이어 분리 (Controller → Service → Repository) 준수
+        - JPA/Hibernate N+1 문제, 영속성 컨텍스트 경계 확인
+        - 트랜잭션 경계 및 롤백 정책 적절성
+        - ProblemDetail (RFC 7807) 기반 예외 응답 형식
+        - Lombok 남용 방지 (@Data 사용 지양, @Builder / @Value 선호)
+        - 보안: SQL injection, CSRF, 입력값 검증 (@Valid / @Validated)
+        - 하드코딩 금지: 매직 넘버는 상수 또는 설정값으로 분리
+        - 비공개 필드에 대한 불필요한 getter/setter 생성 방지
+    - path: "src/main/java/**/controller/**/*.java"
+      instructions: |
+        Controller 레이어 추가 기준:
+        - 비즈니스 로직이 Controller에 포함되지 않도록 확인
+        - 요청/응답 DTO 분리 및 @Valid 적용 확인
+        - HTTP 상태 코드가 의미에 맞게 사용되는지 확인
+    - path: "src/main/java/**/repository/**/*.java"
+      instructions: |
+        Repository 레이어 추가 기준:
+        - JPQL/네이티브 쿼리의 성능 및 인덱스 활용 확인
+        - 불필요한 전체 컬럼 조회 지양 (Projection 활용 권장)
+    - path: "src/test/**/*.java"
+      instructions: |
+        테스트 코드 리뷰:
+        - AAA (Arrange/Act/Assert) 구조 명확성
+        - 테스트 격리: 다른 테스트에 영향을 주지 않는지 확인
+        - 의미 없는 assert (항상 통과) 금지
+        - 테스트 명명: 한국어 또는 영어 일관성 유지
+        - 단위 테스트와 통합 테스트의 역할 구분
+    - path: "src/main/resources/db/migration/**"
+      instructions: |
+        Flyway 마이그레이션 리뷰:
+        - 명명 규칙 확인 (V{version}__{description}.sql)
+        - 되돌리기 불가능한 DDL 변경사항 (DROP, 컬럼 삭제) 경고
+        - NOT NULL 컬럼 추가 시 기본값 또는 백필 전략 확인
+        - 대용량 테이블 변경 시 Lock 위험 경고
+    - path: "src/main/resources/**/*.yaml"
+      instructions: |
+        설정 파일 리뷰:
+        - 민감 정보 (비밀번호, 토큰) 하드코딩 금지
+        - 환경변수 바인딩 시 기본값의 보안 적절성 확인
+        - 프로파일별 설정 분리가 올바른지 확인
+
+chat:
+  auto_reply: true

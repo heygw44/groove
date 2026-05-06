@@ -1,0 +1,74 @@
+name: 기능 구현
+description: 새로운 기능 구현 이슈
+title: "[feat] "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 목적
+      description: 이 이슈의 목적을 1~2문장으로 설명해주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 작업 내용
+      value: |
+        - [ ] 항목 1
+        - [ ] 항목 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: 완료 조건 (DoD)
+      value: |
+        - [ ] 조건 1
+    validations:
+      required: true
+
+  - type: textarea
+    id: depends
+    attributes:
+      label: 선행 / 관련
+      value: |
+        - Depends on: #
+        - Related: #
+
+  - type: dropdown
+    id: domain
+    attributes:
+      label: 도메인
+      options:
+        - auth
+        - member
+        - catalog
+        - cart
+        - order
+        - payment
+        - shipping
+        - review
+        - admin
+        - common
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: 예상 작업량
+      options:
+        - "S (≤4시간)"
+        - "M (0.5~1일)"
+        - "L (1~2일)"
+        - "XL (2일+)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 비고
