@@ -41,6 +41,17 @@ class BizEventLoggerTest {
     }
 
     @Test
+    void quotesValuesContainingWhitespaceOrSpecialChars() {
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        attrs.put("name", "John Doe");
+        attrs.put("note", "has=equals");
+        attrs.put("quoted", "say \"hi\"");
+
+        assertThat(BizEventLogger.format("EVT", attrs))
+                .isEqualTo("BIZ_EVENT type=EVT name=\"John Doe\" note=\"has=equals\" quoted=\"say \\\"hi\\\"\"");
+    }
+
+    @Test
     void rejectsBlankType() {
         assertThatThrownBy(() -> BizEventLogger.format(" ", Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);

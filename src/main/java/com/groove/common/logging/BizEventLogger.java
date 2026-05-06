@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public final class BizEventLogger {
@@ -13,6 +14,7 @@ public final class BizEventLogger {
     private static final String LOGGER_NAME = "BIZ_EVENT";
     private static final Logger log = LoggerFactory.getLogger(LOGGER_NAME);
     private static final String PREFIX = "BIZ_EVENT";
+    private static final Pattern UNQUOTED_SAFE = Pattern.compile("[A-Za-z0-9._:\\-/]+");
 
     private BizEventLogger() {
     }
@@ -32,7 +34,7 @@ public final class BizEventLogger {
                 .filter(e -> e.getKey() != null && !e.getKey().isBlank())
                 .filter(e -> e.getValue() != null && !String.valueOf(e.getValue()).isBlank())
                 .sorted(Map.Entry.comparingByKey())
-                .map(e -> e.getKey() + "=" + e.getValue())
+                .map(e -> e.getKey() + "=" + renderValue(String.valueOf(e.getValue())))
                 .collect(Collectors.joining(" "));
 
         if (tail.isEmpty()) {
@@ -43,5 +45,12 @@ public final class BizEventLogger {
 
     public static Map<String, Object> attrs() {
         return new LinkedHashMap<>();
+    }
+
+    private static String renderValue(String value) {
+        if (UNQUOTED_SAFE.matcher(value).matches()) {
+            return value;
+        }
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 }

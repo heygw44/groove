@@ -9,6 +9,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
+
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,6 +54,28 @@ class MdcFilterTest {
 
         assertThat(response.getHeader(MdcKeys.REQUEST_ID_HEADER)).isEqualTo(incoming);
         assertThat(capturedDuringChain.get()).isEqualTo(incoming);
+    }
+
+    @ParameterizedTest
+    @MethodSource("unsafeRequestIds")
+    void rejectsMalformedIncomingRequestId(String unsafe) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(MdcKeys.REQUEST_ID_HEADER, unsafe);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (req, res) -> {});
+
+        assertThat(response.getHeader(MdcKeys.REQUEST_ID_HEADER)).isEqualTo("generated-id");
+    }
+
+    static Stream<String> unsafeRequestIds() {
+        return Stream.of(
+                "abc\r\nInjected: header",
+                "with space",
+                "한글",
+                "drop;table",
+                "a".repeat(MdcFilter.MAX_REQUEST_ID_LENGTH + 1)
+        );
     }
 
     @Test

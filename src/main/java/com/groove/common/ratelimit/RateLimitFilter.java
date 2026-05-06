@@ -1,8 +1,9 @@
 package com.groove.common.ratelimit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.common.exception.ErrorCode;
+import com.groove.common.exception.ProblemDetailEnricher;
 import io.github.bucket4j.ConsumptionProbe;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +21,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     static final String HEADER_REMAINING = "X-Rate-Limit-Remaining";
     static final String HEADER_RETRY_AFTER_SECONDS = "X-Rate-Limit-Retry-After-Seconds";
+    private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
 
     private final RateLimitRegistry registry;
     private final ObjectMapper objectMapper;
@@ -53,8 +55,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        long retryAfterSeconds = Math.max(1L, TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill()));
+        long retryAfterSeconds = ceilNanosToSeconds(probe.getNanosToWaitForRefill());
         writeTooManyRequests(response, retryAfterSeconds);
+    }
+
+    private static long ceilNanosToSeconds(long nanos) {
+        if (nanos <= 0) {
+            return 1L;
+        }
+        long seconds = (nanos + NANOS_PER_SECOND - 1) / NANOS_PER_SECOND;
+        return Math.max(1L, seconds);
     }
 
     private void writeTooManyRequests(HttpServletResponse response, long retryAfterSeconds) throws IOException {
@@ -63,6 +73,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         problem.setTitle(errorCode.getStatus().getReasonPhrase());
         problem.setProperty("code", errorCode.getCode());
         problem.setProperty("retryAfterSeconds", retryAfterSeconds);
+        ProblemDetailEnricher.enrich(problem, errorCode.getStatus().value());
 
         response.setStatus(errorCode.getStatus().value());
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);

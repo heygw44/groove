@@ -8,8 +8,12 @@ import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 public class MdcFilter extends OncePerRequestFilter {
+
+    static final int MAX_REQUEST_ID_LENGTH = 64;
+    static final Pattern SAFE_REQUEST_ID = Pattern.compile("[A-Za-z0-9._-]+");
 
     private final RequestIdGenerator requestIdGenerator;
 
@@ -34,7 +38,10 @@ public class MdcFilter extends OncePerRequestFilter {
 
     private String resolveRequestId(HttpServletRequest request) {
         String incoming = request.getHeader(MdcKeys.REQUEST_ID_HEADER);
-        if (incoming != null && !incoming.isBlank()) {
+        if (incoming != null
+                && !incoming.isBlank()
+                && incoming.length() <= MAX_REQUEST_ID_LENGTH
+                && SAFE_REQUEST_ID.matcher(incoming).matches()) {
             return incoming;
         }
         return requestIdGenerator.generate();

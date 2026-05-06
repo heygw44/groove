@@ -1,7 +1,7 @@
 package com.groove.common.ratelimit;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
@@ -65,7 +65,31 @@ class RateLimitFilterTest {
         assertThat(blocked.getStatus()).isEqualTo(429);
         assertThat(blocked.getContentType()).contains("application/problem+json");
         assertThat(blocked.getHeader(RateLimitFilter.HEADER_RETRY_AFTER_SECONDS)).isNotNull();
-        assertThat(blocked.getContentAsString()).contains("SYSTEM_002");
+        String body = blocked.getContentAsString();
+        assertThat(body).contains("SYSTEM_002");
+        assertThat(body).contains("\"timestamp\"");
+        assertThat(body).contains("\"traceId\"");
+        assertThat(body).contains("\"retryAfterSeconds\"");
+    }
+
+    @Test
+    void ignoresXForwardedForHeaderForKey() throws Exception {
+        RateLimitPolicy policy = fixedPolicy("ip", 1);
+        RateLimitFilter filter = new RateLimitFilter(new RateLimitRegistry(List.of(policy)), objectMapper);
+        FilterChain chain = (req, res) -> {};
+
+        MockHttpServletRequest first = requestFrom("9.9.9.9");
+        first.addHeader("X-Forwarded-For", "1.2.3.4");
+        MockHttpServletResponse firstResp = new MockHttpServletResponse();
+        filter.doFilter(first, firstResp, chain);
+
+        MockHttpServletRequest second = requestFrom("9.9.9.9");
+        second.addHeader("X-Forwarded-For", "5.6.7.8");
+        MockHttpServletResponse secondResp = new MockHttpServletResponse();
+        filter.doFilter(second, secondResp, chain);
+
+        assertThat(firstResp.getStatus()).isEqualTo(200);
+        assertThat(secondResp.getStatus()).isEqualTo(429);
     }
 
     @Test
