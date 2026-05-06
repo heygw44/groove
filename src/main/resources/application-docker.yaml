@@ -1,0 +1,9 @@
+management:
+  endpoint:
+    health:
+      show-details: ${HEALTH_SHOW_DETAILS:when_authorized}
+
+logging:
+  level:
+    root: WARN
+    com.groove: INFO
