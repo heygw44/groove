@@ -1,6 +1,7 @@
 package com.groove.auth.security;
 
 import com.groove.common.exception.ErrorCode;
+import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(SecurityConfigIntegrationTest.SecuredPingController.class)
+@Import({SecurityConfigIntegrationTest.SecuredPingController.class, TestcontainersConfig.class})
 @DisplayName("SecurityFilterChain 통합 동작")
 class SecurityConfigIntegrationTest {
 

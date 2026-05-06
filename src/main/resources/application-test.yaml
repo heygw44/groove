@@ -1,16 +1,17 @@
 spring:
   flyway:
-    enabled: false
+    enabled: true
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate
     properties:
       hibernate:
         show_sql: true
 
-# 테스트용 CORS (와일드카드 + credentials)
+# 테스트용 CORS — 브라우저 정책상 와일드카드 origin + credentials 조합은 동작하지 않으므로
+# 로컬 개발 origin 패턴(임의 포트) 으로 한정.
 cors:
-  allowed-origin-patterns: ["*"]
+  allowed-origin-patterns: ["http://localhost:[*]"]
   allow-credentials: true
 
 logging:
