@@ -52,6 +52,26 @@ class BizEventLoggerTest {
     }
 
     @Test
+    void escapesControlCharsToPreventLogForging() {
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        attrs.put("evil", "abc\nERROR fake");
+        attrs.put("tabbed", "a\tb");
+        attrs.put("cr", "x\ry");
+
+        assertThat(BizEventLogger.format("EVT", attrs))
+                .isEqualTo("BIZ_EVENT type=EVT cr=\"x\\ry\" evil=\"abc\\nERROR fake\" tabbed=\"a\\tb\"");
+    }
+
+    @Test
+    void escapesUnsafeKeyCharacters() {
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        attrs.put("with space", "v");
+
+        assertThat(BizEventLogger.format("EVT", attrs))
+                .isEqualTo("BIZ_EVENT type=EVT \"with space\"=v");
+    }
+
+    @Test
     void rejectsBlankType() {
         assertThatThrownBy(() -> BizEventLogger.format(" ", Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);

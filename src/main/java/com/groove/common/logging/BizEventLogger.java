@@ -15,6 +15,7 @@ public final class BizEventLogger {
     private static final Logger log = LoggerFactory.getLogger(LOGGER_NAME);
     private static final String PREFIX = "BIZ_EVENT";
     private static final Pattern UNQUOTED_SAFE = Pattern.compile("[A-Za-z0-9._:\\-/]+");
+    private static final Pattern KEY_SAFE = Pattern.compile("[A-Za-z0-9._\\-]+");
 
     private BizEventLogger() {
     }
@@ -34,7 +35,7 @@ public final class BizEventLogger {
                 .filter(e -> e.getKey() != null && !e.getKey().isBlank())
                 .filter(e -> e.getValue() != null && !String.valueOf(e.getValue()).isBlank())
                 .sorted(Map.Entry.comparingByKey())
-                .map(e -> e.getKey() + "=" + renderValue(String.valueOf(e.getValue())))
+                .map(e -> renderKey(e.getKey()) + "=" + renderValue(String.valueOf(e.getValue())))
                 .collect(Collectors.joining(" "));
 
         if (tail.isEmpty()) {
@@ -47,10 +48,40 @@ public final class BizEventLogger {
         return new LinkedHashMap<>();
     }
 
+    private static String renderKey(String key) {
+        if (KEY_SAFE.matcher(key).matches()) {
+            return key;
+        }
+        return "\"" + escape(key) + "\"";
+    }
+
     private static String renderValue(String value) {
-        if (UNQUOTED_SAFE.matcher(value).matches()) {
+        String sanitized = escape(value);
+        if (UNQUOTED_SAFE.matcher(value).matches() && sanitized.equals(value)) {
             return value;
         }
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return "\"" + sanitized + "\"";
+    }
+
+    private static String escape(String raw) {
+        StringBuilder sb = new StringBuilder(raw.length());
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (Character.isISOControl(c)) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
     }
 }
