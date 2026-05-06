@@ -1,5 +1,6 @@
 package com.groove.auth.security;
 
+import com.groove.common.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +42,7 @@ class SecurityConfigIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.code").value("AUTH_001"))
+                .andExpect(jsonPath("$.code").value(ErrorCode.AUTH_UNAUTHORIZED.getCode()))
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.traceId").exists())
                 .andExpect(header().exists("X-Request-Id"));

@@ -8,6 +8,11 @@ spring:
       hibernate:
         show_sql: true
 
+# 테스트용 CORS (와일드카드 + credentials)
+cors:
+  allowed-origin-patterns: ["*"]
+  allow-credentials: true
+
 logging:
   level:
     root: WARN

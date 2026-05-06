@@ -1,8 +1,10 @@
 package com.groove.auth.security;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -11,8 +13,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.List;
 
 /**
  * Stateless API 용 Spring Security 베이스라인.
@@ -23,6 +23,7 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
+@EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {
@@ -51,12 +52,12 @@ public class SecurityConfig {
                                                    RestAccessDeniedHandler accessDeniedHandler,
                                                    CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                .csrf(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .formLogin(form -> form.disable())
-                .httpBasic(basic -> basic.disable())
-                .logout(logout -> logout.disable())
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(PUBLIC_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATTERNS).permitAll()
@@ -76,20 +77,25 @@ public class SecurityConfig {
     }
 
     /**
-     * 개발 단계 CORS 정책. 운영 환경에서는 origin pattern 을 제한해야 한다.
+     * CORS 정책을 {@link CorsProperties} 로부터 구성한다.
      *
-     * <p>{@code allowCredentials=true} 와 {@code allowedOrigins("*")} 는 Spring 5.4+ 부터
-     * 충돌하므로 {@link CorsConfiguration#setAllowedOriginPatterns} 를 사용한다.
+     * <p>application.yaml 의 default 는 비어 있으므로(모든 origin 차단), profile 별 yaml
+     * (local/test/docker) 또는 환경 변수에서 명시적으로 origin 패턴/도메인을 지정해야 한다.
      */
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("X-Request-Id"));
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+        if (!properties.allowedOriginPatterns().isEmpty()) {
+            configuration.setAllowedOriginPatterns(properties.allowedOriginPatterns());
+        }
+        if (!properties.allowedOrigins().isEmpty()) {
+            configuration.setAllowedOrigins(properties.allowedOrigins());
+        }
+        configuration.setAllowedMethods(properties.allowedMethods());
+        configuration.setAllowedHeaders(properties.allowedHeaders());
+        configuration.setExposedHeaders(properties.exposedHeaders());
+        configuration.setAllowCredentials(properties.allowCredentials());
+        configuration.setMaxAge(properties.maxAgeSeconds());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

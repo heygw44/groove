@@ -1,5 +1,6 @@
 package com.groove.auth.security;
 
+import com.groove.common.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -27,7 +28,7 @@ class RestAuthenticationEntryPointTest {
         assertThat(response.getContentType()).contains(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         String body = response.getContentAsString();
         assertThat(body).contains("\"status\":401");
-        assertThat(body).contains("AUTH_001");
+        assertThat(body).contains(ErrorCode.AUTH_UNAUTHORIZED.getCode());
         assertThat(body).contains("\"timestamp\"");
         assertThat(body).contains("\"traceId\"");
     }
