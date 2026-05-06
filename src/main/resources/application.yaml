@@ -24,6 +24,10 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
+  mvc:
+    problemdetails:
+      enabled: true
+
   security:
     user:
       password: disabled
