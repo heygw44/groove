@@ -22,7 +22,8 @@ public enum ErrorCode {
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 
     // SYSTEM
-    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SYSTEM_001", "서버 내부 오류가 발생했습니다");
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SYSTEM_001", "서버 내부 오류가 발생했습니다"),
+    RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "SYSTEM_002", "요청이 너무 많습니다");
 
     private final HttpStatus status;
     private final String code;

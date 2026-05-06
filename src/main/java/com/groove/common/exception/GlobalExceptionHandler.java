@@ -1,12 +1,8 @@
 package com.groove.common.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
@@ -50,7 +46,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ResponseEntity<Object> response = super.handleExceptionInternal(ex, body, headers, statusCode, request);
 
         if (response.getBody() instanceof ProblemDetail pd) {
-            enrich(pd, statusCode.value());
+            ProblemDetailEnricher.enrich(pd, statusCode.value());
         }
 
         return response;
@@ -60,21 +56,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(
                 errorCode.getStatus(), errorCode.getDefaultMessage());
         pd.setProperty("code", errorCode.getCode());
-        enrich(pd, errorCode.getStatus().value());
+        ProblemDetailEnricher.enrich(pd, errorCode.getStatus().value());
         return ResponseEntity.status(errorCode.getStatus()).body(pd);
-    }
-
-    private void enrich(ProblemDetail pd, int statusCode) {
-        pd.setProperty("timestamp", Instant.now());
-        pd.setProperty("traceId", traceId());
-
-        if (!pd.getProperties().containsKey("code")) {
-            pd.setProperty("code", "HTTP_" + statusCode);
-        }
-    }
-
-    private String traceId() {
-        String mdc = MDC.get("traceId");
-        return mdc != null ? mdc : UUID.randomUUID().toString();
     }
 }
