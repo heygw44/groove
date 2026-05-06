@@ -100,7 +100,7 @@ erDiagram
 | email | VARCHAR(255) | NOT NULL, UNIQUE | 로그인 식별자 |
 | password | VARCHAR(255) | NOT NULL | BCrypt 해시 (cost 12) |
 | name | VARCHAR(50) | NOT NULL | |
-| phone | VARCHAR(20) | NULL | |
+| phone | VARCHAR(20) | NOT NULL | 숫자만 10~11자 [APP] |
 | role | VARCHAR(20) | NOT NULL, DEFAULT 'USER' | enum: USER, ADMIN |
 | email_verified | BOOLEAN | NOT NULL, DEFAULT FALSE | 이메일 인증 여부 |
 | deleted_at | DATETIME(6) | NULL | 탈퇴 시각 (soft delete) |

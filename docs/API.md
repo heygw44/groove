@@ -193,9 +193,14 @@
 
 ## 3. 엔드포인트 상세
 
+> **경로 표기**: 본 절의 모든 경로는 §0 의 베이스 URL `/api/v1` 하위에 배치된다.
+> 예) `/auth/signup` 의 실제 호출 경로는 `POST /api/v1/auth/signup`.
+
 ### 3.1 인증
 
 #### POST `/auth/signup` — 회원가입
+
+**구현 상태**: 구현 완료 (#19, W4-1).
 
 **Request**
 ```json
@@ -208,10 +213,10 @@
 ```
 
 **검증**
-- email: 형식, 중복 불가
-- password: 최소 10자, 영문·숫자·특수문자 조합
+- email: 형식, 중복 불가 (탈퇴 회원 이메일도 점유 — 패턴 A)
+- password: 최소 10자, 영문·숫자·특수문자 각 1자 이상
 - name: 1~50자
-- phone: 선택, 숫자만 10~11자
+- phone: 필수, 숫자만 10~11자
 
 **Response 201**
 ```json
@@ -223,10 +228,12 @@
 }
 ```
 
+응답 헤더: `Location: /api/v1/members/{memberId}`
+
 **Errors**
-- 400 `VALIDATION_FAILED`
+- 400 `HTTP_400` (입력 검증 실패. `VALIDATION_FAILED` 코드 매핑은 후속 이슈)
 - 409 `MEMBER_EMAIL_DUPLICATED`
-- 429 Rate Limit
+- 429 Rate Limit (정책 등록은 후속 이슈)
 
 ---
 

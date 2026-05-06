@@ -1,9 +1,9 @@
 spring:
   flyway:
-    enabled: false
+    enabled: true
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate
     properties:
       hibernate:
         show_sql: true

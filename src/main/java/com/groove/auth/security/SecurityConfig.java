@@ -31,7 +31,7 @@ public class SecurityConfig {
     };
 
     private static final String[] PUBLIC_PATTERNS = {
-            "/auth/**",
+            "/api/v1/auth/**",
             "/actuator/health",
             "/error"
     };

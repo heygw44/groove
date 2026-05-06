@@ -18,6 +18,9 @@ public enum ErrorCode {
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "DOMAIN_002", "이미 존재하는 리소스입니다"),
     DOMAIN_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_ENTITY, "DOMAIN_003", "도메인 규칙 위반입니다"),
 
+    // MEMBER
+    MEMBER_EMAIL_DUPLICATED(HttpStatus.CONFLICT, "MEMBER_EMAIL_DUPLICATED", "이미 사용 중인 이메일입니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 
