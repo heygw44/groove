@@ -1,0 +1,705 @@
+{
+  "info": {
+    "name": "Groove API",
+    "description": "LP 전문 이커머스 백엔드 API 컬렉션. W8에서 전체 엔드포인트 + 검증 스크립트 추가 예정.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "http://localhost:8080/actuator/health"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Sign Up",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"P@ssw0rd!2024\",\n  \"name\": \"김철수\",\n  \"phone\": \"01012345678\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.accessToken);",
+                  "pm.environment.set('refreshToken', json.refreshToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/login"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"P@ssw0rd!2024\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('accessToken', json.accessToken);",
+                  "pm.environment.set('refreshToken', json.refreshToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Catalog (Public)",
+      "item": [
+        {
+          "name": "List Albums",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/albums?page=0&size=20&sort=createdAt,desc",
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "sort",
+                  "value": "createdAt,desc"
+                },
+                {
+                  "key": "keyword",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "genreId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "isLimited",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Album Detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/albums/1"
+            }
+          }
+        },
+        {
+          "name": "List Genres",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/genres"
+            }
+          }
+        },
+        {
+          "name": "List Labels",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/labels"
+            }
+          }
+        },
+        {
+          "name": "List Artists",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/artists?page=0&size=20"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Member Flow (E2E) ★",
+      "item": [
+        {
+          "name": "1) Add to Cart",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/cart/items"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"albumId\": 1,\n  \"quantity\": 2\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.items && json.items.length > 0) {",
+                  "    pm.environment.set('cartItemId', json.items[0].itemId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2) Get Cart",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/cart"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "3) Create Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('orderNumber', json.orderNumber);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/orders"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"albumId\": 1, \"quantity\": 2 }\n  ],\n  \"shipping\": {\n    \"recipientName\": \"김철수\",\n    \"recipientPhone\": \"01012345678\",\n    \"address\": \"서울시 강남구 테헤란로 123\",\n    \"addressDetail\": \"456호\",\n    \"zipCode\": \"06234\",\n    \"safePackagingRequested\": true\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "4) Request Payment",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('paymentId', json.paymentId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/payments"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderNumber\": \"{{orderNumber}}\",\n  \"method\": \"CARD\"\n}"
+            }
+          }
+        },
+        {
+          "name": "5) Get Payment Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{paymentId}}"
+            }
+          }
+        },
+        {
+          "name": "6) Get Order Detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderNumber}}"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "7) Get Shipping Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/shippings/{{trackingNumber}}"
+            }
+          }
+        },
+        {
+          "name": "8) Write Review",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/reviews"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderNumber\": \"{{orderNumber}}\",\n  \"albumId\": 1,\n  \"rating\": 5,\n  \"content\": \"음질 정말 좋네요\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Guest Flow",
+      "item": [
+        {
+          "name": "Create Order (Guest)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('guestOrderNumber', json.orderNumber);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/orders"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest\": {\n    \"email\": \"guest@example.com\",\n    \"phone\": \"01098765432\"\n  },\n  \"items\": [\n    { \"albumId\": 1, \"quantity\": 1 }\n  ],\n  \"shipping\": {\n    \"recipientName\": \"홍길동\",\n    \"recipientPhone\": \"01098765432\",\n    \"address\": \"부산시 해운대구 해운대로 1\",\n    \"addressDetail\": \"101호\",\n    \"zipCode\": \"48099\",\n    \"safePackagingRequested\": false\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Lookup Order (Guest)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{guestOrderNumber}}/guest-lookup"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"guest@example.com\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Admin",
+      "item": [
+        {
+          "name": "Create Album",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/admin/albums"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Abbey Road\",\n  \"artistId\": 1,\n  \"genreId\": 1,\n  \"labelId\": 1,\n  \"releaseYear\": 1969,\n  \"format\": \"LP_12\",\n  \"price\": 35000,\n  \"stock\": 100,\n  \"isLimited\": false,\n  \"description\": \"Mastered from the original tapes\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Adjust Stock",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/admin/albums/1/stock"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delta\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/orders?page=0&size=20"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ]
+          }
+        },
+        {
+          "name": "Change Order Status",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/admin/orders/{{orderNumber}}/status"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newStatus\": \"PREPARING\",\n  \"reason\": \"수동 진행\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refund Order",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/admin/orders/{{orderNumber}}/refund"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"고객 요청\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Edge Cases (시연용)",
+      "item": [
+        {
+          "name": "Refresh Token 재사용 → 401",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"already-used-token-here\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Idempotency 중복 키 → 200",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/payments"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderNumber\": \"{{orderNumber}}\",\n  \"method\": \"CARD\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Same paymentId returned', () => {",
+                  "    pm.expect(pm.response.json().paymentId).to.eql(pm.environment.get('paymentId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "재고 부족 주문 → 409",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/orders"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"albumId\": 1, \"quantity\": 99999 }\n  ],\n  \"shipping\": {\n    \"recipientName\": \"테스트\",\n    \"recipientPhone\": \"01012345678\",\n    \"address\": \"서울시\",\n    \"addressDetail\": \"1호\",\n    \"zipCode\": \"12345\",\n    \"safePackagingRequested\": false\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "배송 완료 전 리뷰 → 422",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/reviews"
+            },
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderNumber\": \"{{orderNumber}}\",\n  \"albumId\": 1,\n  \"rating\": 5,\n  \"content\": \"아직 배송 안 왔는데 리뷰 시도\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
