@@ -35,6 +35,11 @@ spring:
 server:
   port: 8080
   forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:native}
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    include-exception: false
 
 management:
   endpoints:
@@ -54,3 +59,14 @@ jwt:
   secret: ${JWT_SECRET:local-dev-secret-key-minimum-256-bits-long}
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
+
+# CORS default 는 모든 origin 차단. profile 별 yaml 또는 환경 변수로 override.
+# 운영 환경에서는 cors.allowed-origins 를 명시적 도메인 화이트리스트로 설정.
+cors:
+  allowed-origin-patterns: []
+  allowed-origins: []
+  allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+  allowed-headers: ["*"]
+  exposed-headers: [X-Request-Id]
+  allow-credentials: false
+  max-age-seconds: 3600

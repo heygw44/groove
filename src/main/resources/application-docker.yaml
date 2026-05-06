@@ -3,6 +3,14 @@ management:
     health:
       show-details: ${HEALTH_SHOW_DETAILS:when_authorized}
 
+# docker 프로파일은 환경 변수로 명시 화이트리스트 주입.
+# 콤마 구분 문자열은 Spring 이 List 로 자동 변환.
+# 예) CORS_ALLOWED_ORIGINS=https://example.com,https://admin.example.com
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:}
+  allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
+
 logging:
   level:
     root: WARN
