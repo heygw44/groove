@@ -2,6 +2,7 @@ package com.groove.auth.security.ratelimit;
 
 import com.groove.common.ratelimit.RateLimitKeyResolver;
 import com.groove.common.ratelimit.RateLimitPolicy;
+import com.groove.common.ratelimit.RequestPaths;
 import io.github.bucket4j.Bucket;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpMethod;
@@ -35,7 +36,7 @@ public class LoginRateLimitPolicy implements RateLimitPolicy {
     @Override
     public boolean appliesTo(HttpServletRequest request) {
         return HttpMethod.POST.matches(request.getMethod())
-                && PATH.equals(request.getRequestURI());
+                && PATH.equals(RequestPaths.normalizedPath(request));
     }
 
     @Override

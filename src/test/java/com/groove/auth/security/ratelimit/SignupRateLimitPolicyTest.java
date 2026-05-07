@@ -40,6 +40,14 @@ class SignupRateLimitPolicyTest {
     }
 
     @Test
+    void appliesAfterPathNormalization() {
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth//signup"))).isTrue();
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth/./signup"))).isTrue();
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth/foo/../signup"))).isTrue();
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth/signup;jsessionid=abc"))).isTrue();
+    }
+
+    @Test
     void bucketFactoryProducesBucketWithConfiguredSignupCapacity() {
         Bucket bucket = policy.bucketFactory().get();
         assertThat(bucket.getAvailableTokens()).isEqualTo(3L);

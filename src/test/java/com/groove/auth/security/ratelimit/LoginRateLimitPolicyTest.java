@@ -41,6 +41,14 @@ class LoginRateLimitPolicyTest {
     }
 
     @Test
+    void appliesAfterPathNormalization() {
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth//login"))).isTrue();
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth/./login"))).isTrue();
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth/foo/../login"))).isTrue();
+        assertThat(policy.appliesTo(request("POST", "/api/v1/auth/login;jsessionid=abc"))).isTrue();
+    }
+
+    @Test
     void bucketFactoryProducesIndependentBucketsWithConfiguredCapacity() {
         Bucket first = policy.bucketFactory().get();
         Bucket second = policy.bucketFactory().get();
