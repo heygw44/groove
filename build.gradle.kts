@@ -1,5 +1,6 @@
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "4.0.6"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -12,6 +13,10 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
+}
+
+jacoco {
+    toolVersion = "0.8.13"
 }
 
 repositories {
@@ -56,4 +61,51 @@ tasks.named<Jar>("jar") {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+// 커버리지 측정 대상에서 제외 — 부트스트랩, DTO/설정/예외 단순 클래스, 패키지 메타.
+// 비즈니스 로직(서비스·도메인·필터·핸들러)에 집중해 의미 있는 커버리지를 산출한다.
+val coverageExclusions = listOf(
+    "com/groove/GrooveApplication.*",
+    "com/groove/**/dto/**",
+    "com/groove/**/package-info.*",
+    "com/groove/**/*Properties.*",
+    "com/groove/**/*Config.*",
+    "com/groove/**/*Configuration.*",
+)
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) { exclude(coverageExclusions) }
+        })
+    )
+}
+
+// 인증/회원 도메인 라인 커버리지 80% 게이트 (#24 DoD).
+// Phase 4 에서 `check` 와 연결해 게이트로 강제한다.
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) { exclude(coverageExclusions) }
+        })
+    )
+    violationRules {
+        rule {
+            element = "BUNDLE"
+            includes = listOf("com.groove.auth.*", "com.groove.member.*")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
 }
