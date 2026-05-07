@@ -9,6 +9,7 @@ public enum ErrorCode {
     AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "AUTH_002", "접근 권한이 없습니다"),
     AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_003", "유효하지 않은 토큰입니다"),
     AUTH_EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_004", "만료된 토큰입니다"),
+    AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH_INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다"),
 
     // VALIDATION
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "VALID_001", "입력값이 올바르지 않습니다"),
