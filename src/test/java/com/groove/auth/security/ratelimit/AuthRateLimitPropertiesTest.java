@@ -43,7 +43,8 @@ class AuthRateLimitPropertiesTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("capacity");
         assertThatThrownBy(() -> new AuthRateLimitProperties.Policy(-1L, Duration.ofMinutes(1)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("capacity");
     }
 
     @Test
@@ -52,8 +53,10 @@ class AuthRateLimitPropertiesTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("refill-period");
         assertThatThrownBy(() -> new AuthRateLimitProperties.Policy(10L, Duration.ZERO))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("refill-period");
         assertThatThrownBy(() -> new AuthRateLimitProperties.Policy(10L, Duration.ofMinutes(-1)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("refill-period");
     }
 }

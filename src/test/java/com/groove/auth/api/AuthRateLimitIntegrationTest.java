@@ -98,7 +98,10 @@ class AuthRateLimitIntegrationTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
-                .andExpect(jsonPath("$.code").value("SYSTEM_002"));
+                .andExpect(header().exists("X-Rate-Limit-Retry-After-Seconds"))
+                .andExpect(header().string("X-Rate-Limit-Remaining", "0"))
+                .andExpect(jsonPath("$.code").value("SYSTEM_002"))
+                .andExpect(jsonPath("$.retryAfterSeconds").isNumber());
     }
 
     @Test
