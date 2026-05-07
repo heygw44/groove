@@ -6,6 +6,8 @@ import com.groove.common.exception.AuthException;
 import com.groove.common.exception.ErrorCode;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
@@ -43,15 +47,20 @@ public class AuthService {
     @Transactional(readOnly = true)
     public TokenPair login(LoginCommand command) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(command.email())
-                .orElseThrow(() -> new AuthException(ErrorCode.AUTH_INVALID_CREDENTIALS));
+                .orElseThrow(() -> {
+                    log.warn("로그인 실패 - 이메일 미존재 email={}", command.email());
+                    return new AuthException(ErrorCode.AUTH_INVALID_CREDENTIALS);
+                });
 
         if (!passwordEncoder.matches(command.password(), member.getPassword())) {
+            log.warn("로그인 실패 - 비밀번호 불일치 memberId={}", member.getId());
             throw new AuthException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
         String accessToken = jwtProvider.issueAccessToken(member.getId(), member.getRole());
         String refreshToken = jwtProvider.issueRefreshToken(member.getId());
 
+        log.info("로그인 성공 memberId={}", member.getId());
         return new TokenPair(accessToken, refreshToken, jwtProperties.accessTokenTtlSeconds());
     }
 }
