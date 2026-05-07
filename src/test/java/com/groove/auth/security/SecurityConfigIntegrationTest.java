@@ -1,10 +1,12 @@
 package com.groove.auth.security;
 
 import com.groove.common.exception.ErrorCode;
+import com.groove.member.domain.MemberRole;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -35,6 +37,39 @@ class SecurityConfigIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JwtProvider jwtProvider;
+
+    @Test
+    @DisplayName("유효한 Access Token 으로 보호 엔드포인트 → 200")
+    void validAccessToken_grantsAccess() throws Exception {
+        String token = jwtProvider.issueAccessToken(1L, MemberRole.USER);
+
+        mockMvc.perform(get("/api/v1/ping/secured")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pong").value(true));
+    }
+
+    @Test
+    @DisplayName("위조된 토큰으로 보호 엔드포인트 → 401")
+    void invalidToken_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/v1/ping/secured")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer not-a-jwt"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(ErrorCode.AUTH_UNAUTHORIZED.getCode()));
+    }
+
+    @Test
+    @DisplayName("Refresh Token 으로 보호 엔드포인트 접근 → 401 (typ mismatch)")
+    void refreshToken_onProtectedEndpoint_returnsUnauthorized() throws Exception {
+        String refresh = jwtProvider.issueRefreshToken(1L);
+
+        mockMvc.perform(get("/api/v1/ping/secured")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + refresh))
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test
     @DisplayName("보호된 엔드포인트 → 401 + ProblemDetail JSON + X-Request-Id")
