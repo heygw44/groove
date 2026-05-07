@@ -121,6 +121,39 @@ class LabelAdminControllerTest {
     }
 
     @Test
+    @DisplayName("PUT 단건 갱신 → 200 + name 변경 + DB 반영")
+    void update_returns200() throws Exception {
+        Label saved = labelRepository.saveAndFlush(Label.create("Sub Pop"));
+
+        Map<String, String> body = Map.of("name", "Sub Pop Records");
+
+        mockMvc.perform(put("/api/v1/admin/labels/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(saved.getId()))
+                .andExpect(jsonPath("$.name").value("Sub Pop Records"));
+
+        assertThat(labelRepository.findById(saved.getId()).orElseThrow().getName())
+                .isEqualTo("Sub Pop Records");
+    }
+
+    @Test
+    @DisplayName("PUT 자기 자신과 동일 name → 200 (no-op)")
+    void update_sameName_returns200() throws Exception {
+        Label saved = labelRepository.saveAndFlush(Label.create("Motown"));
+
+        Map<String, String> body = Map.of("name", "Motown");
+
+        mockMvc.perform(put("/api/v1/admin/labels/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("PUT 다른 id name 충돌 → 409")
     void update_nameTakenByAnother_returns409() throws Exception {
         labelRepository.saveAndFlush(Label.create("Apple"));
