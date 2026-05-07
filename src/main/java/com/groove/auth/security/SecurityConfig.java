@@ -1,29 +1,34 @@
 package com.groove.auth.security;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Clock;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Stateless API 용 Spring Security 베이스라인.
+ * Stateless API 용 Spring Security 설정.
  *
- * <p>이번 단계에서는 보호/공개 엔드포인트 분리만 활성화한다. JWT 인증 필터는 W4(#W4-2) 에서
- * {@code addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)}
- * 로 연결될 자리만 마련한다.
+ * <p>{@link JwtAuthenticationFilter} 가 {@link UsernamePasswordAuthenticationFilter} 앞에 위치해
+ * Authorization 헤더의 Bearer 토큰을 검증하고 {@code SecurityContext} 를 채운다.
+ * 인증 실패 시 401 은 {@link RestAuthenticationEntryPoint} 가, 권한 부족 403 은
+ * {@link RestAccessDeniedHandler} 가 ProblemDetail 형식으로 응답한다.
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(CorsProperties.class)
+@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class})
 public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {
@@ -35,6 +40,12 @@ public class SecurityConfig {
             "/actuator/health",
             "/error"
     };
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Clock clock() {
+        return Clock.systemUTC();
+    }
 
     @Bean
     public RestAuthenticationEntryPoint restAuthenticationEntryPoint(ObjectMapper objectMapper) {
@@ -50,7 +61,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    RestAuthenticationEntryPoint authenticationEntryPoint,
                                                    RestAccessDeniedHandler accessDeniedHandler,
-                                                   CorsConfigurationSource corsConfigurationSource) throws Exception {
+                                                   CorsConfigurationSource corsConfigurationSource,
+                                                   JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -67,11 +79,8 @@ public class SecurityConfig {
                 .exceptionHandling(handler -> handler
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
-                );
-
-        // TODO(W4-2): JWT 인증 필터 연결.
-        // http.addFilterBefore(jwtAuthenticationFilter,
-        //         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
+                )
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
