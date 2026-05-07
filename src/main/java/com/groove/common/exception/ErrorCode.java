@@ -22,6 +22,12 @@ public enum ErrorCode {
     // MEMBER
     MEMBER_EMAIL_DUPLICATED(HttpStatus.CONFLICT, "MEMBER_EMAIL_DUPLICATED", "이미 사용 중인 이메일입니다"),
 
+    // CATALOG
+    GENRE_NAME_DUPLICATED(HttpStatus.CONFLICT, "GENRE_NAME_DUPLICATED", "이미 존재하는 장르명입니다"),
+    GENRE_NOT_FOUND(HttpStatus.NOT_FOUND, "GENRE_NOT_FOUND", "장르를 찾을 수 없습니다"),
+    LABEL_NAME_DUPLICATED(HttpStatus.CONFLICT, "LABEL_NAME_DUPLICATED", "이미 존재하는 레이블명입니다"),
+    LABEL_NOT_FOUND(HttpStatus.NOT_FOUND, "LABEL_NOT_FOUND", "레이블을 찾을 수 없습니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 

@@ -86,7 +86,8 @@ tasks.jacocoTestReport {
     )
 }
 
-// 인증/회원 도메인 라인 커버리지 80% 게이트 (#24 DoD).
+// 인증/회원/카탈로그 도메인 라인 커버리지 80% 게이트.
+// 인증·회원: #24 DoD. 카탈로그: #31 에서 W4 와 동일 정책으로 게이트 확장.
 // `check` 가 트리거하므로 ./gradlew check 가 임계값 위반 시 실패한다.
 tasks.jacocoTestCoverageVerification {
     dependsOn(tasks.jacocoTestReport)
@@ -97,10 +98,10 @@ tasks.jacocoTestCoverageVerification {
     )
     violationRules {
         // PACKAGE element 의 includes 는 패키지 FQN 과 매칭된다 (BUNDLE 의 includes 는 프로젝트명만 매칭되어 침묵 패스됨에 유의).
-        // 인증/회원 하위 모든 패키지가 각각 80% 라인 커버리지를 충족해야 통과한다.
+        // 인증/회원/카탈로그 하위 모든 패키지가 각각 80% 라인 커버리지를 충족해야 통과한다.
         rule {
             element = "PACKAGE"
-            includes = listOf("com.groove.auth.*", "com.groove.member.*")
+            includes = listOf("com.groove.auth.*", "com.groove.member.*", "com.groove.catalog.*")
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"

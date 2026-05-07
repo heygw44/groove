@@ -33,7 +33,9 @@ import tools.jackson.databind.ObjectMapper;
 public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {
-            "/api/v1/albums/**"
+            "/api/v1/albums/**",
+            "/api/v1/genres/**",
+            "/api/v1/labels/**"
     };
 
     private static final String[] PUBLIC_PATTERNS = {
@@ -41,6 +43,8 @@ public class SecurityConfig {
             "/actuator/health",
             "/error"
     };
+
+    private static final String ADMIN_PATTERN = "/api/v1/admin/**";
 
     @Bean
     @ConditionalOnMissingBean
@@ -75,6 +79,7 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(ADMIN_PATTERN).hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(handler -> handler
