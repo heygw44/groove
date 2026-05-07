@@ -28,6 +28,14 @@ spring:
     problemdetails:
       enabled: true
 
+  data:
+    web:
+      pageable:
+        # 공개 페이징 엔드포인트 보호용. ?size 가 클라이언트 요청 그대로 적용되는 것을 방지.
+        # 카탈로그 규모(아티스트 1k~3k, ERD §4.3) 기준에서 한 번에 100건이면 충분.
+        default-page-size: 20
+        max-page-size: 100
+
   security:
     user:
       password: disabled

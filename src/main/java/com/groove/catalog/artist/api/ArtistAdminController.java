@@ -10,7 +10,6 @@ import com.groove.common.api.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -53,7 +52,7 @@ public class ArtistAdminController {
 
     @GetMapping
     public ResponseEntity<PageResponse<ArtistResponse>> list(
-            @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.ASC) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "id") Pageable pageable) {
         Page<Artist> page = artistService.findAll(pageable);
         return ResponseEntity.ok(PageResponse.from(page, ArtistResponse::from));
     }

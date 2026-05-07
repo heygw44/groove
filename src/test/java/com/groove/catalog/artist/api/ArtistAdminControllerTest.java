@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -80,7 +81,7 @@ class ArtistAdminControllerTest {
     }
 
     @Test
-    @DisplayName("POST description 생략 → 201 + null")
+    @DisplayName("POST description 생략 → 201 + description 필드 null 응답")
     void create_withoutDescription_returns201() throws Exception {
         // null 값을 전송하기 위해 HashMap 사용 (Map.of 는 null 미허용)
         Map<String, Object> body = new HashMap<>();
@@ -92,7 +93,7 @@ class ArtistAdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.description").doesNotExist());
+                .andExpect(jsonPath("$.description").value(nullValue()));
     }
 
     @Test
@@ -228,7 +229,7 @@ class ArtistAdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.description").doesNotExist());
+                .andExpect(jsonPath("$.description").value(nullValue()));
 
         assertThat(artistRepository.findById(saved.getId()).orElseThrow().getDescription()).isNull();
     }

@@ -630,13 +630,14 @@ CREATE INDEX idx_review_album_created ON review(album_id, created_at);
 | V2 | `V2__member.sql` | member | W4 | 적용 완료 |
 | V3 | `V3__refresh_token.sql` | refresh_token (self-FK 포함) | W4 | 적용 완료 |
 | V4 | `V4__init_catalog.sql` | genre, label | W5-1 | 적용 완료 |
-| V5+ | (W5-2/W5-3 별도 이슈) | artist, album | W5-2 / W5-3 | 예정 |
-| V6+ | `V*__init_cart_orders.sql` | cart, cart_item, orders, order_item | W6 | 예정 |
-| V7+ | `V*__init_payment_shipping.sql` | payment, idempotency_record, shipping | W7 | 예정 |
-| V8+ | `V*__init_review.sql` | review | W7 | 예정 |
-| V9+ | `V*__add_search_indexes.sql` | W10 시연용 검색·정렬 인덱스 | W10 | 예정 |
+| V5 | `V5__init_artist.sql` | artist (UNIQUE 미적용) | W5-2 | 적용 완료 |
+| V6+ | (W5-3 별도 이슈) | album | W5-3 | 예정 |
+| V7+ | `V*__init_cart_orders.sql` | cart, cart_item, orders, order_item | W6 | 예정 |
+| V8+ | `V*__init_payment_shipping.sql` | payment, idempotency_record, shipping | W7 | 예정 |
+| V9+ | `V*__init_review.sql` | review | W7 | 예정 |
+| V10+ | `V*__add_search_indexes.sql` | W10 시연용 검색·정렬 인덱스 | W10 | 예정 |
 
-> V4 범위 정정: 당초 1회로 묶어 계획했던 artist+genre+label+album 마이그레이션을 W5-1(genre/label) → W5-2(artist) → W5-3(album) 순서대로 분리 도입한다 (#31 에서 결정). 후속 V5+ 의 정확한 버전 번호는 W5-2/W5-3 이슈가 확정한다.
+> V4 범위 정정: 당초 1회로 묶어 계획했던 artist+genre+label+album 마이그레이션을 W5-1(genre/label) → W5-2(artist) → W5-3(album) 순서대로 분리 도입한다 (#31 에서 결정). W5-2(#32) 까지 적용 완료. W5-3(album) 의 정확한 버전 번호는 후속 이슈가 확정한다.
 
 마이그레이션 원칙:
 - 운영 DB가 없는 단계여도 Flyway로 관리. 시연 때 "초기 스키마부터 인덱스 추가까지의 진화 과정"이 그대로 남음
