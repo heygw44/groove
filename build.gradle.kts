@@ -1,5 +1,6 @@
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "4.0.6"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -12,6 +13,10 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
+}
+
+jacoco {
+    toolVersion = "0.8.13"
 }
 
 repositories {
@@ -56,4 +61,55 @@ tasks.named<Jar>("jar") {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+// 커버리지 측정 대상에서 제외 — 부트스트랩·DTO·@ConfigurationProperties 바인딩·패키지 메타만 제외한다.
+// SecurityConfig·RateLimitFilterConfig 등은 운영 동작 직결 코드라 측정에 포함해 회귀를 잡는다.
+val coverageExclusions = listOf(
+    "com/groove/GrooveApplication.*",
+    "com/groove/**/dto/**",
+    "com/groove/**/package-info.*",
+    "com/groove/**/*Properties.*",
+)
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) { exclude(coverageExclusions) }
+        })
+    )
+}
+
+// 인증/회원 도메인 라인 커버리지 80% 게이트 (#24 DoD).
+// `check` 가 트리거하므로 ./gradlew check 가 임계값 위반 시 실패한다.
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) { exclude(coverageExclusions) }
+        })
+    )
+    violationRules {
+        // PACKAGE element 의 includes 는 패키지 FQN 과 매칭된다 (BUNDLE 의 includes 는 프로젝트명만 매칭되어 침묵 패스됨에 유의).
+        // 인증/회원 하위 모든 패키지가 각각 80% 라인 커버리지를 충족해야 통과한다.
+        rule {
+            element = "PACKAGE"
+            includes = listOf("com.groove.auth.*", "com.groove.member.*")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
 }
