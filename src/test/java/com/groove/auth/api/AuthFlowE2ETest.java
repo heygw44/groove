@@ -1,6 +1,7 @@
 package com.groove.auth.api;
 
 import com.groove.auth.domain.RefreshTokenRepository;
+import com.groove.auth.security.JwtProvider;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestSecuredController;
 import com.groove.support.TestcontainersConfig;
@@ -70,11 +71,14 @@ class AuthFlowE2ETest {
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Autowired
+    private JwtProvider jwtProvider;
+
     @BeforeEach
     void cleanDb() {
         // refresh_token 이 member 에 FK 를 가지므로 자식부터 삭제한다.
         refreshTokenRepository.deleteAllInBatch();
-        memberRepository.deleteAll();
+        memberRepository.deleteAllInBatch();
     }
 
     @Test
@@ -110,7 +114,8 @@ class AuthFlowE2ETest {
                         .content(objectMapper.writeValueAsString(Map.of("refreshToken", rotated.refresh))))
                 .andExpect(status().isOk());
 
-        // 7) 로그아웃된 refresh 재사용 → 401 (재사용 감지 분기, 토큰 자체는 revoked 상태)
+        // 7) 로그아웃으로 revoked 된 refresh 재사용 시도 → 401
+        //    (재사용 감지(reuse detection) 분기는 별도 테스트 rotatedRefresh_reuse_invalidatesAllSessions 에서 다룸)
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("refreshToken", rotated.refresh))))
@@ -161,9 +166,17 @@ class AuthFlowE2ETest {
     @Test
     @DisplayName("로그아웃은 형식 오류·미존재 토큰에도 200 (RFC 7009 멱등 처리)")
     void logout_isIdempotent_forInvalidTokens() throws Exception {
+        // (a) 형식 오류 토큰 — JWT 파싱 실패 → 멱등 무동작
         mockMvc.perform(post("/api/v1/auth/logout")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("refreshToken", "not-a-jwt"))))
+                .andExpect(status().isOk());
+
+        // (b) well-formed JWT 형식이지만 DB 에 미존재 — JwtProvider 로 직접 발급해 DB 행 없이 로그아웃 시도
+        String orphanRefreshToken = jwtProvider.issueRefreshToken(99_999L);
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", orphanRefreshToken))))
                 .andExpect(status().isOk());
     }
 
