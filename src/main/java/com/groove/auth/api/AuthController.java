@@ -3,6 +3,8 @@ package com.groove.auth.api;
 import com.groove.auth.api.dto.LoginRequest;
 import com.groove.auth.api.dto.LoginResponse;
 import com.groove.auth.api.dto.LogoutRequest;
+import com.groove.auth.api.dto.RefreshRequest;
+import com.groove.auth.api.dto.RefreshResponse;
 import com.groove.auth.api.dto.SignupRequest;
 import com.groove.auth.api.dto.SignupResponse;
 import com.groove.auth.application.AuthService;
@@ -58,15 +60,26 @@ public class AuthController {
     }
 
     /**
+     * Refresh Token 회전 엔드포인트 (#22).
+     *
+     * <p>새 access·refresh 페어를 발급하고 기존 refresh 는 즉시 revoke 한다.
+     * 재사용·만료·형식 오류는 {@code GlobalExceptionHandler} 가 401 ProblemDetail 로 변환한다.
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+        TokenPair tokens = authService.refresh(request.refreshToken());
+        return ResponseEntity.ok(RefreshResponse.from(tokens));
+    }
+
+    /**
      * 로그아웃 엔드포인트.
      *
-     * <p>본 이슈(#21) 범위에서는 RefreshToken 영속화·revoke 가 도입되기 전이므로
-     * 입력 형식만 검증하고 200 을 반환한다. 실제 무효화 로직은 #22 에서 추가된다.
-     * RFC 7009 와 같이 토큰 자체의 유효성과 무관하게 응답 코드는 항상 200 이다.
+     * <p>RFC 7009 § 2.2 — 토큰 유효성과 무관하게 항상 200. 정상 토큰이면 revoke 되고,
+     * 형식 오류·만료·미존재는 멱등 무동작으로 끝난다.
      */
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
-        // TODO(#22): RefreshTokenService.revoke(request.refreshToken()) 호출
+        authService.logout(request.refreshToken());
         return ResponseEntity.ok().build();
     }
 }

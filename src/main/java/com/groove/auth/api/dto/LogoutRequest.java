@@ -5,8 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * 로그아웃 요청.
  *
- * <p>본 이슈(#21) 범위에서는 토큰 형식 검증만 수행하고 200 을 반환한다.
- * 실제 무효화(revoke) 는 RefreshToken 영속화가 도입되는 #22 에서 추가된다.
+ * <p>refresh 토큰을 받아 서버 측에서 폐기한다. 토큰이 잘못된 형식·만료·미존재 라도
+ * RFC 7009 § 2.2 에 따라 응답은 항상 200 (토큰 유효성 누설 차단).
  */
 public record LogoutRequest(
         @NotBlank
