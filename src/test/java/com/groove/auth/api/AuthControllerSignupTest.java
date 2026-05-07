@@ -1,5 +1,6 @@
 package com.groove.auth.api;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
@@ -43,7 +44,7 @@ class AuthControllerSignupTest {
     private MemberRepository memberRepository;
 
     @Autowired
-    private com.groove.auth.domain.RefreshTokenRepository refreshTokenRepository;
+    private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;

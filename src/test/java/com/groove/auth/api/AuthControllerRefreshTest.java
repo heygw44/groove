@@ -138,6 +138,8 @@ class AuthControllerRefreshTest {
         List<RefreshToken> all = refreshTokenRepository.findAll();
         assertThat(all)
                 .filteredOn(t -> t.getMemberId().equals(memberId))
+                .as("회원의 토큰이 최소 1건 이상 존재해야 의미 있는 검증")
+                .isNotEmpty()
                 .allSatisfy(t -> assertThat(t.isRevoked())
                         .as("재사용 감지 후 해당 사용자의 모든 토큰은 revoked")
                         .isTrue());
@@ -154,12 +156,16 @@ class AuthControllerRefreshTest {
     }
 
     @Test
-    @DisplayName("refreshToken 누락 → 400")
+    @DisplayName("refreshToken 누락 → 400 ProblemDetail")
     void refresh_missingToken_returns400() throws Exception {
+        // 검증 실패는 별도 ExceptionHandler 가 없어 ProblemDetailEnricher 의 fallback "HTTP_400" 사용.
+        // 본 PR 범위 외이므로 현재 동작을 그대로 단언해 회귀 감지만 보장한다.
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("HTTP_400"));
     }
 
     @Test
@@ -205,6 +211,15 @@ class AuthControllerRefreshTest {
         mockMvc.perform(post("/api/v1/auth/logout")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("refreshToken", "not-a-jwt"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("로그아웃: 빈 문자열 refreshToken → 200 (invalid token, RFC 7009 § 2.2)")
+    void logout_emptyStringRefreshToken_returns200() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", ""))))
                 .andExpect(status().isOk());
     }
 

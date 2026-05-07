@@ -49,7 +49,7 @@ public class AuthService {
     public TokenPair login(LoginCommand command) {
         Member member = memberRepository.findByEmailAndDeletedAtIsNull(command.email())
                 .orElseThrow(() -> {
-                    log.warn("로그인 실패 - 이메일 미존재 emailHash={}", maskEmail(command.email()));
+                    log.warn("로그인 실패 - 이메일 미존재 emailMasked={}", maskEmail(command.email()));
                     return new AuthException(ErrorCode.AUTH_INVALID_CREDENTIALS);
                 });
 

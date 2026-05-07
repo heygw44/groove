@@ -18,7 +18,7 @@ public record RefreshResponse(
         return new RefreshResponse(
                 tokens.accessToken(),
                 tokens.refreshToken(),
-                "Bearer",
+                TokenType.BEARER,
                 tokens.accessTokenExpiresInSeconds()
         );
     }

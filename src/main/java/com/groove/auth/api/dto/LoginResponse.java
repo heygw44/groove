@@ -19,7 +19,7 @@ public record LoginResponse(
         return new LoginResponse(
                 tokens.accessToken(),
                 tokens.refreshToken(),
-                "Bearer",
+                TokenType.BEARER,
                 tokens.accessTokenExpiresInSeconds()
         );
     }
