@@ -89,7 +89,7 @@ tasks.jacocoTestReport {
 }
 
 // 인증/회원 도메인 라인 커버리지 80% 게이트 (#24 DoD).
-// Phase 4 에서 `check` 와 연결해 게이트로 강제한다.
+// `check` 가 트리거하므로 ./gradlew check 가 임계값 위반 시 실패한다.
 tasks.jacocoTestCoverageVerification {
     dependsOn(tasks.jacocoTestReport)
     classDirectories.setFrom(
@@ -108,4 +108,8 @@ tasks.jacocoTestCoverageVerification {
             }
         }
     }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
 }
