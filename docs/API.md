@@ -86,9 +86,9 @@
 **도메인별 에러 코드 (예시)**
 | code | 의미 |
 |---|---|
-| `AUTH_INVALID_CREDENTIALS` | 이메일/비밀번호 불일치 |
-| `AUTH_TOKEN_EXPIRED` | 토큰 만료 |
-| `AUTH_TOKEN_REUSED` | 토큰 재사용 감지 (탈취 의심) |
+| `AUTH_INVALID_CREDENTIALS` | 이메일/비밀번호 불일치 (HTTP 401) |
+| `AUTH_004` (`AUTH_EXPIRED_TOKEN`) | 토큰 만료 (HTTP 401) |
+| `AUTH_003` (`AUTH_INVALID_TOKEN`) | 토큰 형식·서명 오류·미존재·재사용 감지 통합 (HTTP 401). 재사용 케이스는 응답 분기 없이 부수 효과로 해당 사용자 활성 refresh 일괄 폐기 |
 | `MEMBER_EMAIL_DUPLICATED` | 이메일 중복 |
 | `ORDER_INSUFFICIENT_STOCK` | 재고 부족 |
 | `ORDER_INVALID_STATE_TRANSITION` | 주문 상태 전이 불가 |
@@ -120,7 +120,7 @@
 | POST | `/auth/signup` | Public | 회원가입 |
 | POST | `/auth/login` | Public | 로그인 |
 | POST | `/auth/refresh` | Public (Refresh Token) | 토큰 갱신 |
-| POST | `/auth/logout` | Authenticated | 로그아웃 |
+| POST | `/auth/logout` | Public | 로그아웃 (RFC 7009 멱등 — refreshToken 본문만으로 폐기) |
 
 ### 회원 (`/members`)
 | 메서드 | 경로 | 권한 | 설명 |
@@ -231,9 +231,9 @@
 응답 헤더: `Location: /api/v1/members/{memberId}`
 
 **Errors**
-- 400 `HTTP_400` (입력 검증 실패. `VALIDATION_FAILED` 코드 매핑은 후속 이슈)
+- 400 `VALID_001` (`VALIDATION_FAILED`) — 입력 검증 실패 (이메일 형식·비밀번호 정책·전화번호 패턴 등)
 - 409 `MEMBER_EMAIL_DUPLICATED`
-- 429 Rate Limit (정책 등록은 후속 이슈)
+- 429 `SYSTEM_002` (`RATE_LIMIT_EXCEEDED`) — IP 분당 3회 (config: `groove.auth.rate-limit.signup`)
 
 ---
 
@@ -258,8 +258,8 @@
 ```
 
 **Errors**
-- 401 `AUTH_INVALID_CREDENTIALS`
-- 429 Rate Limit
+- 401 `AUTH_INVALID_CREDENTIALS` — 미등록 이메일·비밀번호 불일치·탈퇴 회원 모두 동일 응답으로 통일
+- 429 `SYSTEM_002` (`RATE_LIMIT_EXCEEDED`) — IP 분당 10회 (config: `groove.auth.rate-limit.login`)
 
 ---
 
@@ -283,14 +283,16 @@
 ```
 
 **Errors**
-- 401 `AUTH_TOKEN_EXPIRED`
-- 401 `AUTH_TOKEN_REUSED` — 이미 사용된 토큰 재사용 감지 시 → 해당 사용자의 모든 토큰 무효화
+- 401 `AUTH_004` (`AUTH_EXPIRED_TOKEN`) — JWT 만료 또는 DB 만료
+- 401 `AUTH_003` (`AUTH_INVALID_TOKEN`) — 형식 오류·서명 오류·미존재·재사용 감지·동시 회전 race 패배. 재사용으로 판단되면 부수 효과로 해당 사용자의 모든 활성 refresh token 이 일괄 폐기되지만, 응답 코드는 동일하게 `AUTH_INVALID_TOKEN` 으로 통일된다 (공격자에게 분기 정보 미노출).
 
 ---
 
 #### POST `/auth/logout`
 
-**Headers**: `Authorization: Bearer ...`
+**구현 상태**: 구현 완료 (#22, W4-3·W4-4). RFC 7009 § 2.2 — 토큰 유효성과 무관하게 항상 200, 형식 오류·만료·미존재·이미 폐기된 토큰 모두 멱등 무동작.
+
+**Headers**: 별도 `Authorization` 불필요 (refreshToken 본문 기반 폐기). 적용 경로는 `/api/v1/auth/**` permitAll.
 
 **Request**
 ```json
@@ -299,7 +301,7 @@
 }
 ```
 
-**Response 204** No Content
+**Response 200** OK (빈 본문)
 
 ---
 

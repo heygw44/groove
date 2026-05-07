@@ -2,8 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.0 |
+| 버전 | 1.1 |
 | 작성일 | 2026-05-05 |
+| 최종 수정일 | 2026-05-07 |
+| 변경 내용 | v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain` + `security`/`exception`) 기준으로 정정. 레이어 책임/의존성 규칙은 동일하나 디렉토리 명명만 controller/service/repository → api/application/domain. |
 | 관련 문서 | PRD.md |
 
 ---
@@ -90,91 +92,73 @@
 
 ### 4.1 패키지 구조
 
-도메인 중심 + 도메인 내 표준 레이어 구조:
+도메인 중심 + 도메인 내 `api / application / domain` 3-레이어 구조. (Controller/Service/Repository 의 역할명을 그대로 유지하되 디렉토리는 책임 단위로 명명)
 
 ```
 com.groove
 ├── GrooveApplication.java
 │
-├── auth/                       (인증/인가)
-│   ├── controller/
-│   ├── service/
-│   ├── repository/
-│   ├── domain/                 (RefreshToken)
-│   ├── dto/
-│   └── jwt/                    (JwtProvider, JwtAuthenticationFilter)
+├── auth/                       (인증/인가) — W4 구현 완료
+│   ├── api/
+│   │   ├── AuthController.java
+│   │   └── dto/                (LoginRequest/Response, RefreshRequest/Response, SignupRequest/Response, LogoutRequest, TokenType)
+│   ├── application/            (AuthService, RefreshTokenService, RefreshTokenAdmin, LoginCommand, TokenPair)
+│   ├── domain/                 (RefreshToken, RefreshTokenRepository, TokenHasher)
+│   └── security/
+│       ├── SecurityConfig.java
+│       ├── JwtProvider / JwtAuthenticationFilter / JwtClaims / JwtProperties
+│       ├── PasswordConfig, CorsProperties, AuthPrincipal
+│       ├── RestAuthenticationEntryPoint, RestAccessDeniedHandler
+│       └── ratelimit/          (AuthRateLimitProperties, LoginRateLimitPolicy, SignupRateLimitPolicy)
 │
-├── member/                     (회원)
-│   ├── controller/
-│   ├── service/
-│   ├── repository/
-│   ├── domain/                 (Member)
-│   └── dto/
+├── member/                     (회원) — W4 구현 완료
+│   ├── application/            (MemberService, SignupCommand)
+│   ├── domain/                 (Member, MemberRepository, MemberRole)
+│   └── exception/              (MemberEmailDuplicatedException)
 │
-├── catalog/                    (LP 카탈로그)
-│   ├── album/
-│   │   ├── controller/
-│   │   ├── service/
-│   │   ├── repository/
-│   │   ├── domain/             (Album, AlbumStatus, Format)
-│   │   └── dto/
+├── catalog/                    (LP 카탈로그) — W5 예정
+│   ├── album/  (api/, application/, domain/)
 │   ├── artist/
 │   ├── genre/
 │   └── label/
 │
-├── cart/                       (장바구니)
+├── cart/                       (장바구니) — W6 예정
 │
-├── order/                      (주문)
-│   ├── controller/
-│   ├── service/
-│   ├── repository/
-│   ├── domain/                 (Order, OrderItem, OrderStatus)
-│   ├── event/                  (OrderPaidEvent, OrderCancelledEvent)
-│   └── dto/
+├── order/                      (주문) — W6 예정
+│   ├── api/, application/, domain/
+│   └── (event: OrderPaidEvent, OrderCancelledEvent — W7 도입)
 │
-├── payment/                    (결제)
-│   ├── controller/
-│   ├── service/
-│   ├── repository/
-│   ├── domain/                 (Payment, PaymentStatus, IdempotencyRecord)
-│   ├── gateway/
-│   │   ├── PaymentGateway.java         (인터페이스)
-│   │   └── mock/
-│   │       ├── MockPaymentGateway.java
-│   │       └── MockWebhookSimulator.java
-│   └── dto/
+├── payment/                    (결제) — W7 예정
+│   ├── api/, application/, domain/  (Payment, IdempotencyRecord)
+│   └── gateway/
+│       ├── PaymentGateway.java         (인터페이스)
+│       └── mock/                       (MockPaymentGateway, MockWebhookSimulator)
 │
-├── shipping/                   (배송)
-│   ├── controller/
-│   ├── service/
-│   ├── repository/
-│   ├── domain/                 (Shipping, ShippingStatus)
-│   ├── scheduler/              (자동 상태 진행)
-│   └── dto/
+├── shipping/                   (배송) — W7 예정
+│   └── (api/, application/, domain/, scheduler/)
 │
-├── review/                     (리뷰)
+├── review/                     (리뷰) — W7 예정
 │
-├── admin/                      (관리자 전용 API 묶음)
-│   ├── controller/
-│   └── service/
+├── admin/                      (관리자 전용 API 묶음) — W5+ 진행
 │
-└── common/                     (횡단 관심사)
-    ├── config/                 (SecurityConfig, JpaConfig, AsyncConfig)
-    ├── exception/              (GlobalExceptionHandler, BusinessException 계층)
-    ├── security/               (RateLimitFilter, MdcFilter)
-    ├── logging/
-    └── util/
+└── common/                     (횡단 관심사) — W3 구현 완료
+    ├── exception/              (GlobalExceptionHandler, BusinessException 계층, ErrorCode, ProblemDetailEnricher)
+    ├── logging/                (MDC 필터, 비즈니스 이벤트 로거)
+    ├── persistence/            (공용 JPA 설정·기반)
+    └── ratelimit/              (RateLimitFilter, 정책 인터페이스 — 도메인이 정책 빈 등록)
 ```
+
+> 도메인별 layout 은 `api / application / domain` 3-레이어로 통일하되, 횡단 보조(`security`, `exception`, `ratelimit`)가 필요한 도메인은 같은 레벨에 추가한다. 이 명명은 W3~W4 구현 시 합의되었으며, 이전 controller/service/repository 명명에서 디렉토리 이름만 정리한 것으로 책임은 동일하다.
 
 ### 4.2 레이어 책임
 
 | 레이어 | 책임 | 의존 방향 |
 |---|---|---|
-| Controller | HTTP 요청/응답, 입력 검증 (`@Valid`), DTO ↔ Service 변환 | → Service |
-| Service | 비즈니스 로직, 트랜잭션 경계, 도메인 호출 | → Repository, Domain |
-| Repository | JPA 영속성, 쿼리 메서드 | → Domain |
-| Domain | 엔티티, 값 객체, 도메인 로직 (상태 전이 등) | (내부 완결) |
-| DTO | API 입출력 데이터 구조 | Controller 레이어에서만 |
+| `api` | HTTP 요청/응답, 입력 검증 (`@Valid`), DTO ↔ Application 변환 | → Application |
+| `application` | 비즈니스 로직, 트랜잭션 경계, Command·Result 객체, 도메인 호출 | → Domain |
+| `domain` | 엔티티·값 객체·Repository 인터페이스·도메인 로직 (상태 전이, 해시 등) | (내부 완결) |
+| `security` (도메인 횡단 보조) | 인증·인가·정책 (필터·핸들러·정책 빈) | → Domain·Application |
+| `dto` (api 하위) | API 입출력 데이터 구조 (record) | api 레이어 내부에서만 |
 
 ### 4.3 의존성 규칙
 1. **도메인 객체는 Controller에 노출하지 않는다.** Service에서 DTO로 변환 후 반환한다.
@@ -281,7 +265,7 @@ RuntimeException
 
 ### 5.6 멱등성 처리 (Idempotency-Key)
 - 결제 요청 엔드포인트에 `Idempotency-Key` 헤더 필수
-- 처리 컴포넌트: `payment.service.IdempotencyService`
+- 처리 컴포넌트: `payment.application.IdempotencyService`
 - 저장: `idempotency_record` 테이블 (key + result_snapshot 매핑)
 - 동작:
   1. 요청 도착 → key 조회

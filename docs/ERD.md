@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.1 |
+| 버전 | 1.2 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-05-05 |
-| 변경 내용 | Issue #2: W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가 (paid_at, cancelled_at, cancelled_reason) |
+| 최종 수정일 | 2026-05-07 |
+| 변경 내용 | v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
 | DB | MySQL 8 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | PRD.md, ARCHITECTURE.md |
@@ -131,11 +131,11 @@ erDiagram
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | member_id | BIGINT | NOT NULL, FK → member.id | |
-| token_hash | VARCHAR(255) | NOT NULL, UNIQUE | 토큰 평문이 아닌 해시 저장 |
+| token_hash | CHAR(64) | NOT NULL, UNIQUE | 토큰 평문이 아닌 SHA-256 hex 64자 |
+| issued_at | DATETIME(6) | NOT NULL | 발급 시각 |
 | expires_at | DATETIME(6) | NOT NULL | |
-| revoked | BOOLEAN | NOT NULL, DEFAULT FALSE | 사용·무효화 여부 |
-| revoked_at | DATETIME(6) | NULL | |
-| replaced_by_token_id | BIGINT | NULL | Rotation 시 다음 토큰 ID (탈취 추적용) |
+| revoked_at | DATETIME(6) | NULL | NULL = 활성, NOT NULL = 폐기됨 (별도 boolean 미사용) |
+| replaced_by_token_id | BIGINT | NULL, FK → refresh_token.id ON DELETE SET NULL | Rotation 시 다음 토큰 ID (탈취 추적용 self-FK) |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
 
@@ -143,7 +143,7 @@ erDiagram
 
 [W5]:
 - `uk_refresh_token_hash` UNIQUE (token_hash)
-- `idx_refresh_token_member` (member_id)
+- `idx_refresh_member_revoked` (member_id, revoked_at) — 회원 활성 토큰 조회·일괄 폐기용 복합 인덱스
 
 [W10] 추가 후보 없음.
 
@@ -153,13 +153,14 @@ erDiagram
 |---|---|---|
 | 토큰 해시 중복 불가 | [DB] | uk_refresh_token_hash UNIQUE |
 | 토큰 평문 미저장 | [APP] | SHA-256 해시 후 저장 |
-| Rotation: 기존 토큰 revoke + 신규 발급 | [APP] | replaced_by_token_id 연결 |
-| 탈취 감지: revoked 토큰 재사용 시 member 전체 토큰 무효화 | [APP] | Service에서 member_id로 전체 revoke |
+| Rotation: 기존 토큰 폐기 + 신규 발급 | [APP] | revoked_at 기록 + replaced_by_token_id 연결 |
+| 탈취 감지: 폐기된 토큰 재사용 시 member 전체 토큰 무효화 | [APP] | RefreshTokenAdmin 이 별도 트랜잭션으로 일괄 revoke |
 
 **비고**
-- 토큰 평문은 절대 저장하지 않음. SHA-256 등 해시 후 저장.
-- Rotation: 사용 시 기존 행을 `revoked=true`로 변경, 새 행 발급 + `replaced_by_token_id` 연결.
-- 탈취 감지: 이미 `revoked=true`인 토큰이 사용되면 해당 member의 모든 활성 토큰 무효화.
+- 토큰 평문은 절대 저장하지 않음. `TokenHasher.sha256Hex` 로 hex 64자 해시 후 저장.
+- Rotation: 사용 시 기존 행에 `revoked_at` 기록 + 새 행 발급 + `replaced_by_token_id` 연결. atomic CAS(`revokeIfActive`) 0 행이면 동시 회전 race 패배로 단순 거부.
+- 탈취 감지: `revoked_at IS NOT NULL` 토큰이 다시 사용되면 해당 member 의 모든 활성 토큰 무효화. 단, JWT 만료가 먼저 검출되면 전체 무효화 없이 단순 만료 응답.
+- self-FK `replaced_by_token_id` 의 `ON DELETE SET NULL`: 회전 체인 행 삭제 시 후방 참조가 자동 해제되어 운영/테스트 batch 삭제 순서 의존성을 제거.
 
 ---
 
@@ -562,7 +563,7 @@ erDiagram
 |---|---|
 | 모든 테이블 | PK + FK 자동 인덱스 |
 | `member` | `uk_member_email`, `idx_member_role` |
-| `refresh_token` | `uk_refresh_token_hash`, `idx_refresh_token_member` |
+| `refresh_token` | `uk_refresh_token_hash`, `idx_refresh_member_revoked` (member_id, revoked_at) |
 | `album` | `idx_album_artist`, `idx_album_genre`, `idx_album_label` |
 | `genre`, `label` | `uk_*_name` |
 | `cart` | `uk_cart_member` |
@@ -623,14 +624,16 @@ CREATE INDEX idx_review_album_created ON review(album_id, created_at);
 
 ## 7. Flyway 마이그레이션 파일 계획
 
-| 버전 | 파일명 | 내용 | 적용 시점 |
-|---|---|---|---|
-| V1 | `V1__init_member_auth.sql` | member, refresh_token | W4 |
-| V2 | `V2__init_catalog.sql` | artist, genre, label, album | W5 |
-| V3 | `V3__init_cart_orders.sql` | cart, cart_item, orders, order_item | W6 |
-| V4 | `V4__init_payment_shipping.sql` | payment, idempotency_record, shipping | W7 |
-| V5 | `V5__init_review.sql` | review | W7 |
-| V6 | `V6__add_search_indexes.sql` | W10 시연용 검색·정렬 인덱스 | W10 |
+| 버전 | 파일명 | 내용 | 적용 시점 | 상태 |
+|---|---|---|---|---|
+| V1 | `V1__init.sql` | 스키마 초기화 placeholder (`SELECT 1`) | W3 | 적용 완료 |
+| V2 | `V2__member.sql` | member | W4 | 적용 완료 |
+| V3 | `V3__refresh_token.sql` | refresh_token (self-FK 포함) | W4 | 적용 완료 |
+| V4 | `V4__init_catalog.sql` | artist, genre, label, album | W5 | 예정 |
+| V5 | `V5__init_cart_orders.sql` | cart, cart_item, orders, order_item | W6 | 예정 |
+| V6 | `V6__init_payment_shipping.sql` | payment, idempotency_record, shipping | W7 | 예정 |
+| V7 | `V7__init_review.sql` | review | W7 | 예정 |
+| V8 | `V8__add_search_indexes.sql` | W10 시연용 검색·정렬 인덱스 | W10 | 예정 |
 
 마이그레이션 원칙:
 - 운영 DB가 없는 단계여도 Flyway로 관리. 시연 때 "초기 스키마부터 인덱스 추가까지의 진화 과정"이 그대로 남음
