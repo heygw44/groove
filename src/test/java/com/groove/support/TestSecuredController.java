@@ -1,13 +1,12 @@
 package com.groove.support;
 
 import com.groove.auth.security.AuthPrincipal;
+import com.groove.member.domain.MemberRole;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 /**
  * 인증 E2E 시나리오 검증용 보호 엔드포인트 (#24).
@@ -21,10 +20,10 @@ import java.util.Map;
 public class TestSecuredController {
 
     @GetMapping("/me")
-    public Map<String, Object> me(@AuthenticationPrincipal AuthPrincipal principal) {
-        return Map.of(
-                "memberId", principal.memberId(),
-                "role", principal.role().name()
-        );
+    public MeResponse me(@AuthenticationPrincipal AuthPrincipal principal) {
+        return new MeResponse(principal.memberId(), principal.role());
+    }
+
+    public record MeResponse(Long memberId, MemberRole role) {
     }
 }

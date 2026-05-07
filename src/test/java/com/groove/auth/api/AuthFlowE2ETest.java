@@ -20,6 +20,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
+import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,8 +36,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>회원가입 → 로그인 → 보호 API → 토큰 회전 → 로그아웃 까지 실 필터·서비스·DB 를 모두 거쳐 검증한다.
  * Testcontainers 위에서 동작하며 보호 엔드포인트는 {@link TestSecuredController}(test 프로파일 한정).
  *
- * <p>토큰 회전 후 구 refresh 재사용은 {@code RefreshTokenServiceTest} 에서 단위 레벨로 다루므로
- * 본 클래스에서는 정상 플로우 + 로그아웃 후 재사용 차단까지만 끝단에서 확인한다.
+ * <p>검증 범위:
+ * <ul>
+ *   <li>정상 플로우 — signup → login → 보호 API → refresh → logout → revoked 재사용 401</li>
+ *   <li>인증 실패 분기 — 토큰 누락·형식 오류 시 401 + ProblemDetail</li>
+ *   <li>회전 후 구 refresh 재사용 — 재사용 감지로 활성 세션 전체 무효화 (#22)</li>
+ *   <li>로그아웃 멱등 — RFC 7009 § 2.2, 형식 오류 토큰에도 200</li>
+ * </ul>
+ *
+ * <p>토큰 회전 단위 검증(만료, 회전 race 등)은 {@code RefreshTokenServiceTest} 에서 다룬다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -111,20 +119,22 @@ class AuthFlowE2ETest {
     }
 
     @Test
-    @DisplayName("Authorization 헤더 누락 시 보호 API 401")
+    @DisplayName("Authorization 헤더 누락 시 보호 API 401 + AUTH ProblemDetail")
     void protectedApi_withoutToken_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/test/me"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.startsWith("AUTH_")));
     }
 
     @Test
-    @DisplayName("형식이 잘못된 Bearer 토큰은 401")
+    @DisplayName("형식이 잘못된 Bearer 토큰은 401 + AUTH ProblemDetail")
     void protectedApi_withMalformedToken_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/test/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer not-a-jwt"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.startsWith("AUTH_")));
     }
 
     @Test
@@ -170,9 +180,10 @@ class AuthFlowE2ETest {
                 .andExpect(status().isCreated())
                 .andExpect(header().exists(HttpHeaders.LOCATION))
                 .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.memberId").isNumber())
                 .andReturn();
         JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-        return json.get("memberId").asLong();
+        return requireField(json, "memberId").asLong();
     }
 
     private TokenPair loginAndExtractTokens() throws Exception {
@@ -186,9 +197,10 @@ class AuthFlowE2ETest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").isNumber())
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andExpect(jsonPath("$.refreshToken").isString())
                 .andReturn();
-        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-        return new TokenPair(json.get("accessToken").asText(), json.get("refreshToken").asText());
+        return extractTokenPair(result);
     }
 
     private TokenPair refreshAndExtractTokens(String refreshToken) throws Exception {
@@ -197,10 +209,26 @@ class AuthFlowE2ETest {
                         .content(objectMapper.writeValueAsString(Map.of("refreshToken", refreshToken))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.accessToken").isString())
                 .andExpect(jsonPath("$.refreshToken").isString())
                 .andReturn();
+        return extractTokenPair(result);
+    }
+
+    private TokenPair extractTokenPair(MvcResult result) throws Exception {
         JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-        return new TokenPair(json.get("accessToken").asText(), json.get("refreshToken").asText());
+        return new TokenPair(
+                requireField(json, "accessToken").asText(),
+                requireField(json, "refreshToken").asText()
+        );
+    }
+
+    /**
+     * 응답 JSON 에서 필드를 안전하게 추출한다. 누락 시 즉시 명확한 메시지로 실패해
+     * 추후 DTO 필드명 변경으로 인한 NPE 디버깅 비용을 줄인다.
+     */
+    private static JsonNode requireField(JsonNode json, String field) {
+        return Objects.requireNonNull(json.get(field), () -> "응답 JSON 에 '" + field + "' 필드가 없음: " + json);
     }
 
     private record TokenPair(String access, String refresh) {

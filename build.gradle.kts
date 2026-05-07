@@ -64,15 +64,13 @@ tasks.withType<Test> {
     finalizedBy(tasks.jacocoTestReport)
 }
 
-// 커버리지 측정 대상에서 제외 — 부트스트랩, DTO/설정/예외 단순 클래스, 패키지 메타.
-// 비즈니스 로직(서비스·도메인·필터·핸들러)에 집중해 의미 있는 커버리지를 산출한다.
+// 커버리지 측정 대상에서 제외 — 부트스트랩·DTO·@ConfigurationProperties 바인딩·패키지 메타만 제외한다.
+// SecurityConfig·RateLimitFilterConfig 등은 운영 동작 직결 코드라 측정에 포함해 회귀를 잡는다.
 val coverageExclusions = listOf(
     "com/groove/GrooveApplication.*",
     "com/groove/**/dto/**",
     "com/groove/**/package-info.*",
     "com/groove/**/*Properties.*",
-    "com/groove/**/*Config.*",
-    "com/groove/**/*Configuration.*",
 )
 
 tasks.jacocoTestReport {
@@ -98,8 +96,10 @@ tasks.jacocoTestCoverageVerification {
         })
     )
     violationRules {
+        // PACKAGE element 의 includes 는 패키지 FQN 과 매칭된다 (BUNDLE 의 includes 는 프로젝트명만 매칭되어 침묵 패스됨에 유의).
+        // 인증/회원 하위 모든 패키지가 각각 80% 라인 커버리지를 충족해야 통과한다.
         rule {
-            element = "BUNDLE"
+            element = "PACKAGE"
             includes = listOf("com.groove.auth.*", "com.groove.member.*")
             limit {
                 counter = "LINE"
