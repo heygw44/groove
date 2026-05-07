@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * JWT 발급·파싱·검증을 담당하는 도메인 컴포넌트.
@@ -60,6 +61,7 @@ public class JwtProvider {
     public String issueRefreshToken(Long memberId) {
         Instant now = clock.instant();
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(memberId))
                 .claim(CLAIM_TYPE, TYPE_REFRESH)
                 .issuedAt(Date.from(now))

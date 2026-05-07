@@ -1,5 +1,6 @@
 package com.groove.auth.api;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
@@ -43,10 +44,15 @@ class AuthControllerLoginTest {
     private MemberRepository memberRepository;
 
     @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
+        // refresh_token 이 member 에 FK 를 가지므로 자식부터 삭제한다.
+        refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAll();
         Member member = Member.register(
                 EMAIL,
