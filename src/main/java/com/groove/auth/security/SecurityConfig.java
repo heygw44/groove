@@ -1,5 +1,6 @@
 package com.groove.auth.security;
 
+import com.groove.auth.security.ratelimit.AuthRateLimitProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +29,7 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class})
+@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class, AuthRateLimitProperties.class})
 public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {

@@ -60,6 +60,17 @@ jwt:
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
 
+# 인증 엔드포인트 Rate Limit (#23). 정책 수치는 운영 측정 후 W10에서 재조정 가능.
+groove:
+  auth:
+    rate-limit:
+      login:
+        capacity: ${AUTH_RATE_LIMIT_LOGIN_CAPACITY:10}
+        refill-period: ${AUTH_RATE_LIMIT_LOGIN_REFILL_PERIOD:PT1M}
+      signup:
+        capacity: ${AUTH_RATE_LIMIT_SIGNUP_CAPACITY:3}
+        refill-period: ${AUTH_RATE_LIMIT_SIGNUP_REFILL_PERIOD:PT1M}
+
 # CORS default 는 모든 origin 차단. profile 별 yaml 또는 환경 변수로 override.
 # 운영 환경에서는 cors.allowed-origins 를 명시적 도메인 화이트리스트로 설정.
 cors:

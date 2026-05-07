@@ -18,3 +18,15 @@ logging:
   level:
     root: WARN
     com.groove: DEBUG
+
+# 테스트 기본값 — 단위/슬라이스 테스트가 동일 IP로 다회 호출해도 영향이 없도록 큰 한도.
+# 한도 검증 통합 테스트는 @TestPropertySource 로 별도 override.
+groove:
+  auth:
+    rate-limit:
+      login:
+        capacity: 100000
+        refill-period: PT1M
+      signup:
+        capacity: 100000
+        refill-period: PT1M
