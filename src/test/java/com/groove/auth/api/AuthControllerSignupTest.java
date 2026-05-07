@@ -43,10 +43,15 @@ class AuthControllerSignupTest {
     private MemberRepository memberRepository;
 
     @Autowired
+    private com.groove.auth.domain.RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void cleanup() {
+        // refresh_token FK 때문에 자식부터 삭제 (다른 테스트가 남긴 데이터 대비)
+        refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAll();
     }
 
