@@ -116,11 +116,11 @@ com.groove
 │   ├── domain/                 (Member, MemberRepository, MemberRole)
 │   └── exception/              (MemberEmailDuplicatedException)
 │
-├── catalog/                    (LP 카탈로그) — W5 예정
-│   ├── album/  (api/, application/, domain/)
-│   ├── artist/
-│   ├── genre/
-│   └── label/
+├── catalog/                    (LP 카탈로그)
+│   ├── album/                  — W5-3 예정 (api/, application/, domain/, exception/)
+│   ├── artist/                 — W5-2 구현 완료 (api/, application/, domain/, exception/)
+│   ├── genre/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)
+│   └── label/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)
 │
 ├── cart/                       (장바구니) — W6 예정
 │

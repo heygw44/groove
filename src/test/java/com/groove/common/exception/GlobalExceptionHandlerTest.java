@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -141,6 +144,20 @@ class GlobalExceptionHandlerTest {
     // ── 폴백 ─────────────────────────────────────────────────────────────
 
     @Test
+    @DisplayName("ConstraintViolationException(@Validated PathVariable) → 400, code=VALID_001 + violations 배열")
+    void constraintViolation() throws Exception {
+        mockMvc.perform(get("/stub/positive/-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.code").value("VALID_001"))
+                .andExpect(jsonPath("$.violations").isArray())
+                .andExpect(jsonPath("$.violations[0].field").exists())
+                .andExpect(jsonPath("$.violations[0].message").exists())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.traceId").exists());
+    }
+
+    @Test
     @DisplayName("RuntimeException(폴백) → 500, code=SYSTEM_001")
     void genericException() throws Exception {
         mockMvc.perform(get("/stub/generic-error"))
@@ -155,6 +172,7 @@ class GlobalExceptionHandlerTest {
 
     @RestController
     @RequestMapping("/stub")
+    @Validated
     static class StubController {
 
         @GetMapping("/auth-error")
@@ -189,6 +207,10 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/generic-error")
         void genericError() {
             throw new RuntimeException("예상치 못한 오류");
+        }
+
+        @GetMapping("/positive/{id}")
+        void positiveOnly(@PathVariable @Positive Long id) {
         }
     }
 

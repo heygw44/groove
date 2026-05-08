@@ -34,6 +34,7 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {
             "/api/v1/albums/**",
+            "/api/v1/artists/**",
             "/api/v1/genres/**",
             "/api/v1/labels/**"
     };
