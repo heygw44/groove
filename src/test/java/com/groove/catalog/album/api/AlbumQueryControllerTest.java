@@ -253,6 +253,53 @@ class AlbumQueryControllerTest {
         }
 
         @Test
+        @DisplayName("필터 조합(genre+artist+price+year+format+isLimited) → 모두 일치하는 1건만")
+        void filter_combinedAllFiltersTogether_returnsIntersection() throws Exception {
+            // 모든 필터 조건을 만족하는 정답 행 1건
+            persistAlbum("Match", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, true, AlbumStatus.SELLING);
+            // 1개 조건만 다른 노이즈 행들 — 교집합에서 빠져야 함
+            persistAlbum("WrongGenre", beatles, jazz, apple, (short) 1969, 30000L, AlbumFormat.LP_12, true, AlbumStatus.SELLING);
+            persistAlbum("WrongArtist", stones, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, true, AlbumStatus.SELLING);
+            persistAlbum("WrongPrice", beatles, rock, apple, (short) 1969, 90000L, AlbumFormat.LP_12, true, AlbumStatus.SELLING);
+            persistAlbum("WrongYear", beatles, rock, apple, (short) 2020, 30000L, AlbumFormat.LP_12, true, AlbumStatus.SELLING);
+            persistAlbum("WrongFormat", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.EP, true, AlbumStatus.SELLING);
+            persistAlbum("WrongLimited", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+
+            mockMvc.perform(get("/api/v1/albums")
+                            .param("genreId", String.valueOf(rock.getId()))
+                            .param("artistId", String.valueOf(beatles.getId()))
+                            .param("minPrice", "20000")
+                            .param("maxPrice", "50000")
+                            .param("minYear", "1969")
+                            .param("maxYear", "1970")
+                            .param("format", "LP_12")
+                            .param("isLimited", "true"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].title").value("Match"));
+        }
+
+        @Test
+        @DisplayName("필터 조합 + keyword → keyword 까지 AND 결합하여 일치하는 1건만")
+        void filter_combinedWithKeyword_returnsIntersection() throws Exception {
+            // 정답: 키워드까지 일치
+            persistAlbum("Abbey Road", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+            // 다른 필터는 모두 일치하지만 keyword 만 어긋남
+            persistAlbum("Let It Be", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+
+            mockMvc.perform(get("/api/v1/albums")
+                            .param("genreId", String.valueOf(rock.getId()))
+                            .param("minPrice", "20000")
+                            .param("maxPrice", "50000")
+                            .param("minYear", "1969")
+                            .param("maxYear", "1970")
+                            .param("keyword", "Abbey"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].title").value("Abbey Road"));
+        }
+
+        @Test
         @DisplayName("page=1 size=1 → 200 + 두 번째 페이지 1건 + last=true")
         void paging_sizeBoundary() throws Exception {
             persistAlbum("A", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
@@ -267,6 +314,50 @@ class AlbumQueryControllerTest {
                     .andExpect(jsonPath("$.size").value(1))
                     .andExpect(jsonPath("$.totalPages").value(2))
                     .andExpect(jsonPath("$.first").value(false))
+                    .andExpect(jsonPath("$.last").value(true));
+        }
+
+        @Test
+        @DisplayName("빈 결과 → 200 + content=[] + totalPages=0 + first=true + last=true")
+        void paging_emptyResult_returnsEmptyEnvelope() throws Exception {
+            mockMvc.perform(get("/api/v1/albums"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(0))
+                    .andExpect(jsonPath("$.page").value(0))
+                    .andExpect(jsonPath("$.size").value(20))
+                    .andExpect(jsonPath("$.totalElements").value(0))
+                    .andExpect(jsonPath("$.totalPages").value(0))
+                    .andExpect(jsonPath("$.first").value(true))
+                    .andExpect(jsonPath("$.last").value(true));
+        }
+
+        @Test
+        @DisplayName("size=500 → spring max-page-size=100 으로 캡 적용")
+        void paging_sizeAboveCap_clampsToMax() throws Exception {
+            persistAlbum("A", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+
+            // 클라이언트가 size=500 을 보내도 application.yaml 의 max-page-size=100 으로 캡되어
+            // PageResponse.size 는 100 이어야 한다 (대량 조회 방지).
+            mockMvc.perform(get("/api/v1/albums").param("size", "500"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.size").value(100))
+                    .andExpect(jsonPath("$.content.length()").value(1));
+        }
+
+        @Test
+        @DisplayName("page=10 size=10 + 데이터 2건 → 200 + 빈 content + last=true")
+        void paging_pageBeyondTotal_returnsEmptyContent() throws Exception {
+            persistAlbum("A", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+            persistAlbum("B", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+
+            mockMvc.perform(get("/api/v1/albums")
+                            .param("page", "10")
+                            .param("size", "10"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(0))
+                    .andExpect(jsonPath("$.page").value(10))
+                    .andExpect(jsonPath("$.totalElements").value(2))
+                    .andExpect(jsonPath("$.totalPages").value(1))
                     .andExpect(jsonPath("$.last").value(true));
         }
 

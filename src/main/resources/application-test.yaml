@@ -10,6 +10,12 @@ spring:
     properties:
       hibernate:
         show_sql: true
+  # AlbumQueryControllerTest#paging_sizeAboveCap_clampsToMax 의 캡 단언이
+  # application.yaml 의 운영 기본값에 묵시적으로 의존하지 않도록 테스트 프로파일에서 명시.
+  data:
+    web:
+      pageable:
+        max-page-size: 100
 
 # 테스트 전용 JWT 시크릿 — 256bit 이상 필요 (JwtProperties 검증).
 jwt:

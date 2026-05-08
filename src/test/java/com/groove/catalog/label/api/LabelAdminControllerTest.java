@@ -217,4 +217,31 @@ class LabelAdminControllerTest {
                 .andExpect(jsonPath("$[0].name").value("Apple"))
                 .andExpect(jsonPath("$[1].name").value("Motown"));
     }
+
+    @Test
+    @DisplayName("PUT USER 권한 → 403")
+    void update_userRole_returns403() throws Exception {
+        Label saved = labelRepository.saveAndFlush(Label.create("Sub Pop"));
+
+        Map<String, String> body = Map.of("name", "Other");
+
+        mockMvc.perform(put("/api/v1/admin/labels/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("DELETE USER 권한 → 403 + 엔티티 보존")
+    void delete_userRole_returns403() throws Exception {
+        Label saved = labelRepository.saveAndFlush(Label.create("Sub Pop"));
+
+        mockMvc.perform(delete("/api/v1/admin/labels/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isForbidden());
+
+        // SecurityFilter 우회로 실제 삭제까지 도달하는 회귀를 잡기 위한 DB 가드.
+        assertThat(labelRepository.findById(saved.getId())).isPresent();
+    }
 }
