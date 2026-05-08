@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.matchesRegex;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -137,8 +139,8 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", org.hamcrest.Matchers.startsWith("/api/v1/orders/ORD-")))
-                .andExpect(jsonPath("$.orderNumber").value(org.hamcrest.Matchers.matchesRegex("^ORD-\\d{8}-[A-Z0-9]{6}$")))
+                .andExpect(header().string("Location", startsWith("/api/v1/orders/ORD-")))
+                .andExpect(jsonPath("$.orderNumber").value(matchesRegex("^ORD-\\d{8}-[A-Z0-9]{6}$")))
                 .andExpect(jsonPath("$.status").value(OrderStatus.PENDING.name()))
                 .andExpect(jsonPath("$.totalAmount").value(35000 * 2 + 30000 * 3))
                 .andExpect(jsonPath("$.items.length()").value(2))

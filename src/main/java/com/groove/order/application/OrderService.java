@@ -16,6 +16,9 @@ import com.groove.order.exception.InvalidOrderOwnershipException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 주문 생성 트랜잭션 경계 (issue #43, API.md §3.5).
  *
@@ -27,10 +30,13 @@ import org.springframework.transaction.annotation.Transactional;
  *       lost-update / oversell 가능성을 의도적으로 노출 (W6-6 재현, W10-3 비관적 락 시연).</li>
  *   <li>orderNumber 발급 (사전 존재 체크 최대 3회).</li>
  *   <li>Order + OrderItem 생성 후 영속화.</li>
- *   <li>응답 직렬화 시 LazyInitializationException 방지를 위해 album/artist 강제 초기화.</li>
  * </ol>
  *
  * <p>RuntimeException 이 발생하면 Spring 의 기본 정책으로 트랜잭션 전체가 롤백되어 재고 차감도 함께 되돌려진다.
+ *
+ * <p>응답 DTO({@code OrderItemResponse}) 는 {@code album_title_snapshot} 컬럼과 {@code album.id}(프록시
+ * 키만 사용) 만 노출하므로 LAZY 강제 초기화는 두지 않는다 — cart 와 달리 album.title / artist.name 을
+ * 응답에 포함하지 않는다.
  */
 @Service
 public class OrderService {
@@ -54,24 +60,24 @@ public class OrderService {
         validateOwnership(memberId, request.guest());
 
         // 1) 도메인 검증 + 재고 차감 — 실패 시 orderNumber 발급 비용을 아낀다.
-        Album[] albums = new Album[request.items().size()];
-        for (int i = 0; i < request.items().size(); i++) {
-            OrderItemRequest line = request.items().get(i);
+        List<ResolvedLine> lines = new ArrayList<>(request.items().size());
+        for (OrderItemRequest line : request.items()) {
             Album album = loadPurchasable(line.albumId());
             decreaseStock(album, line.quantity());
-            albums[i] = album;
+            lines.add(new ResolvedLine(album, line.quantity()));
         }
 
         // 2) orderNumber 발급 + Order/OrderItem 영속화.
         String orderNumber = allocateOrderNumber();
         Order order = newOrder(orderNumber, memberId, request.guest());
-        for (int i = 0; i < albums.length; i++) {
-            order.addItem(OrderItem.create(albums[i], request.items().get(i).quantity()));
+        for (ResolvedLine line : lines) {
+            order.addItem(OrderItem.create(line.album, line.quantity));
         }
 
-        Order saved = orderRepository.save(order);
-        initializeAssociations(saved);
-        return saved;
+        return orderRepository.save(order);
+    }
+
+    private record ResolvedLine(Album album, int quantity) {
     }
 
     private void validateOwnership(Long memberId, GuestInfoRequest guest) {
@@ -118,17 +124,5 @@ public class OrderService {
             throw new InsufficientStockException(album.getId(), quantity, album.getStock());
         }
         album.adjustStock(-quantity);
-    }
-
-    /**
-     * OrderResponse 직렬화 시점에 album.title / album.artist.name 이 필요하므로
-     * 트랜잭션 내에서 LAZY 프록시를 강제 초기화한다. cart 와 동일한 패턴.
-     */
-    private void initializeAssociations(Order order) {
-        order.getItems().forEach(item -> {
-            Album album = item.getAlbum();
-            album.getTitle();
-            album.getArtist().getName();
-        });
     }
 }
