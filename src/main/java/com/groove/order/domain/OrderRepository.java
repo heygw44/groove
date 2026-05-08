@@ -7,4 +7,6 @@ import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Optional<Order> findByOrderNumber(String orderNumber);
+
+    boolean existsByOrderNumber(String orderNumber);
 }

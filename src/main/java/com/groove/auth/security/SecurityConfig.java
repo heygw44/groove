@@ -45,6 +45,14 @@ public class SecurityConfig {
             "/error"
     };
 
+    /**
+     * 게스트 주문 생성을 허용하는 경로. POST 만 풀고 GET/PATCH 등 본인 조회·취소는
+     * {@code anyRequest().authenticated()} 로 그대로 보호한다.
+     */
+    private static final String[] PUBLIC_POST_PATTERNS = {
+            "/api/v1/orders"
+    };
+
     private static final String ADMIN_PATTERN = "/api/v1/admin/**";
 
     @Bean
@@ -79,6 +87,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(PUBLIC_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATTERNS).permitAll()
+                        .requestMatchers(HttpMethod.POST, PUBLIC_POST_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(ADMIN_PATTERN).hasRole("ADMIN")
                         .anyRequest().authenticated()
