@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 주문 (ERD §4.9, glossary §3.4).
@@ -123,6 +124,7 @@ public class Order extends BaseTimeEntity {
      * </ul>
      */
     public void changeStatus(OrderStatus next, String reason) {
+        Objects.requireNonNull(next, "next status must not be null");
         if (!status.canTransitionTo(next)) {
             throw new IllegalStateTransitionException(status, next);
         }

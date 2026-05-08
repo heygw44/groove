@@ -215,6 +215,29 @@ class OrderTest {
         }
 
         @Test
+        @DisplayName("CANCELLED 전이 후에도 totalAmount 는 보존 (취소 주문 금액 이력 유지)")
+        void totalAmount_preservedAfterCancellation() {
+            Order order = Order.placeForMember("ORD-1", 1L);
+            order.addItem(OrderItem.create(album(10L, 30000L), 2));
+            long beforeCancel = order.getTotalAmount();
+
+            order.changeStatus(OrderStatus.CANCELLED, "변심");
+
+            assertThat(order.getTotalAmount()).isEqualTo(beforeCancel);
+            assertThat(order.getTotalAmount()).isEqualTo(60000L);
+        }
+
+        @Test
+        @DisplayName("changeStatus(null) → NullPointerException (canTransitionTo 의 null-흡수와 책임 분리)")
+        void rejectsNullNext() {
+            Order order = Order.placeForMember("ORD-1", 1L);
+
+            assertThatThrownBy(() -> order.changeStatus(null, null))
+                    .isInstanceOf(NullPointerException.class);
+            assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        }
+
+        @Test
         @DisplayName("정상 라이프사이클 PENDING → PAID → PREPARING → SHIPPED → DELIVERED → COMPLETED")
         void happyPath_walkthrough() {
             Order order = Order.placeForMember("ORD-1", 1L);

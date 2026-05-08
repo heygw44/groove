@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * OrderStatus 상태 전이 매트릭스 전수 검증 (8×8 = 64 케이스).
  *
- * <p>합법 전이는 ARCHITECTURE.md §8 다이어그램 기준 12종이다. 본 테스트는
+ * <p>합법 전이는 ARCHITECTURE.md §8 다이어그램 기준 9종이다. 본 테스트는
  * "합법 전이 표 + 종착 상태" 두 단으로 SSOT 를 두고 — 매트릭스의 나머지 셀은 모두 불법 (false) 이다.
  */
 @DisplayName("OrderStatus — 전이 매트릭스 전수")
@@ -49,7 +49,7 @@ class OrderStatusTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @MethodSource("allTransitions")
-    @DisplayName("64 케이스 매트릭스: 합법 전이 표에 포함된 9개만 true, 나머지는 false")
+    @DisplayName("64 케이스 매트릭스: 합법 전이 표에 포함된 9종만 true, 나머지는 false")
     void canTransitionTo_matrix(OrderStatus from, OrderStatus to) {
         boolean expected = LEGAL.contains(new Pair(from, to));
 

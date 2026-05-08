@@ -62,6 +62,9 @@ public class OrderItem extends BaseTimeEntity {
      *
      * <p>{@code Order.addItem} 호출 전까지 order 연관은 비어 있고, addItem 시점에
      * {@link #attachTo(Order)} 를 통해 주입된다.
+     *
+     * <p>호출 측({@code OrderService}, #W6-3) 이 album.status == SELLING 검증을 끝낸 상태로
+     * 전달한다고 가정한다 — Cart 패턴과 동일하게 도메인은 구매 가능 여부를 재검증하지 않는다.
      */
     public static OrderItem create(Album album, int quantity) {
         if (album == null) {
