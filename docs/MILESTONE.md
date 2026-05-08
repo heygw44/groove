@@ -571,15 +571,15 @@
 **선행**: #W6-1
 
 **작업 내용**
-- [ ] `Order`, `OrderItem` 엔티티
-- [ ] `OrderStatus` enum + `canTransitionTo()` 메서드
-- [ ] Flyway 마이그레이션
-- [ ] `Order.changeStatus(next)` 도메인 메서드 (전이 검증)
-- [ ] 단위 테스트 (모든 합법/불법 전이)
+- [x] `Order`, `OrderItem` 엔티티 + Repository (회원/게스트 정적 팩토리, OrderItem 가격·제목 스냅샷)
+- [x] `OrderStatus` enum + `canTransitionTo()` + `isTerminal()` 메서드
+- [x] Flyway 마이그레이션 V8 (uk_orders_number, ck_orders_total_non_negative, ck_order_item_quantity_positive, ck_order_item_unit_price_non_neg, FK ON DELETE SET NULL/CASCADE/RESTRICT)
+- [x] `Order.changeStatus(next, reason)` 도메인 메서드 (전이 검증 + PAID/CANCELLED 시각·사유 기록)
+- [x] 단위 테스트 (8×8 전이 매트릭스 75건 + Order/OrderItem 23건)
 
 **완료 조건**
-- [ ] 합법 전이만 허용, 불법 전이는 `IllegalStateTransitionException`
-- [ ] 단위 테스트로 전이 표 전수 검증
+- [x] 합법 전이만 허용, 불법 전이는 `IllegalStateTransitionException` (HTTP 409 ORDER_INVALID_STATE_TRANSITION)
+- [x] 단위 테스트로 전이 표 전수 검증 (자기 자신/null/종착 상태 모두 포함)
 
 ---
 

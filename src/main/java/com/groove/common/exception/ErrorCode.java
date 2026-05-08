@@ -40,6 +40,12 @@ public enum ErrorCode {
     CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "CART_ITEM_NOT_FOUND", "장바구니 항목을 찾을 수 없습니다"),
     CART_QUANTITY_LIMIT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "CART_QUANTITY_LIMIT_EXCEEDED", "허용된 수량 한도를 초과했습니다"),
 
+    // ORDER
+    ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "주문을 찾을 수 없습니다"),
+    ORDER_INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "ORDER_INVALID_STATE_TRANSITION", "허용되지 않은 주문 상태 전이입니다"),
+    ORDER_INVALID_OWNERSHIP(HttpStatus.UNPROCESSABLE_ENTITY, "ORDER_INVALID_OWNERSHIP", "주문 소유 형식이 올바르지 않습니다"),
+    ORDER_ITEM_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "ORDER_ITEM_INVALID", "주문 항목 값이 올바르지 않습니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 
