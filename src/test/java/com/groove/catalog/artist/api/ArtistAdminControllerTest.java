@@ -273,4 +273,28 @@ class ArtistAdminControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ARTIST_NOT_FOUND"));
     }
+
+    @Test
+    @DisplayName("PUT USER 권한 → 403")
+    void update_userRole_returns403() throws Exception {
+        Artist saved = artistRepository.saveAndFlush(Artist.create("Old", null));
+
+        Map<String, String> body = Map.of("name", "New");
+
+        mockMvc.perform(put("/api/v1/admin/artists/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("DELETE USER 권한 → 403")
+    void delete_userRole_returns403() throws Exception {
+        Artist saved = artistRepository.saveAndFlush(Artist.create("X", null));
+
+        mockMvc.perform(delete("/api/v1/admin/artists/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isForbidden());
+    }
 }

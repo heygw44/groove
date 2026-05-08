@@ -333,6 +333,31 @@ class AlbumAdminControllerTest {
     }
 
     @Test
+    @DisplayName("PUT USER 권한 → 403")
+    void update_userRole_returns403() throws Exception {
+        Album saved = persistedAlbum(0);
+
+        Map<String, Object> body = validCreateBody();
+        body.remove("stock");
+
+        mockMvc.perform(put("/api/v1/admin/albums/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("DELETE USER 권한 → 403")
+    void delete_userRole_returns403() throws Exception {
+        Album saved = persistedAlbum(0);
+
+        mockMvc.perform(delete("/api/v1/admin/albums/{id}", saved.getId())
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("PATCH /stock 양수 delta → 200 + 재고 증가")
     void patchStock_positive_returns200() throws Exception {
         Album saved = persistedAlbum(5);
