@@ -1,6 +1,7 @@
 package com.groove.catalog.artist.api;
 
 import com.groove.auth.security.JwtProvider;
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
 import com.groove.member.domain.MemberRole;
@@ -48,6 +49,9 @@ class ArtistAdminControllerTest {
     private ArtistRepository artistRepository;
 
     @Autowired
+    private AlbumRepository albumRepository;
+
+    @Autowired
     private JwtProvider jwtProvider;
 
     private String adminBearer;
@@ -55,6 +59,8 @@ class ArtistAdminControllerTest {
 
     @BeforeEach
     void cleanup() {
+        // Album → Artist FK 때문에 album 을 먼저 비운다 (W5-3 도입).
+        albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
         adminBearer = "Bearer " + jwtProvider.issueAccessToken(1L, MemberRole.ADMIN);
         userBearer = "Bearer " + jwtProvider.issueAccessToken(2L, MemberRole.USER);

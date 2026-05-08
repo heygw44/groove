@@ -1,5 +1,6 @@
 package com.groove.catalog.genre.api;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.support.TestcontainersConfig;
@@ -30,8 +31,12 @@ class GenreQueryControllerTest {
     @Autowired
     private GenreRepository genreRepository;
 
+    @Autowired
+    private AlbumRepository albumRepository;
+
     @BeforeEach
     void cleanup() {
+        albumRepository.deleteAllInBatch();
         genreRepository.deleteAllInBatch();
     }
 

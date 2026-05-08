@@ -1,5 +1,6 @@
 package com.groove.catalog.artist.domain;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.common.persistence.JpaAuditingConfig;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,8 +30,15 @@ class ArtistRepositoryTest {
     @Autowired
     private ArtistRepository artistRepository;
 
+    @Autowired
+    private AlbumRepository albumRepository;
+
+    /**
+     * Album → Artist FK 때문에 album 을 먼저 비운다 (W5-3 도입).
+     */
     @BeforeEach
     void cleanup() {
+        albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
     }
 

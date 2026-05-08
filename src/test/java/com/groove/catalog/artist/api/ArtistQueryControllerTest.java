@@ -1,5 +1,6 @@
 package com.groove.catalog.artist.api;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
 import com.groove.support.TestcontainersConfig;
@@ -30,8 +31,12 @@ class ArtistQueryControllerTest {
     @Autowired
     private ArtistRepository artistRepository;
 
+    @Autowired
+    private AlbumRepository albumRepository;
+
     @BeforeEach
     void cleanup() {
+        albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
     }
 

@@ -1,7 +1,9 @@
 package com.groove.catalog.label.application;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
+import com.groove.catalog.label.exception.LabelInUseException;
 import com.groove.catalog.label.exception.LabelNameDuplicatedException;
 import com.groove.catalog.label.exception.LabelNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,11 +32,14 @@ class LabelServiceTest {
     @Mock
     private LabelRepository labelRepository;
 
+    @Mock
+    private AlbumRepository albumRepository;
+
     private LabelService labelService;
 
     @BeforeEach
     void setUp() {
-        labelService = new LabelService(labelRepository);
+        labelService = new LabelService(labelRepository, albumRepository);
     }
 
     @Test
@@ -114,14 +119,41 @@ class LabelServiceTest {
     }
 
     @Test
-    @DisplayName("delete 정상 → entity 로 delete 위임")
+    @DisplayName("delete 정상 → album 미참조 시 entity 로 delete 위임 후 flush")
     void delete_callsDeleteEntity() {
         Label existing = Label.create("Apple Records");
         given(labelRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByLabel_Id(1L)).willReturn(false);
 
         labelService.delete(1L);
 
         then(labelRepository).should().delete(existing);
+        then(labelRepository).should().flush();
+    }
+
+    @Test
+    @DisplayName("delete → album 이 참조 중이면 409 LabelInUse")
+    void delete_throwsWhenAlbumReferences() {
+        Label existing = Label.create("Apple Records");
+        given(labelRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByLabel_Id(1L)).willReturn(true);
+
+        assertThatThrownBy(() -> labelService.delete(1L))
+                .isInstanceOf(LabelInUseException.class);
+        then(labelRepository).should(never()).delete(any(Label.class));
+    }
+
+    @Test
+    @DisplayName("delete → 사전검사 통과 후 동시 INSERT race → DataIntegrityViolation 을 LabelInUse 로 변환")
+    void delete_translatesIntegrityViolationToInUse() {
+        Label existing = Label.create("Apple Records");
+        given(labelRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByLabel_Id(1L)).willReturn(false);
+        org.mockito.BDDMockito.willThrow(new DataIntegrityViolationException("fk_album_label"))
+                .given(labelRepository).flush();
+
+        assertThatThrownBy(() -> labelService.delete(1L))
+                .isInstanceOf(LabelInUseException.class);
     }
 
     @Test

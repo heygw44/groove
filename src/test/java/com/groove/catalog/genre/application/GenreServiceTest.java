@@ -1,7 +1,9 @@
 package com.groove.catalog.genre.application;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
+import com.groove.catalog.genre.exception.GenreInUseException;
 import com.groove.catalog.genre.exception.GenreNameDuplicatedException;
 import com.groove.catalog.genre.exception.GenreNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,11 +32,14 @@ class GenreServiceTest {
     @Mock
     private GenreRepository genreRepository;
 
+    @Mock
+    private AlbumRepository albumRepository;
+
     private GenreService genreService;
 
     @BeforeEach
     void setUp() {
-        genreService = new GenreService(genreRepository);
+        genreService = new GenreService(genreRepository, albumRepository);
     }
 
     @Test
@@ -116,14 +121,41 @@ class GenreServiceTest {
     }
 
     @Test
-    @DisplayName("delete → 존재하면 entity 로 delete 호출")
+    @DisplayName("delete → 존재하고 album 미참조면 entity 로 delete 호출 후 flush")
     void delete_callsDeleteEntity() {
         Genre existing = Genre.create("Rock");
         given(genreRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByGenre_Id(1L)).willReturn(false);
 
         genreService.delete(1L);
 
         then(genreRepository).should().delete(existing);
+        then(genreRepository).should().flush();
+    }
+
+    @Test
+    @DisplayName("delete → album 이 참조 중이면 409 GenreInUse (delete 호출 안 함)")
+    void delete_throwsWhenAlbumReferences() {
+        Genre existing = Genre.create("Rock");
+        given(genreRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByGenre_Id(1L)).willReturn(true);
+
+        assertThatThrownBy(() -> genreService.delete(1L))
+                .isInstanceOf(GenreInUseException.class);
+        then(genreRepository).should(never()).delete(any(Genre.class));
+    }
+
+    @Test
+    @DisplayName("delete → 사전검사 통과 후 동시 INSERT race → DataIntegrityViolation 을 GenreInUse 로 변환")
+    void delete_translatesIntegrityViolationToInUse() {
+        Genre existing = Genre.create("Rock");
+        given(genreRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByGenre_Id(1L)).willReturn(false);
+        org.mockito.BDDMockito.willThrow(new DataIntegrityViolationException("fk_album_genre"))
+                .given(genreRepository).flush();
+
+        assertThatThrownBy(() -> genreService.delete(1L))
+                .isInstanceOf(GenreInUseException.class);
     }
 
     @Test

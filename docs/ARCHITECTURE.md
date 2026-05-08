@@ -117,7 +117,7 @@ com.groove
 │   └── exception/              (MemberEmailDuplicatedException)
 │
 ├── catalog/                    (LP 카탈로그)
-│   ├── album/                  — W5-3 예정 (api/, application/, domain/, exception/)
+│   ├── album/                  — W5-3 구현 완료 (api/, application/, domain/, exception/)
 │   ├── artist/                 — W5-2 구현 완료 (api/, application/, domain/, exception/)
 │   ├── genre/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)
 │   └── label/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)

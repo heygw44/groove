@@ -1,5 +1,6 @@
 package com.groove.catalog.label.api;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.support.TestcontainersConfig;
@@ -30,8 +31,12 @@ class LabelQueryControllerTest {
     @Autowired
     private LabelRepository labelRepository;
 
+    @Autowired
+    private AlbumRepository albumRepository;
+
     @BeforeEach
     void cleanup() {
+        albumRepository.deleteAllInBatch();
         labelRepository.deleteAllInBatch();
     }
 
