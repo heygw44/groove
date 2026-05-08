@@ -7,7 +7,6 @@ import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.domain.Cart;
 import com.groove.cart.domain.CartRepository;
 import com.groove.cart.exception.AlbumNotPurchasableException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,9 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
  * 공통 시작점이다. 회원가입 흐름에서 eager 로 만들지 않는 이유는 휴면 회원에 빈 cart 행을
  * 생성하지 않기 위함.
  *
- * <p>동시성 정책: 본 이슈 범위(W6-1) 에서는 락 미적용. 동일 회원이 같은 album 을 동시에
- * POST /items 했을 때 발생하는 {@code uk_cart_item_cart_album} 충돌만 1회 재시도로 흡수한다
- * (실무 표준 패턴) — 그 외 경합(예: 동시 cart 생성 → {@code uk_cart_member} 충돌) 도 동일하게 흡수.
+ * <p>동시성 정책: 본 이슈 범위(W6-1) 에서는 락/재시도 미적용. 동일 회원이 같은 album 을
+ * 동시에 POST /items 했을 때 발생하는 {@code uk_cart_item_cart_album} 충돌, 또는 동시
+ * 첫 진입에서 발생하는 {@code uk_cart_member} 충돌은 {@code DataIntegrityViolationException}
+ * → 500 으로 그대로 노출된다 — W10 동시성 시연 범위에서 재시도/락을 도입한다.
  *
  * <p>응답 시 LazyInitializationException 방지: 컨트롤러는 닫힌 세션에서 직렬화하므로,
  * 트랜잭션 내에서 {@code album} 연관(artist) 까지 강제 초기화한다 — 단건 cart 응답 한정.
@@ -47,16 +47,10 @@ public class CartService {
     @Transactional
     public Cart addItem(Long memberId, Long albumId, int quantity) {
         Album album = loadPurchasableAlbum(albumId);
-        try {
-            Cart cart = getOrCreate(memberId);
-            cart.addOrAccumulate(album, quantity);
-            cartRepository.flush();
-            initializeAssociations(cart);
-            return cart;
-        } catch (DataIntegrityViolationException ex) {
-            // uk_cart_item_cart_album / uk_cart_member 동시성 충돌 — 한 번 재시도하면 누적 분기로 흡수된다.
-            return retryAddItem(memberId, album, quantity, ex);
-        }
+        Cart cart = getOrCreate(memberId);
+        cart.addOrAccumulate(album, quantity);
+        initializeAssociations(cart);
+        return cart;
     }
 
     @Transactional
@@ -82,26 +76,9 @@ public class CartService {
         return cart;
     }
 
-    /**
-     * 회원당 1개 보장 (lazy). {@code uk_cart_member} 동시성 충돌 시 호출 측에서 재시도로 흡수.
-     */
     private Cart getOrCreate(Long memberId) {
         return cartRepository.findByMemberIdWithItems(memberId)
                 .orElseGet(() -> cartRepository.save(Cart.openFor(memberId)));
-    }
-
-    private Cart retryAddItem(Long memberId, Album album, int quantity, DataIntegrityViolationException original) {
-        try {
-            Cart cart = cartRepository.findByMemberIdWithItems(memberId)
-                    .orElseGet(() -> cartRepository.save(Cart.openFor(memberId)));
-            cart.addOrAccumulate(album, quantity);
-            cartRepository.flush();
-            initializeAssociations(cart);
-            return cart;
-        } catch (DataIntegrityViolationException retried) {
-            // 두 번째 충돌은 정상 경합이 아니라 데이터 위반 — 원인을 보존해 던진다.
-            throw retried;
-        }
     }
 
     private Album loadPurchasableAlbum(Long albumId) {
