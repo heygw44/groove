@@ -1,4 +1,7 @@
 spring:
+  datasource:
+    # Testcontainers ServiceConnection 이 실제 자격을 주입하므로 placeholder 통과용 더미.
+    password: test
   flyway:
     enabled: true
   jpa:
@@ -7,6 +10,10 @@ spring:
     properties:
       hibernate:
         show_sql: true
+
+# 테스트 전용 JWT 시크릿 — 256bit 이상 필요 (JwtProperties 검증).
+jwt:
+  secret: test-only-secret-key-minimum-256-bits-long-for-jwt-signing
 
 # 테스트용 CORS — 브라우저 정책상 와일드카드 origin + credentials 조합은 동작하지 않으므로
 # 로컬 개발 origin 패턴(임의 포트) 으로 한정.

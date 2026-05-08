@@ -7,7 +7,7 @@ spring:
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:groove}?characterEncoding=UTF-8&serverTimezone=UTC
     username: ${DB_USERNAME:groove}
-    password: ${DB_PASSWORD:changeme}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -64,7 +64,9 @@ logging:
     com.groove: INFO
 
 jwt:
-  secret: ${JWT_SECRET:local-dev-secret-key-minimum-256-bits-long}
+  # 시크릿은 프로파일별 설정 또는 환경 변수로 주입한다 — 미설정 시 기동 실패가 의도된 동작.
+  # 로컬 개발용 fallback 은 application-local.yaml, 테스트용은 application-test.yaml 에 정의.
+  secret: ${JWT_SECRET}
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
 

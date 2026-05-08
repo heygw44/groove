@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    # 로컬 편의용 fallback — .env 또는 환경 변수가 우선 적용됨.
+    password: ${DB_PASSWORD:changeme}
+  jpa:
+    properties:
+      hibernate:
+        show_sql: true
+        format_sql: true
+
+# 로컬 개발용 JWT 시크릿 fallback. 운영/도커 프로파일에는 환경 변수로 주입.
+jwt:
+  secret: ${JWT_SECRET:local-dev-secret-key-minimum-256-bits-long}
+
+# 로컬 개발용 CORS (모든 origin + credentials 허용)
+cors:
+  allowed-origin-patterns: ["*"]
+  allow-credentials: true
+
+logging:
+  level:
+    root: INFO
+    com.groove: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE

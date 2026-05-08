@@ -31,6 +31,13 @@ docker-compose up -d
 curl http://localhost:8080/actuator/health
 ```
 
+> IDE / 터미널에서 `./gradlew bootRun` 으로 직접 실행하려면 (local 프로파일):
+> ```bash
+> cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
+> ```
+> 그러면 `DB_PASSWORD` / `JWT_SECRET` 환경 변수가 없어도 dev fallback 으로 부팅된다.
+> 운영(docker) 프로파일은 환경 변수가 반드시 주입되어야 기동된다 — 부팅 시 누락은 의도된 fail-fast.
+
 > 시드 데이터 주입은 W8 완료 후 `./scripts/seed.sh` 추가 예정.
 
 ## 프로젝트 문서
