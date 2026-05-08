@@ -98,12 +98,12 @@
 
 각 게이트는 **다음 단계 진입 가능 여부**를 판단하는 시점이다.
 
-### G1 — 인프라 게이트 (W3 말)
-- [ ] `docker-compose up -d` 한 번으로 앱 + MySQL 정상 기동
-- [ ] `/actuator/health` 200 OK 응답
-- [ ] Spring Security FilterChain 동작 (보호된 엔드포인트 401 응답 확인)
-- [ ] Flyway 초기 마이그레이션 적용됨
-- [ ] GlobalExceptionHandler가 ProblemDetail로 응답
+### G1 — 인프라 게이트 (W3 말) ✅ 통과 (2026-04 무렵)
+- [x] `docker-compose up -d` 한 번으로 앱 + MySQL 정상 기동
+- [x] `/actuator/health` 200 OK 응답
+- [x] Spring Security FilterChain 동작 (보호된 엔드포인트 401 응답 확인)
+- [x] Flyway 초기 마이그레이션 적용됨
+- [x] GlobalExceptionHandler가 ProblemDetail로 응답
 
 ### G2 — 기능 완성 게이트 (W7 말) ★ 가장 중요
 - [ ] 회원가입 → 로그인 → 토큰 갱신 동작
@@ -238,17 +238,17 @@
 **목적**: `docker-compose up -d` 한 번으로 전체 환경 구성
 
 **작업 내용**
-- [ ] `docker-compose.yml` 작성 (app, mysql 서비스, 볼륨, 네트워크)
-- [ ] `Dockerfile` 작성 (multi-stage build, JRE 21)
-- [ ] Spring Profiles 분리: `local`, `docker`, `test`
-- [ ] `application.yml` (공통) + `application-{profile}.yml` 작성
-- [ ] 환경 변수 외부화 (`DB_PASSWORD`, `JWT_SECRET` 등)
-- [ ] `.env.example` 보강
+- [x] `docker-compose.yml` 작성 (app, mysql 서비스, 볼륨, 네트워크)
+- [x] `Dockerfile` 작성 (multi-stage build, JRE 21)
+- [x] Spring Profiles 분리: `local`, `docker`, `test`
+- [x] `application.yml` (공통) + `application-{profile}.yml` 작성
+- [x] 환경 변수 외부화 (`DB_PASSWORD`, `JWT_SECRET` 등)
+- [x] `.env.example` 보강
 
 **완료 조건**
-- [ ] `docker-compose up -d` 후 app + mysql 정상 기동
-- [ ] App에서 MySQL 연결 성공 (헬스체크 OK)
-- [ ] `.env` git ignore 확인
+- [x] `docker-compose up -d` 후 app + mysql 정상 기동
+- [x] App에서 MySQL 연결 성공 (헬스체크 OK)
+- [x] `.env` git ignore 확인
 
 ---
 
@@ -259,15 +259,15 @@
 **목적**: 스키마 버저닝 시작 + 도메인별 패키지 골격 마련
 
 **작업 내용**
-- [ ] `src/main/resources/db/migration/` 디렉토리
-- [ ] `V1__init.sql` 작성 (헬스체크용 빈 스키마)
-- [ ] Flyway 설정 (application.yml)
-- [ ] 패키지 구조 생성 (도메인 폴더 + `package-info.java`)
+- [x] `src/main/resources/db/migration/` 디렉토리
+- [x] `V1__init.sql` 작성 (헬스체크용 빈 스키마)
+- [x] Flyway 설정 (application.yml)
+- [x] 패키지 구조 생성 (도메인 폴더 + `package-info.java`)
   - `auth`, `member`, `catalog/album`, `catalog/artist`, `catalog/genre`, `catalog/label`, `cart`, `order`, `payment`, `shipping`, `review`, `admin`, `common`
 
 **완료 조건**
-- [ ] Flyway 적용 후 `flyway_schema_history` 테이블 생성 확인
-- [ ] 모든 도메인 패키지 존재
+- [x] Flyway 적용 후 `flyway_schema_history` 테이블 생성 확인
+- [x] 모든 도메인 패키지 존재
 
 ---
 
@@ -278,15 +278,15 @@
 **목적**: ProblemDetail 기반 통합 에러 응답
 
 **작업 내용**
-- [ ] `BusinessException` 추상 클래스 + 하위 (`AuthException`, `ValidationException`, `DomainException`, `ExternalException`)
-- [ ] `ErrorCode` enum (HTTP 상태 + 코드 매핑)
-- [ ] `GlobalExceptionHandler` (`@RestControllerAdvice`)
-- [ ] `MethodArgumentNotValidException` 등 Spring 내장 예외 매핑
-- [ ] ProblemDetail 응답 포맷에 `code`, `timestamp`, `traceId` 확장 필드 추가
+- [x] `BusinessException` 추상 클래스 + 하위 (`AuthException`, `ValidationException`, `DomainException`, `ExternalException`)
+- [x] `ErrorCode` enum (HTTP 상태 + 코드 매핑)
+- [x] `GlobalExceptionHandler` (`@RestControllerAdvice`)
+- [x] `MethodArgumentNotValidException` 등 Spring 내장 예외 매핑
+- [x] ProblemDetail 응답 포맷에 `code`, `timestamp`, `traceId` 확장 필드 추가
 
 **완료 조건**
-- [ ] 의도적 예외 발생 시 ProblemDetail 응답 확인 (테스트 컨트롤러 또는 단위 테스트)
-- [ ] 응답 Content-Type: `application/problem+json`
+- [x] 의도적 예외 발생 시 ProblemDetail 응답 확인 (테스트 컨트롤러 또는 단위 테스트)
+- [x] 응답 Content-Type: `application/problem+json`
 
 ---
 
@@ -297,15 +297,15 @@
 **목적**: 요청 추적 + 표준 로깅 + Rate Limit 인터페이스 준비
 
 **작업 내용**
-- [ ] `MdcFilter`: `X-Request-Id` 발급/추출, MDC 주입
-- [ ] Logback 설정 (`logback-spring.xml`) — 패턴에 `requestId`, `userId` 포함
-- [ ] `RateLimitFilter` 골격 (Bucket4j 의존성 추가)
+- [x] `MdcFilter`: `X-Request-Id` 발급/추출, MDC 주입
+- [x] Logback 설정 (`logback-spring.xml`) — 패턴에 `requestId`, `userId` 포함
+- [x] `RateLimitFilter` 골격 (Bucket4j 의존성 추가)
   - 정책 인터페이스 정의, 실제 정책은 도메인 구현 시 등록
-- [ ] 비즈니스 이벤트 표준 로그 헬퍼 (`BIZ_EVENT type=...`)
+- [x] 비즈니스 이벤트 표준 로그 헬퍼 (`BIZ_EVENT type=...`)
 
 **완료 조건**
-- [ ] 요청 시 응답 헤더에 `X-Request-Id` 포함
-- [ ] 로그에 requestId가 자동 출력됨
+- [x] 요청 시 응답 헤더에 `X-Request-Id` 포함
+- [x] 로그에 requestId가 자동 출력됨
 
 ---
 
@@ -316,17 +316,17 @@
 **목적**: 보호된 엔드포인트 / 공개 엔드포인트 분리 동작
 
 **작업 내용**
-- [ ] `SecurityConfig`: `SecurityFilterChain` 빈 등록
-- [ ] CORS 설정 (개발 단계는 모든 오리진 허용)
-- [ ] CSRF 비활성화 (Stateless API)
-- [ ] URL 패턴 권한 정책: `/auth/**`, `/api/v1/albums/**`(GET) 등 permitAll, 나머지 authenticated
-- [ ] JWT 필터는 다음 주(#W4)에 연결 — 일단 자리만 마련
-- [ ] 임시 테스트 컨트롤러 (`/api/v1/ping/secured`) 추가 → 401 응답 확인 후 제거
+- [x] `SecurityConfig`: `SecurityFilterChain` 빈 등록
+- [x] CORS 설정 (개발 단계는 모든 오리진 허용)
+- [x] CSRF 비활성화 (Stateless API)
+- [x] URL 패턴 권한 정책: `/auth/**`, `/api/v1/albums/**`(GET) 등 permitAll, 나머지 authenticated
+- [x] JWT 필터는 다음 주(#W4)에 연결 — 일단 자리만 마련
+- [x] 임시 테스트 컨트롤러 (`/api/v1/ping/secured`) 추가 → 401 응답 확인 후 제거
 
 **완료 조건**
-- [ ] 보호된 엔드포인트 401 응답
-- [ ] 공개 엔드포인트 200 응답
-- [ ] CORS 프리플라이트 동작
+- [x] 보호된 엔드포인트 401 응답
+- [x] 공개 엔드포인트 200 응답
+- [x] CORS 프리플라이트 동작
 
 ---
 
@@ -337,13 +337,13 @@
 **목적**: G1 충족 검증 + W4 진입 준비
 
 **작업 내용**
-- [ ] G1 체크리스트 모든 항목 통과 확인
-- [ ] README에 "현재 W3 완료" 표시
-- [ ] W4 인증 도메인 진입 전 의존성 검토 (jjwt 또는 Nimbus JOSE 선정)
+- [x] G1 체크리스트 모든 항목 통과 확인
+- [x] README에 "현재 W3 완료" 표시
+- [x] W4 인증 도메인 진입 전 의존성 검토 (jjwt 또는 Nimbus JOSE 선정)
 
 **완료 조건**
-- [ ] G1 게이트 통과
-- [ ] JWT 라이브러리 선정됨
+- [x] G1 게이트 통과
+- [x] JWT 라이브러리 선정됨
 
 ---
 
@@ -356,18 +356,18 @@
 **선행**: #W3-6
 
 **작업 내용**
-- [ ] `Member` 엔티티 + Repository
-- [ ] `MemberRole` enum
-- [ ] Flyway V2 마이그레이션 (`member` 테이블)
-- [ ] `MemberService.signup()` (BCrypt 해싱)
-- [ ] `POST /api/v1/auth/signup` 컨트롤러
-- [ ] 입력 검증 (`@Valid`)
-- [ ] 단위 테스트 (이메일 중복, 비밀번호 정책)
+- [x] `Member` 엔티티 + Repository
+- [x] `MemberRole` enum
+- [x] Flyway V2 마이그레이션 (`member` 테이블)
+- [x] `MemberService.signup()` (BCrypt 해싱)
+- [x] `POST /api/v1/auth/signup` 컨트롤러
+- [x] 입력 검증 (`@Valid`)
+- [x] 단위 테스트 (이메일 중복, 비밀번호 정책)
 
 **완료 조건**
-- [ ] 정상 회원가입 동작
-- [ ] 이메일 중복 시 409 응답
-- [ ] BCrypt 해시가 DB에 저장됨 (평문 X)
+- [x] 정상 회원가입 동작
+- [x] 이메일 중복 시 409 응답
+- [x] BCrypt 해시가 DB에 저장됨 (평문 X)
 
 ---
 
@@ -376,16 +376,16 @@
 **선행**: #W4-1
 
 **작업 내용**
-- [ ] `JwtProvider`: 토큰 생성·검증·파싱
-- [ ] Access Token (TTL 30분), Refresh Token (TTL 14일)
-- [ ] Secret 환경변수 분리
-- [ ] `JwtAuthenticationFilter`: Access Token 검증 + SecurityContext 주입
-- [ ] `SecurityConfig`에 필터 연결
-- [ ] 단위 테스트 (정상/만료/위조 토큰)
+- [x] `JwtProvider`: 토큰 생성·검증·파싱
+- [x] Access Token (TTL 30분), Refresh Token (TTL 14일)
+- [x] Secret 환경변수 분리
+- [x] `JwtAuthenticationFilter`: Access Token 검증 + SecurityContext 주입
+- [x] `SecurityConfig`에 필터 연결
+- [x] 단위 테스트 (정상/만료/위조 토큰)
 
 **완료 조건**
-- [ ] 유효한 Access Token으로 보호된 엔드포인트 접근 시 200
-- [ ] 만료/위조 토큰은 401
+- [x] 유효한 Access Token으로 보호된 엔드포인트 접근 시 200
+- [x] 만료/위조 토큰은 401
 
 ---
 
@@ -394,15 +394,15 @@
 **선행**: #W4-2
 
 **작업 내용**
-- [ ] `POST /api/v1/auth/login` (이메일/비밀번호 검증, 토큰 발급)
-- [ ] `POST /api/v1/auth/logout` (Refresh Token 무효화)
-- [ ] `AuthService` 분리
-- [ ] 통합 테스트
+- [x] `POST /api/v1/auth/login` (이메일/비밀번호 검증, 토큰 발급)
+- [x] `POST /api/v1/auth/logout` (Refresh Token 무효화)
+- [x] `AuthService` 분리
+- [x] 통합 테스트
 
 **완료 조건**
-- [ ] 로그인 성공 시 access/refresh 응답
-- [ ] 잘못된 비밀번호 시 401 `AUTH_INVALID_CREDENTIALS`
-- [ ] 로그아웃 후 해당 refreshToken으로 갱신 시 401
+- [x] 로그인 성공 시 access/refresh 응답
+- [x] 잘못된 비밀번호 시 401 `AUTH_INVALID_CREDENTIALS`
+- [x] 로그아웃 후 해당 refreshToken으로 갱신 시 401
 
 ---
 
@@ -411,19 +411,19 @@
 **선행**: #W4-3
 
 **작업 내용**
-- [ ] `RefreshToken` 엔티티 (해시 저장, `replaced_by_token_id` 포함)
-- [ ] Flyway 마이그레이션
-- [ ] `RefreshTokenService`: 발급, 사용(Rotation), 무효화, 재사용 감지
-- [ ] `POST /api/v1/auth/refresh`
-- [ ] 토큰 재사용 감지 시 해당 사용자 모든 토큰 무효화 로직
-- [ ] 통합 테스트:
+- [x] `RefreshToken` 엔티티 (해시 저장, `replaced_by_token_id` 포함)
+- [x] Flyway 마이그레이션
+- [x] `RefreshTokenService`: 발급, 사용(Rotation), 무효화, 재사용 감지
+- [x] `POST /api/v1/auth/refresh`
+- [x] 토큰 재사용 감지 시 해당 사용자 모든 토큰 무효화 로직
+- [x] 통합 테스트:
   - 정상 Rotation
   - 만료된 토큰 사용
   - 이미 사용된(revoked) 토큰 재사용 → 전체 세션 무효화
 
 **완료 조건**
-- [ ] Rotation 정상 동작 (응답에 새 access/refresh 모두 포함)
-- [ ] 재사용 감지 시 사용자의 다른 활성 토큰까지 모두 무효화됨
+- [x] Rotation 정상 동작 (응답에 새 access/refresh 모두 포함)
+- [x] 재사용 감지 시 사용자의 다른 활성 토큰까지 모두 무효화됨
 
 ---
 
@@ -432,12 +432,12 @@
 **선행**: #W4-3
 
 **작업 내용**
-- [ ] 정책 등록: 로그인 IP/분당 10회, 회원가입 IP/분당 3회
-- [ ] 초과 시 429 + `Retry-After` 헤더
-- [ ] 통합 테스트
+- [x] 정책 등록: 로그인 IP/분당 10회, 회원가입 IP/분당 3회
+- [x] 초과 시 429 + `Retry-After` 헤더
+- [x] 통합 테스트
 
 **완료 조건**
-- [ ] 한도 초과 시 429 응답 확인
+- [x] 한도 초과 시 429 응답 확인
 
 ---
 
@@ -446,14 +446,14 @@
 **선행**: #W4-1 ~ #W4-5
 
 **작업 내용**
-- [ ] Testcontainers MySQL 셋업
-- [ ] E2E 시나리오 테스트: 회원가입 → 로그인 → 보호된 API 접근 → 토큰 갱신 → 로그아웃
-- [ ] 도메인별 단위 테스트 보강
-- [ ] 커버리지 측정 (JaCoCo) 도입
+- [x] Testcontainers MySQL 셋업
+- [x] E2E 시나리오 테스트: 회원가입 → 로그인 → 보호된 API 접근 → 토큰 갱신 → 로그아웃
+- [x] 도메인별 단위 테스트 보강
+- [x] 커버리지 측정 (JaCoCo) 도입
 
 **완료 조건**
-- [ ] 전체 인증 시나리오 통합 테스트 통과
-- [ ] 인증 도메인 라인 커버리지 80%+
+- [x] 전체 인증 시나리오 통합 테스트 통과
+- [x] 인증 도메인 라인 커버리지 80%+
 
 ---
 
@@ -467,14 +467,14 @@
 **선행**: #W4-6
 
 **작업 내용**
-- [ ] `Genre`, `Label` 엔티티 + Repository
-- [ ] Flyway V3 마이그레이션
-- [ ] 관리자 CRUD API (`/api/v1/admin/genres`, `/api/v1/admin/labels`)
-- [ ] Public 조회 API (`GET /api/v1/genres`, `/labels`)
+- [x] `Genre`, `Label` 엔티티 + Repository
+- [x] Flyway V3 마이그레이션
+- [x] 관리자 CRUD API (`/api/v1/admin/genres`, `/api/v1/admin/labels`)
+- [x] Public 조회 API (`GET /api/v1/genres`, `/labels`)
 
 **완료 조건**
-- [ ] CRUD 정상 동작
-- [ ] 중복 name 시 409
+- [x] CRUD 정상 동작
+- [x] 중복 name 시 409
 
 ---
 
@@ -483,14 +483,14 @@
 **선행**: #W5-1
 
 **작업 내용**
-- [ ] `Artist` 엔티티 + Repository
-- [ ] Flyway 추가
-- [ ] 관리자 CRUD
-- [ ] Public 조회 (`GET /artists`, `GET /artists/{id}`)
+- [x] `Artist` 엔티티 + Repository
+- [x] Flyway 추가
+- [x] 관리자 CRUD
+- [x] Public 조회 (`GET /artists`, `GET /artists/{id}`)
 
 **완료 조건**
-- [ ] CRUD 정상 동작
-- [ ] 페이징 동작
+- [x] CRUD 정상 동작
+- [x] 페이징 동작
 
 ---
 
@@ -499,15 +499,15 @@
 **선행**: #W5-2
 
 **작업 내용**
-- [ ] `Album` 엔티티 (FK: artist, genre, label) + `AlbumStatus`, `AlbumFormat` enum
-- [ ] Flyway 마이그레이션 (※ 검색용 인덱스 의도적 누락)
-- [ ] 관리자 CRUD (`POST/PUT/DELETE /admin/albums`)
-- [ ] 재고 조정 (`PATCH /admin/albums/{id}/stock`)
-- [ ] FK 유효성 검증 (artist/genre/label 존재)
+- [x] `Album` 엔티티 (FK: artist, genre, label) + `AlbumStatus`, `AlbumFormat` enum
+- [x] Flyway 마이그레이션 (※ 검색용 인덱스 의도적 누락)
+- [x] 관리자 CRUD (`POST/PUT/DELETE /admin/albums`)
+- [x] 재고 조정 (`PATCH /admin/albums/{id}/stock`)
+- [x] FK 유효성 검증 (artist/genre/label 존재)
 
 **완료 조건**
-- [ ] CRUD + 재고 조정 동작
-- [ ] FK 잘못된 ID 시 400/404
+- [x] CRUD + 재고 조정 동작
+- [x] FK 잘못된 ID 시 400/404
 
 ---
 
@@ -516,16 +516,16 @@
 **선행**: #W5-3
 
 **작업 내용**
-- [ ] `GET /api/v1/albums` — 페이징·정렬·필터(genre/price/year/format/isLimited)
-- [ ] `GET /api/v1/albums/{id}` — 상세
-- [ ] `GET /api/v1/artists/{id}/albums` — 아티스트별
-- [ ] 키워드 검색 (앨범명 + 아티스트명 OR LIKE)
-- [ ] **의도적 N+1 발생 코드** (페치 조인 미적용 — W10 시연 자료)
+- [x] `GET /api/v1/albums` — 페이징·정렬·필터(genre/price/year/format/isLimited)
+- [x] `GET /api/v1/albums/{id}` — 상세
+- [x] `GET /api/v1/artists/{id}/albums` — 아티스트별
+- [x] 키워드 검색 (앨범명 + 아티스트명 OR LIKE)
+- [x] **의도적 N+1 발생 코드** (페치 조인 미적용 — W10 시연 자료)
 
 **완료 조건**
-- [ ] 모든 필터·정렬 조합 동작
-- [ ] 응답에 평균 평점·리뷰 수 포함
-- [ ] N+1 발생이 Hibernate Statistics 또는 SQL 로그로 확인됨 (시연 자료 보존)
+- [x] 모든 필터·정렬 조합 동작
+- [x] 응답에 평균 평점·리뷰 수 포함
+- [x] N+1 발생이 Hibernate Statistics 또는 SQL 로그로 확인됨 (시연 자료 보존)
 
 ---
 
@@ -534,12 +534,12 @@
 **선행**: #W5-4
 
 **작업 내용**
-- [ ] Album 검색 시나리오 테스트 (필터 조합)
-- [ ] 페이징 경계값 테스트
-- [ ] 관리자 CRUD 통합 테스트
+- [x] Album 검색 시나리오 테스트 (필터 조합)
+- [x] 페이징 경계값 테스트
+- [x] 관리자 CRUD 통합 테스트
 
 **완료 조건**
-- [ ] 카탈로그 도메인 라인 커버리지 70%+
+- [x] 카탈로그 도메인 라인 커버리지 70%+
 
 ---
 

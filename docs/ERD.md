@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.2 |
+| 버전 | 1.3 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-05-07 |
-| 변경 내용 | v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
+| 최종 수정일 | 2026-05-08 |
+| 변경 내용 | v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
 | DB | MySQL 8 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | PRD.md, ARCHITECTURE.md |
@@ -279,8 +279,10 @@ erDiagram
 |---|---|---|
 | stock ≥ 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(0) |
 | price ≥ 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(0) |
-| status 전이 (SELLING→SOLD_OUT 등) | [APP] | AlbumStatus.canTransitionTo() |
+| status 전이 (SELLING→SOLD_OUT 등) | [APP] | W5-3 범위 미포함 — `AlbumStatus.canTransitionTo()` 는 W6+ 주문/재고 흐름 도입 시 추가 예정. 현재는 단순 set 만 허용 |
 | FK 참조 무결성 (artist, genre, label) | [DB] | ON DELETE RESTRICT |
+| Public 검색에서 status=HIDDEN 거부 | [APP] | `AlbumQueryController.rejectHiddenStatusFromPublic()` — 단건 GET 은 status 무관 허용 |
+| 정렬 키 화이트리스트 | [APP] | `id, createdAt, price, releaseYear` 만 허용 — 인덱스 없는 컬럼 정렬로 인한 부하 차단. `salesCount` 는 W7 주문 도메인 도입 후 활성화 |
 
 ---
 

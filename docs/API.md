@@ -390,10 +390,18 @@
 | `maxYear` | int | 발매연도 끝 |
 | `format` | string | LP_12 / LP_DOUBLE / EP / SINGLE_7 |
 | `isLimited` | boolean | 한정반만 |
-| `status` | string | 기본 SELLING (Public은 SELLING만 노출) |
-| `page`, `size`, `sort` | | 공통 페이징 |
+| `status` | string | 미지정 시 SELLING. `SELLING`/`SOLD_OUT` 만 허용, `HIDDEN` 은 400 (관리자 전용) |
+| `page`, `size`, `sort` | | 공통 페이징. `size` 는 1.3절 공통 규칙대로 최대 100 |
 
-**정렬 키**: `createdAt`, `price`, `releaseYear`, (집계) `salesCount`
+**정렬 키 (화이트리스트)**: `id`, `createdAt`, `price`, `releaseYear` — 인덱스 없는 컬럼 정렬로 인한 부하 차단. `salesCount` 는 W7 주문 도메인 도입 후 활성화 예정.
+
+**검색 동작 노트**
+- 키워드는 album.title + artist.name LIKE OR (대소문자 무시, `Locale.ROOT` 고정).
+- LIKE 메타 문자(`%`, `_`, `\`) 는 escape — `?keyword=50%` 가 모든 행에 매칭되지 않음.
+- 의도적으로 페치 조인을 사용하지 않음 → 응답 변환 시 N+1 SELECT 발생 (W10 시연 자료, 정상 동작).
+
+**Errors**
+- 400 `VALIDATION_FAILED` — `status=HIDDEN`, 허용되지 않는 정렬 키, 음수 가격/연도 등
 
 **Response 200**: PageResponse<AlbumSummary>
 ```json
@@ -447,18 +455,31 @@
 }
 ```
 
+**동작 노트**
+- Public 단건 조회는 `status=HIDDEN` 도 허용된다. ID 를 직접 알고 있는 운영 케이스를 위함이며, Public 목록(검색) 에서만 SELLING 으로 자동 필터된다.
+
 **Errors**
+- 400 `VALIDATION_FAILED` — `id <= 0`
 - 404 `ALBUM_NOT_FOUND`
 
 ---
 
-#### GET `/artists` / `/artists/{id}` / `/artists/{id}/albums`
+#### GET `/artists`, `/artists/{id}`, `/artists/{id}/albums`
 
-생략 — 카탈로그 패턴과 동일 구조.
+`/artists`, `/artists/{id}` 는 페이징 목록 + 단건 조회. 응답은 `ArtistResponse` (id, name, description).
+
+`/artists/{id}/albums` 는 `GET /albums` 검색을 path 의 `artistId` 로 고정 위임:
+- `status=SELLING` 강제 (Public 경계 동일)
+- query 의 `artistId` 가 path 와 다르면 400 `VALIDATION_FAILED` (silent override 방지)
+- 정렬 화이트리스트·N+1 정책은 `GET /albums` 와 동일
+
+**Errors**
+- 400 `VALIDATION_FAILED` — path/query `artistId` 충돌, `status=HIDDEN`, 허용되지 않는 정렬 키
+- 404 `ARTIST_NOT_FOUND`
 
 #### GET `/genres`, `/labels`
 
-단순 목록 조회. 페이징 없이 전체 반환 (소량 데이터).
+단순 목록 조회. 페이징 없이 전체 반환 (소량 데이터). 응답은 `[{ "id": .., "name": ".." }, ...]`.
 
 ---
 
@@ -843,9 +864,16 @@
 
 **Response 200**: 갱신된 Album 객체
 
+**Errors**
+- 400 `ALBUM_INVALID_STOCK` — `stock + delta < 0` 또는 `Integer.MAX_VALUE` 초과
+- 404 `ALBUM_NOT_FOUND`
+
 #### `/admin/artists`, `/admin/genres`, `/admin/labels`
 
-표준 CRUD. 동일 패턴이므로 상세 생략.
+표준 CRUD (`POST`, `GET` list, `GET /{id}`, `PUT /{id}`, `DELETE /{id}`). 동일 패턴이므로 상세 생략.
+
+- 이름 중복 등록 시 409 `GENRE_NAME_DUPLICATED` / `LABEL_NAME_DUPLICATED` (Artist 는 동명이인 허용 — UNIQUE 미적용).
+- DELETE 는 album 이 해당 메타를 참조 중이면 FK ON DELETE RESTRICT 로 409 `*_IN_USE` 응답.
 
 ---
 

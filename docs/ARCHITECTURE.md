@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.1 |
+| 버전 | 1.2 |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-05-07 |
-| 변경 내용 | v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain` + `security`/`exception`) 기준으로 정정. 레이어 책임/의존성 규칙은 동일하나 디렉토리 명명만 controller/service/repository → api/application/domain. |
+| 최종 수정일 | 2026-05-08 |
+| 변경 내용 | v1.2 (W5 완료 반영): catalog 4개 서브도메인(album/artist/genre/label) 모두 구현 완료 표기, AlbumQueryController + AlbumSpecs(JPA Specification) 기반 동적 검색 도입, 의도적 N+1 보존 정책(W10 시연용)을 §4.1 카탈로그 노트로 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain` + `security`/`exception`) 기준으로 정정. 레이어 책임/의존성 규칙은 동일하나 디렉토리 명명만 controller/service/repository → api/application/domain. |
 | 관련 문서 | PRD.md |
 
 ---
@@ -116,11 +116,19 @@ com.groove
 │   ├── domain/                 (Member, MemberRepository, MemberRole)
 │   └── exception/              (MemberEmailDuplicatedException)
 │
-├── catalog/                    (LP 카탈로그)
-│   ├── album/                  — W5-3 구현 완료 (api/, application/, domain/, exception/)
+├── catalog/                    (LP 카탈로그) — W5 구현 완료
+│   ├── album/                  — W5-3 (admin CRUD/재고) + W5-4 (Public API: 목록/상세/검색)
+│   │                              · api/        : AlbumAdminController, AlbumQueryController + dto/
+│   │                              · application/: AlbumService, AlbumCommand, AlbumSearchCondition
+│   │                              · domain/     : Album, AlbumRepository, AlbumSpecs(JPA Specification), AlbumStatus, AlbumFormat
+│   │                              · exception/  : AlbumNotFoundException, IllegalStockAdjustmentException
 │   ├── artist/                 — W5-2 구현 완료 (api/, application/, domain/, exception/)
 │   ├── genre/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)
 │   └── label/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)
+│
+│   ※ 의도적 N+1 보존 (W10 시연 자료): AlbumSpecs.keyword() 는 artist 와의 LEFT JOIN 만 사용,
+│     fetch 조인 없음. AlbumSummaryResponse 변환 단계에서 lazy proxy 가 풀리며 N+1 SELECT 발생.
+│     ERD §4.6 [W10] 인덱스 누락도 함께 보존.
 │
 ├── cart/                       (장바구니) — W6 예정
 │

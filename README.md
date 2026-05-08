@@ -53,9 +53,13 @@ curl http://localhost:8080/actuator/health
 ## 진행 현황
 
 ```
-Progress: ▓▓▓░░░░░░░░░ 3/12 weeks
+Progress: ▓▓▓▓▓░░░░░░░ 5/12 weeks
 ```
 
-**현재 단계**: W3 인프라/스켈레톤 완료 (G1 게이트 통과) → W4 인증 도메인 진입.
+**현재 단계**: W5 카탈로그(Album/Artist/Genre/Label) 완료 → W6 장바구니/주문 진입 직전.
+
+- W3: 인프라/스켈레톤 (G1 게이트 통과)
+- W4: 인증/회원 (회원가입·로그인·JWT·Refresh Rotation·Rate Limit·E2E·JaCoCo 80% 게이트)
+- W5: 카탈로그 (관리자 CRUD + Public 목록/상세/검색 + 의도적 N+1 보존 — W10 시연 자료)
 
 GitHub Milestones 페이지에서 상세 진행률 확인 가능.
