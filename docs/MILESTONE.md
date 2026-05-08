@@ -552,17 +552,17 @@
 **선행**: #W5-5
 
 **작업 내용**
-- [ ] `Cart`, `CartItem` 엔티티 + Repository
-- [ ] Flyway 마이그레이션
-- [ ] `GET /cart` (회원 자동 생성)
-- [ ] `POST /cart/items` (수량 누적)
-- [ ] `PATCH /cart/items/{itemId}`, `DELETE /cart/items/{itemId}`, `DELETE /cart`
-- [ ] 비활성 상품 검증 (HIDDEN/SOLD_OUT 거부)
+- [x] `Cart`, `CartItem` 엔티티 + Repository (`findByMemberIdWithItems` fetch join)
+- [x] Flyway 마이그레이션 V7 (uk_cart_member, uk_cart_item_cart_album, ck_cart_item_quantity_positive)
+- [x] `GET /api/v1/cart` (회원 자동 생성 — POST 도 lazy 자동 생성, GET 단독으로는 비영속)
+- [x] `POST /api/v1/cart/items` (수량 누적, UNIQUE 동시성 충돌 1회 재시도)
+- [x] `PATCH /api/v1/cart/items/{itemId}`, `DELETE /api/v1/cart/items/{itemId}`, `DELETE /api/v1/cart`
+- [x] 비활성 상품 검증 (HIDDEN/SOLD_OUT 거부 — 422 ALBUM_NOT_PURCHASABLE)
 
 **완료 조건**
-- [ ] 모든 CRUD 동작
-- [ ] 같은 상품 재추가 시 수량 누적
-- [ ] 비활성 상품 추가 시 422
+- [x] 모든 CRUD 동작
+- [x] 같은 상품 재추가 시 수량 누적
+- [x] 비활성 상품 추가 시 422
 
 ---
 

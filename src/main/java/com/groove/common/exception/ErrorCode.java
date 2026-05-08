@@ -33,6 +33,12 @@ public enum ErrorCode {
     ARTIST_IN_USE(HttpStatus.CONFLICT, "ARTIST_IN_USE", "앨범이 참조 중인 아티스트는 삭제할 수 없습니다"),
     ALBUM_NOT_FOUND(HttpStatus.NOT_FOUND, "ALBUM_NOT_FOUND", "앨범을 찾을 수 없습니다"),
     ALBUM_INVALID_STOCK(HttpStatus.BAD_REQUEST, "ALBUM_INVALID_STOCK", "재고 조정 결과가 음수가 될 수 없습니다"),
+    ALBUM_NOT_PURCHASABLE(HttpStatus.UNPROCESSABLE_ENTITY, "ALBUM_NOT_PURCHASABLE", "현재 구매할 수 없는 앨범입니다"),
+
+    // CART
+    CART_NOT_FOUND(HttpStatus.NOT_FOUND, "CART_NOT_FOUND", "장바구니를 찾을 수 없습니다"),
+    CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "CART_ITEM_NOT_FOUND", "장바구니 항목을 찾을 수 없습니다"),
+    CART_QUANTITY_LIMIT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "CART_QUANTITY_LIMIT_EXCEEDED", "허용된 수량 한도를 초과했습니다"),
 
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
