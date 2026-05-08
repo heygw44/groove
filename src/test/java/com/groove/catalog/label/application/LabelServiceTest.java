@@ -106,21 +106,22 @@ class LabelServiceTest {
     @Test
     @DisplayName("delete 미존재 → 404")
     void delete_throwsWhenIdMissing() {
-        given(labelRepository.existsById(99L)).willReturn(false);
+        given(labelRepository.findById(99L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> labelService.delete(99L))
                 .isInstanceOf(LabelNotFoundException.class);
-        then(labelRepository).should(never()).deleteById(any());
+        then(labelRepository).should(never()).delete(any(Label.class));
     }
 
     @Test
-    @DisplayName("delete 정상 → deleteById 위임")
-    void delete_callsDeleteById() {
-        given(labelRepository.existsById(1L)).willReturn(true);
+    @DisplayName("delete 정상 → entity 로 delete 위임")
+    void delete_callsDeleteEntity() {
+        Label existing = Label.create("Apple Records");
+        given(labelRepository.findById(1L)).willReturn(Optional.of(existing));
 
         labelService.delete(1L);
 
-        then(labelRepository).should().deleteById(1L);
+        then(labelRepository).should().delete(existing);
     }
 
     @Test

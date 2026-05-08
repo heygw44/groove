@@ -108,21 +108,22 @@ class GenreServiceTest {
     @Test
     @DisplayName("delete → 존재하지 않는 id 면 404")
     void delete_throwsWhenIdMissing() {
-        given(genreRepository.existsById(99L)).willReturn(false);
+        given(genreRepository.findById(99L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> genreService.delete(99L))
                 .isInstanceOf(GenreNotFoundException.class);
-        then(genreRepository).should(never()).deleteById(any());
+        then(genreRepository).should(never()).delete(any(Genre.class));
     }
 
     @Test
-    @DisplayName("delete → 존재하면 deleteById 호출")
-    void delete_callsDeleteById() {
-        given(genreRepository.existsById(1L)).willReturn(true);
+    @DisplayName("delete → 존재하면 entity 로 delete 호출")
+    void delete_callsDeleteEntity() {
+        Genre existing = Genre.create("Rock");
+        given(genreRepository.findById(1L)).willReturn(Optional.of(existing));
 
         genreService.delete(1L);
 
-        then(genreRepository).should().deleteById(1L);
+        then(genreRepository).should().delete(existing);
     }
 
     @Test

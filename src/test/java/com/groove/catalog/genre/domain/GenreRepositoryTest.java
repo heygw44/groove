@@ -95,11 +95,13 @@ class GenreRepositoryTest {
     void rename_updatesTimestamp() {
         Genre saved = genreRepository.saveAndFlush(Genre.create("RnB"));
         Instant originalCreatedAt = saved.getCreatedAt();
+        Instant originalUpdatedAt = saved.getUpdatedAt();
 
         saved.rename("R&B");
         Genre updated = genreRepository.saveAndFlush(saved);
 
         assertThat(updated.getName()).isEqualTo("R&B");
         assertThat(updated.getCreatedAt()).isEqualTo(originalCreatedAt);
+        assertThat(updated.getUpdatedAt()).isNotNull().isAfterOrEqualTo(originalUpdatedAt);
     }
 }

@@ -7,7 +7,9 @@ import com.groove.catalog.label.application.LabelCommand;
 import com.groove.catalog.label.application.LabelService;
 import com.groove.catalog.label.domain.Label;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +28,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/admin/labels")
+@Validated
 public class LabelAdminController {
 
     private final LabelService labelService;
@@ -53,19 +56,19 @@ public class LabelAdminController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<LabelResponse> get(@PathVariable Long id) {
+    public ResponseEntity<LabelResponse> get(@PathVariable @Positive Long id) {
         return ResponseEntity.ok(LabelResponse.from(labelService.findById(id)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<LabelResponse> update(@PathVariable Long id,
+    public ResponseEntity<LabelResponse> update(@PathVariable @Positive Long id,
                                                 @Valid @RequestBody LabelUpdateRequest request) {
         Label updated = labelService.update(id, new LabelCommand(request.name()));
         return ResponseEntity.ok(LabelResponse.from(updated));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
         labelService.delete(id);
         return ResponseEntity.noContent().build();
     }

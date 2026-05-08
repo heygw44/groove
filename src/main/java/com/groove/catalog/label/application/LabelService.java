@@ -52,10 +52,9 @@ public class LabelService {
 
     @Transactional
     public void delete(Long id) {
-        if (!labelRepository.existsById(id)) {
-            throw new LabelNotFoundException();
-        }
-        labelRepository.deleteById(id);
+        Label label = labelRepository.findById(id)
+                .orElseThrow(LabelNotFoundException::new);
+        labelRepository.delete(label);
     }
 
     @Transactional(readOnly = true)

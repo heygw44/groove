@@ -61,6 +61,7 @@ class ArtistRepositoryTest {
     void update_changesBothFieldsAndPreservesCreatedAt() {
         Artist saved = artistRepository.saveAndFlush(Artist.create("Old", "Old desc"));
         Instant originalCreatedAt = saved.getCreatedAt();
+        Instant originalUpdatedAt = saved.getUpdatedAt();
 
         saved.update("New", "New desc");
         Artist updated = artistRepository.saveAndFlush(saved);
@@ -68,6 +69,7 @@ class ArtistRepositoryTest {
         assertThat(updated.getName()).isEqualTo("New");
         assertThat(updated.getDescription()).isEqualTo("New desc");
         assertThat(updated.getCreatedAt()).isEqualTo(originalCreatedAt);
+        assertThat(updated.getUpdatedAt()).isNotNull().isAfterOrEqualTo(originalUpdatedAt);
     }
 
     @Test

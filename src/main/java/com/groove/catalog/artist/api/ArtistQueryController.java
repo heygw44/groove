@@ -4,10 +4,12 @@ import com.groove.catalog.artist.api.dto.ArtistResponse;
 import com.groove.catalog.artist.application.ArtistService;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.common.api.PageResponse;
+import jakarta.validation.constraints.Positive;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/artists")
+@Validated
 public class ArtistQueryController {
 
     private final ArtistService artistService;
@@ -37,7 +40,7 @@ public class ArtistQueryController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ArtistResponse> get(@PathVariable Long id) {
+    public ResponseEntity<ArtistResponse> get(@PathVariable @Positive Long id) {
         return ResponseEntity.ok(ArtistResponse.from(artistService.findById(id)));
     }
 }

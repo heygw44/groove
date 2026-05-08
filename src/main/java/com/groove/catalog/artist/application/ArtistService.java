@@ -45,10 +45,9 @@ public class ArtistService {
 
     @Transactional
     public void delete(Long id) {
-        if (!artistRepository.existsById(id)) {
-            throw new ArtistNotFoundException();
-        }
-        artistRepository.deleteById(id);
+        Artist artist = artistRepository.findById(id)
+                .orElseThrow(ArtistNotFoundException::new);
+        artistRepository.delete(artist);
     }
 
     @Transactional(readOnly = true)

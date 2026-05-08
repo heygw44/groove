@@ -7,7 +7,9 @@ import com.groove.catalog.genre.application.GenreCommand;
 import com.groove.catalog.genre.application.GenreService;
 import com.groove.catalog.genre.domain.Genre;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +31,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/admin/genres")
+@Validated
 public class GenreAdminController {
 
     private final GenreService genreService;
@@ -56,19 +59,19 @@ public class GenreAdminController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<GenreResponse> get(@PathVariable Long id) {
+    public ResponseEntity<GenreResponse> get(@PathVariable @Positive Long id) {
         return ResponseEntity.ok(GenreResponse.from(genreService.findById(id)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<GenreResponse> update(@PathVariable Long id,
+    public ResponseEntity<GenreResponse> update(@PathVariable @Positive Long id,
                                                 @Valid @RequestBody GenreUpdateRequest request) {
         Genre updated = genreService.update(id, new GenreCommand(request.name()));
         return ResponseEntity.ok(GenreResponse.from(updated));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
         genreService.delete(id);
         return ResponseEntity.noContent().build();
     }

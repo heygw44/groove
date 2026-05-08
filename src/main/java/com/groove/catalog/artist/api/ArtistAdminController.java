@@ -8,10 +8,12 @@ import com.groove.catalog.artist.application.ArtistService;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.common.api.PageResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,6 +34,7 @@ import java.net.URI;
  */
 @RestController
 @RequestMapping("/api/v1/admin/artists")
+@Validated
 public class ArtistAdminController {
 
     private final ArtistService artistService;
@@ -58,19 +61,19 @@ public class ArtistAdminController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ArtistResponse> get(@PathVariable Long id) {
+    public ResponseEntity<ArtistResponse> get(@PathVariable @Positive Long id) {
         return ResponseEntity.ok(ArtistResponse.from(artistService.findById(id)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ArtistResponse> update(@PathVariable Long id,
+    public ResponseEntity<ArtistResponse> update(@PathVariable @Positive Long id,
                                                  @Valid @RequestBody ArtistUpdateRequest request) {
         Artist updated = artistService.update(id, new ArtistCommand(request.name(), request.description()));
         return ResponseEntity.ok(ArtistResponse.from(updated));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
         artistService.delete(id);
         return ResponseEntity.noContent().build();
     }

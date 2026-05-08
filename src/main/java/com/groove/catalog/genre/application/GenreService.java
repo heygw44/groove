@@ -56,10 +56,9 @@ public class GenreService {
 
     @Transactional
     public void delete(Long id) {
-        if (!genreRepository.existsById(id)) {
-            throw new GenreNotFoundException();
-        }
-        genreRepository.deleteById(id);
+        Genre genre = genreRepository.findById(id)
+                .orElseThrow(GenreNotFoundException::new);
+        genreRepository.delete(genre);
     }
 
     @Transactional(readOnly = true)

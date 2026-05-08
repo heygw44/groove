@@ -98,21 +98,22 @@ class ArtistServiceTest {
     @Test
     @DisplayName("delete → 존재하지 않는 id 면 404")
     void delete_throwsWhenIdMissing() {
-        given(artistRepository.existsById(99L)).willReturn(false);
+        given(artistRepository.findById(99L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> artistService.delete(99L))
                 .isInstanceOf(ArtistNotFoundException.class);
-        then(artistRepository).should(never()).deleteById(any());
+        then(artistRepository).should(never()).delete(any());
     }
 
     @Test
-    @DisplayName("delete → 존재하면 deleteById 호출")
-    void delete_callsDeleteById() {
-        given(artistRepository.existsById(1L)).willReturn(true);
+    @DisplayName("delete → 존재하면 entity 로 delete 호출")
+    void delete_callsDeleteEntity() {
+        Artist existing = Artist.create("X", null);
+        given(artistRepository.findById(1L)).willReturn(Optional.of(existing));
 
         artistService.delete(1L);
 
-        then(artistRepository).should().deleteById(1L);
+        then(artistRepository).should().delete(existing);
     }
 
     @Test
