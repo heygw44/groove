@@ -1,7 +1,10 @@
 package com.groove.catalog.album.application;
 
+import com.groove.catalog.album.api.dto.AlbumDetailResponse;
+import com.groove.catalog.album.api.dto.AlbumSummaryResponse;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumRepository;
+import com.groove.catalog.album.domain.AlbumSpecs;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
@@ -12,6 +15,9 @@ import com.groove.catalog.genre.exception.GenreNotFoundException;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.catalog.label.exception.LabelNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -112,6 +118,44 @@ public class AlbumService {
         Album album = albumRepository.findById(id)
                 .orElseThrow(AlbumNotFoundException::new);
         albumRepository.delete(album);
+    }
+
+    /**
+     * 공개 검색/목록 (#34, API §3.3 GET /albums).
+     *
+     * <p>{@link AlbumSpecs} 의 동적 Specification 을 합쳐 페이징 조회한다. 응답 DTO 변환을
+     * 트랜잭션 내에서 수행하여 {@code open-in-view=false} 환경에서도 LazyInitializationException
+     * 을 피한다. 단, artist/genre/label 페치 조인을 의도적으로 사용하지 않으므로 DTO 변환 시점에
+     * lazy proxy 가 풀리며 <b>N+1 SELECT 가 발생</b>한다 — W10 시연용 (ERD §4.6) 의도된 동작.
+     */
+    @Transactional(readOnly = true)
+    public Page<AlbumSummaryResponse> search(AlbumSearchCondition condition, Pageable pageable) {
+        Specification<Album> spec = Specification
+                .allOf(
+                        AlbumSpecs.keyword(condition.keyword()),
+                        AlbumSpecs.hasArtistId(condition.artistId()),
+                        AlbumSpecs.hasGenreId(condition.genreId()),
+                        AlbumSpecs.priceBetween(condition.minPrice(), condition.maxPrice()),
+                        AlbumSpecs.yearBetween(condition.minYear(), condition.maxYear()),
+                        AlbumSpecs.hasFormat(condition.format()),
+                        AlbumSpecs.isLimited(condition.limited()),
+                        AlbumSpecs.hasStatus(condition.status())
+                );
+        return albumRepository.findAll(spec, pageable).map(AlbumSummaryResponse::from);
+    }
+
+    /**
+     * 공개 상세 (#34, API §3.3 GET /albums/{id}).
+     *
+     * <p>단건 조회는 LazyInitializationException 방지를 위해 연관을 명시 초기화한 뒤 DTO 변환한다.
+     * Public 노출 정책상 status=HIDDEN 은 컨트롤러에서 거르지 않고 (관리자가 단건 URL 을 직접 줄 수
+     * 있어야 함) 조회 자체는 status 무관하게 허용한다 — Public 목록(검색) 에서만 SELLING 으로 필터된다.
+     */
+    @Transactional(readOnly = true)
+    public AlbumDetailResponse findDetail(Long id) {
+        Album album = albumRepository.findById(id)
+                .orElseThrow(AlbumNotFoundException::new);
+        return AlbumDetailResponse.from(initializeAssociations(album));
     }
 
     private Artist loadArtist(Long artistId) {

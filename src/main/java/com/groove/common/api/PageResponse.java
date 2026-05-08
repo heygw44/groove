@@ -37,4 +37,20 @@ public record PageResponse<T>(
                 source.isLast()
         );
     }
+
+    /**
+     * 호출자가 이미 도메인 → DTO 변환을 마친 {@link Page} 를 그대로 envelope 에 감싼다.
+     * {@link #from(Page, Function)} 와 달리 항등 매퍼({@code s -> s}) 를 호출자에게 강요하지 않는다.
+     */
+    public static <T> PageResponse<T> of(Page<T> source) {
+        return new PageResponse<>(
+                source.getContent(),
+                source.getNumber(),
+                source.getSize(),
+                source.getTotalElements(),
+                source.getTotalPages(),
+                source.isFirst(),
+                source.isLast()
+        );
+    }
 }
