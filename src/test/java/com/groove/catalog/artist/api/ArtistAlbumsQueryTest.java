@@ -108,6 +108,26 @@ class ArtistAlbumsQueryTest {
     }
 
     @Test
+    @DisplayName("path 의 id 와 다른 ?artistId 동시 지정 → 400 (silent override 방지)")
+    void list_artistIdConflict_returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/artists/{id}/albums", beatles.getId())
+                        .param("artistId", String.valueOf(stones.getId())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALID_001"));
+    }
+
+    @Test
+    @DisplayName("path 의 id 와 동일한 ?artistId 명시 → 200 (혼용 허용)")
+    void list_artistIdMatchingPath_returns200() throws Exception {
+        persistAlbum("Beatles1", beatles, AlbumStatus.SELLING);
+
+        mockMvc.perform(get("/api/v1/artists/{id}/albums", beatles.getId())
+                        .param("artistId", String.valueOf(beatles.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+    }
+
+    @Test
     @DisplayName("페이징 적용 → 200")
     void list_appliesPaging() throws Exception {
         for (int i = 0; i < 5; i++) {

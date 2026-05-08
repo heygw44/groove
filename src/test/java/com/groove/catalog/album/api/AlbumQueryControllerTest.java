@@ -218,6 +218,19 @@ class AlbumQueryControllerTest {
         }
 
         @Test
+        @DisplayName("keyword 의 LIKE 메타문자(%/_) 는 escape 되어 와일드카드로 동작하지 않음")
+        void filter_keywordEscapesLikeMetaCharacters() throws Exception {
+            persistAlbum("Abbey Road", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+            persistAlbum("50% Off", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+
+            // ?keyword=% 가 모든 행에 매칭되면 escape 미적용 — 정확히 "%" 를 포함한 행만 매칭되어야 한다.
+            mockMvc.perform(get("/api/v1/albums").param("keyword", "%"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].title").value("50% Off"));
+        }
+
+        @Test
         @DisplayName("정렬 키 price,asc → 200 + 오름차순")
         void sort_priceAsc() throws Exception {
             persistAlbum("Mid", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);

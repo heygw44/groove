@@ -35,7 +35,7 @@ public record AlbumSearchRequest(
 
     /**
      * Public 경계용 변환 — status 가 null 이면 {@link AlbumStatus#SELLING} 으로 강제한다.
-     * Admin 검색 경로(W6 외) 에서는 {@link #toCondition()} 을 사용해 status 를 그대로 전달한다.
+     * Admin 검색 경로(후속 이슈) 도입 시 status 를 그대로 전달하는 별도 변환 메서드를 추가한다.
      */
     public AlbumSearchCondition toPublicCondition() {
         AlbumStatus effective = (status == null) ? AlbumStatus.SELLING : status;

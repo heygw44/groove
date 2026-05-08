@@ -6,6 +6,8 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.util.Locale;
+
 /**
  * 앨범 공개 검색용 {@link Specification} 모음 (#34, API §3.3 GET /albums).
  *
@@ -19,6 +21,9 @@ import org.springframework.data.jpa.domain.Specification;
  * 조회하는 경로 보존). ERD §4.6 [W10] 인덱스 누락도 함께 시연 자료로 보존.
  */
 public final class AlbumSpecs {
+
+    /** LIKE 패턴에서 역할을 갖는 문자들을 escape 하기 위한 escape character. */
+    private static final char LIKE_ESCAPE = '\\';
 
     private AlbumSpecs() {
     }
@@ -104,17 +109,35 @@ public final class AlbumSpecs {
      * artist join 자체를 생성하지 않도록 query 가 count 인지 확인 후 skip 하지는 않는다 —
      * Spring Data 가 자동으로 페이징 count 쿼리를 별도로 빌드하므로 same Specification 재호출이
      * 안전하다 (artist 와 album 은 ManyToOne, count distinct 불필요).
+     *
+     * <p>대소문자 변환은 {@link Locale#ROOT} 로 고정 — JVM default Locale 의존 시 Turkish 환경
+     * (`I → ı`) 에서 DB collation(utf8mb4_unicode_ci) 결과와 어긋나는 silent miss 가 발생.
+     *
+     * <p>사용자 입력의 LIKE 메타 문자({@code %}, {@code _}, {@code \}) 는 escape 처리해
+     * {@code ?keyword=50%} 가 모든 행에 매칭되는 의도치 않은 와일드카드 동작을 막는다.
      */
     public static Specification<Album> keyword(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return Specification.unrestricted();
         }
-        String pattern = "%" + keyword.trim().toLowerCase() + "%";
+        String escaped = escapeLikePattern(keyword.trim().toLowerCase(Locale.ROOT));
+        String pattern = "%" + escaped + "%";
         return (root, query, cb) -> {
             Join<Album, Artist> artist = root.join("artist", JoinType.LEFT);
-            Predicate titleMatch = cb.like(cb.lower(root.get("title")), pattern);
-            Predicate artistMatch = cb.like(cb.lower(artist.get("name")), pattern);
+            Predicate titleMatch = cb.like(cb.lower(root.get("title")), pattern, LIKE_ESCAPE);
+            Predicate artistMatch = cb.like(cb.lower(artist.get("name")), pattern, LIKE_ESCAPE);
             return cb.or(titleMatch, artistMatch);
         };
+    }
+
+    /**
+     * LIKE 메타 문자 escape. {@code %}, {@code _}, escape 자체({@code \}) 를 모두 escape.
+     * escape 자체를 가장 먼저 처리해야 추가 escape 가 이중 처리되지 않는다.
+     */
+    private static String escapeLikePattern(String input) {
+        return input
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 }

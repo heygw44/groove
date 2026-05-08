@@ -65,7 +65,7 @@ public class AlbumQueryController {
         validateSort(pageable.getSort());
 
         Page<AlbumSummaryResponse> page = albumService.search(request.toPublicCondition(), pageable);
-        return ResponseEntity.ok(PageResponse.from(page, s -> s));
+        return ResponseEntity.ok(PageResponse.of(page));
     }
 
     @GetMapping("/{id}")

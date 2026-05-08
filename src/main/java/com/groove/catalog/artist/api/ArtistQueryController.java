@@ -78,11 +78,12 @@ public class ArtistQueryController {
             Pageable pageable) {
         artistService.findById(id);
         rejectHiddenStatusFromPublic(request.status());
+        rejectArtistIdConflict(id, request.artistId());
         validateAlbumSort(pageable.getSort());
 
         Page<AlbumSummaryResponse> page = albumService.search(
                 request.toPublicCondition().withArtistId(id), pageable);
-        return ResponseEntity.ok(PageResponse.from(page, s -> s));
+        return ResponseEntity.ok(PageResponse.of(page));
     }
 
     private void rejectHiddenStatusFromPublic(AlbumStatus status) {
@@ -90,6 +91,18 @@ public class ArtistQueryController {
             throw new ValidationException(
                     ErrorCode.VALIDATION_FAILED,
                     "status=HIDDEN 은 공개 검색에서 사용할 수 없습니다");
+        }
+    }
+
+    /**
+     * path 의 {@code id} 와 query 의 {@code artistId} 가 모두 지정되었는데 다르면 400.
+     * 동일하거나 query 가 비어있으면 path 가 우선 적용된다 — silent override 방지.
+     */
+    private void rejectArtistIdConflict(Long pathArtistId, Long queryArtistId) {
+        if (queryArtistId != null && !queryArtistId.equals(pathArtistId)) {
+            throw new ValidationException(
+                    ErrorCode.VALIDATION_FAILED,
+                    "경로의 artistId 와 query 의 artistId 가 일치하지 않습니다");
         }
     }
 
