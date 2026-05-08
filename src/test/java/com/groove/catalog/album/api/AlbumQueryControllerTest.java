@@ -240,7 +240,7 @@ class AlbumQueryControllerTest {
         }
 
         @Test
-        @DisplayName("size=0 페이지 + page=0 → 200 + 빈 content + totalElements 정상")
+        @DisplayName("page=1 size=1 → 200 + 두 번째 페이지 1건 + last=true")
         void paging_sizeBoundary() throws Exception {
             persistAlbum("A", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
             persistAlbum("B", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
@@ -261,6 +261,13 @@ class AlbumQueryControllerTest {
         @DisplayName("음수 minPrice → 400")
         void filter_negativeMinPrice_returns400() throws Exception {
             mockMvc.perform(get("/api/v1/albums").param("minPrice", "-1"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("maxYear=999999 (short 범위 초과) → 400")
+        void filter_yearOverShortMax_returns400() throws Exception {
+            mockMvc.perform(get("/api/v1/albums").param("maxYear", "999999"))
                     .andExpect(status().isBadRequest());
         }
 

@@ -3,6 +3,7 @@ package com.groove.catalog.album.api.dto;
 import com.groove.catalog.album.application.AlbumSearchCondition;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumStatus;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -25,8 +26,8 @@ public record AlbumSearchRequest(
         @Positive Long genreId,
         @Min(0) Long minPrice,
         @Min(0) Long maxPrice,
-        @Min(1900) Integer minYear,
-        @Min(1900) Integer maxYear,
+        @Min(1900) @Max(Short.MAX_VALUE) Integer minYear,
+        @Min(1900) @Max(Short.MAX_VALUE) Integer maxYear,
         AlbumFormat format,
         Boolean isLimited,
         AlbumStatus status
