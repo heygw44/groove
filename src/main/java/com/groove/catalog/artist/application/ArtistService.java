@@ -1,8 +1,11 @@
 package com.groove.catalog.artist.application;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
+import com.groove.catalog.artist.exception.ArtistInUseException;
 import com.groove.catalog.artist.exception.ArtistNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -17,17 +20,19 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>동시 PUT 정책: {@code @Version} 미적용 — 두 PUT 이 겹치면 last-write-wins 로 처리된다.
  * Genre/Label 과 동일 정책이며 W10 운영 부하 측정 후 카탈로그 전반에 걸쳐 재평가한다.
  *
- * <p>W5-3 (Album) 도입 이후의 추가 처리: Album 이 artist_id 를 FK 로 참조하면 delete 시
- * ON DELETE RESTRICT 로 인한 {@link org.springframework.dao.DataIntegrityViolationException}
- * 을 도메인 예외로 변환해야 한다. 본 처리는 W5-3 이슈 범위에서 추가한다.
+ * <p>delete 시 album 참조 검사: W5-3 (Album) 도입으로 ON DELETE RESTRICT FK 가 활성화되었다.
+ * {@link AlbumRepository#existsByArtist_Id} 사전 검사 + {@link DataIntegrityViolationException}
+ * fallback 변환으로 항상 409 {@link ArtistInUseException} 응답을 보장한다 (race-safe).
  */
 @Service
 public class ArtistService {
 
     private final ArtistRepository artistRepository;
+    private final AlbumRepository albumRepository;
 
-    public ArtistService(ArtistRepository artistRepository) {
+    public ArtistService(ArtistRepository artistRepository, AlbumRepository albumRepository) {
         this.artistRepository = artistRepository;
+        this.albumRepository = albumRepository;
     }
 
     @Transactional
@@ -47,7 +52,15 @@ public class ArtistService {
     public void delete(Long id) {
         Artist artist = artistRepository.findById(id)
                 .orElseThrow(ArtistNotFoundException::new);
-        artistRepository.delete(artist);
+        if (albumRepository.existsByArtist_Id(id)) {
+            throw new ArtistInUseException();
+        }
+        try {
+            artistRepository.delete(artist);
+            artistRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ArtistInUseException(ex);
+        }
     }
 
     @Transactional(readOnly = true)

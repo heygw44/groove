@@ -25,9 +25,14 @@ public enum ErrorCode {
     // CATALOG
     GENRE_NAME_DUPLICATED(HttpStatus.CONFLICT, "GENRE_NAME_DUPLICATED", "이미 존재하는 장르명입니다"),
     GENRE_NOT_FOUND(HttpStatus.NOT_FOUND, "GENRE_NOT_FOUND", "장르를 찾을 수 없습니다"),
+    GENRE_IN_USE(HttpStatus.CONFLICT, "GENRE_IN_USE", "앨범이 참조 중인 장르는 삭제할 수 없습니다"),
     LABEL_NAME_DUPLICATED(HttpStatus.CONFLICT, "LABEL_NAME_DUPLICATED", "이미 존재하는 레이블명입니다"),
     LABEL_NOT_FOUND(HttpStatus.NOT_FOUND, "LABEL_NOT_FOUND", "레이블을 찾을 수 없습니다"),
+    LABEL_IN_USE(HttpStatus.CONFLICT, "LABEL_IN_USE", "앨범이 참조 중인 레이블은 삭제할 수 없습니다"),
     ARTIST_NOT_FOUND(HttpStatus.NOT_FOUND, "ARTIST_NOT_FOUND", "아티스트를 찾을 수 없습니다"),
+    ARTIST_IN_USE(HttpStatus.CONFLICT, "ARTIST_IN_USE", "앨범이 참조 중인 아티스트는 삭제할 수 없습니다"),
+    ALBUM_NOT_FOUND(HttpStatus.NOT_FOUND, "ALBUM_NOT_FOUND", "앨범을 찾을 수 없습니다"),
+    ALBUM_INVALID_STOCK(HttpStatus.BAD_REQUEST, "ALBUM_INVALID_STOCK", "재고 조정 결과가 음수가 될 수 없습니다"),
 
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),

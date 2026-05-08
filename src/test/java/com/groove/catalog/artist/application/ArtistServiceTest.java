@@ -1,7 +1,9 @@
 package com.groove.catalog.artist.application;
 
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
+import com.groove.catalog.artist.exception.ArtistInUseException;
 import com.groove.catalog.artist.exception.ArtistNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -9,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -23,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,11 +36,14 @@ class ArtistServiceTest {
     @Mock
     private ArtistRepository artistRepository;
 
+    @Mock
+    private AlbumRepository albumRepository;
+
     private ArtistService artistService;
 
     @BeforeEach
     void setUp() {
-        artistService = new ArtistService(artistRepository);
+        artistService = new ArtistService(artistRepository, albumRepository);
     }
 
     @Test
@@ -106,14 +113,41 @@ class ArtistServiceTest {
     }
 
     @Test
-    @DisplayName("delete → 존재하면 entity 로 delete 호출")
+    @DisplayName("delete → 존재하고 album 미참조면 entity 로 delete 호출 후 flush")
     void delete_callsDeleteEntity() {
         Artist existing = Artist.create("X", null);
         given(artistRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByArtist_Id(1L)).willReturn(false);
 
         artistService.delete(1L);
 
         then(artistRepository).should().delete(existing);
+        then(artistRepository).should().flush();
+    }
+
+    @Test
+    @DisplayName("delete → album 이 참조 중이면 409 ArtistInUse")
+    void delete_throwsWhenAlbumReferences() {
+        Artist existing = Artist.create("X", null);
+        given(artistRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByArtist_Id(1L)).willReturn(true);
+
+        assertThatThrownBy(() -> artistService.delete(1L))
+                .isInstanceOf(ArtistInUseException.class);
+        then(artistRepository).should(never()).delete(any(Artist.class));
+    }
+
+    @Test
+    @DisplayName("delete → 사전검사 통과 후 동시 INSERT race → DataIntegrityViolation 을 ArtistInUse 로 변환")
+    void delete_translatesIntegrityViolationToInUse() {
+        Artist existing = Artist.create("X", null);
+        given(artistRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.existsByArtist_Id(1L)).willReturn(false);
+        willThrow(new DataIntegrityViolationException("fk_album_artist"))
+                .given(artistRepository).flush();
+
+        assertThatThrownBy(() -> artistService.delete(1L))
+                .isInstanceOf(ArtistInUseException.class);
     }
 
     @Test
