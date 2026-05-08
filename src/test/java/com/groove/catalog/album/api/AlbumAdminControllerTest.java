@@ -348,13 +348,16 @@ class AlbumAdminControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE USER 권한 → 403")
+    @DisplayName("DELETE USER 권한 → 403 + 엔티티 보존")
     void delete_userRole_returns403() throws Exception {
         Album saved = persistedAlbum(0);
 
         mockMvc.perform(delete("/api/v1/admin/albums/{id}", saved.getId())
                         .header(HttpHeaders.AUTHORIZATION, userBearer))
                 .andExpect(status().isForbidden());
+
+        // SecurityFilter 우회로 실제 삭제까지 도달하는 회귀를 잡기 위한 DB 가드.
+        assertThat(albumRepository.findById(saved.getId())).isPresent();
     }
 
     @Test
