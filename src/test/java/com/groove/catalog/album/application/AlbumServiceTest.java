@@ -207,7 +207,7 @@ class AlbumServiceTest {
 
         assertThatThrownBy(() -> albumService.delete(1L))
                 .isInstanceOf(AlbumNotFoundException.class);
-        then(albumRepository).should(never()).delete(any());
+        then(albumRepository).should(never()).delete(any(Album.class));
     }
 
     @Test

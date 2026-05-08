@@ -1,12 +1,10 @@
-package com.groove.catalog.artist.api;
+package com.groove.catalog.album.api;
 
+import com.groove.catalog.album.api.dto.AlbumDetailResponse;
 import com.groove.catalog.album.api.dto.AlbumSearchRequest;
 import com.groove.catalog.album.api.dto.AlbumSummaryResponse;
 import com.groove.catalog.album.application.AlbumService;
 import com.groove.catalog.album.domain.AlbumStatus;
-import com.groove.catalog.artist.api.dto.ArtistResponse;
-import com.groove.catalog.artist.application.ArtistService;
-import com.groove.catalog.artist.domain.Artist;
 import com.groove.common.api.PageResponse;
 import com.groove.common.exception.ErrorCode;
 import com.groove.common.exception.ValidationException;
@@ -28,63 +26,57 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 아티스트 공개 조회 (API §3.3).
+ * 앨범 공개 조회 (#34, API §3.3).
  *
- * <p>비로그인 사용자도 GET 으로 페이징 목록과 단건을 조회할 수 있다.
- * 인증 경계는 {@code SecurityConfig} 의 {@code PUBLIC_GET_PATTERNS} 에 등록된다.
+ * <p>비로그인 사용자가 페이징·필터·키워드 검색을 통해 카탈로그를 조회한다.
+ * 인증 경계는 {@code SecurityConfig#PUBLIC_GET_PATTERNS} 의 {@code /api/v1/albums/**} 가 담당.
  *
- * <p>{@code /artists/{id}/albums} 는 album 검색을 artistId 로 고정 위임한다 (#34) —
- * status=SELLING 강제, N+1 보존 정책은 {@code GET /albums} 와 동일.
+ * <p>의도적 N+1 (W10 시연 보존): 목록 조회 시 페치 조인 없이 lazy proxy 가 DTO 변환 단계에서
+ * 풀리며 SELECT 가 N+1 발생한다 — {@link AlbumService#search} Javadoc 참조.
  */
 @RestController
-@RequestMapping("/api/v1/artists")
+@RequestMapping("/api/v1/albums")
 @Validated
-public class ArtistQueryController {
+public class AlbumQueryController {
 
     /**
-     * Album 정렬 화이트리스트. {@code AlbumQueryController} 와 동일 정책 (별도 이유: 동일한 album
-     * 응답을 반환하므로 동일 키만 허용해야 함). 중복 정의는 의도적이다 — 한쪽에서만 추가/제거 시
-     * 정책 드리프트가 일어나는 것을 즉각 알 수 있게 하기 위함.
+     * 정렬 화이트리스트. {@code Pageable} 에 임의 필드를 노출하면 인덱스가 없는 컬럼으로 정렬되어
+     * 운영 부하가 폭증할 수 있어 컨트롤러에서 명시 검증한다.
+     *
+     * <p>API §3.3 의 정렬 키 {@code salesCount} 는 W7 (주문 도메인) 집계라 본 이슈 범위에서
+     * 제외하고, {@code id/createdAt/price/releaseYear} 만 허용한다.
      */
-    private static final Set<String> ALLOWED_ALBUM_SORT_PROPERTIES = Set.of(
+    private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of(
             "id", "createdAt", "price", "releaseYear");
 
-    private final ArtistService artistService;
     private final AlbumService albumService;
 
-    public ArtistQueryController(ArtistService artistService, AlbumService albumService) {
-        this.artistService = artistService;
+    public AlbumQueryController(AlbumService albumService) {
         this.albumService = albumService;
     }
 
     @GetMapping
-    public ResponseEntity<PageResponse<ArtistResponse>> list(
-            @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        Page<Artist> page = artistService.findAll(pageable);
-        return ResponseEntity.ok(PageResponse.from(page, ArtistResponse::from));
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<ArtistResponse> get(@PathVariable @Positive Long id) {
-        return ResponseEntity.ok(ArtistResponse.from(artistService.findById(id)));
-    }
-
-    @GetMapping("/{id}/albums")
-    public ResponseEntity<PageResponse<AlbumSummaryResponse>> albums(
-            @PathVariable @Positive Long id,
+    public ResponseEntity<PageResponse<AlbumSummaryResponse>> search(
             @Valid @ModelAttribute AlbumSearchRequest request,
             @PageableDefault(size = 20)
             @SortDefault(sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        artistService.findById(id);
         rejectHiddenStatusFromPublic(request.status());
-        validateAlbumSort(pageable.getSort());
+        validateSort(pageable.getSort());
 
-        Page<AlbumSummaryResponse> page = albumService.search(
-                request.toPublicCondition().withArtistId(id), pageable);
+        Page<AlbumSummaryResponse> page = albumService.search(request.toPublicCondition(), pageable);
         return ResponseEntity.ok(PageResponse.from(page, s -> s));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<AlbumDetailResponse> get(@PathVariable @Positive Long id) {
+        return ResponseEntity.ok(albumService.findDetail(id));
+    }
+
+    /**
+     * Public 검색 경로에서 HIDDEN 노출 차단. 관리자 전용 카테고리 (보유 재고/비공개) 가 검색 결과로
+     * 새는 것을 막는다. 단건 GET 은 status 무관 — 직접 ID 를 알고 있는 경우 운영상 허용.
+     */
     private void rejectHiddenStatusFromPublic(AlbumStatus status) {
         if (status == AlbumStatus.HIDDEN) {
             throw new ValidationException(
@@ -93,9 +85,9 @@ public class ArtistQueryController {
         }
     }
 
-    private void validateAlbumSort(Sort sort) {
+    private void validateSort(Sort sort) {
         for (Sort.Order order : sort) {
-            if (!ALLOWED_ALBUM_SORT_PROPERTIES.contains(order.getProperty())) {
+            if (!ALLOWED_SORT_PROPERTIES.contains(order.getProperty())) {
                 throw new ValidationException(
                         ErrorCode.VALIDATION_FAILED,
                         "허용되지 않는 정렬 키: " + order.getProperty());
