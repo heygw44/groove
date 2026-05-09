@@ -154,35 +154,40 @@ class OversellingBaselineTest {
                 List.of(new OrderItemRequest(albumId, 1)),
                 null);
 
-        for (int i = 0; i < CONCURRENT_REQUESTS; i++) {
-            pool.submit(() -> {
-                try {
-                    readyGate.await();
-                    orderService.place(memberId, request);
-                    successCount.incrementAndGet();
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    otherFailureCount.incrementAndGet();
-                } catch (InsufficientStockException ex) {
-                    insufficientCount.incrementAndGet();
-                } catch (Throwable ex) {
-                    otherFailureCount.incrementAndGet();
-                    log.warn("예상 외 예외", ex);
-                } finally {
-                    doneGate.countDown();
-                }
-            });
-        }
+        boolean settled;
+        long elapsedMs;
+        try {
+            for (int i = 0; i < CONCURRENT_REQUESTS; i++) {
+                pool.submit(() -> {
+                    try {
+                        readyGate.await();
+                        orderService.place(memberId, request);
+                        successCount.incrementAndGet();
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                        otherFailureCount.incrementAndGet();
+                    } catch (InsufficientStockException ex) {
+                        insufficientCount.incrementAndGet();
+                    } catch (Throwable ex) {
+                        otherFailureCount.incrementAndGet();
+                        log.warn("예상 외 예외", ex);
+                    } finally {
+                        doneGate.countDown();
+                    }
+                });
+            }
 
-        long startNanos = System.nanoTime();
-        readyGate.countDown();
-        boolean settled = doneGate.await(DONE_GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
-        pool.shutdown();
-        // doneGate 가 풀린 시점에 모든 task 가 finally 블록까지 통과했지만, 워커 스레드가 풀에 반환되는
-        // 잔여 시간을 보수적으로 기다린다 — 만료되어도 실패 처리하지 않는다 (이미 결과 카운트는 확정).
-        if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
-            pool.shutdownNow();
+            long startNanos = System.nanoTime();
+            readyGate.countDown();
+            settled = doneGate.await(DONE_GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
+        } finally {
+            // doneGate.await() 가 InterruptedException 을 던지거나 submit 단계에서 예외가 날 경우에도
+            // ExecutorService 가 반드시 종료되도록 finally 로 감싼다 (CodeRabbit 리뷰 반영).
+            pool.shutdown();
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                pool.shutdownNow();
+            }
         }
 
         int finalStock = albumRepository.findById(albumId).orElseThrow().getStock();
