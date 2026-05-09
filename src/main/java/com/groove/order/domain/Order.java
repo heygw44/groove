@@ -12,7 +12,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -72,6 +74,16 @@ public class Order extends BaseTimeEntity {
     @Column(name = "cancelled_reason", length = 500)
     private String cancelledReason;
 
+    /**
+     * 페이징 쿼리({@code findByMemberId} 등)에서 컬렉션 fetch join 시 발생하는 인메모리 페이지네이션을
+     * 회피하기 위해 {@link BatchSize} 를 둔다 — Hibernate 가 Order 페이지를 SQL LIMIT 으로 가져온 뒤
+     * items 를 IN 쿼리로 일괄 로드한다 (N+1 도 함께 방지).
+     *
+     * <p>{@link OrderBy}("id ASC") 가 IN 쿼리에 명시적 정렬을 부여한다 — auto-increment PK 기준
+     * 삽입 순서를 보장해 {@code OrderSummaryResponse.representativeAlbumTitle} 이 결정적이도록 한다.
+     */
+    @BatchSize(size = 50)
+    @OrderBy("id ASC")
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private final List<OrderItem> items = new ArrayList<>();
 

@@ -46,11 +46,17 @@ public class SecurityConfig {
     };
 
     /**
-     * 게스트 주문 생성을 허용하는 경로. POST 만 풀고 GET/PATCH 등 본인 조회·취소는
-     * {@code anyRequest().authenticated()} 로 그대로 보호한다.
+     * 게스트 주문 진입점. POST 만 풀고 본인 GET 조회·cancel 등은 {@code anyRequest().authenticated()} 로
+     * 그대로 보호한다.
+     *
+     * <ul>
+     *   <li>{@code /api/v1/orders} — 게스트 주문 생성 (#43)</li>
+     *   <li>{@code /api/v1/orders/*}/guest-lookup} — 게스트 본인 주문 조회 (#44, email 매칭)</li>
+     * </ul>
      */
     private static final String[] PUBLIC_POST_PATTERNS = {
-            "/api/v1/orders"
+            "/api/v1/orders",
+            "/api/v1/orders/*/guest-lookup"
     };
 
     private static final String ADMIN_PATTERN = "/api/v1/admin/**";

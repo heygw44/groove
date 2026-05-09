@@ -38,6 +38,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesRegex;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -271,6 +272,201 @@ class OrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ========== 이슈 #44: 단건 조회 / 취소 / 게스트 lookup ==========
+
+    @Test
+    @DisplayName("GET /orders/{orderNumber} — 회원 본인 주문 조회 → 200")
+    void get_ownOrder_returns200() throws Exception {
+        String orderNumber = placeMemberOrder(sellingAlbumId, 2);
+
+        mockMvc.perform(get("/api/v1/orders/" + orderNumber)
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderNumber").value(orderNumber))
+                .andExpect(jsonPath("$.status").value(OrderStatus.PENDING.name()))
+                .andExpect(jsonPath("$.items.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /orders/{orderNumber} — 미존재 주문 → 404 ORDER_NOT_FOUND")
+    void get_unknown_returns404() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/ORD-99999999-XXXXXX")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("GET /orders/{orderNumber} — 인증 누락 → 401")
+    void get_unauthenticated_returns401() throws Exception {
+        String orderNumber = placeMemberOrder(sellingAlbumId, 1);
+
+        mockMvc.perform(get("/api/v1/orders/" + orderNumber))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /orders/{orderNumber} — 타 회원 주문 접근 → 404 (존재 노출 회피)")
+    void get_otherMembersOrder_returns404() throws Exception {
+        String orderNumber = placeMemberOrder(sellingAlbumId, 1);
+
+        Member other = memberRepository.saveAndFlush(
+                Member.register("other@example.com", "$2a$10$dummy...", "Other", "01000000001"));
+        String otherBearer = "Bearer " + jwtProvider.issueAccessToken(other.getId(), MemberRole.USER);
+
+        mockMvc.perform(get("/api/v1/orders/" + orderNumber)
+                        .header(HttpHeaders.AUTHORIZATION, otherBearer))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/cancel — PENDING 회원 주문 취소 → 200, 재고 복원")
+    void cancel_pending_returns200_andRestoresStock() throws Exception {
+        int beforeStock = albumRepository.findById(sellingAlbumId).orElseThrow().getStock();
+        String orderNumber = placeMemberOrder(sellingAlbumId, 3);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("reason", "단순 변심");
+
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/cancel")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(OrderStatus.CANCELLED.name()));
+
+        assertThat(albumRepository.findById(sellingAlbumId).orElseThrow().getStock())
+                .isEqualTo(beforeStock);
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/cancel — body 없이도 200 (reason 선택)")
+    void cancel_noBody_returns200() throws Exception {
+        String orderNumber = placeMemberOrder(sellingAlbumId, 1);
+
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/cancel")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(OrderStatus.CANCELLED.name()));
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/cancel — 이미 CANCELLED → 409 ORDER_INVALID_STATE_TRANSITION")
+    void cancel_alreadyCancelled_returns409() throws Exception {
+        String orderNumber = placeMemberOrder(sellingAlbumId, 1);
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/cancel")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/cancel")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ORDER_INVALID_STATE_TRANSITION"));
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/cancel — 타 회원 → 404")
+    void cancel_otherMembersOrder_returns404() throws Exception {
+        String orderNumber = placeMemberOrder(sellingAlbumId, 1);
+
+        Member other = memberRepository.saveAndFlush(
+                Member.register("other2@example.com", "$2a$10$dummy...", "Other", "01000000002"));
+        String otherBearer = "Bearer " + jwtProvider.issueAccessToken(other.getId(), MemberRole.USER);
+
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/cancel")
+                        .header(HttpHeaders.AUTHORIZATION, otherBearer))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/guest-lookup — email 매칭 시 200")
+    void guestLookup_match_returns200() throws Exception {
+        String orderNumber = placeGuestOrder(sellingAlbumId, 1, "guest@example.com", "01099998888");
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("email", "guest@example.com");
+
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/guest-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderNumber").value(orderNumber));
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/guest-lookup — email 불일치 → 404 ORDER_NOT_FOUND")
+    void guestLookup_emailMismatch_returns404() throws Exception {
+        String orderNumber = placeGuestOrder(sellingAlbumId, 1, "guest@example.com", "01099998888");
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("email", "wrong@example.com");
+
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/guest-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/guest-lookup — 회원 주문에 게스트로 접근 → 404")
+    void guestLookup_memberOrder_returns404() throws Exception {
+        String orderNumber = placeMemberOrder(sellingAlbumId, 1);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("email", "user@example.com");
+
+        mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/guest-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("POST /orders/{orderNumber}/guest-lookup — email 형식 위반 → 400")
+    void guestLookup_invalidEmail_returns400() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("email", "not-an-email");
+
+        mockMvc.perform(post("/api/v1/orders/ORD-20260508-XXXXXX/guest-lookup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** 회원 주문을 한 건 만들고 orderNumber 를 반환한다. */
+    private String placeMemberOrder(Long albumId, int quantity) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", List.of(itemBody(albumId, quantity)));
+
+        String json = mockMvc.perform(post("/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(json).get("orderNumber").asText();
+    }
+
+    private String placeGuestOrder(Long albumId, int quantity, String email, String phone) throws Exception {
+        Map<String, Object> guest = new LinkedHashMap<>();
+        guest.put("email", email);
+        guest.put("phone", phone);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", List.of(itemBody(albumId, quantity)));
+        body.put("guest", guest);
+
+        String json = mockMvc.perform(post("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(json).get("orderNumber").asText();
     }
 
     private Map<String, Object> itemBody(Long albumId, int quantity) {
