@@ -34,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -116,8 +117,10 @@ class MemberOrderControllerTest {
     }
 
     @Test
-    @DisplayName("주문 2건 생성 후 목록 조회 → 200, itemCount/representativeAlbumTitle 포함")
+    @DisplayName("주문 2건 생성 후 목록 조회 → 200, itemCount/representativeAlbumTitle 정확값 검증")
     void list_withTwoOrders_returnsSummaries() throws Exception {
+        // order1: Album A (qty 2) + Album B (qty 1) → itemCount=2, repr="Album A" (첫 라인)
+        // order2: Album B (qty 3) only → itemCount=1, repr="Album B"
         placeOrder(List.of(item(albumA, 2), item(albumB, 1)));
         placeOrder(List.of(item(albumB, 3)));
 
@@ -126,8 +129,9 @@ class MemberOrderControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.content.length()").value(2))
-                .andExpect(jsonPath("$.content[0].itemCount").exists())
-                .andExpect(jsonPath("$.content[0].representativeAlbumTitle").exists());
+                .andExpect(jsonPath("$.content[*].itemCount", containsInAnyOrder(2, 1)))
+                .andExpect(jsonPath("$.content[*].representativeAlbumTitle",
+                        containsInAnyOrder("Album A", "Album B")));
     }
 
     @Test

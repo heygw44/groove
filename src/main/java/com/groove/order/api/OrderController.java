@@ -8,6 +8,7 @@ import com.groove.order.api.dto.OrderResponse;
 import com.groove.order.application.OrderService;
 import com.groove.order.domain.Order;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -34,6 +35,12 @@ import java.net.URI;
 @Validated
 public class OrderController {
 
+    /**
+     * orderNumber 형식: {@code RandomOrderNumberGenerator} 가 발급하는 {@code ORD-YYYYMMDD-XXXXXX}
+     * (대문자/숫자 6자) — 형식 위반 path 는 컨트롤러 진입 단계에서 400 으로 거른다.
+     */
+    private static final String ORDER_NUMBER_REGEX = "^ORD-\\d{8}-[A-Z0-9]{6}$";
+
     private final OrderService orderService;
 
     public OrderController(OrderService orderService) {
@@ -53,7 +60,7 @@ public class OrderController {
     @GetMapping("/{orderNumber}")
     public ResponseEntity<OrderResponse> get(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable String orderNumber) {
+            @PathVariable @Pattern(regexp = ORDER_NUMBER_REGEX) String orderNumber) {
         Order order = orderService.findForMember(principal.memberId(), orderNumber);
         return ResponseEntity.ok(OrderResponse.from(order));
     }
@@ -61,7 +68,7 @@ public class OrderController {
     @PostMapping("/{orderNumber}/cancel")
     public ResponseEntity<OrderResponse> cancel(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable String orderNumber,
+            @PathVariable @Pattern(regexp = ORDER_NUMBER_REGEX) String orderNumber,
             @Valid @RequestBody(required = false) OrderCancelRequest request) {
         String reason = request != null ? request.reason() : null;
         Order order = orderService.cancel(principal.memberId(), orderNumber, reason);
@@ -76,7 +83,7 @@ public class OrderController {
      */
     @PostMapping("/{orderNumber}/guest-lookup")
     public ResponseEntity<OrderResponse> guestLookup(
-            @PathVariable String orderNumber,
+            @PathVariable @Pattern(regexp = ORDER_NUMBER_REGEX) String orderNumber,
             @Valid @RequestBody GuestLookupRequest request) {
         Order order = orderService.findForGuest(orderNumber, request.email());
         return ResponseEntity.ok(OrderResponse.from(order));

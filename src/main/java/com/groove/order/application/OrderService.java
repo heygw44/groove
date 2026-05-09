@@ -95,13 +95,18 @@ public class OrderService {
      *
      * <p>{@code status} null 이면 전체, 지정 시 status 필터 적용. JPQL {@code IS NULL OR ...}
      * 패턴 대신 derived method 2종 분기로 처리한다 — 옵티마이저가 단순 인덱스 스캔을 선택하기 쉽다.
+     *
+     * <p>페이지 쿼리는 컬렉션 fetch join 을 두지 않고 ({@link Order#getItems items} 의
+     * {@code @BatchSize} 활용) 트랜잭션 안에서 items 를 강제 초기화한다 — 컨트롤러의 응답 매핑
+     * (SUMMARY DTO) 시점에 발생하는 {@code LazyInitializationException} 회피.
      */
     @Transactional(readOnly = true)
     public Page<Order> listForMember(Long memberId, OrderStatus status, Pageable pageable) {
-        if (status == null) {
-            return orderRepository.findByMemberId(memberId, pageable);
-        }
-        return orderRepository.findByMemberIdAndStatus(memberId, status, pageable);
+        Page<Order> page = (status == null)
+                ? orderRepository.findByMemberId(memberId, pageable)
+                : orderRepository.findByMemberIdAndStatus(memberId, status, pageable);
+        page.forEach(order -> order.getItems().size());
+        return page;
     }
 
     /**

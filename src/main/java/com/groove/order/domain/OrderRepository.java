@@ -31,9 +31,15 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     boolean existsByOrderNumber(String orderNumber);
 
-    @EntityGraph(attributePaths = "items")
+    /**
+     * 회원 주문 목록 (페이징).
+     *
+     * <p>{@code @EntityGraph(items)} 를 두지 않는 이유: 컬렉션 fetch join + {@code Pageable} 조합은
+     * Hibernate 가 SQL LIMIT 을 적용하지 못해 모든 행을 메모리에 적재한 뒤 자바 레벨에서 페이지네이션을
+     * 수행한다 (HHH90003004 경고). {@link Order#getItems items} 컬렉션의 {@code @BatchSize} 가
+     * Order 페이지 후 IN 쿼리로 일괄 로드해 N+1 과 인메모리 페이지네이션을 동시에 회피한다.
+     */
     Page<Order> findByMemberId(Long memberId, Pageable pageable);
 
-    @EntityGraph(attributePaths = "items")
     Page<Order> findByMemberIdAndStatus(Long memberId, OrderStatus status, Pageable pageable);
 }
