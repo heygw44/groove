@@ -2,7 +2,7 @@
 
 > **상태**: Before (W6 시점, 락 미적용 baseline)
 > **다음 작업**: W10-3 비관적 락 적용 후 같은 시나리오 재실행 → After 캡처로 갱신
-> **관련 이슈**: [#43 (의도적 락 미적용)](../../README.md#issue-43), [#46 (본 baseline 보존)](../../README.md#issue-46), W10-3 (비관적 락 적용)
+> **관련 이슈**: [#43 — 의도적 락 미적용](https://github.com/heygw44/groove/issues/43), [#46 — 본 baseline 보존](https://github.com/heygw44/groove/issues/46), W10-3 (비관적 락 적용 — 마일스톤 진입 시 별도 이슈 발급)
 
 ---
 

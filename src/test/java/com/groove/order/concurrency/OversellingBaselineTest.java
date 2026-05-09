@@ -1,5 +1,6 @@
 package com.groove.order.concurrency;
 
+import com.groove.cart.domain.CartRepository;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumRepository;
@@ -16,6 +17,7 @@ import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
 import com.groove.order.application.OrderService;
 import com.groove.order.domain.OrderRepository;
+import com.groove.order.exception.InsufficientStockException;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,8 +52,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code docs/troubleshooting/overselling-baseline.md} 에 캡처해 보존한다.
  *
  * <p>"수정"이 아니라 "기록"이 목적인 테스트이므로 assertion 의 의미는 통상의 "기능 통과"가 아니라
- * "오버셀 발생을 증명" 한다는 점에 있다 — {@code success > stock} 또는 {@code finalStock < 0}
- * 둘 중 하나라도 성립해야 baseline 으로 유효하다.
+ * "오버셀 발생을 증명" 한다는 점에 있다 — 다음 세 시그널 중 하나라도 성립해야 baseline 으로 유효하다:
+ * <ul>
+ *   <li>{@code successCount > INITIAL_STOCK} — 재고를 초과한 주문이 영속화 (이상적 시나리오)</li>
+ *   <li>{@code finalStock < 0} — 마지막 write 가 음수로 진입 (도메인 가드 우회)</li>
+ *   <li>{@code persistedOrders > actualDecrement} — 영속 주문 수가 실제 차감량 초과
+ *       (MySQL InnoDB row lock + deadlock detection 환경에서 가장 두드러지는 시그널)</li>
+ * </ul>
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -88,6 +95,9 @@ class OversellingBaselineTest {
     @Autowired
     private OrderRepository orderRepository;
 
+    @Autowired
+    private CartRepository cartRepository;
+
     private Long albumId;
     private Long memberId;
 
@@ -118,6 +128,9 @@ class OversellingBaselineTest {
 
     private void cleanupAll() {
         // FK 의존 순서대로 부모 repository 를 비운다 (CartOrderE2EIntegrationTest 와 동일 패턴).
+        // cart 정리는 본 테스트에서 cart 를 만들지 않더라도, Testcontainers 컨테이너 재사용 환경에서
+        // 외부 테스트가 남긴 cart 데이터가 album 삭제 시 FK 위반을 유발하는 경로를 차단한다.
+        cartRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
@@ -147,7 +160,10 @@ class OversellingBaselineTest {
                     readyGate.await();
                     orderService.place(memberId, request);
                     successCount.incrementAndGet();
-                } catch (com.groove.order.exception.InsufficientStockException ex) {
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    otherFailureCount.incrementAndGet();
+                } catch (InsufficientStockException ex) {
                     insufficientCount.incrementAndGet();
                 } catch (Throwable ex) {
                     otherFailureCount.incrementAndGet();
@@ -163,7 +179,11 @@ class OversellingBaselineTest {
         boolean settled = doneGate.await(DONE_GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
         pool.shutdown();
-        pool.awaitTermination(5, TimeUnit.SECONDS);
+        // doneGate 가 풀린 시점에 모든 task 가 finally 블록까지 통과했지만, 워커 스레드가 풀에 반환되는
+        // 잔여 시간을 보수적으로 기다린다 — 만료되어도 실패 처리하지 않는다 (이미 결과 카운트는 확정).
+        if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+            pool.shutdownNow();
+        }
 
         int finalStock = albumRepository.findById(albumId).orElseThrow().getStock();
         int actualDecrement = INITIAL_STOCK - finalStock;
