@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("OrderPaidEventListener — AFTER_COMMIT 트랜잭션 이벤트 (#W7-5)")
 class OrderPaidEventListenerTest {
 
-    private static final String ORDER_NUMBER = "ORD-TEST-0001";
+    private static final OrderPaidEvent SAMPLE_EVENT = new OrderPaidEvent(1L, "ORD-TEST-0001", 7L, 42L);
 
     @Autowired
     private ApplicationEventPublisher publisher;
@@ -60,30 +60,25 @@ class OrderPaidEventListenerTest {
     void setUp() {
         tx = new TransactionTemplate(txManager);
         recorder.reset();
-    }
-
-    private static OrderPaidEvent sampleEvent() {
-        return new OrderPaidEvent(1L, ORDER_NUMBER, 7L, 42L);
+        memberRepository.deleteAllInBatch();
     }
 
     @Test
     @DisplayName("발행 트랜잭션이 커밋된 뒤에 호출된다 — 트랜잭션 진행 중에는 호출되지 않는다")
     void invokedOnlyAfterCommit() {
         tx.executeWithoutResult(status -> {
-            publisher.publishEvent(sampleEvent());
+            publisher.publishEvent(SAMPLE_EVENT);
             assertThat(recorder.received()).isEmpty(); // 아직 커밋 전 — AFTER_COMMIT 이므로 미호출
         });
 
-        assertThat(recorder.received())
-                .extracting(OrderPaidEvent::orderNumber)
-                .containsExactly(ORDER_NUMBER);
+        assertThat(recorder.received()).containsExactly(SAMPLE_EVENT);
     }
 
     @Test
     @DisplayName("발행 트랜잭션이 롤백되면 호출되지 않는다")
     void notInvokedOnRollback() {
         tx.executeWithoutResult(status -> {
-            publisher.publishEvent(sampleEvent());
+            publisher.publishEvent(SAMPLE_EVENT);
             status.setRollbackOnly();
         });
 
@@ -100,11 +95,11 @@ class OrderPaidEventListenerTest {
         // 발행 측 트랜잭션은 이미 커밋되었으므로 되돌릴 것도, 호출자에게 새어 나갈 것도 없다.
         tx.executeWithoutResult(status -> {
             memberRepository.save(Member.register(email, "hash", "테스터", "010-0000-0000"));
-            publisher.publishEvent(sampleEvent());
+            publisher.publishEvent(SAMPLE_EVENT);
         });
 
         // 리스너가 실제로 실행됐고(그 안에서 터졌고), 그럼에도 발행 트랜잭션의 쓰기는 커밋되어 있다.
-        assertThat(recorder.received()).hasSize(1);
+        assertThat(recorder.received()).containsExactly(SAMPLE_EVENT);
         assertThat(memberRepository.existsByEmail(email)).isTrue();
     }
 
