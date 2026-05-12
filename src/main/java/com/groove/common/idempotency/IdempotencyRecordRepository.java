@@ -28,7 +28,7 @@ public interface IdempotencyRecordRepository extends JpaRepository<IdempotencyRe
     int deleteByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
 
     /**
-     * {@code expiresAt < now} 인 행을 최대 {@code batchSize} 개 삭제 (TTL 정리).
+     * {@code expiresAt < now} 인 행을 최대 {@code batchSize} 개 삭제 (TTL 정리, MySQL {@code DELETE … LIMIT}).
      *
      * <p>{@code now} 는 호출 시점 고정값이라 삭제 대상 집합은 유한하다 — 호출자가 0 이 반환될 때까지
      * 반복하며, 매 반복을 독립 트랜잭션으로 커밋해 한 번에 잡는 락 범위를 제한한다.

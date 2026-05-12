@@ -39,6 +39,15 @@ import java.util.function.Supplier;
  * <p>모든 레코드 접근은 호출자 트랜잭션과 무관한 짧은 {@code REQUIRES_NEW} 트랜잭션으로 수행한다 —
  * 마커는 {@code action} 실행 전에 커밋돼야 동시 호출자가 보고, 재조회는 매번 최신 스냅샷이어야 한다.
  *
+ * <h2>호출 규약</h2>
+ * <ul>
+ *   <li>{@code execute()} 를 열린 트랜잭션 안에서 호출하지 말 것. {@code action} 자신이 트랜잭션을
+ *       관리하고 반환 전에 커밋해야 한다(예: {@code @Transactional} 서비스 메서드를 {@code action} 으로,
+ *       그 호출자는 비트랜잭션 컨트롤러). 그래야 "{@code action} 커밋 → 마커 {@code COMPLETED} 커밋"
+ *       순서가 보장된다 — {@code action} 이 호출자 트랜잭션에 묶여 있으면 마커가 {@code COMPLETED} 로
+ *       찍힌 뒤 그 트랜잭션이 롤백돼 (일어나지 않은 처리의 결과를) 캐시하게 될 수 있다.</li>
+ * </ul>
+ *
  * <h2>알려진 한계</h2>
  * <ul>
  *   <li>{@code action} 커밋 직후 완료 갱신 트랜잭션이 실패하면 해당 키는 TTL 만료 전까지 409 다 —
