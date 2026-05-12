@@ -94,6 +94,18 @@ groove:
       min-age: ${PAYMENT_RECONCILIATION_MIN_AGE:PT1M}
       # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리/PG 호출량을 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${PAYMENT_RECONCILIATION_BATCH_SIZE:200}
+  # 배송 자동 진행 (#W7-6). 실 택배사 연동 없음 — interval 마다 PREPARING→SHIPPED→DELIVERED 를 한 단계씩 민다.
+  # 시연 시 prepare-delay/ship-delay 를 수 초 단위로 줄여 빠르게 진행시킨다.
+  shipping:
+    progress:
+      interval: ${SHIPPING_PROGRESS_INTERVAL:PT2S}
+      initial-delay: ${SHIPPING_PROGRESS_INITIAL_DELAY:PT5S}
+      # PREPARING 으로 이 시간 이상 머문 배송을 SHIPPED 로 (created_at < now - prepare-delay).
+      prepare-delay: ${SHIPPING_PROGRESS_PREPARE_DELAY:PT5S}
+      # SHIPPED 로 이 시간 이상 머문 배송을 DELIVERED 로 (shipped_at < now - ship-delay).
+      ship-delay: ${SHIPPING_PROGRESS_SHIP_DELAY:PT5S}
+      # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리를 바운드. 나머지는 다음 주기에 처리.
+      batch-size: ${SHIPPING_PROGRESS_BATCH_SIZE:200}
 
 # CORS default 는 모든 origin 차단. profile 별 yaml 또는 환경 변수로 override.
 # 운영 환경에서는 cors.allowed-origins 를 명시적 도메인 화이트리스트로 설정.

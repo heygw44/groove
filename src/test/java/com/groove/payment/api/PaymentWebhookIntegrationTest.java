@@ -124,7 +124,7 @@ class PaymentWebhookIntegrationTest {
         albumRepository.saveAndFlush(album);
 
         String orderNumber = String.format("ORD-20260512-W%05d", ORDER_SEQ.incrementAndGet());
-        Order order = Order.placeForMember(orderNumber, memberId);
+        Order order = Order.placeForMember(orderNumber, memberId, com.groove.support.OrderFixtures.sampleShippingInfo());
         order.addItem(OrderItem.create(album, quantity));
         Long orderId = orderRepository.saveAndFlush(order).getId();
 

@@ -59,7 +59,7 @@ class PaymentCallbackServiceTest {
     }
 
     private static Payment pendingPayment(Album album, int quantity) {
-        Order order = Order.placeForMember(ORDER_NUMBER, 1L);
+        Order order = Order.placeForMember(ORDER_NUMBER, 1L, com.groove.support.OrderFixtures.sampleShippingInfo());
         order.addItem(OrderItem.create(album, quantity));
         return Payment.initiate(order, order.getTotalAmount(), PaymentMethod.CARD, "MOCK", PG_TX);
     }

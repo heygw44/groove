@@ -2,6 +2,7 @@ package com.groove.order.api.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -13,6 +14,8 @@ import java.util.List;
  * 회원/게스트 분기는 컨트롤러에서 {@code AuthPrincipal} 존재 여부로 판단하고,
  * 본 DTO 는 단일 표현으로 두 경로를 모두 받는다.
  *
+ * <p>{@code shipping} 은 회원/게스트 공통 필수 — 결제 완료 후 이 스냅샷으로 배송 행이 만들어진다(#W7-6).
+ *
  * <p>items 상한 50 — 한 주문에 50개 라인 이상은 비현실적이며 응답 페이로드 비대화 방지.
  */
 public record OrderCreateRequest(
@@ -22,6 +25,10 @@ public record OrderCreateRequest(
         List<OrderItemRequest> items,
 
         @Valid
-        GuestInfoRequest guest
+        GuestInfoRequest guest,
+
+        @NotNull
+        @Valid
+        ShippingInfoRequest shipping
 ) {
 }

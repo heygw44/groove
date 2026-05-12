@@ -57,6 +57,9 @@ public enum ErrorCode {
     PAYMENT_GATEWAY_FAILURE(HttpStatus.BAD_GATEWAY, "PAYMENT_GATEWAY_FAILURE", "결제 게이트웨이 연동에 실패했습니다"),
     PAYMENT_WEBHOOK_INVALID_SIGNATURE(HttpStatus.UNAUTHORIZED, "PAYMENT_WEBHOOK_INVALID_SIGNATURE", "결제 웹훅 서명 검증에 실패했습니다"),
 
+    // SHIPPING
+    SHIPPING_NOT_FOUND(HttpStatus.NOT_FOUND, "SHIPPING_NOT_FOUND", "배송 정보를 찾을 수 없습니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 

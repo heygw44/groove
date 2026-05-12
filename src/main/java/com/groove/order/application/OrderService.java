@@ -8,9 +8,11 @@ import com.groove.cart.exception.AlbumNotPurchasableException;
 import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
+import com.groove.order.api.dto.ShippingInfoRequest;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
+import com.groove.order.domain.OrderShippingInfo;
 import com.groove.order.domain.OrderStatus;
 import com.groove.order.exception.IllegalStateTransitionException;
 import com.groove.order.exception.InsufficientStockException;
@@ -150,7 +152,7 @@ public class OrderService {
 
         // 2) orderNumber 발급 + Order/OrderItem 영속화.
         String orderNumber = allocateOrderNumber();
-        Order order = newOrder(orderNumber, memberId, request.guest());
+        Order order = newOrder(orderNumber, memberId, request.guest(), toShippingInfo(request.shipping()));
         for (ResolvedLine line : lines) {
             order.addItem(OrderItem.create(line.album, line.quantity));
         }
@@ -169,11 +171,21 @@ public class OrderService {
         }
     }
 
-    private Order newOrder(String orderNumber, Long memberId, GuestInfoRequest guest) {
+    private Order newOrder(String orderNumber, Long memberId, GuestInfoRequest guest, OrderShippingInfo shipping) {
         if (memberId != null) {
-            return Order.placeForMember(orderNumber, memberId);
+            return Order.placeForMember(orderNumber, memberId, shipping);
         }
-        return Order.placeForGuest(orderNumber, guest.email(), guest.phone());
+        return Order.placeForGuest(orderNumber, guest.email(), guest.phone(), shipping);
+    }
+
+    private static OrderShippingInfo toShippingInfo(ShippingInfoRequest shipping) {
+        return new OrderShippingInfo(
+                shipping.recipientName(),
+                shipping.recipientPhone(),
+                shipping.address(),
+                shipping.addressDetail(),
+                shipping.zipCode(),
+                shipping.safePackagingRequested());
     }
 
     /**

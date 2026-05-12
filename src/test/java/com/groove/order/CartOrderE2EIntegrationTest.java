@@ -185,7 +185,10 @@ class CartOrderE2EIntegrationTest {
                 .andExpect(jsonPath("$.orderNumber").value(orderNumber))
                 .andExpect(jsonPath("$.status").value(OrderStatus.PENDING.name()))
                 .andExpect(jsonPath("$.totalAmount").value(expectedTotal))
-                .andExpect(jsonPath("$.items.length()").value(2));
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.shipping.recipientName").value("김철수"))
+                .andExpect(jsonPath("$.shipping.zipCode").value("06234"))
+                .andExpect(jsonPath("$.shipping.safePackagingRequested").value(false));
 
         // 5) 회원 목록에 1건 노출 — /members/me/orders
         mockMvc.perform(get("/api/v1/members/me/orders")
@@ -282,7 +285,8 @@ class CartOrderE2EIntegrationTest {
         Map<String, Object> body = Map.of(
                 "items", List.of(
                         itemBody(sellingAlbumId, 2),
-                        itemBody(hiddenAlbumId, 1)));
+                        itemBody(hiddenAlbumId, 1)),
+                "shipping", shippingBody());
 
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, memberABearer)
@@ -321,6 +325,7 @@ class CartOrderE2EIntegrationTest {
     private String placeMemberOrder(String bearer, List<Map<String, Object>> items) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", items);
+        body.put("shipping", shippingBody());
 
         MvcResult result = mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, bearer)
@@ -335,6 +340,7 @@ class CartOrderE2EIntegrationTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", items);
         body.put("guest", Map.of("email", email, "phone", phone));
+        body.put("shipping", shippingBody());
 
         MvcResult result = mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -354,6 +360,17 @@ class CartOrderE2EIntegrationTest {
         body.put("albumId", albumId);
         body.put("quantity", quantity);
         return body;
+    }
+
+    private static Map<String, Object> shippingBody() {
+        Map<String, Object> shipping = new LinkedHashMap<>();
+        shipping.put("recipientName", "김철수");
+        shipping.put("recipientPhone", "01012345678");
+        shipping.put("address", "서울시 강남구 테헤란로 123");
+        shipping.put("addressDetail", "456호");
+        shipping.put("zipCode", "06234");
+        shipping.put("safePackagingRequested", false);
+        return shipping;
     }
 
     private static JsonNode requireField(JsonNode json, String field) {

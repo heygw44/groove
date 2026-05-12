@@ -199,11 +199,24 @@ class MemberOrderControllerTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", items);
 
+        body.put("shipping", shippingBody());
+
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, bearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated());
+    }
+
+    private Map<String, Object> shippingBody() {
+        Map<String, Object> shipping = new LinkedHashMap<>();
+        shipping.put("recipientName", "김철수");
+        shipping.put("recipientPhone", "01012345678");
+        shipping.put("address", "서울시 강남구 테헤란로 123");
+        shipping.put("addressDetail", "456호");
+        shipping.put("zipCode", "06234");
+        shipping.put("safePackagingRequested", false);
+        return shipping;
     }
 
     private Map<String, Object> item(Long albumId, int quantity) {

@@ -45,7 +45,7 @@ class PaymentRepositoryTest {
     }
 
     private Order persistGuestOrder(String orderNumber) {
-        return orderRepository.saveAndFlush(Order.placeForGuest(orderNumber, "guest@example.com", null));
+        return orderRepository.saveAndFlush(Order.placeForGuest(orderNumber, "guest@example.com", null, com.groove.support.OrderFixtures.sampleShippingInfo()));
     }
 
     @Test

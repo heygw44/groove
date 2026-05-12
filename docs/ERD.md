@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.3 |
+| 버전 | 1.4 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-05-08 |
-| 변경 내용 | v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
+| 최종 수정일 | 2026-05-12 |
+| 변경 내용 | v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
 | DB | MySQL 8 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | PRD.md, ARCHITECTURE.md |
@@ -354,8 +354,16 @@ erDiagram
 | paid_at | DATETIME(6) | NULL | 결제 완료 시각 (status=PAID 전환 시 기록) |
 | cancelled_at | DATETIME(6) | NULL | 취소 시각 (status=CANCELLED 전환 시 기록) |
 | cancelled_reason | VARCHAR(500) | NULL | 취소 사유 |
+| recipient_name | VARCHAR(50) | NOT NULL (DEFAULT '') | 배송지 스냅샷 — 수령인 이름 (W12) |
+| recipient_phone | VARCHAR(20) | NOT NULL (DEFAULT '') | 배송지 스냅샷 — 수령인 연락처 (W12) |
+| address | VARCHAR(500) | NOT NULL (DEFAULT '') | 배송지 스냅샷 — 기본 주소 (W12) |
+| address_detail | VARCHAR(200) | NULL | 배송지 스냅샷 — 상세 주소 (W12) |
+| zip_code | VARCHAR(20) | NOT NULL (DEFAULT '') | 배송지 스냅샷 — 우편번호 (W12) |
+| safe_packaging_requested | BOOLEAN | NOT NULL, DEFAULT FALSE | 배송지 스냅샷 — LP 안전 포장 요청 (W12) |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
+
+> 배송지 6개 컬럼은 주문 생성 요청(API.md §3.5 `shipping` 블록)을 주문 시점 스냅샷으로 저장한다 — `album_title_snapshot` 과 같은 이유. 결제 완료 후 `shipping` 행(§4.13)으로 그대로 복사된다. 기존 행 호환을 위해 NOT NULL 컬럼에는 빈 문자열/FALSE 기본값을 둔다(신규 주문은 항상 도메인 검증 통과 값).
 
 **인덱스**
 
@@ -376,6 +384,7 @@ erDiagram
 | status 전이 (PENDING→PAID→PREPARING→…) | [APP] | OrderStatus.canTransitionTo() |
 | total_amount ≥ 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(0) |
 | paid_at: PAID 전환 시 기록, CANCELLED 시 cancelled_at/reason 기록 | [APP] | 상태 전환 메서드 내부에서 처리 |
+| 배송지 6개 컬럼 = 주문 시점 스냅샷 (요청 `shipping` 블록 복사) | [APP] | OrderShippingInfo 불변식 + Order 정적 팩토리에서 캡처 |
 
 ---
 
@@ -510,8 +519,8 @@ erDiagram
 - `uk_shipping_order` UNIQUE (order_id)
 - `uk_shipping_tracking` UNIQUE (tracking_number)
 
-[W10] (슬로우 쿼리 측정 후 추가):
-- `idx_shipping_status` (status) — 자동 진행 스케줄러 조회용
+[W12] (자동 진행 스케줄러와 함께 선반영 — 원래 [W10] 표기였으나 V11 `idx_payment_status_created` 와 같은 결정):
+- `idx_shipping_status` (status, created_at) — PREPARING→SHIPPED 스캔(created_at 필터)을 받치고, SHIPPED→DELIVERED 스캔은 status 프리픽스로 좁힌다
 
 **비즈니스 룰**
 
@@ -574,7 +583,7 @@ erDiagram
 | `order_item` | `idx_order_item_order`, `idx_order_item_album` |
 | `payment` | `uk_payment_order`, `idx_payment_pg_tx`, `idx_payment_status_created` (V11) |
 | `idempotency_record` | `uk_idempotency_key`, `idx_idempotency_created` |
-| `shipping` | `uk_shipping_order`, `uk_shipping_tracking` |
+| `shipping` | `uk_shipping_order`, `uk_shipping_tracking`, `idx_shipping_status` (status, created_at) (V12) |
 | `review` | `uk_review_order_album`, `idx_review_member` |
 
 검색·정렬·필터 인덱스는 **의도적으로 누락** → W9 측정 시 슬로우 쿼리 재현 → W10 시연용 인덱스 추가.
@@ -595,8 +604,7 @@ CREATE INDEX idx_album_limited ON album(is_limited, status);
 CREATE INDEX idx_orders_member_created ON orders(member_id, created_at);
 CREATE INDEX idx_orders_status_created ON orders(status, created_at);
 
--- 폴링 스케줄러용 (idx_payment_status_created 는 W7-4 / V11 에서 이미 추가)
-CREATE INDEX idx_shipping_status ON shipping(status);
+-- (idx_payment_status_created 는 W7-4 / V11, idx_shipping_status 는 W7-6 / V12 에서 이미 추가)
 
 -- 상품별 리뷰
 CREATE INDEX idx_review_album_created ON review(album_id, created_at);

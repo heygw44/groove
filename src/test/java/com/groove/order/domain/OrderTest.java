@@ -19,6 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("Order 도메인 — 생성/항목 추가/상태 전이")
 class OrderTest {
 
+    private static final OrderShippingInfo SHIPPING =
+            new OrderShippingInfo("김철수", "01012345678", "서울시 강남구 테헤란로 123", "456호", "06234", false);
+
     private Album album(long id, long price) {
         Artist artist = Artist.create("A", null);
         Genre genre = Genre.create("G");
@@ -37,7 +40,7 @@ class OrderTest {
         @Test
         @DisplayName("placeForMember — 회원 주문 PENDING 으로 시작")
         void member_startsPending() {
-            Order order = Order.placeForMember("ORD-1", 7L);
+            Order order = Order.placeForMember("ORD-1", 7L, SHIPPING);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
             assertThat(order.getMemberId()).isEqualTo(7L);
@@ -49,7 +52,7 @@ class OrderTest {
         @Test
         @DisplayName("placeForGuest — 게스트 주문 PENDING 으로 시작")
         void guest_startsPending() {
-            Order order = Order.placeForGuest("ORD-2", "guest@example.com", "010-1111-2222");
+            Order order = Order.placeForGuest("ORD-2", "guest@example.com", "010-1111-2222", SHIPPING);
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
             assertThat(order.getMemberId()).isNull();
@@ -61,26 +64,43 @@ class OrderTest {
         @Test
         @DisplayName("placeForMember — null memberId → InvalidOrderOwnershipException")
         void member_rejectsNullMemberId() {
-            assertThatThrownBy(() -> Order.placeForMember("ORD-1", null))
+            assertThatThrownBy(() -> Order.placeForMember("ORD-1", null, SHIPPING))
                     .isInstanceOf(InvalidOrderOwnershipException.class);
         }
 
         @Test
         @DisplayName("placeForGuest — 빈/null email → InvalidOrderOwnershipException")
         void guest_rejectsBlankEmail() {
-            assertThatThrownBy(() -> Order.placeForGuest("ORD-1", null, null))
+            assertThatThrownBy(() -> Order.placeForGuest("ORD-1", null, null, SHIPPING))
                     .isInstanceOf(InvalidOrderOwnershipException.class);
-            assertThatThrownBy(() -> Order.placeForGuest("ORD-1", " ", null))
+            assertThatThrownBy(() -> Order.placeForGuest("ORD-1", " ", null, SHIPPING))
                     .isInstanceOf(InvalidOrderOwnershipException.class);
         }
 
         @Test
         @DisplayName("정적 팩토리 — 빈 orderNumber 거부")
         void rejectsBlankOrderNumber() {
-            assertThatThrownBy(() -> Order.placeForMember("", 1L))
+            assertThatThrownBy(() -> Order.placeForMember("", 1L, SHIPPING))
                     .isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> Order.placeForGuest(" ", "g@e.com", null))
+            assertThatThrownBy(() -> Order.placeForGuest(" ", "g@e.com", null, SHIPPING))
                     .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("정적 팩토리 — null 배송지 거부")
+        void rejectsNullShipping() {
+            assertThatThrownBy(() -> Order.placeForMember("ORD-1", 1L, null))
+                    .isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> Order.placeForGuest("ORD-1", "g@e.com", null, null))
+                    .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        @DisplayName("placeForMember — 배송지 스냅샷 보존 (getShippingInfo)")
+        void member_capturesShippingSnapshot() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+
+            assertThat(order.getShippingInfo()).isEqualTo(SHIPPING);
         }
     }
 
@@ -91,7 +111,7 @@ class OrderTest {
         @Test
         @DisplayName("addItem — totalAmount 가 subtotal 합으로 누적")
         void totalAmount_accumulates() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             order.addItem(OrderItem.create(album(10L, 30000L), 2));
             order.addItem(OrderItem.create(album(11L, 15000L), 3));
@@ -103,7 +123,7 @@ class OrderTest {
         @Test
         @DisplayName("addItem — order 역방향 연관 자동 주입")
         void addItem_attachesOrder() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
             OrderItem item = OrderItem.create(album(10L, 1000L), 1);
 
             order.addItem(item);
@@ -114,7 +134,7 @@ class OrderTest {
         @Test
         @DisplayName("addItem — null 거부")
         void rejectsNull() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             assertThatThrownBy(() -> order.addItem(null))
                     .isInstanceOf(IllegalArgumentException.class);
@@ -123,7 +143,7 @@ class OrderTest {
         @Test
         @DisplayName("getItems — 외부에서 mutate 불가 (immutable view)")
         void getItems_isUnmodifiable() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
             order.addItem(OrderItem.create(album(10L, 1000L), 1));
 
             assertThatThrownBy(() -> order.getItems().clear())
@@ -138,7 +158,7 @@ class OrderTest {
         @Test
         @DisplayName("PENDING → PAID — paidAt 기록")
         void pendingToPaid_recordsPaidAt() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             order.changeStatus(OrderStatus.PAID, null);
 
@@ -150,7 +170,7 @@ class OrderTest {
         @Test
         @DisplayName("PENDING → CANCELLED — cancelledAt + reason 기록")
         void pendingToCancelled_recordsCancelledMeta() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             order.changeStatus(OrderStatus.CANCELLED, "변심");
 
@@ -163,7 +183,7 @@ class OrderTest {
         @Test
         @DisplayName("PENDING → PAYMENT_FAILED — paidAt/cancelledAt 모두 미기록")
         void pendingToPaymentFailed_recordsNeitherTimestamp() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             order.changeStatus(OrderStatus.PAYMENT_FAILED, null);
 
@@ -175,7 +195,7 @@ class OrderTest {
         @Test
         @DisplayName("PAID 외 전이에서 reason 인자는 무시")
         void reason_ignoredOnNonCancelTransitions() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             order.changeStatus(OrderStatus.PAID, "ignored-reason");
 
@@ -185,7 +205,7 @@ class OrderTest {
         @Test
         @DisplayName("불법 전이 (PENDING → SHIPPED) → IllegalStateTransitionException")
         void illegal_throws() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             assertThatThrownBy(() -> order.changeStatus(OrderStatus.SHIPPED, null))
                     .isInstanceOf(IllegalStateTransitionException.class);
@@ -195,7 +215,7 @@ class OrderTest {
         @Test
         @DisplayName("종착 상태 (CANCELLED) 에서 어떤 전이도 거부")
         void terminal_rejectsAll() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
             order.changeStatus(OrderStatus.CANCELLED, "초기 취소");
 
             for (OrderStatus next : OrderStatus.values()) {
@@ -208,7 +228,7 @@ class OrderTest {
         @Test
         @DisplayName("자기 자신으로의 전이는 불법 (멱등성 보호)")
         void selfTransition_rejected() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             assertThatThrownBy(() -> order.changeStatus(OrderStatus.PENDING, null))
                     .isInstanceOf(IllegalStateTransitionException.class);
@@ -217,7 +237,7 @@ class OrderTest {
         @Test
         @DisplayName("CANCELLED 전이 후에도 totalAmount 는 보존 (취소 주문 금액 이력 유지)")
         void totalAmount_preservedAfterCancellation() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
             order.addItem(OrderItem.create(album(10L, 30000L), 2));
             long beforeCancel = order.getTotalAmount();
 
@@ -230,7 +250,7 @@ class OrderTest {
         @Test
         @DisplayName("changeStatus(null) → NullPointerException (canTransitionTo 의 null-흡수와 책임 분리)")
         void rejectsNullNext() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             assertThatThrownBy(() -> order.changeStatus(null, null))
                     .isInstanceOf(NullPointerException.class);
@@ -240,7 +260,7 @@ class OrderTest {
         @Test
         @DisplayName("정상 라이프사이클 PENDING → PAID → PREPARING → SHIPPED → DELIVERED → COMPLETED")
         void happyPath_walkthrough() {
-            Order order = Order.placeForMember("ORD-1", 1L);
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
             order.changeStatus(OrderStatus.PAID, null);
             order.changeStatus(OrderStatus.PREPARING, null);
