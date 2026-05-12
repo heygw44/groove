@@ -12,15 +12,16 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
-import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
  * 실 PG 의 비동기 웹훅 콜백을 흉내 내는 발사기.
  *
- * <p>{@link MockPaymentGateway#request} 호출 후 설정된 지연({@code payment.mock.webhook-delay-*})
- * 만큼 뒤에 {@link WebhookDispatcher} 로 결제 결과 통보를 전달한다. 스케줄링은 전용
- * {@link TaskScheduler}({@code paymentTaskScheduler}) 위에서 일회성 작업으로 수행된다.
+ * <p>{@link MockPaymentGateway#request} 가 정한 발사 시각({@code fireAt})에 {@link WebhookDispatcher}
+ * 로 결제 결과 통보를 전달한다. 발사 타이밍은 게이트웨이가 단일 기준({@code Transaction.readyAt} 과
+ * 동일한 {@link Instant})으로 소유하며, 본 발사기는 그 시각에 일회성 작업을 예약하기만 한다.
+ * 스케줄링은 전용 {@link TaskScheduler}({@code paymentTaskScheduler}) 위에서 수행된다.
  *
  * <p>{@code @Profile} 로 Mock 구성에 한정되며, 실 PG 프로파일에서는 로드되지 않는다.
  */
@@ -47,17 +48,17 @@ public class MockWebhookSimulator {
     }
 
     /**
-     * {@code delay} 후 결제 결과 웹훅 콜백을 발사하도록 예약한다.
+     * {@code fireAt} 시각에 결제 결과 웹훅 콜백을 발사하도록 예약한다.
      *
      * @param pgTransactionId PG 거래 식별자
      * @param orderNumber     주문 식별자
      * @param result          최종 결제 결과 ({@link PaymentStatus#PAID} 또는 {@link PaymentStatus#FAILED})
-     * @param delay           발사까지의 지연
+     * @param fireAt          콜백 발사 시각 (게이트웨이가 결정)
      */
-    public void scheduleCallback(String pgTransactionId, String orderNumber, PaymentStatus result, Duration delay) {
-        Objects.requireNonNull(delay, "delay");
-        scheduler.schedule(() -> fire(pgTransactionId, orderNumber, result), clock.instant().plus(delay));
-        log.debug("웹훅 콜백 예약: pgTx={}, order={}, result={}, delay={}", pgTransactionId, orderNumber, result, delay);
+    public void scheduleCallback(String pgTransactionId, String orderNumber, PaymentStatus result, Instant fireAt) {
+        Objects.requireNonNull(fireAt, "fireAt");
+        scheduler.schedule(() -> fire(pgTransactionId, orderNumber, result), fireAt);
+        log.debug("웹훅 콜백 예약: pgTx={}, order={}, result={}, fireAt={}", pgTransactionId, orderNumber, result, fireAt);
     }
 
     private void fire(String pgTransactionId, String orderNumber, PaymentStatus result) {

@@ -53,18 +53,20 @@ class MockWebhookSimulatorTest {
     }
 
     @Test
-    @DisplayName("scheduleCallback: 현재 시각 + delay 시점에 작업을 예약한다")
-    void scheduleCallback_schedulesAtNowPlusDelay() {
-        simulator.scheduleCallback("mock-tx-1", "ORD-1", PaymentStatus.PAID, Duration.ofSeconds(3));
+    @DisplayName("scheduleCallback: 전달된 발사 시각에 작업을 예약한다")
+    void scheduleCallback_schedulesAtGivenInstant() {
+        Instant fireAt = NOW.plusSeconds(3);
 
-        verify(taskScheduler).schedule(any(Runnable.class), eq(NOW.plusSeconds(3)));
+        simulator.scheduleCallback("mock-tx-1", "ORD-1", PaymentStatus.PAID, fireAt);
+
+        verify(taskScheduler).schedule(any(Runnable.class), eq(fireAt));
         then(dispatcher).shouldHaveNoInteractions();
     }
 
     @Test
     @DisplayName("예약된 작업 실행 시 올바른 페이로드로 디스패처를 호출한다")
     void scheduledTask_dispatchesNotificationWithExpectedPayload() {
-        simulator.scheduleCallback("mock-tx-2", "ORD-2", PaymentStatus.FAILED, Duration.ZERO);
+        simulator.scheduleCallback("mock-tx-2", "ORD-2", PaymentStatus.FAILED, NOW);
         verify(taskScheduler).schedule(runnableCaptor.capture(), any(Instant.class));
 
         runnableCaptor.getValue().run();
@@ -83,7 +85,7 @@ class MockWebhookSimulatorTest {
     @DisplayName("디스패처가 예외를 던져도 예약 작업 밖으로 전파하지 않는다")
     void scheduledTask_swallowsDispatcherException() {
         willThrow(new RuntimeException("downstream down")).given(dispatcher).dispatch(any());
-        simulator.scheduleCallback("mock-tx-3", "ORD-3", PaymentStatus.PAID, Duration.ZERO);
+        simulator.scheduleCallback("mock-tx-3", "ORD-3", PaymentStatus.PAID, NOW);
         verify(taskScheduler).schedule(runnableCaptor.capture(), any(Instant.class));
 
         assertThatCode(() -> runnableCaptor.getValue().run()).doesNotThrowAnyException();
@@ -91,8 +93,8 @@ class MockWebhookSimulatorTest {
     }
 
     @Test
-    @DisplayName("null delay 는 거부한다")
-    void nullDelay_rejected() {
+    @DisplayName("null fireAt 은 거부한다")
+    void nullFireAt_rejected() {
         assertThatCode(() -> simulator.scheduleCallback("tx", "ORD", PaymentStatus.PAID, null))
                 .isInstanceOf(NullPointerException.class);
         verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));

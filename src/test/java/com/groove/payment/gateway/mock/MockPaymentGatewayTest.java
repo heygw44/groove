@@ -59,13 +59,13 @@ class MockPaymentGatewayTest {
         }
 
         @Test
-        @DisplayName("success-rate=1.0 이면 PAID 결과로 웹훅 콜백을 예약한다")
+        @DisplayName("success-rate=1.0 이면 PAID 결과로 now+webhookDelay 시각에 웹훅 콜백을 예약한다")
         void schedulesPaidCallback_whenSuccessRateOne() {
             PaymentResponse response = gateway(props(1.0, Duration.ZERO, Duration.ofSeconds(2))).request(REQUEST);
 
             verify(webhookSimulator).scheduleCallback(
                     eq(response.pgTransactionId()), eq(REQUEST.orderNumber()),
-                    eq(PaymentStatus.PAID), eq(Duration.ofSeconds(2)));
+                    eq(PaymentStatus.PAID), eq(NOW.plusSeconds(2)));
         }
 
         @Test
@@ -78,16 +78,16 @@ class MockPaymentGatewayTest {
         }
 
         @Test
-        @DisplayName("웹훅 지연이 [min, max] 범위 안에서 선택되어 예약에 전달된다")
-        void webhookDelayWithinConfiguredRange() {
+        @DisplayName("웹훅 발사 시각이 now + [min, max] 범위 안에서 선택되어 예약에 전달된다")
+        void webhookFireAtWithinConfiguredRange() {
             PaymentMockProperties ranged = new PaymentMockProperties(
                     1.0, Duration.ZERO, Duration.ZERO, Duration.ofMillis(1), Duration.ofMillis(3), "secret");
 
             new MockPaymentGateway(ranged, webhookSimulator, CLOCK).request(REQUEST);
 
-            ArgumentCaptor<Duration> delay = ArgumentCaptor.forClass(Duration.class);
-            verify(webhookSimulator).scheduleCallback(any(), any(), any(), delay.capture());
-            assertThat(delay.getValue()).isBetween(Duration.ofMillis(1), Duration.ofMillis(3));
+            ArgumentCaptor<Instant> fireAt = ArgumentCaptor.forClass(Instant.class);
+            verify(webhookSimulator).scheduleCallback(any(), any(), any(), fireAt.capture());
+            assertThat(fireAt.getValue()).isBetween(NOW.plusMillis(1), NOW.plusMillis(3));
         }
 
         @Test
