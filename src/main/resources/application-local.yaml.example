@@ -12,6 +12,11 @@ spring:
 jwt:
   secret: ${JWT_SECRET:local-dev-secret-key-minimum-256-bits-long}
 
+# 로컬 개발용 Mock PG 웹훅 시크릿 fallback. 도커 프로파일에는 .env 의 PAYMENT_MOCK_WEBHOOK_SECRET 로 주입.
+payment:
+  mock:
+    webhook-secret: ${PAYMENT_MOCK_WEBHOOK_SECRET:local-dev-mock-webhook-secret}
+
 # 로컬 개발용 CORS (모든 origin + credentials 허용)
 cors:
   allowed-origin-patterns: ["*"]
