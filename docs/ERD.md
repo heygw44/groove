@@ -435,8 +435,8 @@ erDiagram
 - `uk_payment_order` UNIQUE (order_id)
 - `idx_payment_pg_tx` (pg_transaction_id) — PG 웹훅 검증용
 
-[W10] (슬로우 쿼리 측정 후 추가):
-- `idx_payment_status_created` (status, created_at) — 폴링 스케줄러용 (PENDING 조회)
+[W7-4] (폴링 스케줄러 도입과 함께 추가, V11):
+- `idx_payment_status_created` (status, created_at) — 폴링 스케줄러용 (PENDING 결제 `created_at < cutoff` 조회)
 
 **비즈니스 룰**
 
@@ -572,7 +572,7 @@ erDiagram
 | `cart_item` | `uk_cart_item_cart_album`, `idx_cart_item_album` |
 | `orders` | `uk_orders_number`, `idx_orders_guest_email` |
 | `order_item` | `idx_order_item_order`, `idx_order_item_album` |
-| `payment` | `uk_payment_order`, `idx_payment_pg_tx` |
+| `payment` | `uk_payment_order`, `idx_payment_pg_tx`, `idx_payment_status_created` (V11) |
 | `idempotency_record` | `uk_idempotency_key`, `idx_idempotency_created` |
 | `shipping` | `uk_shipping_order`, `uk_shipping_tracking` |
 | `review` | `uk_review_order_album`, `idx_review_member` |
@@ -595,8 +595,7 @@ CREATE INDEX idx_album_limited ON album(is_limited, status);
 CREATE INDEX idx_orders_member_created ON orders(member_id, created_at);
 CREATE INDEX idx_orders_status_created ON orders(status, created_at);
 
--- 폴링 스케줄러용
-CREATE INDEX idx_payment_status_created ON payment(status, created_at);
+-- 폴링 스케줄러용 (idx_payment_status_created 는 W7-4 / V11 에서 이미 추가)
 CREATE INDEX idx_shipping_status ON shipping(status);
 
 -- 상품별 리뷰

@@ -21,11 +21,11 @@ import java.util.Objects;
  * 결제 (ERD §4.11, glossary §2.8).
  *
  * <p>주문당 결제 1건 — {@code order_id} UNIQUE. 결제 재시도는 새 row 가 아니라 기존 row 의 상태 갱신이다
- * (ERD §4.11). 본 이슈(#W7-3)는 {@link #initiate} 까지만 다룬다 — PAID/FAILED 전이와 {@code paidAt}/
- * {@code failureReason} 기록은 #W7-4 웹훅/폴링에서 추가한다.
+ * (ERD §4.11). 생성은 {@link #initiate}(PENDING), 확정은 {@link #markPaid()}(PAID) / {@link #markFailed(String)}(FAILED).
  *
  * <p>상태 전이 규칙은 {@link PaymentStatus#canTransitionTo(PaymentStatus)} 가 판정한다 —
- * {@code OrderStatus} 와 동일하게 DB 트리거를 두지 않고 애플리케이션 레벨에 일원화한다.
+ * {@code OrderStatus} 와 동일하게 DB 트리거를 두지 않고 애플리케이션 레벨에 일원화한다. 어느 Aggregate 도
+ * 직접 변경하지 않는다 — 주문 상태 전이·재고 복원은 응답 호출 측({@code PaymentCallbackService})이 조율한다.
  */
 @Entity
 @Table(name = "payment")
@@ -35,6 +35,8 @@ public class Payment extends BaseTimeEntity {
     static final int MAX_PG_PROVIDER_LENGTH = 20;
     /** DB {@code pg_transaction_id} 컬럼 길이 — {@link #initiate} 가 선검증해 DB 예외를 막는다. */
     static final int MAX_PG_TRANSACTION_ID_LENGTH = 100;
+    /** DB {@code failure_reason} 컬럼 길이 — {@link #markFailed} 이 초과분을 잘라 DB 예외를 막는다. */
+    static final int MAX_FAILURE_REASON_LENGTH = 500;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -110,6 +112,42 @@ public class Payment extends BaseTimeEntity {
             throw new IllegalArgumentException("pgTransactionId length must be <= " + MAX_PG_TRANSACTION_ID_LENGTH);
         }
         return new Payment(order, amount, method, pgProvider, pgTransactionId);
+    }
+
+    /**
+     * 결제 완료 확정 — PG 가 PAID 결과를 통보(웹훅)하거나 폴링 동기화 시 호출한다. {@code paidAt} 을 기록한다.
+     *
+     * <p>이미 종착 상태(PAID/FAILED/REFUNDED)인 결제에 호출하면 안 된다 — 호출 측({@code PaymentCallbackService})이
+     * PENDING 인지 먼저 확인한다. 방어선으로 {@link PaymentStatus#canTransitionTo} 위반 시 {@link IllegalStateException}.
+     */
+    public void markPaid() {
+        transitionTo(PaymentStatus.PAID);
+        this.paidAt = Instant.now();
+    }
+
+    /**
+     * 결제 실패 확정 — PG 가 FAILED 결과를 통보하거나 폴링 동기화 시 호출한다. {@code failureReason} 을
+     * {@value #MAX_FAILURE_REASON_LENGTH}자 이내로 잘라 기록한다 (null 허용 — 사유 미상).
+     */
+    public void markFailed(String failureReason) {
+        transitionTo(PaymentStatus.FAILED);
+        this.failureReason = truncate(failureReason);
+    }
+
+    private void transitionTo(PaymentStatus next) {
+        if (!status.canTransitionTo(next)) {
+            throw new IllegalStateException("허용되지 않은 결제 상태 전이: " + status + " -> " + next);
+        }
+        this.status = next;
+    }
+
+    private static String truncate(String failureReason) {
+        if (failureReason == null) {
+            return null;
+        }
+        return failureReason.length() <= MAX_FAILURE_REASON_LENGTH
+                ? failureReason
+                : failureReason.substring(0, MAX_FAILURE_REASON_LENGTH);
     }
 
     public Long getId() {

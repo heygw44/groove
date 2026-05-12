@@ -9,6 +9,7 @@ import com.groove.payment.gateway.RefundRequest;
 import com.groove.payment.gateway.RefundResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -29,8 +30,10 @@ import java.util.concurrent.ThreadLocalRandom;
  * <ul>
  *   <li>{@code request()} — 처리 지연({@code payment.mock.delay-*})을 흉내 낸 뒤 거래 식별자를 발급하고,
  *       성공률({@code payment.mock.success-rate})로 최종 결과(PAID/FAILED)를 미리 결정한 다음
- *       웹훅 발사 시각({@code now + webhook-delay})을 정해 {@link MockWebhookSimulator} 에 예약하고
- *       {@link PaymentStatus#PENDING} 으로 즉시 응답.</li>
+ *       웹훅 발사 시각({@code now + webhook-delay})을 정해 ({@code payment.mock.auto-webhook} 이 true 면)
+ *       {@link MockWebhookSimulator} 에 예약하고 {@link PaymentStatus#PENDING} 으로 즉시 응답.
+ *       {@code auto-webhook=false} 면 거래는 기록하되 자동 웹훅을 발사하지 않는다 — 통합 테스트에서 HTTP
+ *       웹훅 엔드포인트/폴링을 직접 호출해 결정적으로 검증하기 위함이다.</li>
  *   <li>{@code query()} — 웹훅 발사 예정 시각 전이면 PENDING, 이후면 결정된 최종 상태(또는 환불 시 REFUNDED).</li>
  *   <li>{@code refund()} — 항상 성공 처리하고 {@link PaymentStatus#REFUNDED} 응답.</li>
  * </ul>
@@ -57,12 +60,15 @@ public class MockPaymentGateway implements PaymentGateway {
     private final PaymentMockProperties properties;
     private final MockWebhookSimulator webhookSimulator;
     private final Clock clock;
+    private final boolean autoWebhook;
     private final Map<String, Transaction> transactions = new ConcurrentHashMap<>();
 
-    public MockPaymentGateway(PaymentMockProperties properties, MockWebhookSimulator webhookSimulator, Clock clock) {
+    public MockPaymentGateway(PaymentMockProperties properties, MockWebhookSimulator webhookSimulator, Clock clock,
+                              @Value("${payment.mock.auto-webhook:true}") boolean autoWebhook) {
         this.properties = Objects.requireNonNull(properties);
         this.webhookSimulator = Objects.requireNonNull(webhookSimulator);
         this.clock = Objects.requireNonNull(clock);
+        this.autoWebhook = autoWebhook;
     }
 
     @Override
@@ -78,10 +84,12 @@ public class MockPaymentGateway implements PaymentGateway {
         Instant fireAt = now.plus(randomDuration(properties.webhookDelayMin(), properties.webhookDelayMax()));
 
         transactions.put(pgTransactionId, new Transaction(result, fireAt));
-        webhookSimulator.scheduleCallback(pgTransactionId, request.orderNumber(), result, fireAt);
+        if (autoWebhook) {
+            webhookSimulator.scheduleCallback(pgTransactionId, request.orderNumber(), result, fireAt);
+        }
 
-        log.info("Mock 결제 접수: pgTx={}, order={}, amount={}, 예정결과={}, 발사시각={}",
-                pgTransactionId, request.orderNumber(), request.amount(), result, fireAt);
+        log.info("Mock 결제 접수: pgTx={}, order={}, amount={}, 예정결과={}, 발사시각={}, autoWebhook={}",
+                pgTransactionId, request.orderNumber(), request.amount(), result, fireAt, autoWebhook);
         return new PaymentResponse(pgTransactionId, PaymentStatus.PENDING, PROVIDER);
     }
 

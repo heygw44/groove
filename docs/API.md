@@ -716,30 +716,43 @@
 
 #### POST `/payments/webhook` — PG 웹훅 콜백
 
-**Headers**: `X-Mock-Signature` (모킹용 서명, 실 PG에서는 PG별 서명 헤더)
+**Headers**: `X-Mock-Signature` (모킹용 서명 = 공유 시크릿; 실 PG에서는 PG별 서명 헤더). 누락·불일치 시 401 `PAYMENT_WEBHOOK_INVALID_SIGNATURE`.
 
-**Request** (Mock PG가 자동 호출)
+**Request** (Mock PG가 자동 호출, 또는 외부에서 직접)
 ```json
 {
   "pgTransactionId": "mock-tx-abc123",
-  "orderNumber": "ORD-20260505-A1B2C3",
   "status": "PAID",
-  "paidAt": "2026-05-05T14:23:05.000Z"
+  "failureReason": null,
+  "occurredAt": "2026-05-05T14:23:05.000Z"
 }
 ```
+- `pgTransactionId` (필수) — 결제는 이 값으로 조회한다 (`orderNumber` 불필요)
+- `status` (필수) — `PAID` 또는 `FAILED` 만 허용 (그 외 값은 400)
+- `failureReason` (선택) — `FAILED` 일 때만 의미, 미상이면 기본 사유 기록
+- `occurredAt` (선택) — PG 측 처리 시각
 
 **처리**
-1. 서명 검증
-2. Payment 상태 갱신 (PENDING → PAID 또는 FAILED)
-3. Order 상태 갱신 (PENDING → PAID 또는 PAYMENT_FAILED)
-4. (PAID 시) `OrderPaidEvent` 발행 → 배송 엔트리 생성
-5. (FAILED 시) 재고 복원
+1. 서명 검증 (`X-Mock-Signature`)
+2. `pgTransactionId` 로 Payment 조회 — 없으면 무해하게 무시(`outcome=IGNORED`), PENDING 아니면 무시(`outcome=ALREADY_PROCESSED`)
+3. PAID — Payment `PENDING→PAID`(`paidAt` 기록), Order `PENDING→PAID`, `OrderPaidEvent` 발행(구독은 #W7-5 배송 생성)
+4. FAILED — 보상 트랜잭션: Payment `PENDING→FAILED`(`failureReason` 기록), Order `PENDING→PAYMENT_FAILED`, 주문 항목 재고 복원
 
-**Response 200** `{"received": true}`
+**Response 200**
+```json
+{
+  "outcome": "APPLIED",
+  "paymentId": 42,
+  "pgTransactionId": "mock-tx-abc123",
+  "paymentStatus": "PAID"
+}
+```
+`outcome` ∈ {`APPLIED`(이번 콜백으로 전이), `ALREADY_PROCESSED`(이미 종착 — 중복), `IGNORED`(알 수 없는 거래)}.
 
-**중복 수신**
-- 같은 (pgTransactionId, status) 두 번째 호출은 idempotent하게 무시
+**멱등성**
+- `pgTransactionId` 로 합성한 키로 멱등 처리 — HTTP 웹훅·인프로세스 Mock 웹훅·폴링 스케줄러가 모두 같은 키를 공유하므로 어느 조합으로 중복 수신해도 상태 전이는 1회 (재고 복원도 1회)
 - 실 PG 환경에서는 PG가 200 받을 때까지 재시도하므로 멱등 보장 필수
+- 웹훅 유실 대비: 폴링 스케줄러(`PaymentReconciliationScheduler`)가 일정 시간 이상 PENDING 인 결제를 PG `query()` 로 보강 동기화
 
 ---
 

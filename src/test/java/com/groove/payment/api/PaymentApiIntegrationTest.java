@@ -32,6 +32,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
@@ -52,13 +53,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 결제 요청·조회 API 통합 테스트 (#55).
  *
  * <p>Testcontainers MySQL 위에서 부팅된 MockMvc 로 실 필터({@code @Idempotent} 인터셉터 포함)·서비스·DB
- * 를 모두 거친다. {@code test} 프로파일이라 {@code MockPaymentGateway} 가 활성이며 — Mock 은
- * {@code request()} 시 즉시 PENDING 으로 응답하므로 본 테스트의 모든 결제는 PENDING 으로 관찰된다
- * (PAID/FAILED 확정은 #W7-4 웹훅 범위).
+ * 를 모두 거친다. {@code test} 프로파일이라 {@code MockPaymentGateway} 가 활성이며 — {@code request()} 시
+ * 즉시 PENDING 으로 응답한다. {@code payment.mock.auto-webhook=false} 로 인프로세스 자동 웹훅을 꺼,
+ * 본 테스트의 모든 결제는 PENDING 으로 안정적으로 관찰된다 (PAID/FAILED 확정·웹훅 처리는 #W7-4 범위 —
+ * {@code PaymentWebhookIntegrationTest} 가 검증).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@TestPropertySource(properties = "payment.mock.auto-webhook=false")
 @Import(TestcontainersConfig.class)
 @DisplayName("/api/v1/payments 결제 요청·조회 API (#55)")
 class PaymentApiIntegrationTest {

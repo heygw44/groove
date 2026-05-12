@@ -53,12 +53,14 @@ public class SecurityConfig {
      *   <li>{@code /api/v1/orders} — 게스트 주문 생성 (#43)</li>
      *   <li>{@code /api/v1/orders/*}/guest-lookup} — 게스트 본인 주문 조회 (#44, email 매칭)</li>
      *   <li>{@code /api/v1/payments} — 결제 요청 (#55, 게스트 주문 결제 허용 — 회원 주문 결제는 서비스 레이어가 본인 검증)</li>
+     *   <li>{@code /api/v1/payments/webhook} — PG 결제 결과 콜백 (#W7-4, 인증 토큰 대신 X-Mock-Signature 헤더로 서명 검증)</li>
      * </ul>
      */
     private static final String[] PUBLIC_POST_PATTERNS = {
             "/api/v1/orders",
             "/api/v1/orders/*/guest-lookup",
-            "/api/v1/payments"
+            "/api/v1/payments",
+            "/api/v1/payments/webhook"
     };
 
     private static final String ADMIN_PATTERN = "/api/v1/admin/**";
