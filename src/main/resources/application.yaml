@@ -85,6 +85,15 @@ groove:
     ttl: ${IDEMPOTENCY_TTL:PT24H}
     cleanup-cron: ${IDEMPOTENCY_CLEANUP_CRON:0 0 * * * *}
     cleanup-batch-size: ${IDEMPOTENCY_CLEANUP_BATCH_SIZE:1000}
+  # 결제 웹훅 유실 대비 폴링 동기화 (#W7-4). PENDING 결제를 interval 마다 PG query() 로 조회한다.
+  payment:
+    reconciliation:
+      interval: ${PAYMENT_RECONCILIATION_INTERVAL:PT1M}
+      initial-delay: ${PAYMENT_RECONCILIATION_INITIAL_DELAY:PT1M}
+      # 갓 접수된 결제는 정상 웹훅이 곧 도착하므로 폴링 대상에서 제외한다 (created_at < now - min-age).
+      min-age: ${PAYMENT_RECONCILIATION_MIN_AGE:PT1M}
+      # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리/PG 호출량을 바운드. 나머지는 다음 주기에 처리.
+      batch-size: ${PAYMENT_RECONCILIATION_BATCH_SIZE:200}
 
 # CORS default 는 모든 origin 차단. profile 별 yaml 또는 환경 변수로 override.
 # 운영 환경에서는 cors.allowed-origins 를 명시적 도메인 화이트리스트로 설정.
@@ -109,3 +118,6 @@ payment:
     webhook-delay-min: ${PAYMENT_MOCK_WEBHOOK_DELAY_MIN:1s}
     webhook-delay-max: ${PAYMENT_MOCK_WEBHOOK_DELAY_MAX:5s}
     webhook-secret: ${PAYMENT_MOCK_WEBHOOK_SECRET}
+    # request() 후 webhook-delay 만큼 뒤에 PaymentWebhookHandler 로 결과 콜백을 자동 발사한다 (#W7-4).
+    # 통합 테스트는 결정적 검증을 위해 false 로 끄고 HTTP 웹훅 엔드포인트/폴링을 직접 호출한다.
+    auto-webhook: ${PAYMENT_MOCK_AUTO_WEBHOOK:true}

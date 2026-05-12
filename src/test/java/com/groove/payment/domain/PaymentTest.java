@@ -4,6 +4,8 @@ import com.groove.order.domain.Order;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -76,5 +78,69 @@ class PaymentTest {
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> Payment.initiate(order(), 1000L, null, "MOCK", "tx"))
                 .isInstanceOf(NullPointerException.class);
+    }
+
+    private Payment pending(String pgTransactionId) {
+        return Payment.initiate(order(), 35000L, PaymentMethod.CARD, "MOCK", pgTransactionId);
+    }
+
+    @Test
+    @DisplayName("markPaid: PENDING → PAID 로 전이하고 paidAt 을 기록한다")
+    void markPaid_transitionsAndRecordsPaidAt() {
+        Payment payment = pending("tx-paid");
+        Instant before = Instant.now();
+
+        payment.markPaid();
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(payment.getPaidAt()).isNotNull().isAfterOrEqualTo(before);
+        assertThat(payment.getFailureReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("markFailed: PENDING → FAILED 로 전이하고 사유를 기록한다")
+    void markFailed_transitionsAndRecordsReason() {
+        Payment payment = pending("tx-fail");
+
+        payment.markFailed("카드 한도 초과");
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(payment.getFailureReason()).isEqualTo("카드 한도 초과");
+        assertThat(payment.getPaidAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("markFailed: 사유가 상한을 넘으면 잘라서 기록한다")
+    void markFailed_truncatesLongReason() {
+        Payment payment = pending("tx-long");
+
+        payment.markFailed("X".repeat(Payment.MAX_FAILURE_REASON_LENGTH + 100));
+
+        assertThat(payment.getFailureReason()).hasSize(Payment.MAX_FAILURE_REASON_LENGTH);
+    }
+
+    @Test
+    @DisplayName("markFailed: 사유 null 도 허용한다 (사유 미상)")
+    void markFailed_allowsNullReason() {
+        Payment payment = pending("tx-null");
+
+        payment.markFailed(null);
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(payment.getFailureReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("종착 상태에서 markPaid/markFailed 는 IllegalStateException")
+    void terminalState_furtherTransitionsRejected() {
+        Payment paid = pending("tx-1");
+        paid.markPaid();
+        assertThatThrownBy(paid::markPaid).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> paid.markFailed("x")).isInstanceOf(IllegalStateException.class);
+
+        Payment failed = pending("tx-2");
+        failed.markFailed("x");
+        assertThatThrownBy(failed::markPaid).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> failed.markFailed("y")).isInstanceOf(IllegalStateException.class);
     }
 }

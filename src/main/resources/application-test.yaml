@@ -46,8 +46,17 @@ groove:
   # 테스트 중 정리 스케줄러 자동 실행 차단 — 정리 동작은 태스크를 직접 호출해 검증한다.
   idempotency:
     cleanup-cron: "-"
+  # 폴링 스케줄러도 테스트 중 자동 실행하지 않는다 (interval/initial-delay 를 테스트 수명 밖으로) —
+  # reconcilePendingPayments() 를 직접 호출해 검증한다. min-age 0 이면 갓 접수된 결제도 즉시 폴링 대상.
+  payment:
+    reconciliation:
+      interval: PT1H
+      initial-delay: PT1H
+      min-age: PT0S
 
 # Mock PG — 테스트에서는 결정적·즉시 동작. 성공률/실패 분기 검증은 단위 테스트에서 properties 를 직접 구성.
+# auto-webhook 은 기본값(true) 유지 — MockPaymentWiringTest 가 비동기 발사 경로를 검증한다. 결정적 검증이
+# 필요한 통합 테스트(PaymentApiIntegrationTest / PaymentWebhookIntegrationTest)는 @TestPropertySource 로 false.
 payment:
   mock:
     success-rate: 1.0

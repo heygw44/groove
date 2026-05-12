@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MockPaymentGateway 단위 테스트")
@@ -41,7 +42,7 @@ class MockPaymentGatewayTest {
     }
 
     private MockPaymentGateway gateway(PaymentMockProperties props) {
-        return new MockPaymentGateway(props, webhookSimulator, CLOCK);
+        return new MockPaymentGateway(props, webhookSimulator, CLOCK, true);
     }
 
     @Nested
@@ -83,11 +84,24 @@ class MockPaymentGatewayTest {
             PaymentMockProperties ranged = new PaymentMockProperties(
                     1.0, Duration.ZERO, Duration.ZERO, Duration.ofMillis(1), Duration.ofMillis(3), "secret");
 
-            new MockPaymentGateway(ranged, webhookSimulator, CLOCK).request(REQUEST);
+            new MockPaymentGateway(ranged, webhookSimulator, CLOCK, true).request(REQUEST);
 
             ArgumentCaptor<Instant> fireAt = ArgumentCaptor.forClass(Instant.class);
             verify(webhookSimulator).scheduleCallback(any(), any(), any(), fireAt.capture());
             assertThat(fireAt.getValue()).isBetween(NOW.plusMillis(1), NOW.plusMillis(3));
+        }
+
+        @Test
+        @DisplayName("auto-webhook 비활성이면 거래는 기록하되 웹훅 콜백을 예약하지 않는다")
+        void noWebhookScheduled_whenAutoWebhookDisabled() {
+            MockPaymentGateway g = new MockPaymentGateway(
+                    props(1.0, Duration.ZERO, Duration.ZERO), webhookSimulator, CLOCK, false);
+
+            PaymentResponse response = g.request(REQUEST);
+
+            verifyNoInteractions(webhookSimulator);
+            // 거래는 기록되어 폴링 조회는 가능하다.
+            assertThat(g.query(response.pgTransactionId())).isEqualTo(PaymentStatus.PAID);
         }
 
         @Test
