@@ -43,3 +43,13 @@ groove:
       signup:
         capacity: 100000
         refill-period: PT1M
+
+# Mock PG — 테스트에서는 결정적·즉시 동작. 성공률/실패 분기 검증은 단위 테스트에서 properties 를 직접 구성.
+payment:
+  mock:
+    success-rate: 1.0
+    delay-min: 0ms
+    delay-max: 0ms
+    webhook-delay-min: 0ms
+    webhook-delay-max: 0ms
+    webhook-secret: test-mock-webhook-secret
