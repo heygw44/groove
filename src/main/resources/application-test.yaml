@@ -43,6 +43,9 @@ groove:
       signup:
         capacity: 100000
         refill-period: PT1M
+  # 테스트 중 정리 스케줄러 자동 실행 차단 — 정리 동작은 태스크를 직접 호출해 검증한다.
+  idempotency:
+    cleanup-cron: "-"
 
 # Mock PG — 테스트에서는 결정적·즉시 동작. 성공률/실패 분기 검증은 단위 테스트에서 properties 를 직접 구성.
 payment:
