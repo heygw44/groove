@@ -52,6 +52,10 @@ public enum ErrorCode {
     IDEMPOTENCY_IN_PROGRESS(HttpStatus.CONFLICT, "IDEMPOTENCY_IN_PROGRESS", "동일한 Idempotency-Key 요청이 처리 중입니다"),
     IDEMPOTENCY_KEY_REUSE_MISMATCH(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_REUSE_MISMATCH", "이미 다른 요청에 사용된 Idempotency-Key 입니다"),
 
+    // PAYMENT
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "결제를 찾을 수 없습니다"),
+    PAYMENT_GATEWAY_FAILURE(HttpStatus.BAD_GATEWAY, "PAYMENT_GATEWAY_FAILURE", "결제 게이트웨이 연동에 실패했습니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 
