@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -68,6 +69,7 @@ class PaymentCallbackServiceTest {
     void applyResult_paid_confirmsAndPublishesEvent() {
         Album album = album(99);
         Payment payment = pendingPayment(album, 1);
+        ReflectionTestUtils.setField(payment, "id", 42L); // 단위 테스트라 미영속 — paymentId 단언이 공허해지지 않게 고정값 주입
         given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.PAID, null);
@@ -83,7 +85,7 @@ class PaymentCallbackServiceTest {
         verify(eventPublisher).publishEvent(event.capture());
         assertThat(event.getValue().orderNumber()).isEqualTo(ORDER_NUMBER);
         assertThat(event.getValue().memberId()).isEqualTo(1L);
-        assertThat(event.getValue().paymentId()).isEqualTo(payment.getId());
+        assertThat(event.getValue().paymentId()).isEqualTo(42L);
     }
 
     @Test

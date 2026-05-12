@@ -4,4 +4,8 @@
 --   SELECT ... FROM payment WHERE status = 'PENDING' AND created_at < :cutoff
 -- V10 주석에서 [W10] 슬로우 쿼리 측정 후로 미뤘던 idx_payment_status_created 를, 그 소비처(폴링
 -- 스케줄러)가 도착한 본 이슈에서 추가한다.
-ALTER TABLE payment ADD INDEX idx_payment_status_created (status, created_at);
+--
+-- ALGORITHM=INPLACE, LOCK=NONE 으로 온라인 DDL 을 명시한다 — InnoDB(MySQL 8.x)는 보조 인덱스 추가를
+-- 기본적으로 온라인으로 수행하지만, 명시하면 (지원 불가 시) 즉시 실패해 운영 배포 사고를 사전에 막는다.
+-- 대용량 테이블·고트래픽 환경에서는 그래도 트래픽 저점 배포를 권장한다.
+ALTER TABLE payment ADD INDEX idx_payment_status_created (status, created_at), ALGORITHM=INPLACE, LOCK=NONE;
