@@ -1,7 +1,9 @@
 /**
  * 결제 도메인 모델 (W7).
  *
- * <p>현재는 상태 머신({@link com.groove.payment.domain.PaymentStatus}) 만 정의한다.
- * {@code Payment} 엔티티 · Repository · 멱등성 레코드는 후속 이슈(#W7-2, #W7-3) 범위.
+ * <p>{@link com.groove.payment.domain.Payment} 엔티티 + 상태/수단 enum
+ * ({@link com.groove.payment.domain.PaymentStatus}, {@link com.groove.payment.domain.PaymentMethod})
+ * + {@link com.groove.payment.domain.PaymentRepository}. 결제 확정(PAID/FAILED 전이, {@code paidAt}
+ * 기록)은 #W7-4 웹훅/폴링 범위다.
  */
 package com.groove.payment.domain;
