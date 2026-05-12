@@ -135,6 +135,8 @@ class OrderControllerTest {
                 itemBody(sellingAlbumId, 2),
                 itemBody(anotherSellingAlbumId, 3)));
 
+        body.put("shipping", shippingBody());
+
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -146,10 +148,51 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.totalAmount").value(35000 * 2 + 30000 * 3))
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.items[0].albumTitle").value("Abbey Road"))
-                .andExpect(jsonPath("$.items[0].subtotal").value(70000));
+                .andExpect(jsonPath("$.items[0].subtotal").value(70000))
+                .andExpect(jsonPath("$.shipping.recipientName").value("김철수"))
+                .andExpect(jsonPath("$.shipping.address").value("서울시 강남구 테헤란로 123"))
+                .andExpect(jsonPath("$.shipping.zipCode").value("06234"))
+                .andExpect(jsonPath("$.shipping.safePackagingRequested").value(false));
 
         assertThat(albumRepository.findById(sellingAlbumId).orElseThrow().getStock()).isEqualTo(98);
         assertThat(albumRepository.findById(anotherSellingAlbumId).orElseThrow().getStock()).isEqualTo(97);
+
+        Order saved = orderRepository.findAll().get(0);
+        assertThat(saved.getShippingInfo().recipientName()).isEqualTo("김철수");
+        assertThat(saved.getShippingInfo().recipientPhone()).isEqualTo("01012345678");
+        assertThat(saved.getShippingInfo().zipCode()).isEqualTo("06234");
+        assertThat(saved.getShippingInfo().safePackagingRequested()).isFalse();
+    }
+
+    @Test
+    @DisplayName("배송지 누락 → 400 VALIDATION_FAILED")
+    void create_missingShipping_returns400() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", List.of(itemBody(sellingAlbumId, 1)));
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+
+        assertThat(orderRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("배송지 recipientName 누락 → 400")
+    void create_blankRecipientName_returns400() throws Exception {
+        Map<String, Object> shipping = shippingBody();
+        shipping.put("recipientName", " ");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", List.of(itemBody(sellingAlbumId, 1)));
+        body.put("shipping", shipping);
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -161,6 +204,8 @@ class OrderControllerTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(sellingAlbumId, 1)));
         body.put("guest", guest);
+
+        body.put("shipping", shippingBody());
 
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -180,6 +225,8 @@ class OrderControllerTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(lowStockAlbumId, 5)));
 
+        body.put("shipping", shippingBody());
+
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -197,6 +244,8 @@ class OrderControllerTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(hiddenAlbumId, 1)));
 
+        body.put("shipping", shippingBody());
+
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -211,6 +260,8 @@ class OrderControllerTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(99_999L, 1)));
 
+        body.put("shipping", shippingBody());
+
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -224,6 +275,8 @@ class OrderControllerTest {
     void create_anonymousWithoutGuest_returns422() throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(sellingAlbumId, 1)));
+
+        body.put("shipping", shippingBody());
 
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -242,6 +295,8 @@ class OrderControllerTest {
         body.put("items", List.of(itemBody(sellingAlbumId, 1)));
         body.put("guest", guest);
 
+        body.put("shipping", shippingBody());
+
         mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -253,6 +308,8 @@ class OrderControllerTest {
     void create_emptyItems_returns400() throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of());
+
+        body.put("shipping", shippingBody());
 
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
@@ -266,6 +323,8 @@ class OrderControllerTest {
     void create_zeroQuantity_returns400() throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(sellingAlbumId, 0)));
+
+        body.put("shipping", shippingBody());
 
         mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
@@ -443,6 +502,7 @@ class OrderControllerTest {
     private String placeMemberOrder(Long albumId, int quantity) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(albumId, quantity)));
+        body.put("shipping", shippingBody());
 
         String json = mockMvc.perform(post("/api/v1/orders")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
@@ -460,6 +520,7 @@ class OrderControllerTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(albumId, quantity)));
         body.put("guest", guest);
+        body.put("shipping", shippingBody());
 
         String json = mockMvc.perform(post("/api/v1/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -467,6 +528,17 @@ class OrderControllerTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(json).get("orderNumber").asText();
+    }
+
+    private Map<String, Object> shippingBody() {
+        Map<String, Object> shipping = new LinkedHashMap<>();
+        shipping.put("recipientName", "김철수");
+        shipping.put("recipientPhone", "01012345678");
+        shipping.put("address", "서울시 강남구 테헤란로 123");
+        shipping.put("addressDetail", "456호");
+        shipping.put("zipCode", "06234");
+        shipping.put("safePackagingRequested", false);
+        return shipping;
     }
 
     private Map<String, Object> itemBody(Long albumId, int quantity) {

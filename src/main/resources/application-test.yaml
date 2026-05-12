@@ -53,6 +53,14 @@ groove:
       interval: PT1H
       initial-delay: PT1H
       min-age: PT0S
+  # 배송 자동 진행 스케줄러도 테스트 중 자동 실행하지 않는다 — progressShipments() 를 직접 호출해 검증한다.
+  # prepare-delay/ship-delay 0 이면 갓 생성/발송된 배송도 즉시 다음 단계 대상.
+  shipping:
+    progress:
+      interval: PT1H
+      initial-delay: PT1H
+      prepare-delay: PT0S
+      ship-delay: PT0S
 
 # Mock PG — 테스트에서는 결정적·즉시 동작. 성공률/실패 분기 검증은 단위 테스트에서 properties 를 직접 구성.
 # auto-webhook 은 기본값(true) 유지 — MockPaymentWiringTest 가 비동기 발사 경로를 검증한다. 결정적 검증이

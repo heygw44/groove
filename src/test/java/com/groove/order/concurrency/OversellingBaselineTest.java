@@ -152,7 +152,8 @@ class OversellingBaselineTest {
 
         OrderCreateRequest request = new OrderCreateRequest(
                 List.of(new OrderItemRequest(albumId, 1)),
-                null);
+                null,
+                com.groove.support.OrderFixtures.sampleShippingInfoRequest());
 
         boolean settled;
         long elapsedMs;

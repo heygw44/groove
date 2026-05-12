@@ -42,6 +42,17 @@ import java.util.Objects;
 @Table(name = "orders")
 public class Order extends BaseTimeEntity {
 
+    /** DB {@code recipient_name} 컬럼 길이 — {@link OrderShippingInfo} 가 선검증한다. */
+    static final int MAX_RECIPIENT_NAME_LENGTH = 50;
+    /** DB {@code recipient_phone} 컬럼 길이 — {@link OrderShippingInfo} 가 선검증한다. */
+    static final int MAX_RECIPIENT_PHONE_LENGTH = 20;
+    /** DB {@code address} 컬럼 길이 — {@link OrderShippingInfo} 가 선검증한다. */
+    static final int MAX_ADDRESS_LENGTH = 500;
+    /** DB {@code address_detail} 컬럼 길이 — {@link OrderShippingInfo} 가 선검증한다. */
+    static final int MAX_ADDRESS_DETAIL_LENGTH = 200;
+    /** DB {@code zip_code} 컬럼 길이 — {@link OrderShippingInfo} 가 선검증한다. */
+    static final int MAX_ZIP_CODE_LENGTH = 20;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -74,6 +85,24 @@ public class Order extends BaseTimeEntity {
     @Column(name = "cancelled_reason", length = 500)
     private String cancelledReason;
 
+    @Column(name = "recipient_name", nullable = false, length = MAX_RECIPIENT_NAME_LENGTH)
+    private String recipientName;
+
+    @Column(name = "recipient_phone", nullable = false, length = MAX_RECIPIENT_PHONE_LENGTH)
+    private String recipientPhone;
+
+    @Column(name = "address", nullable = false, length = MAX_ADDRESS_LENGTH)
+    private String address;
+
+    @Column(name = "address_detail", length = MAX_ADDRESS_DETAIL_LENGTH)
+    private String addressDetail;
+
+    @Column(name = "zip_code", nullable = false, length = MAX_ZIP_CODE_LENGTH)
+    private String zipCode;
+
+    @Column(name = "safe_packaging_requested", nullable = false)
+    private boolean safePackagingRequested;
+
     /**
      * 페이징 쿼리({@code findByMemberId} 등)에서 컬렉션 fetch join 시 발생하는 인메모리 페이지네이션을
      * 회피하기 위해 {@link BatchSize} 를 둔다 — Hibernate 가 Order 페이지를 SQL LIMIT 으로 가져온 뒤
@@ -90,39 +119,49 @@ public class Order extends BaseTimeEntity {
     protected Order() {
     }
 
-    private Order(String orderNumber, Long memberId, String guestEmail, String guestPhone) {
+    private Order(String orderNumber, Long memberId, String guestEmail, String guestPhone,
+                  OrderShippingInfo shipping) {
         this.orderNumber = orderNumber;
         this.memberId = memberId;
         this.guestEmail = guestEmail;
         this.guestPhone = guestPhone;
+        this.recipientName = shipping.recipientName();
+        this.recipientPhone = shipping.recipientPhone();
+        this.address = shipping.address();
+        this.addressDetail = shipping.addressDetail();
+        this.zipCode = shipping.zipCode();
+        this.safePackagingRequested = shipping.safePackagingRequested();
         this.status = OrderStatus.PENDING;
         this.totalAmount = 0L;
     }
 
     /**
-     * 회원 주문 생성. 초기 상태 PENDING.
+     * 회원 주문 생성. 초기 상태 PENDING. {@code shipping} 은 배송지 스냅샷 — 결제 완료 시 그대로 배송 행으로 복사된다.
      */
-    public static Order placeForMember(String orderNumber, Long memberId) {
+    public static Order placeForMember(String orderNumber, Long memberId, OrderShippingInfo shipping) {
         if (orderNumber == null || orderNumber.isBlank()) {
             throw new IllegalArgumentException("orderNumber must not be blank");
         }
         if (memberId == null) {
             throw new InvalidOrderOwnershipException();
         }
-        return new Order(orderNumber, memberId, null, null);
+        Objects.requireNonNull(shipping, "shipping must not be null");
+        return new Order(orderNumber, memberId, null, null, shipping);
     }
 
     /**
-     * 게스트 주문 생성. 초기 상태 PENDING. {@code guestPhone} 은 nullable.
+     * 게스트 주문 생성. 초기 상태 PENDING. {@code guestPhone} 은 nullable, {@code shipping} 은 배송지 스냅샷.
      */
-    public static Order placeForGuest(String orderNumber, String guestEmail, String guestPhone) {
+    public static Order placeForGuest(String orderNumber, String guestEmail, String guestPhone,
+                                      OrderShippingInfo shipping) {
         if (orderNumber == null || orderNumber.isBlank()) {
             throw new IllegalArgumentException("orderNumber must not be blank");
         }
         if (guestEmail == null || guestEmail.isBlank()) {
             throw new InvalidOrderOwnershipException();
         }
-        return new Order(orderNumber, null, guestEmail, guestPhone);
+        Objects.requireNonNull(shipping, "shipping must not be null");
+        return new Order(orderNumber, null, guestEmail, guestPhone, shipping);
     }
 
     /**
@@ -199,6 +238,14 @@ public class Order extends BaseTimeEntity {
 
     public String getCancelledReason() {
         return cancelledReason;
+    }
+
+    /**
+     * 주문 시점에 캡처된 배송지 스냅샷. 결제 완료 후 {@code shipping} 행을 만들 때 그대로 복사된다.
+     */
+    public OrderShippingInfo getShippingInfo() {
+        return new OrderShippingInfo(recipientName, recipientPhone, address, addressDetail, zipCode,
+                safePackagingRequested);
     }
 
     public List<OrderItem> getItems() {

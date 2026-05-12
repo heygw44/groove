@@ -134,8 +134,8 @@ class PaymentApiIntegrationTest {
     private Order persistOrder(Long memberId, OrderStatus status) {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = (memberId != null)
-                ? Order.placeForMember(nextOrderNumber(), memberId)
-                : Order.placeForGuest(nextOrderNumber(), "guest@example.com", "01099999999");
+                ? Order.placeForMember(nextOrderNumber(), memberId, com.groove.support.OrderFixtures.sampleShippingInfo())
+                : Order.placeForGuest(nextOrderNumber(), "guest@example.com", "01099999999", com.groove.support.OrderFixtures.sampleShippingInfo());
         order.addItem(OrderItem.create(album, 1)); // totalAmount = 35000
         if (status != OrderStatus.PENDING) {
             order.changeStatus(status, null);

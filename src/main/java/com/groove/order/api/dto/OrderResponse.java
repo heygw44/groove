@@ -9,13 +9,15 @@ import java.util.List;
 /**
  * 주문 응답 (API.md §3.5).
  *
- * <p>본 이슈(#43) 범위에서는 shipping/payment 는 응답에 포함하지 않는다 — 각각 W6-4/W6-5 에서 추가.
+ * <p>{@code shipping} 은 주문 시점에 캡처된 배송지 스냅샷이다(#W7-6). 운송장 번호·배송 진행 상태는
+ * 별개의 {@code GET /shippings/{trackingNumber}} 가 다룬다 — 결제 상태(payment) 도 마찬가지로 별도.
  */
 public record OrderResponse(
         String orderNumber,
         OrderStatus status,
         long totalAmount,
         List<OrderItemResponse> items,
+        OrderShippingResponse shipping,
         Instant createdAt
 ) {
 
@@ -28,6 +30,7 @@ public record OrderResponse(
                 order.getStatus(),
                 order.getTotalAmount(),
                 items,
+                OrderShippingResponse.from(order.getShippingInfo()),
                 order.getCreatedAt());
     }
 }

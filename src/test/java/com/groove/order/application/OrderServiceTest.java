@@ -12,6 +12,7 @@ import com.groove.cart.exception.AlbumNotPurchasableException;
 import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
+import com.groove.support.OrderFixtures;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
@@ -72,11 +73,11 @@ class OrderServiceTest {
     }
 
     private OrderCreateRequest memberRequest(OrderItemRequest... items) {
-        return new OrderCreateRequest(List.of(items), null);
+        return new OrderCreateRequest(List.of(items), null, OrderFixtures.sampleShippingInfoRequest());
     }
 
     private OrderCreateRequest guestRequest(GuestInfoRequest guest, OrderItemRequest... items) {
-        return new OrderCreateRequest(List.of(items), guest);
+        return new OrderCreateRequest(List.of(items), guest, OrderFixtures.sampleShippingInfoRequest());
     }
 
     @Test
@@ -195,7 +196,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("findForMember — 본인 주문이면 반환")
     void findForMember_ownOrder_returns() {
-        Order order = Order.placeForMember("ORD-1", 1L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         given(orderRepository.findByOrderNumber("ORD-1")).willReturn(Optional.of(order));
 
         Order result = orderService.findForMember(1L, "ORD-1");
@@ -215,7 +216,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("findForMember — 타 회원 주문이면 OrderNotFoundException (존재 노출 회피)")
     void findForMember_otherMembersOrder_throwsNotFound() {
-        Order order = Order.placeForMember("ORD-1", 2L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 2L);
         given(orderRepository.findByOrderNumber("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.findForMember(1L, "ORD-1"))
@@ -225,7 +226,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("findForMember — 게스트 주문에 회원으로 접근하면 404")
     void findForMember_guestOrder_throwsNotFound() {
-        Order order = Order.placeForGuest("ORD-G", "g@x.com", null);
+        Order order = OrderFixtures.guestOrder("ORD-G", "g@x.com", null);
         given(orderRepository.findByOrderNumber("ORD-G")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.findForMember(1L, "ORD-G"))
@@ -237,7 +238,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("findForGuest — email 매칭 시 반환")
     void findForGuest_matchedEmail_returns() {
-        Order order = Order.placeForGuest("ORD-G", "g@x.com", null);
+        Order order = OrderFixtures.guestOrder("ORD-G", "g@x.com", null);
         given(orderRepository.findByOrderNumber("ORD-G")).willReturn(Optional.of(order));
 
         Order result = orderService.findForGuest("ORD-G", "g@x.com");
@@ -248,7 +249,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("findForGuest — email 불일치 시 OrderNotFoundException")
     void findForGuest_emailMismatch_throwsNotFound() {
-        Order order = Order.placeForGuest("ORD-G", "g@x.com", null);
+        Order order = OrderFixtures.guestOrder("ORD-G", "g@x.com", null);
         given(orderRepository.findByOrderNumber("ORD-G")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.findForGuest("ORD-G", "other@x.com"))
@@ -258,7 +259,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("findForGuest — 회원 주문에 게스트로 접근하면 404")
     void findForGuest_memberOrder_throwsNotFound() {
-        Order order = Order.placeForMember("ORD-1", 1L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         given(orderRepository.findByOrderNumber("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.findForGuest("ORD-1", "g@x.com"))
@@ -280,7 +281,7 @@ class OrderServiceTest {
     @DisplayName("listForMember — status null 이면 회원 전체 주문 페이지 반환")
     void listForMember_noStatus_delegatesToFindByMemberId() {
         Pageable pageable = PageRequest.of(0, 20);
-        Order o = Order.placeForMember("ORD-1", 1L);
+        Order o = OrderFixtures.memberOrder("ORD-1", 1L);
         Page<Order> page = new PageImpl<>(List.of(o), pageable, 1);
         given(orderRepository.findByMemberId(1L, pageable)).willReturn(page);
 
@@ -294,7 +295,7 @@ class OrderServiceTest {
     @DisplayName("listForMember — status 지정 시 status 필터 메서드로 위임")
     void listForMember_withStatus_delegatesToFindByMemberIdAndStatus() {
         Pageable pageable = PageRequest.of(0, 20);
-        Order o = Order.placeForMember("ORD-1", 1L);
+        Order o = OrderFixtures.memberOrder("ORD-1", 1L);
         Page<Order> page = new PageImpl<>(List.of(o), pageable, 1);
         given(orderRepository.findByMemberIdAndStatus(1L, OrderStatus.PENDING, pageable))
                 .willReturn(page);
@@ -312,7 +313,7 @@ class OrderServiceTest {
     void cancel_member_pending_restoresStock() {
         Album a1 = album(10L, AlbumStatus.SELLING, 98, 30000L);
         Album a2 = album(11L, AlbumStatus.SELLING, 47, 15000L);
-        Order order = Order.placeForMember("ORD-1", 1L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a1, 2));
         order.addItem(OrderItem.create(a2, 3));
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
@@ -330,7 +331,7 @@ class OrderServiceTest {
     @DisplayName("cancel — reason null 허용")
     void cancel_nullReason_ok() {
         Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
-        Order order = Order.placeForMember("ORD-1", 1L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
 
@@ -353,7 +354,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("cancel — 타 회원 주문이면 OrderNotFoundException (404)")
     void cancel_otherMembersOrder_throwsNotFound() {
-        Order order = Order.placeForMember("ORD-1", 2L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 2L);
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-1", null))
@@ -364,7 +365,7 @@ class OrderServiceTest {
     @DisplayName("cancel — PENDING 외 상태(PAID)는 IllegalStateTransitionException(409)")
     void cancel_nonPending_throwsConflict() {
         Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
-        Order order = Order.placeForMember("ORD-1", 1L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
         order.changeStatus(OrderStatus.PAID, null);
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
@@ -378,7 +379,7 @@ class OrderServiceTest {
     @DisplayName("cancel — 이미 CANCELLED 면 409 (멱등 아님)")
     void cancel_alreadyCancelled_throws() {
         Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
-        Order order = Order.placeForMember("ORD-1", 1L);
+        Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
         order.changeStatus(OrderStatus.CANCELLED, "first");
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));

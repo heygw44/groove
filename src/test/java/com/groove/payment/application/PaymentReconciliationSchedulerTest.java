@@ -58,7 +58,7 @@ class PaymentReconciliationSchedulerTest {
     }
 
     private static Payment pending(String pgTransactionId) {
-        Order order = Order.placeForMember("ORD-20260512-A1B2C3", 1L);
+        Order order = Order.placeForMember("ORD-20260512-A1B2C3", 1L, com.groove.support.OrderFixtures.sampleShippingInfo());
         return Payment.initiate(order, 35000L, PaymentMethod.CARD, "MOCK", pgTransactionId);
     }
 

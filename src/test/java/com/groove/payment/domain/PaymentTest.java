@@ -15,7 +15,7 @@ class PaymentTest {
     private static final String ORDER_NUMBER = "ORD-20260512-A1B2C3";
 
     private Order order() {
-        return Order.placeForMember(ORDER_NUMBER, 1L);
+        return Order.placeForMember(ORDER_NUMBER, 1L, com.groove.support.OrderFixtures.sampleShippingInfo());
     }
 
     @Test

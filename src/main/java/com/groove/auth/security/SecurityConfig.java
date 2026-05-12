@@ -36,7 +36,8 @@ public class SecurityConfig {
             "/api/v1/albums/**",
             "/api/v1/artists/**",
             "/api/v1/genres/**",
-            "/api/v1/labels/**"
+            "/api/v1/labels/**",
+            "/api/v1/shippings/**"
     };
 
     private static final String[] PUBLIC_PATTERNS = {
