@@ -47,6 +47,11 @@ public enum ErrorCode {
     ORDER_ITEM_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "ORDER_ITEM_INVALID", "주문 항목 값이 올바르지 않습니다"),
     ORDER_INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "ORDER_INSUFFICIENT_STOCK", "재고가 부족합니다"),
 
+    // IDEMPOTENCY
+    IDEMPOTENCY_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key 헤더가 필요합니다"),
+    IDEMPOTENCY_IN_PROGRESS(HttpStatus.CONFLICT, "IDEMPOTENCY_IN_PROGRESS", "동일한 Idempotency-Key 요청이 처리 중입니다"),
+    IDEMPOTENCY_KEY_REUSE_MISMATCH(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_REUSE_MISMATCH", "이미 다른 요청에 사용된 Idempotency-Key 입니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 
