@@ -32,8 +32,9 @@ public record WebhookNotification(
         if (orderNumber == null || orderNumber.isBlank()) {
             throw new IllegalArgumentException("orderNumber 는 비어 있을 수 없습니다");
         }
-        if (status == null) {
-            throw new IllegalArgumentException("status 는 null 일 수 없습니다");
+        if (status != PaymentStatus.PAID && status != PaymentStatus.FAILED) {
+            // 웹훅은 최종 결제 결과만 통보한다 — PENDING/REFUNDED 는 계약 밖. null 도 여기서 걸린다.
+            throw new IllegalArgumentException("webhook status 는 PAID 또는 FAILED 여야 합니다 (현재: " + status + ")");
         }
         if (occurredAt == null) {
             throw new IllegalArgumentException("occurredAt 은 null 일 수 없습니다");

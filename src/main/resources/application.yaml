@@ -94,6 +94,8 @@ cors:
 
 # Mock PG 동작 파라미터 (#W7-1, ARCHITECTURE.md §7.2).
 # Mock 프로파일(local/dev/test/docker)에서만 바인딩된다. 실 PG 도입 시 prod 프로파일 구현체로 대체.
+# webhook-secret 은 jwt.secret 과 동일하게 fallback 없이 환경 변수로만 주입 — 미설정 시 기동 실패가 의도된 동작.
+# 로컬 fallback 은 application-local.yaml, 테스트 고정값은 application-test.yaml 에 정의.
 payment:
   mock:
     success-rate: ${PAYMENT_MOCK_SUCCESS_RATE:0.95}
@@ -101,4 +103,4 @@ payment:
     delay-max: ${PAYMENT_MOCK_DELAY_MAX:500ms}
     webhook-delay-min: ${PAYMENT_MOCK_WEBHOOK_DELAY_MIN:1s}
     webhook-delay-max: ${PAYMENT_MOCK_WEBHOOK_DELAY_MAX:5s}
-    webhook-secret: ${PAYMENT_MOCK_WEBHOOK_SECRET:mock-webhook-secret}
+    webhook-secret: ${PAYMENT_MOCK_WEBHOOK_SECRET}

@@ -31,13 +31,19 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 @EnableConfigurationProperties(PaymentMockProperties.class)
 public class MockPaymentConfig {
 
+    /** 웹훅 콜백 전용 스케줄러 풀 크기 — 일회성 단발 작업이라 작게 잡는다. */
+    private static final int WEBHOOK_SCHEDULER_POOL_SIZE = 2;
+    /** 종료 시 진행 중 콜백을 기다리는 최대 시간(초). */
+    private static final int WEBHOOK_SCHEDULER_AWAIT_TERMINATION_SECONDS = 5;
+    private static final String WEBHOOK_SCHEDULER_THREAD_PREFIX = "payment-webhook-";
+
     @Bean(name = "paymentTaskScheduler")
     public TaskScheduler paymentTaskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(2);
-        scheduler.setThreadNamePrefix("payment-webhook-");
+        scheduler.setPoolSize(WEBHOOK_SCHEDULER_POOL_SIZE);
+        scheduler.setThreadNamePrefix(WEBHOOK_SCHEDULER_THREAD_PREFIX);
         scheduler.setWaitForTasksToCompleteOnShutdown(true);
-        scheduler.setAwaitTerminationSeconds(5);
+        scheduler.setAwaitTerminationSeconds(WEBHOOK_SCHEDULER_AWAIT_TERMINATION_SECONDS);
         scheduler.initialize();
         return scheduler;
     }

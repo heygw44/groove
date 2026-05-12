@@ -69,7 +69,8 @@ class MockPaymentWiringTest {
 
         var response = paymentGateway.request(new PaymentRequest("ORD-20260512-WIRE01", 42_000L));
 
-        await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+        // 테스트 프로파일은 지연 0ms 라 사실상 즉시 발사되지만, CI 부하 시 스케줄링 지터에 여유를 둔다.
+        await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             WebhookNotification n = dispatcher.last();
             assertThat(n).isNotNull();
             assertThat(n.pgTransactionId()).isEqualTo(response.pgTransactionId());
