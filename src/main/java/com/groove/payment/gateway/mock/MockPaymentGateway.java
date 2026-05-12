@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -137,6 +138,18 @@ public class MockPaymentGateway implements PaymentGateway {
         }
         Instant cutoff = now.minus(PRUNE_AGE);
         transactions.entrySet().removeIf(e -> e.getValue().fireAt().isBefore(cutoff));
+
+        // stale 항목만으로 상한을 못 맞추는 경우(신선한 거래가 계속 유입) — 발사 시각이 오래된 순으로 강제 축출해
+        // 상한을 실질적으로 보장한다. 다음 put 이 1건 추가하므로 (size - MAX + 1) 만큼 비워 두면 충분하다.
+        int overflow = transactions.size() - MAX_TRACKED_TRANSACTIONS + 1;
+        if (overflow > 0) {
+            transactions.entrySet().stream()
+                    .sorted(Comparator.comparing(e -> e.getValue().fireAt()))
+                    .limit(overflow)
+                    .map(Map.Entry::getKey)
+                    .toList()
+                    .forEach(transactions::remove);
+        }
     }
 
     private static Duration randomDuration(Duration min, Duration max) {
