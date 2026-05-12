@@ -52,6 +52,24 @@ class PaymentTest {
     }
 
     @Test
+    @DisplayName("initiate: pgProvider/pgTransactionId 길이 경계 — 상한은 허용, 초과는 거부")
+    void initiate_validatesPgFieldLengths() {
+        String maxProvider = "P".repeat(Payment.MAX_PG_PROVIDER_LENGTH);
+        String maxTxId = "T".repeat(Payment.MAX_PG_TRANSACTION_ID_LENGTH);
+
+        Payment payment = Payment.initiate(order(), 1000L, PaymentMethod.MOCK, maxProvider, maxTxId);
+        assertThat(payment.getPgProvider()).isEqualTo(maxProvider);
+        assertThat(payment.getPgTransactionId()).isEqualTo(maxTxId);
+
+        assertThatThrownBy(() -> Payment.initiate(order(), 1000L, PaymentMethod.MOCK,
+                "P".repeat(Payment.MAX_PG_PROVIDER_LENGTH + 1), maxTxId))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Payment.initiate(order(), 1000L, PaymentMethod.MOCK,
+                maxProvider, "T".repeat(Payment.MAX_PG_TRANSACTION_ID_LENGTH + 1)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("initiate: order/method 가 null 이면 거부한다")
     void initiate_rejectsNulls() {
         assertThatThrownBy(() -> Payment.initiate(null, 1000L, PaymentMethod.MOCK, "MOCK", "tx"))

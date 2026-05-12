@@ -419,7 +419,7 @@ erDiagram
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | order_id | BIGINT | NOT NULL, UNIQUE, FK → orders.id | 주문당 1결제 (재시도는 새 row가 아닌 상태 갱신) |
-| amount | BIGINT | NOT NULL, CHECK (amount >= 0) | |
+| amount | BIGINT | NOT NULL, CHECK (amount > 0) | 0원 결제 불가 — 게이트웨이 계약(PaymentRequest)·도메인(Payment.initiate)과 정합 |
 | status | VARCHAR(20) | NOT NULL | enum: PENDING, PAID, FAILED, REFUNDED |
 | method | VARCHAR(20) | NOT NULL | enum: CARD, BANK_TRANSFER, MOCK |
 | pg_provider | VARCHAR(20) | NOT NULL, DEFAULT 'MOCK' | |
@@ -443,7 +443,7 @@ erDiagram
 | 규칙 | 위치 | 비고 |
 |---|---|---|
 | 주문당 결제 1건 | [DB] | uk_payment_order UNIQUE |
-| amount ≥ 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(0) |
+| amount > 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + Payment.initiate / PaymentRequest |
 | status 전이 (PENDING→PAID/FAILED, PAID→REFUNDED) | [APP] | PaymentStatus.canTransitionTo() |
 | paid_at: PAID 전환 시 기록 | [APP] | status=PAID 전환 메서드 내부 처리 |
 | 멱등성 키 이중 보호 | [DB+APP] | idempotency_record UNIQUE + Service 레이어 |

@@ -31,6 +31,11 @@ import java.util.Objects;
 @Table(name = "payment")
 public class Payment extends BaseTimeEntity {
 
+    /** DB {@code pg_provider} 컬럼 길이 — {@link #initiate} 가 선검증해 DB 예외를 막는다. */
+    static final int MAX_PG_PROVIDER_LENGTH = 20;
+    /** DB {@code pg_transaction_id} 컬럼 길이 — {@link #initiate} 가 선검증해 DB 예외를 막는다. */
+    static final int MAX_PG_TRANSACTION_ID_LENGTH = 100;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -50,10 +55,10 @@ public class Payment extends BaseTimeEntity {
     @Column(name = "method", nullable = false, length = 20)
     private PaymentMethod method;
 
-    @Column(name = "pg_provider", nullable = false, length = 20)
+    @Column(name = "pg_provider", nullable = false, length = MAX_PG_PROVIDER_LENGTH)
     private String pgProvider;
 
-    @Column(name = "pg_transaction_id", length = 100)
+    @Column(name = "pg_transaction_id", length = MAX_PG_TRANSACTION_ID_LENGTH)
     private String pgTransactionId;
 
     @Column(name = "paid_at")
@@ -82,8 +87,8 @@ public class Payment extends BaseTimeEntity {
      * @param order           결제 대상 주문
      * @param amount          결제 금액 (KRW, 양수)
      * @param method          결제 수단
-     * @param pgProvider      PG 식별자 (예: {@code MOCK}) — blank 불가
-     * @param pgTransactionId PG 발급 거래 식별자 — blank 불가
+     * @param pgProvider      PG 식별자 (예: {@code MOCK}) — blank 불가, {@value #MAX_PG_PROVIDER_LENGTH}자 이하
+     * @param pgTransactionId PG 발급 거래 식별자 — blank 불가, {@value #MAX_PG_TRANSACTION_ID_LENGTH}자 이하
      */
     public static Payment initiate(Order order, long amount, PaymentMethod method,
                                    String pgProvider, String pgTransactionId) {
@@ -95,8 +100,14 @@ public class Payment extends BaseTimeEntity {
         if (pgProvider == null || pgProvider.isBlank()) {
             throw new IllegalArgumentException("pgProvider must not be blank");
         }
+        if (pgProvider.length() > MAX_PG_PROVIDER_LENGTH) {
+            throw new IllegalArgumentException("pgProvider length must be <= " + MAX_PG_PROVIDER_LENGTH);
+        }
         if (pgTransactionId == null || pgTransactionId.isBlank()) {
             throw new IllegalArgumentException("pgTransactionId must not be blank");
+        }
+        if (pgTransactionId.length() > MAX_PG_TRANSACTION_ID_LENGTH) {
+            throw new IllegalArgumentException("pgTransactionId length must be <= " + MAX_PG_TRANSACTION_ID_LENGTH);
         }
         return new Payment(order, amount, method, pgProvider, pgTransactionId);
     }

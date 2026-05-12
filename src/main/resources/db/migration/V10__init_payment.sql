@@ -14,7 +14,7 @@
 --
 -- 비즈니스 룰 위치:
 --   - 주문당 결제 1건                                   : DB UNIQUE (재시도는 새 row 아닌 상태 갱신)
---   - amount >= 0                                      : DB CHECK + 도메인 메서드 이중 방어선
+--   - amount > 0                                       : DB CHECK + 도메인(Payment.initiate)/게이트웨이(PaymentRequest) 다중 방어선
 --   - status 전이 (PENDING→PAID/FAILED, PAID→REFUNDED) : APP (PaymentStatus.canTransitionTo)
 --   - paid_at: PAID 전환 시 기록                        : APP (#W7-4)
 --   - 멱등성 키 이중 보호                                : DB(idempotency_record UNIQUE) + APP(IdempotencyService)
@@ -33,7 +33,7 @@ CREATE TABLE payment (
     created_at        DATETIME(6)  NOT NULL,
     updated_at        DATETIME(6)  NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT ck_payment_amount_non_negative CHECK (amount >= 0),
+    CONSTRAINT ck_payment_amount_positive CHECK (amount > 0),
     CONSTRAINT uk_payment_order UNIQUE (order_id),
     CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,
     INDEX idx_payment_pg_tx (pg_transaction_id)
