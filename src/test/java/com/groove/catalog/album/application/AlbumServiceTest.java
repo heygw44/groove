@@ -12,21 +12,30 @@ import com.groove.catalog.artist.exception.ArtistNotFoundException;
 import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.genre.exception.GenreNotFoundException;
+import com.groove.catalog.album.api.dto.AlbumDetailResponse;
+import com.groove.catalog.album.api.dto.AlbumSummaryResponse;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.catalog.label.exception.LabelNotFoundException;
+import com.groove.review.domain.AlbumRatingView;
+import com.groove.review.domain.ReviewRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -43,12 +52,14 @@ class AlbumServiceTest {
     private GenreRepository genreRepository;
     @Mock
     private LabelRepository labelRepository;
+    @Mock
+    private ReviewRepository reviewRepository;
 
     private AlbumService albumService;
 
     @BeforeEach
     void setUp() {
-        albumService = new AlbumService(albumRepository, artistRepository, genreRepository, labelRepository);
+        albumService = new AlbumService(albumRepository, artistRepository, genreRepository, labelRepository, reviewRepository);
     }
 
     private AlbumCommand baseCommand() {
@@ -234,5 +245,55 @@ class AlbumServiceTest {
         assertThatThrownBy(() -> albumService.adjustStock(1L, Integer.MAX_VALUE))
                 .isInstanceOf(IllegalStockAdjustmentException.class);
         assertThat(existing.getStock()).isEqualTo(1_000_000);
+    }
+
+    private Album albumWithAssociations() {
+        return Album.create("Abbey Road", Artist.create("The Beatles", "desc"), Genre.create("Rock"),
+                Label.create("Apple"), (short) 1969, AlbumFormat.LP_12, 35000L, 8,
+                AlbumStatus.SELLING, false, "https://img", "desc");
+    }
+
+    @Test
+    @DisplayName("search → 결과가 비면 리뷰 집계 쿼리를 호출하지 않는다 (빈 IN 절 회피)")
+    void search_emptyResult_doesNotQueryRatings() {
+        AlbumSearchCondition cond = new AlbumSearchCondition(
+                null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
+        given(albumRepository.findAll(any(Specification.class), any(PageRequest.class)))
+                .willReturn(Page.<Album>empty());
+
+        Page<AlbumSummaryResponse> page = albumService.search(cond, PageRequest.of(0, 20));
+
+        assertThat(page).isEmpty();
+        then(reviewRepository).should(never()).findRatingsByAlbumIds(anyCollection());
+    }
+
+    @Test
+    @DisplayName("findDetail → 리뷰가 있으면 averageRating(소수1자리 반올림)·reviewCount 를 응답에 채운다")
+    void findDetail_fillsRatingFromAggregate() {
+        Album album = albumWithAssociations();
+        given(albumRepository.findById(1L)).willReturn(Optional.of(album));
+        AlbumRatingView view = org.mockito.Mockito.mock(AlbumRatingView.class);
+        given(view.getAlbumId()).willReturn(1L);
+        given(view.getAverageRating()).willReturn(4.75);
+        given(view.getReviewCount()).willReturn(4L);
+        given(reviewRepository.findRatingsByAlbumIds(List.of(1L))).willReturn(List.of(view));
+
+        AlbumDetailResponse response = albumService.findDetail(1L);
+
+        assertThat(response.averageRating()).isEqualTo(4.8);
+        assertThat(response.reviewCount()).isEqualTo(4L);
+    }
+
+    @Test
+    @DisplayName("findDetail → 리뷰가 없으면 averageRating=null, reviewCount=0")
+    void findDetail_noReviews_returnsNullRating() {
+        Album album = albumWithAssociations();
+        given(albumRepository.findById(1L)).willReturn(Optional.of(album));
+        given(reviewRepository.findRatingsByAlbumIds(List.of(1L))).willReturn(List.of());
+
+        AlbumDetailResponse response = albumService.findDetail(1L);
+
+        assertThat(response.averageRating()).isNull();
+        assertThat(response.reviewCount()).isZero();
     }
 }

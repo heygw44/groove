@@ -15,11 +15,18 @@ import com.groove.catalog.genre.exception.GenreNotFoundException;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.catalog.label.exception.LabelNotFoundException;
+import com.groove.review.domain.AlbumRatingView;
+import com.groove.review.domain.ReviewRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 앨범 CRUD + 재고 조정 트랜잭션 경계.
@@ -38,6 +45,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>응답 시 LazyInitializationException 방지: open-in-view=false 환경에서 컨트롤러는 닫힌
  * 세션의 엔티티를 직렬화한다. 모든 반환 엔티티는 {@link #initializeAssociations(Album)} 으로
  * artist/genre/label 프록시를 트랜잭션 내에서 강제 초기화한다 (admin 단건 한정 — 미세한 N+1).
+ *
+ * <p>공개 조회({@link #search}/{@link #findDetail}) 응답의 평점·리뷰 수는 {@link ReviewRepository} 의 집계 쿼리로
+ * 채운다 — 목록은 페이지의 album id 묶음으로 1회, 단건은 해당 id 로 1회. album 본문 조회의 의도된 N+1(W10 시연)과 달리
+ * 평점 집계는 N+1 을 만들지 않는다.
  */
 @Service
 public class AlbumService {
@@ -46,15 +57,18 @@ public class AlbumService {
     private final ArtistRepository artistRepository;
     private final GenreRepository genreRepository;
     private final LabelRepository labelRepository;
+    private final ReviewRepository reviewRepository;
 
     public AlbumService(AlbumRepository albumRepository,
                         ArtistRepository artistRepository,
                         GenreRepository genreRepository,
-                        LabelRepository labelRepository) {
+                        LabelRepository labelRepository,
+                        ReviewRepository reviewRepository) {
         this.albumRepository = albumRepository;
         this.artistRepository = artistRepository;
         this.genreRepository = genreRepository;
         this.labelRepository = labelRepository;
+        this.reviewRepository = reviewRepository;
     }
 
     @Transactional
@@ -141,7 +155,9 @@ public class AlbumService {
                         AlbumSpecs.isLimited(condition.limited()),
                         AlbumSpecs.hasStatus(condition.status())
                 );
-        return albumRepository.findAll(spec, pageable).map(AlbumSummaryResponse::from);
+        Page<Album> page = albumRepository.findAll(spec, pageable);
+        Map<Long, AlbumRating> ratings = ratingsByAlbumId(page.getContent().stream().map(Album::getId).toList());
+        return page.map(album -> AlbumSummaryResponse.from(album, ratings.getOrDefault(album.getId(), AlbumRating.NONE)));
     }
 
     /**
@@ -155,7 +171,20 @@ public class AlbumService {
     public AlbumDetailResponse findDetail(Long id) {
         Album album = albumRepository.findById(id)
                 .orElseThrow(AlbumNotFoundException::new);
-        return AlbumDetailResponse.from(initializeAssociations(album));
+        AlbumRating rating = ratingsByAlbumId(List.of(id)).getOrDefault(id, AlbumRating.NONE);
+        return AlbumDetailResponse.from(initializeAssociations(album), rating);
+    }
+
+    /**
+     * 앨범 묶음의 리뷰 집계를 1회 쿼리로 가져와 {@code albumId → }{@link AlbumRating} 맵으로 만든다.
+     * 리뷰가 없는 앨범은 결과에 없으므로 호출 측에서 {@link AlbumRating#NONE} 으로 채운다. 빈 id 묶음이면 빈 맵 (빈 IN 절 회피).
+     */
+    private Map<Long, AlbumRating> ratingsByAlbumId(Collection<Long> albumIds) {
+        if (albumIds.isEmpty()) {
+            return Map.of();
+        }
+        return reviewRepository.findRatingsByAlbumIds(albumIds).stream()
+                .collect(Collectors.toMap(AlbumRatingView::getAlbumId, AlbumRating::from));
     }
 
     private Artist loadArtist(Long artistId) {

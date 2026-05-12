@@ -1,5 +1,6 @@
 package com.groove.catalog.album.api.dto;
 
+import com.groove.catalog.album.application.AlbumRating;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumStatus;
@@ -10,8 +11,10 @@ import com.groove.catalog.label.domain.Label;
 /**
  * 앨범 목록 응답 DTO (API §3.3 AlbumSummary).
  *
- * <p>{@code averageRating} / {@code reviewCount} 는 W7 (review 도메인) 도입 전이라 placeholder
- * 로 채운다 — null / 0. 도메인 도입 시 집계 쿼리·캐시로 채우도록 시그니처는 미리 노출한다.
+ * <p>{@code averageRating} / {@code reviewCount} 는 리뷰 도메인(#59) 의 집계 결과({@link AlbumRating})로 채운다 —
+ * 호출 측({@code AlbumService.search})이 페이지 단위로 1회 집계 쿼리를 돌려 N+1 없이 주입한다. 리뷰가 없는 앨범은
+ * {@code averageRating=null}, {@code reviewCount=0}. 인자 없는 {@link #from(Album)} 은 {@link AlbumRating#NONE}
+ * 으로 위임하는 편의 메서드다.
  *
  * <p>관리자용 {@link AlbumResponse} 와 분리한 이유: Public 응답은 createdAt/updatedAt 을
  * 노출하지 않고 평점·리뷰 수를 포함하므로 응집도 위해 별도 record 로 둔다.
@@ -34,6 +37,10 @@ public record AlbumSummaryResponse(
 ) {
 
     public static AlbumSummaryResponse from(Album album) {
+        return from(album, AlbumRating.NONE);
+    }
+
+    public static AlbumSummaryResponse from(Album album, AlbumRating rating) {
         return new AlbumSummaryResponse(
                 album.getId(),
                 album.getTitle(),
@@ -47,8 +54,8 @@ public record AlbumSummaryResponse(
                 album.getStatus(),
                 album.isLimited(),
                 album.getCoverImageUrl(),
-                null,
-                0L
+                rating.averageRating(),
+                rating.reviewCount()
         );
     }
 

@@ -560,9 +560,11 @@ erDiagram
 
 | 규칙 | 위치 | 비고 |
 |---|---|---|
-| 1주문-1상품-1리뷰 | [DB] | uk_review_order_album UNIQUE |
-| rating 1~5 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(1) @Max(5) |
-| 구매 완료(COMPLETED) 주문에만 리뷰 허용 | [APP] | Service에서 orders.status == COMPLETED 검증 |
+| 1주문-1상품-1리뷰 | [DB+APP] | uk_review_order_album UNIQUE + ReviewService.existsByOrderIdAndAlbumId 선검증 |
+| rating 1~5 | [DB+APP] | ck_review_rating_range CHECK (MySQL 8) + @Min(1) @Max(5) + Review.write 재검증 |
+| 배송 완료(DELIVERED 이상) 주문에만 리뷰 허용 | [APP] | ReviewService — orders.status ∈ {DELIVERED, COMPLETED} (glossary §2.10, API.md §3.8) |
+| 본인 주문에만 리뷰 작성 / 본인 리뷰만 삭제 | [APP] | ReviewService — order.member_id / review.member_id == 인증 memberId |
+| 리뷰 대상 album 이 주문에 포함 | [APP] | ReviewService — order.items 중 album 존재 |
 
 ---
 
@@ -643,7 +645,7 @@ CREATE INDEX idx_review_album_created ON review(album_id, created_at);
 | V6+ | (W5-3 별도 이슈) | album | W5-3 | 예정 |
 | V7+ | `V*__init_cart_orders.sql` | cart, cart_item, orders, order_item | W6 | 예정 |
 | V8+ | `V*__init_payment_shipping.sql` | payment, idempotency_record, shipping | W7 | 예정 |
-| V9+ | `V*__init_review.sql` | review | W7 | 예정 |
+| V13 | `V13__init_review.sql` | review | W7 | 적용 완료 |
 | V10+ | `V*__add_search_indexes.sql` | W10 시연용 검색·정렬 인덱스 | W10 | 예정 |
 
 > V4 범위 정정: 당초 1회로 묶어 계획했던 artist+genre+label+album 마이그레이션을 W5-1(genre/label) → W5-2(artist) → W5-3(album) 순서대로 분리 도입한다 (#31 에서 결정). W5-2(#32) 까지 적용 완료. W5-3(album) 의 정확한 버전 번호는 후속 이슈가 확정한다.
@@ -681,7 +683,7 @@ v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재.
 - 상태 전이는 enum 메서드(`canTransitionTo`)로 검증 (DB 트리거 미사용)
 - 게스트 주문 검증(member_id XOR guest_email)은 Service 레이어
 - 멱등성 키 처리는 Service 레이어 + DB UNIQUE 제약 이중
-- 리뷰는 COMPLETED 상태 주문에만 허용 (Service 레이어)
+- 리뷰는 배송 완료(DELIVERED 이상) 상태의 본인 회원 주문에만 허용 (ReviewService)
 
 ### 9.3 트랜잭션 경계
 - 주문 생성: 재고 차감 + Order 저장 + OrderItem 저장 → 단일 트랜잭션

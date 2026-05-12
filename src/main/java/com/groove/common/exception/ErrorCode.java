@@ -60,6 +60,13 @@ public enum ErrorCode {
     // SHIPPING
     SHIPPING_NOT_FOUND(HttpStatus.NOT_FOUND, "SHIPPING_NOT_FOUND", "배송 정보를 찾을 수 없습니다"),
 
+    // REVIEW
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "REVIEW_NOT_FOUND", "리뷰를 찾을 수 없습니다"),
+    REVIEW_NOT_OWNED(HttpStatus.FORBIDDEN, "REVIEW_NOT_OWNED", "본인의 리뷰/주문이 아닙니다"),
+    REVIEW_ORDER_NOT_DELIVERED(HttpStatus.UNPROCESSABLE_ENTITY, "REVIEW_ORDER_NOT_DELIVERED", "배송이 완료된 주문에만 리뷰를 작성할 수 있습니다"),
+    REVIEW_ALBUM_NOT_IN_ORDER(HttpStatus.UNPROCESSABLE_ENTITY, "REVIEW_ALBUM_NOT_IN_ORDER", "해당 주문에 포함되지 않은 앨범입니다"),
+    REVIEW_DUPLICATED(HttpStatus.CONFLICT, "REVIEW_DUPLICATED", "이미 작성한 리뷰입니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 
