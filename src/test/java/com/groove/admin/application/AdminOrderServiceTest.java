@@ -38,6 +38,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -60,6 +61,9 @@ class AdminOrderServiceTest {
     private static final int QTY = 2;
     private static final long ORDER_AMOUNT = UNIT_PRICE * QTY;
     private static final String PG_TX = "mock-tx-1";
+    private static final long PAYMENT_ID = 100L;
+    /** {@link Payment#refundIdempotencyKey()} 결정성에 의존하는 검증용 — 같은 paymentId/PG_TX 면 항상 동일. */
+    private static final String EXPECTED_IDEM_KEY = "refund:" + PAYMENT_ID + ":" + PG_TX;
 
     @Mock
     private OrderRepository orderRepository;
@@ -105,6 +109,8 @@ class AdminOrderServiceTest {
     private Payment paidPaymentFor(Order order) {
         Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.CARD, "MOCK", PG_TX);
         payment.markPaid();
+        // refundIdempotencyKey() 는 영속화된 id 를 요구하므로 단위 테스트에서 강제 주입한다 (#72).
+        ReflectionTestUtils.setField(payment, "id", PAYMENT_ID);
         return payment;
     }
 
@@ -212,6 +218,8 @@ class AdminOrderServiceTest {
             assertThat(captor.getValue().pgTransactionId()).isEqualTo(PG_TX);
             assertThat(captor.getValue().amount()).isEqualTo(ORDER_AMOUNT);
             assertThat(captor.getValue().reason()).isEqualTo("운영 환불");
+            // #72: 결정적 멱등 키 전달 — 보상 트랜잭션 재시도 시 PG 캐시 응답 보장.
+            assertThat(captor.getValue().idempotencyKey()).isEqualTo(EXPECTED_IDEM_KEY);
         }
 
         @Test
