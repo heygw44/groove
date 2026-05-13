@@ -146,6 +146,26 @@ public class Payment extends BaseTimeEntity {
         transitionTo(PaymentStatus.REFUNDED);
     }
 
+    /**
+     * PG 환불 호출용 멱등 키 (#72) — {@code "refund:{paymentId}:{pgTransactionId}"} 결정적 derivation.
+     *
+     * <p>같은 결제에 환불을 재시도해도 항상 같은 키가 생성되어야 PG 측이 첫 응답을 재사용하므로
+     * (Stripe {@code Idempotency-Key} 와 동일 계약), 두 필드 모두 INSERT 이후 변하지 않는 값으로 조립한다.
+     * 보상 트랜잭션 부분 실패 후 관리자가 재시도해도 PG 가 같은 키로 캐시 응답을 돌려준다 ({@code AdminOrderService.refund}).
+     *
+     * <p>아직 영속화되지 않은(transient — {@code id == null}) Payment 에 호출하면 키 결정성이 깨지므로
+     * 즉시 {@link IllegalStateException} 으로 차단한다 — 정상 호출 경로
+     * ({@code paymentRepository.findByOrderIdForUpdate}) 는 영속화된 row 만 돌려주므로 운영 중엔 발생하지 않는 방어선.
+     *
+     * @return PG 멱등 키 (Stripe 한계 255자 이내, 콜론 구분)
+     */
+    public String refundIdempotencyKey() {
+        if (id == null) {
+            throw new IllegalStateException("영속화 전 결제는 환불 멱등 키를 생성할 수 없습니다 (id=null)");
+        }
+        return "refund:" + id + ":" + pgTransactionId;
+    }
+
     private void transitionTo(PaymentStatus next) {
         if (!status.canTransitionTo(next)) {
             throw new IllegalStateException("허용되지 않은 결제 상태 전이: " + status + " -> " + next);

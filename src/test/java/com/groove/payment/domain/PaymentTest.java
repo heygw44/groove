@@ -3,6 +3,7 @@ package com.groove.payment.domain;
 import com.groove.order.domain.Order;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 
@@ -172,5 +173,28 @@ class PaymentTest {
         refunded.markPaid();
         refunded.markRefunded();
         assertThatThrownBy(refunded::markRefunded).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("refundIdempotencyKey: 'refund:{id}:{pgTransactionId}' 형식을 결정적으로 반환한다 (#72)")
+    void refundIdempotencyKey_returnsDeterministicValue() {
+        Payment payment = pending("mock-tx-xyz");
+        ReflectionTestUtils.setField(payment, "id", 42L);
+
+        String key1 = payment.refundIdempotencyKey();
+        String key2 = payment.refundIdempotencyKey();
+
+        assertThat(key1).isEqualTo("refund:42:mock-tx-xyz");
+        assertThat(key2).isEqualTo(key1);
+    }
+
+    @Test
+    @DisplayName("refundIdempotencyKey: 영속화 전(id=null) 호출은 IllegalStateException — 호출 컨텍스트 방어선")
+    void refundIdempotencyKey_rejectsTransient() {
+        Payment transientPayment = pending("mock-tx-zzz"); // id 미주입 → null
+
+        assertThatThrownBy(transientPayment::refundIdempotencyKey)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("id");
     }
 }

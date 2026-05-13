@@ -155,7 +155,8 @@ public class AdminOrderService {
                 .orElseThrow(OrderNotFoundException::new);
         // Payment 를 PESSIMISTIC_WRITE 로 잠가 동시 환불 요청 두 건이 상태 확인 → PG refund() 호출까지
         // 동시에 통과해 PG 가 이중 환불을 받는 race 를 차단한다 (CodeRabbit 리뷰 반영). 락은 트랜잭션 종료 시
-        // 해제되고, order_id UNIQUE 라 정확히 한 row 만 잠그므로 데드락 가능성 없음. PG 측 멱등 키는 별도 #72.
+        // 해제되고, order_id UNIQUE 라 정확히 한 row 만 잠그므로 데드락 가능성 없음. PG 측 멱등 키는 #72 도입
+        // ({@link Payment#refundIdempotencyKey()}) — 보상 트랜잭션 부분 실패 후 재시도에도 PG 실호출 1회 보장.
         Payment payment = paymentRepository.findByOrderIdForUpdate(order.getId())
                 .orElseThrow(PaymentNotFoundException::new);
 
@@ -185,8 +186,12 @@ public class AdminOrderService {
     }
 
     private RefundResponse callGatewayRefund(Payment payment, String reason) {
+        // 결정적 멱등 키(#72) — 같은 결제에 환불을 재시도해도 PG 가 첫 응답을 캐시 재사용하므로 보상 트랜잭션
+        // 중간 단계 실패 후 재시도가 와도 PG 실호출은 1회로 정상화된다.
+        RefundRequest request = new RefundRequest(
+                payment.getPgTransactionId(), payment.getAmount(), reason, payment.refundIdempotencyKey());
         try {
-            return paymentGateway.refund(new RefundRequest(payment.getPgTransactionId(), payment.getAmount(), reason));
+            return paymentGateway.refund(request);
         } catch (RuntimeException gatewayFailure) {
             throw new PaymentGatewayException(gatewayFailure);
         }
