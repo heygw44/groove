@@ -186,6 +186,23 @@ class ReviewServiceTest {
     }
 
     @Test
+    @DisplayName("create → memberId=null 명령 + 게스트 주문(memberId=null) → 403 ReviewNotOwned (널끼리 매칭 차단)")
+    void create_nullMemberIdAgainstGuestOrder() {
+        Order order = Order.placeForGuest(ORDER_NUMBER, "guest@example.com", "01099998888",
+                new com.groove.order.domain.OrderShippingInfo("김철수", "01012345678", "서울시", "1호", "06234", false));
+        order.addItem(OrderItem.create(albumWithId(ALBUM_ID), 1));
+        ReflectionTestUtils.setField(order, "id", ORDER_ID);
+        for (OrderStatus next : pathTo(OrderStatus.DELIVERED)) {
+            order.changeStatus(next, null);
+        }
+        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
+
+        ReviewCreateCommand nullMember = new ReviewCreateCommand(null, ORDER_NUMBER, ALBUM_ID, 5, "x");
+        assertThatThrownBy(() -> reviewService.create(nullMember))
+                .isInstanceOf(ReviewNotOwnedException.class);
+    }
+
+    @Test
     @DisplayName("create → 배송 미완료(SHIPPED) 주문 → 422 ReviewOrderNotDelivered")
     void create_orderNotDelivered() {
         Order order = memberOrder(OWNER_ID, OrderStatus.SHIPPED, albumWithId(ALBUM_ID));

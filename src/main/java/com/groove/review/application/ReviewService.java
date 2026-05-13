@@ -76,7 +76,8 @@ public class ReviewService {
         Order order = orderRepository.findByOrderNumber(command.orderNumber())
                 .orElseThrow(OrderNotFoundException::new);
 
-        if (!Objects.equals(order.getMemberId(), command.memberId())) {
+        if (command.memberId() == null || !Objects.equals(order.getMemberId(), command.memberId())) {
+            // memberId 가 null 이면 게스트 주문(member_id 부재)과 매칭돼 통과될 수 있으므로 명시적으로 막는다.
             throw new ReviewNotOwnedException();
         }
         if (!REVIEWABLE_ORDER_STATUSES.contains(order.getStatus())) {
