@@ -103,6 +103,9 @@ public class AdminOrderService {
             specs.add(OrderSpecifications.createdAtBefore(criteria.to()));
         }
         Page<Order> page = orderRepository.findAll(Specification.allOf(specs), pageable);
+        // 응답 매핑({@code AdminOrderSummaryResponse.from}) 이 컨트롤러에서 detached 엔티티의 items.size() 를 본다 —
+        // {@code spring.jpa.open-in-view=false} 이므로 트랜잭션 종료 전에 items 를 일괄 강제 초기화한다
+        // ({@code @BatchSize} 가 N+1 을 IN 쿼리 1번으로 흡수). 응답 DTO 에 다른 LAZY 연관 접근을 추가할 거면 여기도 함께 초기화해야 한다.
         page.forEach(order -> order.getItems().size());
         return page;
     }
