@@ -53,6 +53,9 @@ public class ReviewService {
     private static final Set<OrderStatus> REVIEWABLE_ORDER_STATUSES =
             EnumSet.of(OrderStatus.DELIVERED, OrderStatus.COMPLETED);
 
+    /** 1주문-1상품-1리뷰 UNIQUE 제약 이름 (V13__init_review.sql) — 경합 시 이 제약 위반만 409 로 흡수한다. */
+    private static final String UK_REVIEW_ORDER_ALBUM = "uk_review_order_album";
+
     private final ReviewRepository reviewRepository;
     private final OrderRepository orderRepository;
     private final AlbumRepository albumRepository;
@@ -94,8 +97,13 @@ public class ReviewService {
         try {
             reviewRepository.saveAndFlush(review);
         } catch (DataIntegrityViolationException e) {
-            // 동시 작성 경합 — uk_review_order_album 위반. 선검증을 빠져나간 케이스를 최종 방어선에서 흡수한다.
-            throw new DuplicateReviewException();
+            // 동시 작성 경합으로 uk_review_order_album 이 깨진 경우만 409 로 흡수하고, 그 외 무결성 위반(FK/NOT NULL 등)은 전파한다.
+            Throwable cause = e.getMostSpecificCause();
+            String message = cause != null ? cause.getMessage() : e.getMessage();
+            if (message != null && message.contains(UK_REVIEW_ORDER_ALBUM)) {
+                throw new DuplicateReviewException();
+            }
+            throw e;
         }
         return ReviewResponse.from(review);
     }

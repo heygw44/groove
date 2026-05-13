@@ -17,12 +17,15 @@ import java.math.RoundingMode;
  */
 public record AlbumRating(Double averageRating, long reviewCount) {
 
+    /** 평점 평균을 노출할 때의 소수 자릿수 (API.md 예시 {@code 4.8}). */
+    private static final int RATING_SCALE = 1;
+
     /** 리뷰가 한 건도 없는 앨범의 기본값. */
     public static final AlbumRating NONE = new AlbumRating(null, 0L);
 
     public static AlbumRating from(AlbumRatingView view) {
         double rounded = BigDecimal.valueOf(view.getAverageRating())
-                .setScale(1, RoundingMode.HALF_UP)
+                .setScale(RATING_SCALE, RoundingMode.HALF_UP)
                 .doubleValue();
         return new AlbumRating(rounded, view.getReviewCount());
     }

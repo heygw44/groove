@@ -234,6 +234,22 @@ class ReviewServiceTest {
     }
 
     @Test
+    @DisplayName("create → uk_review_order_album 외 무결성 위반 → 그대로 전파")
+    void create_otherIntegrityViolationPropagates() {
+        Album album = albumWithId(ALBUM_ID);
+        Order order = memberOrder(OWNER_ID, OrderStatus.DELIVERED, album);
+        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(reviewRepository.existsByOrderIdAndAlbumId(ORDER_ID, ALBUM_ID)).willReturn(false);
+        given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
+        given(memberRepository.getReferenceById(OWNER_ID)).willReturn(memberWithId(OWNER_ID, "박"));
+        given(reviewRepository.saveAndFlush(any(Review.class)))
+                .willThrow(new DataIntegrityViolationException("fk_review_member 위반"));
+
+        assertThatThrownBy(() -> reviewService.create(command()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     @DisplayName("create → album 행이 사라진 경우 → 404 AlbumNotFound")
     void create_albumRowMissing() {
         Order order = memberOrder(OWNER_ID, OrderStatus.DELIVERED, albumWithId(ALBUM_ID));

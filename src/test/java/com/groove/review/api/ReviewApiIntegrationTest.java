@@ -268,7 +268,7 @@ class ReviewApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("rating 범위 밖(6) → 400 VALIDATION_FAILED")
+    @DisplayName("rating 범위 밖(6) → 400 HTTP_400")
     void create_invalidRating_returns400() throws Exception {
         Order order = persistMemberOrder(ownerId, OrderStatus.DELIVERED);
 
@@ -276,7 +276,8 @@ class ReviewApiIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, ownerBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(order.getOrderNumber(), albumId, 6, "범위밖")))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("HTTP_400"));
     }
 
     @Test
