@@ -13,6 +13,12 @@ import jakarta.validation.constraints.Size;
  */
 public record AdminOrderStatusChangeRequest(
         @NotNull OrderStatus target,
-        @NotBlank @Size(max = 500) String reason
+        @NotBlank @Size(max = MAX_REASON_LENGTH) String reason
 ) {
+
+    /**
+     * 운영 사유 문자열 최대 길이 — {@code Order.cancelled_reason} / {@code Payment.failure_reason} DB 컬럼
+     * 길이(VARCHAR(500))와 정렬한다. {@link AdminRefundRequest#reason()} 도 같은 상한을 사용한다.
+     */
+    public static final int MAX_REASON_LENGTH = 500;
 }

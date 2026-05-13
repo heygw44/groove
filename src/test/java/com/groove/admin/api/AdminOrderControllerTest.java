@@ -135,6 +135,14 @@ class AdminOrderControllerTest {
         return orderRepository.saveAndFlush(order).getOrderNumber();
     }
 
+    /** 게스트 주문(라인 1개, PENDING)을 영속화하고 orderNumber 를 반환한다. */
+    private String persistGuestOrder(String guestEmail, int qty) {
+        Album album = albumRepository.findById(albumId).orElseThrow();
+        Order order = OrderFixtures.guestOrder(nextOrderNumber(), guestEmail, "01099999999");
+        order.addItem(OrderItem.create(album, qty));
+        return orderRepository.saveAndFlush(order).getOrderNumber();
+    }
+
     /** 위 주문에 PAID 결제를 붙인다. */
     private void persistPaidPayment(String orderNumber) {
         Order order = orderRepository.findByOrderNumber(orderNumber).orElseThrow();
@@ -254,6 +262,18 @@ class AdminOrderControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].orderNumber").value(bOrder))
                 .andExpect(jsonPath("$.content[0].memberId").value(memberB));
+    }
+
+    @Test
+    @DisplayName("GET 목록 게스트 주문 → guestEmail 노출, memberId 없음")
+    void list_guestOrder_exposesGuestEmail() throws Exception {
+        persistGuestOrder("guest@example.com", 1);
+
+        mockMvc.perform(get("/api/v1/admin/orders").header(HttpHeaders.AUTHORIZATION, adminBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].guestEmail").value("guest@example.com"))
+                .andExpect(jsonPath("$.content[0].memberId").doesNotExist());
     }
 
     @Test
@@ -413,6 +433,25 @@ class AdminOrderControllerTest {
         assertThat(paymentRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.REFUNDED);
         assertThat(albumStock()).isEqualTo(stockBefore + 2);
+    }
+
+    @Test
+    @DisplayName("환불 후 GET 상세 → cancelledReason / cancelledAt 노출")
+    void detail_afterRefund_includesCancelledFields() throws Exception {
+        String orderNumber = persistOrder(memberA, 1, OrderStatus.PAID);
+        persistPaidPayment(orderNumber);
+
+        mockMvc.perform(post("/api/v1/admin/orders/{n}/refund", orderNumber)
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"오배송 보상\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/admin/orders/{n}", orderNumber).header(HttpHeaders.AUTHORIZATION, adminBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelledReason").value("오배송 보상"))
+                .andExpect(jsonPath("$.cancelledAt").exists());
     }
 
     @Test
