@@ -149,11 +149,13 @@ class MockPaymentGatewayTest {
     @DisplayName("refund()")
     class Refund {
 
+        private static final String KEY = "refund:7:mock-tx-x";
+
         @Test
         @DisplayName("REFUNDED 상태와 환불 시각을 반환한다")
         void returnsRefunded() {
             RefundResponse response = gateway(props(1.0, Duration.ZERO, Duration.ZERO))
-                    .refund(new RefundRequest("mock-tx-x", 105_000L, "고객 변심"));
+                    .refund(new RefundRequest("mock-tx-x", 105_000L, "고객 변심", KEY));
 
             assertThat(response.status()).isEqualTo(PaymentStatus.REFUNDED);
             assertThat(response.pgTransactionId()).isEqualTo("mock-tx-x");
@@ -167,9 +169,70 @@ class MockPaymentGatewayTest {
             PaymentResponse paid = g.request(REQUEST);
             assertThat(g.query(paid.pgTransactionId())).isEqualTo(PaymentStatus.PAID);
 
-            g.refund(new RefundRequest(paid.pgTransactionId(), REQUEST.amount(), null));
+            g.refund(new RefundRequest(paid.pgTransactionId(), REQUEST.amount(), null,
+                    "refund:1:" + paid.pgTransactionId()));
 
             assertThat(g.query(paid.pgTransactionId())).isEqualTo(PaymentStatus.REFUNDED);
+        }
+
+        @Test
+        @DisplayName("같은 idempotencyKey 두 번 호출 → 첫 응답을 캐시 재사용 (refundedAt 동일, PG 실호출 1회) (#72)")
+        void sameKey_returnsCachedResponse() {
+            MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ZERO));
+            RefundRequest req = new RefundRequest("mock-tx-x", 105_000L, "변심", KEY);
+
+            RefundResponse first = g.refund(req);
+            RefundResponse second = g.refund(req);
+
+            assertThat(second).isSameAs(first);
+            assertThat(second.refundedAt()).isEqualTo(first.refundedAt());
+            assertThat(g.refundCallCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("같은 idempotencyKey + 다른 시각(advance) 이어도 첫 응답이 그대로 반환된다 (#72)")
+        void sameKey_acrossTimeAdvance_isStable() {
+            java.util.concurrent.atomic.AtomicReference<Instant> ref = new java.util.concurrent.atomic.AtomicReference<>(NOW);
+            Clock advancing = new Clock() {
+                @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+                @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+                @Override public Instant instant() { return ref.get(); }
+            };
+            MockPaymentGateway g = new MockPaymentGateway(
+                    props(1.0, Duration.ZERO, Duration.ZERO), webhookSimulator, advancing, true);
+            RefundRequest req = new RefundRequest("mock-tx-x", 105_000L, null, KEY);
+
+            RefundResponse first = g.refund(req);
+            ref.set(NOW.plusSeconds(60));
+            RefundResponse second = g.refund(req);
+
+            assertThat(second.refundedAt()).isEqualTo(first.refundedAt()); // 캐시 응답 — 시간 흘러도 불변
+        }
+
+        @Test
+        @DisplayName("다른 idempotencyKey → 각자 PG 실호출 (캐시 미스)")
+        void differentKeys_separateCalls() {
+            MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ZERO));
+
+            g.refund(new RefundRequest("mock-tx-x", 105_000L, null, "refund:1:mock-tx-x"));
+            g.refund(new RefundRequest("mock-tx-y", 200_000L, null, "refund:2:mock-tx-y"));
+
+            assertThat(g.refundCallCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("같은 키 재호출은 transactions 의 REFUNDED 전이를 두 번 일으키지 않는다 (멱등)")
+        void sameKey_doesNotReapplyTransition() {
+            MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ZERO));
+            PaymentResponse paid = g.request(REQUEST);
+            String key = "refund:1:" + paid.pgTransactionId();
+            RefundRequest req = new RefundRequest(paid.pgTransactionId(), REQUEST.amount(), null, key);
+
+            g.refund(req);
+            g.refund(req);
+
+            assertThat(g.query(paid.pgTransactionId())).isEqualTo(PaymentStatus.REFUNDED);
+            assertThat(g.refundCallCount()).isEqualTo(1);
         }
     }
 }
