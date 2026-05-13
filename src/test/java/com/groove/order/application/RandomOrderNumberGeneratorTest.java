@@ -1,5 +1,6 @@
 package com.groove.order.application;
 
+import com.groove.order.domain.OrderNumberFormat;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class RandomOrderNumberGeneratorTest {
 
-    private static final Pattern FORMAT = Pattern.compile("^ORD-\\d{8}-[A-Z0-9]{6}$");
+    private static final Pattern FORMAT = Pattern.compile(OrderNumberFormat.PATTERN);
 
     @Test
     @DisplayName("형식이 ORD-YYYYMMDD-XXXXXX (XXXXXX = [A-Z0-9]) 와 일치한다")

@@ -195,7 +195,7 @@ class AdminOrderServiceTest {
             Payment payment = paidPaymentFor(order);
             Instant refundedAt = Instant.parse("2026-05-13T10:00:00Z");
             when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-            when(paymentRepository.findByOrderId(any())).thenReturn(Optional.of(payment));
+            when(paymentRepository.findByOrderIdForUpdate(any())).thenReturn(Optional.of(payment));
             when(paymentGateway.refund(any())).thenReturn(new RefundResponse(PG_TX, PaymentStatus.REFUNDED, refundedAt));
 
             RefundResult result = service.refund(ORDER_NUMBER, "운영 환불");
@@ -222,7 +222,7 @@ class AdminOrderServiceTest {
             Payment payment = paidPaymentFor(order);
             payment.markRefunded();
             when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-            when(paymentRepository.findByOrderId(any())).thenReturn(Optional.of(payment));
+            when(paymentRepository.findByOrderIdForUpdate(any())).thenReturn(Optional.of(payment));
 
             RefundResult result = service.refund(ORDER_NUMBER, "다시 환불");
 
@@ -240,7 +240,7 @@ class AdminOrderServiceTest {
             Order order = pendingOrder(album);
             Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.CARD, "MOCK", PG_TX);
             when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-            when(paymentRepository.findByOrderId(any())).thenReturn(Optional.of(payment));
+            when(paymentRepository.findByOrderIdForUpdate(any())).thenReturn(Optional.of(payment));
 
             assertThatThrownBy(() -> service.refund(ORDER_NUMBER, "환불"))
                     .isInstanceOf(PaymentNotRefundableException.class);
@@ -258,7 +258,7 @@ class AdminOrderServiceTest {
             Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.CARD, "MOCK", PG_TX);
             payment.markFailed("카드 거절");
             when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-            when(paymentRepository.findByOrderId(any())).thenReturn(Optional.of(payment));
+            when(paymentRepository.findByOrderIdForUpdate(any())).thenReturn(Optional.of(payment));
 
             assertThatThrownBy(() -> service.refund(ORDER_NUMBER, "환불"))
                     .isInstanceOf(PaymentNotRefundableException.class);
@@ -272,7 +272,7 @@ class AdminOrderServiceTest {
             Order order = orderAt(OrderStatus.SHIPPED, album);
             Payment payment = paidPaymentFor(order);
             when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-            when(paymentRepository.findByOrderId(any())).thenReturn(Optional.of(payment));
+            when(paymentRepository.findByOrderIdForUpdate(any())).thenReturn(Optional.of(payment));
 
             assertThatThrownBy(() -> service.refund(ORDER_NUMBER, "환불"))
                     .isInstanceOf(IllegalStateTransitionException.class);
@@ -296,7 +296,7 @@ class AdminOrderServiceTest {
         void paymentNotFound() {
             Order order = orderAt(OrderStatus.PAID, album(0));
             when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-            when(paymentRepository.findByOrderId(any())).thenReturn(Optional.empty());
+            when(paymentRepository.findByOrderIdForUpdate(any())).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.refund(ORDER_NUMBER, "환불"))
                     .isInstanceOf(PaymentNotFoundException.class);
@@ -309,7 +309,7 @@ class AdminOrderServiceTest {
             Order order = orderAt(OrderStatus.PAID, album);
             Payment payment = paidPaymentFor(order);
             when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-            when(paymentRepository.findByOrderId(any())).thenReturn(Optional.of(payment));
+            when(paymentRepository.findByOrderIdForUpdate(any())).thenReturn(Optional.of(payment));
             when(paymentGateway.refund(any())).thenThrow(new IllegalStateException("PG down"));
 
             assertThatThrownBy(() -> service.refund(ORDER_NUMBER, "환불"))

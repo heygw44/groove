@@ -2,8 +2,7 @@ package com.groove.order.api;
 
 import com.groove.auth.security.AuthPrincipal;
 import com.groove.common.api.PageResponse;
-import com.groove.common.exception.ErrorCode;
-import com.groove.common.exception.ValidationException;
+import com.groove.common.api.SortValidator;
 import com.groove.order.api.dto.OrderSummaryResponse;
 import com.groove.order.application.OrderService;
 import com.groove.order.domain.Order;
@@ -51,19 +50,9 @@ public class MemberOrderController {
             @PageableDefault(size = 20)
             @SortDefault(sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        validateSort(pageable.getSort());
+        SortValidator.requireAllowed(pageable.getSort(), ALLOWED_SORT_PROPERTIES);
 
         Page<Order> page = orderService.listForMember(principal.memberId(), status, pageable);
         return ResponseEntity.ok(PageResponse.from(page, OrderSummaryResponse::from));
-    }
-
-    private void validateSort(Sort sort) {
-        for (Sort.Order order : sort) {
-            if (!ALLOWED_SORT_PROPERTIES.contains(order.getProperty())) {
-                throw new ValidationException(
-                        ErrorCode.VALIDATION_FAILED,
-                        "허용되지 않는 정렬 키: " + order.getProperty());
-            }
-        }
     }
 }

@@ -8,9 +8,9 @@ import com.groove.admin.api.dto.AdminRefundResponse;
 import com.groove.admin.application.AdminOrderSearchCriteria;
 import com.groove.admin.application.AdminOrderService;
 import com.groove.common.api.PageResponse;
-import com.groove.common.exception.ErrorCode;
-import com.groove.common.exception.ValidationException;
+import com.groove.common.api.SortValidator;
 import com.groove.order.domain.Order;
+import com.groove.order.domain.OrderNumberFormat;
 import com.groove.order.domain.OrderStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -49,8 +49,6 @@ import java.util.Set;
 @Validated
 public class AdminOrderController {
 
-    /** {@code RandomOrderNumberGenerator} 발급 형식 {@code ORD-YYYYMMDD-XXXXXX} — 위반 path 는 진입 단계에서 400. */
-    private static final String ORDER_NUMBER_REGEX = "^ORD-\\d{8}-[A-Z0-9]{6}$";
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of("createdAt");
 
     private final AdminOrderService adminOrderService;
@@ -68,7 +66,7 @@ public class AdminOrderController {
             @PageableDefault(size = 20)
             @SortDefault(sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        validateSort(pageable.getSort());
+        SortValidator.requireAllowed(pageable.getSort(), ALLOWED_SORT_PROPERTIES);
         Page<Order> page = adminOrderService.list(
                 new AdminOrderSearchCriteria(status, memberId, from, to), pageable);
         return ResponseEntity.ok(PageResponse.from(page, AdminOrderSummaryResponse::from));
@@ -76,13 +74,13 @@ public class AdminOrderController {
 
     @GetMapping("/{orderNumber}")
     public ResponseEntity<AdminOrderResponse> get(
-            @PathVariable @Pattern(regexp = ORDER_NUMBER_REGEX) String orderNumber) {
+            @PathVariable @Pattern(regexp = OrderNumberFormat.PATTERN) String orderNumber) {
         return ResponseEntity.ok(AdminOrderResponse.from(adminOrderService.findDetail(orderNumber)));
     }
 
     @PatchMapping("/{orderNumber}/status")
     public ResponseEntity<AdminOrderResponse> changeStatus(
-            @PathVariable @Pattern(regexp = ORDER_NUMBER_REGEX) String orderNumber,
+            @PathVariable @Pattern(regexp = OrderNumberFormat.PATTERN) String orderNumber,
             @Valid @RequestBody AdminOrderStatusChangeRequest request) {
         Order order = adminOrderService.changeStatus(orderNumber, request.target(), request.reason());
         return ResponseEntity.ok(AdminOrderResponse.from(order));
@@ -90,19 +88,10 @@ public class AdminOrderController {
 
     @PostMapping("/{orderNumber}/refund")
     public ResponseEntity<AdminRefundResponse> refund(
-            @PathVariable @Pattern(regexp = ORDER_NUMBER_REGEX) String orderNumber,
+            @PathVariable @Pattern(regexp = OrderNumberFormat.PATTERN) String orderNumber,
             @Valid @RequestBody(required = false) AdminRefundRequest request) {
         String reason = request != null ? request.reason() : null;
         return ResponseEntity.ok(AdminRefundResponse.from(adminOrderService.refund(orderNumber, reason)));
     }
 
-    private void validateSort(Sort sort) {
-        for (Sort.Order order : sort) {
-            if (!ALLOWED_SORT_PROPERTIES.contains(order.getProperty())) {
-                throw new ValidationException(
-                        ErrorCode.VALIDATION_FAILED,
-                        "허용되지 않는 정렬 키: " + order.getProperty());
-            }
-        }
-    }
 }

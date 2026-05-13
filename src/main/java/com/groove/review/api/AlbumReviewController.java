@@ -1,8 +1,7 @@
 package com.groove.review.api;
 
 import com.groove.common.api.PageResponse;
-import com.groove.common.exception.ErrorCode;
-import com.groove.common.exception.ValidationException;
+import com.groove.common.api.SortValidator;
 import com.groove.review.api.dto.ReviewResponse;
 import com.groove.review.application.ReviewService;
 import jakarta.validation.constraints.Positive;
@@ -47,19 +46,9 @@ public class AlbumReviewController {
             @PageableDefault(size = 20)
             @SortDefault(sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        validateSort(pageable.getSort());
+        SortValidator.requireAllowed(pageable.getSort(), ALLOWED_SORT_PROPERTIES);
 
         Page<ReviewResponse> page = reviewService.listByAlbum(albumId, pageable);
         return ResponseEntity.ok(PageResponse.of(page));
-    }
-
-    private void validateSort(Sort sort) {
-        for (Sort.Order order : sort) {
-            if (!ALLOWED_SORT_PROPERTIES.contains(order.getProperty())) {
-                throw new ValidationException(
-                        ErrorCode.VALIDATION_FAILED,
-                        "허용되지 않는 정렬 키: " + order.getProperty());
-            }
-        }
     }
 }

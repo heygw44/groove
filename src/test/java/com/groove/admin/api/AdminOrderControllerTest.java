@@ -24,6 +24,7 @@ import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.support.OrderFixtures;
 import com.groove.support.TestcontainersConfig;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -88,13 +89,7 @@ class AdminOrderControllerTest {
 
     @BeforeEach
     void setUp() {
-        paymentRepository.deleteAllInBatch();
-        orderRepository.deleteAllInBatch();
-        albumRepository.deleteAllInBatch();
-        artistRepository.deleteAllInBatch();
-        genreRepository.deleteAllInBatch();
-        labelRepository.deleteAllInBatch();
-        memberRepository.deleteAllInBatch();
+        clearAll();
 
         Member a = memberRepository.saveAndFlush(Member.register("a@example.com", "$2a$10$dummy", "A", "01000000001"));
         Member b = memberRepository.saveAndFlush(Member.register("b@example.com", "$2a$10$dummy", "B", "01000000002"));
@@ -109,6 +104,26 @@ class AdminOrderControllerTest {
 
         adminBearer = "Bearer " + jwtProvider.issueAccessToken(999L, MemberRole.ADMIN);
         userBearer = "Bearer " + jwtProvider.issueAccessToken(memberA, MemberRole.USER);
+    }
+
+    /**
+     * 알파벳 순서상 본 클래스가 가장 먼저 실행돼 데이터가 잔류하면, 이어지는 카탈로그 테스트
+     * ({@code AlbumQueryControllerTest} 등) 의 {@code albumRepository.deleteAllInBatch()} 가
+     * {@code fk_order_item_album} RESTRICT 에 걸린다 — 시작/종료 양쪽에서 청소해 격리한다.
+     */
+    @AfterEach
+    void tearDown() {
+        clearAll();
+    }
+
+    private void clearAll() {
+        paymentRepository.deleteAllInBatch();
+        orderRepository.deleteAllInBatch();
+        albumRepository.deleteAllInBatch();
+        artistRepository.deleteAllInBatch();
+        genreRepository.deleteAllInBatch();
+        labelRepository.deleteAllInBatch();
+        memberRepository.deleteAllInBatch();
     }
 
     private String nextOrderNumber() {

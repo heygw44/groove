@@ -153,7 +153,10 @@ public class AdminOrderService {
     public RefundResult refund(String orderNumber, String reason) {
         Order order = orderRepository.findWithAlbumsByOrderNumber(orderNumber)
                 .orElseThrow(OrderNotFoundException::new);
-        Payment payment = paymentRepository.findByOrderId(order.getId())
+        // Payment 를 PESSIMISTIC_WRITE 로 잠가 동시 환불 요청 두 건이 상태 확인 → PG refund() 호출까지
+        // 동시에 통과해 PG 가 이중 환불을 받는 race 를 차단한다 (CodeRabbit 리뷰 반영). 락은 트랜잭션 종료 시
+        // 해제되고, order_id UNIQUE 라 정확히 한 row 만 잠그므로 데드락 가능성 없음. PG 측 멱등 키는 별도 #72.
+        Payment payment = paymentRepository.findByOrderIdForUpdate(order.getId())
                 .orElseThrow(PaymentNotFoundException::new);
 
         if (payment.getStatus() == PaymentStatus.REFUNDED) {
