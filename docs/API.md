@@ -180,7 +180,8 @@
 ### 관리자 (`/admin`)
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
-| GET | `/admin/orders` | ADMIN | 전체 주문 조회 |
+| GET | `/admin/orders` | ADMIN | 전체 주문 조회 (상태/회원/기간 필터) |
+| GET | `/admin/orders/{orderNumber}` | ADMIN | 주문 상세 조회 |
 | PATCH | `/admin/orders/{orderNumber}/status` | ADMIN | 주문 상태 강제 변경 |
 | POST | `/admin/orders/{orderNumber}/refund` | ADMIN | 환불 처리 |
 | POST | `/admin/albums` | ADMIN | 상품 등록 |
@@ -855,29 +856,56 @@
 
 #### GET `/admin/orders`
 
-**Query**: `page`, `size`, `status`, `memberEmail`, `from`, `to`
+**Query**: `page`, `size`, `sort` (`createdAt` 만 허용, 기본 `createdAt,desc`), `status` (OrderStatus), `memberId` (양수), `from`/`to` (ISO-8601 date-time, `createdAt` 기준 반열린 구간 `[from, to)`). 모든 필터는 선택 — 미지정 시 전체.
 
-**Response 200**: PageResponse<OrderSummary>
+**Response 200**: `PageResponse<AdminOrderSummary>` — `AdminOrderSummary = { orderNumber, status, memberId, guestEmail, totalAmount, itemCount, createdAt }` (회원 주문이면 `guestEmail` 없음, 게스트 주문이면 `memberId` 없음).
+
+**Errors**: 400 — 허용되지 않은 정렬 키 / `memberId` 비양수
+
+#### GET `/admin/orders/{orderNumber}`
+
+회원·게스트 주문 모두 조회 가능 (소유자 검증 없음).
+
+**Response 200**: `{ orderNumber, status, memberId, guestEmail, totalAmount, items[], shipping, paidAt, cancelledAt, cancelledReason, createdAt }` — `items`/`shipping` 블록은 회원용 주문 응답(§3.5)과 동일 구조.
+
+**Errors**: 404 `ORDER_NOT_FOUND`
 
 #### PATCH `/admin/orders/{orderNumber}/status`
 
 **Request**
 ```json
 {
-  "newStatus": "PREPARING",
+  "target": "PREPARING",
   "reason": "수동 진행"
 }
 ```
 
-상태 머신 검증 통과 시 적용.
+`reason` 필수(운영 감사). `target` 은 부수효과(재고/결제)가 없는 **전진 전이**(`PREPARING`/`SHIPPED`/`DELIVERED`/`COMPLETED`)만 허용 — 취소·환불은 `/refund` 를, 결제 확정은 웹훅/폴링 경로를 사용한다. 허용 대상이라도 상태 머신(`OrderStatus.canTransitionTo`) 위반이면 거부.
 
-**Errors**: 409 `ORDER_INVALID_STATE_TRANSITION`
+**Response 200**: `GET /admin/orders/{orderNumber}` 와 동일 형식 (갱신 후 상태).
+
+**Errors**
+- 400 — `reason` 누락 / 알 수 없는 enum 문자열
+- 404 `ORDER_NOT_FOUND`
+- 409 `ORDER_INVALID_STATE_TRANSITION` — 허용 대상이지만 현재 상태에서 불법 전이
+- 422 `DOMAIN_003` (DOMAIN_RULE_VIOLATION) — 허용 대상이 아닌 상태로의 강제 전환 시도 (예: `CANCELLED`)
 
 #### POST `/admin/orders/{orderNumber}/refund`
 
-**Request**: `{ "reason": "..." }`
+**Request**: `{ "reason": "..." }` — `reason` 선택(미지정/본문 생략 허용). 지정 시 PG 환불 사유 및 `Order.cancelledReason` 으로 기록.
 
-처리: Payment REFUNDED + Order CANCELLED + (필요 시) 재고 복원.
+처리(단일 트랜잭션): PG `refund()` 호출 → Payment `PAID→REFUNDED` → Order `→CANCELLED` → 각 라인 재고 복원. 어느 단계든 실패하면 전체 롤백.
+
+**멱등**: 이미 `REFUNDED` 인 결제에 재요청하면 PG 호출/상태 전이/재고 복원 없이 현재 상태로 200 응답 (`alreadyRefunded: true`).
+
+**Response 200**: `{ orderNumber, orderStatus, paymentStatus, refundedAt, alreadyRefunded }` — `refundedAt` 은 PG 환불 완료 시각(멱등 재요청 시 `null`).
+
+**Errors**
+- 404 `ORDER_NOT_FOUND` — 주문 없음
+- 404 `PAYMENT_NOT_FOUND` — 해당 주문에 결제 없음
+- 409 `PAYMENT_NOT_REFUNDABLE` — 결제가 `PAID` 가 아님 (`PENDING`/`FAILED`)
+- 409 `ORDER_INVALID_STATE_TRANSITION` — 배송 시작(`SHIPPED`) 이후 등 주문을 `CANCELLED` 로 둘 수 없는 경우
+- 502 `PAYMENT_GATEWAY_FAILURE` — PG 환불 호출 실패
 
 #### POST/PUT/DELETE `/admin/albums`, `/admin/albums/{id}`
 

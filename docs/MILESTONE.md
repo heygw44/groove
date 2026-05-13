@@ -803,6 +803,24 @@
 
 **주차 목표**: 신뢰성 있는 코드베이스 + 측정 가능한 데이터셋 확보
 
+### #69 [admin] 관리자 주문 조회 / 상태 강제 전환 / 환불 API ✅
+**라벨**: `domain:admin`, `domain:order`, `M`, `type:feature`
+**배경**: W7 완료 검증 중 식별 — 관리자 상품 CRUD 는 W4~W7 에 완료됐으나 주문 조작 API 는 마일스톤 이슈가 없어 미구현이었다. §4 컷 정책 2번 항목을 컷하지 않고 정식 진행.
+
+**작업 내용**
+- [x] `GET /api/v1/admin/orders` — 전체 주문 목록 (페이징 + 상태/회원/기간 필터, Specification 조합)
+- [x] `GET /api/v1/admin/orders/{orderNumber}` — 주문 상세 (관리자)
+- [x] `PATCH /api/v1/admin/orders/{orderNumber}/status` — 상태 강제 전환 (전진 전이만 허용, 사유 필수; 취소·환불은 별도)
+- [x] `POST /api/v1/admin/orders/{orderNumber}/refund` — 환불 (PG `refund()` + Payment REFUNDED + Order CANCELLED + 재고 복원, 멱등)
+- [x] 권한: `/api/v1/admin/**` → ROLE_ADMIN (기존 SecurityConfig 정책 재사용)
+- [x] 단위 테스트 (`Payment.markRefunded`, `AdminOrderService`) + 통합 테스트 (`AdminOrderControllerTest`)
+
+**완료 조건**
+- [x] 비관리자 접근 403 / 합법 전이만 허용(불법 409 `ORDER_INVALID_STATE_TRANSITION`)
+- [x] 환불 시 Payment REFUNDED + Order CANCELLED + 재고 복원, 중복 환불 무해(`alreadyRefunded`)
+
+---
+
 ### #W8-1 [test] 통합 테스트 보강 (커버리지 60%+)
 **라벨**: `type:test`, `M`
 **선행**: #W7-8
@@ -1219,6 +1237,7 @@
   2. 관리자 도메인 일부 컷 (CRUD만 남기고 환불·통계 제외)
   3. 게스트 주문 컷 (회원 흐름만 유지)
 - **컷 결정은 W7 중반(W7-3 끝나는 시점)에 미리 판단**
+- **갱신(W7 완료 검증)**: G2 통과. 컷 우선순위 2번 중 "관리자 주문 조작(조회/상태 강제 전환/환불)" 은 컷하지 않고 **#69 로 분리해 M8(W8) 범위에서 진행** (PRD §6.9 핵심 기능). 통계/대시보드만 후순위로 남김.
 
 ### 신호 3: W8 말 커버리지 50% 미만
 - **원인 가능성**: 통합 테스트 작성 시간 과소평가
