@@ -4,10 +4,16 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.Optional;
 
-public interface OrderRepository extends JpaRepository<Order, Long> {
+/**
+ * {@link JpaSpecificationExecutor} 확장: 관리자 주문 목록의 동적 필터(상태/회원/기간 조합) 를
+ * {@link OrderSpecifications} 조각으로 표현하기 위함이다 (이슈 #69). 회원/게스트 측 조회는 기존 derived
+ * method 를 그대로 쓴다 — Specification 은 admin 경로 전용.
+ */
+public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecificationExecutor<Order> {
 
     /**
      * 단건 조회 (회원 GET / 게스트 lookup) — items 까지 fetch 한다.

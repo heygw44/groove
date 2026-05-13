@@ -134,6 +134,18 @@ public class Payment extends BaseTimeEntity {
         this.failureReason = truncate(failureReason);
     }
 
+    /**
+     * 환불 확정 — 관리자 환불 처리({@code AdminOrderService.refund}) 시 PG {@code refund()} 성공 후 호출한다.
+     *
+     * <p>PAID 가 아닌 결제(PENDING/FAILED/REFUNDED)에 호출하면 안 된다 — 호출 측이 PAID 인지 먼저 확인하며
+     * 이미 REFUNDED 면 부수효과 없이 멱등 응답한다. 방어선으로 {@link PaymentStatus#canTransitionTo} 위반 시
+     * {@link IllegalStateException}. {@code Payment} 는 환불 시각 컬럼을 두지 않는다 — PG 응답
+     * ({@code RefundResponse.refundedAt})이 신뢰 원천이며 영속 상태로는 {@code REFUNDED} 만 남긴다.
+     */
+    public void markRefunded() {
+        transitionTo(PaymentStatus.REFUNDED);
+    }
+
     private void transitionTo(PaymentStatus next) {
         if (!status.canTransitionTo(next)) {
             throw new IllegalStateException("허용되지 않은 결제 상태 전이: " + status + " -> " + next);

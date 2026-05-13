@@ -1,8 +1,12 @@
 package com.groove.payment.domain;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +19,18 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
      * {@code uk_payment_order} UNIQUE 충돌 사전 회피). {@code order_id} 는 UNIQUE 이므로 최대 1건.
      */
     Optional<Payment> findByOrderId(Long orderId);
+
+    /**
+     * 관리자 환불 처리 전용 (이슈 #69) — {@link #findByOrderId} 와 같지만 {@code SELECT ... FOR UPDATE}
+     * (PESSIMISTIC_WRITE) 로 결제 row 를 잠근다. 동시 환불 요청 두 건이 같은 결제에 대해 상태 확인 → PG
+     * {@code refund()} 호출까지 동시에 통과해 PG 가 이중 환불을 받는 race 를 차단한다.
+     *
+     * <p>락은 트랜잭션 종료 시 해제되며 {@code order_id} UNIQUE + {@code uk_payment_order} 가 잡고 있어
+     * 정확히 한 row 만 잠그므로 데드락 가능성은 없다. 이중 안전선으로 PG 측 멱등 키는 별도 이슈(#72)에서 도입.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Payment p WHERE p.order.id = :orderId")
+    Optional<Payment> findByOrderIdForUpdate(@Param("orderId") Long orderId);
 
     /**
      * 웹훅 수신·폴링 동기화 시 PG 거래 식별자로 결제를 조회한다 — 보상 트랜잭션(재고 복원)을 위해

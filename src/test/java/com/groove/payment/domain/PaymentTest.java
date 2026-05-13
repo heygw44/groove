@@ -143,4 +143,34 @@ class PaymentTest {
         assertThatThrownBy(failed::markPaid).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> failed.markFailed("y")).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    @DisplayName("markRefunded: PAID → REFUNDED 로 전이한다 (paidAt/failureReason 은 보존)")
+    void markRefunded_transitionsFromPaid() {
+        Payment payment = pending("tx-refund");
+        payment.markPaid();
+        Instant paidAt = payment.getPaidAt();
+
+        payment.markRefunded();
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getPaidAt()).isEqualTo(paidAt);
+        assertThat(payment.getFailureReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("markRefunded: PAID 가 아닌 결제(PENDING/FAILED/REFUNDED)에 호출하면 IllegalStateException")
+    void markRefunded_rejectsNonPaid() {
+        Payment pending = pending("tx-p");
+        assertThatThrownBy(pending::markRefunded).isInstanceOf(IllegalStateException.class);
+
+        Payment failed = pending("tx-f");
+        failed.markFailed("x");
+        assertThatThrownBy(failed::markRefunded).isInstanceOf(IllegalStateException.class);
+
+        Payment refunded = pending("tx-r");
+        refunded.markPaid();
+        refunded.markRefunded();
+        assertThatThrownBy(refunded::markRefunded).isInstanceOf(IllegalStateException.class);
+    }
 }

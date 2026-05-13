@@ -15,6 +15,7 @@ import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.Order;
+import com.groove.order.domain.OrderNumberFormat;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
 import com.groove.support.TestcontainersConfig;
@@ -143,7 +144,7 @@ class OrderControllerTest {
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", startsWith("/api/v1/orders/ORD-")))
-                .andExpect(jsonPath("$.orderNumber").value(matchesRegex("^ORD-\\d{8}-[A-Z0-9]{6}$")))
+                .andExpect(jsonPath("$.orderNumber").value(matchesRegex(OrderNumberFormat.PATTERN)))
                 .andExpect(jsonPath("$.status").value(OrderStatus.PENDING.name()))
                 .andExpect(jsonPath("$.totalAmount").value(35000 * 2 + 30000 * 3))
                 .andExpect(jsonPath("$.items.length()").value(2))
