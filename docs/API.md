@@ -792,24 +792,28 @@
 }
 ```
 
-**조건**
-- 본인 주문
-- 주문 상태 DELIVERED 이상
+**조건** (검증 순서)
+- 주문 존재
+- 본인(회원) 주문 — 게스트 주문은 불가
+- 주문 상태 DELIVERED 이상 (`DELIVERED` 또는 `COMPLETED`)
 - 해당 주문에 해당 albumId 존재
 - 동일 (order, album) 리뷰 미작성
 
 **Response 201**: Review 객체
 
 **Errors**
-- 403 `REVIEW_NOT_OWNED`
-- 422 `REVIEW_ORDER_NOT_DELIVERED`
-- 409 `REVIEW_DUPLICATED`
+- 400 `VALIDATION_FAILED` — `rating` 1~5 범위 밖, 필수 필드 누락 등
+- 404 `ORDER_NOT_FOUND` — `orderNumber` 미존재
+- 403 `REVIEW_NOT_OWNED` — 본인 주문 아님 (게스트 주문 포함)
+- 422 `REVIEW_ORDER_NOT_DELIVERED` — 주문 상태가 DELIVERED 미만
+- 422 `REVIEW_ALBUM_NOT_IN_ORDER` — 해당 주문에 `albumId` 없음
+- 409 `REVIEW_DUPLICATED` — 같은 (order, album) 리뷰 이미 존재
 
 ---
 
 #### GET `/albums/{id}/reviews`
 
-**Query**: `page`, `size`, `sort=createdAt,desc`
+**Query**: `page`, `size`, `sort=createdAt,desc` (정렬 키는 `createdAt` 만 허용)
 
 **Response 200**: PageResponse<Review>
 ```json
@@ -827,13 +831,21 @@
 }
 ```
 
-회원명은 마스킹 처리.
+- 회원명은 마스킹 처리 (첫 글자만 노출, 나머지 `*`).
+- 앨범이 없거나 리뷰가 없으면 빈 페이지.
+
+**Errors**
+- 400 `VALIDATION_FAILED` — 허용되지 않는 정렬 키, `id <= 0`
 
 ---
 
 #### DELETE `/reviews/{reviewId}`
 
-본인만 가능. **204 No Content**.
+작성자 본인만 가능. **204 No Content**.
+
+**Errors**
+- 404 `REVIEW_NOT_FOUND` — `reviewId` 미존재
+- 403 `REVIEW_NOT_OWNED` — 본인 리뷰 아님
 
 ---
 
