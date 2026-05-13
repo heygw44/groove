@@ -121,12 +121,16 @@ public class MockPaymentGateway implements PaymentGateway {
     public RefundResponse refund(RefundRequest request) {
         Objects.requireNonNull(request, "request");
 
+        // 캐시 정리는 computeIfAbsent 진입 전에 끝낸다 — ConcurrentHashMap 의 mappingFunction 안에서 같은 맵의
+        // 다른 키를 수정하는 건 Javadoc("computation should be short and simple") 권고 위반이며 bin lock 보유
+        // 중 추가 lock 요청 경로가 생긴다.
+        pruneRefundCacheIfFull();
+
         // 같은 idempotencyKey 는 첫 응답을 그대로 재사용한다 (#72) — 보상 트랜잭션 부분 실패 후 재시도가
         // 와도 PG 측 환불은 1회로 정상화된다. 캐시 미스인 경우에만 transactions 의 REFUNDED 전이와
         // 처리 지연 시뮬레이션을 수행한다.
         return refundCache.computeIfAbsent(request.idempotencyKey(), key -> {
             simulateProcessingLatency();
-            pruneRefundCacheIfFull();
 
             // Mock 은 환불을 항상 즉시 성공 처리한다. 알려진 거래면 상태를 REFUNDED 로 갱신해 이후 query() 와 정합을 맞춘다.
             transactions.computeIfPresent(request.pgTransactionId(),
@@ -140,7 +144,9 @@ public class MockPaymentGateway implements PaymentGateway {
 
     /**
      * 테스트 전용 — 실제로 환불을 처리한(캐시 미스) 횟수. 멱등 키 재호출은 카운트되지 않는다.
-     * 운영 로직에선 호출하지 않는다.
+     * 운영 로직에선 호출하지 않는다. {@code @Profile} 가드로 운영 빈에는 본 클래스 자체가 로드되지 않으므로
+     * 가시성보다 명시적 Javadoc 으로 호출 컨텍스트를 좁히고, 다른 패키지의 통합 테스트
+     * ({@code AdminRefundIdempotencyIntegrationTest}) 가 접근할 수 있도록 {@code public} 으로 둔다.
      */
     public int refundCallCount() {
         return refundCallCount.get();
