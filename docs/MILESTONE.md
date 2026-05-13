@@ -823,6 +823,26 @@
 
 ---
 
+### #72 [payment] PG 환불 멱등 키 도입 — 보상 트랜잭션 부분 실패 시 중복 환불 방지 ✅
+**라벨**: `domain:payment`, `domain:admin`, `S`, `type:feature`
+**선행**: #69 (PR #71 셀프 리뷰 중 식별)
+**배경**: `AdminOrderService.refund` 의 PG `refund()` → DB 작업 순서에서 PG 호출 후 어떤 단계든 실패하면 트랜잭션은 롤백되지만 PG 측 환불은 유지되어, 관리자 재시도 시 PG 가 같은 결제에 두 번 환불 요청을 받을 수 있다. Mock 게이트웨이는 우연히 멱등이지만 실 PG 어댑터 도입 전 명시적 계약이 필요.
+
+**작업 내용**
+- [x] `RefundRequest.idempotencyKey` 필수 필드 도입 (Stripe `Idempotency-Key` 호환 ≤255자)
+- [x] `Payment.refundIdempotencyKey()` — `"refund:{id}:{pgTransactionId}"` 결정적 derivation (영속화된 결제만 호출 가능 — 방어선)
+- [x] `MockPaymentGateway.refund()` — `idempotencyKey` 기반 응답 캐시 (`computeIfAbsent`) + `refundCallCount()` 테스트 노출
+- [x] `AdminOrderService.refund` — 호출 시 결정적 키 주입
+- [x] 단위 테스트 — `RefundRequestTest` 신규, `PaymentTest`/`MockPaymentGatewayTest`/`AdminOrderServiceTest` 보강
+- [x] 통합 테스트 — `AdminRefundIdempotencyIntegrationTest`: 보상 트랜잭션 부분 실패 후 재시도 시 PG 실호출 1회 보장
+
+**완료 조건**
+- [x] 같은 키 두 번 호출 시 PG 호출 1회로 정상화 (단위)
+- [x] 보상 트랜잭션 중간 실패 강제 후 재시도가 PG 중복 환불을 일으키지 않음 (통합)
+- [x] DB 변경 없음 (deterministic key — 후속 컬럼 도입은 부분 환불 도입 시점에 검토)
+
+---
+
 ### #W8-1 [test] 통합 테스트 보강 (커버리지 60%+)
 **라벨**: `type:test`, `M`
 **선행**: #W7-8
