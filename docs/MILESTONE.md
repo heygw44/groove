@@ -105,13 +105,15 @@
 - [x] Flyway 초기 마이그레이션 적용됨
 - [x] GlobalExceptionHandler가 ProblemDetail로 응답
 
-### G2 — 기능 완성 게이트 (W7 말) ★ 가장 중요
-- [ ] 회원가입 → 로그인 → 토큰 갱신 동작
-- [ ] 상품 검색·필터·페이징 동작
-- [ ] 장바구니 → 주문 → 결제 → 웹훅 → 배송 → 리뷰 E2E 흐름 통과
-- [ ] 게스트 주문 흐름 동작
-- [ ] 관리자 상품·주문 조작 동작
-- [ ] 결제 실패·보상 트랜잭션 동작
+### G2 — 기능 완성 게이트 (W7 말) ★ 가장 중요 — ✅ 통과 (2026-05-13, 단 #69 잔여)
+- [x] 회원가입 → 로그인 → 토큰 갱신 동작
+- [x] 상품 검색·필터·페이징 동작
+- [x] 장바구니 → 주문 → 결제 → 웹훅 → 배송 → 리뷰 E2E 흐름 통과 (`FullPurchaseJourneyE2ETest`)
+- [x] 게스트 주문 흐름 동작
+- [x] 관리자 상품 조작 동작 / ⏳ 관리자 **주문** 조작(조회·강제 전환·환불)은 별도 이슈 #69 로 분리 — M8 진행 예정
+- [x] 결제 실패·보상 트랜잭션 동작
+
+> 참고: W7 마일스톤 이슈(#W6-4 ~ #W7-8)에는 관리자 주문 조작이 포함돼 있지 않았다. PRD §6.9 기준 핵심 기능이라 #69 로 신규 등록했고, MILESTONE §4 컷 정책상 후순위 컷 대상이기도 하므로 M8 착수 시 진행/컷 여부를 최종 판단한다. 그 외 G2 항목은 모두 통과.
 
 ### G3 — 측정 게이트 (W9 말)
 - [ ] k6 시나리오 4개 작성 및 동작
@@ -607,15 +609,15 @@
 **선행**: #W6-3
 
 **작업 내용**
-- [ ] `GET /orders/{orderNumber}` (회원 본인)
-- [ ] `POST /orders/{orderNumber}/guest-lookup` (게스트, email 매칭)
-- [ ] `GET /members/me/orders` (회원 주문 목록, 페이징)
-- [ ] `POST /orders/{orderNumber}/cancel` (PENDING 한정, 재고 복원)
-- [ ] 권한 검증 (타인 주문 조회 시 404)
+- [x] `GET /orders/{orderNumber}` (회원 본인)
+- [x] `POST /orders/{orderNumber}/guest-lookup` (게스트, email 매칭)
+- [x] `GET /members/me/orders` (회원 주문 목록, 페이징)
+- [x] `POST /orders/{orderNumber}/cancel` (PENDING 한정, 재고 복원)
+- [x] 권한 검증 (타인 주문 조회 시 404)
 
 **완료 조건**
-- [ ] 모든 조회 시나리오 동작
-- [ ] 취소 시 재고 복원 검증
+- [x] 모든 조회 시나리오 동작
+- [x] 취소 시 재고 복원 검증
 
 ---
 
@@ -624,13 +626,13 @@
 **선행**: #W6-4
 
 **작업 내용**
-- [ ] 장바구니 → 주문 생성 E2E
-- [ ] 게스트 주문 시나리오
-- [ ] 주문 취소 + 재고 복원
-- [ ] 권한 검증
+- [x] 장바구니 → 주문 생성 E2E
+- [x] 게스트 주문 시나리오
+- [x] 주문 취소 + 재고 복원
+- [x] 권한 검증
 
 **완료 조건**
-- [ ] 주문 도메인 라인 커버리지 75%+
+- [x] 주문 도메인 라인 커버리지 75%+
 
 ---
 
@@ -641,13 +643,13 @@
 **목적**: W10 시연용 "Before" 상태 명확히 기록
 
 **작업 내용**
-- [ ] CountDownLatch + ExecutorService 기반 동시 주문 테스트
-- [ ] 재고 100짜리 상품에 동시 200 요청 → 오버셀 발생 검증
-- [ ] 결과 로그 / 스크린샷 보존 (`docs/troubleshooting/overselling-baseline.md`)
+- [x] CountDownLatch + ExecutorService 기반 동시 주문 테스트
+- [x] 재고 100짜리 상품에 동시 200 요청 → 오버셀 발생 검증
+- [x] 결과 로그 / 스크린샷 보존 (`docs/troubleshooting/overselling-baseline.md`)
 
 **완료 조건**
-- [ ] 오버셀 재현 테스트가 의도적으로 실패하는 형태로 보존됨 (`@Disabled` + 주석으로 W10 개선 시 활성화 명시)
-- [ ] 또는 별도 시연 디렉토리에 별도 보존
+- [x] 오버셀 재현 테스트가 의도적으로 실패하는 형태로 보존됨 (`@Disabled` + 주석으로 W10 개선 시 활성화 명시)
+- [x] 또는 별도 시연 디렉토리에 별도 보존
 
 ---
 
@@ -660,16 +662,16 @@
 **선행**: #W6-6
 
 **작업 내용**
-- [ ] `PaymentGateway` 인터페이스 (`request`, `query`, `refund`)
-- [ ] DTO: `PaymentRequest`, `PaymentResponse`, `RefundRequest`, `RefundResponse`
-- [ ] `MockPaymentGateway` 구현체 (`@Profile`로 격리)
-- [ ] 처리 지연 시뮬레이션 (랜덤 100~500ms)
-- [ ] 성공률 설정 가능 (`payment.mock.success-rate`)
-- [ ] `MockWebhookSimulator`: 1~5초 후 비동기 웹훅 콜백 발사
+- [x] `PaymentGateway` 인터페이스 (`request`, `query`, `refund`)
+- [x] DTO: `PaymentRequest`, `PaymentResponse`, `RefundRequest`, `RefundResponse`
+- [x] `MockPaymentGateway` 구현체 (`@Profile`로 격리)
+- [x] 처리 지연 시뮬레이션 (랜덤 100~500ms)
+- [x] 성공률 설정 가능 (`payment.mock.success-rate`)
+- [x] `MockWebhookSimulator`: 1~5초 후 비동기 웹훅 콜백 발사
 
 **완료 조건**
-- [ ] Strategy 패턴 정상 동작 (실 PG 추가 시 구현체만 교체 가능)
-- [ ] Mock PG 호출 후 비동기 웹훅 수신 확인
+- [x] Strategy 패턴 정상 동작 (실 PG 추가 시 구현체만 교체 가능)
+- [x] Mock PG 호출 후 비동기 웹훅 수신 확인
 
 ---
 
@@ -678,16 +680,16 @@
 **선행**: #W7-1
 
 **작업 내용**
-- [ ] `IdempotencyRecord` 엔티티 + Repository
-- [ ] Flyway 마이그레이션
-- [ ] `IdempotencyService.execute(key, supplier)` (락 + 결과 캐싱)
-- [ ] `Idempotency-Key` 헤더 검증 인터셉터 또는 어노테이션
-- [ ] TTL 정리 스케줄러 (24시간)
+- [x] `IdempotencyRecord` 엔티티 + Repository
+- [x] Flyway 마이그레이션
+- [x] `IdempotencyService.execute(key, supplier)` (락 + 결과 캐싱)
+- [x] `Idempotency-Key` 헤더 검증 인터셉터 또는 어노테이션
+- [x] TTL 정리 스케줄러 (24시간)
 
 **완료 조건**
-- [ ] 동일 키 + 처리 완료 시 기존 응답 반환
-- [ ] 처리 중 동일 키 시 409
-- [ ] 키 미지정 시 400
+- [x] 동일 키 + 처리 완료 시 기존 응답 반환
+- [x] 처리 중 동일 키 시 409
+- [x] 키 미지정 시 400
 
 ---
 
@@ -696,18 +698,18 @@
 **선행**: #W7-2
 
 **작업 내용**
-- [ ] `Payment` 엔티티 + `PaymentStatus` enum
-- [ ] Flyway 마이그레이션
-- [ ] `POST /api/v1/payments` (Idempotency-Key 필수)
+- [x] `Payment` 엔티티 + `PaymentStatus` enum
+- [x] Flyway 마이그레이션
+- [x] `POST /api/v1/payments` (Idempotency-Key 필수)
   - 주문 상태 검증 (PENDING)
   - PG 호출 → Payment(PENDING) 저장
   - 응답 202 + paymentId
-- [ ] `GET /api/v1/payments/{paymentId}` 상태 조회
-- [ ] 통합 테스트
+- [x] `GET /api/v1/payments/{paymentId}` 상태 조회
+- [x] 통합 테스트
 
 **완료 조건**
-- [ ] 결제 요청 정상 처리 (PENDING 응답)
-- [ ] 멱등성 정상 동작
+- [x] 결제 요청 정상 처리 (PENDING 응답)
+- [x] 멱등성 정상 동작
 
 ---
 
@@ -716,17 +718,17 @@
 **선행**: #W7-3
 
 **작업 내용**
-- [ ] `POST /api/v1/payments/webhook` 엔드포인트
-- [ ] 서명 검증 (Mock에서는 단순 헤더 매칭)
-- [ ] PAID/FAILED 분기 처리
-- [ ] 멱등성 (동일 webhook 중복 수신 시 무시)
-- [ ] 실패 시 보상 트랜잭션: Payment FAILED + Order PAYMENT_FAILED + 재고 복원
-- [ ] 폴링 스케줄러: PENDING 결제 N분마다 PG `query()` 호출 → 동기화
+- [x] `POST /api/v1/payments/webhook` 엔드포인트
+- [x] 서명 검증 (Mock에서는 단순 헤더 매칭)
+- [x] PAID/FAILED 분기 처리
+- [x] 멱등성 (동일 webhook 중복 수신 시 무시)
+- [x] 실패 시 보상 트랜잭션: Payment FAILED + Order PAYMENT_FAILED + 재고 복원
+- [x] 폴링 스케줄러: PENDING 결제 N분마다 PG `query()` 호출 → 동기화
 
 **완료 조건**
-- [ ] 정상 웹훅 처리 시 Order PAID 전환
-- [ ] 실패 웹훅 시 보상 트랜잭션 정상 동작
-- [ ] 중복 웹훅 무해함
+- [x] 정상 웹훅 처리 시 Order PAID 전환
+- [x] 실패 웹훅 시 보상 트랜잭션 정상 동작
+- [x] 중복 웹훅 무해함
 
 ---
 
@@ -735,14 +737,14 @@
 **선행**: #W7-4
 
 **작업 내용**
-- [ ] `OrderPaidEvent` 정의
-- [ ] Order 결제 완료 처리 시 이벤트 발행
-- [ ] Spring Application Event + `@TransactionalEventListener(AFTER_COMMIT)`
-- [ ] (배송 도메인 #W7-6에서 구독)
+- [x] `OrderPaidEvent` 정의
+- [x] Order 결제 완료 처리 시 이벤트 발행
+- [x] Spring Application Event + `@TransactionalEventListener(AFTER_COMMIT)`
+- [x] (배송 도메인 #W7-6에서 구독)
 
 **완료 조건**
-- [ ] 트랜잭션 롤백 시 이벤트 미발행 검증
-- [ ] AFTER_COMMIT 시점에 리스너 호출 확인
+- [x] 트랜잭션 롤백 시 이벤트 미발행 검증
+- [x] AFTER_COMMIT 시점에 리스너 호출 확인
 
 ---
 
@@ -751,16 +753,16 @@
 **선행**: #W7-5
 
 **작업 내용**
-- [ ] `Shipping` 엔티티 + `ShippingStatus` enum
-- [ ] Flyway 마이그레이션
-- [ ] `OrderPaidEvent` 구독 → Shipping(PREPARING) 생성 + 운송장 번호 발급(UUID)
-- [ ] `GET /api/v1/shippings/{trackingNumber}` 조회 API
-- [ ] `@Scheduled` 진행 스케줄러: PREPARING → SHIPPED → DELIVERED (시연용 짧은 간격)
-- [ ] 안전 포장 요청 플래그 처리
+- [x] `Shipping` 엔티티 + `ShippingStatus` enum
+- [x] Flyway 마이그레이션
+- [x] `OrderPaidEvent` 구독 → Shipping(PREPARING) 생성 + 운송장 번호 발급(UUID)
+- [x] `GET /api/v1/shippings/{trackingNumber}` 조회 API
+- [x] `@Scheduled` 진행 스케줄러: PREPARING → SHIPPED → DELIVERED (시연용 짧은 간격)
+- [x] 안전 포장 요청 플래그 처리
 
 **완료 조건**
-- [ ] 결제 완료 → 배송 자동 생성
-- [ ] 스케줄러로 상태 자동 진행 확인
+- [x] 결제 완료 → 배송 자동 생성
+- [x] 스케줄러로 상태 자동 진행 확인
 
 ---
 
@@ -769,17 +771,17 @@
 **선행**: #W7-6
 
 **작업 내용**
-- [ ] `Review` 엔티티 + Repository
-- [ ] Flyway V_n 마이그레이션
-- [ ] `POST /api/v1/reviews` (DELIVERED 검증, 1주문-1상품-1리뷰 제약)
-- [ ] `GET /api/v1/albums/{id}/reviews` (페이징, 회원명 마스킹)
-- [ ] `DELETE /api/v1/reviews/{reviewId}` (본인만)
-- [ ] Album 평균 평점 / 리뷰 수 계산 로직
+- [x] `Review` 엔티티 + Repository
+- [x] Flyway V_n 마이그레이션
+- [x] `POST /api/v1/reviews` (DELIVERED 검증, 1주문-1상품-1리뷰 제약)
+- [x] `GET /api/v1/albums/{id}/reviews` (페이징, 회원명 마스킹)
+- [x] `DELETE /api/v1/reviews/{reviewId}` (본인만)
+- [x] Album 평균 평점 / 리뷰 수 계산 로직
 
 **완료 조건**
-- [ ] 모든 API 정상 동작
-- [ ] 배송 완료 전 리뷰 시 422
-- [ ] 중복 리뷰 시 409
+- [x] 모든 API 정상 동작
+- [x] 배송 완료 전 리뷰 시 422
+- [x] 중복 리뷰 시 409
 
 ---
 
@@ -788,14 +790,14 @@
 **선행**: #W7-7
 
 **작업 내용**
-- [ ] E2E 시나리오: 회원가입 → 로그인 → 장바구니 → 주문 → 결제 → 웹훅 → 배송 → 리뷰
-- [ ] 게스트 주문 E2E
-- [ ] 결제 실패 시 보상 트랜잭션 검증
-- [ ] 멱등성 검증 (동일 키 동시 요청)
-- [ ] G2 게이트 점검
+- [x] E2E 시나리오: 회원가입 → 로그인 → 장바구니 → 주문 → 결제 → 웹훅 → 배송 → 리뷰
+- [x] 게스트 주문 E2E
+- [x] 결제 실패 시 보상 트랜잭션 검증
+- [x] 멱등성 검증 (동일 키 동시 요청)
+- [x] G2 게이트 점검
 
 **완료 조건**
-- [ ] G2 게이트 모든 항목 통과 ★
+- [x] G2 게이트 모든 항목 통과 ★ (관리자 주문 조작은 별도 이슈로 분리 — 아래 G2 게이트 주석 참조)
 
 ---
 
