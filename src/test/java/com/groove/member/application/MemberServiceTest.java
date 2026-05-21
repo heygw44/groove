@@ -3,6 +3,7 @@ package com.groove.member.application;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.exception.MemberEmailDuplicatedException;
+import com.groove.member.exception.MemberNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,7 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MemberService.signup 단위 테스트")
+@DisplayName("MemberService 단위 테스트")
 class MemberServiceTest {
 
     @Mock
@@ -103,5 +106,60 @@ class MemberServiceTest {
         assertThatThrownBy(() -> memberService.signup(command))
                 .isInstanceOf(MemberEmailDuplicatedException.class)
                 .hasCauseInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("getMyInfo: 활성 회원 존재 → 회원 반환")
+    void getMyInfo_activeMember_returnsMember() {
+        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+
+        Member result = memberService.getMyInfo(1L);
+
+        assertThat(result).isSameAs(member);
+    }
+
+    @Test
+    @DisplayName("getMyInfo: 활성 회원 없음(탈퇴/미존재) → MemberNotFoundException")
+    void getMyInfo_missing_throws() {
+        when(memberRepository.findByIdAndDeletedAtIsNull(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> memberService.getMyInfo(99L))
+                .isInstanceOf(MemberNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("updateMyInfo: name·phone 모두 전달 → 둘 다 반영, email 불변")
+    void updateMyInfo_bothFields_updatesMember() {
+        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+
+        Member result = memberService.updateMyInfo(1L, new UpdateProfileCommand("김영희", "01098765432"));
+
+        assertThat(result.getName()).isEqualTo("김영희");
+        assertThat(result.getPhone()).isEqualTo("01098765432");
+        assertThat(result.getEmail()).isEqualTo("user@example.com");
+    }
+
+    @Test
+    @DisplayName("updateMyInfo: 미전송 필드(null)는 미변경")
+    void updateMyInfo_partial_keepsUnsentField() {
+        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
+
+        Member result = memberService.updateMyInfo(1L, new UpdateProfileCommand("김영희", null));
+
+        assertThat(result.getName()).isEqualTo("김영희");
+        assertThat(result.getPhone()).isEqualTo("01012345678");
+    }
+
+    @Test
+    @DisplayName("updateMyInfo: 활성 회원 없음 → MemberNotFoundException")
+    void updateMyInfo_missing_throws() {
+        when(memberRepository.findByIdAndDeletedAtIsNull(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                memberService.updateMyInfo(99L, new UpdateProfileCommand("X", "01000000000")))
+                .isInstanceOf(MemberNotFoundException.class);
     }
 }

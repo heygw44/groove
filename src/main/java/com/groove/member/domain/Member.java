@@ -80,6 +80,21 @@ public class Member extends BaseTimeEntity {
         this.deletedAt = deletedAt;
     }
 
+    /**
+     * 프로필 부분 수정 (#76, API.md §3.2 — PATCH /members/me).
+     *
+     * <p>부분 수정 규약: 인자가 {@code null} 인 필드는 변경하지 않는다 (미전송 = 미변경).
+     * {@code email}·{@code role}·{@code password}·{@code emailVerified} 는 이 메서드로 변경할 수 없다.
+     */
+    public void updateProfile(String name, String phone) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (phone != null) {
+            this.phone = phone;
+        }
+    }
+
     public Long getId() {
         return id;
     }
