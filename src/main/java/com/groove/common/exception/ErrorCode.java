@@ -15,8 +15,6 @@ public enum ErrorCode {
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "VALID_001", "입력값이 올바르지 않습니다"),
 
     // DOMAIN
-    RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "DOMAIN_001", "요청한 리소스를 찾을 수 없습니다"),
-    DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "DOMAIN_002", "이미 존재하는 리소스입니다"),
     DOMAIN_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_ENTITY, "DOMAIN_003", "도메인 규칙 위반입니다"),
 
     // MEMBER
@@ -36,7 +34,6 @@ public enum ErrorCode {
     ALBUM_NOT_PURCHASABLE(HttpStatus.UNPROCESSABLE_ENTITY, "ALBUM_NOT_PURCHASABLE", "현재 구매할 수 없는 앨범입니다"),
 
     // CART
-    CART_NOT_FOUND(HttpStatus.NOT_FOUND, "CART_NOT_FOUND", "장바구니를 찾을 수 없습니다"),
     CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "CART_ITEM_NOT_FOUND", "장바구니 항목을 찾을 수 없습니다"),
     CART_QUANTITY_LIMIT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "CART_QUANTITY_LIMIT_EXCEEDED", "허용된 수량 한도를 초과했습니다"),
 
