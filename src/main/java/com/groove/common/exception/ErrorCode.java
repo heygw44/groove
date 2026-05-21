@@ -20,6 +20,7 @@ public enum ErrorCode {
     // MEMBER
     MEMBER_EMAIL_DUPLICATED(HttpStatus.CONFLICT, "MEMBER_EMAIL_DUPLICATED", "이미 사용 중인 이메일입니다"),
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_NOT_FOUND", "회원을 찾을 수 없습니다"),
+    MEMBER_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "MEMBER_PASSWORD_MISMATCH", "현재 비밀번호가 일치하지 않습니다"),
 
     // CATALOG
     GENRE_NAME_DUPLICATED(HttpStatus.CONFLICT, "GENRE_NAME_DUPLICATED", "이미 존재하는 장르명입니다"),

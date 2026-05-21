@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("Member.updateProfile 단위 테스트")
+@DisplayName("Member 도메인 단위 테스트")
 class MemberTest {
 
     private Member newMember() {
@@ -66,5 +66,28 @@ class MemberTest {
         assertThat(member.getEmail()).isEqualTo("user@example.com");
         assertThat(member.getRole()).isEqualTo(MemberRole.USER);
         assertThat(member.getPassword()).isEqualTo("$2a$10$hash");
+    }
+
+    @Test
+    @DisplayName("changePassword → 비밀번호 해시가 새 값으로 교체됨")
+    void changePassword_replacesHash() {
+        Member member = newMember();
+
+        member.changePassword("$2a$12$newhash");
+
+        assertThat(member.getPassword()).isEqualTo("$2a$12$newhash");
+    }
+
+    @Test
+    @DisplayName("changePassword 는 password 외 다른 필드를 건드리지 않음")
+    void changePassword_doesNotTouchOtherFields() {
+        Member member = newMember();
+
+        member.changePassword("$2a$12$newhash");
+
+        assertThat(member.getEmail()).isEqualTo("user@example.com");
+        assertThat(member.getName()).isEqualTo("김철수");
+        assertThat(member.getPhone()).isEqualTo("01012345678");
+        assertThat(member.getRole()).isEqualTo(MemberRole.USER);
     }
 }
