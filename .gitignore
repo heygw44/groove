@@ -62,3 +62,7 @@ logs/
 .claude/
 CLAUDE.md
 .claude.json
+
+### Private docs (do not expose on remote) ###
+docs/features/
+docs/interview-prep/
