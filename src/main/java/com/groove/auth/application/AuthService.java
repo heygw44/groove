@@ -11,7 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 
 /**
  * 인증 흐름 애플리케이션 서비스.
@@ -40,17 +40,20 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final RefreshTokenAdmin refreshTokenAdmin;
+    private final Clock clock;
 
     public AuthService(
             MemberRepository memberRepository,
             PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService,
-            RefreshTokenAdmin refreshTokenAdmin
+            RefreshTokenAdmin refreshTokenAdmin,
+            Clock clock
     ) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
         this.refreshTokenAdmin = refreshTokenAdmin;
+        this.clock = clock;
     }
 
     public TokenPair login(LoginCommand command) {
@@ -113,7 +116,7 @@ public class AuthService {
         // 직후 REQUIRES_NEW revoke 의 `UPDATE refresh_token WHERE member_id=?` 가 부모 member 행 락을
         // 기다리다 lock-wait 데드락에 빠진다. 커밋 시점 flush 면 revoke 가 이미 커밋된 뒤라 락 충돌이 없다.
         // revoke 와 커밋 사이에는 던질 수 있는 코드가 없어 "revoke 후 비번 미반영" 윈도도 사실상 없다.
-        int revoked = refreshTokenAdmin.forceRevokeAllActiveSessions(memberId, Instant.now());
+        int revoked = refreshTokenAdmin.forceRevokeAllActiveSessions(memberId, clock.instant());
         log.info("비밀번호 변경 성공 memberId={} revokedSessions={}", memberId, revoked);
     }
 

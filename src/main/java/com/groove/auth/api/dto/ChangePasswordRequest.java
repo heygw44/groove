@@ -20,21 +20,19 @@ public record ChangePasswordRequest(
         String currentPassword,
 
         @NotBlank
-        @Size(min = 10, max = 72, message = "비밀번호는 10~72자여야 합니다 (BCrypt 72-byte 한계)")
-        @Pattern(
-                regexp = "^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z0-9]).+$",
-                message = "비밀번호는 영문, 숫자, 특수문자를 각각 1자 이상 포함해야 합니다"
-        )
+        @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH, message = PasswordPolicy.LENGTH_MESSAGE)
+        @Pattern(regexp = PasswordPolicy.COMPLEXITY_REGEX, message = PasswordPolicy.COMPLEXITY_MESSAGE)
         String newPassword
 ) {
 
     /**
-     * 신규 비밀번호가 현재 비밀번호와 동일하면 거부한다. 한쪽이 null 이면 각 필드의
-     * {@code @NotBlank} 가 먼저 보고하도록 통과시킨다(중복 위반 방지).
+     * 신규 비밀번호가 현재 비밀번호와 동일하면 거부한다. 한쪽이 비어 있으면 각 필드의
+     * {@code @NotBlank} 가 먼저 보고하도록 통과시킨다(빈 값일 때 중복 위반 메시지 방지).
      */
     @AssertTrue(message = "새 비밀번호는 현재 비밀번호와 달라야 합니다")
     public boolean isNewPasswordDistinct() {
-        if (currentPassword == null || newPassword == null) {
+        if (currentPassword == null || currentPassword.isBlank()
+                || newPassword == null || newPassword.isBlank()) {
             return true;
         }
         return !currentPassword.equals(newPassword);

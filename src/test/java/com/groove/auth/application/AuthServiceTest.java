@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -23,7 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,6 +52,9 @@ class AuthServiceTest {
 
     @Mock
     private RefreshTokenAdmin refreshTokenAdmin;
+
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private AuthService authService;
@@ -108,18 +111,20 @@ class AuthServiceTest {
 
     private static final String NEW_PASSWORD = "NewPassword!5678";
     private static final String NEW_PASSWORD_HASH = "$2a$10$newhash";
+    private static final Instant FIXED_NOW = Instant.parse("2026-05-21T00:00:00Z");
 
     @Test
-    @DisplayName("비밀번호 변경 성공: 새 해시로 교체하고 활성 세션을 전부 무효화한다")
+    @DisplayName("비밀번호 변경 성공: 새 해시로 교체하고 clock 시각으로 활성 세션을 전부 무효화한다")
     void changePassword_success() {
         given(memberRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(member));
         given(passwordEncoder.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
         given(passwordEncoder.encode(NEW_PASSWORD)).willReturn(NEW_PASSWORD_HASH);
+        given(clock.instant()).willReturn(FIXED_NOW);
 
         authService.changePassword(1L, RAW_PASSWORD, NEW_PASSWORD);
 
         assertThat(member.getPassword()).isEqualTo(NEW_PASSWORD_HASH);
-        verify(refreshTokenAdmin).forceRevokeAllActiveSessions(eq(1L), any(Instant.class));
+        verify(refreshTokenAdmin).forceRevokeAllActiveSessions(1L, FIXED_NOW);
     }
 
     @Test
