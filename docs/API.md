@@ -343,7 +343,22 @@
 
 #### DELETE `/members/me` — 회원 탈퇴 (soft delete)
 
-**Response 204**
+본인 비밀번호를 재확인한다. 진행 중 주문(`PAID`·`PREPARING`·`SHIPPED`)이 있으면 차단된다.
+탈퇴 후 장바구니는 삭제되고 리프레시 토큰은 무효화되며, 주문 이력은 보존된다. 탈퇴한 이메일은
+재가입할 수 없다.
+
+**Request**
+```json
+{
+  "password": "비밀번호"
+}
+```
+
+**Response 204** — 탈퇴 성공 (`deleted_at` 기록). 이미 탈퇴한 회원의 재요청도 멱등하게 204.
+
+**오류**
+- `400 MEMBER_PASSWORD_MISMATCH` — 비밀번호 불일치
+- `409 MEMBER_WITHDRAWAL_BLOCKED` — 진행 중 주문 존재
 
 ---
 

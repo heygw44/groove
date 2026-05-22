@@ -3,6 +3,8 @@ package com.groove.member.domain;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("Member 도메인 단위 테스트")
@@ -88,6 +90,54 @@ class MemberTest {
         assertThat(member.getEmail()).isEqualTo("user@example.com");
         assertThat(member.getName()).isEqualTo("김철수");
         assertThat(member.getPhone()).isEqualTo("01012345678");
+        assertThat(member.getRole()).isEqualTo(MemberRole.USER);
+    }
+
+    @Test
+    @DisplayName("신규 회원은 탈퇴 상태가 아니며 deletedAt 이 null")
+    void newMember_isNotWithdrawn() {
+        Member member = newMember();
+
+        assertThat(member.isWithdrawn()).isFalse();
+        assertThat(member.getDeletedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("withdraw → deletedAt 기록 + isWithdrawn true")
+    void withdraw_recordsDeletedAt() {
+        Member member = newMember();
+        Instant now = Instant.parse("2026-05-22T00:00:00Z");
+
+        member.withdraw(now);
+
+        assertThat(member.isWithdrawn()).isTrue();
+        assertThat(member.getDeletedAt()).isEqualTo(now);
+    }
+
+    @Test
+    @DisplayName("withdraw 멱등 → 재호출해도 최초 deletedAt 을 덮어쓰지 않음")
+    void withdraw_idempotent_keepsFirstTimestamp() {
+        Member member = newMember();
+        Instant first = Instant.parse("2026-05-22T00:00:00Z");
+        Instant later = Instant.parse("2026-05-23T00:00:00Z");
+
+        member.withdraw(first);
+        member.withdraw(later);
+
+        assertThat(member.getDeletedAt()).isEqualTo(first);
+    }
+
+    @Test
+    @DisplayName("withdraw 는 password·email 등 다른 필드를 건드리지 않음")
+    void withdraw_doesNotTouchOtherFields() {
+        Member member = newMember();
+
+        member.withdraw(Instant.parse("2026-05-22T00:00:00Z"));
+
+        assertThat(member.getEmail()).isEqualTo("user@example.com");
+        assertThat(member.getName()).isEqualTo("김철수");
+        assertThat(member.getPhone()).isEqualTo("01012345678");
+        assertThat(member.getPassword()).isEqualTo("$2a$10$hash");
         assertThat(member.getRole()).isEqualTo(MemberRole.USER);
     }
 }

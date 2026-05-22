@@ -15,10 +15,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -43,6 +45,11 @@ class MemberControllerTest {
     @Autowired
     private JwtProvider jwtProvider;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    private static final String RAW_PASSWORD = "P@ssw0rd!2024";
+
     private String userBearer;
     private Long memberId;
 
@@ -53,7 +60,7 @@ class MemberControllerTest {
         memberRepository.deleteAllInBatch();
 
         Member member = memberRepository.saveAndFlush(
-                Member.register("user@example.com", "$2a$10$dummyhashdummyhashdummyh", "김철수", "01012345678"));
+                Member.register("user@example.com", passwordEncoder.encode(RAW_PASSWORD), "김철수", "01012345678"));
         memberId = member.getId();
         userBearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
     }
@@ -152,5 +159,75 @@ class MemberControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"김영희\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("DELETE: 본인 비밀번호 일치 → 204, deleted_at 기록 (soft delete)")
+    void withdraw_validPassword_returns204AndSoftDeletes() throws Exception {
+        mockMvc.perform(delete("/api/v1/members/me")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
+                .andExpect(status().isNoContent());
+
+        Member withdrawn = memberRepository.findById(memberId).orElseThrow();
+        assertThat(withdrawn.isWithdrawn()).isTrue();
+        assertThat(withdrawn.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("DELETE: 비밀번호 불일치 → 400, 탈퇴되지 않음")
+    void withdraw_wrongPassword_returns400() throws Exception {
+        mockMvc.perform(delete("/api/v1/members/me")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"WrongPass!99\"}"))
+                .andExpect(status().isBadRequest());
+
+        Member unchanged = memberRepository.findById(memberId).orElseThrow();
+        assertThat(unchanged.isWithdrawn()).isFalse();
+    }
+
+    @Test
+    @DisplayName("DELETE: 비밀번호 누락(blank) → 400 (검증 실패)")
+    void withdraw_blankPassword_returns400() throws Exception {
+        mockMvc.perform(delete("/api/v1/members/me")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"\"}"))
+                .andExpect(status().isBadRequest());
+
+        Member unchanged = memberRepository.findById(memberId).orElseThrow();
+        assertThat(unchanged.isWithdrawn()).isFalse();
+    }
+
+    @Test
+    @DisplayName("DELETE: 미인증 → 401")
+    void withdraw_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(delete("/api/v1/members/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("DELETE: 재탈퇴(이미 탈퇴) → 멱등 204, 최초 deleted_at 유지")
+    void withdraw_repeated_isIdempotent() throws Exception {
+        mockMvc.perform(delete("/api/v1/members/me")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
+                .andExpect(status().isNoContent());
+        var firstDeletedAt = memberRepository.findById(memberId).orElseThrow().getDeletedAt();
+
+        // access token 은 stateless 라 탈퇴 직후에도 만료 전까지 유효 — 같은 토큰으로 재요청
+        mockMvc.perform(delete("/api/v1/members/me")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
+                .andExpect(status().isNoContent());
+
+        assertThat(memberRepository.findById(memberId).orElseThrow().getDeletedAt())
+                .isEqualTo(firstDeletedAt);
     }
 }

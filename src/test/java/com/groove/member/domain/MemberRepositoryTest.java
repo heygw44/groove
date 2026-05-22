@@ -73,7 +73,7 @@ class MemberRepositoryTest {
     @DisplayName("findByEmailAndDeletedAtIsNull → 탈퇴(deleted_at 있음) 회원은 제외")
     void findByEmailAndDeletedAtIsNull_excludesSoftDeleted() {
         Member deleted = Member.register("gone@example.com", "$2a$12$hash", "탈퇴자", "01077778888");
-        deleted.markDeleted(Instant.now());
+        deleted.withdraw(Instant.now());
         memberRepository.saveAndFlush(deleted);
 
         assertThat(memberRepository.findByEmailAndDeletedAtIsNull("gone@example.com")).isEmpty();

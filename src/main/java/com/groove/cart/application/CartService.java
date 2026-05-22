@@ -76,6 +76,21 @@ public class CartService {
         return cart;
     }
 
+    /**
+     * 회원 탈퇴 시 장바구니 제거 (#78). 존재할 때만 삭제하며, 없으면 no-op 다 — {@link #getOrCreate}
+     * 와 달리 빈 cart 를 새로 만들지 않는다(탈퇴한 회원에 행을 남기지 않기 위함).
+     *
+     * <p>{@code cart_item} 은 {@code orphanRemoval=true + CascadeType.ALL} 로 cart 삭제 시 함께
+     * 제거된다. 따라서 bulk JPQL delete(연관 미적용) 가 아닌 엔티티 삭제를 사용한다.
+     *
+     * <p>호출 맥락: {@code MemberWithdrawnEvent} 의 AFTER_COMMIT 리스너에서만 호출된다 — 탈퇴
+     * 트랜잭션 커밋 이후 별도 트랜잭션으로 수행된다.
+     */
+    @Transactional
+    public void deleteForMember(Long memberId) {
+        cartRepository.findByMemberId(memberId).ifPresent(cartRepository::delete);
+    }
+
     private Cart getOrCreate(Long memberId) {
         return cartRepository.findByMemberIdWithItems(memberId)
                 .orElseGet(() -> cartRepository.save(Cart.openFor(memberId)));

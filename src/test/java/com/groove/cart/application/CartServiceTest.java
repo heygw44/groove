@@ -26,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CartService 단위 테스트")
@@ -128,5 +130,27 @@ class CartServiceTest {
 
         assertThatThrownBy(() -> cartService.removeItem(1L, 12345L))
                 .isInstanceOf(CartItemNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("deleteForMember → cart 존재 시 삭제 위임 (#78 탈퇴 정리)")
+    void deleteForMember_present_delegatesDelete() {
+        Cart cart = Cart.openFor(1L);
+        given(cartRepository.findByMemberId(1L)).willReturn(Optional.of(cart));
+
+        cartService.deleteForMember(1L);
+
+        verify(cartRepository).delete(cart);
+    }
+
+    @Test
+    @DisplayName("deleteForMember → cart 없으면 no-op (삭제·생성 모두 하지 않음 — 빈 cart 안 만듦)")
+    void deleteForMember_absent_noOpAndDoesNotCreate() {
+        given(cartRepository.findByMemberId(1L)).willReturn(Optional.empty());
+
+        cartService.deleteForMember(1L);
+
+        verify(cartRepository, never()).delete(any(Cart.class));
+        verify(cartRepository, never()).save(any(Cart.class));
     }
 }

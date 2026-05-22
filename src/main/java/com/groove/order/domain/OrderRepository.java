@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -48,4 +49,14 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     Page<Order> findByMemberId(Long memberId, Pageable pageable);
 
     Page<Order> findByMemberIdAndStatus(Long memberId, OrderStatus status, Pageable pageable);
+
+    /**
+     * 회원 탈퇴 차단 검사 (#78) — 주어진 상태 집합에 해당하는 회원 주문의 존재 여부.
+     *
+     * <p>{@code MemberService.withdraw} 가 "진행 중" 으로 보는 {@code {PAID, PREPARING, SHIPPED}} 으로
+     * 호출한다. 하나라도 있으면 탈퇴를 막아({@code MEMBER_WITHDRAWAL_BLOCKED} 409) 배송·환불 책임
+     * 주체가 사라지는 것을 방지한다. PENDING(미결제)·종착 상태(DELIVERED/COMPLETED/CANCELLED/PAYMENT_FAILED)
+     * 는 차단 대상이 아니다.
+     */
+    boolean existsByMemberIdAndStatusIn(Long memberId, Collection<OrderStatus> statuses);
 }
