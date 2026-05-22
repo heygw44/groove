@@ -1,5 +1,6 @@
 package com.groove.payment.api;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
@@ -89,6 +90,8 @@ class PaymentApiIntegrationTest {
     private MemberRepository memberRepository;
     @Autowired
     private JwtProvider jwtProvider;
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
 
     private Long ownerId;
     private Long otherMemberId;
@@ -98,7 +101,9 @@ class PaymentApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: payment → orders → album → artist/genre/label, member
+        // FK 의존 순서: payment → orders → album → artist/genre/label, member.
+        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

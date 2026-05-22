@@ -1,5 +1,6 @@
 package com.groove.order.event;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
@@ -53,6 +54,8 @@ class OrderPaidEventListenerTest {
     private RecordingListener recorder;
     @Autowired
     private MemberRepository memberRepository;
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
 
     private TransactionTemplate tx;
 
@@ -60,6 +63,8 @@ class OrderPaidEventListenerTest {
     void setUp() {
         tx = new TransactionTemplate(txManager);
         recorder.reset();
+        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAllInBatch();
     }
 

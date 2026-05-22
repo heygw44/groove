@@ -1,5 +1,6 @@
 package com.groove.admin.api;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
@@ -91,6 +92,8 @@ class AdminRefundIdempotencyIntegrationTest {
     @Autowired
     private JwtProvider jwtProvider;
     @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+    @Autowired
     private PaymentGateway paymentGateway;
 
     private String adminBearer;
@@ -121,6 +124,8 @@ class AdminRefundIdempotencyIntegrationTest {
     }
 
     private void clearAll() {
+        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

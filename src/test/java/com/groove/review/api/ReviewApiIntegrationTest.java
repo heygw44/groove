@@ -1,5 +1,6 @@
 package com.groove.review.api;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
@@ -82,6 +83,8 @@ class ReviewApiIntegrationTest {
     private MemberRepository memberRepository;
     @Autowired
     private JwtProvider jwtProvider;
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
 
     private Long ownerId;
     private Long otherMemberId;
@@ -91,7 +94,9 @@ class ReviewApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: review → orders/album/member, orders → album, album → artist/genre/label
+        // FK 의존 순서: review → orders/album/member, orders → album, album → artist/genre/label.
+        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        refreshTokenRepository.deleteAllInBatch();
         reviewRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

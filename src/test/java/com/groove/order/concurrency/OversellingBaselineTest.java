@@ -1,5 +1,6 @@
 package com.groove.order.concurrency;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.cart.domain.CartRepository;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
@@ -98,6 +99,9 @@ class OversellingBaselineTest {
     @Autowired
     private CartRepository cartRepository;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     private Long albumId;
     private Long memberId;
 
@@ -130,6 +134,8 @@ class OversellingBaselineTest {
         // FK 의존 순서대로 부모 repository 를 비운다 (CartOrderE2EIntegrationTest 와 동일 패턴).
         // cart 정리는 본 테스트에서 cart 를 만들지 않더라도, Testcontainers 컨테이너 재사용 환경에서
         // 외부 테스트가 남긴 cart 데이터가 album 삭제 시 FK 위반을 유발하는 경로를 차단한다.
+        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        refreshTokenRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
