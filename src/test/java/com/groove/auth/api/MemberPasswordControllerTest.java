@@ -6,7 +6,6 @@ import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.support.TestcontainersConfig;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -79,14 +78,6 @@ class MemberPasswordControllerTest {
                 Member.register(EMAIL, passwordEncoder.encode(OLD_PASSWORD), "김철수", "01012345678"));
         memberId = member.getId();
         userBearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
-    }
-
-    @AfterEach
-    void tearDown() {
-        // 로그인으로 발급된 refresh_token 이 member FK 를 잡고 있어, 정리하지 않으면 이후 다른 테스트
-        // 클래스의 member 삭제(공유 Testcontainers DB)에서 FK 위반이 난다. 자식부터 삭제한다.
-        refreshTokenRepository.deleteAllInBatch();
-        memberRepository.deleteAllInBatch();
     }
 
     @Test
