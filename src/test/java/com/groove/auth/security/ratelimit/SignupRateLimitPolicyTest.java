@@ -17,7 +17,8 @@ class SignupRateLimitPolicyTest {
     void setUp() {
         AuthRateLimitProperties properties = new AuthRateLimitProperties(
                 new AuthRateLimitProperties.Policy(10L, Duration.ofMinutes(1)),
-                new AuthRateLimitProperties.Policy(3L, Duration.ofMinutes(1))
+                new AuthRateLimitProperties.Policy(3L, Duration.ofMinutes(1)),
+                new AuthRateLimitProperties.Policy(5L, Duration.ofMinutes(1))
         );
         policy = new SignupRateLimitPolicy(properties);
     }

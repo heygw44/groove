@@ -15,26 +15,33 @@ class AuthRateLimitPropertiesTest {
                 new AuthRateLimitProperties.Policy(10L, Duration.ofMinutes(1));
         AuthRateLimitProperties.Policy signup =
                 new AuthRateLimitProperties.Policy(3L, Duration.ofMinutes(1));
+        AuthRateLimitProperties.Policy passwordChange =
+                new AuthRateLimitProperties.Policy(5L, Duration.ofMinutes(1));
 
-        AuthRateLimitProperties properties = new AuthRateLimitProperties(login, signup);
+        AuthRateLimitProperties properties = new AuthRateLimitProperties(login, signup, passwordChange);
 
         assertThat(properties.login().capacity()).isEqualTo(10L);
         assertThat(properties.login().refillPeriod()).isEqualTo(Duration.ofMinutes(1));
         assertThat(properties.signup().capacity()).isEqualTo(3L);
         assertThat(properties.signup().refillPeriod()).isEqualTo(Duration.ofMinutes(1));
+        assertThat(properties.passwordChange().capacity()).isEqualTo(5L);
+        assertThat(properties.passwordChange().refillPeriod()).isEqualTo(Duration.ofMinutes(1));
     }
 
     @Test
     void rejectsNullPolicies() {
-        AuthRateLimitProperties.Policy login =
+        AuthRateLimitProperties.Policy policy =
                 new AuthRateLimitProperties.Policy(10L, Duration.ofMinutes(1));
 
-        assertThatThrownBy(() -> new AuthRateLimitProperties(null, login))
+        assertThatThrownBy(() -> new AuthRateLimitProperties(null, policy, policy))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("login");
-        assertThatThrownBy(() -> new AuthRateLimitProperties(login, null))
+        assertThatThrownBy(() -> new AuthRateLimitProperties(policy, null, policy))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("signup");
+        assertThatThrownBy(() -> new AuthRateLimitProperties(policy, policy, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("password-change");
     }
 
     @Test

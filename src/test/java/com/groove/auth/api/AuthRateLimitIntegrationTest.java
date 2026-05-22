@@ -26,10 +26,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * #23 — 로그인/회원가입 IP 기반 Rate Limit 통합 테스트.
+ * #23 · #81 — 로그인/회원가입/비밀번호 변경 IP 기반 Rate Limit 통합 테스트.
  *
- * <p>운영 기본값(login=10/min, signup=3/min) 대신 작은 한도를 주입해 한도 초과 직후 429 응답을 검증한다.
+ * <p>운영 기본값 대신 작은 한도를 주입해 한도 초과 직후 429 응답을 검증한다.
  * 각 테스트는 IP 를 다르게 사용해 정책 캐시가 다른 케이스에 영향을 주지 않게 한다.
+ *
+ * <p>비밀번호 변경(#81)은 인증 엔드포인트지만 RateLimitFilter 가 Spring Security 보다 먼저
+ * 실행되므로, 미인증 요청도 한도까지는 401(인증 거부)·초과 시 429 로 처리되어 정책을 검증할 수 있다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -39,9 +42,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "groove.auth.rate-limit.login.capacity=3",
         "groove.auth.rate-limit.login.refill-period=PT1M",
         "groove.auth.rate-limit.signup.capacity=2",
-        "groove.auth.rate-limit.signup.refill-period=PT1M"
+        "groove.auth.rate-limit.signup.refill-period=PT1M",
+        "groove.auth.rate-limit.password-change.capacity=2",
+        "groove.auth.rate-limit.password-change.refill-period=PT1M"
 })
-@DisplayName("Auth Rate Limit (#23)")
+@DisplayName("Auth Rate Limit (#23, #81)")
 class AuthRateLimitIntegrationTest {
 
     @Autowired
@@ -122,6 +127,41 @@ class AuthRateLimitIntegrationTest {
         // 다른 IP 는 영향 없음 — 인증 실패(401) 가 정상 흐름
         mockMvc.perform(loginRequest(cool, json))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("비밀번호 변경 한도(2회) 초과 → 3번째 요청 429 (미인증 401 도 한도 소비)")
+    void passwordChange_exceedsCapacity_returns429() throws Exception {
+        String ip = "203.0.113.40";
+        String body = objectMapper.writeValueAsString(Map.of(
+                "currentPassword", "P@ssw0rd!2024",
+                "newPassword", "NewP@ss!98765"));
+
+        // 미인증 요청 — RateLimitFilter 가 Security 보다 먼저 토큰을 소비하고, 통과분은 401 로 끝난다.
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(passwordChangeRequest(ip, body))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mockMvc.perform(passwordChangeRequest(ip, body))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
+                .andExpect(header().exists("X-Rate-Limit-Retry-After-Seconds"))
+                .andExpect(header().string("X-Rate-Limit-Remaining", "0"))
+                .andExpect(jsonPath("$.code").value("SYSTEM_002"))
+                .andExpect(jsonPath("$.retryAfterSeconds").isNumber());
+    }
+
+    private MockHttpServletRequestBuilder passwordChangeRequest(String ip, String body) {
+        return org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .patch("/api/v1/members/me/password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .with(request -> {
+                    request.setRemoteAddr(ip);
+                    return request;
+                });
     }
 
     private MockHttpServletRequestBuilder loginRequest(String ip, String body) {
