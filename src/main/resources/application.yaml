@@ -80,6 +80,9 @@ groove:
       signup:
         capacity: ${AUTH_RATE_LIMIT_SIGNUP_CAPACITY:3}
         refill-period: ${AUTH_RATE_LIMIT_SIGNUP_REFILL_PERIOD:PT1M}
+      password-change:
+        capacity: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_CAPACITY:5}
+        refill-period: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_REFILL_PERIOD:PT1M}
   # 멱등성 인프라 (#W7-2). cleanup-cron 을 "-" 로 두면 정리 스케줄러가 비활성화된다.
   idempotency:
     ttl: ${IDEMPOTENCY_TTL:PT24H}

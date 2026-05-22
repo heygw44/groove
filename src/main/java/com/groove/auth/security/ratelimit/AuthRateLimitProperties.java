@@ -11,7 +11,7 @@ import java.time.Duration;
  * 정책 수치는 운영 측정 결과에 따라 환경별 yaml 또는 환경 변수에서 override 한다.
  */
 @ConfigurationProperties(prefix = "groove.auth.rate-limit")
-public record AuthRateLimitProperties(Policy login, Policy signup) {
+public record AuthRateLimitProperties(Policy login, Policy signup, Policy passwordChange) {
 
     public AuthRateLimitProperties {
         if (login == null) {
@@ -19,6 +19,9 @@ public record AuthRateLimitProperties(Policy login, Policy signup) {
         }
         if (signup == null) {
             throw new IllegalStateException("groove.auth.rate-limit.signup 설정이 필요합니다");
+        }
+        if (passwordChange == null) {
+            throw new IllegalStateException("groove.auth.rate-limit.password-change 설정이 필요합니다");
         }
     }
 
