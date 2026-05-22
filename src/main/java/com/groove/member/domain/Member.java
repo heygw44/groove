@@ -95,6 +95,18 @@ public class Member extends BaseTimeEntity {
         }
     }
 
+    /**
+     * 비밀번호 교체 (#77, API.md §3.2 — PATCH /members/me/password).
+     *
+     * <p>현재 비밀번호 검증·신규 비밀번호 해싱은 호출자({@code AuthService.changePassword})가 책임지며,
+     * 이 메서드는 이미 해시된 값을 받아 그대로 저장한다. {@code register} 와 동일하게 평문 금지.
+     *
+     * @param newPasswordHash 반드시 BCrypt 등으로 해시된 값. 평문 금지.
+     */
+    public void changePassword(String newPasswordHash) {
+        this.password = newPasswordHash;
+    }
+
     public Long getId() {
         return id;
     }

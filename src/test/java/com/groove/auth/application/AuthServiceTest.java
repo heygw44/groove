@@ -1,9 +1,11 @@
 package com.groove.auth.application;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.common.exception.AuthException;
 import com.groove.common.exception.ErrorCode;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,11 +16,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +49,12 @@ class AuthServiceTest {
 
     @Mock
     private RefreshTokenService refreshTokenService;
+
+    @Mock
+    private RefreshTokenAdmin refreshTokenAdmin;
+
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private AuthService authService;
@@ -96,5 +107,51 @@ class AuthServiceTest {
                 .isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS);
 
         verify(refreshTokenService, never()).issueOnLogin(any());
+    }
+
+    private static final String NEW_PASSWORD = "NewPassword!5678";
+    private static final String NEW_PASSWORD_HASH = "$2a$10$newhash";
+    private static final Instant FIXED_NOW = Instant.parse("2026-05-21T00:00:00Z");
+
+    @Test
+    @DisplayName("비밀번호 변경 성공: 새 해시로 교체하고 clock 시각으로 활성 세션을 전부 무효화한다")
+    void changePassword_success() {
+        given(memberRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(member));
+        given(passwordEncoder.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(true);
+        given(passwordEncoder.encode(NEW_PASSWORD)).willReturn(NEW_PASSWORD_HASH);
+        given(clock.instant()).willReturn(FIXED_NOW);
+
+        authService.changePassword(1L, RAW_PASSWORD, NEW_PASSWORD);
+
+        assertThat(member.getPassword()).isEqualTo(NEW_PASSWORD_HASH);
+        verify(refreshTokenAdmin).forceRevokeAllActiveSessions(1L, FIXED_NOW);
+    }
+
+    @Test
+    @DisplayName("현재 비밀번호 불일치: MEMBER_PASSWORD_MISMATCH 로 실패하고 세션을 무효화하지 않는다")
+    void changePassword_wrongCurrentPassword_throwsMismatch() {
+        given(memberRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.of(member));
+        given(passwordEncoder.matches(RAW_PASSWORD, PASSWORD_HASH)).willReturn(false);
+
+        assertThatThrownBy(() -> authService.changePassword(1L, RAW_PASSWORD, NEW_PASSWORD))
+                .isInstanceOf(AuthException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.MEMBER_PASSWORD_MISMATCH);
+
+        assertThat(member.getPassword()).isEqualTo(PASSWORD_HASH);
+        verify(passwordEncoder, never()).encode(any());
+        verify(refreshTokenAdmin, never()).forceRevokeAllActiveSessions(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("활성 회원 미존재: MemberNotFoundException 으로 실패한다")
+    void changePassword_memberNotFound_throws() {
+        given(memberRepository.findByIdAndDeletedAtIsNull(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.changePassword(1L, RAW_PASSWORD, NEW_PASSWORD))
+                .isInstanceOf(MemberNotFoundException.class);
+
+        verify(passwordEncoder, never()).matches(any(), any());
+        verify(refreshTokenAdmin, never()).forceRevokeAllActiveSessions(anyLong(), any());
     }
 }
