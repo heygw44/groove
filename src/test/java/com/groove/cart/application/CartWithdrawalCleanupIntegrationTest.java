@@ -75,7 +75,8 @@ class CartWithdrawalCleanupIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: cart_item → cart → album → artist/genre/label, member. refresh_token → member 도 먼저.
+        // FK 정리 순서: refresh_token → member, cart(CASCADE → cart_item) → album → artist/genre/label.
+        // cart 를 지우면 fk_cart_item_cart(ON DELETE CASCADE) 로 cart_item 이 함께 정리된다.
         refreshTokenRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

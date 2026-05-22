@@ -262,6 +262,8 @@ class MemberServiceTest {
         memberService.withdraw(1L, "P@ssw0rd!2024");
 
         assertThat(member.getDeletedAt()).isEqualTo(Instant.parse("2026-05-01T00:00:00Z"));
+        // 재탈퇴여도 비밀번호 재확인 계약은 유지된다 — no-op 분기 전에 검증되는지 명시적으로 확인.
+        verify(passwordEncoder).matches("P@ssw0rd!2024", "$2a$12$hash");
         verifyNoInteractions(orderRepository);
         verifyNoInteractions(eventPublisher);
     }
