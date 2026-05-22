@@ -1,5 +1,6 @@
 package com.groove.order;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
 import com.groove.cart.domain.CartRepository;
 import com.groove.catalog.album.domain.Album;
@@ -98,6 +99,9 @@ class CartOrderE2EIntegrationTest {
     @Autowired
     private JwtProvider jwtProvider;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     private String memberABearer;
     private String memberBBearer;
     private Long memberAId;
@@ -114,6 +118,8 @@ class CartOrderE2EIntegrationTest {
     void setUp() {
         // FK 의존 순서대로 부모 repository 를 비운다 — cart_item / order_item 자식 행은
         // DB FK ON DELETE CASCADE / JPA 설정에 의해 부모 삭제와 함께 정리된다.
+        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        refreshTokenRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

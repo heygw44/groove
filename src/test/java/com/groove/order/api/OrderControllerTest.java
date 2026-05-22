@@ -1,5 +1,6 @@
 package com.groove.order.api;
 
+import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
@@ -79,6 +80,9 @@ class OrderControllerTest {
     @Autowired
     private JwtProvider jwtProvider;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     private String userBearer;
     private Long memberId;
     private Long sellingAlbumId;
@@ -88,7 +92,9 @@ class OrderControllerTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: order_item → orders → album → artist/genre/label, member
+        // FK 의존 순서: order_item → orders → album → artist/genre/label, member.
+        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        refreshTokenRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
