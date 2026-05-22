@@ -70,14 +70,28 @@ public class Member extends BaseTimeEntity {
     }
 
     /**
-     * 탈퇴 처리(soft delete) 시점 기록. 같은 패키지에서만 호출 가능.
+     * 회원 탈퇴 (soft delete, #78, API.md §3.2 — DELETE /members/me).
      *
-     * <p>현재는 Repository 슬라이스 테스트에서 {@code findByEmailAndDeletedAtIsNull} 의
-     * 제외 동작 검증용으로만 사용. 회원 탈퇴 API(#W4 후속) 구현 시 도메인 정책이 부착된
-     * 공개 메서드({@code withdraw()}) 로 승격할 예정.
+     * <p>{@code deleted_at} 에 탈퇴 시점을 기록할 뿐 행을 물리 삭제하지 않는다. 주문·결제 이력은
+     * 보존되고({@code orders.member_id → member ON DELETE SET NULL} 은 hard delete 대비 안전망일 뿐
+     * 본 흐름에서는 발동하지 않는다), 이메일은 점유 상태로 남아 재가입을 차단한다(패턴 A —
+     * {@link MemberRepository#existsByEmail}).
+     *
+     * <p><b>멱등</b>: 이미 탈퇴한 회원에 다시 호출해도 최초 {@code deleted_at} 을 덮어쓰지 않는다.
+     * 재탈퇴 요청을 no-op 으로 처리하기 위함이며, 호출자({@code MemberService.withdraw})는
+     * {@link #isWithdrawn()} 으로 사전 분기해 이벤트 재발행도 막는다.
      */
-    void markDeleted(Instant deletedAt) {
-        this.deletedAt = deletedAt;
+    public void withdraw(Instant now) {
+        if (this.deletedAt == null) {
+            this.deletedAt = now;
+        }
+    }
+
+    /**
+     * 이미 탈퇴(soft delete)한 회원인지 여부.
+     */
+    public boolean isWithdrawn() {
+        return this.deletedAt != null;
     }
 
     /**
