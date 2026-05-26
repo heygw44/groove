@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# PR당 이전 실행 취소 — 푸시 연타 시 러너 분 절약. group 에 github.ref 포함으로 PR/브랜치별 독립 취소.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 최소 권한 — 명시하지 않은 스코프는 none. (커버리지 PR 코멘트 액션 도입 시에만 pull-requests: write 추가)
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest   # Docker 사전 설치 → Testcontainers MySQL 그대로 동작 (services: mysql 추가 금지)
+    timeout-minutes: 30      # 콜드 실행 시 MySQL 이미지 pull 여유 + 무한 hang 방지
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false   # 읽기 전용 CI — 토큰을 .git/config 에 남기지 않음 (무단 push 방지)
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          # 캐싱은 setup-gradle 가 전담 → 여기서 cache 옵션을 켜면 이중 캐시로 충돌. 의도적 생략.
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
+
+      - name: Build, test & coverage gate
+        # build → check → test(Testcontainers MySQL) → jacocoTestCoverageVerification 한 번에.
+        # 외부 시크릿 불필요: test 프로파일이 jwt.secret / payment.mock.webhook-secret 자급자족.
+        # --no-daemon 미사용: setup-gradle 가 daemon 수명·캐시 flush 를 관리한다.
+        run: ./gradlew build
+
+      - name: Upload test & coverage reports
+        if: always()   # 테스트 실패 시에도 리포트 회수
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports
+          path: |
+            build/reports/tests/
+            build/reports/jacoco/
+          retention-days: 7

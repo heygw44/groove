@@ -1,5 +1,7 @@
 # Groove
 
+[![CI](https://github.com/heygw44/groove/actions/workflows/ci.yml/badge.svg)](https://github.com/heygw44/groove/actions/workflows/ci.yml)
+
 LP 전문 이커머스 백엔드 — 인증, 카탈로그, 주문/결제/배송 전 흐름을 담은 Spring Boot 포트폴리오 프로젝트.
 
 > 상세 성능 개선 사례 및 시연 자료는 W12 완성 후 추가 예정.
