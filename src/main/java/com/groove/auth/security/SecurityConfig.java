@@ -37,7 +37,11 @@ public class SecurityConfig {
             "/api/v1/artists/**",
             "/api/v1/genres/**",
             "/api/v1/labels/**",
-            "/api/v1/shippings/**"
+            "/api/v1/shippings/**",
+            // 발급 가능 쿠폰 목록만 공개. 의도적으로 와일드카드(/**) 없는 정확 경로다 — 하위 경로
+            // (예: 발급 POST /coupons/{id}/issue)는 공개하지 않으며 인증 기본 정책을 따른다.
+            // 내 쿠폰(GET /me/coupons)도 prefix 가 달라 여기 매칭되지 않고 인증된다.
+            "/api/v1/coupons"
     };
 
     private static final String[] PUBLIC_PATTERNS = {

@@ -83,6 +83,12 @@ groove:
       password-change:
         capacity: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_CAPACITY:5}
         refill-period: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_REFILL_PERIOD:PT1M}
+  # 선착순 쿠폰 발급 Rate Limit (#90). 회원당 분당 발급 횟수 제한 — JWT memberId 로 키잉(IP 폴백).
+  coupon:
+    rate-limit:
+      issue:
+        capacity: ${COUPON_RATE_LIMIT_ISSUE_CAPACITY:10}
+        refill-period: ${COUPON_RATE_LIMIT_ISSUE_REFILL_PERIOD:PT1M}
   # 멱등성 인프라 (#W7-2). cleanup-cron 을 "-" 로 두면 정리 스케줄러가 비활성화된다.
   idempotency:
     ttl: ${IDEMPOTENCY_TTL:PT24H}

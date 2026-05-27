@@ -14,6 +14,9 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase.Replace;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -101,5 +104,41 @@ class MemberCouponRepositoryTest {
         assertThatThrownBy(() ->
                 memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("findByMemberId — 회원 보유 전체를 coupon 함께 fetch (EntityGraph N+1 방지)")
+    void findByMemberId_fetchesCoupon() {
+        Coupon another = couponRepository.saveAndFlush(Coupon.builder(
+                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build());
+        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
+        memberCouponRepository.save(MemberCoupon.issue(another, memberId));
+        em.flush();
+        em.clear();
+
+        Page<MemberCoupon> page = memberCouponRepository.findByMemberId(
+                memberId, PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "issuedAt")));
+
+        assertThat(page.getTotalElements()).isEqualTo(2);
+        assertThat(page.getContent()).allSatisfy(mc -> assertThat(mc.getCoupon().getName()).isNotBlank());
+    }
+
+    @Test
+    @DisplayName("findByMemberIdAndStatus — 상태로 필터 (ISSUED 1장, CANCELLED 1장)")
+    void findByMemberIdAndStatus_filtersByStatus() {
+        Coupon another = couponRepository.saveAndFlush(Coupon.builder(
+                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build());
+        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
+        MemberCoupon cancelled = MemberCoupon.issue(another, memberId);
+        cancelled.cancel();
+        memberCouponRepository.save(cancelled);
+        em.flush();
+        em.clear();
+
+        var pageable = PageRequest.of(0, 20);
+        assertThat(memberCouponRepository.findByMemberIdAndStatus(memberId, MemberCouponStatus.ISSUED, pageable)
+                .getTotalElements()).isEqualTo(1);
+        assertThat(memberCouponRepository.findByMemberIdAndStatus(memberId, MemberCouponStatus.CANCELLED, pageable)
+                .getTotalElements()).isEqualTo(1);
     }
 }
