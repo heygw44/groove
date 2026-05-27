@@ -68,6 +68,17 @@ public enum ErrorCode {
     REVIEW_ALBUM_NOT_IN_ORDER(HttpStatus.UNPROCESSABLE_ENTITY, "REVIEW_ALBUM_NOT_IN_ORDER", "해당 주문에 포함되지 않은 앨범입니다"),
     REVIEW_DUPLICATED(HttpStatus.CONFLICT, "REVIEW_DUPLICATED", "이미 작성한 리뷰입니다"),
 
+    // COUPON (M13 — docs/plans/coupon-system.md §5)
+    COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "COUPON_NOT_FOUND", "쿠폰을 찾을 수 없습니다"),
+    COUPON_SOLD_OUT(HttpStatus.CONFLICT, "COUPON_SOLD_OUT", "쿠폰이 모두 소진되었습니다"),
+    COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "COUPON_ALREADY_ISSUED", "이미 발급받은 쿠폰입니다"),
+    COUPON_NOT_ISSUABLE(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_NOT_ISSUABLE", "현재 발급할 수 없는 쿠폰입니다"),
+    COUPON_EXPIRED(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_EXPIRED", "유효기간이 만료된 쿠폰입니다"),
+    COUPON_ALREADY_USED(HttpStatus.CONFLICT, "COUPON_ALREADY_USED", "이미 사용한 쿠폰입니다"),
+    COUPON_NOT_OWNED(HttpStatus.FORBIDDEN, "COUPON_NOT_OWNED", "본인이 보유한 쿠폰이 아닙니다"),
+    COUPON_MIN_ORDER_NOT_MET(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_MIN_ORDER_NOT_MET", "최소 주문금액 조건을 충족하지 않습니다"),
+    COUPON_NOT_APPLICABLE(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_NOT_APPLICABLE", "주문에 적용할 수 없는 쿠폰입니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
 
