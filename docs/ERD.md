@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.4 |
+| 버전 | 1.5 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-05-12 |
-| 변경 내용 | v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
+| 최종 수정일 | 2026-05-26 |
+| 변경 내용 | v1.5 (확장: 쿠폰 시스템 — V14/V15 계획 반영): `coupon`·`member_coupon` 2개 테이블 신설(§4.15/§4.16) — §8 v2 후보였던 `coupon`/`coupon_issue` 를 정식 도메인으로 승격. `orders` 에 `discount_amount` 컬럼 추가(주문 총액 대비 할인액, payable = total_amount − discount_amount 파생) — `applied_member_coupon_id` 대신 `member_coupon.order_id` 역참조로 순환 FK 회피. 선착순 발급 동시성은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) ADR(DB 단계적: 베이스라인→비관적 락→원자적 조건부 UPDATE)에 따른다. 설계 전문은 [plans/coupon-system.md](./plans/coupon-system.md). 본 변경은 **계획 단계** — 구현/마이그레이션 적용 시점에 상태 갱신. v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
 | DB | MySQL 8 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | PRD.md, ARCHITECTURE.md |
@@ -40,7 +40,9 @@
 
 ---
 
-## 2. 테이블 목록 (전체 13개)
+## 2. 테이블 목록 (전체 15개)
+
+> 13개(W1~W7) + 쿠폰 확장 2개(`coupon`, `member_coupon`). 쿠폰 2개는 **계획 단계**(V14/V15 미적용).
 
 | 도메인 | 테이블 | 용도 |
 |---|---|---|
@@ -58,6 +60,8 @@
 | 결제 | `idempotency_record` | 멱등성 키 저장 |
 | 배송 | `shipping` | 배송 정보 |
 | 리뷰 | `review` | 상품 리뷰 |
+| 쿠폰 | `coupon` | 쿠폰 정책/캠페인 (할인 규칙 + 선착순 한정수량) — *계획* |
+| 쿠폰 | `member_coupon` | 회원 보유 쿠폰 (발급 인스턴스 + 사용 이력) — *계획* |
 
 ---
 
@@ -86,7 +90,13 @@ erDiagram
 
     orders ||--o{ review : enables
     album ||--o{ review : about
+
+    coupon ||--o{ member_coupon : issued_as
+    member ||--o{ member_coupon : holds
+    orders ||--o| member_coupon : discounted_by
 ```
+
+> 쿠폰 관계(점선·*계획*): `coupon`(정책) 1건이 다수 `member_coupon`(회원 발급분)으로 발급되고, 각 `member_coupon` 은 한 회원 소유이며 사용 시 한 `orders` 에 1:0..1 로 연결된다. `orders` 가 `coupon` 을 직접 참조하지 않는 이유는 §4.16 비고 참조.
 
 ---
 
@@ -360,8 +370,11 @@ erDiagram
 | address_detail | VARCHAR(200) | NULL | 배송지 스냅샷 — 상세 주소 (W12) |
 | zip_code | VARCHAR(20) | NOT NULL (DEFAULT '') | 배송지 스냅샷 — 우편번호 (W12) |
 | safe_packaging_requested | BOOLEAN | NOT NULL, DEFAULT FALSE | 배송지 스냅샷 — LP 안전 포장 요청 (W12) |
+| discount_amount | BIGINT | NOT NULL, DEFAULT 0, CHECK (0 ≤ discount_amount ≤ total_amount) | 쿠폰 할인액 (V15, *계획*). 미사용 주문은 0 |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
+
+> **`discount_amount` (V15, 쿠폰 확장 — 계획)**: 적용된 쿠폰의 할인액. **결제 금액(payable) = `total_amount − discount_amount`** 로 파생하며 별도 컬럼으로 저장하지 않는다(`payment.amount` 가 결제 시점 스냅샷). `total_amount` 는 할인 전 정가 합계 그대로 유지된다. 어떤 쿠폰이 적용됐는지는 `member_coupon.order_id` 역참조로 추적한다 — `orders` 에 `coupon_id`/`applied_member_coupon_id` FK 를 두지 않아 `orders ↔ member_coupon` 순환 FK 를 피한다(§4.16 비고). 기존 행 호환을 위해 DEFAULT 0.
 
 > 배송지 6개 컬럼은 주문 생성 요청(API.md §3.5 `shipping` 블록)을 주문 시점 스냅샷으로 저장한다 — `album_title_snapshot` 과 같은 이유. 결제 완료 후 `shipping` 행(§4.13)으로 그대로 복사된다. 기존 행 호환을 위해 NOT NULL 컬럼에는 빈 문자열/FALSE 기본값을 둔다(신규 주문은 항상 도메인 검증 통과 값).
 
@@ -385,6 +398,9 @@ erDiagram
 | total_amount ≥ 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(0) |
 | paid_at: PAID 전환 시 기록, CANCELLED 시 cancelled_at/reason 기록 | [APP] | 상태 전환 메서드 내부에서 처리 |
 | 배송지 6개 컬럼 = 주문 시점 스냅샷 (요청 `shipping` 블록 복사) | [APP] | OrderShippingInfo 불변식 + Order 정적 팩토리에서 캡처 |
+| 0 ≤ discount_amount ≤ total_amount (V15, *계획*) | [DB+APP] | CHECK + `Coupon.calculateDiscount` 결과를 주문총액으로 캡 |
+| 쿠폰은 회원 주문에만 적용 (게스트 불가, V15, *계획*) | [APP] | OrderService.place — 게스트 주문에 `memberCouponId` 동반 시 거부 |
+| 전액 할인(payable=0)은 v1 범위 외 (*계획*) | [APP] | 결제는 `amount > 0` 계약 — 0원 자동결제(PG 우회)는 후속 과제. [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) §Consequences |
 
 ---
 
@@ -568,6 +584,92 @@ erDiagram
 
 ---
 
+### 4.15 `coupon` — 쿠폰 정책/캠페인 ★ (확장, *계획*)
+
+할인 규칙 + 발급 제약을 정의하는 **정책** 엔티티. 회원이 실제 보유하는 인스턴스는 `member_coupon`(§4.16). 선착순 동시성 시연의 핵심 테이블 — `issued_count` 가 핫 카운터다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| name | VARCHAR(100) | NOT NULL | 쿠폰/캠페인 이름 (예: "신규가입 5천원", "블프 10%") |
+| discount_type | VARCHAR(30) | NOT NULL | enum: FIXED_AMOUNT, PERCENTAGE |
+| discount_value | BIGINT | NOT NULL, CHECK (discount_value > 0) | 정액=원, 정률=퍼센트(1~100) |
+| max_discount_amount | BIGINT | NULL | 정률 할인 상한(원). 정액은 NULL |
+| min_order_amount | BIGINT | NOT NULL, DEFAULT 0, CHECK (≥ 0) | 최소 주문금액 조건 |
+| total_quantity | INT | NULL, CHECK (NULL OR ≥ 0) | 선착순 한정수량. **NULL = 무제한**(직접지급 전용) |
+| issued_count | INT | NOT NULL, DEFAULT 0, CHECK (≥ 0) | 발급 누계 (**핫 카운터**) |
+| per_member_limit | INT | NOT NULL, DEFAULT 1, CHECK (> 0) | 회원당 발급 한도. v1=1 은 `member_coupon` UNIQUE 로 강제 |
+| valid_from | DATETIME(6) | NOT NULL | 발급·사용 시작 |
+| valid_until | DATETIME(6) | NOT NULL | 발급·사용 종료 |
+| status | VARCHAR(30) | NOT NULL, DEFAULT 'ACTIVE' | enum: ACTIVE, SUSPENDED, ENDED |
+| created_at | DATETIME(6) | NOT NULL | |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+**인덱스**
+
+[W13]:
+- `idx_coupon_status` (status) — 관리자 발급 가능 쿠폰 목록 조회
+
+[W10 류 측정 후보] 추가 없음 — 쿠폰 정책은 소량 테이블.
+
+**비즈니스 룰**
+
+| 규칙 | 위치 | 비고 |
+|---|---|---|
+| discount_value > 0 | [DB+APP] | CHECK + 도메인 검증 |
+| 정률은 discount_value ∈ 1~100 | [DB+APP] | CHECK `(discount_type<>'PERCENTAGE' OR discount_value BETWEEN 1 AND 100)` + 도메인 |
+| 정액은 max_discount_amount 무의미 (NULL) | [APP] | 정률만 상한 캡 적용 |
+| issued_count ≤ total_quantity (한정수량 시) | [DB+APP] | CHECK `(total_quantity IS NULL OR issued_count <= total_quantity)` + **원자적 조건부 UPDATE** 가 1차 방어 |
+| valid_until > valid_from | [DB+APP] | CHECK + 도메인 |
+| status 전이 (ACTIVE→SUSPENDED/ENDED) | [APP] | `CouponStatus.canTransitionTo()` |
+| 발급 가능 = ACTIVE & now ∈ [valid_from, valid_until] & (무제한 OR issued_count<total_quantity) | [APP] | CouponIssueService |
+
+**비고**
+- **선착순 동시성**: 발급은 `UPDATE coupon SET issued_count = issued_count + 1 WHERE id = ? AND (total_quantity IS NULL OR issued_count < total_quantity)` 원자적 조건부 UPDATE(affected rows=1 → 성공)로 처리한다. 베이스라인(락 없음)→비관적 락→원자적 UPDATE 단계적 시연은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md). `재고`(album.stock)와 동일한 [overselling-baseline](./troubleshooting/overselling-baseline.md) 서사의 쿠폰판.
+- `total_quantity` NULL = 무제한: 관리자/이벤트 직접지급 전용 쿠폰. 선착순 쿠폰은 양수 한정수량 지정.
+
+---
+
+### 4.16 `member_coupon` — 회원 보유 쿠폰 (확장, *계획*)
+
+`coupon`(정책) 1건이 회원별로 발급된 인스턴스. 발급·사용·만료 이력을 보유한다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| coupon_id | BIGINT | NOT NULL, FK → coupon.id | 발급 출처 정책 |
+| member_id | BIGINT | NOT NULL, FK → member.id | 보유 회원 |
+| status | VARCHAR(30) | NOT NULL, DEFAULT 'ISSUED' | enum: ISSUED, USED, EXPIRED, CANCELLED |
+| issued_at | DATETIME(6) | NOT NULL | 발급 시각 |
+| expires_at | DATETIME(6) | NOT NULL | 만료 시각 — 발급 시 `coupon.valid_until` 스냅샷 |
+| used_at | DATETIME(6) | NULL | 사용 시각 (status=USED 전환 시 기록) |
+| order_id | BIGINT | NULL, FK → orders.id ON DELETE SET NULL | 사용된 주문 (USED 시 연결) |
+| created_at | DATETIME(6) | NOT NULL | |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+**인덱스**
+
+[W13]:
+- `uk_member_coupon_coupon_member` UNIQUE (coupon_id, member_id) — **회원당 1장**(선착순 중복발급 방지 + per_member_limit=1 강제)
+- `idx_member_coupon_member_status` (member_id, status) — 내 쿠폰 목록(상태 필터)
+
+**비즈니스 룰**
+
+| 규칙 | 위치 | 비고 |
+|---|---|---|
+| 회원당 동일 쿠폰 1장 (v1) | [DB+APP] | uk_member_coupon_coupon_member UNIQUE — 중복발급 시 409 `COUPON_ALREADY_ISSUED` |
+| status 전이 (ISSUED→USED/EXPIRED/CANCELLED) | [APP] | `MemberCouponStatus.canTransitionTo()` |
+| 사용 가능 = ISSUED & now ≤ expires_at | [APP] | OrderService.place 적용 시 검증 |
+| 주문 취소/환불 시 USED→ISSUED 복원 | [APP] | OrderService.cancel + AdminOrderService 환불 양쪽 — 재고 복원과 대칭 |
+| FK 참조 무결성 | [DB] | coupon ON DELETE RESTRICT, member ON DELETE CASCADE, orders ON DELETE SET NULL |
+
+**비고**
+- **순환 FK 회피**: 사용된 주문 추적은 `member_coupon.order_id` 한 방향으로만 둔다. `orders` 에 `applied_member_coupon_id` 를 두면 `orders ↔ member_coupon` 양방향 FK 가 되어 삽입 순서 의존성이 생기므로 채택하지 않는다. 주문의 할인액은 `orders.discount_amount`(§4.9)로 충분하고, "어떤 쿠폰을 썼나"는 `member_coupon WHERE order_id=?` 로 해소된다.
+- **만료 스케줄러**: `expires_at < now` 이고 `status=ISSUED` 인 행을 주기적으로 `EXPIRED` 전환([common/scheduling](../src/main/java/com/groove/common/scheduling) 재사용, `IdempotencyRecordCleanupTask` 패턴).
+- **member ON DELETE CASCADE**: member 는 soft delete(`deleted_at`)라 실제로는 거의 발화하지 않으나, 물리 삭제 대비 개인 보유 데이터를 동반 삭제하는 방어적 설정.
+
+---
+
 ## 5. 인덱스 전략 요약
 
 ### 5.1 W5 시점 (W10 시연 위해 의도적 최소 인덱스)
@@ -630,6 +732,9 @@ CREATE INDEX idx_review_album_created ON review(album_id, created_at);
 | `PaymentMethod` | CARD, BANK_TRANSFER, MOCK |
 | `ShippingStatus` | PREPARING, SHIPPED, DELIVERED |
 | `IdempotencyStatus` | PROCESSING, COMPLETED, FAILED |
+| `CouponDiscountType` | FIXED_AMOUNT, PERCENTAGE *(계획)* |
+| `CouponStatus` | ACTIVE, SUSPENDED, ENDED *(계획)* |
+| `MemberCouponStatus` | ISSUED, USED, EXPIRED, CANCELLED *(계획)* |
 
 ---
 
@@ -647,6 +752,10 @@ CREATE INDEX idx_review_album_created ON review(album_id, created_at);
 | V8+ | `V*__init_payment_shipping.sql` | payment, idempotency_record, shipping | W7 | 예정 |
 | V13 | `V13__init_review.sql` | review | W7 | 적용 완료 |
 | V10+ | `V*__add_search_indexes.sql` | W10 시연용 검색·정렬 인덱스 | W10 | 예정 |
+| V14 | `V14__init_coupon.sql` | coupon, member_coupon (확장) | 확장(W13) | 계획 |
+| V15 | `V15__order_coupon_columns.sql` | orders `discount_amount` ALTER + CHECK | 확장(W13) | 계획 |
+
+> V14/V15 는 W10 검색 인덱스 마이그레이션과 버전 번호가 겹칠 수 있다 — Flyway 는 적용 순서를 버전 번호로 정하므로, **실제 도입 시점에 미적용 최대 버전 다음 번호로 재배정**한다(W10 검색 인덱스가 먼저 적용되면 쿠폰은 V16/V17 등). 한 번 적용된 마이그레이션은 수정 금지 원칙 유지.
 
 > V4 범위 정정: 당초 1회로 묶어 계획했던 artist+genre+label+album 마이그레이션을 W5-1(genre/label) → W5-2(artist) → W5-3(album) 순서대로 분리 도입한다 (#31 에서 결정). W5-2(#32) 까지 적용 완료. W5-3(album) 의 정확한 버전 번호는 후속 이슈가 확정한다.
 
@@ -664,11 +773,11 @@ ERD에 미리 자리만 잡아두는 후보:
 |---|---|---|
 | `album_used_listing` | 중고 LP 등록 (컨디션 등급별) | v2 |
 | `album_pre_order` | 발매 전 예약 주문 | v2 |
-| `coupon`, `coupon_issue` | 쿠폰 관리 | v2 |
+| ~~`coupon`, `coupon_issue`~~ → `coupon`, `member_coupon` | 쿠폰 관리 | **확장(W13)으로 승격** — §4.15/§4.16 정식 반영 |
 | `point_history` | 적립금 이력 | v2 |
 | `wish_list` | 위시리스트 | v2 |
 
-v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재.
+v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재. 단 `coupon`/`member_coupon` 은 W7 완료 후 **확장 도메인으로 승격**되어 §4.15/§4.16 에 정식 스키마로 편입되었다(테이블명은 `coupon_issue` → `member_coupon` 으로 정정).
 
 ---
 
@@ -678,6 +787,7 @@ v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재.
 - 모든 FK는 `ON DELETE RESTRICT` (참조되는 데이터 삭제 방지)
 - UNIQUE 제약은 비즈니스 핵심 룰에 모두 적용 (중복 방지)
 - `CHECK` 제약 (MySQL 8 지원): `quantity > 0`, `rating BETWEEN 1 AND 5`, `stock >= 0`, `price >= 0`, `total_amount >= 0`, `unit_price >= 0`, `amount >= 0`
+- 쿠폰 확장(*계획*) `CHECK`: `discount_value > 0`, 정률 `discount_value BETWEEN 1 AND 100`, `min_order_amount >= 0`, `issued_count >= 0`, `issued_count <= total_quantity`(한정수량 시), `total_quantity >= 0`, `per_member_limit > 0`, `valid_until > valid_from`, `orders.discount_amount BETWEEN 0 AND total_amount`
 
 ### 9.2 애플리케이션 레벨
 - 상태 전이는 enum 메서드(`canTransitionTo`)로 검증 (DB 트리거 미사용)

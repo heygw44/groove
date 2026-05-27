@@ -89,8 +89,11 @@
 | 측정 | W9 | k6 시나리오, 베이스라인, 문제 식별 | **G3** | 6 |
 | CS 개선 | W10~W11 | N+1·인덱스·동시성·멱등성 + Before/After | — | 8 |
 | 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | 5 |
+| 확장 (쿠폰) | M13 | 쿠폰 시스템 + 선착순 동시성 + k6 Before/After | — | 6 |
 
-**총 이슈 수: 약 60개** (W11 옵션 포함 시 65개)
+**총 이슈 수: 약 60개** (W11 옵션 포함 시 65개) + 쿠폰 확장 6개
+
+> **확장(쿠폰) 마일스톤(M13)**: W1~W12 본 로드맵 외 추가 도메인. 선착순 발급 동시성으로 W8~W12 미충족 산출물(DoD #4 k6·#5 Before/After)을 함께 메운다. 상세 이슈는 §3 끝의 「확장 — 쿠폰 시스템」 절, 설계는 [plans/coupon-system.md](plans/coupon-system.md).
 
 ---
 
@@ -1243,6 +1246,106 @@
 **완료 조건**
 - [ ] G4 게이트 모든 항목 통과 ★
 - [ ] 외부에서 1회 클린 셋업 성공
+
+---
+
+## 확장 — 쿠폰 시스템 (M13, *계획*)
+
+> W1~W12 본 로드맵 외 **확장 도메인**. 이커머스 핵심 기능(쿠폰)을 추가하되, **선착순 한정수량 발급의 대용량 동시성**을 단계적으로 시연해 W8~W12 의 미충족 산출물(특히 DoD #4 k6 부하테스트·#5 Before/After 개선 사례)을 함께 메운다.
+> 설계 정본: [plans/coupon-system.md](plans/coupon-system.md) · 동시성 결정: [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md) · 스키마: [ERD.md §4.15/§4.16](ERD.md) · API: [API.md §3.9](API.md).
+> 1 Phase = 1 이슈 = 1 PR. 브랜치 `feat/{이슈번호}`, 커밋·PR 한글, `Closes #N`.
+
+### #C-0 (GH #88) [docs] 쿠폰 설계·ERD·API 명세 + 마이그레이션 초안
+**라벨**: `type:docs`, `domain:coupon`, `M`
+**선행**: G2
+
+**목적**: 구현 전 설계·스키마·API 를 문서로 확정한다.
+
+**작업 내용**
+- [x] ERD §4.15/§4.16(`coupon`/`member_coupon`) + `orders.discount_amount`
+- [x] API §3.9(쿠폰)·§3.10(관리자 쿠폰) + 에러 코드 + rate limit
+- [x] glossary 엔티티·enum·용어
+- [x] 설계 plan + 동시성 ADR + 트러블슈팅 skeleton
+- [ ] `V14__init_coupon.sql`·`V15__order_coupon_columns.sql` SQL 초안
+
+**완료 조건**
+- [x] ERD/API/glossary/plan/ADR 상호 링크 정합
+- [ ] 마이그레이션 SQL 이 ERD 와 1:1
+
+### #C-1 (GH #89) [feature] 쿠폰 도메인 모델 (Coupon · MemberCoupon)
+**라벨**: `type:feature`, `domain:coupon`, `M`
+**선행**: #C-0
+
+**작업 내용**
+- [ ] `Coupon`·`MemberCoupon` 엔티티 + `CouponDiscountType`/`CouponStatus`/`MemberCouponStatus` enum
+- [ ] Repository + Flyway V14 적용
+- [ ] `Coupon.calculateDiscount(subtotal)` (정액/정률/캡/최소금액)
+- [ ] 상태 머신 `canTransitionTo`
+- [ ] `COUPON_*` ErrorCode 추가
+
+**완료 조건**
+- [ ] 할인 계산 `@ParameterizedTest`(정액·정률·캡·최소금액 경계) 통과
+- [ ] 상태 전이 위반 거부 검증
+
+### #C-2 (GH #90) [feature] 선착순 쿠폰 발급 + 동시성 (헤드라인)
+**라벨**: `type:feature`, `domain:coupon`, `L`
+**선행**: #C-1
+
+**목적**: 초과발급 없이 정확히 한정수량만 발급. 베이스라인→비관적 락→원자적 UPDATE 단계 시연.
+
+**작업 내용**
+- [ ] `CouponIssueService` — 베이스라인(레이스) + 비관적 락 + 원자적 조건부 UPDATE
+- [ ] `POST /coupons/{id}/issue` (USER, Idempotency-Key) + `GET /coupons` + `GET /me/coupons`
+- [ ] `UNIQUE(coupon_id, member_id)` 중복발급 방지
+- [ ] 동시성 테스트(Testcontainers): 초과발급 재현(`@Disabled` 보존) + 원자적 UPDATE 정확성 검증
+
+**완료 조건**
+- [ ] 원자적 UPDATE 경로에서 `발급수 == total_quantity` (초과발급 0)
+- [ ] 중복 요청 시 한 장만 발급
+
+### #C-3 (GH #91) [feature] 주문/결제 쿠폰 통합 + 취소·환불 복원
+**라벨**: `type:feature`, `domain:coupon`, `domain:order`, `L`
+**선행**: #C-2
+
+**작업 내용**
+- [ ] `Order.discountAmount` + `getPayableAmount()`, `OrderCreateRequest.memberCouponId`, V15 적용
+- [ ] `OrderService.place` 쿠폰 검증·적용(USED 전이), 게스트 거부
+- [ ] `PaymentService` 청구액 `getPayableAmount()` 로 변경
+- [ ] `OrderService.cancel` + `AdminOrderService` 환불 시 쿠폰 복원(USED→ISSUED)
+- [ ] 통합테스트(발급→쿠폰주문→결제 청구액→취소/환불 복원)
+
+**완료 조건**
+- [ ] 쿠폰 주문의 결제 금액 = payable
+- [ ] 취소·환불 양 경로 모두 쿠폰 복원 검증
+
+### #C-4 (GH #92) [feature] 관리자 쿠폰 CRUD · 직접지급 · 만료 스케줄러
+**라벨**: `type:feature`, `domain:coupon`, `domain:admin`, `M`
+**선행**: #C-3
+
+**작업 내용**
+- [ ] `POST·GET /admin/coupons`, `PATCH /admin/coupons/{id}/status`, `POST /admin/coupons/{id}/grant`
+- [ ] 직접지급(선착순 한정수량과 별개, `member_coupon` INSERT)
+- [ ] 만료 스케줄러(ISSUED 중 `expires_at < now` → EXPIRED, `IdempotencyRecordCleanupTask` 패턴)
+
+**완료 조건**
+- [ ] 관리자 CRUD/grant 정상 + 권한 검증(ADMIN)
+- [ ] 만료 배치 동작 검증
+
+### #C-5 (GH #93) [improvement] k6 발급 부하 측정 + Before/After + 커버리지 게이트
+**라벨**: `type:improvement`, `domain:coupon`, `M`
+**선행**: #C-4
+
+**목적**: DoD #4(k6)·#5(Before/After) 충족.
+
+**작업 내용**
+- [ ] k6 발급 부하 스크립트(베이스라인/비관적/원자적 3종 비교)
+- [ ] [troubleshooting/coupon-issuance-concurrency.md](troubleshooting/coupon-issuance-concurrency.md) §3/§6 실측치 채움
+- [ ] `build.gradle.kts` JaCoCo 게이트에 `com.groove.coupon.*` 80% 편입
+- [ ] README 에 Before/After 사례 기재
+
+**완료 조건**
+- [ ] 3종 전략의 TPS·정확성 비교표 완성
+- [ ] coupon 패키지 라인 커버리지 80% 통과
 
 ---
 
