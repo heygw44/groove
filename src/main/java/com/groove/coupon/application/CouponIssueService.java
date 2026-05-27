@@ -54,8 +54,10 @@ public class CouponIssueService {
     /**
      * <b>프로덕션 발급 경로 — 원자적 조건부 UPDATE.</b>
      *
-     * <p>{@code issued_count < total_quantity} 검사와 증가를 단일 UPDATE 문으로 원자 처리하므로 핫 카운터
-     * 경합에도 초과발급이 없다 (affected=1 성공 / 0 소진).
+     * <p>status+{@code issued_count < total_quantity} 검사와 증가를 단일 UPDATE 문으로 원자 처리하므로
+     * 핫 카운터 경합에도 초과발급이 없다 (affected=1 성공 / 0 발급불가 → 재조회로 소진·비ACTIVE 판별).
+     * 발급 기간(validFrom·validUntil)은 UPDATE 가 검사하지 않으므로 {@link #validateIssuable} 사전 검사가
+     * 게이트한다 — 기간 경계는 고정 시각이라 관리자 트리거 경합이 없어 사전 검사로 충분하다.
      */
     @Transactional
     public MemberCouponResponse issue(Long memberId, Long couponId) {
