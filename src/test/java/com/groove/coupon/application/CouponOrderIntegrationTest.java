@@ -239,7 +239,7 @@ class CouponOrderIntegrationTest {
                         f.memberCoupon.getId()))))
                 .isInstanceOf(CouponNotApplicableException.class);
 
-        // 재고 미차감 — 검증이 가장 빨라 album loading 도 일어나지 않아야 함.
+        // 게스트+쿠폰 검증이 stock 차감 루프 이전에 일어나므로 재고가 차감되지 않았어야 한다 (트랜잭션 롤백 보조 검증).
         Album album = albumRepository.findById(f.album.getId()).orElseThrow();
         assertThat(album.getStock()).isEqualTo(10);
     }
