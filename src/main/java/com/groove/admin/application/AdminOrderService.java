@@ -2,6 +2,7 @@ package com.groove.admin.application;
 
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
+import com.groove.coupon.application.CouponApplicationService;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
@@ -47,9 +48,11 @@ import java.util.Set;
  *
  * <h2>환불</h2>
  * <p>{@link #refund} 는 단일 트랜잭션에서 PG {@code refund()} 호출 + {@code Payment} REFUNDED 전이 +
- * {@code Order} CANCELLED 전이 + 각 라인 재고 복원을 수행한다 ({@code PaymentCallbackService} 의 FAILED
- * 보상 트랜잭션과 같은 패턴). 어느 단계든 실패하면 트랜잭션 전체가 롤백된다. PG 호출이 트랜잭션 안에서
- * 일어나 DB 커넥션을 점유하는 한계는 {@code PaymentService} 와 동일하게 v1 Mock 지연이 짧아 허용한다.
+ * {@code Order} CANCELLED 전이 + 각 라인 재고 복원 + 쿠폰 USED→ISSUED 복원을 수행한다
+ * ({@code PaymentCallbackService} 의 FAILED 보상 트랜잭션과 같은 패턴). 어느 단계든 실패하면 트랜잭션
+ * 전체가 롤백된다. PG 호출이 트랜잭션 안에서 일어나 DB 커넥션을 점유하는 한계는 {@code PaymentService} 와
+ * 동일하게 v1 Mock 지연이 짧아 허용한다. 쿠폰 복원은 {@code OrderService.cancel} 과 대칭으로
+ * 호출되어야 하며 누락 시 환불된 주문의 쿠폰이 USED 인 채로 남는다 (이슈 #91 HIGH 리스크).
  *
  * <p>멱등: 이미 {@code REFUNDED} 인 결제에 재요청하면 PG 호출/상태 전이/재고 복원 없이 현재 상태로 응답한다
  * (이슈 #69 DoD "중복 환불 요청 무해"). 동시 이중 제출 race 는 {@code OrderService#place} 의 재고 차감과
@@ -71,13 +74,16 @@ public class AdminOrderService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
+    private final CouponApplicationService couponApplicationService;
 
     public AdminOrderService(OrderRepository orderRepository,
                              PaymentRepository paymentRepository,
-                             PaymentGateway paymentGateway) {
+                             PaymentGateway paymentGateway,
+                             CouponApplicationService couponApplicationService) {
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
+        this.couponApplicationService = couponApplicationService;
     }
 
     /**
@@ -180,6 +186,9 @@ public class AdminOrderService {
             item.getAlbum().adjustStock(item.getQuantity());
             restored++;
         }
+        // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (이슈 #91 DoD HIGH 리스크: cancel + refund 양 경로 복원).
+        // 미적용 주문은 no-op. REFUNDED 멱등 분기에서는 호출되지 않으므로 중복 복원 우려 없음.
+        couponApplicationService.restoreForOrder(order.getId());
         log.info("관리자 환불 완료: order={}, paymentId={}, amount={}, 재고복원 {}건",
                 orderNumber, payment.getId(), payment.getAmount(), restored);
         return RefundResult.refunded(order, payment, pgResponse.refundedAt());

@@ -53,12 +53,15 @@ class OrderServiceTest {
     private AlbumRepository albumRepository;
     @Mock
     private OrderNumberGenerator orderNumberGenerator;
+    @Mock
+    private com.groove.coupon.application.CouponApplicationService couponApplicationService;
 
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
-        orderService = new OrderService(orderRepository, albumRepository, orderNumberGenerator);
+        orderService = new OrderService(orderRepository, albumRepository, orderNumberGenerator,
+                couponApplicationService);
     }
 
     private Album album(long id, AlbumStatus status, int stock, long price) {
@@ -73,11 +76,22 @@ class OrderServiceTest {
     }
 
     private OrderCreateRequest memberRequest(OrderItemRequest... items) {
-        return new OrderCreateRequest(List.of(items), null, OrderFixtures.sampleShippingInfoRequest());
+        return new OrderCreateRequest(List.of(items), null, OrderFixtures.sampleShippingInfoRequest(), null);
+    }
+
+    private OrderCreateRequest memberRequestWithCoupon(Long memberCouponId, OrderItemRequest... items) {
+        return new OrderCreateRequest(List.of(items), null, OrderFixtures.sampleShippingInfoRequest(),
+                memberCouponId);
     }
 
     private OrderCreateRequest guestRequest(GuestInfoRequest guest, OrderItemRequest... items) {
-        return new OrderCreateRequest(List.of(items), guest, OrderFixtures.sampleShippingInfoRequest());
+        return new OrderCreateRequest(List.of(items), guest, OrderFixtures.sampleShippingInfoRequest(), null);
+    }
+
+    private OrderCreateRequest guestRequestWithCoupon(GuestInfoRequest guest, Long memberCouponId,
+                                                       OrderItemRequest... items) {
+        return new OrderCreateRequest(List.of(items), guest, OrderFixtures.sampleShippingInfoRequest(),
+                memberCouponId);
     }
 
     @Test
@@ -402,5 +416,70 @@ class OrderServiceTest {
         Order order = orderService.place(1L, memberRequest(new OrderItemRequest(10L, 1)));
 
         assertThat(order.getOrderNumber()).isEqualTo("ORD-20260508-BBBBBB");
+    }
+
+    // -- 쿠폰 통합 (#91) ------------------------------------------------------
+
+    @Test
+    @DisplayName("게스트 + memberCouponId → CouponNotApplicableException, 재고/저장 미실행")
+    void place_guestWithCoupon_rejected() {
+        GuestInfoRequest guest = new GuestInfoRequest("g@example.com", "010-1111-2222");
+
+        assertThatThrownBy(() -> orderService.place(null,
+                guestRequestWithCoupon(guest, 7L, new OrderItemRequest(10L, 1))))
+                .isInstanceOf(com.groove.coupon.exception.CouponNotApplicableException.class);
+        verify(albumRepository, never()).findById(any());
+        verify(orderRepository, never()).save(any(Order.class));
+        verify(couponApplicationService, never()).applyToOrder(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("회원 주문 + memberCouponId → 저장 후 applyToOrder 호출")
+    void place_memberWithCoupon_callsApply() {
+        Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
+        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(orderNumberGenerator.generate()).willReturn("ORD-20260528-A1A1A1");
+        given(orderRepository.existsByOrderNumber("ORD-20260528-A1A1A1")).willReturn(false);
+        given(orderRepository.save(any(Order.class))).willAnswer(inv -> {
+            Order o = inv.getArgument(0);
+            ReflectionTestUtils.setField(o, "id", 555L);  // 저장 시 id 부여 흉내
+            return o;
+        });
+
+        Order order = orderService.place(1L, memberRequestWithCoupon(7L, new OrderItemRequest(10L, 1)));
+
+        assertThat(order.getId()).isEqualTo(555L);
+        verify(couponApplicationService).applyToOrder(7L, 1L, order);
+    }
+
+    @Test
+    @DisplayName("회원 주문 + memberCouponId == null → applyToOrder 미호출")
+    void place_memberNoCoupon_doesNotApply() {
+        Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
+        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(orderNumberGenerator.generate()).willReturn("ORD-20260528-B2B2B2");
+        given(orderRepository.existsByOrderNumber("ORD-20260528-B2B2B2")).willReturn(false);
+        given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
+
+        orderService.place(1L, memberRequest(new OrderItemRequest(10L, 1)));
+
+        verify(couponApplicationService, never()).applyToOrder(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("cancel — 재고 복원 후 restoreForOrder 호출 (적용 여부 무관, 미적용은 서비스에서 no-op)")
+    void cancel_callsCouponRestore() {
+        Album a = album(10L, AlbumStatus.SELLING, 0, 30000L);
+        Order order = Order.placeForMember("ORD-20260528-C3C3C3", 1L, OrderFixtures.sampleShippingInfo());
+        order.addItem(com.groove.order.domain.OrderItem.create(a, 2));
+        ReflectionTestUtils.setField(order, "id", 777L);
+        given(orderRepository.findWithAlbumsByOrderNumber("ORD-20260528-C3C3C3"))
+                .willReturn(Optional.of(order));
+
+        orderService.cancel(1L, "ORD-20260528-C3C3C3", "변심");
+
+        assertThat(order.getStatus()).isEqualTo(com.groove.order.domain.OrderStatus.CANCELLED);
+        assertThat(a.getStock()).isEqualTo(2);   // 재고 복원
+        verify(couponApplicationService).restoreForOrder(777L);
     }
 }

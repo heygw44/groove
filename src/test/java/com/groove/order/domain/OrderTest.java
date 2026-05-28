@@ -152,6 +152,89 @@ class OrderTest {
     }
 
     @Nested
+    @DisplayName("applyDiscount — 쿠폰 할인 적용 + payable 산정 (#91)")
+    class ApplyDiscount {
+
+        @Test
+        @DisplayName("초기 — discountAmount=0, payable=total")
+        void initialState() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.addItem(OrderItem.create(album(10L, 30000L), 2));
+
+            assertThat(order.getDiscountAmount()).isZero();
+            assertThat(order.getPayableAmount()).isEqualTo(60000L);
+        }
+
+        @Test
+        @DisplayName("정상 적용 — payable = total − discount")
+        void appliesDiscount() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.addItem(OrderItem.create(album(10L, 30000L), 2));   // total = 60000
+
+            order.applyDiscount(15000L);
+
+            assertThat(order.getDiscountAmount()).isEqualTo(15000L);
+            assertThat(order.getPayableAmount()).isEqualTo(45000L);
+        }
+
+        @Test
+        @DisplayName("totalAmount 와 같은 할인 — payable=0 (v1 정책: PG 단에서 거부, 도메인은 허용)")
+        void allowsFullDiscount() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.addItem(OrderItem.create(album(10L, 10000L), 1));
+
+            order.applyDiscount(10000L);
+
+            assertThat(order.getPayableAmount()).isZero();
+        }
+
+        @Test
+        @DisplayName("음수 할인 → IllegalArgumentException")
+        void rejectsNegative() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.addItem(OrderItem.create(album(10L, 10000L), 1));
+
+            assertThatThrownBy(() -> order.applyDiscount(-1L))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThat(order.getDiscountAmount()).isZero();
+        }
+
+        @Test
+        @DisplayName("totalAmount 초과 할인 → IllegalArgumentException (DB CHECK 사전 차단)")
+        void rejectsOverTotal() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.addItem(OrderItem.create(album(10L, 10000L), 1));
+
+            assertThatThrownBy(() -> order.applyDiscount(10001L))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThat(order.getDiscountAmount()).isZero();
+        }
+
+        @Test
+        @DisplayName("PAID 이후 applyDiscount → IllegalStateTransitionException (결제 후 할인 변경 금지)")
+        void rejectsAfterPaid() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.addItem(OrderItem.create(album(10L, 10000L), 1));
+            order.changeStatus(OrderStatus.PAID, null);
+
+            assertThatThrownBy(() -> order.applyDiscount(1000L))
+                    .isInstanceOf(IllegalStateTransitionException.class);
+            assertThat(order.getDiscountAmount()).isZero();
+        }
+
+        @Test
+        @DisplayName("CANCELLED 상태에서 applyDiscount → IllegalStateTransitionException")
+        void rejectsAfterCancelled() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.addItem(OrderItem.create(album(10L, 10000L), 1));
+            order.changeStatus(OrderStatus.CANCELLED, "변심");
+
+            assertThatThrownBy(() -> order.applyDiscount(1000L))
+                    .isInstanceOf(IllegalStateTransitionException.class);
+        }
+    }
+
+    @Nested
     @DisplayName("changeStatus — 합법/불법 전이 + 시각 기록")
     class ChangeStatus {
 

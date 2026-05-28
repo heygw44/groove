@@ -76,6 +76,20 @@ public class Order extends BaseTimeEntity {
     @Column(name = "total_amount", nullable = false)
     private long totalAmount;
 
+    /**
+     * 쿠폰 할인 금액 (원, 0 이상). {@code payable = totalAmount − discountAmount} 의 차감분.
+     *
+     * <p>쿠폰 미적용 주문에서는 {@code 0} 으로 유지된다. DB CHECK ({@code ck_orders_discount_within_total},
+     * V15) 가 {@code 0 ≤ discount_amount ≤ total_amount} 를 2차 방어하지만, 1차 방어는 도메인
+     * {@link #applyDiscount(long)} 가 한다 — 적용 시점 검증으로 CHECK 위반이 DB 까지 닿지 않게 한다.
+     *
+     * <p>설계상 PENDING 상태에서만 변경된다 (적용/취소복원 모두 PENDING 진입 시점). 그래서 가드 변경자
+     * {@link #applyDiscount(long)} 가 status 확인을 함께 수행한다 — totalAmount 가 확정되기 전(addItem 도중)에
+     * 적용되면 CHECK 위반이 가능하므로 호출자({@code OrderService.place})는 totalAmount 확정 후 호출한다.
+     */
+    @Column(name = "discount_amount", nullable = false)
+    private long discountAmount;
+
     @Column(name = "paid_at")
     private Instant paidAt;
 
@@ -133,6 +147,7 @@ public class Order extends BaseTimeEntity {
         this.safePackagingRequested = shipping.safePackagingRequested();
         this.status = OrderStatus.PENDING;
         this.totalAmount = 0L;
+        this.discountAmount = 0L;
     }
 
     /**
@@ -189,6 +204,34 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
+     * 쿠폰 할인 적용 — PENDING 상태에서 {@code totalAmount} 확정 후 단 한 번 호출되는 것을 전제한다.
+     *
+     * <p>가드:
+     * <ul>
+     *   <li>{@code status != PENDING} → {@link IllegalStateTransitionException} (현재→PENDING 가짜 전이로 의도 표현).
+     *       결제 이후 할인 변경을 금지해 결제 금액과 주문 금액의 정합성을 지킨다.</li>
+     *   <li>{@code amount < 0} 또는 {@code amount > totalAmount} → {@link IllegalArgumentException} —
+     *       DB CHECK ({@code ck_orders_discount_within_total}, V15) 위반을 사전 차단한다.</li>
+     * </ul>
+     *
+     * <p>중복 호출은 막지 않는다 — {@code OrderService.place} 는 라이프사이클상 1회만 호출하며,
+     * 이상 동작이 발생해도 마지막 값이 CHECK 안에 있으면 데이터 정합성은 깨지지 않는다.
+     */
+    public void applyDiscount(long amount) {
+        if (status != OrderStatus.PENDING) {
+            throw new IllegalStateTransitionException(status, status);
+        }
+        if (amount < 0) {
+            throw new IllegalArgumentException("discount amount must be non-negative: " + amount);
+        }
+        if (amount > totalAmount) {
+            throw new IllegalArgumentException(
+                    "discount amount " + amount + " exceeds totalAmount " + totalAmount);
+        }
+        this.discountAmount = amount;
+    }
+
+    /**
      * 항목 추가 + totalAmount 누적.
      */
     public void addItem(OrderItem item) {
@@ -226,6 +269,19 @@ public class Order extends BaseTimeEntity {
 
     public long getTotalAmount() {
         return totalAmount;
+    }
+
+    public long getDiscountAmount() {
+        return discountAmount;
+    }
+
+    /**
+     * 실제 청구 금액 — {@code totalAmount − discountAmount}. {@link com.groove.coupon.domain.Coupon}
+     * 의 {@code discount ≤ subtotal} 불변식과 {@link #applyDiscount} 의 가드, V15 의 CHECK 가
+     * 함께 {@code ≥ 0} 을 보장한다. {@code PaymentService.requestPayment} 가 PG 청구액으로 사용한다.
+     */
+    public long getPayableAmount() {
+        return totalAmount - discountAmount;
     }
 
     public Instant getPaidAt() {

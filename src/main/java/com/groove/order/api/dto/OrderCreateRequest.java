@@ -17,6 +17,10 @@ import java.util.List;
  * <p>{@code shipping} 은 회원/게스트 공통 필수 — 결제 완료 후 이 스냅샷으로 배송 행이 만들어진다(#W7-6).
  *
  * <p>items 상한 50 — 한 주문에 50개 라인 이상은 비현실적이며 응답 페이로드 비대화 방지.
+ *
+ * <p>{@code memberCouponId} (#91) — optional. 회원 주문에서 쿠폰 1장을 적용한다. 게스트 주문에 동봉되면
+ * 서비스 레벨에서 {@code COUPON_NOT_APPLICABLE} (422) 로 거부된다. 검증 어노테이션은 두지 않는다 —
+ * null 도 합법이라 빈 값/0 모두 허용한다 (실패는 적용 단계에서 매핑).
  */
 public record OrderCreateRequest(
         @NotEmpty
@@ -29,6 +33,8 @@ public record OrderCreateRequest(
 
         @NotNull
         @Valid
-        ShippingInfoRequest shipping
+        ShippingInfoRequest shipping,
+
+        Long memberCouponId
 ) {
 }

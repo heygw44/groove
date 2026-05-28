@@ -71,12 +71,15 @@ class AdminOrderServiceTest {
     private PaymentRepository paymentRepository;
     @Mock
     private PaymentGateway paymentGateway;
+    @Mock
+    private com.groove.coupon.application.CouponApplicationService couponApplicationService;
 
     private AdminOrderService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminOrderService(orderRepository, paymentRepository, paymentGateway);
+        service = new AdminOrderService(orderRepository, paymentRepository, paymentGateway,
+                couponApplicationService);
     }
 
     private Album album(int initialStock) {
@@ -220,6 +223,8 @@ class AdminOrderServiceTest {
             assertThat(captor.getValue().reason()).isEqualTo("운영 환불");
             // #72: 결정적 멱등 키 전달 — 보상 트랜잭션 재시도 시 PG 캐시 응답 보장.
             assertThat(captor.getValue().idempotencyKey()).isEqualTo(EXPECTED_IDEM_KEY);
+            // #91: 쿠폰 복원 호출 (적용 여부 무관 — 서비스 내부에서 미적용 주문은 no-op).
+            verify(couponApplicationService).restoreForOrder(order.getId());
         }
 
         @Test
@@ -239,6 +244,8 @@ class AdminOrderServiceTest {
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
             assertThat(album.getStock()).isEqualTo(5);
             verifyNoInteractions(paymentGateway);
+            // #91: 멱등 분기에서는 쿠폰 복원도 호출되지 않음 (이미 환불·복원 완료된 상태).
+            verifyNoInteractions(couponApplicationService);
         }
 
         @Test
