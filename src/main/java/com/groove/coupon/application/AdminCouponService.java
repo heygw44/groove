@@ -139,7 +139,8 @@ public class AdminCouponService {
      */
     @Transactional
     public MemberCoupon grant(Long couponId, Long memberId) {
-        Coupon coupon = couponRepository.findById(couponId)
+        // 행 락으로 changeStatus 와 동일 경계에 맞춰 상태 전이와 발급 가능성 검사를 직렬화한다 (#92 리뷰).
+        Coupon coupon = couponRepository.findByIdForUpdate(couponId)
                 .orElseThrow(() -> new CouponNotFoundException(couponId));
         if (!coupon.isIssuable(clock.instant())) {
             // SUSPENDED/ENDED 또는 validUntil 경과 — 즉시-만료 회원쿠폰 생성 차단 (#92 리뷰).
@@ -154,8 +155,12 @@ public class AdminCouponService {
         try {
             granted = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
         } catch (DataIntegrityViolationException uniqueRace) {
-            // 사전 검사 통과 후 다른 트랜잭션이 먼저 INSERT 한 경우 — 같은 의미 코드로 응답.
-            throw new CouponAlreadyIssuedException(couponId, memberId);
+            // 사전 검사 통과 후 다른 트랜잭션이 먼저 INSERT 한 UNIQUE 충돌일 때만 같은 의미 코드로 응답하고,
+            // 그 외 무결성 오류는 원인 은폐를 막기 위해 원예외를 재던진다 (#92 리뷰).
+            if (memberCouponRepository.existsByCoupon_IdAndMemberId(couponId, memberId)) {
+                throw new CouponAlreadyIssuedException(couponId, memberId);
+            }
+            throw uniqueRace;
         }
         log.info("관리자 쿠폰 직접지급: couponId={}, memberId={}, memberCouponId={}",
                 couponId, memberId, granted.getId());

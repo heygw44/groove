@@ -52,8 +52,9 @@ public class MemberCouponExpirationTask {
             if (total > 0) {
                 log.info("만료된 회원 쿠폰 {}건 EXPIRED 전환", total);
             }
-        } catch (Throwable e) {
-            // Throwable 까지 잡아 스케줄러 스레드가 죽지 않도록 보호 (#92 리뷰). 다음 주기에 재시도.
+        } catch (Exception e) {
+            // 스케줄러 스레드가 죽지 않도록 보호하되, OutOfMemoryError 등 치명적 Error 는 전파시킨다 (#92 리뷰).
+            // 다음 주기에 재시도.
             log.warn("회원 쿠폰 만료 처리 실패 — 다음 주기에 재시도", e);
         }
     }
