@@ -292,11 +292,17 @@ public class Coupon extends BaseTimeEntity {
                 throw new IllegalArgumentException(
                         "maxDiscountAmount must be positive when present: " + maxDiscountAmount);
             }
+            // 정률 할인은 상한(maxDiscountAmount) 필수 — 무제한 정률은 큰 주문에서 손실이 무한히 커진다 (#92 리뷰).
+            if (discountType == CouponDiscountType.PERCENTAGE && maxDiscountAmount == null) {
+                throw new IllegalArgumentException(
+                        "PERCENTAGE coupon requires maxDiscountAmount to bound the discount");
+            }
             if (minOrderAmount < 0) {
                 throw new IllegalArgumentException("minOrderAmount must be non-negative: " + minOrderAmount);
             }
-            if (totalQuantity != null && totalQuantity < 0) {
-                throw new IllegalArgumentException("totalQuantity must be non-negative: " + totalQuantity);
+            // totalQuantity=0 은 '처음부터 0건' 인 죽은 정책 — null(무제한) 또는 양수만 허용 (#92 리뷰).
+            if (totalQuantity != null && totalQuantity <= 0) {
+                throw new IllegalArgumentException("totalQuantity must be positive when present: " + totalQuantity);
             }
             if (perMemberLimit <= 0) {
                 throw new IllegalArgumentException("perMemberLimit must be positive: " + perMemberLimit);

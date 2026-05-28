@@ -92,6 +92,17 @@ class MemberCouponStatusTest {
         }
     }
 
+    /**
+     * 만료 배치(#92) 의 네이티브 SQL 이 'ISSUED'/'EXPIRED' 문자열 리터럴을 박아 비교한다 —
+     * enum 리네이밍이 silent 하게 SQL 매칭을 깨지 않도록 본 단언이 회귀 알람 역할을 한다.
+     */
+    @Test
+    @DisplayName("ISSUED/EXPIRED 이름 가정 보호 — 만료 배치 네이티브 SQL 의 리터럴과 정합")
+    void enumNames_pinnedForExpirationQuery() {
+        assertThat(MemberCouponStatus.ISSUED.name()).isEqualTo("ISSUED");
+        assertThat(MemberCouponStatus.EXPIRED.name()).isEqualTo("EXPIRED");
+    }
+
     private record Pair(MemberCouponStatus from, MemberCouponStatus to) {
     }
 }

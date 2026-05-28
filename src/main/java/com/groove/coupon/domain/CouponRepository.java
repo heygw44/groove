@@ -61,4 +61,9 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
     @Query("SELECT c FROM Coupon c WHERE c.status = com.groove.coupon.domain.CouponStatus.ACTIVE "
             + "AND c.validFrom <= :now AND c.validUntil >= :now")
     Page<Coupon> findIssuable(@Param("now") Instant now, Pageable pageable);
+
+    /**
+     * 관리자 목록 조회(상태 필터) — API.md §3.10 {@code GET /admin/coupons?status=...}.
+     */
+    Page<Coupon> findByStatus(CouponStatus status, Pageable pageable);
 }

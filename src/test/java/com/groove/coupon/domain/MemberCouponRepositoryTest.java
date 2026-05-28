@@ -111,7 +111,8 @@ class MemberCouponRepositoryTest {
     @DisplayName("findByMemberId — 회원 보유 전체를 coupon 함께 fetch (EntityGraph N+1 방지)")
     void findByMemberId_fetchesCoupon() {
         Coupon another = couponRepository.saveAndFlush(Coupon.builder(
-                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build());
+                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL)
+                .maxDiscountAmount(5_000L).build());
         memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
         memberCouponRepository.save(MemberCoupon.issue(another, memberId));
         em.flush();
@@ -133,7 +134,8 @@ class MemberCouponRepositoryTest {
     @DisplayName("findByMemberIdAndStatus — 상태로 필터 (ISSUED 1장, CANCELLED 1장)")
     void findByMemberIdAndStatus_filtersByStatus() {
         Coupon another = couponRepository.saveAndFlush(Coupon.builder(
-                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build());
+                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL)
+                .maxDiscountAmount(5_000L).build());
         memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
         MemberCoupon cancelled = MemberCoupon.issue(another, memberId);
         cancelled.cancel();

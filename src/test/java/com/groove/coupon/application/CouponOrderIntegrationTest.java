@@ -43,6 +43,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
@@ -95,8 +96,15 @@ class CouponOrderIntegrationTest {
     private LabelRepository labelRepository;
     @Autowired
     private PaymentRepository paymentRepository;
-    @Autowired
+
+    // 픽스처 사전 커밋용. REQUIRES_NEW 변형(쿠폰 만료 #92, 멱등 정리 #W7-2) 등 같은 타입 빈이 여럿이라
+    // 트랜잭션 매니저로부터 직접 만든다 — 의도는 기본 REQUIRED 로 짧은 트랜잭션을 끊어 두는 것.
     private TransactionTemplate txTemplate;
+
+    @Autowired
+    void wireTxTemplate(PlatformTransactionManager transactionManager) {
+        this.txTemplate = new TransactionTemplate(transactionManager);
+    }
 
     private record Fixtures(Member member, Album album, Coupon coupon, MemberCoupon memberCoupon) { }
 

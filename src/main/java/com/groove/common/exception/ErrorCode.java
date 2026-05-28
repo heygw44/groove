@@ -78,6 +78,7 @@ public enum ErrorCode {
     COUPON_NOT_OWNED(HttpStatus.FORBIDDEN, "COUPON_NOT_OWNED", "본인이 보유한 쿠폰이 아닙니다"),
     COUPON_MIN_ORDER_NOT_MET(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_MIN_ORDER_NOT_MET", "최소 주문금액 조건을 충족하지 않습니다"),
     COUPON_NOT_APPLICABLE(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_NOT_APPLICABLE", "주문에 적용할 수 없는 쿠폰입니다"),
+    COUPON_INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "COUPON_INVALID_STATE_TRANSITION", "쿠폰 상태를 변경할 수 없습니다"),
 
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "외부 서비스 연동에 실패했습니다"),
