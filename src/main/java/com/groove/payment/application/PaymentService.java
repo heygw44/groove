@@ -87,14 +87,18 @@ public class PaymentService {
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.PAID);
         }
-        if (order.getTotalAmount() <= 0) {
+        // 청구액은 payable = totalAmount − discountAmount (#91). 쿠폰 미적용 주문은 payable == totalAmount.
+        // payable <= 0 가드는 v1 전액할인 미지원 정책의 결제 도메인 표현이다 (docs/plans/coupon-system.md §결정).
+        // V15 의 CHECK 가 음수는 사전 차단하지만, payable==0 은 DB CHECK 를 통과하므로 여기서 거부한다.
+        long payable = order.getPayableAmount();
+        if (payable <= 0) {
             throw new DomainException(ErrorCode.DOMAIN_RULE_VIOLATION,
                     "결제할 금액이 없는 주문입니다: " + order.getOrderNumber());
         }
 
-        PaymentResponse pgResponse = callGateway(order);
+        PaymentResponse pgResponse = callGateway(order, payable);
         Payment payment = paymentRepository.save(Payment.initiate(
-                order, order.getTotalAmount(), request.method(), pgResponse.provider(), pgResponse.pgTransactionId()));
+                order, payable, request.method(), pgResponse.provider(), pgResponse.pgTransactionId()));
         log.info("결제 접수: paymentId={}, order={}, amount={}, method={}, pgTx={}",
                 payment.getId(), order.getOrderNumber(), payment.getAmount(), payment.getMethod(),
                 payment.getPgTransactionId());
@@ -129,8 +133,9 @@ public class PaymentService {
         return !order.isGuestOrder() && order.getMemberId().equals(memberId);
     }
 
-    private PaymentResponse callGateway(Order order) {
-        PaymentRequest pgRequest = new PaymentRequest(order.getOrderNumber(), order.getTotalAmount());
+    private PaymentResponse callGateway(Order order, long payableAmount) {
+        // PG 청구액은 payable (#91) — 쿠폰 할인 반영 후의 실제 결제 금액.
+        PaymentRequest pgRequest = new PaymentRequest(order.getOrderNumber(), payableAmount);
         try {
             return paymentGateway.request(pgRequest);
         } catch (RuntimeException gatewayFailure) {

@@ -65,6 +65,8 @@ class PaymentServiceTest {
         when(order.getOrderNumber()).thenReturn(ORDER_NUMBER);
         when(order.getStatus()).thenReturn(status);
         when(order.getTotalAmount()).thenReturn(ORDER_AMOUNT);
+        // #91: PaymentService 는 청구액으로 payable 을 쓴다. 쿠폰 미적용 주문은 payable == totalAmount.
+        when(order.getPayableAmount()).thenReturn(ORDER_AMOUNT);
         when(order.isGuestOrder()).thenReturn(guest);
         when(order.getMemberId()).thenReturn(memberId);
         return order;
@@ -177,10 +179,10 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("requestPayment: 결제 금액이 0 이하인 주문 → 422 DomainException, PG·저장 미호출")
-    void requestPayment_zeroAmountOrder_throwsDomainException() {
+    @DisplayName("requestPayment: payable<=0 주문 → 422 DomainException, PG·저장 미호출 (#91 전액할인 v1 미지원)")
+    void requestPayment_zeroPayableOrder_throwsDomainException() {
         Order order = order(false, 1L, OrderStatus.PENDING);
-        when(order.getTotalAmount()).thenReturn(0L);
+        when(order.getPayableAmount()).thenReturn(0L);   // 쿠폰 전액할인 → payable=0
         when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
 
@@ -189,6 +191,26 @@ class PaymentServiceTest {
 
         verify(paymentGateway, never()).request(any());
         verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("requestPayment: 쿠폰 적용 주문 → PG·Payment 모두 payable 로 청구 (#91)")
+    void requestPayment_withCoupon_chargesPayable() {
+        Order order = order(false, 1L, OrderStatus.PENDING);
+        when(order.getTotalAmount()).thenReturn(50_000L);
+        when(order.getPayableAmount()).thenReturn(30_000L);   // 20,000 할인
+        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
+        when(paymentGateway.request(any())).thenAnswer(inv -> {
+            com.groove.payment.gateway.PaymentRequest pgReq = inv.getArgument(0);
+            assertThat(pgReq.amount()).isEqualTo(30_000L);   // PG 청구액은 payable
+            return new PaymentResponse("mock-tx-coupon", PaymentStatus.PENDING, "MOCK");
+        });
+        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        PaymentApiResponse response = paymentService.requestPayment(1L, request());
+
+        assertThat(response.amount()).isEqualTo(30_000L);   // 저장된 Payment.amount 도 payable
     }
 
     @Test

@@ -5,6 +5,8 @@ import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.exception.AlbumNotPurchasableException;
+import com.groove.coupon.application.CouponApplicationService;
+import com.groove.coupon.exception.CouponNotApplicableException;
 import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
@@ -18,6 +20,8 @@ import com.groove.order.exception.IllegalStateTransitionException;
 import com.groove.order.exception.InsufficientStockException;
 import com.groove.order.exception.InvalidOrderOwnershipException;
 import com.groove.order.exception.OrderNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -31,15 +35,21 @@ import java.util.List;
  *
  * <p>처리 순서:
  * <ol>
- *   <li>회원/게스트 정합성 가드 (XOR).</li>
+ *   <li>회원/게스트 정합성 가드 (XOR). 게스트 + {@code memberCouponId} 동시 지정 시 즉시 거부 (#91).</li>
  *   <li>각 라인 album 로딩 + 구매 가능(SELLING) 검증.</li>
  *   <li>재고 검증 + 차감 — <b>락 없이 단순 구현</b>. 동일 album 동시 주문 시
  *       lost-update / oversell 가능성을 의도적으로 노출 (W6-6 재현, W10-3 비관적 락 시연).</li>
  *   <li>orderNumber 발급 (사전 존재 체크 최대 3회).</li>
  *   <li>Order + OrderItem 생성 후 영속화.</li>
+ *   <li>쿠폰 적용 (#91) — {@code memberCouponId} 가 있으면 저장된 orderId 로
+ *       {@code CouponApplicationService.applyToOrder} 호출. 검증 실패는 동일 트랜잭션 롤백으로
+ *       재고/주문도 되돌린다.</li>
  * </ol>
  *
  * <p>RuntimeException 이 발생하면 Spring 의 기본 정책으로 트랜잭션 전체가 롤백되어 재고 차감도 함께 되돌려진다.
+ *
+ * <p>{@code cancel} 은 재고 복원 직후 {@code CouponApplicationService.restoreForOrder} 를 호출해
+ * 적용된 쿠폰을 ISSUED 로 되돌린다 (#91 DoD HIGH 리스크: 취소·환불 양 경로 복원 누락 금지).
  *
  * <p>응답 DTO({@code OrderItemResponse}) 는 {@code album_title_snapshot} 컬럼과 {@code album.id}(프록시
  * 키만 사용) 만 노출하므로 LAZY 강제 초기화는 두지 않는다 — cart 와 달리 album.title / artist.name 을
@@ -48,18 +58,23 @@ import java.util.List;
 @Service
 public class OrderService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
     private static final int MAX_ORDER_NUMBER_ATTEMPTS = 3;
 
     private final OrderRepository orderRepository;
     private final AlbumRepository albumRepository;
     private final OrderNumberGenerator orderNumberGenerator;
+    private final CouponApplicationService couponApplicationService;
 
     public OrderService(OrderRepository orderRepository,
                         AlbumRepository albumRepository,
-                        OrderNumberGenerator orderNumberGenerator) {
+                        OrderNumberGenerator orderNumberGenerator,
+                        CouponApplicationService couponApplicationService) {
         this.orderRepository = orderRepository;
         this.albumRepository = albumRepository;
         this.orderNumberGenerator = orderNumberGenerator;
+        this.couponApplicationService = couponApplicationService;
     }
 
     /**
@@ -135,12 +150,20 @@ public class OrderService {
         for (OrderItem item : order.getItems()) {
             item.getAlbum().adjustStock(item.getQuantity());
         }
+        // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (이슈 #91 DoD HIGH 리스크: 양 경로 모두 복원).
+        // 미적용 주문은 no-op 이므로 분기 없이 안전하게 호출한다.
+        couponApplicationService.restoreForOrder(order.getId());
         return order;
     }
 
     @Transactional
     public Order place(Long memberId, OrderCreateRequest request) {
         validateOwnership(memberId, request.guest());
+        // 게스트 + memberCouponId 거부 — 회원 전용 쿠폰을 게스트가 사용하려는 경합을 즉시 차단한다
+        // (이슈 #91 DoD: 게스트 + memberCouponId → COUPON_NOT_APPLICABLE 422).
+        if (memberId == null && request.memberCouponId() != null) {
+            throw new CouponNotApplicableException("게스트 주문에는 쿠폰을 적용할 수 없습니다");
+        }
 
         // 1) 도메인 검증 + 재고 차감 — 실패 시 orderNumber 발급 비용을 아낀다.
         List<ResolvedLine> lines = new ArrayList<>(request.items().size());
@@ -157,7 +180,19 @@ public class OrderService {
             order.addItem(OrderItem.create(line.album, line.quantity));
         }
 
-        return orderRepository.save(order);
+        Order persisted = orderRepository.save(order);
+
+        // 3) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다 ({@link MemberCoupon#use(Long)} 가 orderId 를 기록).
+        // 같은 트랜잭션이라 적용 실패는 재고 차감/주문 저장과 함께 롤백된다 (이슈 #91 DoD: 실패 시 정합성 유지).
+        // memberId 는 윗 가드(게스트+쿠폰 거부) + validateOwnership XOR 결과로 여기서 memberCouponId 가 비지 않으면 항상 non-null.
+        if (request.memberCouponId() != null) {
+            long discount = couponApplicationService.applyToOrder(
+                    request.memberCouponId(), memberId, persisted);
+            log.info("쿠폰 적용: orderId={}, memberCouponId={}, discount={}, payable={}",
+                    persisted.getId(), request.memberCouponId(), discount, persisted.getPayableAmount());
+        }
+
+        return persisted;
     }
 
     private record ResolvedLine(Album album, int quantity) {
