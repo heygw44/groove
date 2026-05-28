@@ -9,11 +9,13 @@ import com.groove.coupon.exception.CouponAlreadyIssuedException;
 import com.groove.coupon.exception.CouponNotFoundException;
 import com.groove.coupon.exception.CouponNotIssuableException;
 import com.groove.coupon.exception.CouponSoldOutException;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.Locale;
 
 /**
  * 선착순 쿠폰 발급 — 동시성 헤드라인 (#90, decisions/coupon-concurrency.md).
@@ -38,6 +40,9 @@ import java.time.Clock;
  */
 @Service
 public class CouponIssueService {
+
+    /** 회원당 1장 UNIQUE 제약명 (V14) — 소문자 비교용. */
+    private static final String MEMBER_COUPON_UNIQUE_CONSTRAINT = "uk_member_coupon_coupon_member";
 
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
@@ -142,9 +147,35 @@ public class CouponIssueService {
         try {
             MemberCoupon issued = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
             return MemberCouponResponse.from(issued);
-        } catch (DataIntegrityViolationException uniqueViolation) {
-            // 사전 검사를 통과한 동시 중복 요청이 UNIQUE 에서 충돌 — 트랜잭션 롤백으로 카운터 증가도 되돌아간다.
-            throw new CouponAlreadyIssuedException(couponId, memberId);
+        } catch (DataIntegrityViolationException violation) {
+            // 회원당 1장 UNIQUE 충돌(사전 검사를 통과한 동시 중복)만 ALREADY_ISSUED 로 매핑한다 —
+            // 트랜잭션 롤백으로 카운터 증가도 되돌아간다. 그 외 제약 위반(FK·CHECK 등)은 의미가 다르므로
+            // 원본 예외를 그대로 전파해 오분류를 막는다.
+            if (isMemberCouponUniqueViolation(violation)) {
+                throw new CouponAlreadyIssuedException(couponId, memberId);
+            }
+            throw violation;
         }
+    }
+
+    /**
+     * 예외 cause 체인에서 {@code uk_member_coupon_coupon_member}(회원당 1장) UNIQUE 위반인지 판별한다.
+     * Hibernate {@link ConstraintViolationException#getConstraintName()} 을 우선 보고, 드라이버/방언별로
+     * null 일 수 있어 메시지 substring 도 폴백으로 확인한다.
+     */
+    private boolean isMemberCouponUniqueViolation(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConstraintViolationException cve && containsConstraint(cve.getConstraintName())) {
+                return true;
+            }
+            if (containsConstraint(cause.getMessage())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsConstraint(String value) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(MEMBER_COUPON_UNIQUE_CONSTRAINT);
     }
 }

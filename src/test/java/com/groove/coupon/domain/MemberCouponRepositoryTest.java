@@ -5,6 +5,7 @@ import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceUnitUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -120,7 +121,12 @@ class MemberCouponRepositoryTest {
                 memberId, PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "issuedAt")));
 
         assertThat(page.getTotalElements()).isEqualTo(2);
-        assertThat(page.getContent()).allSatisfy(mc -> assertThat(mc.getCoupon().getName()).isNotBlank());
+        PersistenceUnitUtil pu = em.getEntityManagerFactory().getPersistenceUnitUtil();
+        assertThat(page.getContent()).allSatisfy(mc -> {
+            // EntityGraph 가 실제로 coupon 을 선로딩했는지(세션 내 lazy 초기화로 우연히 통과하는 게 아님) 검증.
+            assertThat(pu.isLoaded(mc, "coupon")).as("coupon 선로딩").isTrue();
+            assertThat(mc.getCoupon().getName()).isNotBlank();
+        });
     }
 
     @Test

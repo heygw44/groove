@@ -130,11 +130,12 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
-     * 남은 발급 수량 — {@code totalQuantity − issuedCount}. 무제한({@code totalQuantity == null})이면
-     * {@code null}. {@code CouponResponse.remainingQuantity} 산정에 쓰인다 (API.md §3.9).
+     * 남은 발급 수량 — {@code max(0, totalQuantity − issuedCount)}. 무제한({@code totalQuantity == null})
+     * 이면 {@code null}. {@code CouponResponse.remainingQuantity} 산정에 쓰인다 (API.md §3.9). CHECK 제약상
+     * 음수가 될 수 없지만, API 노출값이 음수로 새지 않도록 0 하한으로 방어한다.
      */
     public Integer remainingQuantity() {
-        return totalQuantity == null ? null : totalQuantity - issuedCount;
+        return totalQuantity == null ? null : Math.max(0, totalQuantity - issuedCount);
     }
 
     /**

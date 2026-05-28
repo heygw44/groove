@@ -27,9 +27,11 @@ class CouponRateLimitPropertiesTest {
     }
 
     @Test
-    @DisplayName("capacity 0 이하 → 예외")
+    @DisplayName("capacity 0/음수 → 예외")
     void nonPositiveCapacity_throws() {
         assertThatThrownBy(() -> new CouponRateLimitProperties.Policy(0L, Duration.ofMinutes(1)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new CouponRateLimitProperties.Policy(-1L, Duration.ofMinutes(1)))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -37,6 +39,8 @@ class CouponRateLimitPropertiesTest {
     @DisplayName("refill-period 가 0/음수/null → 예외")
     void invalidRefillPeriod_throws() {
         assertThatThrownBy(() -> new CouponRateLimitProperties.Policy(10L, Duration.ZERO))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new CouponRateLimitProperties.Policy(10L, Duration.ofMinutes(-1)))
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> new CouponRateLimitProperties.Policy(10L, null))
                 .isInstanceOf(IllegalStateException.class);
