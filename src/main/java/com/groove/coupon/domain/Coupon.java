@@ -118,6 +118,44 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
+     * 지정 시각 기준 발급 가능 여부 — 정책 상태가 {@link CouponStatus#ACTIVE} 이고 현재가 발급 기간
+     * ({@code validFrom ≤ now ≤ validUntil}) 안인지를 판단한다. 소진({@code issuedCount}) 여부는
+     * 포함하지 않는다 — 소진은 발급 경로의 원자적 조건부 UPDATE 가 판정한다 (#90, 설계 §4).
+     */
+    public boolean isIssuable(Instant now) {
+        Objects.requireNonNull(now, "now must not be null");
+        return status == CouponStatus.ACTIVE
+                && !now.isBefore(validFrom)
+                && !now.isAfter(validUntil);
+    }
+
+    /**
+     * 남은 발급 수량 — {@code max(0, totalQuantity − issuedCount)}. 무제한({@code totalQuantity == null})
+     * 이면 {@code null}. {@code CouponResponse.remainingQuantity} 산정에 쓰인다 (API.md §3.9). CHECK 제약상
+     * 음수가 될 수 없지만, API 노출값이 음수로 새지 않도록 0 하한으로 방어한다.
+     */
+    public Integer remainingQuantity() {
+        return totalQuantity == null ? null : Math.max(0, totalQuantity - issuedCount);
+    }
+
+    /**
+     * 발급 슬롯 1개를 차감 시도 — 한정수량 여유가 있으면(또는 무제한) {@code issuedCount} 를 증가시키고
+     * {@code true}, 소진이면 {@code false} 를 반환한다 (read-check-increment).
+     *
+     * <p><b>동시성 주의</b>: 본 메서드는 그 자체로 원자적이지 않다 — 정확성은 호출자의 잠금 전략에
+     * 달려 있다 (설계 §4). 비관적 락 경로({@code findByIdForUpdate})는 행 락으로 안전하고, 락 없는
+     * 베이스라인 경로는 lost-update 로 <b>초과발급을 재현</b>한다. 프로덕션 발급 경로는 본 메서드 대신
+     * {@link CouponRepository#incrementIssuedCount(Long)} 의 원자적 조건부 UPDATE 를 쓴다.
+     */
+    public boolean tryIssueOne() {
+        if (totalQuantity != null && issuedCount >= totalQuantity) {
+            return false;
+        }
+        this.issuedCount++;
+        return true;
+    }
+
+    /**
      * 상태 전이 단일 진입점. {@link CouponStatus#canTransitionTo} 가 false 면
      * {@link IllegalCouponStateTransitionException}.
      */

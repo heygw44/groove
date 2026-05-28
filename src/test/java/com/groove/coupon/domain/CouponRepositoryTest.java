@@ -10,10 +10,13 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase.Replace;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -75,6 +78,84 @@ class CouponRepositoryTest {
         assertThat(found.getMaxDiscountAmount()).isEqualTo(5_000L);
         assertThat(found.getMinOrderAmount()).isEqualTo(30_000L);
         assertThat(found.getTotalQuantity()).isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("incrementIssuedCount — 한정수량 미만이면 1행 영향 + issued_count 증가")
+    void incrementIssuedCount_belowLimit_increments() {
+        Coupon saved = couponRepository.saveAndFlush(limited(2));
+
+        int affected = couponRepository.incrementIssuedCount(saved.getId());
+        flushAndClear();
+
+        assertThat(affected).isEqualTo(1);
+        assertThat(couponRepository.findById(saved.getId()).orElseThrow().getIssuedCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("incrementIssuedCount — 소진(issued == total)이면 0행 영향 + 카운터 불변")
+    void incrementIssuedCount_soldOut_returnsZero() {
+        Coupon saved = couponRepository.saveAndFlush(limited(1));
+        assertThat(couponRepository.incrementIssuedCount(saved.getId())).isEqualTo(1);
+        flushAndClear();
+
+        int affected = couponRepository.incrementIssuedCount(saved.getId());
+        flushAndClear();
+
+        assertThat(affected).isZero();
+        assertThat(couponRepository.findById(saved.getId()).orElseThrow().getIssuedCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("incrementIssuedCount — 무제한(total_quantity NULL)이면 항상 1행 영향")
+    void incrementIssuedCount_unlimited_alwaysIncrements() {
+        Coupon saved = couponRepository.saveAndFlush(Coupon.builder(
+                "무제한", CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).build());
+
+        assertThat(couponRepository.incrementIssuedCount(saved.getId())).isEqualTo(1);
+        assertThat(couponRepository.incrementIssuedCount(saved.getId())).isEqualTo(1);
+        flushAndClear();
+
+        assertThat(couponRepository.findById(saved.getId()).orElseThrow().getIssuedCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("findByIdForUpdate — 비관적 락으로 행 로딩 (존재하면 반환)")
+    void findByIdForUpdate_returnsCoupon() {
+        Coupon saved = couponRepository.saveAndFlush(limited(5));
+        flushAndClear();
+
+        assertThat(couponRepository.findByIdForUpdate(saved.getId()))
+                .get()
+                .extracting(Coupon::getId)
+                .isEqualTo(saved.getId());
+    }
+
+    @Test
+    @DisplayName("findIssuable — ACTIVE + 기간 내 쿠폰만, SUSPENDED·기간 밖 제외")
+    void findIssuable_filtersByStatusAndPeriod() {
+        Coupon active = couponRepository.save(limited(10));
+        Coupon suspended = couponRepository.save(limited(10));
+        suspended.changeStatus(CouponStatus.SUSPENDED);
+        Coupon future = couponRepository.save(Coupon.builder(
+                        "미래쿠폰", CouponDiscountType.FIXED_AMOUNT, 1_000,
+                        VALID_UNTIL.plus(1, ChronoUnit.DAYS), VALID_UNTIL.plus(60, ChronoUnit.DAYS))
+                .build());
+        couponRepository.flush();
+        flushAndClear();
+
+        Instant now = VALID_FROM.plus(1, ChronoUnit.DAYS);
+        Page<Coupon> page = couponRepository.findIssuable(now, PageRequest.of(0, 20));
+
+        List<Long> ids = page.getContent().stream().map(Coupon::getId).toList();
+        assertThat(ids).containsExactly(active.getId())
+                .doesNotContain(suspended.getId(), future.getId());
+    }
+
+    private static Coupon limited(int totalQuantity) {
+        return Coupon.builder("한정", CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL)
+                .totalQuantity(totalQuantity)
+                .build();
     }
 
     private void flushAndClear() {

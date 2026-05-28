@@ -129,6 +129,65 @@ class CouponTest {
     }
 
     @Nested
+    @DisplayName("isIssuable — 발급 가능 판정 (상태 · 기간)")
+    class IsIssuable {
+
+        @Test
+        @DisplayName("ACTIVE + 기간 내 → 발급 가능")
+        void activeWithinPeriod_issuable() {
+            Coupon coupon = fixed(1_000, 0);
+
+            assertThat(coupon.isIssuable(VALID_FROM)).isTrue();
+            assertThat(coupon.isIssuable(VALID_UNTIL)).isTrue();
+            assertThat(coupon.isIssuable(VALID_FROM.plus(1, ChronoUnit.DAYS))).isTrue();
+        }
+
+        @Test
+        @DisplayName("기간 밖(시작 전 · 종료 후) → 발급 불가")
+        void outsidePeriod_notIssuable() {
+            Coupon coupon = fixed(1_000, 0);
+
+            assertThat(coupon.isIssuable(VALID_FROM.minusMillis(1))).isFalse();
+            assertThat(coupon.isIssuable(VALID_UNTIL.plusMillis(1))).isFalse();
+        }
+
+        @Test
+        @DisplayName("SUSPENDED/ENDED 상태 → 기간 내라도 발급 불가")
+        void nonActiveStatus_notIssuable() {
+            Coupon suspended = fixed(1_000, 0);
+            suspended.changeStatus(CouponStatus.SUSPENDED);
+            Coupon ended = fixed(1_000, 0);
+            ended.changeStatus(CouponStatus.ENDED);
+
+            assertThat(suspended.isIssuable(VALID_FROM)).isFalse();
+            assertThat(ended.isIssuable(VALID_FROM)).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("remainingQuantity — 남은 발급 수량")
+    class RemainingQuantity {
+
+        @Test
+        @DisplayName("한정수량 쿠폰: total − issued (생성 직후 issued=0)")
+        void limited_returnsTotalMinusIssued() {
+            Coupon coupon = Coupon.builder("한정", CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL)
+                    .totalQuantity(100)
+                    .build();
+
+            assertThat(coupon.remainingQuantity()).isEqualTo(100);
+        }
+
+        @Test
+        @DisplayName("무제한 쿠폰(totalQuantity null) → null")
+        void unlimited_returnsNull() {
+            Coupon coupon = fixed(1_000, 0);
+
+            assertThat(coupon.remainingQuantity()).isNull();
+        }
+    }
+
+    @Nested
     @DisplayName("changeStatus — 상태 전이 가드")
     class ChangeStatus {
 

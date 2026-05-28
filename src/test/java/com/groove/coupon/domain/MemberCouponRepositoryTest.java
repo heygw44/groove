@@ -5,6 +5,7 @@ import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceUnitUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,9 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase.Replace;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -101,5 +105,46 @@ class MemberCouponRepositoryTest {
         assertThatThrownBy(() ->
                 memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("findByMemberId — 회원 보유 전체를 coupon 함께 fetch (EntityGraph N+1 방지)")
+    void findByMemberId_fetchesCoupon() {
+        Coupon another = couponRepository.saveAndFlush(Coupon.builder(
+                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build());
+        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
+        memberCouponRepository.save(MemberCoupon.issue(another, memberId));
+        em.flush();
+        em.clear();
+
+        Page<MemberCoupon> page = memberCouponRepository.findByMemberId(
+                memberId, PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "issuedAt")));
+
+        assertThat(page.getTotalElements()).isEqualTo(2);
+        PersistenceUnitUtil pu = em.getEntityManagerFactory().getPersistenceUnitUtil();
+        assertThat(page.getContent()).allSatisfy(mc -> {
+            // EntityGraph 가 실제로 coupon 을 선로딩했는지(세션 내 lazy 초기화로 우연히 통과하는 게 아님) 검증.
+            assertThat(pu.isLoaded(mc, "coupon")).as("coupon 선로딩").isTrue();
+            assertThat(mc.getCoupon().getName()).isNotBlank();
+        });
+    }
+
+    @Test
+    @DisplayName("findByMemberIdAndStatus — 상태로 필터 (ISSUED 1장, CANCELLED 1장)")
+    void findByMemberIdAndStatus_filtersByStatus() {
+        Coupon another = couponRepository.saveAndFlush(Coupon.builder(
+                "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build());
+        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
+        MemberCoupon cancelled = MemberCoupon.issue(another, memberId);
+        cancelled.cancel();
+        memberCouponRepository.save(cancelled);
+        em.flush();
+        em.clear();
+
+        var pageable = PageRequest.of(0, 20);
+        assertThat(memberCouponRepository.findByMemberIdAndStatus(memberId, MemberCouponStatus.ISSUED, pageable)
+                .getTotalElements()).isEqualTo(1);
+        assertThat(memberCouponRepository.findByMemberIdAndStatus(memberId, MemberCouponStatus.CANCELLED, pageable)
+                .getTotalElements()).isEqualTo(1);
     }
 }
