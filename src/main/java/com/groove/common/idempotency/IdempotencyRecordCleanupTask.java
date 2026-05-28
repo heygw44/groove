@@ -2,6 +2,7 @@ package com.groove.common.idempotency;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.groove.common.transaction.CommonTransactionConfig;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -29,7 +30,7 @@ public class IdempotencyRecordCleanupTask {
     private final int batchSize;
 
     public IdempotencyRecordCleanupTask(IdempotencyRecordRepository repository,
-                                        @Qualifier(IdempotencyConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
+                                        @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
                                         IdempotencyProperties properties) {
         this.repository = repository;
         this.requiresNewTx = requiresNewTx;

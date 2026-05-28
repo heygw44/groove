@@ -107,7 +107,14 @@ public class MemberCoupon extends BaseTimeEntity {
         this.orderId = null;
     }
 
-    /** 만료 (ISSUED → EXPIRED). 스케줄러 배치(#92~)가 호출한다. */
+    /**
+     * 만료 (ISSUED → EXPIRED).
+     *
+     * <p>운영 만료 배치는 성능을 위해 {@code MemberCouponRepository.expireOverdueBatch} 벌크
+     * UPDATE 로 본 메서드를 우회한다 — 도메인 규칙({@code canTransitionTo} 의 ISSUED→EXPIRED 허용)
+     * 과 SQL WHERE 가 정합하지만, 향후 도메인 규칙이 바뀌면 벌크 SQL 도 같이 손봐야 한다는 점에
+     * 유의. 본 메서드는 단건 만료 경로(향후 회원 탈퇴 시 보유 쿠폰 정리 등) 용 진입점으로 남는다.
+     */
     public void expire() {
         transitionTo(MemberCouponStatus.EXPIRED);
     }

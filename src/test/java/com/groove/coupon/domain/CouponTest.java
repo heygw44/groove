@@ -41,6 +41,8 @@ class CouponTest {
     class CalculateDiscount {
 
         static Stream<Arguments> discountCases() {
+            // 정률 정책은 maxDiscountAmount 필수 (#92 리뷰). 충분히 큰 캡으로 두면 raw 결과가 그대로 살아남는다.
+            long uncapped = Long.MAX_VALUE;
             return Stream.of(
                     // 정액: 소계보다 작은 정액은 그대로
                     Arguments.of(fixed(3_000, 0), 10_000L, 3_000L),
@@ -48,16 +50,16 @@ class CouponTest {
                     Arguments.of(fixed(10_000, 0), 10_000L, 10_000L),
                     // 정액: 소계보다 큰 정액 → 소계로 캡 (discount ≤ subtotal 불변식)
                     Arguments.of(fixed(15_000, 0), 10_000L, 10_000L),
-                    // 정률: 10% (캡 없음)
-                    Arguments.of(percentage(10, null, 0), 10_000L, 1_000L),
+                    // 정률: 10% (캡 매우 큼 → raw 그대로)
+                    Arguments.of(percentage(10, uncapped, 0), 10_000L, 1_000L),
                     // 정률: 절사 (33% of 10,000 = 3,300; 정수 나눗셈)
-                    Arguments.of(percentage(33, null, 0), 9_999L, 3_299L),
+                    Arguments.of(percentage(33, uncapped, 0), 9_999L, 3_299L),
                     // 정률: 캡 미만 → 원시값
                     Arguments.of(percentage(20, 5_000L, 0), 10_000L, 2_000L),
                     // 정률: 캡 도달 → 캡으로 제한
                     Arguments.of(percentage(20, 1_500L, 0), 10_000L, 1_500L),
                     // 정률: 100% → 소계로 캡 (discount ≤ subtotal)
-                    Arguments.of(percentage(100, null, 0), 10_000L, 10_000L),
+                    Arguments.of(percentage(100, uncapped, 0), 10_000L, 10_000L),
                     // 최소주문금액 경계: subtotal == minOrder 는 통과
                     Arguments.of(fixed(2_000, 10_000), 10_000L, 2_000L)
             );
@@ -113,6 +115,10 @@ class CouponTest {
                             CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).minOrderAmount(-1).build()),
                     Arguments.of("totalQuantity 음수", (Runnable) () -> Coupon.builder("쿠폰",
                             CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).totalQuantity(-1).build()),
+                    Arguments.of("totalQuantity 0 (#92 죽은 정책)", (Runnable) () -> Coupon.builder("쿠폰",
+                            CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).totalQuantity(0).build()),
+                    Arguments.of("정률 + maxDiscountAmount 누락 (#92 정률은 상한 필수)", (Runnable) () -> Coupon.builder("쿠폰",
+                            CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build()),
                     Arguments.of("perMemberLimit 0", (Runnable) () -> Coupon.builder("쿠폰",
                             CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).perMemberLimit(0).build()),
                     Arguments.of("validUntil <= validFrom", (Runnable) () -> Coupon.builder("쿠폰",

@@ -2,6 +2,7 @@ package com.groove.common.idempotency;
 
 import com.groove.common.idempotency.exception.IdempotencyConflictException;
 import com.groove.common.idempotency.exception.IdempotencyKeyReuseMismatchException;
+import com.groove.common.transaction.CommonTransactionConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -72,7 +73,7 @@ public class IdempotencyService {
     private final Duration ttl;
 
     public IdempotencyService(IdempotencyRecordRepository repository,
-                              @Qualifier(IdempotencyConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
+                              @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
                               ObjectMapper objectMapper,
                               IdempotencyProperties properties) {
         this.repository = repository;
