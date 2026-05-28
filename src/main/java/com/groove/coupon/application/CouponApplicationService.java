@@ -10,6 +10,8 @@ import com.groove.coupon.exception.CouponNotFoundException;
 import com.groove.coupon.exception.CouponNotIssuableException;
 import com.groove.coupon.exception.CouponNotOwnedException;
 import com.groove.order.domain.Order;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,8 @@ import java.time.Instant;
  */
 @Service
 public class CouponApplicationService {
+
+    private static final Logger log = LoggerFactory.getLogger(CouponApplicationService.class);
 
     private final MemberCouponRepository memberCouponRepository;
     private final Clock clock;
@@ -112,8 +116,10 @@ public class CouponApplicationService {
      * <p>호출 시점: {@code OrderService.cancel} 의 재고 복원 직후, {@code AdminOrderService.refund} 의
      * 재고 복원 직후. {@code MemberCoupon.restore} 가 {@code usedAt} 과 {@code orderId} 를 함께 비운다.
      *
-     * <p>방어적 가드: 사용된 쿠폰의 상태가 어떤 이유로 ISSUED 인 채라면(예: 외부 수정) 복원하지 않고 no-op —
-     * {@code MemberCoupon.restore()} 가 던질 {@link IllegalStateException} 을 피하기 위해 사전에 가른다.
+     * <p>{@code findByOrderId} 는 {@code MemberCoupon.use(orderId)} 가 USED 로 전이시킨 행만 반환되므로
+     * 정상 흐름에서는 status==USED 가 보장된다. 그럼에도 status≠USED 가 관측되면 외부 수정·만료 배치
+     * race 등 데이터 이상 신호이므로 WARN 으로 기록하고 복원을 스킵한다 — {@code MemberCoupon.restore()}
+     * 가 던질 {@link IllegalStateException} 을 막으면서, 무성공으로 사라지지 않게 한다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void restoreForOrder(Long orderId) {
@@ -123,6 +129,9 @@ public class CouponApplicationService {
         memberCouponRepository.findByOrderId(orderId).ifPresent(memberCoupon -> {
             if (memberCoupon.getStatus() == MemberCouponStatus.USED) {
                 memberCoupon.restore();
+            } else {
+                log.warn("쿠폰 복원 스킵 — status 가 USED 가 아님: orderId={}, memberCouponId={}, status={}",
+                        orderId, memberCoupon.getId(), memberCoupon.getStatus());
             }
         });
     }

@@ -20,6 +20,8 @@ import com.groove.order.exception.IllegalStateTransitionException;
 import com.groove.order.exception.InsufficientStockException;
 import com.groove.order.exception.InvalidOrderOwnershipException;
 import com.groove.order.exception.OrderNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -55,6 +57,8 @@ import java.util.List;
  */
 @Service
 public class OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
     private static final int MAX_ORDER_NUMBER_ATTEMPTS = 3;
 
@@ -180,8 +184,12 @@ public class OrderService {
 
         // 3) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다 ({@link MemberCoupon#use(Long)} 가 orderId 를 기록).
         // 같은 트랜잭션이라 적용 실패는 재고 차감/주문 저장과 함께 롤백된다 (이슈 #91 DoD: 실패 시 정합성 유지).
-        if (memberId != null && request.memberCouponId() != null) {
-            couponApplicationService.applyToOrder(request.memberCouponId(), memberId, persisted);
+        // memberId 는 윗 가드(게스트+쿠폰 거부) + validateOwnership XOR 결과로 여기서 memberCouponId 가 비지 않으면 항상 non-null.
+        if (request.memberCouponId() != null) {
+            long discount = couponApplicationService.applyToOrder(
+                    request.memberCouponId(), memberId, persisted);
+            log.info("쿠폰 적용: orderId={}, memberCouponId={}, discount={}, payable={}",
+                    persisted.getId(), request.memberCouponId(), discount, persisted.getPayableAmount());
         }
 
         return persisted;

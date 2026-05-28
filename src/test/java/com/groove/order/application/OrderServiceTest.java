@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -481,5 +482,30 @@ class OrderServiceTest {
         assertThat(order.getStatus()).isEqualTo(com.groove.order.domain.OrderStatus.CANCELLED);
         assertThat(a.getStock()).isEqualTo(2);   // 재고 복원
         verify(couponApplicationService).restoreForOrder(777L);
+    }
+
+    @Test
+    @DisplayName("쿠폰 적용 실패 → 예외 전파 (Spring 트랜잭션 롤백 신호) — 재고/주문 정합성은 Spring 위임")
+    void place_couponApplyFails_propagates() {
+        Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
+        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(orderNumberGenerator.generate()).willReturn("ORD-20260528-F4F4F4");
+        given(orderRepository.existsByOrderNumber("ORD-20260528-F4F4F4")).willReturn(false);
+        given(orderRepository.save(any(Order.class))).willAnswer(inv -> {
+            Order o = inv.getArgument(0);
+            ReflectionTestUtils.setField(o, "id", 888L);
+            return o;
+        });
+        // applyToOrder 가 throw 하면 service 는 잡지 않고 그대로 전파해야 한다 — Spring 이 @Transactional 로 롤백.
+        doThrow(new com.groove.coupon.exception.CouponAlreadyUsedException(7L))
+                .when(couponApplicationService).applyToOrder(any(), any(), any());
+
+        assertThatThrownBy(() -> orderService.place(1L,
+                memberRequestWithCoupon(7L, new OrderItemRequest(10L, 1))))
+                .isInstanceOf(com.groove.coupon.exception.CouponAlreadyUsedException.class);
+
+        // applyToOrder 가 호출됐고, 그 위치는 save 이후이므로 호출 자체가 일어나야 한다.
+        verify(couponApplicationService).applyToOrder(any(), any(), any());
+        verify(orderRepository).save(any(Order.class));
     }
 }

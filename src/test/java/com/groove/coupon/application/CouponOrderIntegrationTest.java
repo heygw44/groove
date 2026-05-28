@@ -218,6 +218,12 @@ class CouponOrderIntegrationTest {
 
         Album restoredAlbum = albumRepository.findById(f.album.getId()).orElseThrow();
         assertThat(restoredAlbum.getStock()).isEqualTo(10);
+
+        // 결제 금액 == payable (즉, 쿠폰 할인 반영된 금액) 임이 환불 후에도 보존됨 — PG 환불액도 같은 값이었어야 한다.
+        // 60000 - 5000 = 55000 (FIXED_AMOUNT 5000원 쿠폰).
+        Payment refunded = paymentRepository.findByOrderId(order.getId()).orElseThrow();
+        assertThat(refunded.getAmount()).isEqualTo(55_000L);
+        assertThat(refunded.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
     }
 
     @Test

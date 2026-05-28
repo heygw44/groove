@@ -208,7 +208,8 @@ public class Order extends BaseTimeEntity {
      *
      * <p>가드:
      * <ul>
-     *   <li>{@code status != PENDING} → {@link IllegalStateTransitionException} (현재→PENDING 가짜 전이로 의도 표현).
+     *   <li>{@code status != PENDING} → {@link IllegalStateTransitionException}({@code status → PENDING}).
+     *       두 번째 인자에 PENDING 을 둬 "PENDING 으로 되돌아가야 할인이 가능하다" 는 의도를 메시지로 드러낸다.
      *       결제 이후 할인 변경을 금지해 결제 금액과 주문 금액의 정합성을 지킨다.</li>
      *   <li>{@code amount < 0} 또는 {@code amount > totalAmount} → {@link IllegalArgumentException} —
      *       DB CHECK ({@code ck_orders_discount_within_total}, V15) 위반을 사전 차단한다.</li>
@@ -219,7 +220,8 @@ public class Order extends BaseTimeEntity {
      */
     public void applyDiscount(long amount) {
         if (status != OrderStatus.PENDING) {
-            throw new IllegalStateTransitionException(status, status);
+            // 두 번째 인자에 PENDING — 메시지가 "PAID -> PENDING" 으로 드러나 의도 명확.
+            throw new IllegalStateTransitionException(status, OrderStatus.PENDING);
         }
         if (amount < 0) {
             throw new IllegalArgumentException("discount amount must be non-negative: " + amount);
