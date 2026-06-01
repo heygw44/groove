@@ -44,6 +44,21 @@ public class SecurityConfig {
             "/api/v1/coupons"
     };
 
+    /**
+     * 정적 SPA 데모 프론트엔드 (#102). 같은 origin 에서 Spring Boot 가 static/ 을 서빙하므로
+     * GET 으로만 공개한다. API 인증 정책(아래 PUBLIC_* / ADMIN / anyRequest)은 변경하지 않는다.
+     * 해시 라우팅이라 서버 forward 가 필요 없어 "/"(welcome-page) 만으로 index.html 이 서빙된다.
+     * GET 한정이므로 POST "/" 등은 그대로 {@code anyRequest().authenticated()} 로 떨어진다.
+     */
+    private static final String[] PUBLIC_STATIC_GET_PATTERNS = {
+            "/",
+            "/index.html",
+            "/favicon.ico",
+            "/css/**",
+            "/js/**",
+            "/assets/**"
+    };
+
     private static final String[] PUBLIC_PATTERNS = {
             "/api/v1/auth/**",
             "/actuator/health",
@@ -100,6 +115,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.GET, PUBLIC_STATIC_GET_PATTERNS).permitAll()
                         .requestMatchers(PUBLIC_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST_PATTERNS).permitAll()

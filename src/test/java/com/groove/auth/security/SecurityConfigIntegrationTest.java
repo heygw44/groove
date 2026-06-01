@@ -93,6 +93,24 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
+    @DisplayName("정적 SPA 경로(GET /, /js/**, /css/**) 공개 → 401/403 아님 (#102)")
+    void staticSpaPaths_arePublic() throws Exception {
+        int root = mockMvc.perform(get("/")).andReturn().getResponse().getStatus();
+        assertThat(root).isNotIn(401, 403);
+
+        // 실제 정적 파일은 200 으로 서빙되어 permit + 리소스 핸들러 동작을 함께 확인한다.
+        mockMvc.perform(get("/js/app.js")).andExpect(status().isOk());
+        mockMvc.perform(get("/css/app.css")).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("정적 permitAll 은 GET 한정 → 정적 경로 POST 는 그대로 401 (#102)")
+    void staticSpaPaths_postIsStillProtected() throws Exception {
+        mockMvc.perform(post("/"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("GET /api/v1/albums/** 공개 → 컨트롤러 미존재이므로 404 (보안 통과 확인)")
     void albumsGet_isPublic_butControllerMissing() throws Exception {
         mockMvc.perform(get("/api/v1/albums/123"))
