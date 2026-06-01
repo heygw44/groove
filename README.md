@@ -52,6 +52,15 @@ curl http://localhost:8080/actuator/health
 | [docs/API.md](docs/API.md) | API 명세 |
 | [docs/MILESTONE.md](docs/MILESTONE.md) | 마일스톤 & 이슈 가이드 |
 
+## 성능·동시성 개선 사례
+
+단일 행 동시 갱신의 **lost-update** 를 도메인 특성에 맞는 제어로 해소한 사례.
+
+- **선착순 쿠폰 발급 — Before→After 완료 (#90·#93)**: 락 없는 베이스라인은 lost-update(`issued_count 24 ≠ 발급 48`) + 락 경합 실패 84%(`CannotAcquireLockException`)로 붕괴. **원자적 조건부 UPDATE**(`WHERE issued_count < total_quantity`)로 전환해 250 VU 스파이크(6,500+ 요청)에도 **정확히 100장, 초과발급 0**(k6 HTTP 실측). → [트러블슈팅](docs/troubleshooting/coupon-issuance-concurrency.md) · [loadtest/](loadtest/)
+- **재고 차감 오버셀 — Before 박제 (#46)**: 락 없는 재고 차감의 동형(同型) 결함을 baseline 으로 보존. 비관적 락 적용(After)은 W10 예정. → [트러블슈팅](docs/troubleshooting/overselling-baseline.md)
+
+> **같은 lost-update, 두 도메인, 두 제어** — 재고는 비관적 락, 쿠폰은 원자적 조건부 UPDATE 로 해소해 제어 기법 선택의 트레이드오프를 대비시킨다.
+
 ## 진행 현황
 
 ```

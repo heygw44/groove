@@ -26,7 +26,9 @@ import org.springframework.test.context.ActiveProfiles;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,12 +41,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 선착순 쿠폰 발급 동시성 테스트 (#90, decisions/coupon-concurrency.md).
  *
  * <p>오버셀 baseline(#46)과 같은 서사의 쿠폰판이다 — 베이스라인(락 없음)은 초과발급을 재현({@code @Disabled}
- * 로 보존)하고, 프로덕션 경로(원자적 조건부 UPDATE)는 초과발급 0 을 증명한다. ([OversellingBaselineTest]
+ * 로 보존)하고, 비관적 락·프로덕션 경로(원자적 조건부 UPDATE)는 초과발급 0 을 증명한다. ([OversellingBaselineTest]
  * 포맷 재사용)
  *
  * <p>회원당 1장 UNIQUE 때문에 초과발급 노출은 <b>서로 다른 member_id</b> 로 글로벌 카운터를 때려야 한다
  * (이슈 #90 비고). 멱등 재시도 부수효과 1회는 엔드포인트 레벨에서 {@code CouponApiIntegrationTest}
  * (Idempotency-Key replay)가 검증한다.
+ *
+ * <p><b>실측(#93)</b>: {@link #runConcurrently} 가 wall-clock(elapsedMs)·요청별 지연을 수집해 TPS·p95 를
+ * 콘솔에 박제한다 — 3종 전략(베이스라인/비관적/원자적)의 정확성·처리량 비교표
+ * (docs/troubleshooting/coupon-issuance-concurrency.md §3·§6) 근거다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -100,7 +106,7 @@ class CouponIssuanceConcurrencyTest {
         AtomicInteger soldOut = new AtomicInteger();
         AtomicInteger other = new AtomicInteger();
 
-        runConcurrently(CONCURRENT_REQUESTS, i -> {
+        LoadResult result = runConcurrently(CONCURRENT_REQUESTS, i -> {
             try {
                 couponIssueService.issue(memberIds.get(i), couponId);
                 success.incrementAndGet();
@@ -114,8 +120,40 @@ class CouponIssuanceConcurrencyTest {
 
         int issuedCount = couponRepository.findById(couponId).orElseThrow().getIssuedCount();
         long persisted = memberCouponRepository.count();
-        log.info("[#90 원자적] success={}, soldOut={}, other={}, issuedCount={}, persisted={}",
-                success.get(), soldOut.get(), other.get(), issuedCount, persisted);
+        logMeasurement("원자적", success, soldOut, other, issuedCount, persisted, result);
+
+        assertThat(success.get()).as("정확히 한정수량만 발급").isEqualTo(LIMIT);
+        assertThat(issuedCount).as("issued_count == 한정수량 (초과발급 0)").isEqualTo(LIMIT);
+        assertThat(persisted).as("영속 member_coupon 수 == issued_count").isEqualTo(LIMIT);
+        assertThat(soldOut.get()).as("나머지는 소진 거부").isEqualTo(CONCURRENT_REQUESTS - LIMIT);
+        assertThat(other.get()).isZero();
+    }
+
+    @Test
+    @DisplayName("비관적 락 — 한정 100 / 동시 300(서로 다른 회원) → 정확히 100 발급, 초과발급 0 (직렬화)")
+    void pessimisticLock_noOverIssuance() throws InterruptedException {
+        Long couponId = persistLimitedCoupon(LIMIT);
+        List<Long> memberIds = createMembers(CONCURRENT_REQUESTS);
+
+        AtomicInteger success = new AtomicInteger();
+        AtomicInteger soldOut = new AtomicInteger();
+        AtomicInteger other = new AtomicInteger();
+
+        LoadResult result = runConcurrently(CONCURRENT_REQUESTS, i -> {
+            try {
+                couponIssueService.issueWithPessimisticLock(memberIds.get(i), couponId);
+                success.incrementAndGet();
+            } catch (CouponSoldOutException ex) {
+                soldOut.incrementAndGet();
+            } catch (RuntimeException ex) {
+                other.incrementAndGet();
+                log.warn("예상 외 예외", ex);
+            }
+        });
+
+        int issuedCount = couponRepository.findById(couponId).orElseThrow().getIssuedCount();
+        long persisted = memberCouponRepository.count();
+        logMeasurement("비관적", success, soldOut, other, issuedCount, persisted, result);
 
         assertThat(success.get()).as("정확히 한정수량만 발급").isEqualTo(LIMIT);
         assertThat(issuedCount).as("issued_count == 한정수량 (초과발급 0)").isEqualTo(LIMIT);
@@ -169,21 +207,23 @@ class CouponIssuanceConcurrencyTest {
         AtomicInteger soldOut = new AtomicInteger();
         AtomicInteger other = new AtomicInteger();
 
-        runConcurrently(CONCURRENT_REQUESTS, i -> {
+        LoadResult result = runConcurrently(CONCURRENT_REQUESTS, i -> {
             try {
                 couponIssueService.issueWithoutLock(memberIds.get(i), couponId);
                 success.incrementAndGet();
             } catch (CouponSoldOutException ex) {
                 soldOut.incrementAndGet();
             } catch (RuntimeException ex) {
+                // 락 없는 동시 쓰기는 같은 coupon 행을 두고 락 경합/데드락을 일으켜 다수가
+                // CannotAcquireLockException 으로 롤백된다 (#93 실측 other=252/300). 커밋된 소수에서
+                // lost-update 가 누적돼 issued_count < persisted 로 드러난다.
                 other.incrementAndGet();
             }
         });
 
         int issuedCount = couponRepository.findById(couponId).orElseThrow().getIssuedCount();
         long persisted = memberCouponRepository.count();
-        log.info("[#90 baseline] success={}, soldOut={}, other={}, issuedCount={}, persisted={} (limit={})",
-                success.get(), soldOut.get(), other.get(), issuedCount, persisted, LIMIT);
+        logMeasurement("baseline", success, soldOut, other, issuedCount, persisted, result);
 
         // 통과 조건 = "초과발급 증거". lost-update 시 다음 중 하나 이상이 성립한다:
         //   (1) persisted > LIMIT          — 한정수량보다 많이 발급 (오버이슈)
@@ -216,19 +256,33 @@ class CouponIssuanceConcurrencyTest {
         return memberRepository.saveAll(members).stream().map(Member::getId).toList();
     }
 
-    /** ready 게이트로 동시 출발시키는 부하 하니스 (OversellingBaselineTest 패턴). */
-    private void runConcurrently(int requests, java.util.function.IntConsumer task) throws InterruptedException {
+    /** 콘솔 박제용 측정 로그 — 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 한 줄. (overselling-baseline.md §3.1 포맷) */
+    private void logMeasurement(String label, AtomicInteger success, AtomicInteger soldOut, AtomicInteger other,
+                                int issuedCount, long persisted, LoadResult result) {
+        log.info("[#93 {}] success={}, soldOut={}, other={}, issuedCount={}, persisted={} (limit={})"
+                        + " | elapsedMs={}, tps={}, p95Ms={}",
+                label, success.get(), soldOut.get(), other.get(), issuedCount, persisted, LIMIT,
+                result.elapsedMs(), String.format("%.1f", result.tps()), result.p95Millis());
+    }
+
+    /** ready 게이트로 동시 출발시키는 부하 하니스 (OversellingBaselineTest 패턴) — wall-clock·요청별 지연을 수집한다. */
+    private LoadResult runConcurrently(int requests, java.util.function.IntConsumer task) throws InterruptedException {
         CountDownLatch readyGate = new CountDownLatch(1);
         CountDownLatch doneGate = new CountDownLatch(requests);
+        ConcurrentLinkedQueue<Long> latenciesNanos = new ConcurrentLinkedQueue<>();
         ExecutorService pool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
         boolean settled;
+        long startNanos;
+        long endNanos;
         try {
             for (int i = 0; i < requests; i++) {
                 final int index = i;
                 pool.submit(() -> {
                     try {
                         readyGate.await();
+                        long reqStart = System.nanoTime();
                         task.accept(index);
+                        latenciesNanos.add(System.nanoTime() - reqStart);
                     } catch (InterruptedException ex) {
                         Thread.currentThread().interrupt();
                     } finally {
@@ -236,8 +290,10 @@ class CouponIssuanceConcurrencyTest {
                     }
                 });
             }
+            startNanos = System.nanoTime();
             readyGate.countDown();
             settled = doneGate.await(DONE_GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            endNanos = System.nanoTime();
         } finally {
             pool.shutdown();
             if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -245,5 +301,26 @@ class CouponIssuanceConcurrencyTest {
             }
         }
         assertThat(settled).as("동시 요청들이 timeout 안에 완료되어야 결과가 유효하다").isTrue();
+        long elapsedMs = (endNanos - startNanos) / 1_000_000L;
+        return new LoadResult(requests, elapsedMs, new ArrayList<>(latenciesNanos));
+    }
+
+    /** 부하 측정 결과 — 처리량(TPS)·p95 지연(ms)을 요청별 지연에서 파생한다. */
+    private record LoadResult(int requests, long elapsedMs, List<Long> latenciesNanos) {
+
+        double tps() {
+            return elapsedMs == 0 ? 0.0 : requests / (elapsedMs / 1000.0);
+        }
+
+        long p95Millis() {
+            if (latenciesNanos.isEmpty()) {
+                return 0L;
+            }
+            List<Long> sorted = new ArrayList<>(latenciesNanos);
+            Collections.sort(sorted);
+            int idx = (int) Math.ceil(0.95 * sorted.size()) - 1;
+            idx = Math.max(0, Math.min(idx, sorted.size() - 1));
+            return sorted.get(idx) / 1_000_000L;
+        }
     }
 }
