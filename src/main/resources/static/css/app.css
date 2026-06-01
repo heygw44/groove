@@ -1,0 +1,13 @@
+/* 데모 프론트 커스텀 스타일 (#102). 대부분은 Bootstrap 유틸리티에 맡기고 최소만 둔다. */
+
+#app {
+  min-height: 60vh;
+}
+
+.album-card {
+  transition: box-shadow 0.15s ease-in-out;
+}
+
+.album-card:hover {
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
+}

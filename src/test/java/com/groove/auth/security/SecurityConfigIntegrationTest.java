@@ -93,6 +93,23 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
+    @DisplayName("정적 SPA 경로(GET /, /js/**, /css/**) 공개 → 200 서빙 (#102)")
+    void staticSpaPaths_arePublic() throws Exception {
+        // "/" 는 welcome-page 로 index.html 이 서빙되어 200. 200 을 단언해야 404 회귀(웰컴페이지·
+        // index.html 누락)까지 잡는다 — isNotIn(401,403) 만으로는 404 가 통과해 회귀를 놓친다.
+        mockMvc.perform(get("/")).andExpect(status().isOk());
+        mockMvc.perform(get("/js/app.js")).andExpect(status().isOk());
+        mockMvc.perform(get("/css/app.css")).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("정적 permitAll 은 GET 한정 → 정적 경로 POST 는 그대로 401 (#102)")
+    void staticSpaPaths_postIsStillProtected() throws Exception {
+        mockMvc.perform(post("/"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("GET /api/v1/albums/** 공개 → 컨트롤러 미존재이므로 404 (보안 통과 확인)")
     void albumsGet_isPublic_butControllerMissing() throws Exception {
         mockMvc.perform(get("/api/v1/albums/123"))
