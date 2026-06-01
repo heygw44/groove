@@ -93,12 +93,11 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
-    @DisplayName("정적 SPA 경로(GET /, /js/**, /css/**) 공개 → 401/403 아님 (#102)")
+    @DisplayName("정적 SPA 경로(GET /, /js/**, /css/**) 공개 → 200 서빙 (#102)")
     void staticSpaPaths_arePublic() throws Exception {
-        int root = mockMvc.perform(get("/")).andReturn().getResponse().getStatus();
-        assertThat(root).isNotIn(401, 403);
-
-        // 실제 정적 파일은 200 으로 서빙되어 permit + 리소스 핸들러 동작을 함께 확인한다.
+        // "/" 는 welcome-page 로 index.html 이 서빙되어 200. 200 을 단언해야 404 회귀(웰컴페이지·
+        // index.html 누락)까지 잡는다 — isNotIn(401,403) 만으로는 404 가 통과해 회귀를 놓친다.
+        mockMvc.perform(get("/")).andExpect(status().isOk());
         mockMvc.perform(get("/js/app.js")).andExpect(status().isOk());
         mockMvc.perform(get("/css/app.css")).andExpect(status().isOk());
     }

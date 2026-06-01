@@ -66,8 +66,9 @@ export function getUser() {
   const claims = decodeJwt(token);
   if (!claims) return null;
   const role = claims.role || 'USER'; // "USER" | "ADMIN" (평문, ROLE_ 접두사 없음)
+  const memberId = claims.sub == null ? null : Number(claims.sub);
   return {
-    memberId: claims.sub ? Number(claims.sub) : null,
+    memberId: Number.isFinite(memberId) ? memberId : null, // 비정상 토큰의 NaN 방어
     role,
     email: localStorage.getItem(K_EMAIL) || null,
     isAdmin: role === 'ADMIN',
