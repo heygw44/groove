@@ -57,10 +57,13 @@ function showError(app, err) {
 // ---- 홈 / 카탈로그 라우트 (비로그인 공개 조회) -----------------------------
 
 async function renderHome({ app }) {
+  // 응답이 도착하기 전 사용자가 다른 라우트로 이동했으면 DOM 을 덮어쓰지 않는다.
+  const startHash = location.hash;
   showLoading(app, '카탈로그를 불러오는 중…');
   try {
     // auth:false → 인증 헤더 없이 공개 조회됨을 입증
     const page = await api.get('/albums', { auth: false, query: { page: 0, size: 20 } });
+    if (location.hash !== startHash) return; // 이미 다른 화면 → 폐기
     const albums = (page && page.content) || [];
 
     if (albums.length === 0) {
@@ -88,6 +91,7 @@ async function renderHome({ app }) {
       <h1 class="h4 mb-3">카탈로그</h1>
       <div class="row g-3">${cards}</div>`;
   } catch (err) {
+    if (location.hash !== startHash) return;
     showError(app, err);
   }
 }
@@ -139,6 +143,12 @@ function renderLogin({ app }) {
   });
 }
 
+// ---- 관리자 자리표시 라우트 (#106 이 정식 콘솔로 교체) ---------------------
+// 네비바 Admin 링크가 not-found 로 빠지지 않도록 자리표시 라우트를 둔다.
+function renderAdminPlaceholder({ app }) {
+  app.innerHTML = '<div class="alert alert-info">관리자 콘솔은 곧 제공됩니다 (#106).</div>';
+}
+
 // ---- 부트스트랩 ------------------------------------------------------------
 
 renderNavbar(store.getUser());
@@ -146,5 +156,6 @@ store.subscribe(renderNavbar);
 
 router.register('/', renderHome);
 router.register('/login', renderLogin);
+router.register('/admin', renderAdminPlaceholder);
 
 router.start();

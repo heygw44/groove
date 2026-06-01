@@ -30,7 +30,9 @@ function decodeJwt(token) {
   try {
     const payload = token.split('.')[1];
     const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const binary = atob(base64);
+    // base64url 은 보통 '=' 패딩이 생략되어 있다. atob() 가 엄격 모드에서 던지지 않도록 길이를 4의 배수로 보정.
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const binary = atob(padded);
     const json = decodeURIComponent(
       Array.from(binary)
         .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
