@@ -6,7 +6,6 @@ let toastSeq = 0
 export const useUiStore = defineStore('ui', {
   state: () => ({
     toasts: [], // [{id, type, message}]
-    searchKeyword: '',
   }),
   actions: {
     /**
@@ -25,9 +24,6 @@ export const useUiStore = defineStore('ui', {
     },
     dismiss(id) {
       this.toasts = this.toasts.filter((t) => t.id !== id)
-    },
-    setSearchKeyword(keyword) {
-      this.searchKeyword = keyword
     },
   },
 })

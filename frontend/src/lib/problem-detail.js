@@ -40,3 +40,11 @@ export function toApiError(error) {
     traceId: problem.traceId,
   })
 }
+
+/**
+ * 사용자 표시용 에러 메시지 추출 — ApiError 면 detail→title 우선, 그 외(또는 둘 다 빈 값)면 fallback.
+ * 뷰들이 동일한 폴백 규칙을 공유하도록 단일 헬퍼로 제공한다.
+ */
+export function errorMessage(error, fallback) {
+  return (error instanceof ApiError && (error.detail || error.title)) || fallback
+}

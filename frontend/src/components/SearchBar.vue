@@ -1,17 +1,17 @@
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useUiStore } from '@/stores/ui'
+import { useRoute, useRouter } from 'vue-router'
 
+const route = useRoute()
 const router = useRouter()
-const ui = useUiStore()
 const keyword = ref('')
 
 function onSubmit() {
   const q = keyword.value.trim()
-  ui.setSearchKeyword(q)
-  // 카탈로그 검색 라우트는 #114 에서 구현. 현재는 홈으로 이동(골격).
-  router.push({ path: '/', query: q ? { q } : {} })
+  // 이미 카탈로그면 적용된 필터/정렬을 보존하고 keyword 만 갱신(페이지는 초기화).
+  // 다른 화면에서 검색하면 새 카탈로그 조회로 시작한다.
+  const base = route.name === 'catalog' ? route.query : {}
+  router.push({ name: 'catalog', query: { ...base, keyword: q || undefined, page: undefined } })
 }
 </script>
 

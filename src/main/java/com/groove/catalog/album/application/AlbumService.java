@@ -149,6 +149,7 @@ public class AlbumService {
                         AlbumSpecs.keyword(condition.keyword()),
                         AlbumSpecs.hasArtistId(condition.artistId()),
                         AlbumSpecs.hasGenreId(condition.genreId()),
+                        AlbumSpecs.hasLabelId(condition.labelId()),
                         AlbumSpecs.priceBetween(condition.minPrice(), condition.maxPrice()),
                         AlbumSpecs.yearBetween(condition.minYear(), condition.maxYear()),
                         AlbumSpecs.hasFormat(condition.format()),

@@ -42,6 +42,18 @@ public final class AlbumSpecs {
         return (root, query, cb) -> cb.equal(root.get("genre").get("id"), genreId);
     }
 
+    /**
+     * label 필터. label 은 nullable FK 라 {@code root.get("label")} 의 암묵 inner join 으로
+     * label 미지정 앨범은 자연히 제외된다 — 특정 labelId 로 거를 때 의도된 동작.
+     * genre 와 동일하게 fetch 는 하지 않아 의도된 N+1(W10 시연) 을 보존한다.
+     */
+    public static Specification<Album> hasLabelId(Long labelId) {
+        if (labelId == null) {
+            return Specification.unrestricted();
+        }
+        return (root, query, cb) -> cb.equal(root.get("label").get("id"), labelId);
+    }
+
     public static Specification<Album> hasFormat(AlbumFormat format) {
         if (format == null) {
             return Specification.unrestricted();

@@ -257,7 +257,7 @@ class AlbumServiceTest {
     @DisplayName("search → 결과가 비면 리뷰 집계 쿼리를 호출하지 않는다 (빈 IN 절 회피)")
     void search_emptyResult_doesNotQueryRatings() {
         AlbumSearchCondition cond = new AlbumSearchCondition(
-                null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
+                null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
         given(albumRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .willReturn(Page.<Album>empty());
 

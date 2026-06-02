@@ -140,6 +140,20 @@ class AlbumQueryControllerTest {
         }
 
         @Test
+        @DisplayName("labelId 필터 → 200 + 해당 레이블만 반환")
+        void filter_byLabelId() throws Exception {
+            Label sony = labelRepository.saveAndFlush(Label.create("Sony Records"));
+            persistAlbum("AppleAlbum", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+            persistAlbum("SonyAlbum", beatles, rock, sony, (short) 1970, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+
+            mockMvc.perform(get("/api/v1/albums").param("labelId", String.valueOf(sony.getId())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].title").value("SonyAlbum"))
+                    .andExpect(jsonPath("$.content[0].label.id").value(sony.getId()));
+        }
+
+        @Test
         @DisplayName("artistId 필터 → 200 + 해당 아티스트만")
         void filter_byArtistId() throws Exception {
             persistAlbum("Beatles1", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
