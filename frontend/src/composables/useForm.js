@@ -11,7 +11,7 @@ import { ApiError, errorMessage } from '@/lib/problem-detail'
  * @param {() => Promise<any>} onSubmit 실제 제출 동작(API/스토어 호출).
  * @returns {{errors:Record<string,string>, formError:import('vue').Ref<string>,
  *   submitting:import('vue').Ref<boolean>, submit:() => Promise<boolean>,
- *   clearError:(field:string) => void}}
+ *   clearError:(field:string) => void, reset:() => void}}
  */
 export function useForm(onSubmit) {
   const errors = reactive({}) // { [field]: message }
