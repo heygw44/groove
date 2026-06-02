@@ -3,9 +3,11 @@ package com.groove.auth.security;
 import com.groove.common.exception.ErrorCode;
 import com.groove.member.domain.MemberRole;
 import com.groove.support.TestcontainersConfig;
+import com.groove.web.SpaRoutes;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,15 +17,23 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.http.server.PathContainer;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -93,13 +103,12 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
-    @DisplayName("정적 SPA 경로(GET /, /js/**, /css/**) 공개 → 200 서빙 (#102)")
-    void staticSpaPaths_arePublic() throws Exception {
-        // "/" 는 welcome-page 로 index.html 이 서빙되어 200. 200 을 단언해야 404 회귀(웰컴페이지·
-        // index.html 누락)까지 잡는다 — isNotIn(401,403) 만으로는 404 가 통과해 회귀를 놓친다.
+    @DisplayName("정적 SPA 셸(GET /, /index.html) 공개 → 200 서빙 (#113 Vite 빌드 산출물)")
+    void staticSpaShell_isPublic() throws Exception {
+        // "/" 는 welcome-page 로 index.html(Vite 빌드 산출물)이 서빙되어 200. 200 을 단언해야
+        // 404 회귀(index.html 누락·frontendBuild 미실행)까지 잡는다 — isNotIn(401,403)은 404 를 놓친다.
         mockMvc.perform(get("/")).andExpect(status().isOk());
-        mockMvc.perform(get("/js/app.js")).andExpect(status().isOk());
-        mockMvc.perform(get("/css/app.css")).andExpect(status().isOk());
+        mockMvc.perform(get("/index.html")).andExpect(status().isOk());
     }
 
     @Test
@@ -107,6 +116,78 @@ class SecurityConfigIntegrationTest {
     void staticSpaPaths_postIsStillProtected() throws Exception {
         mockMvc.perform(post("/"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("SPA clean-route(GET /cart) → index.html 로 forward (#113 history fallback)")
+    void spaCleanRoute_forwardsToIndexHtml() throws Exception {
+        // History 라우팅: /cart 직접 진입·새로고침 시 SpaForwardConfig 가 index.html 로 forward 하고
+        // SecurityConfig 가 GET permitAll 로 열어 401/404 없이 SPA 셸이 로드된다.
+        mockMvc.perform(get("/cart"))
+                .andExpect(status().isOk())
+                .andExpect(forwardedUrl("/index.html"));
+    }
+
+    @Test
+    @DisplayName("SPA admin clean-route(GET /admin) HTML 셸 공개 → forward (실데이터는 API 가 보호)")
+    void spaAdminRoute_isPublicShell() throws Exception {
+        mockMvc.perform(get("/admin"))
+                .andExpect(status().isOk())
+                .andExpect(forwardedUrl("/index.html"));
+    }
+
+    @Test
+    @DisplayName("SPA /admin 셸이 공개여도 /api/v1/admin/** 는 비인증 차단 유지 (API 정책 불변)")
+    void apiAdminPath_stillProtected() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/orders"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 /api/v1/** 는 SPA forward 대상 아님 → HTML 셸이 아닌 401 (API/SPA 격리)")
+    void unknownApiPath_isNotForwardedToSpa() throws Exception {
+        // /api 는 SpaRoutes.PATTERNS 에 없어 forward 되지 않는다 → index.html 이 아니라 인증 정책(401)을 탄다.
+        mockMvc.perform(get("/api/v1/does-not-exist"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(forwardedUrl(null));
+    }
+
+    @Test
+    @DisplayName("SpaRoutes.PATTERNS 와 충돌하는 GET 컨트롤러 매핑이 없어야 한다 (SPA permitAll 회귀 가드)")
+    void noGetControllerCollidesWithSpaRoutes(
+            @Autowired @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping) {
+        // SpaRoutes.PATTERNS 는 forward 이자 GET permitAll 표면을 겸한다(코드래빗 지적). 향후 bare 경로
+        // (예: GET /me, /albums/{id})에 컨트롤러가 추가되면 SPA permitAll 이 실데이터 GET 을 의도치 않게
+        // 공개하므로, 그런 매핑이 생기면 빌드를 깨뜨려 회귀를 잡는다. 현재 모든 컨트롤러는 /api/v1 prefix 다.
+        for (Map.Entry<RequestMappingInfo, ?> entry : handlerMapping.getHandlerMethods().entrySet()) {
+            RequestMappingInfo info = entry.getKey();
+            var methods = info.getMethodsCondition().getMethods();
+            boolean handlesGet = methods.isEmpty() || methods.contains(RequestMethod.GET);
+            if (!handlesGet) {
+                continue;
+            }
+            var patternsCondition = info.getPathPatternsCondition();
+            if (patternsCondition == null) {
+                continue;
+            }
+            for (PathPattern controllerPattern : patternsCondition.getPatterns()) {
+                for (String spaRoute : SpaRoutes.PATTERNS) {
+                    // SpaRoutes 패턴의 대표 경로(base + 하위) 둘 다로 컨트롤러 매칭을 시도한다.
+                    for (String probe : List.of(
+                            spaRoute.replace("/**", "").replace("/*", ""),
+                            spaRoute.replace("/**", "/probe").replace("/*", "/probe"))) {
+                        if (probe.isEmpty()) {
+                            continue;
+                        }
+                        if (controllerPattern.matches(PathContainer.parsePath(probe))) {
+                            fail("GET 컨트롤러 매핑 '" + controllerPattern.getPatternString()
+                                    + "' 가 SPA permitAll 경로 '" + spaRoute
+                                    + "' 와 충돌합니다. SpaRoutes.PATTERNS 가 실데이터 GET 을 덮지 않도록 분리하세요.");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Test

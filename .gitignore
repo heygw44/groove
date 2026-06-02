@@ -66,3 +66,10 @@ CLAUDE.md
 ### Private docs (do not expose on remote) ###
 docs/features/
 docs/interview-prep/
+
+### Frontend (Vue 3 + Vite, #113) ###
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+# Vite 빌드 산출물 — 소스 진실은 frontend/, 산출물은 frontendBuild 가 생성하므로 커밋 제외.
+src/main/resources/static/
