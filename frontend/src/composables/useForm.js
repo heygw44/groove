@@ -23,7 +23,8 @@ export function useForm(onSubmit) {
     if (field in errors) delete errors[field]
   }
 
-  function resetErrors() {
+  /** 에러 상태 전체 초기화. 뷰가 클라이언트 사전 검증 전에 직전 서버 에러를 지울 때도 쓴다. */
+  function reset() {
     for (const k of Object.keys(errors)) delete errors[k]
     formError.value = ''
   }
@@ -31,7 +32,7 @@ export function useForm(onSubmit) {
   /** 제출 실행. 성공 시 true, 실패 시 false 를 반환하고 에러는 errors/formError 로 노출한다(예외 전파 안 함). */
   async function submit() {
     if (submitting.value) return false // 중복 제출 가드
-    resetErrors()
+    reset()
     submitting.value = true
     try {
       await onSubmit()
@@ -39,6 +40,12 @@ export function useForm(onSubmit) {
     } catch (e) {
       if (e instanceof ApiError && e.violations.length) {
         Object.assign(errors, e.fieldErrors())
+        // 입력에 매핑되지 않는 위반(field 없음 = 객체/폼 레벨)은 배너로 노출해 silent 실패를 막는다.
+        const general = e.violations
+          .filter((v) => v && !v.field)
+          .map((v) => v.message)
+          .filter(Boolean)
+        if (general.length) formError.value = general.join(' ')
       } else {
         formError.value = errorMessage(e, '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
       }
@@ -48,5 +55,5 @@ export function useForm(onSubmit) {
     }
   }
 
-  return { errors, formError, submitting, submit, clearError }
+  return { errors, formError, submitting, submit, clearError, reset }
 }

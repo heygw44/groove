@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { safeRedirect } from '@/lib/redirect'
 
 // History(clean URL) 라우팅. 서버는 SpaForwardConfig 가 등록된 SPA 경로를 index.html 로
 // forward 하므로 /cart 등 직접 진입·새로고침에도 SPA 셸이 로드된다.
@@ -67,13 +68,6 @@ const router = createRouter({
     return { top: 0 }
   },
 })
-
-/** open-redirect 방지 — 같은 오리진 절대경로('/x')만 허용하고 그 외엔 null. */
-function safeRedirect(target) {
-  if (typeof target !== 'string') return null
-  if (!target.startsWith('/') || target.startsWith('//')) return null
-  return target
-}
 
 // 인증 가드 — 라우트 meta 기반. 클라 UI 보호일 뿐이며 실제 권한 검증은 서버가 한다.
 // Pinia store 는 반드시 가드 함수 내부에서 호출한다(모듈 최상단 호출은 설치 순서 의존으로 실패).

@@ -2,6 +2,7 @@
 import { reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { loginFlow } from '@/api/auth'
+import { safeRedirect } from '@/lib/redirect'
 import { useUiStore } from '@/stores/ui'
 import { useForm } from '@/composables/useForm'
 import BaseInput from '@/components/base/BaseInput.vue'
@@ -19,10 +20,8 @@ const { errors, formError, submitting, submit, clearError } = useForm(() =>
 async function onSubmit() {
   if (!(await submit())) return
   ui.notify('환영합니다.', 'success')
-  // 복귀 경로(redirect)가 같은 오리진 절대경로면 그곳으로, 아니면 홈으로.
-  const r = route.query.redirect
-  const target = typeof r === 'string' && r.startsWith('/') && !r.startsWith('//') ? r : '/'
-  router.replace(target)
+  // 복귀 경로(redirect)가 안전한 같은 오리진 절대경로면 그곳으로, 아니면 홈으로 (가드와 동일 규칙).
+  router.replace(safeRedirect(route.query.redirect) || '/')
 }
 </script>
 
