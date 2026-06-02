@@ -3,9 +3,11 @@ package com.groove.auth.security;
 import com.groove.common.exception.ErrorCode;
 import com.groove.member.domain.MemberRole;
 import com.groove.support.TestcontainersConfig;
+import com.groove.web.SpaRoutes;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,11 +17,18 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.http.server.PathContainer;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -141,6 +150,44 @@ class SecurityConfigIntegrationTest {
         mockMvc.perform(get("/api/v1/does-not-exist"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(forwardedUrl(null));
+    }
+
+    @Test
+    @DisplayName("SpaRoutes.PATTERNS 와 충돌하는 GET 컨트롤러 매핑이 없어야 한다 (SPA permitAll 회귀 가드)")
+    void noGetControllerCollidesWithSpaRoutes(
+            @Autowired @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping) {
+        // SpaRoutes.PATTERNS 는 forward 이자 GET permitAll 표면을 겸한다(코드래빗 지적). 향후 bare 경로
+        // (예: GET /me, /albums/{id})에 컨트롤러가 추가되면 SPA permitAll 이 실데이터 GET 을 의도치 않게
+        // 공개하므로, 그런 매핑이 생기면 빌드를 깨뜨려 회귀를 잡는다. 현재 모든 컨트롤러는 /api/v1 prefix 다.
+        for (Map.Entry<RequestMappingInfo, ?> entry : handlerMapping.getHandlerMethods().entrySet()) {
+            RequestMappingInfo info = entry.getKey();
+            var methods = info.getMethodsCondition().getMethods();
+            boolean handlesGet = methods.isEmpty() || methods.contains(RequestMethod.GET);
+            if (!handlesGet) {
+                continue;
+            }
+            var patternsCondition = info.getPathPatternsCondition();
+            if (patternsCondition == null) {
+                continue;
+            }
+            for (PathPattern controllerPattern : patternsCondition.getPatterns()) {
+                for (String spaRoute : SpaRoutes.PATTERNS) {
+                    // SpaRoutes 패턴의 대표 경로(base + 하위) 둘 다로 컨트롤러 매칭을 시도한다.
+                    for (String probe : List.of(
+                            spaRoute.replace("/**", "").replace("/*", ""),
+                            spaRoute.replace("/**", "/probe").replace("/*", "/probe"))) {
+                        if (probe.isEmpty()) {
+                            continue;
+                        }
+                        if (controllerPattern.matches(PathContainer.parsePath(probe))) {
+                            fail("GET 컨트롤러 매핑 '" + controllerPattern.getPatternString()
+                                    + "' 가 SPA permitAll 경로 '" + spaRoute
+                                    + "' 와 충돌합니다. SpaRoutes.PATTERNS 가 실데이터 GET 을 덮지 않도록 분리하세요.");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Test

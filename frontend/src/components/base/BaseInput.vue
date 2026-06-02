@@ -10,8 +10,10 @@ const emit = defineEmits(['update:modelValue'])
 
 function onInput(e) {
   if (props.type === 'number') {
-    // 숫자 타입은 valueAsNumber 로 number 를 emit 해 v-model 타입을 보존한다(빈 입력은 '' 로 NaN 방지).
-    emit('update:modelValue', e.target.value === '' ? '' : e.target.valueAsNumber)
+    // 숫자 타입은 valueAsNumber 로 number 를 emit 해 v-model 타입을 보존한다.
+    // 빈 입력·불완전 입력("-", ".", "1e")은 NaN 이 되므로 '' 로 보정한다(NaN 을 절대 emit 하지 않음).
+    const num = e.target.valueAsNumber
+    emit('update:modelValue', Number.isNaN(num) ? '' : num)
   } else {
     emit('update:modelValue', e.target.value)
   }
@@ -25,7 +27,7 @@ function onInput(e) {
       :type="type"
       :value="modelValue"
       :placeholder="placeholder"
-      class="w-full rounded-lg border bg-cream-50 px-3 py-2 text-sm text-vinyl-black focus:outline-none focus:ring-2 focus:ring-gold-400"
+      class="w-full rounded-lg border bg-cream-50 px-3 py-2 text-sm text-vinyl-black focus:outline-hidden focus:ring-2 focus:ring-gold-400"
       :class="error ? 'border-rust-500' : 'border-vinyl-800/20'"
       @input="onInput"
     />

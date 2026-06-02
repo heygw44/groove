@@ -22,7 +22,7 @@ function onSubmit() {
       type="search"
       placeholder="앨범, 아티스트 검색"
       aria-label="검색어"
-      class="w-full rounded-l-full border border-vinyl-800/20 bg-cream-50 px-4 py-2 text-sm text-vinyl-black focus:outline-none focus:ring-2 focus:ring-gold-400"
+      class="w-full rounded-l-full border border-vinyl-800/20 bg-cream-50 px-4 py-2 text-sm text-vinyl-black focus:outline-hidden focus:ring-2 focus:ring-gold-400"
     />
     <button
       type="submit"

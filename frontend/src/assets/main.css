@@ -22,10 +22,10 @@
   --color-rust-600: #97411a;
 
   --font-sans:
-    'Pretendard Variable', Pretendard, ui-sans-serif, system-ui, -apple-system,
+    'Pretendard Variable', 'Pretendard', ui-sans-serif, system-ui, -apple-system,
     'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
   --font-display:
-    'Pretendard Variable', Pretendard, ui-sans-serif, system-ui, sans-serif;
+    'Pretendard Variable', 'Pretendard', ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Pretendard 가변 웹폰트 (CDN) */

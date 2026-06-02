@@ -17,12 +17,19 @@ const styleByType = {
     <div
       v-for="t in toasts"
       :key="t.id"
-      class="pointer-events-auto rounded-full px-5 py-2 text-sm shadow-lg"
+      class="pointer-events-auto flex items-center gap-3 rounded-full py-2 pl-5 pr-3 text-sm shadow-lg"
       :class="styleByType[t.type] || styleByType.info"
-      role="status"
-      @click="ui.dismiss(t.id)"
+      :role="t.type === 'error' ? 'alert' : 'status'"
     >
-      {{ t.message }}
+      <span>{{ t.message }}</span>
+      <button
+        type="button"
+        class="grid h-5 w-5 shrink-0 place-items-center rounded-full opacity-70 hover:opacity-100 focus:outline-hidden focus:ring-2 focus:ring-current"
+        aria-label="알림 닫기"
+        @click="ui.dismiss(t.id)"
+      >
+        ✕
+      </button>
     </div>
   </div>
 </template>

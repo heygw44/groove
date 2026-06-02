@@ -14,7 +14,8 @@ onMounted(async () => {
     const page = await albumsApi.list({ page: 0, size: 12 })
     albums.value = page.content
   } catch (e) {
-    error.value = e instanceof ApiError ? e.detail || e.title : '앨범을 불러오지 못했습니다.'
+    // ApiError 라도 detail·title 이 모두 비어 있을 수 있으므로 항상 기본 문구로 폴백한다.
+    error.value = (e instanceof ApiError && (e.detail || e.title)) || '앨범을 불러오지 못했습니다.'
   } finally {
     loading.value = false
   }
