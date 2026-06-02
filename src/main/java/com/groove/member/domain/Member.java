@@ -51,12 +51,12 @@ public class Member extends BaseTimeEntity {
     protected Member() {
     }
 
-    private Member(String email, String passwordHash, String name, String phone) {
+    private Member(String email, String passwordHash, String name, String phone, MemberRole role) {
         this.email = email;
         this.password = passwordHash;
         this.name = name;
         this.phone = phone;
-        this.role = MemberRole.USER;
+        this.role = role;
         this.emailVerified = false;
     }
 
@@ -66,7 +66,20 @@ public class Member extends BaseTimeEntity {
      * @param passwordHash 반드시 BCrypt 등으로 해시된 값. 평문 금지.
      */
     public static Member register(String email, String passwordHash, String name, String phone) {
-        return new Member(email, passwordHash, name, phone);
+        return new Member(email, passwordHash, name, phone, MemberRole.USER);
+    }
+
+    /**
+     * 관리자 계정 정적 팩토리 (role=ADMIN).
+     *
+     * <p>일반 가입({@link #register})은 항상 role=USER 로 고정하므로, 관리자 부트스트랩은 이 팩토리를
+     * 통해서만 생성한다. 현재 유일한 소비자는 로컬 데모 시더({@code LocalDataSeeder}) 다 —
+     * 운영 환경의 관리자 계정 발급 경로가 생기면 그쪽도 이 팩토리를 재사용한다.
+     *
+     * @param passwordHash 반드시 BCrypt 등으로 해시된 값. 평문 금지.
+     */
+    public static Member registerAdmin(String email, String passwordHash, String name, String phone) {
+        return new Member(email, passwordHash, name, phone, MemberRole.ADMIN);
     }
 
     /**
