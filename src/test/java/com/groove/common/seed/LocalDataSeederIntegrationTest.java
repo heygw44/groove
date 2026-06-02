@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -82,9 +83,14 @@ class LocalDataSeederIntegrationTest {
     @BeforeEach
     void setUp() {
         cleanAll();
+        // 시더의 런타임 프로파일 가드(local 필수)를 통과시키기 위해 local 활성 환경을 주입한다.
+        // 테스트 컨텍스트 자체는 test 프로파일이라 실제 빈은 등록되지 않으며, 여기서는 협력자를 모아
+        // 시더를 직접 생성해 시드 로직만 검증한다.
+        MockEnvironment seedEnv = new MockEnvironment();
+        seedEnv.setActiveProfiles("local");
         seeder = new LocalDataSeeder(albumRepository, artistService, genreService, labelService,
                 albumService, memberService, memberRepository, passwordEncoder, adminCouponService,
-                orderService, txTemplate);
+                orderService, txTemplate, seedEnv);
     }
 
     @AfterEach
@@ -155,5 +161,21 @@ class LocalDataSeederIntegrationTest {
         assertThat(albumRepository.count()).isEqualTo(albumsAfterFirst);
         assertThat(memberRepository.count()).isEqualTo(membersAfterFirst);
         assertThat(couponRepository.count()).isEqualTo(couponsAfterFirst);
+    }
+
+    @Test
+    @DisplayName("활성 프로파일에 local 이 없으면 시드를 건너뛴다 (런타임 안전망)")
+    void skipsWhenProfileIsNotLocal() {
+        MockEnvironment nonLocal = new MockEnvironment();
+        nonLocal.setActiveProfiles("prod");
+        LocalDataSeeder guarded = new LocalDataSeeder(albumRepository, artistService, genreService,
+                labelService, albumService, memberService, memberRepository, passwordEncoder,
+                adminCouponService, orderService, txTemplate, nonLocal);
+
+        guarded.run(null);
+
+        assertThat(albumRepository.count()).isZero();
+        assertThat(memberRepository.count()).isZero();
+        assertThat(couponRepository.count()).isZero();
     }
 }

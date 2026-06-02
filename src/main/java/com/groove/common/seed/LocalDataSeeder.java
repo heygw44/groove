@@ -32,6 +32,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -57,7 +58,8 @@ import java.util.List;
  * {@code spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}}). 따라서 운영/스테이징 등 비-로컬
  * 환경은 반드시 {@code SPRING_PROFILES_ACTIVE} 를 명시적으로 주입해야 한다 — 누락 시 {@code local} 로
  * 폴백해 이 시더가 등록될 수 있다. 다만 아래 멱등 가드(앨범 0개일 때만)로 비어 있는 DB 에만 주입되어
- * 기존 데이터는 보존된다.
+ * 기존 데이터는 보존된다. 추가로 {@link #run} 진입 시 활성 프로파일에 {@code local} 이 실제로 포함되는지
+ * 한 번 더 확인하는 런타임 안전망을 둔다(향후 와이어링 변경 대비 — 알려진 비밀번호의 ADMIN 시드 보호).
  *
  * <h2>멱등성</h2>
  * <p>앨범이 한 장이라도 있으면(=이미 시드됨) 전체를 건너뛴다 (이슈 DoD: 재기동 시 중복 생성 없음).
@@ -97,6 +99,7 @@ public class LocalDataSeeder implements ApplicationRunner {
     private final AdminCouponService adminCouponService;
     private final OrderService orderService;
     private final TransactionTemplate txTemplate;
+    private final Environment environment;
 
     public LocalDataSeeder(AlbumRepository albumRepository,
                            ArtistService artistService,
@@ -109,7 +112,8 @@ public class LocalDataSeeder implements ApplicationRunner {
                            AdminCouponService adminCouponService,
                            OrderService orderService,
                            @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE)
-                           TransactionTemplate txTemplate) {
+                           TransactionTemplate txTemplate,
+                           Environment environment) {
         this.albumRepository = albumRepository;
         this.artistService = artistService;
         this.genreService = genreService;
@@ -121,10 +125,19 @@ public class LocalDataSeeder implements ApplicationRunner {
         this.adminCouponService = adminCouponService;
         this.orderService = orderService;
         this.txTemplate = txTemplate;
+        this.environment = environment;
     }
 
     @Override
     public void run(ApplicationArguments args) {
+        // 런타임 안전망 (CodeRabbit 리뷰): @Profile("local") 로 빈 등록은 이미 막히지만, 활성 프로파일을
+        // 진입 시점에 한 번 더 확인한다. 알려진 비밀번호의 ADMIN 계정을 시드하므로, 향후 와이어링 변경·
+        // 다중 프로파일 구성 등으로 'local' 이 아닌데 실행되는 경로가 생기면 즉시 차단(skip)한다.
+        if (!environment.matchesProfiles("local")) {
+            log.warn("[seed] 활성 프로파일에 'local' 이 없어 데모 시드를 건너뜁니다 (active={})",
+                    String.join(",", environment.getActiveProfiles()));
+            return;
+        }
         if (albumRepository.count() > 0) {
             log.info("[seed] 기존 데이터 감지 — 로컬 데모 시드 건너뜀");
             return;
