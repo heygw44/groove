@@ -10,11 +10,15 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -49,6 +53,38 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         "message", v.getMessage()))
                 .toList();
         pd.setProperty("violations", violations);
+        ProblemDetailEnricher.enrich(pd, errorCode.getStatus().value());
+        return ResponseEntity.status(errorCode.getStatus()).body(pd);
+    }
+
+    /**
+     * {@code @RequestBody @Valid} 본문 검증 위반(form DTO). {@link #handleConstraintViolation}와 동일하게
+     * RFC 7807 확장 필드 {@code violations}(필드 경로/메시지)를 담아 클라이언트가 필드별로 표시할 수 있게 한다.
+     * 필드 단위 위반은 {@link FieldError}, 객체 단위(@AssertTrue 등 클래스 제약)는 {@link ObjectError} 로 함께 담는다.
+     */
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+
+        ErrorCode errorCode = ErrorCode.VALIDATION_FAILED;
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(
+                errorCode.getStatus(), errorCode.getDefaultMessage());
+        pd.setProperty("code", errorCode.getCode());
+
+        List<Map<String, String>> violations = new ArrayList<>();
+        for (FieldError fe : ex.getBindingResult().getFieldErrors()) {
+            violations.add(Map.of(
+                    "field", fe.getField(),
+                    "message", fe.getDefaultMessage() != null ? fe.getDefaultMessage() : ""));
+        }
+        for (ObjectError oe : ex.getBindingResult().getGlobalErrors()) {
+            violations.add(Map.of(
+                    "field", oe.getObjectName(),
+                    "message", oe.getDefaultMessage() != null ? oe.getDefaultMessage() : ""));
+        }
+        pd.setProperty("violations", violations);
+
         ProblemDetailEnricher.enrich(pd, errorCode.getStatus().value());
         return ResponseEntity.status(errorCode.getStatus()).body(pd);
     }

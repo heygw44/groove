@@ -81,14 +81,17 @@ class GlobalExceptionHandlerTest {
     // ── Spring 내장 예외 ─────────────────────────────────────────────────
 
     @Test
-    @DisplayName("@Valid 실패(MethodArgumentNotValidException) → 400, code=HTTP_400, application/problem+json")
+    @DisplayName("@Valid 본문 검증 실패(MethodArgumentNotValidException) → 400, code=VALID_001 + violations 배열")
     void validationFailed() throws Exception {
         mockMvc.perform(post("/stub/valid")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\": \"\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
-                .andExpect(jsonPath("$.code").value("HTTP_400"))
+                .andExpect(jsonPath("$.code").value("VALID_001"))
+                .andExpect(jsonPath("$.violations").isArray())
+                .andExpect(jsonPath("$.violations[0].field").value("name"))
+                .andExpect(jsonPath("$.violations[0].message").exists())
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.traceId").exists());
     }

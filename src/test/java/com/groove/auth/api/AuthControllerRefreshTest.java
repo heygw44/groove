@@ -156,16 +156,16 @@ class AuthControllerRefreshTest {
     }
 
     @Test
-    @DisplayName("refreshToken 누락 → 400 ProblemDetail")
+    @DisplayName("refreshToken 누락 → 400 VALID_001 + violations")
     void refresh_missingToken_returns400() throws Exception {
-        // 검증 실패는 별도 ExceptionHandler 가 없어 ProblemDetailEnricher 의 fallback "HTTP_400" 사용.
-        // 본 PR 범위 외이므로 현재 동작을 그대로 단언해 회귀 감지만 보장한다.
+        // 본문 검증(@NotBlank refreshToken) 실패는 code=VALID_001 + 필드별 violations 로 내려간다.
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.code").value("HTTP_400"));
+                .andExpect(jsonPath("$.code").value("VALID_001"))
+                .andExpect(jsonPath("$.violations[0].field").value("refreshToken"));
     }
 
     @Test

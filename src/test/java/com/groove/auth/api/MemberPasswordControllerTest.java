@@ -125,8 +125,9 @@ class MemberPasswordControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeBody(OLD_PASSWORD, OLD_PASSWORD)))
                 .andExpect(status().isBadRequest())
-                // 검증(@AssertTrue) 거부는 프레임워크 경로라 code=HTTP_400 — 서비스의 MEMBER_PASSWORD_MISMATCH 와 구분된다.
-                .andExpect(jsonPath("$.code").value("HTTP_400"));
+                // 본문 검증(@AssertTrue) 거부는 code=VALID_001 + violations — 서비스의 MEMBER_PASSWORD_MISMATCH 와 구분된다.
+                .andExpect(jsonPath("$.code").value("VALID_001"))
+                .andExpect(jsonPath("$.violations").isArray());
     }
 
     @Test
@@ -137,7 +138,8 @@ class MemberPasswordControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeBody(OLD_PASSWORD, "weak")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("HTTP_400"));
+                .andExpect(jsonPath("$.code").value("VALID_001"))
+                .andExpect(jsonPath("$.violations[0].field").value("newPassword"));
     }
 
     @Test
