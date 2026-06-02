@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+
+/*
+ * 디자인 토큰 (#113 기반) — LP 음반 쇼핑몰 감성: 바이닐 블랙 / 크림 / 골드 / 러스트.
+ * Tailwind v4 는 CSS-first 라 @theme 에 정의한 변수가 bg-*, text-*, border-* 유틸로 노출된다.
+ * 정교한 비주얼(hero·카드 디테일 등)은 #114~ 카탈로그 이슈에서 확장한다.
+ */
+@theme {
+  --color-vinyl-black: #161412;
+  --color-vinyl-900: #1f1c19;
+  --color-vinyl-800: #2b2722;
+
+  --color-cream-50: #faf6ee;
+  --color-cream-100: #f3ece0;
+  --color-cream-200: #e7dcc9;
+
+  --color-gold-400: #d4b262;
+  --color-gold-500: #c29c43;
+  --color-gold-600: #a5832f;
+
+  --color-rust-500: #b4521f;
+  --color-rust-600: #97411a;
+
+  --font-sans:
+    'Pretendard Variable', Pretendard, ui-sans-serif, system-ui, -apple-system,
+    'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  --font-display:
+    'Pretendard Variable', Pretendard, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Pretendard 가변 웹폰트 (CDN) */
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src:
+    url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/woff2/PretendardVariable.woff2')
+    format('woff2-variations');
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-cream-50);
+  color: var(--color-vinyl-black);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

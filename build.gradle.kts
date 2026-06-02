@@ -1,8 +1,11 @@
+import com.github.gradle.node.npm.task.NpmTask
+
 plugins {
     java
     jacoco
     id("org.springframework.boot") version "4.0.6"
     id("io.spring.dependency-management") version "1.1.7"
+    id("com.github.node-gradle.node") version "7.1.0"
 }
 
 group = "com.groove"
@@ -113,4 +116,65 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check {
     dependsOn(tasks.jacocoTestCoverageVerification)
+}
+
+// ── 프론트엔드(Vue 3 + Vite) 빌드 통합 (#113) ────────────────────────────────────
+// node-gradle 가 node 를 자동 다운로드(download=true)하므로 시스템 node 나 CI 셋업 없이
+// ./gradlew build 한 번으로 프론트까지 빌드된다(메모의 'CI 프론트 미빌드' GOTCHA 해소).
+// 백엔드만 빠르게 빌드하려면 ./gradlew build -PskipFrontend (값 없이도 동작).
+// 값 없는 -P 는 빈 문자열이라 it.toBoolean()=false 가 되므로, isEmpty() 도 스킵으로 취급한다.
+val skipFrontend = providers.gradleProperty("skipFrontend")
+    .map { it.isEmpty() || it.toBoolean() }
+    .getOrElse(false)
+
+// node 버전 단일 소스: frontend/.node-version (npm run dev 는 nvm/fnm/volta 가 같은 파일을 읽어 버전 일치).
+val nodeVersion = file("frontend/.node-version").takeIf { it.exists() }?.readText()?.trim() ?: "22.12.0"
+
+node {
+    version.set(nodeVersion)
+    download.set(true)
+    nodeProjectDir.set(file("frontend"))
+}
+
+// Vite 가 산출물을 src/main/resources/static 으로 출력한다(vite.config.js 의 outDir).
+val frontendBuild = tasks.register<NpmTask>("frontendBuild") {
+    group = "build"
+    description = "Vite 로 Vue 프론트엔드를 빌드해 src/main/resources/static 으로 출력한다."
+    dependsOn(tasks.named("npmInstall"))
+    npmCommand.set(listOf("run", "build"))
+    // 입력/출력 선언으로 소스 미변경 시 UP-TO-DATE → 백엔드만 자주 도는 개발 루프에서 npm 재빌드 회피.
+    inputs.dir("frontend/src")
+    inputs.dir("frontend/public")
+    inputs.file("frontend/index.html")
+    inputs.file("frontend/vite.config.js")
+    inputs.file("frontend/package.json")
+    inputs.file("frontend/package-lock.json")
+    outputs.dir(layout.projectDirectory.dir("src/main/resources/static"))
+    onlyIf { !skipFrontend }
+}
+
+// 백엔드만 빌드(-PskipFrontend)할 때도 통합 테스트가 SPA 셸을 찾도록 최소 placeholder index.html 을
+// 보장한다(SecurityConfigIntegrationTest 의 GET / → 200 단언이 404 로 깨지는 것을 방지).
+// 정상 빌드 시에는 frontendBuild 의 emptyOutDir 가 이 placeholder 를 실제 산출물로 덮어쓴다.
+val frontendPlaceholder = tasks.register("frontendPlaceholder") {
+    description = "skipFrontend 시 static/index.html placeholder 를 생성한다(통합 테스트 404 방지)."
+    onlyIf { skipFrontend }
+    doLast {
+        val dir = layout.projectDirectory.dir("src/main/resources/static").asFile
+        dir.mkdirs()
+        val index = dir.resolve("index.html")
+        if (!index.exists()) {
+            index.writeText("<!doctype html>\n<title>groove (skipFrontend placeholder)</title>\n")
+        }
+    }
+}
+
+// bootJar/bootRun/build 가 모두 거치는 processResources 에 의존시켜 산출물이 jar 에 포함되게 한다.
+tasks.named("processResources") {
+    dependsOn(if (skipFrontend) frontendPlaceholder else frontendBuild)
+}
+
+// 빌드 산출 정적파일도 gradle clean 으로 정리(소스 진실은 frontend/, 산출물은 커밋 제외).
+tasks.named<Delete>("clean") {
+    delete("src/main/resources/static")
 }
