@@ -273,7 +273,7 @@ class ReviewApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("rating 범위 밖(6) → 400 HTTP_400")
+    @DisplayName("rating 범위 밖(6) → 400 VALID_001 + violations")
     void create_invalidRating_returns400() throws Exception {
         Order order = persistMemberOrder(ownerId, OrderStatus.DELIVERED);
 
@@ -282,7 +282,8 @@ class ReviewApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(createBody(order.getOrderNumber(), albumId, 6, "범위밖")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("HTTP_400"));
+                .andExpect(jsonPath("$.code").value("VALID_001"))
+                .andExpect(jsonPath("$.violations[0].field").value("rating"));
     }
 
     @Test
