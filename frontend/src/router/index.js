@@ -11,6 +11,21 @@ const router = createRouter({
       component: () => import('@/views/HomeView.vue'),
     },
     {
+      path: '/catalog',
+      name: 'catalog',
+      component: () => import('@/views/CatalogView.vue'),
+    },
+    {
+      path: '/albums/:id',
+      name: 'album-detail',
+      component: () => import('@/views/AlbumDetailView.vue'),
+    },
+    {
+      path: '/artists/:id',
+      name: 'artist-detail',
+      component: () => import('@/views/ArtistDetailView.vue'),
+    },
+    {
       // 클라이언트 라우팅 중 매칭 실패한 경로용 catch-all.
       path: '/:pathMatch(.*)*',
       name: 'not-found',

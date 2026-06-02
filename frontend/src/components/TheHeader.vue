@@ -31,6 +31,7 @@ async function onLogout() {
       </div>
 
       <nav class="ml-auto flex items-center gap-4 text-sm">
+        <RouterLink to="/catalog" class="hover:text-gold-400">카탈로그</RouterLink>
         <RouterLink to="/cart" class="hover:text-gold-400">장바구니</RouterLink>
         <template v-if="isAuthenticated">
           <RouterLink v-if="user?.isAdmin" to="/admin" class="hover:text-gold-400">관리자</RouterLink>

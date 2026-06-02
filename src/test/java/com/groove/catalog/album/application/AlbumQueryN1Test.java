@@ -102,7 +102,7 @@ class AlbumQueryN1Test {
     @DisplayName("5건 SELLING 검색 시 쿼리 수 > 5 — fetch join 미적용으로 lazy proxy 가 행마다 풀림")
     void search_triggersN1Selects_byDesign() {
         AlbumSearchCondition cond = new AlbumSearchCondition(
-                null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
+                null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
 
         var page = albumService.search(cond, PageRequest.of(0, 20));
 

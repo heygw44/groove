@@ -18,6 +18,7 @@ public record AlbumSearchCondition(
         String keyword,
         Long artistId,
         Long genreId,
+        Long labelId,
         Long minPrice,
         Long maxPrice,
         Integer minYear,
@@ -29,7 +30,7 @@ public record AlbumSearchCondition(
 
     public AlbumSearchCondition withArtistId(Long newArtistId) {
         return new AlbumSearchCondition(
-                keyword, newArtistId, genreId, minPrice, maxPrice,
+                keyword, newArtistId, genreId, labelId, minPrice, maxPrice,
                 minYear, maxYear, format, limited, status);
     }
 }

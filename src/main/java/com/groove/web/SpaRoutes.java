@@ -28,6 +28,7 @@ public final class SpaRoutes {
     public static final String[] PATTERNS = {
             "/login",
             "/signup",
+            "/catalog",
             "/cart",
             "/checkout",
             "/mypage",

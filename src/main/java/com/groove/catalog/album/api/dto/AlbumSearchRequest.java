@@ -24,6 +24,7 @@ public record AlbumSearchRequest(
         @Size(max = 200) String keyword,
         @Positive Long artistId,
         @Positive Long genreId,
+        @Positive Long labelId,
         @Min(0) Long minPrice,
         @Min(0) Long maxPrice,
         @Min(1900) @Max(Short.MAX_VALUE) Integer minYear,
@@ -40,7 +41,7 @@ public record AlbumSearchRequest(
     public AlbumSearchCondition toPublicCondition() {
         AlbumStatus effective = (status == null) ? AlbumStatus.SELLING : status;
         return new AlbumSearchCondition(
-                keyword, artistId, genreId, minPrice, maxPrice,
+                keyword, artistId, genreId, labelId, minPrice, maxPrice,
                 minYear, maxYear, format, isLimited, effective);
     }
 }
