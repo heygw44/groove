@@ -90,6 +90,15 @@ public class Order extends BaseTimeEntity {
     @Column(name = "discount_amount", nullable = false)
     private long discountAmount;
 
+    /**
+     * 발급된 운송장 번호 (이슈 #116). 결제 완료 후 {@code shipping} 모듈의
+     * {@link com.groove.shipping.application.ShippingCreationListener} 가 배송 생성 직후 기록한다 —
+     * 결제 전(배송 미생성)에는 {@code null}. {@link OrderResponse} 가 그대로 노출해 프론트가 별도 매핑 없이
+     * {@code GET /shippings/{trackingNumber}} 로 배송 추적하게 한다 (라이브 배송 상태는 그 엔드포인트가 담당).
+     */
+    @Column(name = "tracking_number", length = 64)
+    private String trackingNumber;
+
     @Column(name = "paid_at")
     private Instant paidAt;
 
@@ -234,6 +243,22 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
+     * 배송 생성 시 발급된 운송장 번호를 주문에 기록한다 (이슈 #116).
+     *
+     * <p>{@code shipping} 모듈의 {@code ShippingCreationListener} 가 결제 완료 후 배송 생성 직후 호출한다 —
+     * 쓰기 방향이 shipping→order 라 모듈 의존(shipping 이 order 를 안다)을 깨지 않는다. 주문 상세 응답이
+     * 운송장 번호를 노출해 프론트가 별도 매핑 없이 배송 추적을 연결할 수 있게 한다.
+     *
+     * <p>멱등 — 이미 기록돼 있으면 무시한다(중복 이벤트·경합 시 첫 값 보존).
+     */
+    public void recordTrackingNumber(String trackingNumber) {
+        if (this.trackingNumber != null) {
+            return;
+        }
+        this.trackingNumber = trackingNumber;
+    }
+
+    /**
      * 항목 추가 + totalAmount 누적.
      */
     public void addItem(OrderItem item) {
@@ -275,6 +300,11 @@ public class Order extends BaseTimeEntity {
 
     public long getDiscountAmount() {
         return discountAmount;
+    }
+
+    /** 발급된 운송장 번호 — 배송 생성 전(결제 완료 전)에는 {@code null}. */
+    public String getTrackingNumber() {
+        return trackingNumber;
     }
 
     /**

@@ -57,6 +57,42 @@ const router = createRouter({
       component: () => import('@/views/PasswordChangeView.vue'),
       meta: { requiresAuth: true },
     },
+    // 구매 여정(#116). 결제/체크아웃/게스트조회는 게스트도 써야 하므로 requiresAuth 를 걸지 않는다.
+    // 모든 경로는 SpaRoutes(/cart·/checkout·/orders/**)에 매칭돼 새로고침·딥링크가 동작한다(백엔드 무수정).
+    {
+      path: '/cart',
+      name: 'cart',
+      component: () => import('@/views/CartView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/checkout',
+      name: 'checkout',
+      component: () => import('@/views/CheckoutView.vue'),
+    },
+    {
+      path: '/orders',
+      name: 'orders',
+      component: () => import('@/views/OrderListView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      // '/orders/:orderNumber' 보다 먼저 선언 — "lookup" 이 orderNumber 로 매칭되지 않게 한다.
+      path: '/orders/lookup',
+      name: 'guest-lookup',
+      component: () => import('@/views/GuestLookupView.vue'),
+    },
+    {
+      path: '/orders/:orderNumber/pay',
+      name: 'order-pay',
+      component: () => import('@/views/PaymentView.vue'),
+    },
+    {
+      path: '/orders/:orderNumber',
+      name: 'order-detail',
+      component: () => import('@/views/OrderDetailView.vue'),
+      meta: { requiresAuth: true },
+    },
     {
       // 클라이언트 라우팅 중 매칭 실패한 경로용 catch-all.
       path: '/:pathMatch(.*)*',
