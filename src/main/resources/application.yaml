@@ -1,8 +1,9 @@
 spring:
   application:
     name: groove
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+  # 활성 프로파일은 외부에서 주입한다 (SPRING_PROFILES_ACTIVE 또는 --spring.profiles.active). 기본값 폴백 없음(이슈 #128):
+  # 미설정 시 Spring 의 'default' 프로파일만 활성 → LocalDataSeeder(@Profile("local"))가 동작하지 않아 데모 계정/시드가
+  # 운영 DB 에 유입되지 않는다. 로컬 개발은 build.gradle.kts 의 bootRun 이 local 을 자동 주입한다.
 
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:groove}?characterEncoding=UTF-8&serverTimezone=UTC
