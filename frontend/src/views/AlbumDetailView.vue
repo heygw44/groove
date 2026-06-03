@@ -1,14 +1,27 @@
 <script setup>
 import { ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import * as albumsApi from '@/api/albums'
 import { errorMessage } from '@/lib/problem-detail'
 import { formatWon, formatDate } from '@/lib/format'
 import { formatLabel, statusLabel } from '@/lib/enums'
+import { useAuthStore } from '@/stores/auth'
+import { useCartStore } from '@/stores/cart'
+import { useGuestCartStore } from '@/stores/guestCart'
+import { useUiStore } from '@/stores/ui'
 import RatingStars from '@/components/catalog/RatingStars.vue'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
+import BaseButton from '@/components/base/BaseButton.vue'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const cart = useCartStore()
+const guestCart = useGuestCartStore()
+const ui = useUiStore()
+const { isAuthenticated } = storeToRefs(auth)
+const adding = ref(false)
 const album = ref(null)
 const reviews = ref([])
 const reviewsError = ref(false)
@@ -48,6 +61,39 @@ async function fetchAll(id) {
 
 // 동일 컴포넌트 재사용(다른 id 로 이동) 시에도 재조회되도록 params.id 를 watch.
 watch(() => route.params.id, fetchAll, { immediate: true })
+
+// 담기 — 회원은 서버 카트(POST /cart/items), 게스트는 로컬 카트(렌더용 스냅샷 저장).
+function snapshotOf(a) {
+  return {
+    albumId: a.id,
+    albumTitle: a.title,
+    artistName: a.artist?.name ?? '',
+    coverImageUrl: a.coverImageUrl,
+    unitPrice: a.price,
+  }
+}
+
+async function addToCart() {
+  const a = album.value
+  if (!a || adding.value) return
+  adding.value = true
+  try {
+    if (isAuthenticated.value) await cart.add(a.id, 1)
+    else guestCart.add(snapshotOf(a), 1)
+    ui.notify('장바구니에 담았습니다.', 'success')
+  } catch (e) {
+    ui.notify(errorMessage(e, '장바구니에 담지 못했습니다.'), 'error')
+  } finally {
+    adding.value = false
+  }
+}
+
+// 바로 구매 — 회원/게스트 공통. 체크아웃에 단일 항목을 쿼리로 전달(서버/로컬 카트와 분리).
+function buyNow() {
+  const a = album.value
+  if (!a) return
+  router.push({ name: 'checkout', query: { albumId: a.id, qty: 1 } })
+}
 </script>
 
 <template>
@@ -116,6 +162,12 @@ watch(() => route.params.id, fetchAll, { immediate: true })
         </dl>
 
         <p class="mt-5 text-2xl font-bold text-rust-600">{{ formatWon(album.price) }}</p>
+
+        <div v-if="album.status === 'SELLING'" class="mt-5 flex gap-3">
+          <BaseButton :loading="adding" @click="addToCart">장바구니 담기</BaseButton>
+          <BaseButton variant="ghost" @click="buyNow">바로 구매</BaseButton>
+        </div>
+        <p v-else class="mt-5 text-sm text-vinyl-800/50">현재 구매할 수 없는 상품입니다.</p>
 
         <p
           v-if="album.description"

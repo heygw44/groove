@@ -227,6 +227,14 @@ class FullPurchaseJourneyE2ETest {
                 .andExpect(jsonPath("$.trackingNumber").value(trackingNumber))
                 .andExpect(jsonPath("$.status").value("PREPARING"));
 
+        // 6-1) 주문 상세 응답이 운송장 번호·금액 3종을 노출한다(이슈 #116) — 프론트가 별도 매핑 없이 배송 추적을 연결.
+        mockMvc.perform(get("/api/v1/orders/" + orderNumber).header("Authorization", bearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trackingNumber").value(trackingNumber))
+                .andExpect(jsonPath("$.totalAmount").value((int) expectedTotal))
+                .andExpect(jsonPath("$.discountAmount").value(0))
+                .andExpect(jsonPath("$.payableAmount").value((int) expectedTotal));
+
         // 7) 자동 진행 스케줄러 — PREPARING → SHIPPED → DELIVERED (테스트 프로파일은 단계 지연 0)
         progressShippingToDelivered();
         getShipping(trackingNumber)

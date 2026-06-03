@@ -88,7 +88,10 @@ async function onWithdraw() {
         </div>
       </dl>
 
-      <div class="mt-4 flex gap-3">
+      <div class="mt-4 flex flex-wrap gap-3">
+        <BaseButton variant="ghost" @click="router.push({ name: 'orders' })">
+          주문 내역
+        </BaseButton>
         <BaseButton variant="ghost" @click="router.push({ name: 'profile-edit' })">
           프로필 수정
         </BaseButton>

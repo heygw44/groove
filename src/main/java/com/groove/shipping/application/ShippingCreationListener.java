@@ -65,6 +65,9 @@ public class ShippingCreationListener {
             }
             Shipping shipping = Shipping.prepare(order, order.getShippingInfo(), trackingNumberGenerator.generate());
             shippingRepository.saveAndFlush(shipping);
+            // 운송장 번호를 주문에 비정규화한다(이슈 #116) — order 는 이 REQUIRES_NEW 트랜잭션에서 로드된 관리 상태라
+            // 더티체킹으로 커밋 시 반영된다. 주문 상세 응답이 운송장 번호를 노출해 프론트가 배송 추적을 연결한다.
+            order.recordTrackingNumber(shipping.getTrackingNumber());
             log.info("배송 생성: order={}, tracking={}", order.getOrderNumber(), shipping.getTrackingNumber());
         } catch (DataIntegrityViolationException e) {
             log.info("배송 생성 건너뜀: order={} 이미 존재(중복 이벤트/경합)", event.orderNumber());
