@@ -93,6 +93,23 @@ const router = createRouter({
       component: () => import('@/views/OrderDetailView.vue'),
       meta: { requiresAuth: true },
     },
+    // 쿠폰(#118). 목록은 public(GET /coupons), 내 쿠폰은 회원 전용. 동시성 데모는 자체 demo 계정 풀 사용.
+    {
+      path: '/coupons',
+      name: 'coupons',
+      component: () => import('@/views/CouponListView.vue'),
+    },
+    {
+      path: '/coupons/race-demo',
+      name: 'coupon-race-demo',
+      component: () => import('@/views/CouponRaceDemoView.vue'),
+    },
+    {
+      path: '/me/coupons',
+      name: 'my-coupons',
+      component: () => import('@/views/MyCouponsView.vue'),
+      meta: { requiresAuth: true },
+    },
     {
       // 클라이언트 라우팅 중 매칭 실패한 경로용 catch-all.
       path: '/:pathMatch(.*)*',

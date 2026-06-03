@@ -81,6 +81,7 @@ async function onLogout() {
 
       <nav class="ml-auto flex items-center gap-4 text-sm">
         <RouterLink to="/catalog" class="hover:text-gold-400">카탈로그</RouterLink>
+        <RouterLink to="/coupons" class="hover:text-gold-400">쿠폰</RouterLink>
         <RouterLink to="/cart" class="relative hover:text-gold-400">
           장바구니
           <span

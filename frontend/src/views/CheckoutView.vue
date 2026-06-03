@@ -12,7 +12,7 @@ import { myCoupons } from '@/api/coupons'
 import * as albumsApi from '@/api/albums'
 import { errorMessage } from '@/lib/problem-detail'
 import { formatWon } from '@/lib/format'
-import { previewDiscount } from '@/lib/order-enums'
+import { previewDiscount, couponDiscountLabel } from '@/lib/order-enums'
 import BaseInput from '@/components/base/BaseInput.vue'
 import BaseSelect from '@/components/base/BaseSelect.vue'
 import BaseButton from '@/components/base/BaseButton.vue'
@@ -106,10 +106,8 @@ async function loadCoupons() {
 }
 
 function couponLabel(c) {
-  const value =
-    c.discountType === 'PERCENTAGE' ? `${c.discountValue}%` : formatWon(c.discountValue)
-  const min = c.minOrderAmount > 0 ? ` · ${formatWon(c.minOrderAmount)} 이상` : ''
-  return `${c.name} (${value}${min})`
+  // 할인 표기는 couponDiscountLabel 단일 출처를 재사용한다(정률 상한 maxDiscountAmount 포함).
+  return `${c.name} (${couponDiscountLabel(c)})`
 }
 
 // BaseSelect 옵션 — '쿠폰 미적용' + 보유 쿠폰(최소주문금액 미달은 disabled). 단일 출처로 관리.

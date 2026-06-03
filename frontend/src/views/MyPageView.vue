@@ -92,6 +92,9 @@ async function onWithdraw() {
         <BaseButton variant="ghost" @click="router.push({ name: 'orders' })">
           주문 내역
         </BaseButton>
+        <BaseButton variant="ghost" @click="router.push({ name: 'my-coupons' })">
+          내 쿠폰
+        </BaseButton>
         <BaseButton variant="ghost" @click="router.push({ name: 'profile-edit' })">
           프로필 수정
         </BaseButton>
