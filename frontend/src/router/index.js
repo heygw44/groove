@@ -117,6 +117,33 @@ const router = createRouter({
           },
         ]
       : []),
+    // 관리자 콘솔(#119). 중첩 라우트 — AdminLayout(사이드바 + <router-view/>) 아래 자식 뷰.
+    // meta 는 부모에 두면 Vue Router 4 가 자식 to.meta 로 머지하므로 모든 하위가 보호된다.
+    // 이중 방어: 클라 requiresAdmin 가드(UI) + 서버 hasRole("ADMIN")(진짜 인가, 비관리자 API 호출 시 403).
+    // 모든 경로가 /admin/** 아래라 백엔드 SpaRoutes(이미 /admin·/admin/** 등록) 동기화가 불필요하다.
+    {
+      path: '/admin',
+      component: () => import('@/components/admin/AdminLayout.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/AdminDashboardView.vue') },
+        { path: 'albums', name: 'admin-albums', component: () => import('@/views/admin/AdminAlbumsView.vue') },
+        { path: 'albums/new', name: 'admin-album-new', component: () => import('@/views/admin/AdminAlbumFormView.vue') },
+        {
+          path: 'albums/:id/edit',
+          name: 'admin-album-edit',
+          component: () => import('@/views/admin/AdminAlbumFormView.vue'),
+        },
+        { path: 'orders', name: 'admin-orders', component: () => import('@/views/admin/AdminOrdersView.vue') },
+        {
+          path: 'orders/:orderNumber',
+          name: 'admin-order-detail',
+          component: () => import('@/views/admin/AdminOrderDetailView.vue'),
+        },
+        { path: 'coupons', name: 'admin-coupons', component: () => import('@/views/admin/AdminCouponsView.vue') },
+        { path: 'coupons/new', name: 'admin-coupon-new', component: () => import('@/views/admin/AdminCouponFormView.vue') },
+      ],
+    },
     {
       // 클라이언트 라우팅 중 매칭 실패한 경로용 catch-all.
       path: '/:pathMatch(.*)*',
@@ -138,7 +165,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  // 관리자 전용 라우트에 비관리자 접근 → 홈. (admin 라우트는 후속 이슈에서 추가)
+  // 관리자 전용 라우트에 비관리자 접근 → 홈.
   if (to.meta.requiresAdmin && !auth.isAdmin) {
     return { name: 'home' }
   }

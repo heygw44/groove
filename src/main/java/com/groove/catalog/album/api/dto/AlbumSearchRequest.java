@@ -36,12 +36,23 @@ public record AlbumSearchRequest(
 
     /**
      * Public 경계용 변환 — status 가 null 이면 {@link AlbumStatus#SELLING} 으로 강제한다.
-     * Admin 검색 경로(후속 이슈) 도입 시 status 를 그대로 전달하는 별도 변환 메서드를 추가한다.
+     * Admin 경로는 {@link #toAdminCondition()} 가 status 를 그대로 전달한다.
      */
     public AlbumSearchCondition toPublicCondition() {
         AlbumStatus effective = (status == null) ? AlbumStatus.SELLING : status;
         return new AlbumSearchCondition(
                 keyword, artistId, genreId, labelId, minPrice, maxPrice,
                 minYear, maxYear, format, isLimited, effective);
+    }
+
+    /**
+     * Admin 경계용 변환 — {@code GET /api/v1/admin/albums} 전용. status 를 강제하지 않고 그대로
+     * 전달한다(null → 전체 status, HIDDEN 포함). 관리자 콘솔(#119) 이 비공개 앨범까지 관리해야 하므로
+     * Public 검색과 달리 HIDDEN 을 노출한다.
+     */
+    public AlbumSearchCondition toAdminCondition() {
+        return new AlbumSearchCondition(
+                keyword, artistId, genreId, labelId, minPrice, maxPrice,
+                minYear, maxYear, format, isLimited, status);
     }
 }
