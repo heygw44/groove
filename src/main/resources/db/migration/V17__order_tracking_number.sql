@@ -6,5 +6,6 @@
 --
 -- 쓰기 주체는 shipping 모듈의 리스너(이미 order 를 의존) — 쓰기 방향 shipping->order 라 모듈 경계 유지.
 -- 결제 완료 전(배송 미생성)에는 NULL. 운송장번호 형식은 ShippingResponse 와 동일(hex+하이픈, 최대 50자).
+-- NULL 컬럼이라 백필이 없고, 컬럼 매핑은 이름 기준이라 물리적 위치(AFTER) 지정은 불필요하다(잠금/이식성 고려).
 ALTER TABLE orders
-    ADD COLUMN tracking_number VARCHAR(64) NULL AFTER discount_amount;
+    ADD COLUMN tracking_number VARCHAR(64) NULL;

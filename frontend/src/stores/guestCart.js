@@ -34,7 +34,7 @@ export const useGuestCartStore = defineStore('guestCart', {
     add(snapshot, quantity = 1) {
       const existing = this.items.find((i) => i.albumId === snapshot.albumId)
       if (existing) {
-        existing.quantity = Math.min(MAX_QTY, existing.quantity + quantity)
+        existing.quantity = Math.min(MAX_QTY, Math.max(1, existing.quantity + quantity))
       } else {
         this.items.push({ ...snapshot, quantity: Math.min(MAX_QTY, Math.max(1, quantity)) })
       }

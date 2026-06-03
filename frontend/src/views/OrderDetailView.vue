@@ -46,7 +46,7 @@ async function fetchOrder(orderNumber) {
     } else if (isPaidStatus(o.status)) {
       // 결제 완료인데 아직 운송장 미발급이면 주문을 재폴링해 번호를 확보 → ShippingTracker 가 이어받음.
       // 끝까지 안 나오면(배송행 없는 주문) trackingPending 을 풀어 "배송 정보 없음" 으로 마무리한다.
-      startTrackingWait(orderNumber)
+      startTrackingWait(orderNumber, seq)
     }
   } catch (e) {
     if (seq !== reqSeq) return
@@ -56,11 +56,14 @@ async function fetchOrder(orderNumber) {
   }
 }
 
-function startTrackingWait(orderNumber) {
+function startTrackingWait(orderNumber, seq) {
   trackingPending.value = true
   trackingPoller.start(
     async () => {
       const o = await getOrder(orderNumber)
+      // usePolling.stop() 은 다음 tick 만 막고 진행 중 콜백은 못 멈추므로, await 직후 시퀀스를 재확인한다.
+      // 라우트 변경(다른 주문) 후 늦게 resolve 된 응답이 새 주문 상태를 덮어쓰는 것을 막고 폴링을 종료한다.
+      if (seq !== reqSeq) return true
       order.value = o
       if (o.trackingNumber) {
         trackingNumber.value = o.trackingNumber

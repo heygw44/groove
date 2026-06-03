@@ -63,7 +63,10 @@ async function onSubmit() {
 
       <div v-if="paid" class="mt-8">
         <h3 class="mb-3 font-display text-base font-bold text-vinyl-black">배송 추적</h3>
-        <ShippingTracker :tracking-number="trackingNumber" />
+        <ShippingTracker v-if="trackingNumber" :tracking-number="trackingNumber" />
+        <div v-else class="rounded-lg bg-cream-100 px-4 py-4 text-sm text-vinyl-800/60">
+          배송이 준비되면 추적 정보가 표시됩니다. 위 새로고침으로 다시 확인해 주세요.
+        </div>
       </div>
     </div>
   </section>
