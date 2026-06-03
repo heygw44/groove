@@ -1,4 +1,5 @@
 import com.github.gradle.node.npm.task.NpmTask
+import org.springframework.boot.gradle.tasks.run.BootRun
 
 plugins {
     java
@@ -65,6 +66,16 @@ tasks.named<Jar>("jar") {
 tasks.withType<Test> {
     useJUnitPlatform()
     finalizedBy(tasks.jacocoTestReport)
+}
+
+// 로컬 개발 DX (#128): ./gradlew bootRun 을 그대로 쓰면 local 프로파일로 기동한다. application.yaml 의
+// :local 폴백을 제거(운영 안전)했으므로 여기서 명시 주입한다. 단 셸에 SPRING_PROFILES_ACTIVE 가 있으면
+// 그것을 존중하고(미주입), CLI override(--args='--spring.profiles.active=xxx')는 system property 보다
+// 우선순위가 높아 그대로 통한다.
+tasks.withType<BootRun> {
+    if (System.getenv("SPRING_PROFILES_ACTIVE").isNullOrBlank()) {
+        systemProperty("spring.profiles.active", "local")
+    }
 }
 
 // 커버리지 측정 대상에서 제외 — 부트스트랩·DTO·@ConfigurationProperties 바인딩·패키지 메타만 제외한다.

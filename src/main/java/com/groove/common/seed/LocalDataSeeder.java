@@ -54,12 +54,11 @@ import java.util.List;
  * <p>{@code @Profile("local")} 이므로 {@code docker}·{@code test} 프로파일에서는 빈 자체가 등록되지
  * 않아 동작하지 않는다 (테스트는 전부 {@code @ActiveProfiles("test")}). 운영/도커 경로 무영향이 보장된다.
  *
- * <p><b>주의</b>: 기본 활성 프로파일이 {@code local} 이다({@code application.yaml} —
- * {@code spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}}). 따라서 운영/스테이징 등 비-로컬
- * 환경은 반드시 {@code SPRING_PROFILES_ACTIVE} 를 명시적으로 주입해야 한다 — 누락 시 {@code local} 로
- * 폴백해 이 시더가 등록될 수 있다. 다만 아래 멱등 가드(앨범 0개일 때만)로 비어 있는 DB 에만 주입되어
- * 기존 데이터는 보존된다. 추가로 {@link #run} 진입 시 활성 프로파일에 {@code local} 이 실제로 포함되는지
- * 한 번 더 확인하는 런타임 안전망을 둔다(향후 와이어링 변경 대비 — 알려진 비밀번호의 ADMIN 시드 보호).
+ * <p><b>주의</b>: 활성 프로파일은 외부에서 주입한다({@code application.yaml} 에 기본값 폴백 없음 — 이슈 #128).
+ * 미설정 시 Spring 은 {@code default} 프로파일만 활성화하므로 이 시더({@code @Profile("local")})는 등록되지
+ * 않는다(로컬 개발은 {@code build.gradle.kts} 의 bootRun 이 {@code local} 을 자동 주입). 추가로
+ * {@link #run} 진입 시 활성 프로파일에 {@code local} 이 실제로 포함되는지 한 번 더 확인하는 런타임 안전망을
+ * 두고, 운영(비-local) 경로는 {@link ProductionSeedGuard} 가 데모 계정 유입을 fail-fast 로 차단한다.
  *
  * <h2>멱등성</h2>
  * <p>앨범이 한 장이라도 있으면(=이미 시드됨) 전체를 건너뛴다 (이슈 DoD: 재기동 시 중복 생성 없음).
@@ -79,9 +78,8 @@ public class LocalDataSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(LocalDataSeeder.class);
 
-    private static final String DEMO_USER_EMAIL = "demo@groove.dev";
+    // 데모 계정 이메일은 DemoAccounts 단일 출처를 참조한다(ProductionSeedGuard 와 식별자 공유 — 이슈 #128).
     private static final String DEMO_USER_PASSWORD = "demo1234";
-    private static final String ADMIN_EMAIL = "admin@groove.dev";
     private static final String ADMIN_PASSWORD = "admin1234";
     /** 쿠폰 동시성 라이브 데모(#110)가 사용하는 유저 풀 크기. */
     private static final int USER_POOL_SIZE = 30;
@@ -210,9 +208,9 @@ public class LocalDataSeeder implements ApplicationRunner {
     /** 데모 USER(서비스 경유) + 데모 ADMIN(role 지정 위해 도메인 팩토리 직접). */
     private Member seedDemoAccounts() {
         Member demoUser = memberService.signup(
-                new SignupCommand(DEMO_USER_EMAIL, DEMO_USER_PASSWORD, "데모유저", "01000000000"));
+                new SignupCommand(DemoAccounts.DEMO_USER_EMAIL, DEMO_USER_PASSWORD, "데모유저", "01000000000"));
         Member admin = Member.registerAdmin(
-                ADMIN_EMAIL, passwordEncoder.encode(ADMIN_PASSWORD), "데모관리자", "01000000001");
+                DemoAccounts.ADMIN_EMAIL, passwordEncoder.encode(ADMIN_PASSWORD), "데모관리자", "01000000001");
         memberRepository.saveAndFlush(admin);
         return demoUser;
     }
