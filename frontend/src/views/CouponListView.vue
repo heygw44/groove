@@ -22,6 +22,9 @@ const auth = useAuthStore()
 const ui = useUiStore()
 const { isAuthenticated } = storeToRefs(auth)
 
+// 동시성 라이브 데모 라우트는 개발 빌드에만 등록되므로(router/index.js), 진입 링크도 dev 에서만 노출한다.
+const isDev = import.meta.env.DEV
+
 const page = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -81,6 +84,7 @@ watch(() => route.query, fetchCoupons, { immediate: true })
           내 쿠폰함 →
         </RouterLink>
         <RouterLink
+          v-if="isDev"
           :to="{ name: 'coupon-race-demo' }"
           class="text-vinyl-800/60 hover:text-rust-600 hover:underline"
         >
