@@ -19,15 +19,15 @@ defineProps({ order: { type: Object, required: true } })
     </div>
 
     <ul class="divide-y divide-vinyl-800/10 rounded-lg border border-vinyl-800/15 bg-cream-50">
-      <li
-        v-for="it in order.items"
-        :key="it.albumId"
-        class="flex items-center justify-between px-4 py-3 text-sm"
-      >
-        <span class="min-w-0 flex-1 truncate text-vinyl-black">
-          {{ it.albumTitle }} <span class="text-vinyl-800/50">× {{ it.quantity }}</span>
-        </span>
-        <span class="ml-3 font-medium text-vinyl-black">{{ formatWon(it.subtotal) }}</span>
+      <li v-for="it in order.items" :key="it.albumId" class="px-4 py-3 text-sm">
+        <div class="flex items-center justify-between">
+          <span class="min-w-0 flex-1 truncate text-vinyl-black">
+            {{ it.albumTitle }} <span class="text-vinyl-800/50">× {{ it.quantity }}</span>
+          </span>
+          <span class="ml-3 font-medium text-vinyl-black">{{ formatWon(it.subtotal) }}</span>
+        </div>
+        <!-- 항목별 액션(예: 리뷰 작성). 슬롯 미전달 시(게스트 조회 등) 아무것도 렌더하지 않는다. -->
+        <slot name="item-action" :item="it" />
       </li>
     </ul>
 
