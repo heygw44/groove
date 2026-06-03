@@ -43,6 +43,9 @@ curl http://localhost:8080/actuator/health
 > 운영(docker) 프로파일은 환경 변수가 반드시 주입되어야 기동된다 — 부팅 시 누락은 의도된 fail-fast.
 > 또한 application.yaml 에 프로파일 기본값 폴백이 없어 미설정 시 `default`(데모 시드 비활성)로 뜨며, 비-local
 > 프로파일로 기동 중 DB 에서 데모 계정이 감지되면 `ProductionSeedGuard` 가 기동을 중단한다(이슈 #128).
+>
+> ⚠️ IDE 에서 `GrooveApplication` 의 main() 을 bootRun 없이 직접 실행할 때는 폴백이 없으므로 run config 의
+> 활성 프로파일을 `local` 로 지정해야 한다 — 미지정 시 `default` 로 떠 Mock PG 빈 부재로 부팅에 실패한다.
 
 > 시드 데이터 주입은 W8 완료 후 `./scripts/seed.sh` 추가 예정.
 

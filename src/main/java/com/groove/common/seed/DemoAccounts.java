@@ -15,6 +15,14 @@ public final class DemoAccounts {
     /** 데모 관리자 (role ADMIN, 알려진 비밀번호 — 운영 DB 유입 시 가장 위험). */
     public static final String ADMIN_EMAIL = "admin@groove.dev";
 
+    /** 쿠폰 동시성 데모용 유저 풀 크기 (demo01@ … demo{N}@). */
+    public static final int USER_POOL_SIZE = 30;
+
+    /** 유저 풀 이메일 — {@code demo01@groove.dev} … {@code demo{USER_POOL_SIZE}@groove.dev}. */
+    public static String poolEmail(int index) {
+        return String.format("demo%02d@groove.dev", index);
+    }
+
     private DemoAccounts() {
     }
 }

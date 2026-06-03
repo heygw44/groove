@@ -78,12 +78,11 @@ public class LocalDataSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(LocalDataSeeder.class);
 
-    // 데모 계정 이메일은 DemoAccounts 단일 출처를 참조한다(ProductionSeedGuard 와 식별자 공유 — 이슈 #128).
+    // 데모 계정 식별자(이메일·유저 풀)는 DemoAccounts 단일 출처를 참조한다(ProductionSeedGuard 와 공유 — 이슈 #128).
+    // 비밀번호는 시드 생성 전용이라 여기 둔다.
     private static final String DEMO_USER_PASSWORD = "demo1234";
     private static final String ADMIN_PASSWORD = "admin1234";
-    /** 쿠폰 동시성 라이브 데모(#110)가 사용하는 유저 풀 크기. */
-    private static final int USER_POOL_SIZE = 30;
-    /** 한정 쿠폰 발급 수량 — 유저 풀(30)보다 작게 두어 #110 에서 선착순 경합/실패가 드러나게 한다. */
+    /** 한정 쿠폰 발급 수량 — 유저 풀(DemoAccounts.USER_POOL_SIZE)보다 작게 두어 #110 에서 선착순 경합/실패가 드러나게 한다. */
     private static final int COUPON_TOTAL_QUANTITY = 20;
 
     private final AlbumRepository albumRepository;
@@ -143,7 +142,7 @@ public class LocalDataSeeder implements ApplicationRunner {
         log.info("[seed] 로컬 데모 데이터 시드 시작");
         txTemplate.executeWithoutResult(status -> seedAll());
         log.info("[seed] 완료: 앨범 12, 데모계정 2(USER/ADMIN), 유저풀 {}, 한정쿠폰 1, DELIVERED 주문 1",
-                USER_POOL_SIZE);
+                DemoAccounts.USER_POOL_SIZE);
     }
 
     /** 시드 본체 — 단일 트랜잭션 안에서 호출된다. 어느 단계든 예외 시 전체 롤백. */
@@ -217,8 +216,8 @@ public class LocalDataSeeder implements ApplicationRunner {
 
     /** 쿠폰 동시성 데모용 유저 풀 (demo01@ … demo30@, 공통 비번). */
     private void seedUserPool() {
-        for (int i = 1; i <= USER_POOL_SIZE; i++) {
-            String email = String.format("demo%02d@groove.dev", i);
+        for (int i = 1; i <= DemoAccounts.USER_POOL_SIZE; i++) {
+            String email = DemoAccounts.poolEmail(i);
             String phone = String.format("0102%07d", i); // 11자리 숫자, 데모/관리자 번호와 미충돌
             memberService.signup(new SignupCommand(
                     email, DEMO_USER_PASSWORD, String.format("데모회원%02d", i), phone));
