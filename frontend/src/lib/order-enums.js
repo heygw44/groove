@@ -70,6 +70,11 @@ export function isPaidStatus(status) {
   return ['PAID', 'PREPARING', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(status)
 }
 
+/** 리뷰 작성 가능 상태 — 클라 노출 가드(백엔드 REVIEWABLE_ORDER_STATUSES 미러, 최종 판정은 서버). */
+export function isReviewableStatus(status) {
+  return status === 'DELIVERED' || status === 'COMPLETED'
+}
+
 /**
  * 쿠폰 할인액 미리보기(표시용) — 최종 금액은 서버 OrderResponse.payableAmount 가 권위.
  * @param {{discountType:string, discountValue:number, maxDiscountAmount:number|null, minOrderAmount:number}} coupon

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import * as albumsApi from '@/api/albums'
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useGuestCartStore } from '@/stores/guestCart'
 import { useUiStore } from '@/stores/ui'
+import { usePagination } from '@/composables/usePagination'
 import RatingStars from '@/components/catalog/RatingStars.vue'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
 import BaseButton from '@/components/base/BaseButton.vue'
@@ -23,34 +24,48 @@ const ui = useUiStore()
 const { isAuthenticated } = storeToRefs(auth)
 const adding = ref(false)
 const album = ref(null)
-const reviews = ref([])
+const reviewsPage = ref(null) // PageResponse — 페이징 표시용(단일 출처)
+const reviews = computed(() => reviewsPage.value?.content ?? []) // 목록은 현재 페이지에서 파생
 const reviewsError = ref(false)
+const reviewsLoading = ref(false) // 페이지 이동 중
 const loading = ref(true)
 const error = ref('')
 
-const REVIEW_PAGE_SIZE = 20
-let reqSeq = 0 // 응답 순서 가드 — 빠른 앨범 전환 시 stale 응답 폐기.
+const REVIEW_PAGE_SIZE = 10
+let reqSeq = 0 // 앨범 단위 응답 순서 가드 — 빠른 앨범 전환 시 stale 응답 폐기.
+let reviewSeq = 0 // 리뷰 목록(페이지 이동) 단위 가드.
+
+// 리뷰 목록 로드 — 자체 가드(reviewSeq)로 페이지 이동/앨범 전환 stale 응답을 폐기한다.
+async function loadReviews(id, pageNo) {
+  const seq = ++reviewSeq
+  reviewsLoading.value = true
+  reviewsError.value = false
+  try {
+    const r = await albumsApi.reviews(id, { page: pageNo, size: REVIEW_PAGE_SIZE })
+    if (seq !== reviewSeq) return
+    reviewsPage.value = r
+  } catch {
+    if (seq !== reviewSeq) return
+    reviewsError.value = true
+    reviewsPage.value = null
+  } finally {
+    if (seq === reviewSeq) reviewsLoading.value = false
+  }
+}
 
 async function fetchAll(id) {
   const seq = ++reqSeq
   loading.value = true
   error.value = ''
   album.value = null
-  reviews.value = []
+  reviewsPage.value = null
   reviewsError.value = false
   try {
     const detail = await albumsApi.detail(id)
     if (seq !== reqSeq) return
     album.value = detail
-    // 리뷰는 부가 정보 — 실패해도 상세는 보여주되, 빈 목록과 로딩 실패를 구분한다.
-    try {
-      const r = await albumsApi.reviews(id, { size: REVIEW_PAGE_SIZE })
-      if (seq !== reqSeq) return
-      reviews.value = r.content
-    } catch {
-      if (seq !== reqSeq) return
-      reviewsError.value = true
-    }
+    // 리뷰는 부가 정보 — 실패해도 상세는 보여준다(loadReviews 가 자체적으로 에러를 흡수).
+    await loadReviews(id, 0)
   } catch (e) {
     if (seq !== reqSeq) return
     error.value = errorMessage(e, '앨범 정보를 불러오지 못했습니다.')
@@ -58,6 +73,18 @@ async function fetchAll(id) {
     if (seq === reqSeq) loading.value = false
   }
 }
+
+// usePagination 에는 ref 를 직접 넘긴다 — 내부가 unref 로 풀기 때문에 getter(()=>...) 를 주면
+// unref 가 함수를 그대로 반환해 페이징 값이 전부 0/false 가 된다(hasPages 항상 false).
+const { current, isFirst, isLast, hasPages, pages, totalPages } = usePagination(reviewsPage)
+
+function goToReviewPage(p) {
+  if (p < 0 || p > totalPages.value - 1 || p === current.value || reviewsLoading.value) return
+  loadReviews(route.params.id, p)
+}
+
+const pageBtn =
+  'min-w-9 rounded-md px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-40'
 
 // 동일 컴포넌트 재사용(다른 id 로 이동) 시에도 재조회되도록 params.id 를 watch.
 watch(() => route.params.id, fetchAll, { immediate: true })
@@ -180,9 +207,12 @@ function buyNow() {
 
     <!-- 리뷰 -->
     <section class="mt-12">
-      <h2 class="mb-4 font-display text-xl font-bold text-vinyl-black">
+      <h2 class="mb-1 font-display text-xl font-bold text-vinyl-black">
         리뷰 <span class="text-base font-normal text-vinyl-800/50">{{ album.reviewCount }}</span>
       </h2>
+      <p class="mb-4 text-xs text-vinyl-800/50">
+        배송 완료된 주문의 주문 상세에서 리뷰를 작성할 수 있습니다.
+      </p>
 
       <p
         v-if="reviewsError"
@@ -213,12 +243,44 @@ function buyNow() {
             <p v-if="r.content" class="mt-2 text-sm text-vinyl-800/80">{{ r.content }}</p>
           </li>
         </ul>
-        <p
-          v-if="album.reviewCount > reviews.length"
-          class="mt-3 text-center text-xs text-vinyl-800/40"
+        <nav
+          v-if="hasPages"
+          class="mt-6 flex items-center justify-center gap-1"
+          aria-label="리뷰 페이지 이동"
         >
-          최근 {{ reviews.length }}개 리뷰를 표시하고 있습니다.
-        </p>
+          <button
+            type="button"
+            :class="pageBtn"
+            class="hover:bg-cream-100"
+            :disabled="isFirst || reviewsLoading"
+            @click="goToReviewPage(current - 1)"
+          >
+            이전
+          </button>
+          <button
+            v-for="p in pages"
+            :key="p"
+            type="button"
+            :class="[
+              pageBtn,
+              p === current ? 'bg-vinyl-black font-semibold text-cream-50' : 'hover:bg-cream-100',
+            ]"
+            :aria-current="p === current ? 'page' : undefined"
+            :disabled="reviewsLoading"
+            @click="goToReviewPage(p)"
+          >
+            {{ p + 1 }}
+          </button>
+          <button
+            type="button"
+            :class="pageBtn"
+            class="hover:bg-cream-100"
+            :disabled="isLast || reviewsLoading"
+            @click="goToReviewPage(current + 1)"
+          >
+            다음
+          </button>
+        </nav>
       </template>
     </section>
   </article>

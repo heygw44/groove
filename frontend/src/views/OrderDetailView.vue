@@ -1,13 +1,16 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getOrder, cancelOrder } from '@/api/orders'
+import * as reviewsApi from '@/api/reviews'
 import { useUiStore } from '@/stores/ui'
 import { errorMessage } from '@/lib/problem-detail'
-import { isCancellableStatus, isPaidStatus } from '@/lib/order-enums'
+import { isCancellableStatus, isPaidStatus, isReviewableStatus } from '@/lib/order-enums'
 import { usePolling } from '@/composables/usePolling'
+import { useForm } from '@/composables/useForm'
 import OrderItemsCard from '@/components/order/OrderItemsCard.vue'
 import ShippingTracker from '@/components/order/ShippingTracker.vue'
+import RatingInput from '@/components/catalog/RatingInput.vue'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
@@ -24,6 +27,74 @@ const cancelling = ref(false)
 const cancellable = computed(() => order.value && isCancellableStatus(order.value.status))
 const paid = computed(() => order.value && isPaidStatus(order.value.status))
 
+// ── 리뷰 작성·삭제 (배송완료 주문 한정). 한 번에 한 항목만 인라인 폼을 펼친다. ──────────────────
+// 백엔드 계약은 orderNumber + albumId. ReviewResponse/OrderResponse 모두 작성여부·소유권 플래그가
+// 없어, 작성 직후 받은 reviewId 로만 같은 세션에서 삭제를 노출한다(새로고침 시 작성됨 표시는 사라짐).
+const reviewable = computed(() => order.value && isReviewableStatus(order.value.status))
+const reviewedMap = reactive({}) // { [albumId]: reviewId } — 이 세션에서 작성한 리뷰
+const activeAlbumId = ref(null) // 현재 폼이 펼쳐진 항목(앨범 id)
+const rating = ref(0)
+const content = ref('')
+const ratingError = ref('')
+const deletingId = ref(null)
+
+const { errors, formError, submitting, submit, reset } = useForm(async () => {
+  const albumId = activeAlbumId.value
+  const res = await reviewsApi.create({
+    orderNumber: order.value.orderNumber,
+    albumId,
+    rating: rating.value,
+    content: content.value.trim() || null,
+  })
+  reviewedMap[albumId] = res.reviewId
+})
+
+function clearReviewFields() {
+  rating.value = 0
+  content.value = ''
+  ratingError.value = ''
+  reset() // useForm 의 errors/formError 정리
+}
+
+function resetReviewForm() {
+  activeAlbumId.value = null
+  clearReviewFields()
+}
+
+function openForm(albumId) {
+  activeAlbumId.value = albumId
+  clearReviewFields()
+}
+
+async function onSubmitReview() {
+  ratingError.value = ''
+  if (!rating.value) {
+    // 평점은 클라에서 즉시 가드(별점 미선택). 내용 길이는 textarea maxlength + 서버 검증에 맡긴다.
+    ratingError.value = '평점을 선택해 주세요.'
+    return
+  }
+  if (await submit()) {
+    ui.notify('리뷰가 등록되었습니다.', 'success')
+    resetReviewForm()
+  }
+}
+
+async function onDeleteReview(albumId) {
+  const reviewId = reviewedMap[albumId]
+  if (!reviewId || deletingId.value) return
+  if (!window.confirm('작성한 리뷰를 삭제하시겠습니까?')) return
+  deletingId.value = reviewId
+  try {
+    await reviewsApi.remove(reviewId)
+    delete reviewedMap[albumId]
+    ui.notify('리뷰가 삭제되었습니다.', 'success')
+  } catch (e) {
+    ui.notify(errorMessage(e, '리뷰를 삭제하지 못했습니다.'), 'error')
+  } finally {
+    deletingId.value = null
+  }
+}
+
 const TRACK_POLL_MS = 2000
 const TRACK_MAX = 15 // 운송장 발급 대기 ~30s. 도달해도 없으면(시드/관리자 전진 등 배송행 없는 주문) "없음" 처리.
 const trackingPoller = usePolling()
@@ -37,6 +108,9 @@ async function fetchOrder(orderNumber) {
   trackingPoller.stop()
   trackingNumber.value = ''
   trackingPending.value = false
+  // 다른 주문으로 이동 시 리뷰 폼·세션 작성 상태를 초기화(앨범 id 가 겹쳐도 섞이지 않게).
+  resetReviewForm()
+  for (const k of Object.keys(reviewedMap)) delete reviewedMap[k]
   try {
     const o = await getOrder(orderNumber)
     if (seq !== reqSeq) return
@@ -117,7 +191,64 @@ watch(() => route.params.orderNumber, fetchOrder, { immediate: true })
     </p>
 
     <template v-else-if="order">
-      <OrderItemsCard :order="order" />
+      <OrderItemsCard :order="order">
+        <template #item-action="{ item }">
+          <div v-if="reviewable" class="mt-2">
+            <!-- 이 세션에서 작성 완료 → 삭제 가능 -->
+            <div v-if="reviewedMap[item.albumId]" class="flex items-center gap-3 text-xs">
+              <span class="text-vinyl-800/60">리뷰 작성됨</span>
+              <button
+                type="button"
+                class="text-rust-600 hover:underline disabled:opacity-50"
+                :disabled="!!deletingId"
+                @click="onDeleteReview(item.albumId)"
+              >
+                삭제
+              </button>
+            </div>
+
+            <!-- 작성 폼(펼침) -->
+            <div
+              v-else-if="activeAlbumId === item.albumId"
+              class="rounded-lg border border-vinyl-800/15 bg-cream-100 p-3"
+            >
+              <RatingInput v-model="rating" @update:model-value="ratingError = ''" />
+              <p v-if="ratingError" class="mt-1 text-xs text-rust-600">{{ ratingError }}</p>
+              <textarea
+                v-model="content"
+                rows="3"
+                maxlength="2000"
+                placeholder="리뷰를 남겨 주세요 (선택)"
+                class="mt-2 w-full rounded-lg border bg-cream-50 px-3 py-2 text-sm text-vinyl-black focus:outline-hidden focus:ring-2 focus:ring-gold-400"
+                :class="errors.content ? 'border-rust-500' : 'border-vinyl-800/20'"
+              ></textarea>
+              <p v-if="errors.content" class="mt-1 text-xs text-rust-600">{{ errors.content }}</p>
+              <p
+                v-if="formError"
+                class="mt-2 rounded bg-rust-500/10 px-3 py-2 text-xs text-rust-600"
+              >
+                {{ formError }}
+              </p>
+              <div class="mt-2 flex gap-2">
+                <BaseButton :loading="submitting" @click="onSubmitReview">작성</BaseButton>
+                <BaseButton variant="ghost" :disabled="submitting" @click="resetReviewForm">
+                  취소
+                </BaseButton>
+              </div>
+            </div>
+
+            <!-- 작성 버튼 -->
+            <button
+              v-else
+              type="button"
+              class="text-xs text-rust-600 hover:underline"
+              @click="openForm(item.albumId)"
+            >
+              리뷰 작성
+            </button>
+          </div>
+        </template>
+      </OrderItemsCard>
 
       <div v-if="cancellable" class="mt-4">
         <BaseButton variant="ghost" :loading="cancelling" @click="onCancel">주문 취소</BaseButton>
