@@ -165,7 +165,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  // 관리자 전용 라우트에 비관리자 접근 → 홈. (admin 라우트는 후속 이슈에서 추가)
+  // 관리자 전용 라우트에 비관리자 접근 → 홈.
   if (to.meta.requiresAdmin && !auth.isAdmin) {
     return { name: 'home' }
   }

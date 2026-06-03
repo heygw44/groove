@@ -85,7 +85,8 @@ async function onDelete(album) {
   }
 }
 
-watch(() => route.query, fetchAlbums, { immediate: true })
+// 명시 래핑 — watch 의 oldValue 가 fetchAlbums 의 options 자리에 새지 않게 한다(AdminCouponsView 와 동일).
+watch(() => route.query, (q) => fetchAlbums(q), { immediate: true })
 </script>
 
 <template>
@@ -158,6 +159,7 @@ watch(() => route.query, fetchAlbums, { immediate: true })
                     v-model.number="deltas[a.id]"
                     type="number"
                     placeholder="±"
+                    :aria-label="`${a.title} 재고 증감`"
                     class="w-16 rounded border border-vinyl-800/20 bg-cream-50 px-2 py-1 text-xs focus:outline-hidden focus:ring-2 focus:ring-gold-400"
                   />
                   <button

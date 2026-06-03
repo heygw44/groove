@@ -43,6 +43,9 @@ const { errors, formError, submitting, submit, clearError } = useForm(async () =
   const untilMs = Date.parse(form.validUntil)
   if (Number.isNaN(fromMs)) v.push({ field: 'validFrom', message: '유효 시작 일시를 입력해 주세요.' })
   if (Number.isNaN(untilMs)) v.push({ field: 'validUntil', message: '유효 종료 일시를 입력해 주세요.' })
+  if (!Number.isNaN(fromMs) && !Number.isNaN(untilMs) && untilMs <= fromMs) {
+    v.push({ field: 'validUntil', message: '종료 일시는 시작 일시보다 이후여야 합니다.' })
+  }
   if (v.length) throw new ApiError({ status: 400, violations: v })
 
   const body = {

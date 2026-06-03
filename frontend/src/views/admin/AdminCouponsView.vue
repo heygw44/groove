@@ -92,7 +92,9 @@ async function onGrant(coupon) {
   }
 }
 
-watch(() => route.query, fetchCoupons, { immediate: true })
+// 명시 래핑 — watch 는 콜백을 (new, old)로 호출하므로 fetchCoupons 에 직접 넘기면 oldValue 가
+// options 자리에 들어간다(?silent= 쿼리 등으로 의도치 않게 silent 전환될 수 있음).
+watch(() => route.query, (q) => fetchCoupons(q), { immediate: true })
 </script>
 
 <template>
