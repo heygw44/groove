@@ -1,17 +1,19 @@
-import { computed, unref } from 'vue'
+import { computed, toValue } from 'vue'
 
 /**
  * PageResponse(content/page/size/totalElements/totalPages/first/last) 기반 페이지네이션 표시 헬퍼.
  *
- * URL 쿼리 구동 방식이라 페이지 이동 자체는 호출부(라우터 push)가 담당하고, 이 composable 은
+ * 페이지 이동 자체는 호출부(URL 쿼리 push 또는 콜백)가 담당하고, 이 composable 은
  * 0-based page 를 경계·번호 윈도우 같은 표시용 계산값으로 환산한다.
  *
- * @param {import('vue').Ref<object>|(() => object)} pageSource PageResponse 를 반환하는 ref/getter
+ * @param {import('vue').MaybeRefOrGetter<object>} pageSource PageResponse 를 반환하는 ref/getter/값
  * @param {{window?: number}} [opts] window: 현재 페이지 좌우로 보여줄 번호 개수(기본 2)
  */
 export function usePagination(pageSource, opts = {}) {
   const windowSize = opts.window ?? 2
-  const page = computed(() => unref(pageSource) || {})
+  // toValue 는 ref·getter·plain 값을 모두 정규화한다(unref 와 달리 getter 도 호출) — Pagination.vue 는
+  // getter(()=>props.page)를, AlbumDetailView 는 ref 를 넘기므로 둘 다 올바르게 풀려야 한다.
+  const page = computed(() => toValue(pageSource) || {})
 
   const current = computed(() => page.value.page ?? 0) // 0-based
   const totalPages = computed(() => page.value.totalPages ?? 0)
