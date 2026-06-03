@@ -26,12 +26,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -438,13 +439,60 @@ class AlbumAdminControllerTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @DisplayName("GET → 200 + HIDDEN 포함 전체 status 노출 (Public 검색과 차이)")
+    void list_includesHidden_returns200() throws Exception {
+        persistedAlbum("Selling One", 5, AlbumStatus.SELLING);
+        persistedAlbum("Hidden One", 0, AlbumStatus.HIDDEN);
+
+        // 카운트만이 아니라 content 에 HIDDEN 행이 실제로 들어있는지 단언 — 이 이슈(#119)의 핵심 계약.
+        mockMvc.perform(get("/api/v1/admin/albums")
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[*].status", hasItems("SELLING", "HIDDEN")));
+    }
+
+    @Test
+    @DisplayName("GET ?status=HIDDEN → 200 + HIDDEN 앨범만 (Public 은 거부하는 필터)")
+    void list_filterHidden_returnsOnlyHidden() throws Exception {
+        persistedAlbum("Selling One", 5, AlbumStatus.SELLING);
+        persistedAlbum("Hidden One", 0, AlbumStatus.HIDDEN);
+
+        mockMvc.perform(get("/api/v1/admin/albums")
+                        .param("status", "HIDDEN")
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].status").value("HIDDEN"));
+    }
+
+    @Test
+    @DisplayName("GET USER 권한 → 403")
+    void list_userRole_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/albums")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET 미인증 → 401")
+    void list_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/albums"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private Album persistedAlbum(int initialStock) {
+        return persistedAlbum("Abbey Road", initialStock, AlbumStatus.SELLING);
+    }
+
+    private Album persistedAlbum(String title, int initialStock, AlbumStatus status) {
         Artist artist = artistRepository.findById(artistId).orElseThrow();
         Genre genre = genreRepository.findById(genreId).orElseThrow();
         Label label = labelRepository.findById(labelId).orElseThrow();
         return albumRepository.saveAndFlush(Album.create(
-                "Abbey Road", artist, genre, label,
+                title, artist, genre, label,
                 (short) 1969, AlbumFormat.LP_12, 35000L, initialStock,
-                AlbumStatus.SELLING, false, null, null));
+                status, false, null, null));
     }
 }
