@@ -74,8 +74,7 @@ async function fetchAll(id) {
   }
 }
 
-// usePagination 에는 ref 를 직접 넘긴다 — 내부가 unref 로 풀기 때문에 getter(()=>...) 를 주면
-// unref 가 함수를 그대로 반환해 페이징 값이 전부 0/false 가 된다(hasPages 항상 false).
+// 리뷰 페이지는 URL 이 아니라 콜백(goToReviewPage)으로 이동하므로 reviewsPage(ref)를 직접 넘긴다.
 const { current, isFirst, isLast, hasPages, pages, totalPages } = usePagination(reviewsPage)
 
 function goToReviewPage(p) {
