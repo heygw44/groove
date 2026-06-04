@@ -21,7 +21,7 @@ import java.util.Optional;
  * 명시적 사전 검사로 {@code COUPON_ALREADY_ISSUED} 를 먼저 응답하기 위해
  * {@link #existsByCoupon_IdAndMemberId(Long, Long)} 를 쓴다.
  *
- * <p>목록 조회({@code GET /me/coupons})는 응답에 정책 필드(이름·할인규칙)가 필요하므로
+ * <p>목록 조회({@code GET /members/me/coupons})는 응답에 정책 필드(이름·할인규칙)가 필요하므로
  * {@link EntityGraph} 로 {@code coupon} 을 함께 fetch 해 N+1 을 피한다.
  *
  * <p>주문 적용 (#91) 은 {@link #findByIdForUpdate(Long)} 행 락으로 동일 회원의 동시 적용을 직렬화한다 —

@@ -1,7 +1,7 @@
 import client from './client'
 import { randomUuid } from '@/lib/uuid'
 
-// 쿠폰 API. 목록(GET /coupons)은 public, 발급(POST issue)·내 쿠폰(GET /me/coupons)은 회원 전용.
+// 쿠폰 API. 목록(GET /coupons)은 public, 발급(POST issue)·내 쿠폰(GET /members/me/coupons)은 회원 전용.
 
 /**
  * 발급 가능 쿠폰 목록(공개). → PageResponse<CouponResponse>.
@@ -40,5 +40,5 @@ export function issueCouponWithToken(couponId, accessToken) {
  * @param {{status?:string, page?:number, size?:number}} [params] 체크아웃은 {status:'ISSUED', size:100}.
  */
 export function myCoupons(params = {}) {
-  return client.get('/me/coupons', { params }).then((res) => res.data)
+  return client.get('/members/me/coupons', { params }).then((res) => res.data)
 }

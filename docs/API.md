@@ -182,12 +182,12 @@
 | GET | `/albums/{id}/reviews` | Public | 상품 리뷰 목록 |
 | DELETE | `/reviews/{reviewId}` | USER (본인) | 리뷰 삭제 |
 
-### 쿠폰 (`/coupons`, `/me/coupons`) — *확장 M13*
+### 쿠폰 (`/coupons`, `/members/me/coupons`) — *확장 M13*
 | 메서드 | 경로 | 권한 | 설명 |
 |---|---|---|---|
 | GET | `/coupons` | Public | 발급 가능한 쿠폰(캠페인) 목록 |
 | POST | `/coupons/{couponId}/issue` | USER | 선착순 쿠폰 발급 (Idempotency-Key 필수) |
-| GET | `/me/coupons` | USER | 내 보유 쿠폰 목록 (status 필터) |
+| GET | `/members/me/coupons` | USER | 내 보유 쿠폰 목록 (status 필터) |
 
 ### 관리자 (`/admin`)
 | 메서드 | 경로 | 권한 | 설명 |
@@ -890,7 +890,7 @@
 
 ### 3.9 쿠폰 ★ (확장 M13)
 
-> 확장 M13 으로 **구현 완료**. 컨트롤러: `CouponController`(`/coupons`)·`MyCouponController`(`/me/coupons`). 선착순 동시성 설계: [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md), 전문: [plans/coupon-system.md](./plans/coupon-system.md).
+> 확장 M13 으로 **구현 완료**. 컨트롤러: `CouponController`(`/coupons`)·`MyCouponController`(`/members/me/coupons`). 선착순 동시성 설계: [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md), 전문: [plans/coupon-system.md](./plans/coupon-system.md).
 
 #### GET `/coupons` — 발급 가능한 쿠폰 목록
 
@@ -935,7 +935,7 @@ Public. `status=ACTIVE` 이고 현재 발급 기간(`valid_from ≤ now ≤ vali
 - 409 `COUPON_ALREADY_ISSUED` — 이미 발급받음 (회원당 1장)
 - 422 `COUPON_NOT_ISSUABLE` — SUSPENDED/ENDED 또는 발급 기간 아님
 
-#### GET `/me/coupons` — 내 보유 쿠폰 목록
+#### GET `/members/me/coupons` — 내 보유 쿠폰 목록
 
 **Headers**: `Authorization: Bearer ...` (USER).
 **Query**: `page`, `size`, `status`(MemberCouponStatus 선택), `sort`(기본 `issuedAt,desc`).
