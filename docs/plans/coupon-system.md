@@ -103,7 +103,7 @@ PERCENTAGE   : raw = subtotal * discountValue / 100
 ## 6. API 표면
 
 정본은 [API.md §3.9 (쿠폰)·§3.10 (관리자 쿠폰)](../API.md). 요약:
-- `GET /coupons` (Public) · `POST /coupons/{id}/issue` (USER, Idempotency-Key) · `GET /me/coupons` (USER)
+- `GET /coupons` (Public) · `POST /coupons/{id}/issue` (USER, Idempotency-Key) · `GET /members/me/coupons` (USER)
 - `POST·GET /admin/coupons` · `PATCH /admin/coupons/{id}/status` · `POST /admin/coupons/{id}/grant` (ADMIN)
 
 ## 7. 설계 결정 & Why

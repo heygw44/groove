@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 
 /**
- * 쿠폰 조회 — 발급 가능 목록({@code GET /coupons})과 내 보유 쿠폰({@code GET /me/coupons}) (API.md §3.9).
+ * 쿠폰 조회 — 발급 가능 목록({@code GET /coupons})과 내 보유 쿠폰({@code GET /members/me/coupons}) (API.md §3.9).
  *
  * <p>발급/동시성은 {@link CouponIssueService} 가 담당하고, 본 서비스는 읽기 전용 조회만 다룬다.
  */

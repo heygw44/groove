@@ -21,16 +21,17 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 회원 본인 보유 쿠폰 목록 (API.md §3.9 — GET /me/coupons).
+ * 회원 본인 보유 쿠폰 목록 (API.md §3.9 — GET /members/me/coupons).
  *
- * <p>{@link CouponController} 와 분리한 이유는 URL prefix({@code /me/coupons})가 다르고 항상 인증된
- * 회원에게만 노출되기 때문이다 — SecurityConfig 의 {@code anyRequest().authenticated()} 기본 정책을
- * 그대로 따라간다 ({@code MemberOrderController} 와 동일 구조).
+ * <p>{@link CouponController}(공개 {@code /coupons}) 와 분리한 이유는 항상 인증된 회원에게만 노출되기
+ * 때문이다 — 본인 리소스 경로({@code /members/me/coupons})로 {@code MemberController}·
+ * {@code MemberOrderController} 와 prefix 를 통일했다. SecurityConfig 의
+ * {@code anyRequest().authenticated()} 기본 정책을 그대로 따라간다.
  *
  * <p>정렬 화이트리스트: {@code issuedAt} 만 허용.
  */
 @RestController
-@RequestMapping("/api/v1/me/coupons")
+@RequestMapping("/api/v1/members/me/coupons")
 public class MyCouponController {
 
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of("issuedAt");

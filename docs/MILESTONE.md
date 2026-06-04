@@ -1300,7 +1300,7 @@
 
 **작업 내용**
 - [ ] `CouponIssueService` — 베이스라인(레이스) + 비관적 락 + 원자적 조건부 UPDATE
-- [ ] `POST /coupons/{id}/issue` (USER, Idempotency-Key) + `GET /coupons` + `GET /me/coupons`
+- [ ] `POST /coupons/{id}/issue` (USER, Idempotency-Key) + `GET /coupons` + `GET /members/me/coupons`
 - [ ] `UNIQUE(coupon_id, member_id)` 중복발급 방지
 - [ ] 동시성 테스트(Testcontainers): 초과발급 재현(`@Disabled` 보존) + 원자적 UPDATE 정확성 검증
 

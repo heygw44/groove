@@ -247,12 +247,12 @@ class CouponApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /me/coupons (USER) → 200, 본인 보유 쿠폰")
+    @DisplayName("GET /members/me/coupons (USER) → 200, 본인 보유 쿠폰")
     void listMine_returnsOwnerCoupons() throws Exception {
         Coupon coupon = persistCoupon(100, CouponStatus.ACTIVE);
         memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, ownerId));
 
-        mockMvc.perform(get("/api/v1/me/coupons")
+        mockMvc.perform(get("/api/v1/members/me/coupons")
                         .header(HttpHeaders.AUTHORIZATION, ownerBearer))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
@@ -261,9 +261,9 @@ class CouponApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /me/coupons 미인증 → 401")
+    @DisplayName("GET /members/me/coupons 미인증 → 401")
     void listMine_unauthenticated_returns401() throws Exception {
-        mockMvc.perform(get("/api/v1/me/coupons"))
+        mockMvc.perform(get("/api/v1/members/me/coupons"))
                 .andExpect(status().isUnauthorized());
     }
 }

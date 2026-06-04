@@ -10,7 +10,7 @@ import java.time.Instant;
 /**
  * 회원 보유 쿠폰 응답 (API.md §3.9).
  *
- * <p>발급 201 응답({@code POST /coupons/{id}/issue})과 목록({@code GET /me/coupons})이 공용으로 쓰는
+ * <p>발급 201 응답({@code POST /coupons/{id}/issue})과 목록({@code GET /members/me/coupons})이 공용으로 쓰는
  * 필드 합집합이다 — 발급 직후엔 {@code usedAt}/{@code orderNumber} 가 null, 목록에선 상태에 따라 채워진다.
  *
  * <p>{@code orderNumber} 는 쿠폰 사용(USED) 시 연결된 주문 번호다. 쿠폰 사용은 주문 통합(#91)에서 처음
