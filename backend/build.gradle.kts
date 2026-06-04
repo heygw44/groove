@@ -139,12 +139,12 @@ val skipFrontend = providers.gradleProperty("skipFrontend")
     .getOrElse(false)
 
 // node 버전 단일 소스: frontend/.node-version (npm run dev 는 nvm/fnm/volta 가 같은 파일을 읽어 버전 일치).
-val nodeVersion = file("frontend/.node-version").takeIf { it.exists() }?.readText()?.trim() ?: "22.12.0"
+val nodeVersion = file("../frontend/.node-version").takeIf { it.exists() }?.readText()?.trim() ?: "22.12.0"
 
 node {
     version.set(nodeVersion)
     download.set(true)
-    nodeProjectDir.set(file("frontend"))
+    nodeProjectDir.set(file("../frontend"))
 }
 
 // Vite 가 산출물을 src/main/resources/static 으로 출력한다(vite.config.js 의 outDir).
@@ -154,12 +154,12 @@ val frontendBuild = tasks.register<NpmTask>("frontendBuild") {
     dependsOn(tasks.named("npmInstall"))
     npmCommand.set(listOf("run", "build"))
     // 입력/출력 선언으로 소스 미변경 시 UP-TO-DATE → 백엔드만 자주 도는 개발 루프에서 npm 재빌드 회피.
-    inputs.dir("frontend/src")
-    inputs.dir("frontend/public")
-    inputs.file("frontend/index.html")
-    inputs.file("frontend/vite.config.js")
-    inputs.file("frontend/package.json")
-    inputs.file("frontend/package-lock.json")
+    inputs.dir("../frontend/src")
+    inputs.dir("../frontend/public")
+    inputs.file("../frontend/index.html")
+    inputs.file("../frontend/vite.config.js")
+    inputs.file("../frontend/package.json")
+    inputs.file("../frontend/package-lock.json")
     outputs.dir(layout.projectDirectory.dir("src/main/resources/static"))
     onlyIf { !skipFrontend }
 }

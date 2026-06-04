@@ -10,5 +10,5 @@
     "checkJs": false
   },
   "include": ["src/**/*", "src/**/*.vue", "vite.config.js"],
-  "exclude": ["node_modules", "../src/main/resources/static"]
+  "exclude": ["node_modules", "../backend/src/main/resources/static"]
 }

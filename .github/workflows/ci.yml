@@ -39,6 +39,8 @@ jobs:
         # build → check → test(Testcontainers MySQL) → jacocoTestCoverageVerification 한 번에.
         # 외부 시크릿 불필요: test 프로파일이 jwt.secret / payment.mock.webhook-secret 자급자족.
         # --no-daemon 미사용: setup-gradle 가 daemon 수명·캐시 flush 를 관리한다.
+        # 백엔드는 backend/ 로 이동(#131). frontendBuild 는 ../frontend 를 읽으므로 전체 checkout 이면 동작.
+        working-directory: backend
         run: ./gradlew build
 
       - name: Upload test & coverage reports
@@ -47,6 +49,6 @@ jobs:
         with:
           name: reports
           path: |
-            build/reports/tests/
-            build/reports/jacoco/
+            backend/build/reports/tests/
+            backend/build/reports/jacoco/
           retention-days: 7

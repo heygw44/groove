@@ -26,7 +26,7 @@ docker compose -f docker-compose.yml -f /tmp/lt-override.yml up -d mysql
 # 2) 앱 기동 — rate limit 을 사실상 무제한으로 올려 측정 간섭 제거
 DB_PORT=3307 DB_PASSWORD=changeme \
 COUPON_RATE_LIMIT_ISSUE_CAPACITY=1000000 AUTH_RATE_LIMIT_LOGIN_CAPACITY=1000000 \
-./gradlew bootRun   # 헬스: curl http://localhost:8080/actuator/health
+./backend/gradlew -p backend bootRun   # 백엔드는 backend/ 하위(#131). 헬스: curl http://localhost:8080/actuator/health
 
 # 3) 시드 적용 (Flyway 마이그레이션 이후) — 매 실행 전 재적용해 issued_count 를 0 으로 리셋
 docker exec -i groove-mysql-1 mysql -uroot -pchangeme-root groove < loadtest/seed-coupon-loadtest.sql

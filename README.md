@@ -33,8 +33,9 @@ docker-compose up -d
 curl http://localhost:8080/actuator/health
 ```
 
-> IDE / 터미널에서 `./gradlew bootRun` 으로 직접 실행하면 **local 프로파일이 자동 주입**된다(`build.gradle.kts`):
+> IDE / 터미널에서 `./gradlew bootRun`(백엔드는 `backend/` 하위, #131)으로 직접 실행하면 **local 프로파일이 자동 주입**된다(`build.gradle.kts`):
 > ```bash
+> cd backend
 > cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
 > ./gradlew bootRun   # SPRING_PROFILES_ACTIVE 미설정 시 자동으로 local
 > ```
