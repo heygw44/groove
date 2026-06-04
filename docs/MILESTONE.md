@@ -2,12 +2,13 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.1 (이슈 단위 확장) |
+| 버전 | 1.2 (진행 현황 동기화) |
 | 작성일 | 2026-05-05 |
-| 진행 기간 | 12주 (단독, 전업) |
+| 최종 수정일 | 2026-06-04 (W1~W7 완료·G2 통과 반영, M13 쿠폰 완료, M14/M15 프론트 확장 추가, §1 일정표·§6 진행표기 현행화) |
+| 진행 기간 | 12주 (단독, 전업) + 확장(쿠폰·프론트) |
 | 주당 가용 시간 | 35~45시간 |
-| 표기 방식 | 상대 (W1 ~ W12) |
-| 관련 문서 | PRD.md, ARCHITECTURE.md, ERD.md, API.md |
+| 표기 방식 | 상대 (W1 ~ W12) + 확장 M13~M15 |
+| 관련 문서 | PRD.md, ARCHITECTURE.md, ERD.md, API.md, glossary.md |
 
 ---
 
@@ -80,20 +81,22 @@
 
 ## 1. 전체 일정 한눈에
 
-| 단계 | 주차 | 핵심 산출물 | 게이트 | 이슈 수 |
+| 단계 | 주차 | 핵심 산출물 | 게이트 | 상태 |
 |---|---|---|---|---|
-| 설계 | W1~W2 | PRD·아키텍처·ERD·API 명세 확정 | — | 5 |
-| 인프라/스켈레톤 | W3 | Docker Compose, 패키지·Security 베이스 | **G1** | 6 |
-| 도메인 구현 | W4~W7 | 인증→카탈로그→장바구니/주문→결제/배송/리뷰 | **G2** | 24 |
-| 통합/시드 | W8 | 통합 테스트, 시드 데이터, Postman 컬렉션 | — | 5 |
-| 측정 | W9 | k6 시나리오, 베이스라인, 문제 식별 | **G3** | 6 |
-| CS 개선 | W10~W11 | N+1·인덱스·동시성·멱등성 + Before/After | — | 8 |
-| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | 5 |
-| 확장 (쿠폰) | M13 | 쿠폰 시스템 + 선착순 동시성 + k6 Before/After | — | 6 |
+| 설계 | W1~W2 | PRD·아키텍처·ERD·API 명세 확정 | — | ✅ 완료 |
+| 인프라/스켈레톤 | W3 | Docker Compose, 패키지·Security 베이스 | **G1** | ✅ 통과 |
+| 도메인 구현 | W4~W7 | 인증→카탈로그→장바구니/주문→결제/배송/리뷰 | **G2** | ✅ 통과 (2026-05-13) |
+| 통합/시드 | W8 | 통합 테스트, 시드 데이터, Postman 컬렉션 | — | ⏳ 진행 (CI #86 완료) |
+| 측정 | W9 | k6 시나리오, 베이스라인, 문제 식별 | **G3** | ⏳ 예정 |
+| CS 개선 | W10~W11 | N+1·인덱스·동시성·멱등성 + Before/After | — | ⏳ 예정 |
+| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | ⏳ 예정 |
+| 확장: 쿠폰 | M13 | 쿠폰 시스템 + 선착순 동시성 + k6 Before/After | — | ✅ 완료 (~2026-06-01) |
+| 확장: 데모 프론트 | M14 | 정적 Bootstrap 시연 UI | — | ✅ 완료 → M15 로 대체 |
+| 확장: Vue 프론트 | M15 | Vue 3 + Vite 전 기능 시연 UI | — | ✅ 완료 (2026-06-03) |
 
-**총 이슈 수: 약 60개** (W11 옵션 포함 시 65개) + 쿠폰 확장 6개
-
-> **확장(쿠폰) 마일스톤(M13)**: W1~W12 본 로드맵 외 추가 도메인. 선착순 발급 동시성으로 W8~W12 미충족 산출물(DoD #4 k6·#5 Before/After)을 함께 메운다. 상세 이슈는 §3 끝의 「확장 — 쿠폰 시스템」 절, 설계는 [plans/coupon-system.md](plans/coupon-system.md).
+> **로드맵 분기**: 본 문서의 W1~W12 로드맵에서 W1~W7(핵심 흐름)을 완료(G2 통과)한 뒤, **확장 도메인으로 쿠폰(M13)과 데모 프론트엔드(M14 바닐라 → M15 Vue 전환)** 를 먼저 진행했다. 측정·개선·문서화(W8~W12, G3/G4)는 남은 로드맵이며, 쿠폰 확장이 그중 DoD #4(k6)·#5(Before/After) 일부를 선충족했다.
+>
+> **확장 마일스톤**: M13 상세 이슈는 §3 끝의 「확장 — 쿠폰 시스템」 절([plans/coupon-system.md](plans/coupon-system.md)). M14/M15 프론트엔드는 백엔드 시연용 UI로, M14(정적 Bootstrap)를 폐기하고 M15(Vue 3 + Vite + Pinia + Tailwind, History 라우팅 → `SpaForwardConfig`, node-gradle 통합 빌드)로 재구축했다.
 
 ---
 
@@ -1249,10 +1252,12 @@
 
 ---
 
-## 확장 — 쿠폰 시스템 (M13, *계획*)
+## 확장 — 쿠폰 시스템 (M13, ✅ 완료)
 
+> **✅ 완료 (~2026-06-01)**: 전 Phase(GH #88~#93, PR #94~#101) 머지 완료. 마이그레이션 `V14`~`V16` 적용, 엔드포인트·관리자 API 구현, 원자적 조건부 UPDATE 채택, k6 부하·3종 Before/After 측정 완료. 아래 Phase별 체크리스트는 당시 계획 기록이며 실제 구현 결과가 정본(ERD/API/troubleshooting).
+>
 > W1~W12 본 로드맵 외 **확장 도메인**. 이커머스 핵심 기능(쿠폰)을 추가하되, **선착순 한정수량 발급의 대용량 동시성**을 단계적으로 시연해 W8~W12 의 미충족 산출물(특히 DoD #4 k6 부하테스트·#5 Before/After 개선 사례)을 함께 메운다.
-> 설계 정본: [plans/coupon-system.md](plans/coupon-system.md) · 동시성 결정: [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md) · 스키마: [ERD.md §4.15/§4.16](ERD.md) · API: [API.md §3.9](API.md).
+> 설계 정본: [plans/coupon-system.md](plans/coupon-system.md) · 동시성 결정: [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md) · 스키마: [ERD.md §4.15/§4.16](ERD.md) · API: [API.md §3.9](API.md) · 측정: [troubleshooting/coupon-issuance-concurrency.md](troubleshooting/coupon-issuance-concurrency.md).
 > 1 Phase = 1 이슈 = 1 PR. 브랜치 `feat/{이슈번호}`, 커밋·PR 한글, `Closes #N`.
 
 ### #C-0 (GH #88) [docs] 쿠폰 설계·ERD·API 명세 + 마이그레이션 초안
@@ -1349,6 +1354,19 @@
 
 ---
 
+## 확장 — 데모 프론트엔드 (M14 → M15)
+
+> W1~W12 본 로드맵 외 **확장**. 백엔드 전 기능을 브라우저에서 시연하기 위한 데모 UI. node-gradle 통합 빌드로 단일 JAR 에 묶여 정적 서빙된다(ARCHITECTURE §10.4).
+
+### M14 — 데모 프론트엔드 (정적 Bootstrap, ✅ 완료 → 폐기)
+- **✅ 완료 (2026-06-02) 후 M15 로 대체**: 바닐라 JS + Bootstrap 으로 인증·카탈로그·주문·결제·배송·리뷰·관리자 콘솔 UI 구현(GH #102~#110). 유지보수성·상태관리 한계로 폐기하고 Vue 로 재구축.
+
+### M15 — Vue 프론트엔드 (✅ 완료)
+- **✅ 완료 (2026-06-03)**: **Vue 3 + Vite + JS + Pinia + Tailwind v4** 로 전 기능 재구축(GH #113~#119, PR #120~#130). History 라우팅(`SpaForwardConfig` 필요) + node-gradle Gradle 빌드 통합.
+- 시연 GOTCHA: 주문 `status` PAID 정체 → 리뷰는 관리자 DELIVERED 전환 후 작성. 쿠폰 동시성 라이브 데모는 개발 빌드 전용(다중 토큰풀 + rate-limit 완화).
+
+---
+
 ## 4. 위험 신호 + 컷 정책
 
 ### 신호 1: W3 말 G1 미달
@@ -1394,11 +1412,12 @@
 GitHub README 상단에 진행 상황 표기:
 
 ```
-Progress: ▓▓▓▓▓▓▓▓░░░░ 8/12 weeks
-M1~M12 마일스톤 진행률은 GitHub Milestones 페이지 참조
+핵심 로드맵: ▓▓▓▓▓▓▓░░░░░ W1~W7 완료 (G2 통과)
+확장:        쿠폰(M13) · 데모 프론트(M14→M15 Vue) 완료
+남은 로드맵:  W8 시드/통합 · W9 측정(G3) · W10~11 개선 · W12 문서(G4)
 ```
 
-각 마일스톤은 GitHub Milestones에서 자동 진행률 계산되므로 README 갱신 부담이 적다.
+각 마일스톤은 GitHub [Milestones](https://github.com/heygw44/groove/milestones) 에서 자동 진행률 계산되므로 README 갱신 부담이 적다. 완료 마일스톤(M1~M7, M13~M15)은 closed, 남은 로드맵(M8~M12)은 open 으로 유지한다.
 
 ---
 
