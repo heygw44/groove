@@ -13,3 +13,10 @@ postman
 .claude
 CLAUDE.md
 .claude.json
+
+# 백엔드 backend/ 이동 + frontend/ 통합 COPY(#131) — nested 빌드 산출물과 거대 node_modules 를
+# 컨텍스트에서 제외(컨테이너 내 npmInstall 이 새로 생성하므로 호스트 산출물은 불필요).
+backend/build
+backend/.gradle
+frontend/node_modules
+frontend/.vite

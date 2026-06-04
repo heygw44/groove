@@ -13,8 +13,8 @@ export default defineConfig({
     },
   },
   build: {
-    // frontend/ 가 root 이므로 상대경로로 상위의 Spring static 디렉토리를 가리킨다.
-    outDir: '../src/main/resources/static',
+    // frontend/ 가 root 이므로 상대경로로 형제 backend/ 의 Spring static 디렉토리를 가리킨다(#131).
+    outDir: '../backend/src/main/resources/static',
     // 빌드 전 static/ 을 비운다(M14 잔재 포함). static 엔 빌드 산출물만 둔다 — 손관리 자산은 public/.
     emptyOutDir: true,
     // SecurityConfig 의 /assets/** GET permitAll 과 일치시킨다.

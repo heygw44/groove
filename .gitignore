@@ -1,7 +1,7 @@
 HELP.md
 .gradle
 build/
-!gradle/wrapper/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 
@@ -72,4 +72,4 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 # Vite 빌드 산출물 — 소스 진실은 frontend/, 산출물은 frontendBuild 가 생성하므로 커밋 제외.
-src/main/resources/static/
+backend/src/main/resources/static/
