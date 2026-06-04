@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.1 |
+| 버전 | 1.2 |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-05-26 (확장: 쿠폰 시스템 용어 추가 — *계획*) |
+| 최종 수정일 | 2026-06-04 (확장 M13 쿠폰 시스템 **구현 완료** 반영 — *계획* 표기 제거) |
 | 관련 문서 | PRD.md, ARCHITECTURE.md, ERD.md, API.md |
 | 정본 우선순위 | ERD > PRD > ARCHITECTURE > API |
 
@@ -170,9 +170,9 @@
 | OrderItem | 주문 항목 | `order_item` | 주문 시점의 가격/앨범명 스냅샷 보존. |
 | CartItem | 장바구니 항목 | `cart_item` | Cart 내 Album 수량 관리. |
 | IdempotencyRecord | 멱등성 레코드 | `idempotency_record` | 결제 등 멱등성 키 + 응답 스냅샷. TTL 24시간. |
-| MemberCoupon | 회원 보유 쿠폰 | `member_coupon` | Coupon 정책의 회원별 발급 인스턴스. 발급·사용·만료 이력. *(확장, 계획)* |
+| MemberCoupon | 회원 보유 쿠폰 | `member_coupon` | Coupon 정책의 회원별 발급 인스턴스. 발급·사용·만료 이력. *(확장 M13)* |
 
-### 2.12 Coupon — 쿠폰 (확장, *계획*)
+### 2.12 Coupon — 쿠폰 (확장 M13)
 
 | 항목 | 값 |
 |---|---|
@@ -268,14 +268,14 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | `COMPLETED` | 처리 완료 (저장된 응답 스냅샷 반환) |
 | `FAILED` | 처리 실패 (재시도 가능 여부는 정책에 따름) |
 
-### 3.9 CouponDiscountType — 쿠폰 할인 종류 (확장, *계획*)
+### 3.9 CouponDiscountType — 쿠폰 할인 종류 (확장 M13)
 
 | 값 | 의미 |
 |---|---|
 | `FIXED_AMOUNT` | 정액 할인 (예: 5,000원). `discount_value` = 원 |
 | `PERCENTAGE` | 정률 할인 (예: 10%). `discount_value` = 1~100, `max_discount_amount` 상한 캡 적용 |
 
-### 3.10 CouponStatus — 쿠폰 정책 상태 (확장, *계획*)
+### 3.10 CouponStatus — 쿠폰 정책 상태 (확장 M13)
 
 | 값 | 의미 | 전이 |
 |---|---|---|
@@ -283,7 +283,7 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | `SUSPENDED` | 발급 일시 중단 (기보유분은 사용 가능) | 관리자 |
 | `ENDED` | 종료 (발급·신규 사용 불가) | 관리자 또는 기간 만료 |
 
-### 3.11 MemberCouponStatus — 회원 보유 쿠폰 상태 (확장, *계획*)
+### 3.11 MemberCouponStatus — 회원 보유 쿠폰 상태 (확장 M13)
 
 | 값 | 의미 | 전이 |
 |---|---|---|
@@ -306,12 +306,12 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | 주문 번호 (Order Number) | 외부 노출용 주문 식별자. 형식 `ORD-YYYYMMDD-XXXX`. 내부 PK(`orders.id`)와 분리. |
 | 운송장 번호 (Tracking Number) | UUID 기반으로 자체 발급. 외부 택배사 API 미연동(v1). |
 | 단일 재고 희귀반 | `stock=1`인 Album. 정합성 시연의 보너스 시나리오(§PRD 8.5). |
-| 선착순 발급 (First-Come Issuance) | 한정수량(`coupon.total_quantity`) 쿠폰을 회원이 먼저 요청한 순서대로 발급. 대용량 동시성 시연의 핵심 — 재고 오버셀과 동형 문제. *(확장, 계획)* |
-| 정액 할인 (Fixed Amount) | 고정 금액 할인. `CouponDiscountType.FIXED_AMOUNT`. *(확장, 계획)* |
-| 정률 할인 (Percentage) | 비율 할인 + 상한 캡(`max_discount_amount`). `CouponDiscountType.PERCENTAGE`. *(확장, 계획)* |
-| 최소 주문금액 (Min Order Amount) | 쿠폰 적용 가능한 주문 총액 하한(`coupon.min_order_amount`). 미달 시 적용 거부. *(확장, 계획)* |
-| 결제 금액 (Payable Amount) | 쿠폰 할인 후 실제 청구액 = `total_amount − discount_amount`. 별도 저장 없이 파생. *(확장, 계획)* |
-| 직접지급 (Direct Grant) | 관리자/이벤트가 특정 회원에게 쿠폰을 발급(선착순 한정수량과 무관, `total_quantity` NULL 가능). *(확장, 계획)* |
+| 선착순 발급 (First-Come Issuance) | 한정수량(`coupon.total_quantity`) 쿠폰을 회원이 먼저 요청한 순서대로 발급. 대용량 동시성 시연의 핵심 — 재고 오버셀과 동형 문제. *(확장 M13)* |
+| 정액 할인 (Fixed Amount) | 고정 금액 할인. `CouponDiscountType.FIXED_AMOUNT`. *(확장 M13)* |
+| 정률 할인 (Percentage) | 비율 할인 + 상한 캡(`max_discount_amount`). `CouponDiscountType.PERCENTAGE`. *(확장 M13)* |
+| 최소 주문금액 (Min Order Amount) | 쿠폰 적용 가능한 주문 총액 하한(`coupon.min_order_amount`). 미달 시 적용 거부. *(확장 M13)* |
+| 결제 금액 (Payable Amount) | 쿠폰 할인 후 실제 청구액 = `total_amount − discount_amount`. 별도 저장 없이 파생. *(확장 M13)* |
+| 직접지급 (Direct Grant) | 관리자/이벤트가 특정 회원에게 쿠폰을 발급(선착순 한정수량과 무관, `total_quantity` NULL 가능). *(확장 M13)* |
 
 ### 4.2 기술 용어
 
@@ -322,8 +322,8 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | 보상 트랜잭션 (Compensating Transaction) | 실패한 작업의 부수 효과를 되돌리는 후속 트랜잭션. 예: 결제 실패 시 재고 복원. |
 | 비관적 락 (Pessimistic Lock) | `SELECT ... FOR UPDATE`로 행 단위 잠금. v1 동시성 처리 기본. 정합성 확실, TPS 측정에 사용. |
 | 낙관적 락 (Optimistic Lock) | 버전 컬럼 기반 충돌 감지. 비관적 락과의 비교 시연 후보. |
-| 원자적 조건부 UPDATE (Atomic Conditional Update) | `UPDATE ... SET cnt=cnt+1 WHERE id=? AND cnt<limit` 처럼 조건과 증가를 단일 DB 문으로 처리. 영향 행 수(0/1)로 성공 판정. 행 락을 길게 잡지 않아 비관적 락보다 처리량이 높다. 선착순 쿠폰 발급의 최종 채택안. *(확장, 계획)* |
-| 핫 로우 (Hot Row) | 다수 트랜잭션이 동시에 갱신하는 단일 행(예: `coupon.issued_count`). 원자적 UPDATE 로도 남는 병목 — 극한 트래픽에서 Redis 카운터 전환의 근거. *(확장, 계획)* |
+| 원자적 조건부 UPDATE (Atomic Conditional Update) | `UPDATE ... SET cnt=cnt+1 WHERE id=? AND cnt<limit` 처럼 조건과 증가를 단일 DB 문으로 처리. 영향 행 수(0/1)로 성공 판정. 행 락을 길게 잡지 않아 비관적 락보다 처리량이 높다. 선착순 쿠폰 발급의 최종 채택안. *(확장 M13)* |
+| 핫 로우 (Hot Row) | 다수 트랜잭션이 동시에 갱신하는 단일 행(예: `coupon.issued_count`). 원자적 UPDATE 로도 남는 병목 — 극한 트래픽에서 Redis 카운터 전환의 근거. *(확장 M13)* |
 | N+1 문제 | 연관 엔티티를 개별 쿼리로 조회하여 1+N개 쿼리가 발생하는 현상. 페치 조인 / `@EntityGraph`로 해결. |
 | ProblemDetail (RFC 7807) | 에러 응답 표준 포맷. `application/problem+json`. 본 프로젝트는 `code`, `timestamp`, `traceId` 필드를 추가 확장. |
 | MDC (Mapped Diagnostic Context) | SLF4J/Logback의 요청 단위 컨텍스트 저장소. `requestId`, `userId` 등을 모든 로그에 자동 포함. |
@@ -361,13 +361,13 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | Review | 리뷰 / 평점 | 엔티티 |
 | RefreshToken | 리프레시 토큰 | 엔티티 |
 | IdempotencyRecord | 멱등성 레코드 | 엔티티 |
-| Coupon | 쿠폰 (정책) | 엔티티 *(계획)* |
-| MemberCoupon | 회원 보유 쿠폰 | 엔티티 *(계획)* |
-| First-Come Issuance | 선착순 발급 | 도메인 *(계획)* |
-| Fixed Amount / Percentage | 정액 / 정률 할인 | 도메인 *(계획)* |
-| Payable Amount | 결제 금액 (할인 후) | 도메인 *(계획)* |
-| Atomic Conditional Update | 원자적 조건부 UPDATE | 기술 *(계획)* |
-| Hot Row | 핫 로우 | 기술 *(계획)* |
+| Coupon | 쿠폰 (정책) | 엔티티 |
+| MemberCoupon | 회원 보유 쿠폰 | 엔티티 |
+| First-Come Issuance | 선착순 발급 | 도메인 |
+| Fixed Amount / Percentage | 정액 / 정률 할인 | 도메인 |
+| Payable Amount | 결제 금액 (할인 후) | 도메인 |
+| Atomic Conditional Update | 원자적 조건부 UPDATE | 기술 |
+| Hot Row | 핫 로우 | 기술 |
 | Limited Edition | 한정반 | 도메인 |
 | Guest Order | 게스트 주문 | 도메인 |
 | Order Number | 주문 번호 | 도메인 |
@@ -400,3 +400,4 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 |---|---|---|
 | 1.0 | 2026-05-05 | 최초 작성. 9개 핵심 도메인 + 8개 enum + 보조 엔티티 4개 + 자주 쓰는 용어. ERD/PRD/ARCHITECTURE/API 교차 검증. |
 | 1.1 | 2026-05-26 | 확장(쿠폰 시스템, *계획*) 반영: Coupon/MemberCoupon 엔티티(§2.12), enum 3종(§3.9~3.11), 도메인 용어 6종 + 기술 용어 2종, 매핑표 갱신. ERD v1.5 와 동기화. |
+| 1.2 | 2026-06-04 | 확장 M13 쿠폰 시스템 **구현 완료** 반영 — 쿠폰 용어·enum·매핑표의 *계획* 표기 일괄 제거. ERD v1.6 와 동기화. |

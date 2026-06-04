@@ -2,11 +2,11 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.2 |
+| 버전 | 2.0 |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-05-08 |
-| 변경 내용 | v1.2 (W5 완료 반영): catalog 4개 서브도메인(album/artist/genre/label) 모두 구현 완료 표기, AlbumQueryController + AlbumSpecs(JPA Specification) 기반 동적 검색 도입, 의도적 N+1 보존 정책(W10 시연용)을 §4.1 카탈로그 노트로 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain` + `security`/`exception`) 기준으로 정정. 레이어 책임/의존성 규칙은 동일하나 디렉토리 명명만 controller/service/repository → api/application/domain. |
-| 관련 문서 | PRD.md |
+| 최종 수정일 | 2026-06-04 |
+| 변경 내용 | v2.0 (W6~W7 + 확장 M13 쿠폰 + M14/M15 프론트 반영 — 전면 현행화): §4.1 패키지 구조를 현재 구현 기준으로 갱신(cart/order/payment/shipping/review/admin 구현 완료 + `coupon` 모듈 + `web`(SpaForwardConfig)·`common/scheduling` 추가), `backend/`(Spring Boot) + `frontend/`(Vue3) 형제 구조·node-gradle 통합 빌드 명시. ADR-11(쿠폰 선착순=원자적 조건부 UPDATE)·ADR-12(Vue3 SPA + node-gradle)·ADR-13(Caffeine rate-limit 저장) 추가. §5.5 쿠폰 발급 rate-limit·§5.7 쿠폰 발급 동시성 신설, §6.2 실제 이벤트(`OrderPaidEvent`·`MemberWithdrawnEvent`)로 정정, §10 프론트 빌드·프로파일(`.yaml`) 현행화. v1.2 (W5 완료 반영): catalog 4개 서브도메인 구현 완료 표기, AlbumQueryController + AlbumSpecs 동적 검색, 의도적 N+1 보존 정책(W10 시연용) 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain`) 기준으로 정정. |
+| 관련 문서 | PRD.md, ERD.md, API.md, glossary.md, MILESTONE.md |
 
 ---
 
@@ -39,7 +39,10 @@
 | ADR-7 | 결제 PG: Strategy 패턴 + Mock | 확장 포인트 확보 | 직접 호출 |
 | ADR-8 | 트랜잭션 경계: Service 레이어 | 표준 관례, 명확 | 도메인 레이어 |
 | ADR-9 | DB 마이그레이션: Flyway | 스키마 버저닝 표준 | Liquibase / 수동 |
-| ADR-10 | 동시성: 비관적 락 (v1) | 단순·확실, 시연 단계적 개선 시작점 | 낙관적 락 / Redis 분산락 (조건부) |
+| ADR-10 | 동시성(재고): 비관적 락 (v1) | 단순·확실, 시연 단계적 개선 시작점 | 낙관적 락 / Redis 분산락 (조건부) |
+| ADR-11 | 동시성(쿠폰 발급): 원자적 조건부 UPDATE | 핫 카운터(`issued_count`)를 행 락 길게 잡지 않고 처리 — 비관적 락 대비 처리량 우위. 베이스라인→비관적 락→원자적 UPDATE 단계적 시연 ([decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)) | 비관적 락 / Redis 카운터 (조건부) |
+| ADR-12 | 프론트엔드: Vue3 SPA + node-gradle 통합 빌드 | 백엔드 시연용 단일 산출물(JAR)로 정적 서빙, `backend/`·`frontend/` 형제 구조 | 별도 배포 / 서버사이드 템플릿 |
+| ADR-13 | Rate Limit 저장: Caffeine(in-memory) | 단일 인스턴스에서 외부 의존 없이 버킷 보관·만료 | Redis (멀티 인스턴스 시 전환) |
 
 ---
 
@@ -92,68 +95,68 @@
 
 ### 4.1 패키지 구조
 
+**저장소 레이아웃**: 루트 아래 `backend/`(Spring Boot, 본 문서 대상)와 `frontend/`(Vue3 SPA, M15)가 형제로 배치된다. `backend/build.gradle.kts` 가 node-gradle 로 프론트를 빌드해 `backend/src/main/resources/static` 으로 묶어 단일 JAR 산출물을 만든다(§10.4).
+
 도메인 중심 + 도메인 내 `api / application / domain` 3-레이어 구조. (Controller/Service/Repository 의 역할명을 그대로 유지하되 디렉토리는 책임 단위로 명명)
 
 ```
-com.groove
+backend/src/main/java/com.groove
 ├── GrooveApplication.java
 │
-├── auth/                       (인증/인가) — W4 구현 완료
-│   ├── api/
-│   │   ├── AuthController.java
-│   │   └── dto/                (LoginRequest/Response, RefreshRequest/Response, SignupRequest/Response, LogoutRequest, TokenType)
-│   ├── application/            (AuthService, RefreshTokenService, RefreshTokenAdmin, LoginCommand, TokenPair)
+├── auth/                       (인증/인가) — 구현 완료
+│   ├── api/                    (AuthController + dto/)
+│   ├── application/            (AuthService, RefreshTokenService, RefreshTokenCleanupOnMemberWithdrawnListener)
 │   ├── domain/                 (RefreshToken, RefreshTokenRepository, TokenHasher)
-│   └── security/
-│       ├── SecurityConfig.java
-│       ├── JwtProvider / JwtAuthenticationFilter / JwtClaims / JwtProperties
-│       ├── PasswordConfig, CorsProperties, AuthPrincipal
-│       ├── RestAuthenticationEntryPoint, RestAccessDeniedHandler
-│       └── ratelimit/          (AuthRateLimitProperties, LoginRateLimitPolicy, SignupRateLimitPolicy)
+│   └── security/               (SecurityConfig, JwtProvider/Filter/Claims/Properties, ratelimit/: Login·SignupRateLimitPolicy)
 │
-├── member/                     (회원) — W4 구현 완료
-│   ├── application/            (MemberService, SignupCommand)
-│   ├── domain/                 (Member, MemberRepository, MemberRole)
-│   └── exception/              (MemberEmailDuplicatedException)
+├── member/                     (회원) — 구현 완료
+│   ├── api/, application/, domain/  (Member, MemberRole)
+│   ├── event/                  (MemberWithdrawnEvent)
+│   └── exception/
 │
-├── catalog/                    (LP 카탈로그) — W5 구현 완료
-│   ├── album/                  — W5-3 (admin CRUD/재고) + W5-4 (Public API: 목록/상세/검색)
-│   │                              · api/        : AlbumAdminController, AlbumQueryController + dto/
-│   │                              · application/: AlbumService, AlbumCommand, AlbumSearchCondition
-│   │                              · domain/     : Album, AlbumRepository, AlbumSpecs(JPA Specification), AlbumStatus, AlbumFormat
-│   │                              · exception/  : AlbumNotFoundException, IllegalStockAdjustmentException
-│   ├── artist/                 — W5-2 구현 완료 (api/, application/, domain/, exception/)
-│   ├── genre/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)
-│   └── label/                  — W5-1 구현 완료 (api/, application/, domain/, exception/)
+├── catalog/                    (LP 카탈로그) — 구현 완료
+│   ├── album/                  (AlbumAdminController·AlbumQueryController, AlbumSpecs(JPA Specification), AlbumStatus·AlbumFormat)
+│   ├── artist/ · genre/ · label/   (각 api/·application/·domain/·exception/)
+│   │
+│   │   ※ 의도적 N+1 보존 (W10 시연 자료): AlbumSpecs.keyword() 는 artist 와 LEFT JOIN 만 사용(fetch 조인 없음).
+│   │     변환 단계에서 lazy proxy 가 풀리며 N+1 발생. ERD §5 [W10] 인덱스 누락도 함께 보존.
 │
-│   ※ 의도적 N+1 보존 (W10 시연 자료): AlbumSpecs.keyword() 는 artist 와의 LEFT JOIN 만 사용,
-│     fetch 조인 없음. AlbumSummaryResponse 변환 단계에서 lazy proxy 가 풀리며 N+1 SELECT 발생.
-│     ERD §4.6 [W10] 인덱스 누락도 함께 보존.
+├── cart/                       (장바구니) — 구현 완료
+│   └── application/            (CartService, CartCleanupOnMemberWithdrawnListener)
 │
-├── cart/                       (장바구니) — W6 예정
+├── order/                      (주문) — 구현 완료
+│   ├── api/                    (OrderController, MemberOrderController)
+│   ├── application/, domain/   (Order, OrderItem, OrderStatus)
+│   └── event/                  (OrderPaidEvent, OrderPaidEventListener)
 │
-├── order/                      (주문) — W6 예정
-│   ├── api/, application/, domain/
-│   └── (event: OrderPaidEvent, OrderCancelledEvent — W7 도입)
+├── payment/                    (결제) — 구현 완료
+│   ├── api/, application/      (PaymentService, Idempotency 연동, PaymentReconciliationScheduler)
+│   ├── domain/                 (Payment, PaymentStatus, PaymentMethod)
+│   └── gateway/                (PaymentGateway 인터페이스 + mock/: MockPaymentGateway)
 │
-├── payment/                    (결제) — W7 예정
-│   ├── api/, application/, domain/  (Payment, IdempotencyRecord)
-│   └── gateway/
-│       ├── PaymentGateway.java         (인터페이스)
-│       └── mock/                       (MockPaymentGateway, MockWebhookSimulator)
+├── shipping/                   (배송) — 구현 완료
+│   └── application/            (ShippingCreationListener(OrderPaidEvent 구독), ShippingProgressScheduler)
 │
-├── shipping/                   (배송) — W7 예정
-│   └── (api/, application/, domain/, scheduler/)
+├── review/                     (리뷰) — 구현 완료
 │
-├── review/                     (리뷰) — W7 예정
+├── coupon/                     (쿠폰 — 확장 M13) — 구현 완료
+│   ├── api/                    (CouponController, MyCouponController + dto/, ratelimit/: CouponIssueRateLimitPolicy)
+│   ├── application/            (CouponIssueService(원자적 발급), CouponApplicationService(주문 적용/복원), MemberCouponExpirationTask)
+│   ├── domain/                 (Coupon, MemberCoupon, *Repository, CouponDiscountType·CouponStatus·MemberCouponStatus)
+│   └── exception/
 │
-├── admin/                      (관리자 전용 API 묶음) — W5+ 진행
+├── admin/                      (관리자 전용 API 묶음) — 구현 완료
+│   └── api/                    (AdminOrderController, AdminCouponController + dto/)
 │
-└── common/                     (횡단 관심사) — W3 구현 완료
+├── web/                        (SPA 정적 라우팅) — SpaForwardConfig, SpaRoutes (History 라우팅 forward)
+│
+└── common/                     (횡단 관심사) — 구현 완료
     ├── exception/              (GlobalExceptionHandler, BusinessException 계층, ErrorCode, ProblemDetailEnricher)
     ├── logging/                (MDC 필터, 비즈니스 이벤트 로거)
     ├── persistence/            (공용 JPA 설정·기반)
-    └── ratelimit/              (RateLimitFilter, 정책 인터페이스 — 도메인이 정책 빈 등록)
+    ├── idempotency/            (IdempotencyService, IdempotencyRecord, @Idempotent, web/ 인터셉터)
+    ├── scheduling/             (SchedulingConfig — @EnableScheduling 단일 진입)
+    └── ratelimit/              (RateLimitFilter, RateLimitRegistry(Caffeine), 정책 인터페이스)
 ```
 
 > 도메인별 layout 은 `api / application / domain` 3-레이어로 통일하되, 횡단 보조(`security`, `exception`, `ratelimit`)가 필요한 도메인은 같은 레벨에 추가한다. 이 명명은 W3~W4 구현 시 합의되었으며, 이전 controller/service/repository 명명에서 디렉토리 이름만 정리한 것으로 책임은 동일하다.
@@ -264,22 +267,35 @@ RuntimeException
 - 비즈니스 이벤트 표준 포맷 (검색·집계 용이): `BIZ_EVENT type=ORDER_CREATED orderId=... memberId=... amount=...`
 
 ### 5.5 Rate Limiting
-- 라이브러리: Bucket4j (in-memory, v1)
-- 적용 대상 및 정책 (예시):
-  - 로그인: IP당 분당 10회
-  - 회원가입: IP당 분당 3회
-  - 결제 요청: 회원당 분당 5회
+- 라이브러리: Bucket4j + Caffeine 저장(`common.ratelimit.RateLimitRegistry` — 버킷 보관·만료, in-memory v1)
+- 정책은 각 도메인이 빈으로 등록(`common.ratelimit` 의 정책 인터페이스 구현):
+  - 로그인 / 회원가입: IP당 (`auth.security.ratelimit`)
+  - 결제 요청: 회원당
+  - **쿠폰 발급**(`POST /coupons/{id}/issue`): 회원당 (`coupon.api.ratelimit.CouponIssueRateLimitPolicy` — 선착순 폭주 시 1인 반복요청 억제)
 - v2: Redis 기반 분산 Rate Limit (Bucket4j-Redis)으로 전환 가능
 
 ### 5.6 멱등성 처리 (Idempotency-Key)
-- 결제 요청 엔드포인트에 `Idempotency-Key` 헤더 필수
-- 처리 컴포넌트: `payment.application.IdempotencyService`
+- 결제·쿠폰 발급 요청에 `Idempotency-Key` 헤더 필수 (`@Idempotent` 적용)
+- 처리 컴포넌트: `common.idempotency.IdempotencyService` (도메인 공용 — 결제·쿠폰이 재사용)
 - 저장: `idempotency_record` 테이블 (key + result_snapshot 매핑)
 - 동작:
   1. 요청 도착 → key 조회
   2. 존재 + 처리 완료 → 기존 결과 반환 (200)
   3. 존재 + 처리 중 → `409 Conflict`
   4. 미존재 → 락 획득 후 처리 → 결과 저장 후 반환
+- 적용 지점: 결제(`POST /payments`)·쿠폰 발급(`POST /coupons/{id}/issue`) — 둘 다 `@Idempotent`(`common.idempotency`)
+
+### 5.7 쿠폰 선착순 발급 동시성 (확장 M13)
+한정수량 쿠폰의 `coupon.issued_count` 는 다수 트랜잭션이 동시에 갱신하는 **핫 카운터**다. 재고 오버셀과 동형 문제이며, 단계적으로 시연한다(ADR-11, [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)).
+
+1. **베이스라인**(락 없음): lost-update 로 초과발급 재현 (Before)
+2. **비관적 락**: 정확하지만 행 락을 길게 잡아 처리량 저하
+3. **원자적 조건부 UPDATE**(최종 채택): `UPDATE coupon SET issued_count = issued_count + 1 WHERE id = ? AND (total_quantity IS NULL OR issued_count < total_quantity)` — 영향 행 수 1이면 발급 성공, 0이면 소진(409). 행 락을 짧게 잡아 처리량 우위.
+
+- **회원당 1장**: `member_coupon` `UNIQUE(coupon_id, member_id)` 가 DB 레벨 강제 — 동시 중복요청은 409 `COUPON_ALREADY_ISSUED`.
+- **발급 멱등성**: `@Idempotent`(§5.6) 로 재시도 시 같은 결과 replay.
+- **발급 rate-limit**: §5.5.
+- k6 부하·3종 Before/After 측정: [troubleshooting/coupon-issuance-concurrency.md](./troubleshooting/coupon-issuance-concurrency.md).
 
 ---
 
@@ -293,9 +309,10 @@ RuntimeException
 
 | 이벤트 | 발행자 | 구독자 | 비고 |
 |---|---|---|---|
-| `OrderPaidEvent` | OrderService | ShippingService (배송 생성) | 결제 완료 → 배송 엔트리 생성 |
-| `OrderCancelledEvent` | OrderService | InventoryService (재고 복원) | 동일 트랜잭션 내 복원 |
-| `ShippingDeliveredEvent` | ShippingService | (옵션) ReviewEligibilityService | 리뷰 작성 가능 플래그 |
+| `OrderPaidEvent` | 결제 완료 처리 | `OrderPaidEventListener`(order), `ShippingCreationListener`(shipping — 배송·운송장 생성) | 결제 완료(AFTER_COMMIT) → 배송 엔트리·운송장 생성(`orders.tracking_number` 비정규화) |
+| `MemberWithdrawnEvent` | MemberService(탈퇴) | `RefreshTokenCleanupOnMemberWithdrawnListener`(auth), `CartCleanupOnMemberWithdrawnListener`(cart) | 탈퇴(AFTER_COMMIT) → 리프레시 토큰·장바구니 정리 |
+
+> 주문 취소/환불 시 **재고·쿠폰(MemberCoupon USED→ISSUED) 복원**은 이벤트가 아니라 Service 트랜잭션 내 동기 처리(즉시 정합성). 비동기 이벤트는 결과 정합성을 허용하는 배송 생성·탈퇴 정리에만 쓴다(§6.1).
 
 ### 6.3 트랜잭션과 이벤트
 - `@TransactionalEventListener(phase = AFTER_COMMIT)` 사용
@@ -449,9 +466,11 @@ volumes:
 
 ### 10.2 Spring Profiles
 
+설정 파일은 `backend/src/main/resources/application*.yaml` (base `application.yaml` + 프로파일별). 운영(prod) 프로파일은 두지 않는다(시연용 — 폴백 제거).
+
 | Profile | 용도 | 특징 |
 |---|---|---|
-| local | 로컬 개발 | 로컬 MySQL 또는 H2, Mock PG 활성 |
+| local | 로컬 개발 | 로컬 MySQL, Mock PG 활성, (개발 빌드 한정) 쿠폰 동시성 라이브 데모·데모 시드 |
 | docker | Docker Compose | MySQL 컨테이너 연결, Mock PG 활성 |
 | test | 통합 테스트 | Testcontainers MySQL, 시간 가속(스케줄러) |
 
@@ -463,6 +482,17 @@ volumes:
 - `PAYMENT_MOCK_SUCCESS_RATE`
 
 → 저장소 미포함, `.env.example`만 커밋
+
+### 10.4 빌드 (Gradle + 프론트 통합)
+
+- 빌드 스크립트: `backend/build.gradle.kts` (Kotlin DSL), Java 21 toolchain, Spring Boot.
+- 프론트 통합: `com.github.node-gradle.node` 플러그인이 `frontend/`(Vue3 + Vite)를 빌드해 산출물을 `backend/src/main/resources/static` 으로 묶는다 → **단일 실행 JAR** 로 SPA 정적 서빙.
+- SPA History 라우팅: `com.groove.web.SpaForwardConfig`(`SpaRoutes`)가 비정적·비 API 경로를 `index.html` 로 forward.
+- 명령:
+  - `./gradlew build` — 백+프론트 함께 빌드
+  - `./gradlew build -PskipFrontend` — 백엔드만(빠른 빌드)
+  - `./gradlew bootRun` — 로컬 실행(local 프로파일)
+- 품질 게이트: JaCoCo 라인 커버리지 80% (`auth`/`member`/`catalog`/`coupon`), CI(`.github/workflows/ci.yml`)에서 Testcontainers 로 검증([plans/ci-pipeline.md](./plans/ci-pipeline.md)).
 
 ---
 
@@ -537,6 +567,6 @@ volumes:
 
 ## 14. 미해결 결정 / 향후 검토
 
-- **시드 데이터 출처**: 자체 생성 스크립트 vs 공개 데이터 활용 — W7~W8에 결정
-- **한정반 시연 시 Redis 도입 여부**: W9 부하 측정 결과에 따라 결정
+- ~~**시드 데이터 출처**~~: **결정됨** — 카탈로그는 Discogs 덤프, 트랜잭션은 Python Faker 하이브리드([decisions/seed-data.md](./decisions/seed-data.md)). 시드 스크립트 적용은 W8.
+- **한정반 시연 시 Redis 도입 여부**: W9 부하 측정 결과에 따라 결정 (쿠폰 핫 로우는 ADR-11 원자적 UPDATE 로 v1 해소)
 - **가상 스레드(Virtual Threads) 활성화**: 통합 테스트 안정화 후 옵션으로 시도, 효과 측정 후 채택 여부 결정
