@@ -1,0 +1,4 @@
+# 생성물 — 커밋하지 않는다 (generate_seed.py 로 언제든 재생성)
+seed.sql
+# 시드 생성용 로컬 가상환경
+.venv/

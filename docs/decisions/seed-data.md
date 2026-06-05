@@ -97,6 +97,13 @@ Discogs(카탈로그 현실성) + Faker(트랜잭션 유연성)의 장점을 결
 
 ## Implementation Notes (W8-3 인풋)
 
+> **구현 결과 (W8-3 / #140)** — 측정용 시드는 카탈로그까지 **Python + Faker 합성**으로 구현했다
+> (`db/seed/generate_seed.py`, `scripts/seed.sh`). 본 ADR이 채택한 Discogs Dump 파싱은 수 GB 다운로드·
+> 외부 의존을 수반해 `./scripts/seed.sh`의 오프라인·수초 내 재현성과 상충했고, W9 측정의 목표(검색 슬로우
+> 쿼리 풀 스캔 재현)는 합성 데이터의 분포(가격·연도·장르·제목)만으로 충분했다. **Discogs 실데이터 주입은
+> 후속 과제로 남긴다**(포트폴리오 현실감 보강 시). 적재는 FK-safe TRUNCATE + 멀티로우 INSERT
+> (`foreign_key_checks=0`/`autocommit=0` 래핑)이며, 트랜잭션(orders/payment/review) 대량 시드는 아직 미구현.
+
 ### Discogs 덤프 파싱 전략
 
 1. **다운로드**: `discogs_YYYYMMDD_releases.xml.gz` (최신 월 덤프)

@@ -1,0 +1,3 @@
+# 측정용 시드 생성기 의존성 (이슈 #140) — db/seed/generate_seed.py
+Faker>=30,<38
+bcrypt>=4,<5

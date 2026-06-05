@@ -882,19 +882,21 @@
 **라벨**: `type:chore`, `L`
 **선행**: #W1-3
 
+**구현**: 카탈로그까지 Python + Faker 합성으로 구현(ADR의 Discogs Dump는 후속 — `docs/decisions/seed-data.md` 구현 결과 노트). `db/seed/generate_seed.py`(멀티로우 INSERT seed.sql 생성) + `scripts/seed.sh`(FK-safe TRUNCATE 후 import, `--docker`/`--yes`). 계정은 데모(@groove.dev)와 분리된 `loadtest*@groove.test`.
+
 **작업 내용**
-- [ ] `db/seed/` 디렉토리
-- [ ] Genre 10~15건, Label 50~100건, Artist 1k~3k건
-- [ ] Album 5만~10만 건 (다양한 가격·연도·장르 분포)
-- [ ] 한정반(`is_limited=true`) 30~50건
-- [ ] 단일 재고(stock=1) 5~10건
-- [ ] 테스트 회원 50~100명 (k6 다중 사용자용)
-- [ ] ADMIN 계정 1개
-- [ ] 시드 적용 스크립트 (Spring CLI 또는 Docker exec)
+- [x] `db/seed/` 디렉토리
+- [x] Genre 12건, Label 80건, Artist 2,000건 (env 오버라이드)
+- [x] Album 5만 건 기본 (`ALBUM_COUNT`로 10만+ 상향, 다양한 가격·연도·장르·포맷 분포)
+- [x] 한정반(`is_limited=true`) 40건
+- [x] 단일 재고(stock=1) 8건
+- [x] 테스트 회원 80명 (k6 다중 사용자용, `loadtest001..080@groove.test`)
+- [x] ADMIN 계정 1개 (`loadtest-admin@groove.test`)
+- [x] 시드 적용 스크립트 (`./scripts/seed.sh`, 로컬 mysql / docker exec 양쪽)
 
 **완료 조건**
-- [ ] `./scripts/seed.sh` 한 번으로 시드 적용
-- [ ] 검색 슬로우 쿼리 재현 가능 (EXPLAIN 풀 스캔 확인)
+- [x] `./scripts/seed.sh` 한 번으로 시드 적용
+- [x] 검색 슬로우 쿼리 재현 가능 (EXPLAIN 풀 스캔 확인)
 
 ---
 
