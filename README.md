@@ -80,20 +80,16 @@ curl http://localhost:8080/actuator/health
 npm install              # newman 설치 (루트 devDependency)
 npm run test:postman     # 결정론적 happy-path 폴더만 실행 (Health/Auth/Catalog/Cart/MemberFlow/Guest/EdgeCases)
 npm run test:postman:admin   # 8. Admin 폴더 (시드 관리자 계정 필요)
-npm run test:postman:full    # 전체 컬렉션 (주의: 아래 참고)
+npm run test:postman:full    # 파괴적 제외 전체(폴더 0~9) — 재실행 가능
+npm run test:postman:cleanup # 10. Cleanup (비밀번호 변경·회원 탈퇴, 파괴적 — 마지막에만)
+npm run test:postman:ratelimit # 11. Rate Limit (429 검증, 로그인 버킷 소진 — 격리 실행)
 npm run test:postman:report  # test:postman 과 동일 범위 + JUnit 리포트(reports/postman-junit.xml)
 ```
 
-- **`test:postman`** 은 외부(DB 시드) 상태에만 의존하는 폴더를 collection 순서대로 골라 실행한다(Member Flow → Edge Cases 순서가 보장되어 결제 멱등 등 직전 단계 상태를 그대로 사용). 데모 시드가 있으면 전부 통과한다.
-- **Rate Limit 엣지 케이스**(`9. Edge Cases > Rate Limit 초과 → 429`)는 `POST /auth/login` IP당 분당 10회 제한을
-  쓴다. 단발 실행은 401(한도 내)이고, **이 요청 하나만** 11회 이상 반복해야 마지막에 429 + `Retry-After` 가 나온다.
-  Postman GUI Collection Runner 에서 이 요청만 선택해 Iterations=11 로 돌리거나, 셸에서
-  `for i in $(seq 11); do curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"email":"x@x.io","password":"wrong"}'; done` 로 확인한다.
-  (newman `-n` 은 폴더 전체를 반복하므로 다른 엣지 요청까지 함께 도는 점에 주의 — 단일 요청 반복엔 적합하지 않다.) 1분 뒤 버킷이 리필된다.
-- **`test:postman:full`(전체 실행) 주의**: 파괴적 요청은 맨 끝 `10. Cleanup` 폴더(비밀번호 변경·회원 탈퇴)로 모아 두어
-  다른 회원 토큰 폴더 뒤에 실행되지만, `5. Coupons > Issue Coupon` 은 발급 가능한 ACTIVE 쿠폰(환경변수 `couponId` 기본값 `1`,
-  데모 시드 또는 `8. Admin > Create Coupon Policy`)이 선행돼야 하고, `Sign Up` 은 분당 3회 제한이라 연속 재실행 시 429 가 날 수 있다.
-  폴더별로 골라 실행하길 권장한다.
+- **`test:postman`** 은 외부(DB 시드) 상태에만 의존하는 폴더를 collection 순서대로 골라 실행한다(Member Flow → Edge Cases 순서가 보장되어 결제 멱등 등 직전 단계 상태를 그대로 사용). 데모 시드가 있으면 전부 통과하고, 로그인 버킷을 소진하지 않으므로 1분 내 반복 실행해도 깨지지 않는다.
+- **`test:postman:full`** 은 파괴적 폴더(`10. Cleanup`)와 격리 폴더(`11. Rate Limit`)를 제외한 0~9 폴더를 실행하므로 같은 시드 DB 에서 반복 실행해도 깨지지 않는다. 비밀번호 변경·회원 탈퇴는 `test:postman:cleanup` 으로 따로 돌린다(실행하면 고정 회원 계정이 변경/삭제되므로 이후 재실행 전 DB 재시드 필요).
+- **Rate Limit 검증**(`11. Rate Limit`)은 `POST /auth/login` IP당 분당 10회 제한을 쓴다. 요청의 pre-request 가 본 호출 전 10회 선요청으로 버킷을 소진시키므로 **이 요청 1회 실행으로 429 + `Retry-After` 가 반드시 반환된다**(테스트가 429 를 강제 — 미발동 시 실패). 단, **로그인 버킷을 비우므로 happy-path 와 섞지 말고** `npm run test:postman:ratelimit` 로 격리 실행한다(버킷은 1분 뒤 리필).
+- `5. Coupons > Issue Coupon` 은 발급 가능한 ACTIVE 쿠폰(환경변수 `couponId` 기본값 `1`, 데모 시드 또는 `8. Admin > Create Coupon Policy`)이 선행돼야 하고, `Sign Up` 은 분당 3회 제한이라 1분 내 4회 이상 연속 재실행 시 429 가 날 수 있다(테스트는 429 도 허용).
 
 자세한 엔드포인트 계약은 [docs/API.md](docs/API.md) 참고.
 

@@ -83,6 +83,7 @@
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
                   "pm.test('has accessToken', () => pm.expect(json).to.have.property('accessToken'));",
+                  "pm.test('has refreshToken', () => pm.expect(json).to.have.property('refreshToken'));",
                   "pm.environment.set('accessToken', json.accessToken);",
                   "pm.environment.set('refreshToken', json.refreshToken);"
                 ]
@@ -123,6 +124,7 @@
                   "pm.test('Status 200', () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
                   "pm.test('has accessToken', () => pm.expect(json).to.have.property('accessToken'));",
+                  "pm.test('has refreshToken', () => pm.expect(json).to.have.property('refreshToken'));",
                   "pm.environment.set('accessToken', json.accessToken);",
                   "pm.environment.set('refreshToken', json.refreshToken);"
                 ]
@@ -2532,48 +2534,6 @@
             }
           },
           "description": "방금 생성한 주문(PENDING/PAID)에 리뷰를 시도하면 DELIVERED 미만이라 422. 배송 완료로 전환했다면 이 케이스는 더 이상 422 가 아니므로 새 주문으로 시연할 것."
-        },
-        {
-          "name": "Rate Limit 초과 → 429",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 429) {",
-                  "  pm.test('429 Too Many Requests', () => pm.response.to.have.status(429));",
-                  "  pm.test('Retry-After 헤더 존재', () => pm.expect(pm.response.headers.has('Retry-After')).to.be.true);",
-                  "} else {",
-                  "  pm.test('아직 한도 내 (401 자격 불일치)', () => pm.response.to.have.status(401));",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"ratelimit@example.com\",\n  \"password\": \"wrong-password\"\n}"
-            }
-          },
-          "description": "POST /auth/login 은 IP 당 분당 10회 제한. Collection Runner 또는 Newman 에서 이 요청만 11회 이상 반복(-n 11)하면 마지막에 429 + Retry-After 헤더가 반환된다. 1분 후 버킷이 리필된다."
         }
       ]
     },
@@ -2664,6 +2624,73 @@
             }
           },
           "description": "전체 실행 시 가장 마지막에 실행되도록 Cleanup 폴더에 배치. 성공(204) 시 계정 soft-delete + 해당 이메일 재가입 불가, 진행 중 주문이 있으면 409. 데모 반복은 새 이메일로 Sign Up 하거나 DB 재시드."
+        }
+      ]
+    },
+    {
+      "name": "11. Rate Limit (격리 실행)",
+      "description": "로그인 rate limit 429 를 결정론적으로 검증하는 격리 폴더. 본 요청이 로그인 버킷을 소진하므로 기본 test:postman / test:postman:full 에는 포함하지 않고 전용 스크립트로만 실행한다 — 이렇게 해야 다른 스위트가 1분 내 재실행 가능하다.",
+      "item": [
+        {
+          "name": "Rate Limit 초과 → 429",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// 분당 10회 제한 버킷을 본 요청 전에 10회 선요청으로 소진 → 본 요청(11번째)이 429 가 되도록 강제.",
+                  "// 본 요청과 동일한 body(이메일 + 잘못된 비밀번호)를 재사용한다.",
+                  "const N = 10;",
+                  "const req = {",
+                  "  url: pm.environment.get('baseUrl') + '/auth/login',",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' },",
+                  "  body: { mode: 'raw', raw: pm.request.body.raw }",
+                  "};",
+                  "let sent = 0;",
+                  "function fire() {",
+                  "  if (sent >= N) { return; }",
+                  "  sent++;",
+                  "  pm.sendRequest(req, () => fire());",
+                  "}",
+                  "fire();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('429 Too Many Requests', () => pm.expect(pm.response.code).to.eql(429));",
+                  "pm.test('Retry-After 헤더 존재', () => pm.expect(pm.response.headers.has('Retry-After')).to.be.true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ratelimit@example.com\",\n  \"password\": \"wrong-password\"\n}"
+            }
+          },
+          "description": "로그인 IP 버킷(분당 10회)을 의도적으로 소진하는 격리 데모. pre-request 가 본 호출 전 10회 선요청하므로 이 요청 1회 실행으로 11번째가 되어 429 + Retry-After 가 반드시 반환된다. **로그인 버킷을 비우므로** happy-path 스위트와 섞지 말고 `npm run test:postman:ratelimit` 로 따로 실행한다(버킷은 1분 뒤 리필)."
         }
       ]
     }
