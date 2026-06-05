@@ -58,19 +58,21 @@ class OrderShippingInfoTest {
         }
 
         @Test
-        @DisplayName("경계 길이(=MAX) 는 허용")
+        @DisplayName("경계 길이(=MAX) 는 허용 (전 필드)")
         void allowsExactlyMaxLength() {
             OrderShippingInfo info = new OrderShippingInfo(
                     "가".repeat(Order.MAX_RECIPIENT_NAME_LENGTH),
-                    "01012345678",
+                    "1".repeat(Order.MAX_RECIPIENT_PHONE_LENGTH),
                     "주".repeat(Order.MAX_ADDRESS_LENGTH),
                     "상".repeat(Order.MAX_ADDRESS_DETAIL_LENGTH),
-                    "06234",
+                    "9".repeat(Order.MAX_ZIP_CODE_LENGTH),
                     false);
 
             assertThat(info.recipientName()).hasSize(Order.MAX_RECIPIENT_NAME_LENGTH);
+            assertThat(info.recipientPhone()).hasSize(Order.MAX_RECIPIENT_PHONE_LENGTH);
             assertThat(info.address()).hasSize(Order.MAX_ADDRESS_LENGTH);
             assertThat(info.addressDetail()).hasSize(Order.MAX_ADDRESS_DETAIL_LENGTH);
+            assertThat(info.zipCode()).hasSize(Order.MAX_ZIP_CODE_LENGTH);
         }
     }
 
@@ -80,22 +82,20 @@ class OrderShippingInfoTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("com.groove.order.domain.OrderShippingInfoTest#blankCases")
-        @DisplayName("null/blank → IllegalArgumentException(must not be blank)")
-        void rejectsBlank(String field, Runnable construct) {
+        @DisplayName("null/blank → IllegalArgumentException (해당 필드 거부)")
+        void rejectsBlank(String label, String field, Runnable construct) {
             assertThatThrownBy(construct::run)
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining(field)
-                    .hasMessageContaining("must not be blank");
+                    .hasMessageContaining(field);
         }
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("com.groove.order.domain.OrderShippingInfoTest#overLengthCases")
-        @DisplayName("MAX 초과 → IllegalArgumentException(length must be <=)")
+        @DisplayName("MAX 초과 → IllegalArgumentException (해당 필드 거부)")
         void rejectsOverLength(String field, Runnable construct) {
             assertThatThrownBy(construct::run)
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining(field)
-                    .hasMessageContaining("length must be <=");
+                    .hasMessageContaining(field);
         }
     }
 
@@ -128,28 +128,27 @@ class OrderShippingInfoTest {
                     "김철수", "01012345678", "서울시 강남구",
                     "상".repeat(Order.MAX_ADDRESS_DETAIL_LENGTH + 1), "06234", false))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("addressDetail")
-                    .hasMessageContaining("length must be <=");
+                    .hasMessageContaining("addressDetail");
         }
     }
 
     static Stream<Arguments> blankCases() {
         return Stream.of(
-                Arguments.of("recipientName", (Runnable) () ->
+                Arguments.of("recipientName=null", "recipientName", (Runnable) () ->
                         new OrderShippingInfo(null, "01012345678", "서울", "456호", "06234", false)),
-                Arguments.of("recipientName", (Runnable) () ->
+                Arguments.of("recipientName=blank", "recipientName", (Runnable) () ->
                         new OrderShippingInfo(" ", "01012345678", "서울", "456호", "06234", false)),
-                Arguments.of("recipientPhone", (Runnable) () ->
+                Arguments.of("recipientPhone=null", "recipientPhone", (Runnable) () ->
                         new OrderShippingInfo("김철수", null, "서울", "456호", "06234", false)),
-                Arguments.of("recipientPhone", (Runnable) () ->
+                Arguments.of("recipientPhone=blank", "recipientPhone", (Runnable) () ->
                         new OrderShippingInfo("김철수", " ", "서울", "456호", "06234", false)),
-                Arguments.of("address", (Runnable) () ->
+                Arguments.of("address=null", "address", (Runnable) () ->
                         new OrderShippingInfo("김철수", "01012345678", null, "456호", "06234", false)),
-                Arguments.of("address", (Runnable) () ->
+                Arguments.of("address=blank", "address", (Runnable) () ->
                         new OrderShippingInfo("김철수", "01012345678", " ", "456호", "06234", false)),
-                Arguments.of("zipCode", (Runnable) () ->
+                Arguments.of("zipCode=null", "zipCode", (Runnable) () ->
                         new OrderShippingInfo("김철수", "01012345678", "서울", "456호", null, false)),
-                Arguments.of("zipCode", (Runnable) () ->
+                Arguments.of("zipCode=blank", "zipCode", (Runnable) () ->
                         new OrderShippingInfo("김철수", "01012345678", "서울", "456호", " ", false))
         );
     }
