@@ -48,7 +48,10 @@ curl http://localhost:8080/actuator/health
 > ⚠️ IDE 에서 `GrooveApplication` 의 main() 을 bootRun 없이 직접 실행할 때는 폴백이 없으므로 run config 의
 > 활성 프로파일을 `local` 로 지정해야 한다 — 미지정 시 `default` 로 떠 Mock PG 빈 부재로 부팅에 실패한다.
 
-> 시드 데이터 주입은 W8 완료 후 `./scripts/seed.sh` 추가 예정.
+> **측정용 시드 데이터** — 앱을 1회 부팅(스키마 마이그레이션 적용)한 뒤 `./scripts/seed.sh --yes`(또는
+> docker 환경은 `./scripts/seed.sh --docker --yes`)로 대규모 데이터셋(앨범 5만, 테스트 회원 80 + ADMIN)을
+> 적재한다. 데모 시더 `LocalDataSeeder`(로컬 12장)와 별개 경로이며 W9 측정(검색 슬로우 쿼리·flash-sale)용이다.
+> 규모/계정/검증은 [`db/seed/README.md`](db/seed/README.md) 참고.
 
 ## 프로젝트 문서
 
