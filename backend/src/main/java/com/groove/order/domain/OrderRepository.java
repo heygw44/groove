@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -59,4 +60,18 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      * 는 차단 대상이 아니다.
      */
     boolean existsByMemberIdAndStatusIn(Long memberId, Collection<OrderStatus> statuses);
+
+    /**
+     * 내 쿠폰함(#137) 의 사용 완료 쿠폰 → 주문번호 일괄 resolve 전용 경량 프로젝션.
+     *
+     * <p>{@code MemberCoupon.orderId} 집합으로 {@code (id, orderNumber)} 두 컬럼만 IN 조회해
+     * N+1 과 {@link Order#getItems items} 그래프 적재를 동시에 회피한다.
+     */
+    List<OrderNumberView> findByIdIn(Collection<Long> ids);
+
+    interface OrderNumberView {
+        Long getId();
+
+        String getOrderNumber();
+    }
 }

@@ -11,6 +11,9 @@ import com.groove.coupon.domain.MemberCouponRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.order.domain.Order;
+import com.groove.order.domain.OrderRepository;
+import com.groove.support.OrderFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +26,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
@@ -66,6 +70,8 @@ class CouponApiIntegrationTest {
     @Autowired
     private MemberRepository memberRepository;
     @Autowired
+    private OrderRepository orderRepository;
+    @Autowired
     private JwtProvider jwtProvider;
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
@@ -76,10 +82,13 @@ class CouponApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: member_coupon → coupon, member. refresh_token → member.
+        // FK 삭제 순서: member_coupon → coupon(RESTRICT)·member(CASCADE)·orders(SET NULL).
+        // member_coupon 을 먼저 비워야 coupon 의 RESTRICT 가 풀리고, orders 의 자식
+        // (order_item/payment/shipping/review)은 ON DELETE CASCADE 로 함께 정리된다.
         refreshTokenRepository.deleteAllInBatch();
         memberCouponRepository.deleteAllInBatch();
         couponRepository.deleteAllInBatch();
+        orderRepository.deleteAllInBatch();
         memberRepository.deleteAllInBatch();
 
         ownerId = memberRepository.saveAndFlush(
@@ -258,6 +267,63 @@ class CouponApiIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].couponId").value(coupon.getId().intValue()))
                 .andExpect(jsonPath("$.content[0].status").value("ISSUED"));
+    }
+
+    @Test
+    @DisplayName("GET /members/me/coupons?status=USED → 사용 주문의 orderNumber 가 채워진다 (#137)")
+    void listMine_usedCoupon_resolvesOrderNumber() throws Exception {
+        Coupon coupon = persistCoupon(100, CouponStatus.ACTIVE);
+        Order order = orderRepository.saveAndFlush(OrderFixtures.memberOrder("ORD-20260604-000137", ownerId));
+        MemberCoupon used = MemberCoupon.issue(coupon, ownerId);
+        used.use(order.getId());
+        memberCouponRepository.saveAndFlush(used);
+
+        mockMvc.perform(get("/api/v1/members/me/coupons")
+                        .param("status", "USED")
+                        .header(HttpHeaders.AUTHORIZATION, ownerBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].status").value("USED"))
+                .andExpect(jsonPath("$.content[0].orderNumber").value(order.getOrderNumber()));
+    }
+
+    @Test
+    @DisplayName("GET /members/me/coupons → 혼재 페이지에서 orderNumber 가 행별로 매핑된다 (#137 회귀)")
+    void listMine_mixedPage_mapsOrderNumberPerRow() throws Exception {
+        // USED 쿠폰 1장(주문 연결) + 미사용 ISSUED 쿠폰 1장을 같은 페이지에 둔다.
+        Coupon usedCoupon = persistCoupon(100, CouponStatus.ACTIVE);
+        Order order = orderRepository.saveAndFlush(OrderFixtures.memberOrder("ORD-20260604-000137", ownerId));
+        MemberCoupon used = MemberCoupon.issue(usedCoupon, ownerId);
+        used.use(order.getId());
+        memberCouponRepository.saveAndFlush(used);
+
+        Coupon issuedCoupon = persistCoupon(100, CouponStatus.ACTIVE);
+        memberCouponRepository.saveAndFlush(MemberCoupon.issue(issuedCoupon, ownerId));
+
+        MvcResult result = mockMvc.perform(get("/api/v1/members/me/coupons")
+                        .header(HttpHeaders.AUTHORIZATION, ownerBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andReturn();
+
+        JsonNode content = objectMapper.readTree(result.getResponse().getContentAsString()).get("content");
+        JsonNode usedRow = contentByStatus(content, "USED");
+        JsonNode issuedRow = contentByStatus(content, "ISSUED");
+
+        // USED 행에만 주문번호가 붙고(일괄 적용이 아니라 orderId 별 매핑), ISSUED 행은 키는 있되 명시적 null.
+        assertThat(usedRow.get("orderNumber").asString()).isEqualTo(order.getOrderNumber());
+        assertThat(issuedRow.has("orderNumber")).isTrue();
+        assertThat(issuedRow.get("orderNumber").isNull()).isTrue();
+    }
+
+    /** content 배열에서 주어진 status 의 첫 행을 찾는다 — 없으면 단언 실패. */
+    private JsonNode contentByStatus(JsonNode content, String status) {
+        for (JsonNode row : content) {
+            if (status.equals(row.get("status").asString())) {
+                return row;
+            }
+        }
+        throw new AssertionError("status=" + status + " 행이 응답에 없음");
     }
 
     @Test
