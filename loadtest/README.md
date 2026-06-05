@@ -1,5 +1,8 @@
 # 부하 테스트 (k6)
 
+> 선착순 쿠폰 발급의 **동시성·부하 검증 공식 수단**이다. 실 운영 사이트처럼 검증은 인앱 데모가 아니라
+> 부하 테스트 도구(이 k6 스파이크) + 동시성 통합 테스트(`CouponIssuanceConcurrencyTest`)로 한다.
+
 선착순 쿠폰 발급(`POST /api/v1/coupons/{id}/issue`)의 **프로덕션 원자적 조건부 UPDATE** 경로를 HTTP 계층에서
 스파이크 측정한다. 3종 전략(베이스라인/비관적/원자적)의 **정확성·처리량 비교**는 인프로세스 JUnit
 `CouponIssuanceConcurrencyTest` 가 담당하고(아래 §결과), 본 스크립트는 인증·멱등성·rate limit 을 포함한

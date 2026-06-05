@@ -93,7 +93,7 @@ const router = createRouter({
       component: () => import('@/views/OrderDetailView.vue'),
       meta: { requiresAuth: true },
     },
-    // 쿠폰(#118). 목록은 public(GET /coupons), 내 쿠폰은 회원 전용. 동시성 데모는 개발 빌드 전용(아래).
+    // 쿠폰(#118). 목록은 public(GET /coupons), 내 쿠폰은 회원 전용.
     {
       path: '/coupons',
       name: 'coupons',
@@ -105,18 +105,6 @@ const router = createRouter({
       component: () => import('@/views/MyCouponsView.vue'),
       meta: { requiresAuth: true },
     },
-    // 쿠폰 동시성 라이브 데모는 개발 빌드 전용 — 데모 계정 자격증명(demo01~30 / DEMO_PASSWORD)이
-    // 운영 번들에 포함되지 않도록 import.meta.env.DEV 일 때만 등록한다. 미등록 시 dynamic import 가
-    // dead-code 로 제거되어 CouponRaceDemoView 청크 자체가 운영 번들에서 빠진다.
-    ...(import.meta.env.DEV
-      ? [
-          {
-            path: '/coupons/race-demo',
-            name: 'coupon-race-demo',
-            component: () => import('@/views/CouponRaceDemoView.vue'),
-          },
-        ]
-      : []),
     // 관리자 콘솔(#119). 중첩 라우트 — AdminLayout(사이드바 + <router-view/>) 아래 자식 뷰.
     // meta 는 부모에 두면 Vue Router 4 가 자식 to.meta 로 머지하므로 모든 하위가 보호된다.
     // 이중 방어: 클라 requiresAdmin 가드(UI) + 서버 hasRole("ADMIN")(진짜 인가, 비관리자 API 호출 시 403).

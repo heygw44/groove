@@ -470,7 +470,7 @@ volumes:
 
 | Profile | 용도 | 특징 |
 |---|---|---|
-| local | 로컬 개발 | 로컬 MySQL, Mock PG 활성, (개발 빌드 한정) 쿠폰 동시성 라이브 데모·데모 시드 |
+| local | 로컬 개발 | 로컬 MySQL, Mock PG 활성, 데모 시드 계정 |
 | docker | Docker Compose | MySQL 컨테이너 연결, Mock PG 활성 |
 | test | 통합 테스트 | Testcontainers MySQL, 시간 가속(스케줄러) |
 
