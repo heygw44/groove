@@ -100,8 +100,9 @@ tasks.jacocoTestReport {
     )
 }
 
-// 인증/회원/카탈로그/쿠폰 도메인 라인 커버리지 80% 게이트.
+// 인증/회원/카탈로그/쿠폰/주문/결제 도메인 라인 커버리지 80% 게이트 + 전체 라인 60% 게이트(#139).
 // 인증·회원: #24 DoD. 카탈로그: #31 에서 W4 와 동일 정책으로 게이트 확장. 쿠폰: #93 (k6 부하·Before/After 와 함께 편입).
+// 주문·결제: #139 (통합 테스트 보강과 함께 편입, 전체 60% BUNDLE 룰 동반).
 // `check` 가 트리거하므로 ./gradlew check 가 임계값 위반 시 실패한다.
 tasks.jacocoTestCoverageVerification {
     dependsOn(tasks.jacocoTestReport)
@@ -112,14 +113,27 @@ tasks.jacocoTestCoverageVerification {
     )
     violationRules {
         // PACKAGE element 의 includes 는 패키지 FQN 과 매칭된다 (BUNDLE 의 includes 는 프로젝트명만 매칭되어 침묵 패스됨에 유의).
-        // 인증/회원/카탈로그/쿠폰 하위 모든 패키지가 각각 80% 라인 커버리지를 충족해야 통과한다.
+        // 인증/회원/카탈로그/쿠폰/주문/결제 하위 모든 패키지가 각각 80% 라인 커버리지를 충족해야 통과한다.
+        // 주의: PACKAGE 룰은 매칭된 leaf 패키지마다 개별 평가된다 — 한 sub-package(예: com.groove.payment.gateway)만 미달해도 실패한다.
         rule {
             element = "PACKAGE"
-            includes = listOf("com.groove.auth.*", "com.groove.member.*", "com.groove.catalog.*", "com.groove.coupon.*")
+            includes = listOf(
+                "com.groove.auth.*", "com.groove.member.*", "com.groove.catalog.*", "com.groove.coupon.*",
+                "com.groove.order.*", "com.groove.payment.*",
+            )
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
                 minimum = "0.80".toBigDecimal()
+            }
+        }
+        // 전체 라인 커버리지 60% 게이트 (#139). element 생략 = BUNDLE(리포트 전체).
+        // includes 를 비워 둔다 — BUNDLE 에 FQN 을 includes 하면 프로젝트명만 매칭되어 침묵 패스되므로(위 주석).
+        rule {
+            limit {
+                counter = "LINE"               // 생략 시 INSTRUCTION 기준이 되므로 LINE 명시 필수
+                value = "COVEREDRATIO"
+                minimum = "0.60".toBigDecimal()
             }
         }
     }
