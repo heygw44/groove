@@ -14,14 +14,6 @@ export async function signupFlow({ email, password, name, phone }) {
   return loginFlow(email, password)
 }
 
-/**
- * 데모 전용 로그인 — 토큰만 반환하고 전역 auth store 에 저장하지 않는다.
- * 동시성 라이브 데모(#118)가 demo01~30 계정을 병렬 로그인할 때 전역 세션이 덮어써지는 사고를 막는다.
- */
-export function demoLogin(email, password) {
-  return client.post('/auth/login', { email, password }, { auth: false }).then((res) => res.data)
-}
-
 /** 로그아웃: 서버에 refresh 폐기 best-effort 요청 후 로컬 상태 clear. 호출 실패해도 로컬은 비운다. */
 export async function logoutFlow() {
   const auth = useAuthStore()

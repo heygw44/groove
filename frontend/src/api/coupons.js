@@ -1,5 +1,4 @@
 import client from './client'
-import { randomUuid } from '@/lib/uuid'
 
 // 쿠폰 API. 목록(GET /coupons)은 public, 발급(POST issue)·내 쿠폰(GET /members/me/coupons)은 회원 전용.
 
@@ -18,20 +17,6 @@ export function listCoupons(params = {}) {
 export function issueCoupon(couponId) {
   return client
     .post(`/coupons/${couponId}/issue`, null, { idempotent: true })
-    .then((res) => res.data)
-}
-
-/**
- * 데모 전용 발급 — 계정별 accessToken 을 명시 첨부한다(동시성 라이브 데모의 병렬 발급).
- * 인터셉터의 전역 Bearer 자동 첨부 경로를 쓰지 않으려고 auth:false + 명시 헤더를 쓴다.
- * → 전역 로그인 세션을 건드리지 않고, 401 자동 refresh 도 발화하지 않는다.
- */
-export function issueCouponWithToken(couponId, accessToken) {
-  return client
-    .post(`/coupons/${couponId}/issue`, null, {
-      auth: false,
-      headers: { Authorization: `Bearer ${accessToken}`, 'Idempotency-Key': randomUuid() },
-    })
     .then((res) => res.data)
 }
 

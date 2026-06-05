@@ -15,7 +15,11 @@ public final class DemoAccounts {
     /** 데모 관리자 (role ADMIN, 알려진 비밀번호 — 운영 DB 유입 시 가장 위험). */
     public static final String ADMIN_EMAIL = "admin@groove.dev";
 
-    /** 쿠폰 동시성 데모용 유저 풀 크기 (demo01@ … demo{N}@). */
+    /**
+     * 유저 풀 크기 (demo01@ … demo{N}@). 본래 프론트 "쿠폰 동시성 라이브 데모" 전용이었으나 그 데모는
+     * 은퇴했다(동시성·부하 검증은 {@code loadtest/} k6 + 동시성 테스트로 일원화). 현재 이 풀을 소비하는
+     * 앱 기능은 없으며, 풀 시드 제거는 ProductionSeedGuard·시더 테스트 동반 수정이 필요해 후속으로 둔다.
+     */
     public static final int USER_POOL_SIZE = 30;
 
     /** 유저 풀 이메일 — {@code demo01@groove.dev} … {@code demo{USER_POOL_SIZE}@groove.dev}. */

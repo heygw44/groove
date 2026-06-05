@@ -1367,7 +1367,8 @@
 
 ### M15 — Vue 프론트엔드 (✅ 완료)
 - **✅ 완료 (2026-06-03)**: **Vue 3 + Vite + JS + Pinia + Tailwind v4** 로 전 기능 재구축(GH #113~#119, PR #120~#130). History 라우팅(`SpaForwardConfig` 필요) + node-gradle Gradle 빌드 통합.
-- 시연 GOTCHA: 주문 `status` PAID 정체 → 리뷰는 관리자 DELIVERED 전환 후 작성. 쿠폰 동시성 라이브 데모는 개발 빌드 전용(다중 토큰풀 + rate-limit 완화).
+- 시연 GOTCHA: 주문 `status` PAID 정체 → 리뷰는 관리자 DELIVERED 전환 후 작성.
+- 쿠폰 발급은 고객용 선착순 `발급받기` 플로우만 둔다(인앱 "동시성 라이브 데모"는 은퇴). 동시성·부하 검증은 실 운영 방식대로 `loadtest/` k6 스파이크 + `CouponIssuanceConcurrencyTest` 로 한다.
 
 ---
 
