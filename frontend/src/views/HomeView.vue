@@ -28,7 +28,7 @@ onMounted(async () => {
     >
       <div>
         <p class="font-display text-xl font-bold text-gold-400">첫 구매 5,000원 쿠폰</p>
-        <p class="mt-1 text-sm text-cream-200/80">선착순 한정 — 지금 바로 카탈로그를 둘러보세요.</p>
+        <p class="mt-1 text-sm text-cream-200/80">첫 주문에 바로 적용 — 지금 바로 카탈로그를 둘러보세요.</p>
       </div>
       <RouterLink
         to="/catalog"

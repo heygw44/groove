@@ -16,7 +16,7 @@ function onSubmit() {
 </script>
 
 <template>
-  <form class="flex items-center" role="search" @submit.prevent="onSubmit">
+  <form class="flex items-stretch" role="search" @submit.prevent="onSubmit">
     <input
       v-model="keyword"
       type="search"
