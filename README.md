@@ -53,6 +53,50 @@ curl http://localhost:8080/actuator/health
 > 적재한다. 데모 시더 `LocalDataSeeder`(로컬 12장)와 별개 경로이며 W9 측정(검색 슬로우 쿼리·flash-sale)용이다.
 > 규모/계정/검증은 [`db/seed/README.md`](db/seed/README.md) 참고.
 
+## API 테스트 (Postman / Newman)
+
+전체 엔드포인트 요청·응답 검증 스크립트·시연용 엣지 케이스를 담은 Postman 컬렉션을 제공한다.
+
+| 파일 | 내용 |
+|------|------|
+| [postman/groove.collection.json](postman/groove.collection.json) | 전체 엔드포인트 + `pm.test` 응답 검증 + 환경변수 자동 저장 |
+| [postman/groove.environment.json](postman/groove.environment.json) | `Groove Local` 환경(baseUrl·토큰·관리자 계정 등) |
+
+> **사전 조건**: 백엔드가 `localhost:8080` 에 떠 있고 데모 시드가 적재돼 있어야 한다. `local` 프로파일로
+> 기동하면 `LocalDataSeeder` 가 앨범 12장·데모 회원(`demo@groove.dev`)·**관리자(`admin@groove.dev` / `admin1234`)**
+> 를 자동 생성한다. 관리자 폴더는 이 시드 계정으로 로그인한다(환경변수 `adminEmail`/`adminPassword`).
+
+### Postman GUI
+
+1. 컬렉션·환경 JSON 두 파일을 import 하고 우상단에서 `Groove Local` 환경 선택.
+2. `1. Auth > Login` 실행 → `accessToken`/`refreshToken` 자동 저장.
+3. `6. Member Flow (E2E) ★` 폴더를 위에서부터 순서대로 실행하면 장바구니→주문→결제→배송→리뷰 흐름이 1클릭 시연된다.
+   - 리뷰 작성(`8) Write Review`)은 주문이 `DELIVERED` 이상이어야 201이다. 결제 PAID(Mock 웹훅/폴링 자동) 후
+     `8. Admin > Change Order Status` 에서 `target` 을 `PREPARING`→`SHIPPED`→`DELIVERED` 로 순차 전환해야 통과한다(그 전에는 422).
+
+### Newman (헤드리스 / CLI)
+
+```bash
+npm install              # newman 설치 (루트 devDependency)
+npm run test:postman     # 결정론적 happy-path 폴더만 실행 (Health/Auth/Catalog/Cart/MemberFlow/Guest/EdgeCases)
+npm run test:postman:admin   # 8. Admin 폴더 (시드 관리자 계정 필요)
+npm run test:postman:full    # 전체 컬렉션 (주의: 아래 참고)
+npm run test:postman:report  # test:postman 과 동일 범위 + JUnit 리포트(reports/postman-junit.xml)
+```
+
+- **`test:postman`** 은 외부(DB 시드) 상태에만 의존하는 폴더를 collection 순서대로 골라 실행한다(Member Flow → Edge Cases 순서가 보장되어 결제 멱등 등 직전 단계 상태를 그대로 사용). 데모 시드가 있으면 전부 통과한다.
+- **Rate Limit 엣지 케이스**(`9. Edge Cases > Rate Limit 초과 → 429`)는 `POST /auth/login` IP당 분당 10회 제한을
+  쓴다. 단발 실행은 401(한도 내)이고, **이 요청 하나만** 11회 이상 반복해야 마지막에 429 + `Retry-After` 가 나온다.
+  Postman GUI Collection Runner 에서 이 요청만 선택해 Iterations=11 로 돌리거나, 셸에서
+  `for i in $(seq 11); do curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/auth/login -H 'Content-Type: application/json' -d '{"email":"x@x.io","password":"wrong"}'; done` 로 확인한다.
+  (newman `-n` 은 폴더 전체를 반복하므로 다른 엣지 요청까지 함께 도는 점에 주의 — 단일 요청 반복엔 적합하지 않다.) 1분 뒤 버킷이 리필된다.
+- **`test:postman:full`(전체 실행) 주의**: 파괴적 요청은 맨 끝 `10. Cleanup` 폴더(비밀번호 변경·회원 탈퇴)로 모아 두어
+  다른 회원 토큰 폴더 뒤에 실행되지만, `5. Coupons > Issue Coupon` 은 발급 가능한 ACTIVE 쿠폰(환경변수 `couponId` 기본값 `1`,
+  데모 시드 또는 `8. Admin > Create Coupon Policy`)이 선행돼야 하고, `Sign Up` 은 분당 3회 제한이라 연속 재실행 시 429 가 날 수 있다.
+  폴더별로 골라 실행하길 권장한다.
+
+자세한 엔드포인트 계약은 [docs/API.md](docs/API.md) 참고.
+
 ## 프로젝트 문서
 
 | 문서 | 내용 |
