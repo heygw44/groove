@@ -356,4 +356,38 @@ class OrderTest {
             assertThat(order.getCancelledAt()).isNull();
         }
     }
+
+    @Nested
+    @DisplayName("recordTrackingNumber — 운송장 번호 멱등 기록 (#116)")
+    class RecordTrackingNumber {
+
+        @Test
+        @DisplayName("초기 상태 — 운송장 번호 null")
+        void nullByDefault() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+
+            assertThat(order.getTrackingNumber()).isNull();
+        }
+
+        @Test
+        @DisplayName("미기록 상태 — 운송장 번호 설정")
+        void recordsWhenAbsent() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+
+            order.recordTrackingNumber("TRK-12345");
+
+            assertThat(order.getTrackingNumber()).isEqualTo("TRK-12345");
+        }
+
+        @Test
+        @DisplayName("이미 기록됨 — 재호출 시 첫 값 보존 (멱등, 중복 이벤트/경합 방어)")
+        void keepsFirstValueOnReinvoke() {
+            Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
+            order.recordTrackingNumber("TRK-FIRST");
+
+            order.recordTrackingNumber("TRK-SECOND");
+
+            assertThat(order.getTrackingNumber()).isEqualTo("TRK-FIRST");
+        }
+    }
 }
