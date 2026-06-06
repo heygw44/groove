@@ -8,8 +8,6 @@ import com.groove.coupon.application.CouponQueryService;
 import com.groove.coupon.domain.MemberCouponStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,7 +17,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,10 +54,8 @@ public class MyCouponController {
                     + "생략 시 전체를 반환한다. USED 쿠폰은 사용 주문번호(orderNumber)가 채워진다. 정렬은 issuedAt 만 허용한다.",
             security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponse(responseCode = "200", description = "내 쿠폰 목록 조회 성공")
-    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 속성",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "인증 필요 (토큰 없음·무효·만료)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 속성")
+    @ApiResponse(responseCode = "401", description = "인증 필요 (토큰 없음·무효·만료)")
     @GetMapping
     public ResponseEntity<PageResponse<MemberCouponResponse>> list(
             @AuthenticationPrincipal AuthPrincipal principal,

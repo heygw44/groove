@@ -13,8 +13,6 @@ import com.groove.common.api.PageResponse;
 import com.groove.common.api.SortValidator;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,7 +24,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -80,12 +77,9 @@ public class AlbumAdminController {
     @Operation(summary = "앨범 관리자 목록 조회",
             description = "관리자 콘솔 전용 앨범 목록. Public 검색과 동일한 필터·정렬을 쓰되 status 를 강제하지 않아 HIDDEN 을 포함한 전체 status 가 조회된다. ADMIN 권한 필요.")
     @ApiResponse(responseCode = "200", description = "조회 성공 — 페이징 envelope")
-    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 컬럼 또는 검색 파라미터 검증 실패",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 컬럼 또는 검색 파라미터 검증 실패")
+    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)")
+    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)")
     @GetMapping
     public ResponseEntity<PageResponse<AlbumSummaryResponse>> list(
             @Valid @ParameterObject @ModelAttribute AlbumSearchRequest request,
@@ -101,14 +95,10 @@ public class AlbumAdminController {
     @Operation(summary = "앨범 등록",
             description = "앨범을 신규 등록한다. artist/genre 는 필수 FK, label 은 nullable. 성공 시 Location 헤더에 생성된 앨범 리소스 URI 를 담는다. ADMIN 권한 필요.")
     @ApiResponse(responseCode = "201", description = "등록 성공")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (제목·가격·연도·재고 등)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "참조한 아티스트 · 장르 · 레이블 미존재",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (제목·가격·연도·재고 등)")
+    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)")
+    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)")
+    @ApiResponse(responseCode = "404", description = "참조한 아티스트 · 장르 · 레이블 미존재")
     @PostMapping
     public ResponseEntity<AlbumResponse> create(@Valid @RequestBody AlbumCreateRequest request) {
         Album album = albumService.create(toCommand(request), request.stock());
@@ -122,14 +112,10 @@ public class AlbumAdminController {
     @Operation(summary = "앨범 수정",
             description = "앨범을 전체 갱신(PUT)한다. 재고(stock)는 본 요청 대상이 아니며 PATCH /stock 으로만 변경한다. ADMIN 권한 필요.")
     @ApiResponse(responseCode = "200", description = "수정 성공")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "앨범 또는 참조한 아티스트 · 장르 · 레이블 미존재",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패")
+    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)")
+    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)")
+    @ApiResponse(responseCode = "404", description = "앨범 또는 참조한 아티스트 · 장르 · 레이블 미존재")
     @PutMapping("/{id}")
     public ResponseEntity<AlbumResponse> update(@PathVariable @Positive @Parameter(description = "앨범 ID") Long id,
                                                 @Valid @RequestBody AlbumUpdateRequest request) {
@@ -140,12 +126,9 @@ public class AlbumAdminController {
     @Operation(summary = "앨범 삭제",
             description = "앨범을 삭제한다. ADMIN 권한 필요.")
     @ApiResponse(responseCode = "204", description = "삭제 성공 (본문 없음)")
-    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "앨범 미존재",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)")
+    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)")
+    @ApiResponse(responseCode = "404", description = "앨범 미존재")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable @Positive @Parameter(description = "앨범 ID") Long id) {
         albumService.delete(id);
@@ -155,14 +138,10 @@ public class AlbumAdminController {
     @Operation(summary = "앨범 재고 조정",
             description = "재고를 delta 만큼 증감한다. delta 는 음수도 허용(반품·재고 감소)하나 결과 재고가 0 미만이면 거부된다. ADMIN 권한 필요.")
     @ApiResponse(responseCode = "200", description = "재고 조정 성공")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패 또는 결과 재고가 0 미만",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "앨범 미존재",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 또는 결과 재고가 0 미만")
+    @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)")
+    @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)")
+    @ApiResponse(responseCode = "404", description = "앨범 미존재")
     @PatchMapping("/{id}/stock")
     public ResponseEntity<AlbumResponse> adjustStock(@PathVariable @Positive @Parameter(description = "앨범 ID") Long id,
                                                     @Valid @RequestBody StockAdjustRequest request) {

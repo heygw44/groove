@@ -6,8 +6,6 @@ import com.groove.review.api.dto.ReviewResponse;
 import com.groove.review.application.ReviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Positive;
@@ -17,7 +15,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -53,8 +50,7 @@ public class AlbumReviewController {
             description = "특정 앨범에 작성된 리뷰를 페이지로 조회한다. 비로그인 공개 엔드포인트이며, 작성자 이름은 마스킹되어 노출된다. "
                     + "존재하지 않는 앨범이면 빈 페이지를 반환한다. 정렬은 createdAt 만 허용한다.")
     @ApiResponse(responseCode = "200", description = "앨범 리뷰 목록 조회 성공")
-    @ApiResponse(responseCode = "400", description = "albumId 형식 오류 · 허용되지 않은 정렬 속성",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "albumId 형식 오류 · 허용되지 않은 정렬 속성")
     @GetMapping
     public ResponseEntity<PageResponse<ReviewResponse>> list(
             @Parameter(description = "리뷰를 조회할 앨범 식별자") @PathVariable @Positive Long albumId,

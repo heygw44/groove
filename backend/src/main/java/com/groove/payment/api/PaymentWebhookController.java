@@ -7,12 +7,9 @@ import com.groove.payment.application.PaymentCallbackService;
 import com.groove.payment.gateway.WebhookSignatureVerifier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -57,10 +54,8 @@ public class PaymentWebhookController {
             description = "PG 가 비동기 결제 결과(PAID/FAILED)를 통보하는 콜백 엔드포인트. 인증 토큰이 아니라 X-Mock-Signature 헤더 서명으로 검증하며, "
                     + "서명 검증 실패 시 401 로 거부한다. 멱등성은 본문의 pgTransactionId 로 보장되어 중복 콜백은 무해하게 무시된다. (공개 엔드포인트)")
     @ApiResponse(responseCode = "200", description = "콜백 처리됨 (APPLIED / ALREADY_PROCESSED / IGNORED)")
-    @ApiResponse(responseCode = "400", description = "본문 검증 실패 (pgTransactionId 누락·status 가 PAID/FAILED 외)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "웹훅 서명 검증 실패 (PAYMENT_WEBHOOK_INVALID_SIGNATURE)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "본문 검증 실패 (pgTransactionId 누락·status 가 PAID/FAILED 외)")
+    @ApiResponse(responseCode = "401", description = "웹훅 서명 검증 실패 (PAYMENT_WEBHOOK_INVALID_SIGNATURE)")
     @PostMapping("/webhook")
     public ResponseEntity<PaymentCallbackResult> handle(
             @Parameter(description = "PG 콜백 서명 헤더 (Mock 은 공유 시크릿 단순 비교)", example = "mock-signature")

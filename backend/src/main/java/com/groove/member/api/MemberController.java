@@ -7,13 +7,10 @@ import com.groove.member.api.dto.WithdrawRequest;
 import com.groove.member.application.MemberService;
 import com.groove.member.domain.Member;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -48,10 +45,8 @@ public class MemberController {
     @Operation(summary = "내 정보 조회",
             description = "인증 토큰으로 식별된 본인의 회원 정보를 조회한다. 비밀번호는 절대 노출하지 않는다.")
     @ApiResponse(responseCode = "200", description = "내 정보 조회 성공")
-    @ApiResponse(responseCode = "401", description = "인증 실패 (토큰 미제공·만료·무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "활성 회원 없음 (탈퇴 후 토큰 만료 전 윈도)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "인증 실패 (토큰 미제공·만료·무효)")
+    @ApiResponse(responseCode = "404", description = "활성 회원 없음 (탈퇴 후 토큰 만료 전 윈도)")
     @GetMapping
     public ResponseEntity<MemberResponse> getMyInfo(@AuthenticationPrincipal AuthPrincipal principal) {
         Member member = memberService.getMyInfo(principal.memberId());
@@ -62,12 +57,9 @@ public class MemberController {
             description = "이름·전화번호를 부분 수정한다 (PATCH). 전송하지 않은 필드(null)는 변경되지 않으며, "
                     + "빈 문자열은 검증 대상이라 400 으로 거부된다.")
     @ApiResponse(responseCode = "200", description = "내 정보 수정 성공")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (이름 길이·전화번호 형식 등)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "인증 실패 (토큰 미제공·만료·무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "활성 회원 없음",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (이름 길이·전화번호 형식 등)")
+    @ApiResponse(responseCode = "401", description = "인증 실패 (토큰 미제공·만료·무효)")
+    @ApiResponse(responseCode = "404", description = "활성 회원 없음")
     @PatchMapping
     public ResponseEntity<MemberResponse> updateMyInfo(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -80,14 +72,10 @@ public class MemberController {
             description = "본인 비밀번호 재확인 후 회원을 탈퇴(soft delete)한다. 성공 시 본문 없이 204. "
                     + "이미 탈퇴한 회원의 재요청도 멱등하게 204 로 수렴한다.")
     @ApiResponse(responseCode = "204", description = "탈퇴 처리됨 (멱등 — 이미 탈퇴한 회원도 204)")
-    @ApiResponse(responseCode = "400", description = "비밀번호 미입력 또는 현재 비밀번호 불일치",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "인증 실패 (토큰 미제공·만료·무효)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "해당 회원 없음",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "409", description = "진행 중인 주문이 있어 탈퇴 불가",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "비밀번호 미입력 또는 현재 비밀번호 불일치")
+    @ApiResponse(responseCode = "401", description = "인증 실패 (토큰 미제공·만료·무효)")
+    @ApiResponse(responseCode = "404", description = "해당 회원 없음")
+    @ApiResponse(responseCode = "409", description = "진행 중인 주문이 있어 탈퇴 불가")
     @DeleteMapping
     public ResponseEntity<Void> withdraw(
             @AuthenticationPrincipal AuthPrincipal principal,

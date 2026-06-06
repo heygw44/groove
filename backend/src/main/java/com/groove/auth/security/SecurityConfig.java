@@ -80,7 +80,8 @@ public class SecurityConfig {
             "/v3/api-docs.yaml",
             "/swagger-ui/**",
             "/swagger-ui.html",
-            "/webjars/**"
+            // swagger-ui webjar 자산만 — 비-swagger webjar 가 추후 추가돼도 공개되지 않도록 좁힌다.
+            "/webjars/swagger-ui/**"
     };
 
     /**

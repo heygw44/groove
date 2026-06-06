@@ -14,12 +14,9 @@ import com.groove.member.application.MemberService;
 import com.groove.member.application.SignupCommand;
 import com.groove.member.domain.Member;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -45,12 +42,9 @@ public class AuthController {
     @Operation(summary = "회원가입",
             description = "이메일·비밀번호·이름·전화번호로 신규 회원을 생성한다. 성공 시 Location 헤더에 생성된 회원 리소스 URI 를 담는다.")
     @ApiResponse(responseCode = "201", description = "회원가입 성공")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (이메일 형식·비밀번호 정책 등)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "409", description = "이미 가입된 이메일",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "429", description = "회원가입 Rate Limit 초과",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (이메일 형식·비밀번호 정책 등)")
+    @ApiResponse(responseCode = "409", description = "이미 가입된 이메일")
+    @ApiResponse(responseCode = "429", description = "회원가입 Rate Limit 초과")
     @PostMapping("/signup")
     public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         SignupCommand command = new SignupCommand(
@@ -72,12 +66,9 @@ public class AuthController {
     @Operation(summary = "로그인",
             description = "이메일·비밀번호로 인증하고 access/refresh 토큰 페어를 발급한다. 발급된 accessToken 을 우측 상단 Authorize 에 넣으면 보호 엔드포인트를 try-out 할 수 있다.")
     @ApiResponse(responseCode = "200", description = "로그인 성공 — 토큰 페어 발급")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "이메일 또는 비밀번호 불일치",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "429", description = "로그인 Rate Limit 초과",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패")
+    @ApiResponse(responseCode = "401", description = "이메일 또는 비밀번호 불일치")
+    @ApiResponse(responseCode = "429", description = "로그인 Rate Limit 초과")
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         TokenPair tokens = authService.login(new LoginCommand(request.email(), request.password()));
@@ -93,8 +84,7 @@ public class AuthController {
     @Operation(summary = "토큰 갱신",
             description = "Refresh Token 을 회전해 새 access/refresh 페어를 발급하고 기존 refresh 는 즉시 revoke 한다. 재사용된 토큰은 401.")
     @ApiResponse(responseCode = "200", description = "갱신 성공 — 새 토큰 페어 발급")
-    @ApiResponse(responseCode = "401", description = "refresh 토큰 무효 · 만료 · 재사용",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "refresh 토큰 무효 · 만료 · 재사용")
     @PostMapping("/refresh")
     public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         TokenPair tokens = authService.refresh(request.refreshToken());

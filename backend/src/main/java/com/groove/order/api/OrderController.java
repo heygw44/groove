@@ -10,14 +10,11 @@ import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderNumberFormat;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -55,14 +52,10 @@ public class OrderController {
             description = "회원/게스트 공통 주문 생성. Bearer 토큰이 있으면 회원 주문, 없으면 게스트 주문으로 처리되며 게스트는 본문의 guest 블록이 필수다. "
                     + "성공 시 Location 헤더에 생성된 주문 리소스 URI 를 담는다. 회원 주문은 memberCouponId 로 쿠폰 1장을 적용할 수 있다. (공개 엔드포인트)")
     @ApiResponse(responseCode = "201", description = "주문 생성 성공")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (items 누락·수량 범위·배송지·게스트 정보 형식 등)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "주문 항목의 앨범을 찾을 수 없음",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "409", description = "재고 부족 (ORDER_INSUFFICIENT_STOCK)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "422", description = "구매 불가 앨범·게스트에 쿠폰 동봉 등 도메인 규칙 위반",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (items 누락·수량 범위·배송지·게스트 정보 형식 등)")
+    @ApiResponse(responseCode = "404", description = "주문 항목의 앨범을 찾을 수 없음")
+    @ApiResponse(responseCode = "409", description = "재고 부족 (ORDER_INSUFFICIENT_STOCK)")
+    @ApiResponse(responseCode = "422", description = "구매 불가 앨범·게스트에 쿠폰 동봉 등 도메인 규칙 위반")
     @PostMapping
     public ResponseEntity<OrderResponse> create(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -77,12 +70,9 @@ public class OrderController {
             description = "로그인한 회원이 자신의 주문을 주문번호로 단건 조회한다. 본인 주문이 아니면 404 로 응답한다(존재 노출 회피).")
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponse(responseCode = "200", description = "주문 조회 성공")
-    @ApiResponse(responseCode = "400", description = "주문번호 형식 위반",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "인증 필요",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "주문 없음 또는 본인 주문 아님 (ORDER_NOT_FOUND)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "주문번호 형식 위반")
+    @ApiResponse(responseCode = "401", description = "인증 필요")
+    @ApiResponse(responseCode = "404", description = "주문 없음 또는 본인 주문 아님 (ORDER_NOT_FOUND)")
     @GetMapping("/{orderNumber}")
     public ResponseEntity<OrderResponse> get(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -97,14 +87,10 @@ public class OrderController {
                     + "현재 상태에서 취소할 수 없는 주문은 409 로 거부된다.")
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponse(responseCode = "200", description = "주문 취소 성공")
-    @ApiResponse(responseCode = "400", description = "주문번호 형식 위반 또는 취소 사유 길이 초과",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "인증 필요",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "주문 없음 또는 본인 주문 아님 (ORDER_NOT_FOUND)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "409", description = "현재 주문 상태에서 취소 불가 (ORDER_INVALID_STATE_TRANSITION)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "주문번호 형식 위반 또는 취소 사유 길이 초과")
+    @ApiResponse(responseCode = "401", description = "인증 필요")
+    @ApiResponse(responseCode = "404", description = "주문 없음 또는 본인 주문 아님 (ORDER_NOT_FOUND)")
+    @ApiResponse(responseCode = "409", description = "현재 주문 상태에서 취소 불가 (ORDER_INVALID_STATE_TRANSITION)")
     @PostMapping("/{orderNumber}/cancel")
     public ResponseEntity<OrderResponse> cancel(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -126,10 +112,8 @@ public class OrderController {
             description = "비로그인 게스트가 주문번호와 주문 시 입력한 이메일을 함께 제시해 자신의 주문을 조회한다. "
                     + "이메일이 일치하지 않으면 404 로 응답한다(정보 노출 회피). (공개 엔드포인트)")
     @ApiResponse(responseCode = "200", description = "주문 조회 성공")
-    @ApiResponse(responseCode = "400", description = "주문번호 형식 위반 또는 이메일 형식 오류",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "주문 없음 또는 이메일 불일치 (ORDER_NOT_FOUND)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "주문번호 형식 위반 또는 이메일 형식 오류")
+    @ApiResponse(responseCode = "404", description = "주문 없음 또는 이메일 불일치 (ORDER_NOT_FOUND)")
     @PostMapping("/{orderNumber}/guest-lookup")
     public ResponseEntity<OrderResponse> guestLookup(
             @Parameter(description = "조회할 주문번호 (형식: ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260101-AB12CD")

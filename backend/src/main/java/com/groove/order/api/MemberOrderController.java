@@ -9,8 +9,6 @@ import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,7 +18,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,10 +54,8 @@ public class MemberOrderController {
     @Operation(summary = "내 주문 목록 조회",
             description = "로그인한 회원 본인의 주문을 페이징 조회한다. status 로 주문 상태를 필터링할 수 있으며, 정렬은 createdAt 만 허용한다(기본 최신순).")
     @ApiResponse(responseCode = "200", description = "주문 목록 조회 성공")
-    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 키 등 입력 검증 실패",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "인증 필요",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 키 등 입력 검증 실패")
+    @ApiResponse(responseCode = "401", description = "인증 필요")
     @GetMapping
     public ResponseEntity<PageResponse<OrderSummaryResponse>> list(
             @AuthenticationPrincipal AuthPrincipal principal,

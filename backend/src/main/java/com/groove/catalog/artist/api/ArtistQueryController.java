@@ -12,8 +12,6 @@ import com.groove.common.exception.ErrorCode;
 import com.groove.common.exception.ValidationException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,7 +22,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -79,10 +76,8 @@ public class ArtistQueryController {
     @Operation(summary = "아티스트 단건 조회",
             description = "ID 로 아티스트 단건을 조회한다.")
     @ApiResponse(responseCode = "200", description = "아티스트 조회 성공")
-    @ApiResponse(responseCode = "400", description = "id 가 양수가 아님",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "해당 ID 의 아티스트 없음",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "id 가 양수가 아님")
+    @ApiResponse(responseCode = "404", description = "해당 ID 의 아티스트 없음")
     @GetMapping("/{id}")
     public ResponseEntity<ArtistResponse> get(
             @Parameter(description = "조회할 아티스트 ID", example = "1") @PathVariable @Positive Long id) {
@@ -93,10 +88,8 @@ public class ArtistQueryController {
             description = "지정한 아티스트의 앨범을 페이징 조회한다. 경로 artistId 가 강제되며 query 의 artistId 와 다르면 400. "
                     + "status=HIDDEN 차단·정렬 화이트리스트는 GET /albums 와 동일.")
     @ApiResponse(responseCode = "200", description = "아티스트별 앨범 목록 조회 성공")
-    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (status=HIDDEN, 경로·query artistId 불일치, 허용되지 않은 정렬 키 등)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "해당 ID 의 아티스트 없음",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (status=HIDDEN, 경로·query artistId 불일치, 허용되지 않은 정렬 키 등)")
+    @ApiResponse(responseCode = "404", description = "해당 ID 의 아티스트 없음")
     @GetMapping("/{id}/albums")
     public ResponseEntity<PageResponse<AlbumSummaryResponse>> albums(
             @Parameter(description = "앨범을 조회할 아티스트 ID", example = "1") @PathVariable @Positive Long id,

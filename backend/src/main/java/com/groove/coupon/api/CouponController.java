@@ -12,8 +12,6 @@ import com.groove.coupon.application.CouponIssueService;
 import com.groove.coupon.application.CouponQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,7 +23,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -71,8 +68,7 @@ public class CouponController {
             description = "현재 발급 가능한(ACTIVE + 발급 기간 내) 쿠폰을 페이지로 조회한다. 비로그인 공개 엔드포인트다. "
                     + "소진 여부는 remainingQuantity 로 노출되며, 무제한 발급이면 null 이다. 정렬은 validUntil·id 만 허용한다.")
     @ApiResponse(responseCode = "200", description = "발급 가능 쿠폰 목록 조회 성공")
-    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 속성",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 속성")
     @GetMapping
     public ResponseEntity<PageResponse<CouponResponse>> listIssuable(
             @PageableDefault(size = 20)
@@ -90,18 +86,12 @@ public class CouponController {
                     + "회원당 분당 발급 횟수가 제한되어 한도 초과 시 429 가 반환된다.",
             security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponse(responseCode = "201", description = "쿠폰 발급 성공")
-    @ApiResponse(responseCode = "400", description = "Idempotency-Key 헤더 누락",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "401", description = "인증 필요 (토큰 없음·무효·만료)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "404", description = "쿠폰을 찾을 수 없음",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "409", description = "재고 소진 · 이미 발급받은 쿠폰 · 처리 중인 동일 키 · Idempotency-Key 재사용 충돌",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "422", description = "현재 발급할 수 없는 쿠폰 (비활성·발급 기간 외)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "429", description = "발급 Rate Limit 초과 (회원당 분당 한도)",
-            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "400", description = "Idempotency-Key 헤더 누락")
+    @ApiResponse(responseCode = "401", description = "인증 필요 (토큰 없음·무효·만료)")
+    @ApiResponse(responseCode = "404", description = "쿠폰을 찾을 수 없음")
+    @ApiResponse(responseCode = "409", description = "재고 소진 · 이미 발급받은 쿠폰 · 처리 중인 동일 키 · Idempotency-Key 재사용 충돌")
+    @ApiResponse(responseCode = "422", description = "현재 발급할 수 없는 쿠폰 (비활성·발급 기간 외)")
+    @ApiResponse(responseCode = "429", description = "발급 Rate Limit 초과 (회원당 분당 한도)")
     @PostMapping("/{couponId}/issue")
     @Idempotent
     public ResponseEntity<MemberCouponResponse> issue(
