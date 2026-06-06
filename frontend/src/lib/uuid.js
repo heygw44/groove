@@ -1,5 +1,5 @@
 // Idempotency-Key 등에 쓸 UUID v4 생성.
-// crypto.randomUUID 는 secure context(HTTPS/localhost)에서만 동작하므로, 평문 HTTP 원격 데모를
+// crypto.randomUUID 는 secure context(HTTPS/localhost)에서만 동작하므로, 평문 HTTP 환경을
 // 위해 crypto.getRandomValues → Math.random 순으로 폴백한다(멱등키 용도라 충돌 회피만 충족하면 됨).
 export function randomUuid() {
   const c = globalThis.crypto

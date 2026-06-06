@@ -22,7 +22,7 @@ async function loadOptions() {
     const [g, l, a] = await Promise.all([
       taxonomyApi.genres(),
       taxonomyApi.labels(),
-      // 아티스트 옵션은 백엔드 max-page-size(=100)까지. 데모 규모엔 충분.
+      // 아티스트 옵션은 백엔드 max-page-size(=100)까지. 현재 카탈로그 규모엔 충분.
       artistsApi.list({ size: 100, sort: 'name,asc' }),
     ])
     optionsCache = { genres: g, labels: l, artists: a.content }
