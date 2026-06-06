@@ -29,7 +29,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -44,12 +46,14 @@ class PaymentCallbackServiceTest {
     private PaymentRepository paymentRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private com.groove.coupon.application.CouponApplicationService couponApplicationService;
 
     private PaymentCallbackService service;
 
     @BeforeEach
     void setUp() {
-        service = new PaymentCallbackService(paymentRepository, eventPublisher);
+        service = new PaymentCallbackService(paymentRepository, eventPublisher, couponApplicationService);
     }
 
     private static Album album(int stock) {
@@ -86,13 +90,15 @@ class PaymentCallbackServiceTest {
         assertThat(event.getValue().orderNumber()).isEqualTo(ORDER_NUMBER);
         assertThat(event.getValue().memberId()).isEqualTo(1L);
         assertThat(event.getValue().paymentId()).isEqualTo(42L);
+        verify(couponApplicationService, never()).restoreForOrder(any()); // 성공 결제는 쿠폰 USED 유지
     }
 
     @Test
-    @DisplayName("FAILED: 보상 트랜잭션 — 결제 실패·주문 결제실패·재고 복원, 이벤트 미발행")
+    @DisplayName("FAILED: 보상 트랜잭션 — 결제 실패·주문 결제실패·재고 복원·쿠폰 복원, 이벤트 미발행")
     void applyResult_failed_compensates() {
         Album album = album(98); // 주문이 2개 차감했다고 가정
         Payment payment = pendingPayment(album, 2);
+        ReflectionTestUtils.setField(payment.getOrder(), "id", 7L); // 단위 테스트라 미영속 — restoreForOrder 인자 단언용
         given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.FAILED, "카드 한도 초과");
@@ -102,6 +108,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getFailureReason()).isEqualTo("카드 한도 초과");
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(album.getStock()).isEqualTo(100); // 98 + 2 복원
+        verify(couponApplicationService).restoreForOrder(7L); // 적용 쿠폰 복원 — 이슈 #158
         verifyNoInteractions(eventPublisher);
     }
 
@@ -125,7 +132,7 @@ class PaymentCallbackServiceTest {
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.IGNORED);
         assertThat(result.paymentId()).isNull();
-        verifyNoInteractions(eventPublisher);
+        verifyNoInteractions(eventPublisher, couponApplicationService);
     }
 
     @Test
@@ -141,7 +148,7 @@ class PaymentCallbackServiceTest {
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(album.getStock()).isEqualTo(99);
-        verifyNoInteractions(eventPublisher);
+        verifyNoInteractions(eventPublisher, couponApplicationService);
     }
 
     @Test
@@ -151,6 +158,6 @@ class PaymentCallbackServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.applyResult(PG_TX, PaymentStatus.REFUNDED, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(paymentRepository, eventPublisher);
+        verifyNoInteractions(paymentRepository, eventPublisher, couponApplicationService);
     }
 }
