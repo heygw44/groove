@@ -3,6 +3,7 @@ package com.groove.cart.api.dto;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.cart.domain.CartItem;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * 장바구니 항목 응답 (API §3.4).
@@ -12,14 +13,31 @@ import com.groove.cart.domain.CartItem;
  * 매 응답마다 (status == SELLING && stock >= quantity) 로 재평가한다.
  */
 public record CartItemResponse(
+        @Schema(description = "장바구니 항목 ID", example = "1")
         Long itemId,
+
+        @Schema(description = "앨범 ID", example = "1")
         Long albumId,
+
+        @Schema(description = "앨범 제목", example = "Random Access Memories")
         String albumTitle,
+
+        @Schema(description = "아티스트명", example = "Daft Punk")
         String artistName,
+
+        @Schema(description = "커버 이미지 URL", example = "https://cdn.groove.com/covers/1.jpg")
         String coverImageUrl,
+
+        @Schema(description = "단가 (단위 원)", example = "18500")
         long unitPrice,
+
+        @Schema(description = "수량", example = "2")
         int quantity,
+
+        @Schema(description = "소계 (단가 × 수량, 단위 원)", example = "37000")
         long subtotal,
+
+        @Schema(description = "구매 가능 여부 (응답 시점 재계산 — 판매중 && 재고충분)", example = "true")
         boolean available
 ) {
 

@@ -1,5 +1,6 @@
 package com.groove.catalog.album.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
 /**
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
  * 0 은 비즈니스적으로 무의미하지만 별도 거절하지 않는다 — 단순 통과.
  */
 public record StockAdjustRequest(
+        @Schema(description = "재고 증감량. 음수 허용(반품·재고 감소)하나 결과 재고가 0 미만이면 거부된다", example = "10")
         @NotNull
         Integer delta
 ) {

@@ -4,9 +4,17 @@ import com.groove.auth.security.AuthPrincipal;
 import com.groove.review.api.dto.ReviewCreateRequest;
 import com.groove.review.api.dto.ReviewResponse;
 import com.groove.review.application.ReviewService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -27,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>상품별 리뷰 목록({@code GET /albums/{id}/reviews})은 공개 엔드포인트라 URL prefix 가 달라 {@link AlbumReviewController} 로 분리한다.
  */
+@Tag(name = "리뷰", description = "리뷰 작성 · 삭제 (모두 인증 회원 전용, 본인 주문/리뷰만 가능)")
 @RestController
 @RequestMapping("/api/v1/reviews")
 @Validated
@@ -38,6 +47,23 @@ public class ReviewController {
         this.reviewService = reviewService;
     }
 
+    @Operation(summary = "리뷰 작성",
+            description = "배송 완료(DELIVERED 이상)된 본인 주문에 포함된 앨범에 대해 리뷰를 작성한다. "
+                    + "주문 1건-앨범 1개당 1개의 리뷰만 작성할 수 있으며, 게스트 주문에는 작성할 수 없다.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponse(responseCode = "201", description = "리뷰 작성 성공")
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (평점 범위·내용 길이 등)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "인증 필요 (토큰 없음·무효·만료)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "403", description = "본인 주문이 아님 (게스트 주문 포함)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "404", description = "주문 또는 앨범을 찾을 수 없음",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "409", description = "이미 작성한 리뷰",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "422", description = "배송이 완료되지 않은 주문 · 주문에 포함되지 않은 앨범",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @PostMapping
     public ResponseEntity<ReviewResponse> create(@AuthenticationPrincipal AuthPrincipal principal,
                                                  @Valid @RequestBody ReviewCreateRequest request) {
@@ -45,10 +71,22 @@ public class ReviewController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @Operation(summary = "리뷰 삭제",
+            description = "본인이 작성한 리뷰를 삭제한다. 작성자가 아니면 삭제할 수 없다.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponse(responseCode = "204", description = "리뷰 삭제 성공 (본문 없음)")
+    @ApiResponse(responseCode = "400", description = "reviewId 형식 오류 (양수가 아님)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "인증 필요 (토큰 없음·무효·만료)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "403", description = "본인이 작성한 리뷰가 아님",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "404", description = "리뷰를 찾을 수 없음",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @DeleteMapping("/{reviewId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal AuthPrincipal principal,
-                       @PathVariable @Positive Long reviewId) {
+                       @Parameter(description = "삭제할 리뷰 식별자") @PathVariable @Positive Long reviewId) {
         reviewService.delete(principal.memberId(), reviewId);
     }
 }

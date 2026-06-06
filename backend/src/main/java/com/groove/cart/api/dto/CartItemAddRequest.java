@@ -1,6 +1,7 @@
 package com.groove.cart.api.dto;
 
 import com.groove.cart.domain.Cart;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -11,7 +12,10 @@ import jakarta.validation.constraints.NotNull;
  * <p>quantity 상한은 {@link Cart#MAX_ITEM_QUANTITY} 와 일치 — 도메인 상수가 단일 출처다.
  */
 public record CartItemAddRequest(
+        @Schema(description = "담을 앨범 ID", example = "1")
         @NotNull Long albumId,
+
+        @Schema(description = "담을 수량 (1 이상, 상한 내). 동일 앨범이 있으면 누적", example = "2")
         @Min(1) @Max(Cart.MAX_ITEM_QUANTITY) int quantity
 ) {
 }

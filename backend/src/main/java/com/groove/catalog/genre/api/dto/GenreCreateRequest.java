@@ -1,5 +1,6 @@
 package com.groove.catalog.genre.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -9,6 +10,7 @@ import jakarta.validation.constraints.Size;
  * <p>{@code name} 컬럼 길이는 ERD §4.4 기준 50 자.
  */
 public record GenreCreateRequest(
+        @Schema(description = "장르 이름 (UNIQUE)", example = "Jazz", maxLength = 50)
         @NotBlank
         @Size(min = 1, max = 50)
         String name

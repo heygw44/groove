@@ -1,5 +1,6 @@
 package com.groove.admin.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -9,5 +10,8 @@ import jakarta.validation.constraints.Size;
  * 본문 자체를 생략한 요청도 허용한다(컨트롤러에서 {@code required = false}). 길이 상한은
  * {@link AdminOrderStatusChangeRequest#MAX_REASON_LENGTH} 와 동일하다 (DB 컬럼 길이 정렬).
  */
-public record AdminRefundRequest(@Size(max = AdminOrderStatusChangeRequest.MAX_REASON_LENGTH) String reason) {
+public record AdminRefundRequest(
+        @Schema(description = "환불 사유 — 선택 (PG 환불 사유 및 주문 취소 사유로 기록, 최대 500자)",
+                example = "고객 변심 환불")
+        @Size(max = AdminOrderStatusChangeRequest.MAX_REASON_LENGTH) String reason) {
 }

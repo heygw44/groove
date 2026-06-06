@@ -6,11 +6,20 @@ import com.groove.common.api.SortValidator;
 import com.groove.coupon.api.dto.MemberCouponResponse;
 import com.groove.coupon.application.CouponQueryService;
 import com.groove.coupon.domain.MemberCouponStatus;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +39,7 @@ import java.util.Set;
  *
  * <p>정렬 화이트리스트: {@code issuedAt} 만 허용.
  */
+@Tag(name = "내 쿠폰", description = "로그인한 회원 본인이 보유한 쿠폰 목록 조회")
 @RestController
 @RequestMapping("/api/v1/members/me/coupons")
 public class MyCouponController {
@@ -42,13 +52,22 @@ public class MyCouponController {
         this.couponQueryService = couponQueryService;
     }
 
+    @Operation(summary = "내 보유 쿠폰 목록",
+            description = "로그인한 회원 본인이 보유한 쿠폰을 페이지로 조회한다. status 쿼리 파라미터로 상태별 필터링이 가능하며, "
+                    + "생략 시 전체를 반환한다. USED 쿠폰은 사용 주문번호(orderNumber)가 채워진다. 정렬은 issuedAt 만 허용한다.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponse(responseCode = "200", description = "내 쿠폰 목록 조회 성공")
+    @ApiResponse(responseCode = "400", description = "허용되지 않은 정렬 속성",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "인증 필요 (토큰 없음·무효·만료)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @GetMapping
     public ResponseEntity<PageResponse<MemberCouponResponse>> list(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @RequestParam(required = false) MemberCouponStatus status,
+            @Parameter(description = "쿠폰 상태 필터 (생략 시 전체)") @RequestParam(required = false) MemberCouponStatus status,
             @PageableDefault(size = 20)
             @SortDefault(sort = "issuedAt", direction = Sort.Direction.DESC)
-            Pageable pageable) {
+            @ParameterObject Pageable pageable) {
         SortValidator.requireAllowed(pageable.getSort(), ALLOWED_SORT_PROPERTIES);
 
         Page<MemberCouponResponse> page = couponQueryService.listForMember(principal.memberId(), status, pageable);

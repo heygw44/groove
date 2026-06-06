@@ -4,6 +4,7 @@ import com.groove.order.api.dto.OrderItemResponse;
 import com.groove.order.api.dto.OrderShippingResponse;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,16 +17,37 @@ import java.util.List;
  * 회원용 DTO({@link OrderItemResponse}, {@link OrderShippingResponse}) 를 재사용한다.
  */
 public record AdminOrderResponse(
+        @Schema(description = "주문 번호 (ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260606-A1B2C3")
         String orderNumber,
+
+        @Schema(description = "주문 상태", example = "PAID")
         OrderStatus status,
+
+        @Schema(description = "회원 주문이면 회원 ID, 게스트 주문이면 null", example = "42")
         Long memberId,
+
+        @Schema(description = "게스트 주문이면 주문자 이메일, 회원 주문이면 null", example = "guest@example.com")
         String guestEmail,
+
+        @Schema(description = "주문 총액(원)", example = "45000")
         long totalAmount,
+
+        @Schema(description = "주문 라인 항목 목록")
         List<OrderItemResponse> items,
+
+        @Schema(description = "배송지 정보")
         OrderShippingResponse shipping,
+
+        @Schema(description = "결제 완료 시각 (미결제면 null, ISO-8601 UTC)", example = "2026-06-06T09:10:00Z")
         Instant paidAt,
+
+        @Schema(description = "취소/환불 시각 (취소되지 않았으면 null)", example = "2026-06-07T11:00:00Z")
         Instant cancelledAt,
+
+        @Schema(description = "취소/환불 사유 (취소되지 않았으면 null)", example = "고객 변심 환불")
         String cancelledReason,
+
+        @Schema(description = "주문 생성 시각 (ISO-8601 UTC)", example = "2026-06-06T09:00:00Z")
         Instant createdAt
 ) {
 

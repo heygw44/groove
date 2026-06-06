@@ -10,13 +10,21 @@ import com.groove.catalog.artist.domain.Artist;
 import com.groove.common.api.PageResponse;
 import com.groove.common.exception.ErrorCode;
 import com.groove.common.exception.ValidationException;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.SortDefault;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,6 +44,7 @@ import java.util.Set;
  * <p>{@code /artists/{id}/albums} 는 album 검색을 artistId 로 고정 위임한다 (#34) —
  * status=SELLING 강제, N+1 보존 정책은 {@code GET /albums} 와 동일.
  */
+@Tag(name = "아티스트", description = "아티스트 공개 조회 (비로그인 — 목록·단건 및 아티스트별 앨범 검색)")
 @RestController
 @RequestMapping("/api/v1/artists")
 @Validated
@@ -57,22 +66,42 @@ public class ArtistQueryController {
         this.albumService = albumService;
     }
 
+    @Operation(summary = "아티스트 목록 조회",
+            description = "아티스트를 페이징 조회한다. 기본 정렬은 id 오름차순.")
+    @ApiResponse(responseCode = "200", description = "아티스트 목록 조회 성공")
     @GetMapping
     public ResponseEntity<PageResponse<ArtistResponse>> list(
-            @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
         Page<Artist> page = artistService.findAll(pageable);
         return ResponseEntity.ok(PageResponse.from(page, ArtistResponse::from));
     }
 
+    @Operation(summary = "아티스트 단건 조회",
+            description = "ID 로 아티스트 단건을 조회한다.")
+    @ApiResponse(responseCode = "200", description = "아티스트 조회 성공")
+    @ApiResponse(responseCode = "400", description = "id 가 양수가 아님",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "404", description = "해당 ID 의 아티스트 없음",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @GetMapping("/{id}")
-    public ResponseEntity<ArtistResponse> get(@PathVariable @Positive Long id) {
+    public ResponseEntity<ArtistResponse> get(
+            @Parameter(description = "조회할 아티스트 ID", example = "1") @PathVariable @Positive Long id) {
         return ResponseEntity.ok(ArtistResponse.from(artistService.findById(id)));
     }
 
+    @Operation(summary = "아티스트별 앨범 검색",
+            description = "지정한 아티스트의 앨범을 페이징 조회한다. 경로 artistId 가 강제되며 query 의 artistId 와 다르면 400. "
+                    + "status=HIDDEN 차단·정렬 화이트리스트는 GET /albums 와 동일.")
+    @ApiResponse(responseCode = "200", description = "아티스트별 앨범 목록 조회 성공")
+    @ApiResponse(responseCode = "400", description = "입력 검증 실패 (status=HIDDEN, 경로·query artistId 불일치, 허용되지 않은 정렬 키 등)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "404", description = "해당 ID 의 아티스트 없음",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @GetMapping("/{id}/albums")
     public ResponseEntity<PageResponse<AlbumSummaryResponse>> albums(
-            @PathVariable @Positive Long id,
-            @Valid @ModelAttribute AlbumSearchRequest request,
+            @Parameter(description = "앨범을 조회할 아티스트 ID", example = "1") @PathVariable @Positive Long id,
+            @Valid @ParameterObject @ModelAttribute AlbumSearchRequest request,
+            @ParameterObject
             @PageableDefault(size = 20)
             @SortDefault(sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {

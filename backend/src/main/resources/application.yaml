@@ -64,6 +64,14 @@ logging:
     root: INFO
     com.groove: INFO
 
+# OpenAPI/Swagger UI (#156). 문서는 코드에서 자동 생성된다 — Swagger UI=/swagger-ui.html, OpenAPI JSON=/v3/api-docs.
+# 포트폴리오 데모용으로 전 프로파일에서 노출한다(실 운영 도입 시 prod 프로파일에서 enabled=false 권장).
+springdoc:
+  swagger-ui:
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+
 jwt:
   # 시크릿은 프로파일별 설정 또는 환경 변수로 주입한다 — 미설정 시 기동 실패가 의도된 동작.
   # 로컬 개발용 fallback 은 application-local.yaml, 테스트용은 application-test.yaml 에 정의.

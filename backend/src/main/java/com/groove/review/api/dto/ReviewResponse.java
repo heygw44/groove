@@ -1,6 +1,7 @@
 package com.groove.review.api.dto;
 
 import com.groove.review.domain.Review;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
@@ -17,10 +18,15 @@ import java.time.Instant;
  * @param createdAt  작성 시각
  */
 public record ReviewResponse(
+        @Schema(description = "리뷰 식별자", example = "100")
         Long reviewId,
+        @Schema(description = "작성자 이름 (마스킹 — 첫 글자만 노출)", example = "김**")
         String memberName,
+        @Schema(description = "평점 (1~5)", example = "5")
         int rating,
+        @Schema(description = "리뷰 내용 (비어 있으면 null)", example = "음질이 정말 좋아요. 추천합니다!")
         String content,
+        @Schema(description = "작성 시각 (ISO-8601 UTC)", example = "2026-07-01T10:30:00Z")
         Instant createdAt
 ) {
 

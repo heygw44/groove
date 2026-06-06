@@ -2,6 +2,7 @@ package com.groove.shipping.api.dto;
 
 import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
@@ -21,13 +22,21 @@ import java.time.Instant;
  * @param createdAt               배송 생성 시각
  */
 public record ShippingResponse(
+        @Schema(description = "운송장 번호 (UUID 형식)", example = "550e8400-e29b-41d4-a716-446655440000")
         String trackingNumber,
+        @Schema(description = "배송 상태 (PREPARING / SHIPPED / DELIVERED)", example = "SHIPPED")
         ShippingStatus status,
+        @Schema(description = "수령인 이름", example = "홍길동")
         String recipientName,
+        @Schema(description = "기본 주소", example = "서울특별시 강남구 테헤란로 123")
         String address,
+        @Schema(description = "LP 안전 포장 요청 여부", example = "true")
         boolean safePackagingRequested,
+        @Schema(description = "발송 시각 — PREPARING 동안 null")
         Instant shippedAt,
+        @Schema(description = "배송 완료 시각 — DELIVERED 전까지 null")
         Instant deliveredAt,
+        @Schema(description = "배송 생성 시각")
         Instant createdAt) {
 
     public static ShippingResponse from(Shipping shipping) {

@@ -1,5 +1,6 @@
 package com.groove.admin.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.Positive;
  * 직접지급은 정책의 발급 카운터를 증가시키지 않는다. 활성 회원만 허용(탈퇴자는 404).
  */
 public record AdminCouponGrantRequest(
+        @Schema(description = "쿠폰을 지급할 대상 회원 ID", example = "42")
         @NotNull @Positive Long memberId
 ) {
 }
