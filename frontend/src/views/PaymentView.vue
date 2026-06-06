@@ -22,7 +22,7 @@ const orderNumber = route.params.orderNumber
 const queryAmount = Number(route.query.amount)
 const displayAmount = Number.isFinite(queryAmount) ? queryAmount : null
 
-const method = ref('MOCK') // 로컬 mock PG 데모 기본값
+const method = ref('CARD') // 기본 결제 수단
 const idempotencyKey = ref(null) // 결제 시도당 1회 생성 → 더블클릭/재시도에도 재사용
 const payment = ref(null)
 const phase = ref('idle') // idle | requesting | polling | done | failed | timeout | submitted-guest
@@ -30,7 +30,7 @@ const failureKind = ref('') // 'request'(요청 자체 실패, 재시도 가능)
 const formError = ref('')
 
 const POLL_MS = 1500
-const MAX_ATTEMPTS = 20 // ~30s. 로컬 mock 은 1~5s 내 PAID/FAILED 전이.
+const MAX_ATTEMPTS = 20 // ~30s 폴링. 결제 승인은 보통 1~5s 내 PAID/FAILED 전이.
 const poller = usePolling()
 
 const busy = computed(() => phase.value === 'requesting' || phase.value === 'polling')

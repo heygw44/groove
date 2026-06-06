@@ -33,9 +33,8 @@ export const SHIPPING_STATUS_LABEL = {
 /** 배송 진행 단계(표시 순서) — 진행 바 렌더용. */
 export const SHIPPING_STEPS = ['PREPARING', 'SHIPPED', 'DELIVERED']
 
-/** PaymentMethod 선택 옵션. 로컬 mock PG 는 수단과 무관하게 자동 전이하므로 데모 기본값은 MOCK. */
+/** PaymentMethod 선택 옵션(결제 수단 드롭다운). */
 export const PAYMENT_METHOD_OPTIONS = [
-  { value: 'MOCK', label: '테스트 결제 (데모)' },
   { value: 'CARD', label: '신용/체크카드' },
   { value: 'BANK_TRANSFER', label: '계좌이체' },
 ]
@@ -135,7 +134,7 @@ export function couponDiscountLabel(coupon) {
 }
 
 /**
- * 쿠폰 발급 ApiError → 분류 키 — 쿠폰 목록 발급·동시성 데모가 공유하는 단일 출처.
+ * 쿠폰 발급 ApiError → 분류 키 — 쿠폰 목록(CouponListView) 발급의 단일 출처.
  * 429(wire code SYSTEM_002)=rate-limit, 409 소진/중복, 422 발급불가, 그 외 오류.
  * @returns {'SOLD_OUT'|'ALREADY'|'RATE_LIMIT'|'NOT_ISSUABLE'|'ERROR'}
  */

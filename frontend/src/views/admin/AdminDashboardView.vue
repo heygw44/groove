@@ -51,9 +51,9 @@ onMounted(load)
   <section>
     <h1 class="mb-6 font-display text-2xl font-bold text-vinyl-black">대시보드</h1>
 
-    <!-- 데모 가이드: 주문 status 는 결제 후 PAID 에 머문다 → 리뷰 데모는 관리자가 DELIVERED 까지 전환해야 가능. -->
+    <!-- 운영 안내: 결제 완료 주문은 PAID 에 머문다 → 관리자가 DELIVERED 까지 전환해야 구매자 리뷰 작성 가능. -->
     <div class="mb-6 rounded-lg border border-gold-400/40 bg-gold-400/10 px-4 py-3 text-sm text-vinyl-800">
-      <p class="font-medium text-vinyl-black">데모 진행 안내</p>
+      <p class="font-medium text-vinyl-black">주문 처리 안내</p>
       <p class="mt-1">
         결제가 끝난 주문은 <b>결제 완료(PAID)</b> 상태에 머뭅니다. 주문 상세에서
         <b>배송 준비 → 배송 중 → 배송 완료</b> 로 전환하면 해당 구매자가 리뷰를 작성할 수 있습니다.
