@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -83,7 +84,9 @@ class OpenApiSmokeTest {
     void swaggerConfig_listsGroups() throws Exception {
         mockMvc.perform(get("/v3/api-docs/swagger-config"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.urls").isArray());
+                .andExpect(jsonPath("$.urls").isArray())
+                // 그룹명이 실제로 노출되는지까지 고정(단순 배열 여부로는 누락을 못 잡음).
+                .andExpect(jsonPath("$.urls[*].name", hasItems("storefront", "admin")));
     }
 
     @Test

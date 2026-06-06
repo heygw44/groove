@@ -35,7 +35,8 @@ public record PaymentApiResponse(
         PaymentMethod method,
         @Schema(description = "PG 식별자", example = "MOCK")
         String pgProvider,
-        @Schema(description = "결제 완료 시각 — PENDING 동안 null")
+        @Schema(description = "결제 완료 시각 — PENDING 동안 null",
+                nullable = true, requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         Instant paidAt,
         @Schema(description = "결제 접수 시각")
         Instant createdAt) {

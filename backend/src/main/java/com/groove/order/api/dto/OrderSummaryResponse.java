@@ -27,7 +27,8 @@ public record OrderSummaryResponse(
         long totalAmount,
         @Schema(description = "주문 라인 수(수량 합 아님)", example = "2")
         int itemCount,
-        @Schema(description = "대표(첫 라인) 앨범명 스냅샷", example = "Abbey Road")
+        @Schema(description = "대표(첫 라인) 앨범명 스냅샷 — 라인이 없으면 null", example = "Abbey Road",
+                nullable = true, requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         String representativeAlbumTitle,
         @Schema(description = "주문 생성 시각")
         Instant createdAt

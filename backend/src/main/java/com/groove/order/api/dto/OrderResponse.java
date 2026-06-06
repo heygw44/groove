@@ -35,7 +35,8 @@ public record OrderResponse(
         List<OrderItemResponse> items,
         @Schema(description = "주문 시점 캡처된 배송지 스냅샷")
         OrderShippingResponse shipping,
-        @Schema(description = "운송장 번호 — 결제 완료 후 배송 생성 시 채워짐, 그 전에는 null", example = "550e8400-e29b-41d4-a716-446655440000")
+        @Schema(description = "운송장 번호 — 결제 완료 후 배송 생성 시 채워짐, 그 전에는 null", example = "550e8400-e29b-41d4-a716-446655440000",
+                nullable = true, requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         String trackingNumber,
         @Schema(description = "주문 생성 시각")
         Instant createdAt

@@ -38,7 +38,8 @@ public record ShippingInfoRequest(
         @Size(max = 20)
         String zipCode,
 
-        @Schema(description = "LP 안전 포장 요청 여부 (누락 시 false)", example = "true")
+        @Schema(description = "LP 안전 포장 요청 여부 (누락 시 false)", example = "true",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED, defaultValue = "false")
         boolean safePackagingRequested
 ) {
 }

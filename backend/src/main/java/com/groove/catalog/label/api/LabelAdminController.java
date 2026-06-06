@@ -29,7 +29,7 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * 레이블 관리자 CRUD (API §3.9, ADMIN 전용). {@link GenreAdminController} 와 동일한 패턴.
+ * 레이블 관리자 CRUD (API §3.9, ADMIN 전용). {@link com.groove.catalog.genre.api.GenreAdminController} 와 동일한 패턴.
  */
 @Tag(name = "레이블 (관리자)", description = "레이블 등록·조회·수정·삭제 (ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")

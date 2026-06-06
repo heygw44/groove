@@ -117,10 +117,17 @@ public class OpenApiConfig {
                             return;
                         }
                         operation.getResponses().forEach((code, response) -> {
-                            // 비-2xx 는 전부 ProblemDetail. springdoc 이 채워둔 기본 content(*/*)를
-                            // problem+json 으로 덮어써 일관된 에러 스키마를 보장한다.
                             boolean error = code.length() == 3 && !code.startsWith("2");
-                            if (error) {
+                            if (!error) {
+                                return;
+                            }
+                            // springdoc 이 채워둔 기본 placeholder(*/*) 또는 미지정일 때만 problem+json 으로 채운다.
+                            // 컨트롤러가 명시한 특수 에러 content 는 보존한다.
+                            Content existing = response.getContent();
+                            boolean replaceableDefault = existing != null
+                                    && existing.size() == 1
+                                    && existing.get("*/*") != null;
+                            if (existing == null || replaceableDefault) {
                                 response.setContent(problemContent);
                             }
                         });
