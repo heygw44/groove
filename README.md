@@ -93,6 +93,93 @@ npm run test:postman:report  # test:postman 과 동일 범위 + JUnit 리포트(
 
 자세한 엔드포인트 계약은 [docs/API.md](docs/API.md) 참고.
 
+## 아키텍처
+
+### 시스템 구성도
+
+```mermaid
+flowchart TB
+    subgraph clients["클라이언트 · 검증 도구"]
+        Vue["Vue 3 SPA"]
+        Postman["Postman · Newman"]
+        k6["k6 부하 테스트"]
+    end
+
+    subgraph app["Spring Boot App · 단일 JAR (Docker Compose)"]
+        direction TB
+        Sec["Security · JWT · Rate Limit"]
+        Domains["도메인 모듈<br/>auth · member · catalog · cart · order<br/>payment · shipping · review · coupon"]
+        MockPG["Mock PG<br/>(비동기 웹훅)"]
+        Sched["Scheduler<br/>결제 폴링 · 배송 진행"]
+    end
+
+    DB[("MySQL 8<br/>+ Flyway")]
+
+    clients -->|"HTTP /api/v1"| Sec
+    Sec --> Domains
+    Domains --> MockPG
+    MockPG -.->|"웹훅 콜백"| Domains
+    Sched --> Domains
+    Domains --> DB
+```
+
+> 모든 외부 의존(PG·메일·운송장)은 in-process Mock 으로 처리하는 단일 인스턴스 구조.
+> 조건부 확장(Redis·Prometheus·메시지 큐)은 W9 부하 측정 후 트리거 발생 시 도입 — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §11.
+
+### 주문 상태 머신
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING : 주문 생성
+    PENDING --> PAID : 결제 성공
+    PENDING --> PAYMENT_FAILED : 결제 실패
+    PENDING --> CANCELLED : 사용자 취소
+    PAID --> PREPARING : 배송 준비
+    PREPARING --> SHIPPED : 출고
+    SHIPPED --> DELIVERED : 배송 완료
+    DELIVERED --> COMPLETED : 자동 (n일 후)
+    PAID --> CANCELLED : 관리자 취소 (환불)
+    PREPARING --> CANCELLED : 관리자 취소 (환불)
+    PAYMENT_FAILED --> [*]
+    CANCELLED --> [*]
+    COMPLETED --> [*]
+```
+
+### 결제 처리 시퀀스 (Mock PG 비동기 웹훅)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant PC as PaymentController
+    participant IS as IdempotencyService
+    participant PS as PaymentService
+    participant MG as MockPaymentGateway
+    participant DB as MySQL
+    participant SS as ShippingService
+
+    C->>PC: POST /api/v1/payments (Idempotency-Key)
+    PC->>IS: 멱등성 체크
+    IS->>DB: key 조회
+    DB-->>IS: 미존재
+    IS-->>PC: 신규 처리 가능
+    PC->>PS: request(orderId, amount)
+    PS->>MG: request()
+    MG-->>PS: PENDING (즉시 응답)
+    PS->>DB: Payment 저장 (PENDING)
+    PS-->>PC: paymentId
+    PC-->>C: 200 OK
+
+    Note over MG: 1~5초 후
+
+    MG->>PC: 웹훅 콜백 (성공)
+    PC->>PS: handleWebhook(...)
+    PS->>DB: Payment PAID, Order PAID
+    PS->>SS: OrderPaidEvent (AFTER_COMMIT)
+    SS->>DB: Shipping 생성 (PREPARING)
+```
+
+> 전체 시퀀스·상태 전이 상세와 ADR 은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 참고.
+
 ## 프로젝트 문서
 
 | 문서 | 내용 |

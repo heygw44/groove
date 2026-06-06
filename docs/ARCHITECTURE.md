@@ -59,29 +59,30 @@
 
 ### 3.3 시스템 구성도
 
-```
-┌─────────────────────────────────────────────┐
-│         Docker Compose 환경                  │
-│                                              │
-│   ┌──────────────────┐    ┌─────────────┐   │
-│   │   Spring Boot    │───▶│   MySQL 8   │   │
-│   │      App         │    └─────────────┘   │
-│   │                  │                      │
-│   │  ┌────────────┐  │                      │
-│   │  │  Mock PG   │  │  (in-process module) │
-│   │  └────────────┘  │                      │
-│   └──────────────────┘                      │
-│           ▲                                  │
-└───────────┼──────────────────────────────────┘
-            │
-            │ HTTP
-            │
-   ┌────────┴────────┐
-   │                 │
-┌──┴──┐         ┌────┴─────┐
-│ k6  │         │ Postman  │
-│(부하)│        │ (검증)   │
-└─────┘         └──────────┘
+```mermaid
+flowchart TB
+    subgraph clients["클라이언트 · 검증 도구"]
+        Vue["Vue 3 SPA"]
+        Postman["Postman · Newman"]
+        k6["k6 부하 테스트"]
+    end
+
+    subgraph app["Spring Boot App · 단일 JAR (Docker Compose)"]
+        direction TB
+        Sec["Security · JWT · Rate Limit"]
+        Domains["도메인 모듈<br/>auth · member · catalog · cart · order<br/>payment · shipping · review · coupon"]
+        MockPG["Mock PG<br/>(비동기 웹훅)"]
+        Sched["Scheduler<br/>결제 폴링 · 배송 진행"]
+    end
+
+    DB[("MySQL 8<br/>+ Flyway")]
+
+    clients -->|"HTTP /api/v1"| Sec
+    Sec --> Domains
+    Domains --> MockPG
+    MockPG -.->|"웹훅 콜백"| Domains
+    Sched --> Domains
+    Domains --> DB
 ```
 
 **조건부 확장** (측정 후 트리거 발생 시):
