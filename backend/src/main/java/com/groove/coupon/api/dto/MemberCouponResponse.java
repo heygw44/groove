@@ -4,6 +4,7 @@ import com.groove.coupon.domain.Coupon;
 import com.groove.coupon.domain.CouponDiscountType;
 import com.groove.coupon.domain.MemberCoupon;
 import com.groove.coupon.domain.MemberCouponStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
@@ -21,17 +22,29 @@ import java.time.Instant;
  * (enum·Instant 만 사용) 왕복 가능해야 한다.
  */
 public record MemberCouponResponse(
+        @Schema(description = "회원 보유 쿠폰 식별자", example = "10")
         Long memberCouponId,
+        @Schema(description = "원본 쿠폰 식별자", example = "1")
         Long couponId,
+        @Schema(description = "쿠폰 이름", example = "신규 가입 10% 할인")
         String name,
+        @Schema(description = "할인 유형 (정액 FIXED · 정률 PERCENTAGE)", example = "PERCENTAGE")
         CouponDiscountType discountType,
+        @Schema(description = "할인 값 (FIXED 는 원 단위 금액, PERCENTAGE 는 할인율 %)", example = "10")
         long discountValue,
+        @Schema(description = "최대 할인 금액 (PERCENTAGE 상한, 무제한이면 null)", example = "5000")
         Long maxDiscountAmount,
+        @Schema(description = "최소 주문 금액 (원)", example = "30000")
         long minOrderAmount,
+        @Schema(description = "보유 쿠폰 상태 (발급 ISSUED · 사용 USED · 만료 EXPIRED 등)", example = "ISSUED")
         MemberCouponStatus status,
+        @Schema(description = "발급 시각 (ISO-8601 UTC)", example = "2026-06-06T09:00:00Z")
         Instant issuedAt,
+        @Schema(description = "쿠폰 사용 만료 시각 (ISO-8601 UTC)", example = "2026-12-31T23:59:59Z")
         Instant expiresAt,
+        @Schema(description = "사용 시각 (미사용이면 null)", example = "2026-07-01T10:30:00Z")
         Instant usedAt,
+        @Schema(description = "사용 시 연결된 주문 번호 (USED 가 아니면 null)", example = "ORD-20260701-0001")
         String orderNumber
 ) {
 

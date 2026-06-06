@@ -1,5 +1,6 @@
 package com.groove.member.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.NotBlank;
  * 형식 검증을 두면 정책이 바뀌었을 때 기존 비밀번호로 탈퇴조차 못 하는 모순이 생긴다.
  */
 public record WithdrawRequest(
+        @Schema(description = "본인 확인용 현재 비밀번호", example = "P@ssw0rd123!")
         @NotBlank
         String password
 ) {

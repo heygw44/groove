@@ -1,5 +1,6 @@
 package com.groove.order.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
@@ -10,6 +11,8 @@ import jakarta.validation.constraints.NotBlank;
  * 주문이 존재한 것으로 간주하며, 불일치 시 404 (정보 노출 회피).
  */
 public record GuestLookupRequest(
+        @Schema(description = "주문 시 입력한 게스트 이메일 (일치해야 조회됨)", example = "guest@example.com",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         @NotBlank @Email String email
 ) {
 }

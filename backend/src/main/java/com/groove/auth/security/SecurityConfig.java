@@ -71,6 +71,20 @@ public class SecurityConfig {
     };
 
     /**
+     * SpringDoc OpenAPI/Swagger UI 정적 문서 경로 (#156). 문서 자체는 인증 없이 열되, 실제 API 인가 정책
+     * (PUBLIC_* / ADMIN / anyRequest)은 그대로 유지된다 — Swagger UI 의 try-out 은 Authorize 에 넣은
+     * Bearer 토큰으로 동작한다. SPA forward 는 명시 화이트리스트({@link SpaRoutes#PATTERNS})라 이 경로를 침범하지 않는다.
+     */
+    private static final String[] SWAGGER_PATTERNS = {
+            "/v3/api-docs/**",
+            "/v3/api-docs.yaml",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            // swagger-ui webjar 자산만 — 비-swagger webjar 가 추후 추가돼도 공개되지 않도록 좁힌다.
+            "/webjars/swagger-ui/**"
+    };
+
+    /**
      * permitAll 로 여는 POST 진입점. 본인 GET 조회·cancel 등은 {@code anyRequest().authenticated()} 로
      * 그대로 보호한다.
      *
@@ -124,6 +138,7 @@ public class SecurityConfig {
                         // SPA clean-route 의 HTML 셸만 GET 공개 (#113). 실데이터 인가는 /api/v1/** 가 담당.
                         .requestMatchers(HttpMethod.GET, SpaRoutes.PATTERNS).permitAll()
                         .requestMatchers(PUBLIC_PATTERNS).permitAll()
+                        .requestMatchers(SWAGGER_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST_PATTERNS).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

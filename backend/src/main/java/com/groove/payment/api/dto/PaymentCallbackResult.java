@@ -2,6 +2,7 @@ package com.groove.payment.api.dto;
 
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * 결제 결과 콜백 처리 결과 (#W7-4). {@code POST /api/v1/payments/webhook} 응답 본문이자 폴링 스케줄러의
@@ -14,9 +15,13 @@ import com.groove.payment.domain.PaymentStatus;
  * @param paymentStatus   처리 후 결제 상태 ({@link Outcome#IGNORED} 면 {@code null})
  */
 public record PaymentCallbackResult(
+        @Schema(description = "콜백 처리 결과 분기", example = "APPLIED")
         Outcome outcome,
+        @Schema(description = "결제 식별자 — IGNORED 면 null", example = "1")
         Long paymentId,
+        @Schema(description = "PG 거래 식별자", example = "pg-tx-20260101-0001")
         String pgTransactionId,
+        @Schema(description = "처리 후 결제 상태 — IGNORED 면 null", example = "PAID")
         PaymentStatus paymentStatus) {
 
     public enum Outcome {

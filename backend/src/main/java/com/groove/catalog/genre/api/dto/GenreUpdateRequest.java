@@ -1,5 +1,6 @@
 package com.groove.catalog.genre.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.Size;
  * 필드가 늘어나면 {@code GenreCreateRequest} 와 분리된 검증 정책 도입을 검토한다.
  */
 public record GenreUpdateRequest(
+        @Schema(description = "장르 이름 (UNIQUE)", example = "Jazz", maxLength = 50)
         @NotBlank
         @Size(min = 1, max = 50)
         String name

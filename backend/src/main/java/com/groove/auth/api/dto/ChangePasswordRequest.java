@@ -1,5 +1,6 @@
 package com.groove.auth.api.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -16,9 +17,11 @@ import jakarta.validation.constraints.Size;
  * 의존성 없는 {@code @AssertTrue} 파생 메서드로 처리한다. 위반 시 400 (VALIDATION_FAILED).
  */
 public record ChangePasswordRequest(
+        @Schema(description = "현재 비밀번호", example = "P@ssw0rd123!")
         @NotBlank
         String currentPassword,
 
+        @Schema(description = "새 비밀번호 (최소 10자 + 영·숫·특수 각 1자 이상, 현재 비밀번호와 달라야 함)", example = "N3wP@ssw0rd!")
         @NotBlank
         @Size(min = PasswordPolicy.MIN_LENGTH, max = PasswordPolicy.MAX_LENGTH, message = PasswordPolicy.LENGTH_MESSAGE)
         @Pattern(regexp = PasswordPolicy.COMPLEXITY_REGEX, message = PasswordPolicy.COMPLEXITY_MESSAGE)

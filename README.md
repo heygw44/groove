@@ -31,6 +31,9 @@ docker-compose up -d
 
 # 3. 헬스체크
 curl http://localhost:8080/actuator/health
+
+# 4. API 문서 (Swagger UI) — 코드 자동 생성, Authorize 에 accessToken 입력 후 try-out
+open http://localhost:8080/swagger-ui.html
 ```
 
 > IDE / 터미널에서 `./gradlew bootRun`(백엔드는 `backend/` 하위, #131)으로 직접 실행하면 **local 프로파일이 자동 주입**된다(`build.gradle.kts`):

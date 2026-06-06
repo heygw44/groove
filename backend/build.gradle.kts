@@ -34,6 +34,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    // OpenAPI/Swagger UI 자동 생성 (#156). 3.x 가 Spring Boot 4.x 호환 라인(2.8.x 는 Boot 3.5 용).
+    // Spring Boot BOM 미관리 의존성이라 버전을 명시한다.
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
     implementation("org.flywaydb:flyway-mysql")
     implementation("com.bucket4j:bucket4j_jdk17-core:8.14.0")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.0")

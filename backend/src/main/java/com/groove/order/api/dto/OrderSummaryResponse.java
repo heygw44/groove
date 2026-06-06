@@ -3,6 +3,7 @@ package com.groove.order.api.dto;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 import java.util.List;
@@ -18,11 +19,18 @@ import java.util.List;
  * {@link Order#getItems()} 가 ArrayList 라 삽입 순이 그대로 보존된다.
  */
 public record OrderSummaryResponse(
+        @Schema(description = "주문번호 (형식: ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260101-AB12CD")
         String orderNumber,
+        @Schema(description = "주문 상태", example = "PAID")
         OrderStatus status,
+        @Schema(description = "상품 합계 금액(할인 전, KRW)", example = "45000")
         long totalAmount,
+        @Schema(description = "주문 라인 수(수량 합 아님)", example = "2")
         int itemCount,
+        @Schema(description = "대표(첫 라인) 앨범명 스냅샷 — 라인이 없으면 null", example = "Abbey Road",
+                nullable = true, requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         String representativeAlbumTitle,
+        @Schema(description = "주문 생성 시각")
         Instant createdAt
 ) {
 
