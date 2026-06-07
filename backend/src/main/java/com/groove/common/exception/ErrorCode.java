@@ -33,6 +33,7 @@ public enum ErrorCode {
     ARTIST_NOT_FOUND(HttpStatus.NOT_FOUND, "ARTIST_NOT_FOUND", "아티스트를 찾을 수 없습니다"),
     ARTIST_IN_USE(HttpStatus.CONFLICT, "ARTIST_IN_USE", "이 아티스트를 사용하는 앨범이 있어 삭제할 수 없습니다"),
     ALBUM_NOT_FOUND(HttpStatus.NOT_FOUND, "ALBUM_NOT_FOUND", "앨범을 찾을 수 없습니다"),
+    ALBUM_IN_USE(HttpStatus.CONFLICT, "ALBUM_IN_USE", "이 앨범을 참조하는 장바구니 또는 주문이 있어 삭제할 수 없습니다"),
     ALBUM_INVALID_STOCK(HttpStatus.BAD_REQUEST, "ALBUM_INVALID_STOCK", "재고는 0개 미만으로 설정할 수 없습니다"),
     ALBUM_NOT_PURCHASABLE(HttpStatus.UNPROCESSABLE_ENTITY, "ALBUM_NOT_PURCHASABLE", "현재 구매할 수 없는 앨범입니다"),
 

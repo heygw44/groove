@@ -5,6 +5,7 @@ import com.groove.catalog.album.api.dto.AlbumSummaryResponse;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumSpecs;
+import com.groove.catalog.album.exception.AlbumInUseException;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
@@ -15,8 +16,11 @@ import com.groove.catalog.genre.exception.GenreNotFoundException;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.catalog.label.exception.LabelNotFoundException;
+import com.groove.cart.domain.CartRepository;
+import com.groove.order.domain.OrderRepository;
 import com.groove.review.domain.AlbumRatingView;
 import com.groove.review.domain.ReviewRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -58,17 +62,23 @@ public class AlbumService {
     private final GenreRepository genreRepository;
     private final LabelRepository labelRepository;
     private final ReviewRepository reviewRepository;
+    private final CartRepository cartRepository;
+    private final OrderRepository orderRepository;
 
     public AlbumService(AlbumRepository albumRepository,
                         ArtistRepository artistRepository,
                         GenreRepository genreRepository,
                         LabelRepository labelRepository,
-                        ReviewRepository reviewRepository) {
+                        ReviewRepository reviewRepository,
+                        CartRepository cartRepository,
+                        OrderRepository orderRepository) {
         this.albumRepository = albumRepository;
         this.artistRepository = artistRepository;
         this.genreRepository = genreRepository;
         this.labelRepository = labelRepository;
         this.reviewRepository = reviewRepository;
+        this.cartRepository = cartRepository;
+        this.orderRepository = orderRepository;
     }
 
     @Transactional
@@ -127,11 +137,27 @@ public class AlbumService {
         return initializeAssociations(album);
     }
 
+    /**
+     * 앨범 삭제. 이 메서드가 트랜잭션 경계 소유자여야 한다 — 외부 {@code @Transactional} 안에서
+     * 호출하면 {@code flush()} 실패 시 바깥 트랜잭션이 rollback-only 로 물들어 경계에서
+     * {@code UnexpectedRollbackException} 이 발생하므로, 비트랜잭션 컨트롤러에서 직접 호출하는
+     * 현재 구조를 유지한다.
+     */
     @Transactional
     public void delete(Long id) {
         Album album = albumRepository.findById(id)
                 .orElseThrow(AlbumNotFoundException::new);
-        albumRepository.delete(album);
+        // cart_item/order_item 은 ON DELETE RESTRICT(V7/V8) 라 참조 중이면 409 로 거절한다.
+        // review 는 ON DELETE CASCADE(V13) 라 사전검사 대상이 아니며 앨범과 함께 삭제된다.
+        if (cartRepository.existsByAlbumId(id) || orderRepository.existsByAlbumId(id)) {
+            throw new AlbumInUseException();
+        }
+        try {
+            albumRepository.delete(album);
+            albumRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new AlbumInUseException(ex);
+        }
     }
 
     /**

@@ -11,7 +11,15 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
+import com.groove.cart.domain.Cart;
+import com.groove.cart.domain.CartRepository;
+import com.groove.member.domain.Member;
+import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.order.domain.Order;
+import com.groove.order.domain.OrderItem;
+import com.groove.order.domain.OrderRepository;
+import com.groove.order.domain.OrderShippingInfo;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,8 +37,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Album FK 가 활성화된 이후 Artist/Genre/Label 삭제가 album 참조 시 409 로 거절되는지 통합 검증.
- * 사전검사({@code existsByXxx_Id}) 경로가 작동함을 확인한다.
+ * 카탈로그 DELETE 의 IN_USE(409) 경로 통합 검증.
+ *
+ * <p>부모 도메인: Artist/Genre/Label 삭제가 album 참조 시 409 로 거절되는지 (사전검사 {@code existsByXxx_Id}).
+ * <p>Album: cart_item/order_item 이 참조 중이면 409 ALBUM_IN_USE 로 거절되는지 (#159) — 실제 @Query JPQL 실행과
+ * FK→예외 변환 경로를 end-to-end 로 확인한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -55,12 +66,25 @@ class CatalogDeleteInUseTest {
     private LabelRepository labelRepository;
 
     @Autowired
+    private CartRepository cartRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private MemberRepository memberRepository;
+
+    @Autowired
     private JwtProvider jwtProvider;
 
     private String adminBearer;
 
     @BeforeEach
     void setUp() {
+        // album 의 RESTRICT 참조(cart_item/order_item) 를 먼저 비워야 album deleteAllInBatch 가 FK 에 막히지 않는다.
+        // orders 를 참조하는 FK 는 모두 CASCADE/SET NULL 이라 deleteAllInBatch 가 안전하다.
+        orderRepository.deleteAllInBatch();
+        cartRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
         genreRepository.deleteAllInBatch();
@@ -68,18 +92,18 @@ class CatalogDeleteInUseTest {
         adminBearer = "Bearer " + jwtProvider.issueAccessToken(1L, MemberRole.ADMIN);
     }
 
-    private record Refs(Artist artist, Genre genre, Label label) {
+    private record Refs(Album album, Artist artist, Genre genre, Label label) {
     }
 
     private Refs persistAlbum() {
         Artist artist = artistRepository.saveAndFlush(Artist.create("A", null));
         Genre genre = genreRepository.saveAndFlush(Genre.create("G"));
         Label label = labelRepository.saveAndFlush(Label.create("L"));
-        albumRepository.saveAndFlush(Album.create(
+        Album album = albumRepository.saveAndFlush(Album.create(
                 "T", artist, genre, label,
                 (short) 2020, AlbumFormat.LP_12, 0L, 0,
                 AlbumStatus.SELLING, false, null, null));
-        return new Refs(artist, genre, label);
+        return new Refs(album, artist, genre, label);
     }
 
     @Test
@@ -113,5 +137,38 @@ class CatalogDeleteInUseTest {
                         .header(HttpHeaders.AUTHORIZATION, adminBearer))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("LABEL_IN_USE"));
+    }
+
+    @Test
+    @DisplayName("DELETE album → cart_item 이 참조 중이면 409 ALBUM_IN_USE")
+    void deleteAlbum_inUseByCart_returns409() throws Exception {
+        Album album = persistAlbum().album();
+        Long memberId = memberRepository.saveAndFlush(
+                Member.register("album-del-cart-" + System.nanoTime() + "@example.com",
+                        "$2a$12$hash", "장바구니", "01012345678")).getId();
+        Cart cart = Cart.openFor(memberId);
+        cart.addOrAccumulate(album, 1);
+        cartRepository.saveAndFlush(cart);
+
+        mockMvc.perform(delete("/api/v1/admin/albums/{id}", album.getId())
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ALBUM_IN_USE"));
+    }
+
+    @Test
+    @DisplayName("DELETE album → order_item 이 참조 중이면 409 ALBUM_IN_USE")
+    void deleteAlbum_inUseByOrder_returns409() throws Exception {
+        Album album = persistAlbum().album();
+        Order order = Order.placeForGuest("ORD-" + System.nanoTime(),
+                "guest@example.com", "01012345678",
+                new OrderShippingInfo("받는이", "01012345678", "서울시 강남구", "101동 202호", "06000", false));
+        order.addItem(OrderItem.create(album, 1));
+        orderRepository.saveAndFlush(order);
+
+        mockMvc.perform(delete("/api/v1/admin/albums/{id}", album.getId())
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ALBUM_IN_USE"));
     }
 }

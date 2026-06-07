@@ -4,6 +4,7 @@ import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
+import com.groove.catalog.album.exception.AlbumInUseException;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.catalog.album.exception.IllegalStockAdjustmentException;
 import com.groove.catalog.artist.domain.Artist;
@@ -17,6 +18,8 @@ import com.groove.catalog.album.api.dto.AlbumSummaryResponse;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.catalog.label.exception.LabelNotFoundException;
+import com.groove.cart.domain.CartRepository;
+import com.groove.order.domain.OrderRepository;
 import com.groove.review.domain.AlbumRatingView;
 import com.groove.review.domain.ReviewRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
@@ -38,6 +42,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,12 +59,22 @@ class AlbumServiceTest {
     private LabelRepository labelRepository;
     @Mock
     private ReviewRepository reviewRepository;
+    @Mock
+    private CartRepository cartRepository;
+    @Mock
+    private OrderRepository orderRepository;
 
     private AlbumService albumService;
 
     @BeforeEach
     void setUp() {
-        albumService = new AlbumService(albumRepository, artistRepository, genreRepository, labelRepository, reviewRepository);
+        albumService = new AlbumService(albumRepository, artistRepository, genreRepository, labelRepository, reviewRepository, cartRepository, orderRepository);
+    }
+
+    private Album sampleAlbum() {
+        return Album.create("X", Artist.create("A", null), Genre.create("G"), null,
+                (short) 1990, AlbumFormat.EP, 0L, 0,
+                AlbumStatus.SELLING, false, null, null);
     }
 
     private AlbumCommand baseCommand() {
@@ -222,16 +237,53 @@ class AlbumServiceTest {
     }
 
     @Test
-    @DisplayName("delete → 존재하면 entity 로 delete 호출")
+    @DisplayName("delete → 존재하고 참조 없으면 entity 로 delete 호출")
     void delete_callsDeleteEntity() {
-        Album existing = Album.create("X", Artist.create("A", null), Genre.create("G"), null,
-                (short) 1990, AlbumFormat.EP, 0L, 0,
-                AlbumStatus.SELLING, false, null, null);
+        Album existing = sampleAlbum();
         given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
 
         albumService.delete(1L);
 
+        then(cartRepository).should().existsByAlbumId(1L);
+        then(orderRepository).should().existsByAlbumId(1L);
         then(albumRepository).should().delete(existing);
+        then(albumRepository).should().flush();
+    }
+
+    @Test
+    @DisplayName("delete → cart_item 이 참조 중이면 409 AlbumInUse (delete 호출 안 함)")
+    void delete_throwsWhenReferencedByCart() {
+        Album existing = sampleAlbum();
+        given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(cartRepository.existsByAlbumId(1L)).willReturn(true);
+
+        assertThatThrownBy(() -> albumService.delete(1L))
+                .isInstanceOf(AlbumInUseException.class);
+        then(albumRepository).should(never()).delete(any(Album.class));
+    }
+
+    @Test
+    @DisplayName("delete → order_item 이 참조 중이면 409 AlbumInUse (delete 호출 안 함)")
+    void delete_throwsWhenReferencedByOrder() {
+        Album existing = sampleAlbum();
+        given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(orderRepository.existsByAlbumId(1L)).willReturn(true);
+
+        assertThatThrownBy(() -> albumService.delete(1L))
+                .isInstanceOf(AlbumInUseException.class);
+        then(albumRepository).should(never()).delete(any(Album.class));
+    }
+
+    @Test
+    @DisplayName("delete → 사전검사 통과 후 동시 INSERT race → DataIntegrityViolation 을 AlbumInUse 로 변환")
+    void delete_translatesIntegrityViolationToInUse() {
+        Album existing = sampleAlbum();
+        given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
+        willThrow(new DataIntegrityViolationException("fk_cart_item_album"))
+                .given(albumRepository).flush();
+
+        assertThatThrownBy(() -> albumService.delete(1L))
+                .isInstanceOf(AlbumInUseException.class);
     }
 
     @Test
