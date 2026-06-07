@@ -131,7 +131,10 @@ public class IdempotencyService {
             Instant now = clock.instant();
             if (record.isCompleted() && record.isExpired(now)) {
                 // TTL 지난 캐시는 없는 것으로 간주한다("TTL 후엔 새 처리") — 만료 행을 회수하고 처음부터 다시 처리.
-                deleteExpiredCompletedQuietly(idempotencyKey, now);
+                // status=COMPLETED AND expiresAt<=now 조건부 삭제: stale read 로 다른 스레드가 이미 새 마커로
+                // 교체했으면 0 행 삭제로 빠지고(정상) 다음 시도에서 재조회한다. 삭제 자체가 실패(DB 오류)하면
+                // 삼키지 않고 전파해 500 으로 끝낸다 — 경쟁 요청이 없는데 재시도 소진 끝에 409 로 호도하지 않기 위함.
+                requiresNewTx.executeWithoutResult(status -> repository.deleteExpiredCompleted(idempotencyKey, now));
                 continue;
             }
             if (record.fingerprintMismatch(requestFingerprint)) {
@@ -175,26 +178,17 @@ public class IdempotencyService {
         return result;
     }
 
-    /** 소유자가 처리 실패 시 자기 마커를 회수한다(무조건 삭제 — 소유자만 호출하므로 race 무관). */
+    /**
+     * 소유자가 처리 실패 시 자기 마커를 회수한다(무조건 삭제 — 소유자만 호출하므로 race 무관).
+     *
+     * <p>회수 실패는 best-effort 다 — 곧 재던질 원래 {@code action} 예외를 가리지 않도록 경고만 남긴다
+     * (TTL 정리가 회수). 만료 캐시 회수(위 replay 분기)와 달리 여기서 예외를 전파하면 원인 예외가 묻힌다.
+     */
     private void removeMarkerQuietly(String idempotencyKey) {
-        deleteQuietly("멱등성 마커 회수", idempotencyKey,
-                () -> requiresNewTx.executeWithoutResult(status -> repository.deleteByIdempotencyKey(idempotencyKey)));
-    }
-
-    private void deleteExpiredCompletedQuietly(String idempotencyKey, Instant now) {
-        // status=COMPLETED AND expiresAt<=now 조건부 삭제 — 그 사이 다른 스레드가 새 마커로 교체했으면
-        // 0 행 삭제로 빠진다(stale read 로 남의 IN_PROGRESS 마커를 지우는 race 방지). 0 행이면 다음
-        // 시도에서 재조회해 해당 마커 상태대로(409 또는 캐시) 처리된다.
-        deleteQuietly("만료된 멱등성 캐시 회수", idempotencyKey,
-                () -> requiresNewTx.executeWithoutResult(status -> repository.deleteExpiredCompleted(idempotencyKey, now)));
-    }
-
-    /** 마커 삭제는 best-effort 다 — 실패해도 원래 흐름을 막지 않고 경고만 남긴다(TTL 정리가 회수). */
-    private void deleteQuietly(String description, String idempotencyKey, Runnable deletion) {
         try {
-            deletion.run();
+            requiresNewTx.executeWithoutResult(status -> repository.deleteByIdempotencyKey(idempotencyKey));
         } catch (RuntimeException cleanupFailure) {
-            log.warn("{} 실패 key={} — TTL 정리로 회수 예정", description, idempotencyKey, cleanupFailure);
+            log.warn("멱등성 마커 회수 실패 key={} — TTL 정리로 회수 예정", idempotencyKey, cleanupFailure);
         }
     }
 
