@@ -105,6 +105,9 @@ groove:
   # 멱등성 인프라 (#W7-2). cleanup-cron 을 "-" 로 두면 정리 스케줄러가 비활성화된다.
   idempotency:
     ttl: ${IDEMPOTENCY_TTL:PT24H}
+    # IN_PROGRESS 마커 회수 유예 — 처리 중인 느린 action 의 마커가 TTL 경과만으로 삭제돼 이중 실행되는 것을
+    # 막는다. 최장 action 소요보다 충분히 길게 둔다 (#160).
+    in-progress-grace: ${IDEMPOTENCY_IN_PROGRESS_GRACE:PT1H}
     cleanup-cron: ${IDEMPOTENCY_CLEANUP_CRON:0 0 * * * *}
     cleanup-batch-size: ${IDEMPOTENCY_CLEANUP_BATCH_SIZE:1000}
   # 결제 웹훅 유실 대비 폴링 동기화 (#W7-4). PENDING 결제를 interval 마다 PG query() 로 조회한다.

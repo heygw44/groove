@@ -10,8 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -151,6 +153,43 @@ class IdempotencyServiceTest {
     }
 
     @Test
+    @DisplayName("TTL 지난 COMPLETED 캐시는 무시하고 action 재실행 후 새로 캐싱(#160)")
+    void expiredCompletedCache_isIgnored_andReprocessed() {
+        String key = UUID.randomUUID().toString();
+        saveExpiredCompleted(key, null, "{\"value\":\"stale\",\"n\":1}");
+        AtomicInteger counter = new AtomicInteger();
+
+        SampleResult result = idempotencyService.execute(key, SampleResult.class, () -> {
+            counter.incrementAndGet();
+            return new SampleResult("fresh", 2);
+        });
+
+        assertThat(counter.get()).isEqualTo(1);
+        assertThat(result).isEqualTo(new SampleResult("fresh", 2));
+
+        IdempotencyRecord reloaded = repository.findByIdempotencyKey(key).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
+        assertThat(reloaded.isExpired(Instant.now())).isFalse();
+        assertThat(reloaded.getResponseBody()).contains("fresh");
+    }
+
+    @Test
+    @DisplayName("TTL 지난 캐시는 지문이 달라도 mismatch 가 아니라 새로 처리(#160)")
+    void expiredCompletedCache_differentFingerprint_reprocessesWithoutMismatch() {
+        String key = UUID.randomUUID().toString();
+        saveExpiredCompleted(key, "fp-A", "{\"value\":\"stale\",\"n\":1}");
+        AtomicInteger counter = new AtomicInteger();
+
+        SampleResult result = idempotencyService.execute(key, "fp-B", SampleResult.class, () -> {
+            counter.incrementAndGet();
+            return new SampleResult("fresh", 2);
+        });
+
+        assertThat(counter.get()).isEqualTo(1);
+        assertThat(result).isEqualTo(new SampleResult("fresh", 2));
+    }
+
+    @Test
     @DisplayName("blank 키 — IllegalArgumentException")
     void blankKey_rejected() {
         assertThatIllegalArgumentException()
@@ -204,6 +243,14 @@ class IdempotencyServiceTest {
         assertThat(successes + conflicts).isEqualTo(threadCount);
         assertThat(repository.findByIdempotencyKey(key).orElseThrow().getStatus())
                 .isEqualTo(IdempotencyStatus.COMPLETED);
+    }
+
+    /** TTL 이 이미 지난 COMPLETED 캐시 행을 직접 심는다 — replay 만료 검사용. */
+    private void saveExpiredCompleted(String key, String fingerprint, String responseBody) {
+        IdempotencyRecord record = IdempotencyRecord.start(key, fingerprint, Duration.ofHours(1));
+        record.complete(SampleResult.class.getName(), responseBody);
+        ReflectionTestUtils.setField(record, "expiresAt", Instant.now().minus(Duration.ofMinutes(1)));
+        repository.saveAndFlush(record);
     }
 
     private static void sleepQuietly() {

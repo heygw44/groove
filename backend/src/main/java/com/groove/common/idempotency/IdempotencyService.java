@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -31,7 +33,8 @@ import java.util.function.Supplier;
  *       던지면 마커 행을 삭제(재시도 허용)하고 그 예외를 재던진다.</li>
  *   <li>INSERT 실패(키 충돌) → 마커를 독립 트랜잭션으로 재조회:
  *       <ul>
- *         <li>{@code COMPLETED} → (지문 불일치면 {@link IdempotencyKeyReuseMismatchException}) 캐시 결과 반환.</li>
+ *         <li>{@code COMPLETED} 이고 TTL 지났으면 → 만료 캐시를 회수하고 처음부터 다시 처리("TTL 후엔 새 처리").</li>
+ *         <li>{@code COMPLETED} (유효) → (지문 불일치면 {@link IdempotencyKeyReuseMismatchException}) 캐시 결과 반환.</li>
  *         <li>{@code IN_PROGRESS} → {@link IdempotencyConflictException} (409).</li>
  *         <li>마커가 사라졌으면(소유자 실패로 회수됨) 처음부터 다시 시도.</li>
  *       </ul></li>
@@ -51,9 +54,10 @@ import java.util.function.Supplier;
  *
  * <h2>알려진 한계</h2>
  * <ul>
- *   <li>{@code action} 커밋 직후 완료 갱신 트랜잭션이 실패하면 해당 키는 TTL 만료 전까지 409 다 —
- *       {@link IdempotencyRecordCleanupTask} 가 회수한다. {@code action} 의 부수효과는 이미 반영됐으므로
- *       이 키로 재시도하면 안 된다(새 키를 써야 한다).</li>
+ *   <li>{@code action} 커밋 직후 완료 갱신 트랜잭션이 실패하면 해당 키는 {@code IN_PROGRESS} 로 남아
+ *       {@code ttl + in-progress-grace} 동안 409 다 — {@link IdempotencyRecordCleanupTask} 가 그 후 회수한다
+ *       (처리 중 마커를 TTL 경과만으로 지워 action 이 이중 실행되는 것을 막기 위한 유예다). {@code action}
+ *       의 부수효과는 이미 반영됐으므로 이 키로 재시도하면 안 된다(새 키를 써야 한다).</li>
  *   <li>{@code action} 의 결과는 JSON 왕복 가능한 단순 DTO 여야 한다 — 직렬화 불가 시
  *       {@code action} 부수효과 반영 후 예외가 전파되며 마커가 {@code IN_PROGRESS} 로 남는다(위와 동일).</li>
  *   <li>동시 동일 키 요청에 대한 강한 단일 처리 검증은 #W11-1 통합 테스트에서 추가한다.</li>
@@ -70,15 +74,18 @@ public class IdempotencyService {
     private final IdempotencyRecordRepository repository;
     private final TransactionTemplate requiresNewTx;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
     private final Duration ttl;
 
     public IdempotencyService(IdempotencyRecordRepository repository,
                               @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
                               ObjectMapper objectMapper,
+                              Clock clock,
                               IdempotencyProperties properties) {
         this.repository = repository;
         this.requiresNewTx = requiresNewTx;
         this.objectMapper = objectMapper;
+        this.clock = clock;
         this.ttl = properties.ttl();
     }
 
@@ -121,6 +128,12 @@ public class IdempotencyService {
                 continue;
             }
             IdempotencyRecord record = existing.get();
+            Instant now = clock.instant();
+            if (record.isCompleted() && record.isExpired(now)) {
+                // TTL 지난 캐시는 없는 것으로 간주한다("TTL 후엔 새 처리") — 만료 행을 회수하고 처음부터 다시 처리.
+                deleteExpiredCompletedQuietly(idempotencyKey, now);
+                continue;
+            }
             if (record.fingerprintMismatch(requestFingerprint)) {
                 throw new IdempotencyKeyReuseMismatchException(idempotencyKey);
             }
@@ -168,6 +181,18 @@ public class IdempotencyService {
         } catch (RuntimeException cleanupFailure) {
             // 마커 회수 실패는 원래 예외 전파를 막지 않는다 — TTL 정리가 회수하므로 경고만 남긴다.
             log.warn("멱등성 마커 회수 실패 key={} — TTL 정리로 회수 예정", idempotencyKey, cleanupFailure);
+        }
+    }
+
+    private void deleteExpiredCompletedQuietly(String idempotencyKey, Instant now) {
+        try {
+            // status=COMPLETED AND expiresAt<now 조건부 삭제 — 그 사이 다른 스레드가 새 마커로 교체했으면
+            // 0 행 삭제로 빠진다(stale read 로 남의 IN_PROGRESS 마커를 지우는 race 방지). 0 행이면 다음
+            // 시도에서 재조회해 해당 마커 상태대로(409 또는 캐시) 처리된다.
+            requiresNewTx.executeWithoutResult(status -> repository.deleteExpiredCompleted(idempotencyKey, now));
+        } catch (RuntimeException cleanupFailure) {
+            // 만료 캐시 회수 실패는 멈출 이유가 아니다 — TTL 정리가 회수하므로 경고만 남긴다.
+            log.warn("만료된 멱등성 캐시 회수 실패 key={} — TTL 정리로 회수 예정", idempotencyKey, cleanupFailure);
         }
     }
 
