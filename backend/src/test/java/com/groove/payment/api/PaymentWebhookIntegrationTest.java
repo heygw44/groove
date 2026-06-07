@@ -12,6 +12,12 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
+import com.groove.coupon.domain.Coupon;
+import com.groove.coupon.domain.CouponDiscountType;
+import com.groove.coupon.domain.CouponRepository;
+import com.groove.coupon.domain.MemberCoupon;
+import com.groove.coupon.domain.MemberCouponRepository;
+import com.groove.coupon.domain.MemberCouponStatus;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
@@ -41,6 +47,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -82,6 +89,8 @@ class PaymentWebhookIntegrationTest {
     @Autowired private ArtistRepository artistRepository;
     @Autowired private GenreRepository genreRepository;
     @Autowired private LabelRepository labelRepository;
+    @Autowired private CouponRepository couponRepository;
+    @Autowired private MemberCouponRepository memberCouponRepository;
     @Autowired private MemberRepository memberRepository;
     @Autowired private JwtProvider jwtProvider;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
@@ -95,10 +104,13 @@ class PaymentWebhookIntegrationTest {
     @BeforeEach
     void setUp() {
         // FK 의존 순서: payment → orders → album → artist/genre/label, member.
+        // member_coupon 은 order_id·member_id·coupon_id DB FK 를 가지므로 orders/coupon/member 보다 먼저 정리.
         // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
         refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
+        memberCouponRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
+        couponRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
         genreRepository.deleteAllInBatch();
@@ -144,6 +156,17 @@ class PaymentWebhookIntegrationTest {
 
         var payment = paymentRepository.findByOrderId(orderId).orElseThrow();
         return new Created(payment.getId(), orderId, orderNumber, payment.getPgTransactionId());
+    }
+
+    /** 쿠폰을 발급해 주문에 사용(USED) 상태로 만든다 — OrderService.place 의 쿠폰 적용을 모사. */
+    private MemberCoupon issueAndUseCoupon(Long orderId, long discount) {
+        Coupon coupon = couponRepository.saveAndFlush(
+                Coupon.builder("정액-" + discount, CouponDiscountType.FIXED_AMOUNT, discount,
+                                Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS))
+                        .build());
+        MemberCoupon memberCoupon = MemberCoupon.issue(coupon, memberId);
+        memberCoupon.use(orderId);
+        return memberCouponRepository.saveAndFlush(memberCoupon);
     }
 
     private String webhookBody(String pgTransactionId, PaymentStatus result, String failureReason) {
@@ -204,6 +227,31 @@ class PaymentWebhookIntegrationTest {
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(currentStock()).isEqualTo(INITIAL_STOCK);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getFailureReason()).isEqualTo("카드 한도 초과");
+    }
+
+    @Test
+    @DisplayName("쿠폰 적용 주문 실패 웹훅 → 결제 FAILED·재고 복원·쿠폰 USED→ISSUED 복원 (이슈 #158)")
+    void webhook_failed_restoresAppliedCoupon() throws Exception {
+        Created c = createPendingPayment(2); // 100 → 98
+        MemberCoupon applied = issueAndUseCoupon(c.orderId(), 5_000L);
+        Long memberCouponId = applied.getId();
+        assertThat(applied.getStatus()).isEqualTo(MemberCouponStatus.USED);
+
+        mockMvc.perform(post("/api/v1/payments/webhook")
+                        .header(SIGNATURE_HEADER, WEBHOOK_SECRET)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(webhookBody(c.pgTransactionId(), PaymentStatus.FAILED, "카드 한도 초과")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("APPLIED"));
+
+        assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.FAILED);
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAYMENT_FAILED);
+        assertThat(currentStock()).isEqualTo(INITIAL_STOCK); // 재고 복원
+
+        MemberCoupon restored = memberCouponRepository.findById(memberCouponId).orElseThrow();
+        assertThat(restored.getStatus()).isEqualTo(MemberCouponStatus.ISSUED); // 다시 사용 가능
+        assertThat(restored.getOrderId()).isNull();
+        assertThat(restored.getUsedAt()).isNull();
     }
 
     @Test

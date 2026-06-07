@@ -1,5 +1,6 @@
 package com.groove.payment.application;
 
+import com.groove.coupon.application.CouponApplicationService;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderStatus;
@@ -29,8 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>PAID — Payment {@code PENDING→PAID}({@code paidAt} 기록), Order {@code PENDING→PAID},
  *       {@link OrderPaidEvent} 발행. 발행만 한다 — 후속 처리(배송 생성 등) 구독은 #W7-5.</li>
  *   <li>FAILED — 보상 트랜잭션: Payment {@code PENDING→FAILED}, Order {@code PENDING→PAYMENT_FAILED},
- *       각 OrderItem 의 album 재고 복원. 어느 단계든 실패하면 트랜잭션 전체가 롤백되어 다음 콜백/폴링에 재시도된다
- *       ({@code OrderService.cancel} 의 재고 복원과 같은 패턴 — Aggregate 조율은 도메인이 아닌 ApplicationService 책임).</li>
+ *       각 OrderItem 의 album 재고 복원 + 적용 쿠폰 {@code USED→ISSUED} 복원. 어느 단계든 실패하면 트랜잭션
+ *       전체가 롤백되어 다음 콜백/폴링에 재시도된다 ({@code OrderService.cancel} 의 보상과 같은 패턴 — Aggregate
+ *       조율은 도메인이 아닌 ApplicationService 책임). PAYMENT_FAILED 는 종착 상태라 cancel/refund 로 들어올 수
+ *       없으므로, 쿠폰 복원은 여기서 하지 않으면 영영 못 한다.</li>
  *   <li>알 수 없는 거래 / 이미 종착 상태 — 무해하게 무시(상태 전이 0회).</li>
  * </ul>
  *
@@ -48,10 +51,13 @@ public class PaymentCallbackService {
 
     private final PaymentRepository paymentRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final CouponApplicationService couponApplicationService;
 
-    public PaymentCallbackService(PaymentRepository paymentRepository, ApplicationEventPublisher eventPublisher) {
+    public PaymentCallbackService(PaymentRepository paymentRepository, ApplicationEventPublisher eventPublisher,
+                                  CouponApplicationService couponApplicationService) {
         this.paymentRepository = paymentRepository;
         this.eventPublisher = eventPublisher;
+        this.couponApplicationService = couponApplicationService;
     }
 
     /**
@@ -100,6 +106,11 @@ public class PaymentCallbackService {
                 item.getAlbum().adjustStock(item.getQuantity());
                 restored++;
             }
+            // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (cancel/refund 와 같은 보상 패턴, 재고 복원 직후).
+            // 미적용 주문은 no-op 이라 분기 없이 안전. PAYMENT_FAILED 는 종착 상태라 cancel/refund 로
+            // 들어올 수 없으므로 여기서 복원하지 않으면 쿠폰이 영구 USED 로 고착된다(이슈 #158).
+            // 복원 결과(스킵/이상)는 restoreForOrder 가 자체 WARN 으로 남긴다 — cancel/refund 와 동일하게 여기선 재고만 로깅.
+            couponApplicationService.restoreForOrder(order.getId());
             log.info("결제 실패(FAILED) 보상 트랜잭션: paymentId={}, order={}, 재고복원 {}건",
                     payment.getId(), order.getOrderNumber(), restored);
         }
