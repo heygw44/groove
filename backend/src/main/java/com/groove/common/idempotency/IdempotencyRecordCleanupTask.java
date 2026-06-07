@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -32,14 +33,17 @@ public class IdempotencyRecordCleanupTask {
 
     private final IdempotencyRecordRepository repository;
     private final TransactionTemplate requiresNewTx;
+    private final Clock clock;
     private final int batchSize;
     private final Duration inProgressGrace;
 
     public IdempotencyRecordCleanupTask(IdempotencyRecordRepository repository,
                                         @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
+                                        Clock clock,
                                         IdempotencyProperties properties) {
         this.repository = repository;
         this.requiresNewTx = requiresNewTx;
+        this.clock = clock;
         this.batchSize = properties.cleanupBatchSize();
         this.inProgressGrace = properties.inProgressGrace();
     }
@@ -47,7 +51,7 @@ public class IdempotencyRecordCleanupTask {
     @Scheduled(cron = "${groove.idempotency.cleanup-cron:0 0 * * * *}")
     public void cleanupExpired() {
         try {
-            int deleted = deleteExpired(Instant.now());
+            int deleted = deleteExpired(clock.instant());
             if (deleted > 0) {
                 log.info("만료된 멱등성 레코드 {}건 정리", deleted);
             }

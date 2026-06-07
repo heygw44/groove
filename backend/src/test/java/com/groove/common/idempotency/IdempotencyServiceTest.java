@@ -104,7 +104,7 @@ class IdempotencyServiceTest {
     @DisplayName("처리 중(IN_PROGRESS) 마커가 있으면 동일 키 요청은 409, action 미실행")
     void inProgressMarker_concurrentRequest_throws409() {
         String key = UUID.randomUUID().toString();
-        repository.saveAndFlush(IdempotencyRecord.start(key, null, Duration.ofHours(1)));
+        repository.saveAndFlush(IdempotencyRecord.start(key, null, Duration.ofHours(1), Instant.now()));
         AtomicInteger counter = new AtomicInteger();
 
         assertThatThrownBy(() -> idempotencyService.execute(key, SampleResult.class, () -> {
@@ -167,6 +167,7 @@ class IdempotencyServiceTest {
         assertThat(counter.get()).isEqualTo(1);
         assertThat(result).isEqualTo(new SampleResult("fresh", 2));
 
+        assertThat(repository.count()).isEqualTo(1);   // 만료 행은 교체됐고 중복 행이 남지 않는다
         IdempotencyRecord reloaded = repository.findByIdempotencyKey(key).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(reloaded.isExpired(Instant.now())).isFalse();
@@ -247,7 +248,7 @@ class IdempotencyServiceTest {
 
     /** TTL 이 이미 지난 COMPLETED 캐시 행을 직접 심는다 — replay 만료 검사용. */
     private void saveExpiredCompleted(String key, String fingerprint, String responseBody) {
-        IdempotencyRecord record = IdempotencyRecord.start(key, fingerprint, Duration.ofHours(1));
+        IdempotencyRecord record = IdempotencyRecord.start(key, fingerprint, Duration.ofHours(1), Instant.now());
         record.complete(SampleResult.class.getName(), responseBody);
         ReflectionTestUtils.setField(record, "expiresAt", Instant.now().minus(Duration.ofMinutes(1)));
         repository.saveAndFlush(record);

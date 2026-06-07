@@ -79,15 +79,17 @@ public class IdempotencyRecord extends BaseTimeEntity {
      * @param idempotencyKey     클라이언트 제공 키 (blank 불가)
      * @param requestFingerprint 요청 지문 (nullable)
      * @param ttl                보관 기간 (양수)
+     * @param now                기준 시각 — 호출자가 주입한 {@code Clock} 에서 읽은 값 (만료 판정·정리와 시간소스 일치)
      */
-    public static IdempotencyRecord start(String idempotencyKey, String requestFingerprint, Duration ttl) {
+    public static IdempotencyRecord start(String idempotencyKey, String requestFingerprint, Duration ttl, Instant now) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("idempotencyKey must not be blank");
         }
         if (ttl == null || ttl.isZero() || ttl.isNegative()) {
             throw new IllegalArgumentException("ttl must be positive");
         }
-        return new IdempotencyRecord(idempotencyKey, requestFingerprint, Instant.now().plus(ttl));
+        Objects.requireNonNull(now, "now must not be null");
+        return new IdempotencyRecord(idempotencyKey, requestFingerprint, now.plus(ttl));
     }
 
     /**
