@@ -5,6 +5,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -60,6 +62,15 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      * 는 차단 대상이 아니다.
      */
     boolean existsByMemberIdAndStatusIn(Long memberId, Collection<OrderStatus> statuses);
+
+    /**
+     * 앨범 삭제 차단 검사 (#159) — 해당 album 을 참조하는 order_item 존재 여부.
+     *
+     * <p>{@code order_item.album_id} 는 ON DELETE RESTRICT FK 다. {@code AlbumService.delete} 가
+     * 사전 검사로 호출해 {@code ALBUM_IN_USE}(409) 를 반환하고, 동시 INSERT race 는 DB FK 가 최종 방어한다.
+     */
+    @Query("SELECT CASE WHEN COUNT(oi) > 0 THEN true ELSE false END FROM OrderItem oi WHERE oi.album.id = :albumId")
+    boolean existsByAlbumId(@Param("albumId") Long albumId);
 
     /**
      * 내 쿠폰함(#137) 의 사용 완료 쿠폰 → 주문번호 일괄 resolve 전용 경량 프로젝션.

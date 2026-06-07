@@ -124,11 +124,13 @@ public class AlbumAdminController {
     }
 
     @Operation(summary = "앨범 삭제",
-            description = "앨범을 삭제한다. ADMIN 권한 필요.")
+            description = "앨범을 삭제한다. 해당 앨범을 참조하는 장바구니/주문이 있으면 삭제할 수 없다(409). "
+                    + "작성된 리뷰는 앨범과 함께 삭제된다. ADMIN 권한 필요.")
     @ApiResponse(responseCode = "204", description = "삭제 성공 (본문 없음)")
     @ApiResponse(responseCode = "401", description = "미인증 (토큰 없음 · 만료 · 무효)")
     @ApiResponse(responseCode = "403", description = "권한 부족 (ADMIN 아님)")
     @ApiResponse(responseCode = "404", description = "앨범 미존재")
+    @ApiResponse(responseCode = "409", description = "이 앨범을 참조하는 장바구니/주문이 있어 삭제 불가")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable @Positive @Parameter(description = "앨범 ID") Long id) {
         albumService.delete(id);

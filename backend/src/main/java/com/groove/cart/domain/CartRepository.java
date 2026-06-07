@@ -2,6 +2,7 @@ package com.groove.cart.domain;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 
@@ -19,4 +20,13 @@ public interface CartRepository extends JpaRepository<Cart, Long> {
 
     @Query("SELECT c FROM Cart c LEFT JOIN FETCH c.items WHERE c.memberId = :memberId")
     Optional<Cart> findByMemberIdWithItems(Long memberId);
+
+    /**
+     * 앨범 삭제 차단 검사 (#159) — 해당 album 을 참조하는 cart_item 존재 여부.
+     *
+     * <p>{@code cart_item.album_id} 는 ON DELETE RESTRICT FK 다. {@code AlbumService.delete} 가
+     * 사전 검사로 호출해 {@code ALBUM_IN_USE}(409) 를 반환하고, 동시 INSERT race 는 DB FK 가 최종 방어한다.
+     */
+    @Query("SELECT CASE WHEN COUNT(ci) > 0 THEN true ELSE false END FROM CartItem ci WHERE ci.album.id = :albumId")
+    boolean existsByAlbumId(@Param("albumId") Long albumId);
 }
