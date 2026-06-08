@@ -484,6 +484,8 @@ volumes:
 
 → 저장소 미포함, `.env.example`만 커밋
 
+> **시크릿 fail-fast (#165)**: `JWT_SECRET`·`PAYMENT_MOCK_WEBHOOK_SECRET` 은 `.env.example` 의 플레이스홀더(`change-this-*`) 또는 `change-this`/`change-me`/`changeme` 마커를 포함하면 `SecretPlaceholderGuard` 가 기동을 거부한다. 길이 검증만으로는 49바이트 플레이스홀더의 복붙 배포(관리자 JWT 위조)를 막지 못해 값 블랙리스트를 추가했다. local/test 더미값(`local-dev-*`/`test-*`)은 영향 없음.
+
 ### 10.4 빌드 (Gradle + 프론트 통합)
 
 - 빌드 스크립트: `backend/build.gradle.kts` (Kotlin DSL), Java 21 toolchain, Spring Boot.

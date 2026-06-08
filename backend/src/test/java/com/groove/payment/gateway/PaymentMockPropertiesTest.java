@@ -97,6 +97,17 @@ class PaymentMockPropertiesTest {
     }
 
     @Test
+    @DisplayName(".env.example 의 webhook-secret 플레이스홀더는 거부한다 (이슈 #165)")
+    void placeholderSecret_throws() {
+        assertThatThrownBy(() -> new PaymentMockProperties(
+                0.5, Duration.ofMillis(100), Duration.ofMillis(500),
+                Duration.ofSeconds(1), Duration.ofSeconds(5),
+                "change-this-mock-webhook-secret-in-production"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(".env.example");
+    }
+
+    @Test
     @DisplayName("접근자는 입력값을 그대로 반환한다")
     void accessors() {
         PaymentMockProperties p = valid();

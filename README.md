@@ -25,6 +25,8 @@ LP 전문 이커머스 백엔드 — 인증, 카탈로그, 주문/결제/배송 
 # 1. 환경변수 설정
 cp .env.example .env
 # .env 파일에서 DB_PASSWORD, JWT_SECRET 수정
+#  └ JWT_SECRET / PAYMENT_MOCK_WEBHOOK_SECRET 는 반드시 고유값으로 교체할 것.
+#    .env.example 의 플레이스홀더 그대로면 기동이 거부된다(#165).
 
 # 2. 실행 (Docker 필요)
 docker-compose up -d
