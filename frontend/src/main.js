@@ -16,10 +16,16 @@ app.use(router)
 // 보호 라우트를 미인증으로 오판하지 않는다. 실패하면 stale 힌트를 정리한다. 게스트(힌트 없음)는
 // refresh 호출 없이 즉시 마운트한다.
 async function boot() {
-  const auth = useAuthStore(pinia)
-  if (auth.email && !auth.isAuthenticated) {
-    const restored = await tryRefresh()
-    if (!restored) auth.logout()
+  // 세션 복원은 best-effort — tryRefresh 는 내부에서 예외를 삼키지만, useAuthStore/pinia 등
+  // 예상 밖 동기 예외가 나도 앱은 반드시 마운트되도록 복원 로직만 try 로 감싼다(CodeRabbit).
+  try {
+    const auth = useAuthStore(pinia)
+    if (auth.email && !auth.isAuthenticated) {
+      const restored = await tryRefresh()
+      if (!restored) auth.logout()
+    }
+  } catch (e) {
+    console.error('세션 복원 실패 — 게스트 상태로 마운트:', e)
   }
   app.mount('#app')
 }
