@@ -192,7 +192,7 @@ class PaymentWebhookIntegrationTest {
     }
 
     @Test
-    @DisplayName("정상 PAID 웹훅 → 200, 결제 PAID·주문 PAID·paidAt 기록")
+    @DisplayName("정상 PAID 웹훅 → 200, 결제 PAID·주문 PREPARING(배송 생성 락스텝)·paidAt 기록")
     void webhook_paid_confirmsPaymentAndOrder() throws Exception {
         Created c = createPendingPayment(1);
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PENDING);
@@ -206,7 +206,8 @@ class PaymentWebhookIntegrationTest {
                 .andExpect(jsonPath("$.paymentStatus").value("PAID"));
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
+        // 결제 확정 + AFTER_COMMIT 배송 생성 → 주문은 PAID 를 거쳐 PREPARING 으로 락스텝 전진 (이슈 #161)
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PREPARING);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getPaidAt()).isNotNull();
     }
 
@@ -339,7 +340,7 @@ class PaymentWebhookIntegrationTest {
         reconciliationScheduler.reconcilePendingPayments();
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID); // mock query() → PAID (success-rate=1.0)
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PREPARING); // 배송 생성 락스텝 (이슈 #161)
     }
 
     @Test
@@ -352,7 +353,7 @@ class PaymentWebhookIntegrationTest {
         webhookDispatcher.dispatch(notification);
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PREPARING); // 배송 생성 락스텝 (이슈 #161)
     }
 
     @Test

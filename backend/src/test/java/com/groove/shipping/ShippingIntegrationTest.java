@@ -2,6 +2,7 @@ package com.groove.shipping;
 
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
+import com.groove.order.domain.OrderStatus;
 import com.groove.order.event.OrderPaidEvent;
 import com.groove.shipping.application.ShippingProgressScheduler;
 import com.groove.shipping.domain.Shipping;
@@ -74,9 +75,24 @@ class ShippingIntegrationTest {
                         "guest@example.com", "01099998888"));
     }
 
+    /**
+     * 결제 콜백을 재현한다 — 같은 트랜잭션에서 주문을 PAID 로 전이시키고 {@code OrderPaidEvent} 를 발행한다
+     * ({@code PaymentCallbackService.applyResult} 와 동일). AFTER_COMMIT 으로 배송이 생성되며 주문은 PREPARING 으로
+     * 락스텝 전진한다. 멱등 호출(같은 이벤트 재전달)에 대비해 이미 PENDING 이 아니면 전이를 건너뛴다.
+     */
     private void publishOrderPaid(Order order) {
-        tx.executeWithoutResult(s ->
-                publisher.publishEvent(new OrderPaidEvent(order.getId(), order.getOrderNumber(), order.getMemberId(), 1L)));
+        tx.executeWithoutResult(s -> {
+            Order managed = orderRepository.findById(order.getId()).orElseThrow();
+            if (managed.getStatus() == OrderStatus.PENDING) {
+                managed.changeStatus(OrderStatus.PAID, null);
+            }
+            publisher.publishEvent(
+                    new OrderPaidEvent(managed.getId(), managed.getOrderNumber(), managed.getMemberId(), 1L));
+        });
+    }
+
+    private OrderStatus orderStatus(Long orderId) {
+        return orderRepository.findById(orderId).orElseThrow().getStatus();
     }
 
     @Test
@@ -94,32 +110,41 @@ class ShippingIntegrationTest {
         assertThat(shipping.getRecipientName()).isEqualTo("김철수");
         assertThat(shipping.getZipCode()).isEqualTo("06234");
         assertThat(shipping.isSafePackagingRequested()).isFalse();
+        // 배송 생성에 맞춰 주문도 PREPARING 으로 락스텝 전진 (이슈 #161)
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
 
-        // 같은 이벤트 재전달 → 여전히 1건
+        // 같은 이벤트 재전달 → 여전히 1건, 주문도 PREPARING 유지(중복 전이 없음)
         publishOrderPaid(order);
         assertThat(shippingRepository.findAll()).hasSize(1);
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
     }
 
     @Test
-    @DisplayName("자동 진행 스케줄러 — PREPARING → SHIPPED → DELIVERED 한 단계씩, 종착 후 무변화")
+    @DisplayName("자동 진행 스케줄러 — 배송·주문이 락스텝으로 SHIPPED → DELIVERED, 종착 후 무변화 (이슈 #161)")
     void progressScheduler_advancesOneStepPerRun() {
         Order order = persistGuestOrder();
         publishOrderPaid(order);
         Long shippingId = shippingRepository.findAll().get(0).getId();
+        // 결제→배송 생성 직후: 배송·주문 모두 PREPARING
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
 
         progressScheduler.progressShipments();
         Shipping afterFirst = shippingRepository.findById(shippingId).orElseThrow();
         assertThat(afterFirst.getStatus()).isEqualTo(ShippingStatus.SHIPPED);
         assertThat(afterFirst.getShippedAt()).isNotNull();
         assertThat(afterFirst.getDeliveredAt()).isNull();
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.SHIPPED);
 
         progressScheduler.progressShipments();
         Shipping afterSecond = shippingRepository.findById(shippingId).orElseThrow();
         assertThat(afterSecond.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
         assertThat(afterSecond.getDeliveredAt()).isNotNull();
+        // 배송 완료 → 주문도 DELIVERED 에 도달해 리뷰 작성 자격을 만족한다
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.DELIVERED);
 
         progressScheduler.progressShipments();
         assertThat(shippingRepository.findById(shippingId).orElseThrow().getStatus()).isEqualTo(ShippingStatus.DELIVERED);
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.DELIVERED);
     }
 
     @Test

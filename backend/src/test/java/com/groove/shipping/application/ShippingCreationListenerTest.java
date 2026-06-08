@@ -2,6 +2,7 @@ package com.groove.shipping.application;
 
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
+import com.groove.order.domain.OrderStatus;
 import com.groove.order.event.OrderPaidEvent;
 import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
@@ -47,9 +48,10 @@ class ShippingCreationListenerTest {
     }
 
     @Test
-    @DisplayName("정상 — 주문 배송지 스냅샷으로 PREPARING 배송 생성 + 운송장 발급")
+    @DisplayName("정상 — PREPARING 배송 생성 + 운송장 발급 + 주문도 PAID→PREPARING 락스텝 전이")
     void createsPreparingShipping() {
         Order order = OrderFixtures.memberOrder("ORD-20260512-A1B2C3", 1L);
+        order.changeStatus(OrderStatus.PAID, null); // 결제 직후 상태를 재현
         given(shippingRepository.existsByOrderId(7L)).willReturn(false);
         given(orderRepository.findById(7L)).willReturn(Optional.of(order));
         given(trackingNumberGenerator.generate()).willReturn(TRACKING);
@@ -63,6 +65,22 @@ class ShippingCreationListenerTest {
         assertThat(saved.getTrackingNumber()).isEqualTo(TRACKING);
         assertThat(saved.getRecipientName()).isEqualTo(order.getShippingInfo().recipientName());
         assertThat(saved.getZipCode()).isEqualTo(order.getShippingInfo().zipCode());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PREPARING);
+    }
+
+    @Test
+    @DisplayName("주문이 PAID 가 아니면(취소됨) 배송은 생성하되 주문 상태는 전이하지 않는다 — 예외 없음")
+    void skipsOrderTransitionWhenOrderNotPaid() {
+        Order order = OrderFixtures.memberOrder("ORD-20260512-A1B2C3", 1L);
+        order.changeStatus(OrderStatus.CANCELLED, "취소");
+        given(shippingRepository.existsByOrderId(7L)).willReturn(false);
+        given(orderRepository.findById(7L)).willReturn(Optional.of(order));
+        given(trackingNumberGenerator.generate()).willReturn(TRACKING);
+
+        assertThatCode(() -> listener.onOrderPaid(EVENT)).doesNotThrowAnyException();
+
+        verify(shippingRepository).saveAndFlush(any());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 
     @Test

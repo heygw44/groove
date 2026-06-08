@@ -2,6 +2,7 @@ package com.groove.shipping.application;
 
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
+import com.groove.order.domain.OrderStatus;
 import com.groove.order.event.OrderPaidEvent;
 import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
@@ -68,6 +69,9 @@ public class ShippingCreationListener {
             // 운송장 번호를 주문에 비정규화한다(이슈 #116) — order 는 이 REQUIRES_NEW 트랜잭션에서 로드된 관리 상태라
             // 더티체킹으로 커밋 시 반영된다. 주문 상세 응답이 운송장 번호를 노출해 프론트가 배송 추적을 연결한다.
             order.recordTrackingNumber(shipping.getTrackingNumber());
+            // 배송 생성(PREPARING)에 맞춰 주문도 PAID→PREPARING 으로 락스텝 전진시킨다(이슈 #161). advanceTo 는 합법
+            // 전이일 때만 바꾸므로(환불/관리자 선전이로 PAID 가 아니면 무해 무시) 예외가 아래 catch 로 새지 않는다.
+            order.advanceTo(OrderStatus.PREPARING);
             log.info("배송 생성: order={}, tracking={}", order.getOrderNumber(), shipping.getTrackingNumber());
         } catch (DataIntegrityViolationException e) {
             log.info("배송 생성 건너뜀: order={} 이미 존재(중복 이벤트/경합)", event.orderNumber());

@@ -16,7 +16,6 @@ import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
-import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
 import com.groove.payment.domain.PaymentRepository;
@@ -43,8 +42,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
@@ -82,13 +79,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>멱등성 — 동일 {@code Idempotency-Key} 동시 결제 요청 → 단일 {@code Payment}</li>
  * </ul>
  *
- * <p><strong>주의 — 주문 상태 브리지:</strong> 배송 상태(PREPARING→SHIPPED→DELIVERED) 자동 진행은
- * {@code ShippingProgressScheduler} 가 {@code Shipping} 엔티티만 전이시키고, 이를 {@code Order} 상태로
- * 동기화하는 와이어링(또는 관리자 주문 상태 변경 API)은 아직 없다. 리뷰 작성 사전조건은
- * {@code order.status ∈ {DELIVERED, COMPLETED}} 이므로, 본 테스트는 배송을 실제 스케줄러로 끝까지 민 뒤
- * {@link #advanceOrderToDelivered(String)} 로 주문 상태를 리포지터리에서 직접 끌어올려 브리지한다
- * (도메인별 {@code ReviewApiIntegrationTest} 와 동일한 한계·동일한 처리). 주문↔배송 상태 동기화 와이어링은
- * 별도 이슈에서 다룬다.
+ * <p><strong>주문↔배송 상태 동기화(이슈 #161):</strong> 배송 자동 진행({@code ShippingProgressScheduler})이
+ * {@code Shipping} 을 PREPARING→SHIPPED→DELIVERED 로 밀 때, {@code ShippingCreationListener}/{@code ShippingService}
+ * 가 같은 트랜잭션에서 {@code Order} 도 락스텝으로 전진시킨다(배송 생성=PREPARING, SHIPPED, DELIVERED 1:1 대응).
+ * 따라서 배송이 DELIVERED 에 도달하면 주문도 자동으로 DELIVERED 가 되어 리뷰 작성 사전조건
+ * ({@code order.status ∈ {DELIVERED, COMPLETED}})을 만족한다 — 별도의 수동 브리지가 필요 없다.
  *
  * <p>결제 확정은 {@code payment.mock.auto-webhook=false} 로 인프로세스 자동 웹훅을 꺼 결정적으로 검증한다 —
  * {@code POST /api/v1/payments/webhook} 를 직접 호출하고({@code PaymentWebhookIntegrationTest} 와 동일 패턴),
@@ -134,16 +129,12 @@ class FullPurchaseJourneyE2ETest {
     @Autowired private ShippingRepository shippingRepository;
     @Autowired private ReviewRepository reviewRepository;
     @Autowired private ShippingProgressScheduler shippingProgressScheduler;
-    @Autowired private PlatformTransactionManager txManager;
 
-    private TransactionTemplate tx;
     private Long album1Id;
     private Long album2Id;
 
     @BeforeEach
     void setUp() {
-        tx = new TransactionTemplate(txManager);
-
         cleanAll();
 
         Long artistId = artistRepository.saveAndFlush(Artist.create("The Beatles", "리버풀 출신 4인조")).getId();
@@ -213,9 +204,9 @@ class FullPurchaseJourneyE2ETest {
         String pgTransactionId = requestPayment(bearer, orderNumber, "idem-" + orderNumber);
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.PENDING);
 
-        // 5) PAID 웹훅 → 결제·주문 확정
+        // 5) PAID 웹훅 → 결제 확정 + (AFTER_COMMIT) 배송 생성에 맞춰 주문은 PREPARING 으로 락스텝 전진 (이슈 #161)
         confirmPaymentPaid(pgTransactionId);
-        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PAID);
+        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PREPARING);
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.PAID);
 
         // 6) OrderPaidEvent(AFTER_COMMIT) → 배송 자동 생성 (비동기) — 배송지 스냅샷·운송장 발급
@@ -235,14 +226,14 @@ class FullPurchaseJourneyE2ETest {
                 .andExpect(jsonPath("$.discountAmount").value(0))
                 .andExpect(jsonPath("$.payableAmount").value((int) expectedTotal));
 
-        // 7) 자동 진행 스케줄러 — PREPARING → SHIPPED → DELIVERED (테스트 프로파일은 단계 지연 0)
+        // 7) 자동 진행 스케줄러 — 배송·주문이 락스텝으로 PREPARING → SHIPPED → DELIVERED (테스트 프로파일은 단계 지연 0)
         progressShippingToDelivered();
         getShipping(trackingNumber)
                 .andExpect(jsonPath("$.status").value("DELIVERED"))
                 .andExpect(jsonPath("$.deliveredAt").exists());
 
-        // 8) 주문 상태 브리지 (클래스 javadoc 참조) — 리뷰 사전조건(DELIVERED) 충족용
-        advanceOrderToDelivered(orderNumber);
+        // 8) 배송 완료에 맞춰 주문도 자동으로 DELIVERED — 리뷰 사전조건 충족, 수동 브리지 불필요 (이슈 #161)
+        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.DELIVERED);
 
         // 9) 리뷰 작성 (실 API)
         postReview(bearer, orderNumber, album1Id, 5, "음질 정말 좋네요")
@@ -275,7 +266,7 @@ class FullPurchaseJourneyE2ETest {
         // 게스트도 결제 시작 가능 (POST /payments permitAll)
         String pgTransactionId = requestPayment(null, orderNumber, "idem-" + orderNumber);
         confirmPaymentPaid(pgTransactionId);
-        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PAID);
+        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PREPARING); // 배송 생성에 맞춰 락스텝 전진 (이슈 #161)
 
         Shipping shipping = awaitShippingCreated();
 
@@ -292,10 +283,10 @@ class FullPurchaseJourneyE2ETest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
 
-        // 배송을 DELIVERED 까지 민 뒤에도, 게스트 주문(memberId 부재)은 리뷰 작성 단계에서 403 으로 막힌다.
+        // 배송을 DELIVERED 까지 민 뒤(주문도 자동 DELIVERED)에도, 게스트 주문(memberId 부재)은 리뷰 작성 단계에서 403 으로 막힌다.
         progressShippingToDelivered();
         getShipping(shipping.getTrackingNumber()).andExpect(jsonPath("$.status").value("DELIVERED"));
-        advanceOrderToDelivered(orderNumber);
+        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.DELIVERED);
 
         Long someMemberId = memberRepository.saveAndFlush(
                 Member.register("member@example.com", DUMMY_PASSWORD_HASH, "박지성", "01000000009")).getId();
@@ -513,19 +504,6 @@ class FullPurchaseJourneyE2ETest {
         List<Shipping> all = shippingRepository.findAll();
         assertThat(all).hasSize(1);
         return all.get(0);
-    }
-
-    /**
-     * 배송 자동 진행이 {@code Order} 상태로 동기화되는 경로가 아직 없어, 리뷰 사전조건(DELIVERED)을 위해
-     * 주문 상태를 PAID → PREPARING → SHIPPED → DELIVERED 로 직접 끌어올린다 (클래스 javadoc 참조).
-     */
-    private void advanceOrderToDelivered(String orderNumber) {
-        tx.executeWithoutResult(status -> {
-            Order order = orderRepository.findByOrderNumber(orderNumber).orElseThrow();
-            order.changeStatus(OrderStatus.PREPARING, null);
-            order.changeStatus(OrderStatus.SHIPPED, null);
-            order.changeStatus(OrderStatus.DELIVERED, null);
-        });
     }
 
     private OrderStatus orderStatusOf(String orderNumber) {
