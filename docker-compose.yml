@@ -20,6 +20,8 @@ services:
 
   app:
     # 백엔드는 backend/ 하위(#131). 컨텍스트는 루트 유지 — Dockerfile 이 frontend/ 도 COPY 해 UI 통합 빌드.
+    # 단일 인스턴스 전제 — deploy.replicas 등으로 수평 확장하면 rate limit 버킷(인스턴스 로컬 Caffeine)이
+    # 인스턴스별로 분리돼 무력화된다. 확장 시 분산 버킷(bucket4j-redis) 필요(#164, ARCHITECTURE §10.5).
     build:
       context: .
       dockerfile: backend/Dockerfile

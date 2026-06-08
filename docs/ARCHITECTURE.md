@@ -495,6 +495,12 @@ volumes:
   - `./gradlew bootRun` — 로컬 실행(local 프로파일)
 - 품질 게이트: JaCoCo 라인 커버리지 80% (`auth`/`member`/`catalog`/`coupon`), CI(`.github/workflows/ci.yml`)에서 Testcontainers 로 검증([plans/ci-pipeline.md](./plans/ci-pipeline.md)).
 
+### 10.5 수평 확장 제약 (Rate Limit) — #164
+
+현 배포는 **단일 인스턴스를 전제**한다(§1 비목표: 분산 시스템). Rate Limit 버킷은 인스턴스 로컬 Caffeine 캐시에 저장되므로(ADR-13, `common.ratelimit.RateLimitRegistry`), 로드밸런서 뒤에 N대를 두고 수평 확장하면 인스턴스마다 독립 버킷을 유지하여 **동일 IP/회원의 실효 한도가 N배**가 된다. 그 결과 로그인 무차별 대입·계정 열거(signup)·비밀번호 변경·쿠폰 사재기 억제력이 인스턴스 수에 비례해 약화된다(단일 인스턴스 배포면 무해).
+
+따라서 **수평 확장(예: `docker-compose` `deploy.replicas` 증설) 시에는 분산 버킷(bucket4j-redis + Lettuce)으로 전환하거나 게이트웨이/WAF 계층 rate limit 으로 이관하는 것이 필수**다. 도입 트리거·위치는 §11.1·§11.3 참조.
+
 ---
 
 ## 11. 확장 포인트 (조건부 도입)
