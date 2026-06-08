@@ -7,25 +7,31 @@ import { randomUuid } from '@/lib/uuid'
 const BASE_URL = '/api/v1'
 const REFRESH_URL = '/auth/refresh'
 
+// withCredentials: refresh 토큰 HttpOnly 쿠키를 송수신하기 위함(#163). same-origin(dev 프록시·prod)에선
+// 무해하며, cross-origin 배포 시에도 쿠키가 실리도록 명시한다. refresh 쿠키 Path 가 /api/v1/auth 라
+// 일반 API 호출엔 쿠키가 붙지 않는다.
 // 공통 요청 인스턴스. 모든 응답 에러는 ApiError 로 정규화된다.
-const client = axios.create({ baseURL: BASE_URL })
+const client = axios.create({ baseURL: BASE_URL, withCredentials: true })
 
 // refresh 호출은 인터셉터 재귀를 타지 않도록 별도 raw 인스턴스를 쓴다(refresh 가 refresh 를 부르는 루프 차단).
-const rawClient = axios.create({ baseURL: BASE_URL })
+const rawClient = axios.create({ baseURL: BASE_URL, withCredentials: true })
 
 // 동시 401 들이 refresh 를 중복 호출하지 않도록 in-flight 프로미스를 공유한다. (M14 핵심 자산)
 let refreshInFlight = null
 
-/** 저장된 refresh 토큰으로 1회 갱신. 성공 true / 실패 false. */
-function tryRefresh() {
+/**
+ * refresh 쿠키(HttpOnly)로 1회 갱신. 성공 true / 실패 false.
+ * 토큰은 쿠키가 운반하므로 body 가 비어 있다. JS 는 쿠키 존재 여부를 볼 수 없어 항상 시도하고,
+ * 쿠키가 없거나 무효면 백엔드가 401 을 주어 false 로 떨어진다(#163).
+ */
+export function tryRefresh() {
   if (refreshInFlight) return refreshInFlight
   const auth = useAuthStore()
-  if (!auth.refreshToken) return Promise.resolve(false)
 
   refreshInFlight = rawClient
-    .post(REFRESH_URL, { refreshToken: auth.refreshToken })
+    .post(REFRESH_URL)
     .then((res) => {
-      auth.updateTokens(res.data) // 회전: 구 refresh 토큰은 서버가 폐기
+      auth.updateTokens(res.data) // 회전: 구 refresh 쿠키는 서버가 새 쿠키로 교체
       return true
     })
     .catch(() => false)
@@ -51,7 +57,8 @@ client.interceptors.request.use((config) => {
 })
 
 // 응답 인터셉터: 401 → refresh 1회 + 원요청 1회 재시도(루프 안전). 그 외 에러는 ApiError 로 변환.
-// 가드: 인증 요청이고, 아직 재시도 안 했고, refresh 호출 자신이 아니며, refresh 토큰을 보유한 경우에만 발화.
+// 가드: 인증 요청이고, 아직 재시도 안 했고, refresh 호출 자신이 아닌 경우에만 발화한다.
+// refresh 토큰은 HttpOnly 쿠키라 JS 가 존재를 못 보므로 일단 시도하고, 쿠키 부재·무효면 refresh 가 false 로 떨어진다(#163).
 client.interceptors.response.use(
   (res) => {
     // 204/빈 본문을 일관되게 null 로 정규화한다. axios 는 빈 본문을 ''(빈 문자열)로 두지만,
@@ -66,8 +73,7 @@ client.interceptors.response.use(
       error.response?.status === 401 &&
       config.auth !== false &&
       !config._retried &&
-      config.url !== REFRESH_URL &&
-      !!auth.refreshToken
+      config.url !== REFRESH_URL
 
     if (canRetry) {
       const refreshed = await tryRefresh()

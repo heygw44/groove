@@ -151,8 +151,9 @@ class MemberPasswordControllerTest {
                         .content(loginBody(OLD_PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn();
+        // refresh 토큰은 body 가 아닌 HttpOnly 쿠키로 내려간다 (#163)
+        String refreshToken = login.getResponse().getCookie("refreshToken").getValue();
         JsonNode tokens = objectMapper.readTree(login.getResponse().getContentAsString());
-        String refreshToken = tokens.get("refreshToken").asText();
         String accessToken = tokens.get("accessToken").asText();
 
         // 비밀번호 변경 (로그인으로 받은 access 사용)
@@ -164,8 +165,7 @@ class MemberPasswordControllerTest {
 
         // 변경 전 발급된 refresh 토큰으로 회전 시도 → 401 (전부 무효화됨)
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", refreshToken))))
+                        .cookie(new jakarta.servlet.http.Cookie("refreshToken", refreshToken)))
                 .andExpect(status().isUnauthorized());
     }
 

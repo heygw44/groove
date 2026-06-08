@@ -6,6 +6,7 @@ import com.groove.auth.domain.TokenHasher;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -27,6 +27,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,6 +51,8 @@ class AuthControllerRefreshTest {
 
     private static final String EMAIL = "rotate-user@example.com";
     private static final String RAW_PASSWORD = "P@ssw0rd!2024";
+    /** #163 — refresh 토큰은 HttpOnly 쿠키로 수수된다. */
+    private static final String REFRESH_COOKIE = "refreshToken";
 
     @Autowired
     private MockMvc mockMvc;
@@ -81,17 +84,18 @@ class AuthControllerRefreshTest {
         String oldRefresh = login();
 
         MvcResult result = mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", oldRefresh))))
+                        .cookie(refreshCookie(oldRefresh)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
+                // 회전된 refresh 는 body 가 아닌 HttpOnly 쿠키로 내려간다 (#163)
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(cookie().exists(REFRESH_COOKIE))
+                .andExpect(cookie().httpOnly(REFRESH_COOKIE, true))
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").isNumber())
                 .andReturn();
 
-        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        String newRefresh = body.get("refreshToken").asText();
+        String newRefresh = extractRefreshCookie(result);
         assertThat(newRefresh).isNotEqualTo(oldRefresh);
 
         RefreshToken oldRow = refreshTokenRepository
@@ -115,22 +119,19 @@ class AuthControllerRefreshTest {
 
         // 세션 1 회전 → firstRefresh 가 revoked 상태가 됨
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", firstRefresh))))
+                        .cookie(refreshCookie(firstRefresh)))
                 .andExpect(status().isOk());
 
         // 공격자가 가로챈 firstRefresh 를 다시 사용 시도 → 재사용 감지
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", firstRefresh))))
+                        .cookie(refreshCookie(firstRefresh)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("AUTH_003"));
 
         // DoD §2: 같은 member 의 다른 활성 refresh(secondRefresh) 도 무효화되어야 함
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", secondRefresh))))
+                        .cookie(refreshCookie(secondRefresh)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_003"));
 
@@ -149,23 +150,19 @@ class AuthControllerRefreshTest {
     @DisplayName("잘못된 형식의 refresh → 401 AUTH_INVALID_TOKEN")
     void refresh_malformedToken_returns401() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", "garbage"))))
+                        .cookie(refreshCookie("garbage")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_003"));
     }
 
     @Test
-    @DisplayName("refreshToken 누락 → 400 VALID_001 + violations")
-    void refresh_missingToken_returns400() throws Exception {
-        // 본문 검증(@NotBlank refreshToken) 실패는 code=VALID_001 + 필드별 violations 로 내려간다.
-        mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isBadRequest())
+    @DisplayName("refresh 쿠키 누락 → 401 AUTH_INVALID_TOKEN (#163)")
+    void refresh_missingCookie_returns401() throws Exception {
+        // 쿠키 미존재는 무효 토큰과 동일하게 취급한다 (#163).
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(jsonPath("$.code").value("VALID_001"))
-                .andExpect(jsonPath("$.violations[0].field").value("refreshToken"));
+                .andExpect(jsonPath("$.code").value("AUTH_003"));
     }
 
     @Test
@@ -176,8 +173,7 @@ class AuthControllerRefreshTest {
         String otherActiveRefresh = login();
 
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", loggedOutRefresh))))
+                        .cookie(refreshCookie(loggedOutRefresh)))
                 .andExpect(status().isOk());
 
         RefreshToken loggedOutRow = refreshTokenRepository
@@ -186,8 +182,7 @@ class AuthControllerRefreshTest {
 
         // 폐기된 토큰을 도난당한 공격자가 재사용 시도 → 재사용 감지 분기
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", loggedOutRefresh))))
+                        .cookie(refreshCookie(loggedOutRefresh)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_003"));
 
@@ -199,8 +194,7 @@ class AuthControllerRefreshTest {
                 .isTrue();
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", otherActiveRefresh))))
+                        .cookie(refreshCookie(otherActiveRefresh)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_003"));
     }
@@ -209,27 +203,35 @@ class AuthControllerRefreshTest {
     @DisplayName("로그아웃: 잘못된 형식 토큰 → 200 (RFC 7009 멱등)")
     void logout_invalidToken_returns200() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", "not-a-jwt"))))
+                        .cookie(refreshCookie("not-a-jwt")))
                 .andExpect(status().isOk());
     }
 
     @Test
-    @DisplayName("로그아웃: 빈 문자열 refreshToken → 200 (invalid token, RFC 7009 § 2.2)")
-    void logout_emptyStringRefreshToken_returns200() throws Exception {
+    @DisplayName("로그아웃: 빈 값 refresh 쿠키 → 200 (invalid token, RFC 7009 § 2.2)")
+    void logout_emptyValueRefreshCookie_returns200() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", ""))))
+                        .cookie(refreshCookie("")))
                 .andExpect(status().isOk());
     }
 
+    /** 로그인 후 발급된 refresh 토큰을 Set-Cookie 에서 추출한다 (#163). */
     private String login() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("email", EMAIL, "password", RAW_PASSWORD))))
                 .andExpect(status().isOk())
                 .andReturn();
-        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        return body.get("refreshToken").asText();
+        return extractRefreshCookie(result);
+    }
+
+    private String extractRefreshCookie(MvcResult result) {
+        Cookie cookie = result.getResponse().getCookie(REFRESH_COOKIE);
+        assertThat(cookie).as("refresh 토큰은 HttpOnly 쿠키로 내려가야 함").isNotNull();
+        return cookie.getValue();
+    }
+
+    private Cookie refreshCookie(String token) {
+        return new Cookie(REFRESH_COOKIE, token);
     }
 }

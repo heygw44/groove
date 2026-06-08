@@ -14,16 +14,14 @@ export async function signupFlow({ email, password, name, phone }) {
   return loginFlow(email, password)
 }
 
-/** 로그아웃: 서버에 refresh 폐기 best-effort 요청 후 로컬 상태 clear. 호출 실패해도 로컬은 비운다. */
+/** 로그아웃: 서버에 refresh 쿠키 폐기 best-effort 요청 후 로컬 상태 clear. 호출 실패해도 로컬은 비운다.
+ * refresh 토큰은 HttpOnly 쿠키로 자동 전송되므로 body 가 비어 있고, 서버가 Max-Age=0 쿠키로 삭제한다(#163). */
 export async function logoutFlow() {
   const auth = useAuthStore()
-  const refreshToken = auth.refreshToken
-  if (refreshToken) {
-    try {
-      await client.post('/auth/logout', { refreshToken }, { auth: false })
-    } catch {
-      // 폐기 실패는 무시 — 로컬 로그아웃은 진행
-    }
+  try {
+    await client.post('/auth/logout', null, { auth: false })
+  } catch {
+    // 폐기 실패는 무시 — 로컬 로그아웃은 진행
   }
   auth.logout()
 }

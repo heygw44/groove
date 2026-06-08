@@ -19,7 +19,8 @@
 ## 1. 공통 규칙
 
 ### 1.1 인증
-- 인증 필요 시: `Authorization: Bearer {accessToken}` 헤더
+- 인증 필요 시: `Authorization: Bearer {accessToken}` 헤더 (accessToken 은 클라이언트 메모리 보관)
+- Refresh Token 은 `HttpOnly; Secure; SameSite=Strict` 쿠키로만 수수된다 (#163 — JS 접근 차단). `/auth/refresh`·`/auth/logout` 은 본문 없이 쿠키로 동작.
 - Access Token TTL: 30분
 - Refresh Token TTL: 14일
 
@@ -127,8 +128,8 @@
 |---|---|---|---|
 | POST | `/auth/signup` | Public | 회원가입 |
 | POST | `/auth/login` | Public | 로그인 |
-| POST | `/auth/refresh` | Public (Refresh Token) | 토큰 갱신 |
-| POST | `/auth/logout` | Public | 로그아웃 (RFC 7009 멱등 — refreshToken 본문만으로 폐기) |
+| POST | `/auth/refresh` | Public (Refresh 쿠키) | 토큰 갱신 (refresh 토큰은 HttpOnly 쿠키, #163) |
+| POST | `/auth/logout` | Public | 로그아웃 (RFC 7009 멱등 — refresh 쿠키 기반 폐기, #163) |
 
 ### 회원 (`/members`)
 | 메서드 | 경로 | 권한 | 설명 |
@@ -271,11 +272,11 @@
 ```json
 {
   "accessToken": "eyJhbGc...",
-  "refreshToken": "eyJhbGc...",
   "tokenType": "Bearer",
   "expiresIn": 1800
 }
 ```
+- refresh 토큰은 응답 body 가 아닌 `Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` 쿠키로 내려간다 (#163 — JS 접근 차단). access 토큰은 클라이언트 메모리에만 보관한다.
 
 **Errors**
 - 401 `AUTH_INVALID_CREDENTIALS` — 미등록 이메일·비밀번호 불일치·탈퇴 회원 모두 동일 응답으로 통일
@@ -285,43 +286,33 @@
 
 #### POST `/auth/refresh` — 토큰 갱신
 
-**Request**
-```json
-{
-  "refreshToken": "eyJhbGc..."
-}
-```
+**Request**: 본문 없음. refresh 토큰은 `refreshToken` HttpOnly 쿠키로 자동 전송된다 (#163). 쿠키 부재·빈 값은 무효 토큰과 동일하게 401.
 
 **Response 200**
 ```json
 {
   "accessToken": "eyJhbGc...",
-  "refreshToken": "eyJhbGc...",  // Rotation: 새 토큰 발급
   "tokenType": "Bearer",
   "expiresIn": 1800
 }
 ```
+- 회전된 새 refresh 토큰은 응답 body 가 아닌 `Set-Cookie: refreshToken=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` 쿠키로 재발급되고 기존 refresh 는 즉시 revoke 된다 (Rotation, #163).
 
 **Errors**
 - 401 `AUTH_004` (`AUTH_EXPIRED_TOKEN`) — JWT 만료 또는 DB 만료
-- 401 `AUTH_003` (`AUTH_INVALID_TOKEN`) — 형식 오류·서명 오류·미존재·재사용 감지·동시 회전 race 패배. 재사용으로 판단되면 부수 효과로 해당 사용자의 모든 활성 refresh token 이 일괄 폐기되지만, 응답 코드는 동일하게 `AUTH_INVALID_TOKEN` 으로 통일된다 (공격자에게 분기 정보 미노출).
+- 401 `AUTH_003` (`AUTH_INVALID_TOKEN`) — 쿠키 부재·형식 오류·서명 오류·미존재·재사용 감지·동시 회전 race 패배. 재사용으로 판단되면 부수 효과로 해당 사용자의 모든 활성 refresh token 이 일괄 폐기되지만, 응답 코드는 동일하게 `AUTH_INVALID_TOKEN` 으로 통일된다 (공격자에게 분기 정보 미노출).
 
 ---
 
 #### POST `/auth/logout`
 
-**구현 상태**: 구현 완료 (#22, W4-3·W4-4). RFC 7009 § 2.2 — 토큰 유효성과 무관하게 항상 200, 형식 오류·만료·미존재·이미 폐기된 토큰 모두 멱등 무동작.
+**구현 상태**: 구현 완료 (#22, W4-3·W4-4; #163 쿠키 전환). RFC 7009 § 2.2 — 토큰 유효성과 무관하게 항상 200, 쿠키 부재·형식 오류·만료·미존재·이미 폐기된 토큰 모두 멱등 무동작.
 
-**Headers**: 별도 `Authorization` 불필요 (refreshToken 본문 기반 폐기). 적용 경로는 `/api/v1/auth/**` permitAll.
+**Headers**: 별도 `Authorization` 불필요. refresh 토큰은 `refreshToken` HttpOnly 쿠키로 자동 전송되어 폐기된다 (#163). 적용 경로는 `/api/v1/auth/**` permitAll.
 
-**Request**
-```json
-{
-  "refreshToken": "eyJhbGc..."
-}
-```
+**Request**: 본문 없음 (refresh 토큰은 쿠키로 전송).
 
-**Response 200** OK (빈 본문)
+**Response 200** OK (빈 본문). 응답에 `Set-Cookie: refreshToken=; Max-Age=0` 을 실어 브라우저의 refresh 쿠키를 즉시 삭제한다.
 
 ---
 
@@ -1123,7 +1114,7 @@ Groove API
 ### 결정됨
 - 페이지: 0-based 오프셋. 커서 기반은 v2 후보 (검색 페이지가 깊어질 때 검토)
 - 응답 시간: 항상 UTC ISO 8601. 클라이언트에서 변환
-- 토큰 발급 위치: 응답 본문 (HttpOnly 쿠키는 v2에서 검토 — CSRF 정책 함께)
+- 토큰 발급 위치: accessToken 은 응답 본문, refreshToken 은 `HttpOnly; Secure; SameSite=Strict` 쿠키 (#163). SameSite=Strict 로 refresh/logout 의 CSRF 를 차단(cross-site 미전송)하고, 쿠키 Path 를 `/api/v1/auth` 로 좁혀 일반 API 호출엔 쿠키를 싣지 않는다.
 
 ### 결정 완료 (W2)
 - **비밀번호 재설정 흐름**: v1 미포함. 이메일 발송 인프라가 없어 시연 가치 낮음. v2 후보.

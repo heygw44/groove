@@ -1,9 +1,14 @@
 import { defineStore } from 'pinia'
 
-// localStorage 키 — M14 와 동일하게 유지해 기존 세션 호환.
-const K_ACCESS = 'groove.accessToken'
-const K_REFRESH = 'groove.refreshToken'
+// #163: 토큰은 더 이상 localStorage 에 저장하지 않는다.
+//  - accessToken 은 메모리(Pinia state)에만 둔다 — 새로고침 시 부팅 silent refresh 로 복원.
+//  - refreshToken 은 백엔드가 HttpOnly 쿠키로 관리해 JS 가 접근할 수 없다.
+// email 만 localStorage 에 남긴다 — 토큰이 아니라 navbar 표시·"이전에 로그인함" 힌트용(부팅 refresh 트리거).
 const K_EMAIL = 'groove.email'
+
+// M14/이전 빌드가 localStorage 에 남긴 평문 토큰 키. 부팅 시 1회 제거해 XSS 가 읽을 잔존 토큰을 없앤다(#163).
+const LEGACY_TOKEN_KEYS = ['groove.accessToken', 'groove.refreshToken']
+for (const k of LEGACY_TOKEN_KEYS) localStorage.removeItem(k)
 
 /** base64url JWT payload 를 UTF-8 안전하게 디코드. 실패 시 null. (M14 store.js 이식) */
 function decodeJwt(token) {
@@ -25,7 +30,8 @@ function decodeJwt(token) {
 }
 
 /**
- * 인증 상태 스토어. 토큰을 localStorage 에 보관하는 순수 상태 컨테이너다.
+ * 인증 상태 스토어. accessToken 은 메모리에만, email 만 localStorage 에 두는 순수 상태 컨테이너다(#163).
+ * refresh 토큰은 HttpOnly 쿠키라 JS 에서 보이지 않으므로 스토어가 다루지 않는다.
  * 실제 login/refresh/logout HTTP 호출은 api/ 가 담당하고 여기 액션을 콜백한다.
  *
  * "현재 유저"는 액세스 토큰 JWT payload 디코드로 얻는다(추가 API 호출 없음).
@@ -33,8 +39,7 @@ function decodeJwt(token) {
  */
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    accessToken: localStorage.getItem(K_ACCESS),
-    refreshToken: localStorage.getItem(K_REFRESH),
+    accessToken: null, // 메모리 전용 — persist 안 함. 새로고침 시 부팅 silent refresh 로 복원.
     email: localStorage.getItem(K_EMAIL),
   }),
   getters: {
@@ -58,31 +63,26 @@ export const useAuthStore = defineStore('auth', {
     },
   },
   actions: {
-    /** 로그인 성공: 토큰 + 입력 email 저장. tokens = 로그인/refresh 응답 형태. */
+    /**
+     * 로그인 성공: accessToken 을 메모리에 두고 email 만 localStorage 에 저장한다.
+     * refresh 토큰은 응답 body 에 없고 백엔드가 Set-Cookie(HttpOnly)로 내려준다(#163).
+     * tokens = 로그인 응답 형태({ accessToken, tokenType, expiresIn }).
+     */
     login(tokens, email) {
       this.accessToken = tokens.accessToken
-      this.refreshToken = tokens.refreshToken
-      localStorage.setItem(K_ACCESS, tokens.accessToken)
-      localStorage.setItem(K_REFRESH, tokens.refreshToken)
       if (email) {
         this.email = email
         localStorage.setItem(K_EMAIL, email)
       }
     },
-    /** refresh 후 토큰만 교체(회전). email 은 유지한다. */
+    /** refresh 후 accessToken 만 교체(회전). 새 refresh 쿠키는 백엔드가 재설정하고 email 은 유지한다. */
     updateTokens(tokens) {
       this.accessToken = tokens.accessToken
-      this.refreshToken = tokens.refreshToken
-      localStorage.setItem(K_ACCESS, tokens.accessToken)
-      localStorage.setItem(K_REFRESH, tokens.refreshToken)
     },
-    /** 클라이언트 상태 전체 clear. 서버측 refresh 폐기는 api/auth.logoutFlow 가 담당. */
+    /** 클라이언트 상태 전체 clear. 서버측 refresh 쿠키 폐기는 api/auth.logoutFlow 가 담당. */
     logout() {
       this.accessToken = null
-      this.refreshToken = null
       this.email = null
-      localStorage.removeItem(K_ACCESS)
-      localStorage.removeItem(K_REFRESH)
       localStorage.removeItem(K_EMAIL)
     },
   },

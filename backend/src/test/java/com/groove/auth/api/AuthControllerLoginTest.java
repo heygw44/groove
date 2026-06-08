@@ -4,6 +4,7 @@ import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,7 +66,7 @@ class AuthControllerLoginTest {
     }
 
     @Test
-    @DisplayName("정상 로그인 → 200 + access/refresh 토큰 응답")
+    @DisplayName("정상 로그인 → 200 + accessToken body + refresh 토큰 HttpOnly 쿠키 (#163)")
     void login_success_returnsTokens() throws Exception {
         Map<String, String> body = Map.of("email", EMAIL, "password", RAW_PASSWORD);
 
@@ -73,9 +75,13 @@ class AuthControllerLoginTest {
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.expiresIn").isNumber());
+                .andExpect(jsonPath("$.expiresIn").isNumber())
+                // refresh 토큰은 body 에 노출하지 않고 HttpOnly 쿠키로만 내려간다 (#163)
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(cookie().exists("refreshToken"))
+                .andExpect(cookie().httpOnly("refreshToken", true))
+                .andExpect(cookie().value("refreshToken", org.hamcrest.Matchers.not(org.hamcrest.Matchers.emptyOrNullString())));
     }
 
     @Test
@@ -126,22 +132,18 @@ class AuthControllerLoginTest {
     }
 
     @Test
-    @DisplayName("로그아웃 → 200 (#22 에서 실제 invalidation 추가)")
+    @DisplayName("로그아웃 → 200 + refresh 쿠키 삭제(Max-Age=0) (#163)")
     void logout_returns200() throws Exception {
-        Map<String, String> body = Map.of("refreshToken", "any.refresh.token");
-
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(body)))
-                .andExpect(status().isOk());
+                        .cookie(new Cookie("refreshToken", "any.refresh.token")))
+                .andExpect(status().isOk())
+                .andExpect(cookie().maxAge("refreshToken", 0));
     }
 
     @Test
-    @DisplayName("로그아웃 refreshToken 누락 → 400")
-    void logout_missingToken_returns400() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isBadRequest());
+    @DisplayName("로그아웃 refresh 쿠키 없음 → 200 (멱등, #163)")
+    void logout_missingCookie_returns200() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isOk());
     }
 }
