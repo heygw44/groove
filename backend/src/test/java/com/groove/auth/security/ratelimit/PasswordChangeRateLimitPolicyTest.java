@@ -1,5 +1,10 @@
 package com.groove.auth.security.ratelimit;
 
+import com.groove.auth.security.JwtClaims;
+import com.groove.auth.security.JwtProvider;
+import com.groove.common.exception.AuthException;
+import com.groove.common.exception.ErrorCode;
+import com.groove.member.domain.MemberRole;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,27 +13,56 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PasswordChangeRateLimitPolicyTest {
 
+    private JwtProvider jwtProvider;
     private PasswordChangeRateLimitPolicy policy;
 
     @BeforeEach
     void setUp() {
+        jwtProvider = mock(JwtProvider.class);
         AuthRateLimitProperties properties = new AuthRateLimitProperties(
                 new AuthRateLimitProperties.Policy(10L, Duration.ofMinutes(1)),
                 new AuthRateLimitProperties.Policy(3L, Duration.ofMinutes(1)),
                 new AuthRateLimitProperties.Policy(2L, Duration.ofMinutes(1))
         );
-        policy = new PasswordChangeRateLimitPolicy(properties);
+        policy = new PasswordChangeRateLimitPolicy(properties, jwtProvider);
     }
 
     @Test
-    void hasFixedNameAndClientIpKeyResolver() {
+    void hasFixedName() {
         assertThat(policy.name()).isEqualTo("auth-password-change");
-        MockHttpServletRequest request = new MockHttpServletRequest();
+    }
+
+    @Test
+    void keyResolver_validToken_memberKey() {
+        when(jwtProvider.parseAccessToken("good-token")).thenReturn(new JwtClaims(42L, MemberRole.USER));
+        MockHttpServletRequest request = request("PATCH", "/api/v1/members/me/password");
+        request.addHeader("Authorization", "Bearer good-token");
+
+        assertThat(policy.keyResolver().resolveKey(request)).isEqualTo("member:42");
+    }
+
+    @Test
+    void keyResolver_noToken_ipFallback() {
+        MockHttpServletRequest request = request("PATCH", "/api/v1/members/me/password");
         request.setRemoteAddr("198.51.100.42");
-        assertThat(policy.keyResolver().resolveKey(request)).isEqualTo("198.51.100.42");
+
+        assertThat(policy.keyResolver().resolveKey(request)).isEqualTo("ip:198.51.100.42");
+    }
+
+    @Test
+    void keyResolver_invalidToken_ipFallback() {
+        when(jwtProvider.parseAccessToken("bad-token"))
+                .thenThrow(new AuthException(ErrorCode.AUTH_INVALID_TOKEN));
+        MockHttpServletRequest request = request("PATCH", "/api/v1/members/me/password");
+        request.addHeader("Authorization", "Bearer bad-token");
+        request.setRemoteAddr("198.51.100.9");
+
+        assertThat(policy.keyResolver().resolveKey(request)).isEqualTo("ip:198.51.100.9");
     }
 
     @Test
