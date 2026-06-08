@@ -1,5 +1,6 @@
 package com.groove.payment.gateway;
 
+import com.groove.common.config.SecretPlaceholderGuard;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -40,6 +41,7 @@ public record PaymentMockProperties(
         if (webhookSecret == null || webhookSecret.isBlank()) {
             throw new IllegalStateException("payment.mock.webhook-secret 은 비어 있을 수 없습니다");
         }
+        SecretPlaceholderGuard.rejectPlaceholder("payment.mock.webhook-secret", webhookSecret);
     }
 
     private static void requireNonNegative(Duration value, String key) {
