@@ -29,5 +29,19 @@ public record RefreshCookieProperties(
         secure = secure != null ? secure : Boolean.TRUE;
         sameSite = (sameSite != null && !sameSite.isBlank()) ? sameSite : DEFAULT_SAME_SITE;
         path = (path != null && !path.isBlank()) ? path : DEFAULT_PATH;
+
+        // SameSite 는 RFC 6265bis 의 세 값만 유효하다 — 오타가 'SameSite=strikt' 같은 무의미 속성으로
+        // 새어 브라우저가 쿠키를 조용히 무시하는 일을 부팅 시점에 차단한다.
+        if (!sameSite.equalsIgnoreCase("Strict")
+                && !sameSite.equalsIgnoreCase("Lax")
+                && !sameSite.equalsIgnoreCase("None")) {
+            throw new IllegalStateException(
+                    "auth.refresh-cookie.same-site 는 Strict/Lax/None 중 하나여야 합니다: " + sameSite);
+        }
+        // SameSite=None 쿠키는 Secure 가 필수다(브라우저 거부 + CSRF 재노출 방지). 위반 시 기동 실패.
+        if (sameSite.equalsIgnoreCase("None") && !secure) {
+            throw new IllegalStateException(
+                    "SameSite=None refresh 쿠키는 Secure 가 필수입니다 (auth.refresh-cookie.secure=true 로 설정)");
+        }
     }
 }

@@ -11,6 +11,14 @@ springdoc:
   swagger-ui:
     enabled: ${SPRINGDOC_ENABLED:false}
 
+# Refresh 쿠키 Secure (#163). 기본 true(application.yaml 상속) — HTTPS 또는 TLS 종단 프록시
+# (X-Forwarded-Proto 전달, server.forward-headers-strategy=native 이미 설정됨) 뒤에서 서빙하는 것을 전제로 한다.
+# TLS 없이 평문 HTTP(특히 비-localhost 호스트)로 노출하는 데모라면 브라우저가 Secure 쿠키를 저장하지 않아
+# 세션이 유지되지 않으므로, 그 경우에만 AUTH_REFRESH_COOKIE_SECURE=false 로 내려야 한다.
+auth:
+  refresh-cookie:
+    secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
+
 # docker 프로파일은 환경 변수로 명시 화이트리스트 주입.
 # 콤마 구분 문자열은 Spring 이 List 로 자동 변환.
 # 예) CORS_ALLOWED_ORIGINS=https://example.com,https://admin.example.com

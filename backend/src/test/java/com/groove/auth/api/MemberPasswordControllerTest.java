@@ -2,6 +2,7 @@ package com.groove.auth.api;
 
 import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
+import com.groove.auth.security.RefreshTokenCookieFactory;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
@@ -152,7 +153,8 @@ class MemberPasswordControllerTest {
                 .andExpect(status().isOk())
                 .andReturn();
         // refresh 토큰은 body 가 아닌 HttpOnly 쿠키로 내려간다 (#163)
-        String refreshToken = login.getResponse().getCookie("refreshToken").getValue();
+        String refreshToken = login.getResponse()
+                .getCookie(RefreshTokenCookieFactory.COOKIE_NAME).getValue();
         JsonNode tokens = objectMapper.readTree(login.getResponse().getContentAsString());
         String accessToken = tokens.get("accessToken").asText();
 
@@ -165,7 +167,7 @@ class MemberPasswordControllerTest {
 
         // 변경 전 발급된 refresh 토큰으로 회전 시도 → 401 (전부 무효화됨)
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .cookie(new jakarta.servlet.http.Cookie("refreshToken", refreshToken)))
+                        .cookie(new jakarta.servlet.http.Cookie(RefreshTokenCookieFactory.COOKIE_NAME, refreshToken)))
                 .andExpect(status().isUnauthorized());
     }
 

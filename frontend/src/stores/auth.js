@@ -3,12 +3,20 @@ import { defineStore } from 'pinia'
 // #163: 토큰은 더 이상 localStorage 에 저장하지 않는다.
 //  - accessToken 은 메모리(Pinia state)에만 둔다 — 새로고침 시 부팅 silent refresh 로 복원.
 //  - refreshToken 은 백엔드가 HttpOnly 쿠키로 관리해 JS 가 접근할 수 없다.
-// email 만 localStorage 에 남긴다 — 토큰이 아니라 navbar 표시·"이전에 로그인함" 힌트용(부팅 refresh 트리거).
+// email 은 navbar 표시 전용으로만 localStorage 에 남긴다(토큰 아님).
 const K_EMAIL = 'groove.email'
 
-// M14/이전 빌드가 localStorage 에 남긴 평문 토큰 키. 부팅 시 1회 제거해 XSS 가 읽을 잔존 토큰을 없앤다(#163).
-const LEGACY_TOKEN_KEYS = ['groove.accessToken', 'groove.refreshToken']
-for (const k of LEGACY_TOKEN_KEYS) localStorage.removeItem(k)
+// "이전에 로그인함" 세션 신호. refresh 쿠키는 HttpOnly 라 JS 가 볼 수 없으므로, 부팅 복원 시도와
+// 401 인터셉터의 refresh 시도를 이 플래그로 게이트한다(표시용 email 과 분리 — email 이 다른 사유로
+// 지워져도 세션 판단이 흔들리지 않게). login 에서 set, logout 에서 clear.
+const K_HAD_SESSION = 'groove.hadSession'
+
+// M14/이전 빌드가 localStorage 에 남긴 평문 토큰 키. 부팅 시 1회 제거한다(XSS 가 읽을 잔존 토큰 제거, #163).
+// import 시점 사이드이펙트를 피하려고 main.js boot() 에서 호출한다(비-브라우저 import 안전).
+export function clearLegacyTokenStorage() {
+  localStorage.removeItem('groove.accessToken')
+  localStorage.removeItem('groove.refreshToken')
+}
 
 /** base64url JWT payload 를 UTF-8 안전하게 디코드. 실패 시 null. (M14 store.js 이식) */
 function decodeJwt(token) {
@@ -41,6 +49,7 @@ export const useAuthStore = defineStore('auth', {
   state: () => ({
     accessToken: null, // 메모리 전용 — persist 안 함. 새로고침 시 부팅 silent refresh 로 복원.
     email: localStorage.getItem(K_EMAIL),
+    hadSession: localStorage.getItem(K_HAD_SESSION) === '1', // "이전에 로그인함" 신호(쿠키 비가시성 보완)
   }),
   getters: {
     isAuthenticated: (state) => !!state.accessToken,
@@ -70,6 +79,8 @@ export const useAuthStore = defineStore('auth', {
      */
     login(tokens, email) {
       this.accessToken = tokens.accessToken
+      this.hadSession = true
+      localStorage.setItem(K_HAD_SESSION, '1')
       if (email) {
         this.email = email
         localStorage.setItem(K_EMAIL, email)
@@ -83,7 +94,9 @@ export const useAuthStore = defineStore('auth', {
     logout() {
       this.accessToken = null
       this.email = null
+      this.hadSession = false
       localStorage.removeItem(K_EMAIL)
+      localStorage.removeItem(K_HAD_SESSION)
     },
   },
 })

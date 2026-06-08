@@ -1,6 +1,7 @@
 package com.groove.auth.api;
 
 import com.groove.auth.domain.RefreshTokenRepository;
+import com.groove.auth.security.RefreshTokenCookieFactory;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
@@ -35,6 +36,7 @@ class AuthControllerLoginTest {
 
     private static final String EMAIL = "login-user@example.com";
     private static final String RAW_PASSWORD = "P@ssw0rd!2024";
+    private static final String REFRESH_COOKIE = RefreshTokenCookieFactory.COOKIE_NAME;
 
     @Autowired
     private MockMvc mockMvc;
@@ -79,9 +81,13 @@ class AuthControllerLoginTest {
                 .andExpect(jsonPath("$.expiresIn").isNumber())
                 // refresh 토큰은 body 에 노출하지 않고 HttpOnly 쿠키로만 내려간다 (#163)
                 .andExpect(jsonPath("$.refreshToken").doesNotExist())
-                .andExpect(cookie().exists("refreshToken"))
-                .andExpect(cookie().httpOnly("refreshToken", true))
-                .andExpect(cookie().value("refreshToken", org.hamcrest.Matchers.not(org.hamcrest.Matchers.emptyOrNullString())));
+                .andExpect(cookie().exists(REFRESH_COOKIE))
+                .andExpect(cookie().value(REFRESH_COOKIE, org.hamcrest.Matchers.not(org.hamcrest.Matchers.emptyOrNullString())))
+                // 보안 속성 회귀 방지: HttpOnly·Secure·SameSite=Strict·Path 스코프를 모두 단언 (#163)
+                .andExpect(cookie().httpOnly(REFRESH_COOKIE, true))
+                .andExpect(cookie().secure(REFRESH_COOKIE, true)) // test 프로파일은 secure 기본값 true 상속
+                .andExpect(cookie().sameSite(REFRESH_COOKIE, "Strict"))
+                .andExpect(cookie().path(REFRESH_COOKIE, "/api/v1/auth"));
     }
 
     @Test
@@ -135,15 +141,17 @@ class AuthControllerLoginTest {
     @DisplayName("로그아웃 → 200 + refresh 쿠키 삭제(Max-Age=0) (#163)")
     void logout_returns200() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .cookie(new Cookie("refreshToken", "any.refresh.token")))
+                        .cookie(new Cookie(REFRESH_COOKIE, "any.refresh.token")))
                 .andExpect(status().isOk())
-                .andExpect(cookie().maxAge("refreshToken", 0));
+                .andExpect(cookie().maxAge(REFRESH_COOKIE, 0));
     }
 
     @Test
-    @DisplayName("로그아웃 refresh 쿠키 없음 → 200 (멱등, #163)")
+    @DisplayName("로그아웃 refresh 쿠키 없음 → 200 + 삭제 쿠키도 함께 내려감 (멱등, #163)")
     void logout_missingCookie_returns200() throws Exception {
+        // 쿠키가 없어도 clear() 삭제 쿠키(Max-Age=0)는 항상 응답에 실린다 — 브라우저 잔존 쿠키 제거 보장.
         mockMvc.perform(post("/api/v1/auth/logout"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(cookie().maxAge(REFRESH_COOKIE, 0));
     }
 }

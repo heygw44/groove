@@ -2,6 +2,7 @@ package com.groove.auth.api;
 
 import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
+import com.groove.auth.security.RefreshTokenCookieFactory;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestSecuredController;
 import com.groove.support.TestcontainersConfig;
@@ -59,8 +60,8 @@ class AuthFlowE2ETest {
     private static final String RAW_PASSWORD = "P@ssw0rd!2024";
     private static final String NAME = "홍길동";
     private static final String PHONE = "01012345678";
-    /** #163 — refresh 토큰은 HttpOnly 쿠키로 수수된다. */
-    private static final String REFRESH_COOKIE = "refreshToken";
+    /** #163 — refresh 토큰은 HttpOnly 쿠키로 수수된다. 이름은 production 단일 출처를 참조한다. */
+    private static final String REFRESH_COOKIE = RefreshTokenCookieFactory.COOKIE_NAME;
 
     @Autowired
     private MockMvc mockMvc;

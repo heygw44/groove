@@ -7,9 +7,10 @@ import { randomUuid } from '@/lib/uuid'
 const BASE_URL = '/api/v1'
 const REFRESH_URL = '/auth/refresh'
 
-// withCredentials: refresh 토큰 HttpOnly 쿠키를 송수신하기 위함(#163). same-origin(dev 프록시·prod)에선
-// 무해하며, cross-origin 배포 시에도 쿠키가 실리도록 명시한다. refresh 쿠키 Path 가 /api/v1/auth 라
-// 일반 API 호출엔 쿠키가 붙지 않는다.
+// withCredentials: refresh 토큰 HttpOnly 쿠키를 송수신하기 위함(#163). 실제 배포는 same-origin
+// (dev 는 Vite 프록시, prod 는 Spring 이 SPA 를 같은 오리진에서 서빙)이라 쿠키가 CORS 없이 동작한다.
+// (cross-origin 배포로 가려면 서버 CORS 의 allow-credentials=true + 명시적 origin 화이트리스트가 추가로 필요 — 현재 형상엔 미적용.)
+// refresh 쿠키 Path 가 /api/v1/auth 라 일반 API 호출엔 쿠키가 붙지 않는다.
 // 공통 요청 인스턴스. 모든 응답 에러는 ApiError 로 정규화된다.
 const client = axios.create({ baseURL: BASE_URL, withCredentials: true })
 
@@ -21,12 +22,14 @@ let refreshInFlight = null
 
 /**
  * refresh 쿠키(HttpOnly)로 1회 갱신. 성공 true / 실패 false.
- * 토큰은 쿠키가 운반하므로 body 가 비어 있다. JS 는 쿠키 존재 여부를 볼 수 없어 항상 시도하고,
- * 쿠키가 없거나 무효면 백엔드가 401 을 주어 false 로 떨어진다(#163).
+ * 토큰은 쿠키가 운반하므로 body 가 비어 있다. JS 는 쿠키 존재 여부를 볼 수 없으므로,
+ * "이전에 로그인함" 신호(auth.hadSession)로 게이트한다 — 한 번도 로그인한 적 없는 게스트가
+ * 매 401 마다 무의미한 refresh 왕복을 하지 않도록 막는다(#163, 코드리뷰 #3).
  */
 export function tryRefresh() {
   if (refreshInFlight) return refreshInFlight
   const auth = useAuthStore()
+  if (!auth.hadSession) return Promise.resolve(false)
 
   refreshInFlight = rawClient
     .post(REFRESH_URL)
@@ -57,8 +60,8 @@ client.interceptors.request.use((config) => {
 })
 
 // 응답 인터셉터: 401 → refresh 1회 + 원요청 1회 재시도(루프 안전). 그 외 에러는 ApiError 로 변환.
-// 가드: 인증 요청이고, 아직 재시도 안 했고, refresh 호출 자신이 아닌 경우에만 발화한다.
-// refresh 토큰은 HttpOnly 쿠키라 JS 가 존재를 못 보므로 일단 시도하고, 쿠키 부재·무효면 refresh 가 false 로 떨어진다(#163).
+// 가드: 인증 요청이고, 아직 재시도 안 했고, refresh 호출 자신이 아니며, 이전에 로그인한 적이 있는 경우에만 발화한다.
+// refresh 토큰은 HttpOnly 쿠키라 JS 가 존재를 못 보므로, auth.hadSession 으로 게스트의 불필요한 refresh 를 막는다(#163).
 client.interceptors.response.use(
   (res) => {
     // 204/빈 본문을 일관되게 null 로 정규화한다. axios 는 빈 본문을 ''(빈 문자열)로 두지만,
@@ -73,7 +76,8 @@ client.interceptors.response.use(
       error.response?.status === 401 &&
       config.auth !== false &&
       !config._retried &&
-      config.url !== REFRESH_URL
+      config.url !== REFRESH_URL &&
+      auth.hadSession
 
     if (canRetry) {
       const refreshed = await tryRefresh()

@@ -3,6 +3,7 @@ package com.groove.auth.api;
 import com.groove.auth.domain.RefreshToken;
 import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.domain.TokenHasher;
+import com.groove.auth.security.RefreshTokenCookieFactory;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.TestcontainersConfig;
@@ -51,8 +52,8 @@ class AuthControllerRefreshTest {
 
     private static final String EMAIL = "rotate-user@example.com";
     private static final String RAW_PASSWORD = "P@ssw0rd!2024";
-    /** #163 — refresh 토큰은 HttpOnly 쿠키로 수수된다. */
-    private static final String REFRESH_COOKIE = "refreshToken";
+    /** #163 — refresh 토큰은 HttpOnly 쿠키로 수수된다. 이름은 production 단일 출처를 참조한다. */
+    private static final String REFRESH_COOKIE = RefreshTokenCookieFactory.COOKIE_NAME;
 
     @Autowired
     private MockMvc mockMvc;
@@ -227,7 +228,8 @@ class AuthControllerRefreshTest {
 
     private String extractRefreshCookie(MvcResult result) {
         Cookie cookie = result.getResponse().getCookie(REFRESH_COOKIE);
-        assertThat(cookie).as("refresh 토큰은 HttpOnly 쿠키로 내려가야 함").isNotNull();
+        assertThat(cookie).as("refresh 토큰은 쿠키로 내려가야 함").isNotNull();
+        assertThat(cookie.isHttpOnly()).as("refresh 쿠키는 HttpOnly 여야 함").isTrue();
         return cookie.getValue();
     }
 
