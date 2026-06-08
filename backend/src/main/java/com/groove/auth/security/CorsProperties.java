@@ -10,8 +10,16 @@ import java.util.List;
  * <p>운영 환경에서는 {@code allowed-origins} 를 명시적 화이트리스트로 제한하고,
  * 개발 환경에서만 {@code allowed-origin-patterns} 에 와일드카드를 허용한다.
  *
- * <p>{@code allow-credentials=true} 와 {@code allowed-origins("*")} 는 Spring 5.4+
- * 부터 충돌하므로 와일드카드는 반드시 {@code allowed-origin-patterns} 로 지정해야 한다.
+ * <p>{@code allow-credentials=true} 와 <b>host 전체를 매칭하는 와일드카드</b>(bare {@code "*"},
+ * {@code http://*}, {@code https://*}, {@code *://*}, {@code http://*:8080} 등)는 함께 쓸 수 없다.
+ * 그 조합은 요청 Origin 을 그대로 반사(reflect)해 임의 사이트의 자격증명 동반 교차 출처 요청을
+ * 허용하기 때문이다. host 가 한정된 패턴(예: {@code https://*.example.com},
+ * {@code http://localhost:[*]})이나 명시적 origin 은 허용된다.
+ *
+ * <p>Spring 의 내장 검증({@code CorsConfiguration.validateAllowCredentials()})은
+ * {@code allowed-origins} 의 bare {@code "*"} 만 거부하고 {@code allowed-origin-patterns}
+ * 는 방치하므로, compact constructor 에서 두 목록의 host 와일드카드 + credentials 조합을 기동
+ * 시점에 거부한다({@code JwtProperties}/{@code SecretPlaceholderGuard} 와 동일한 fail-fast, 이슈 #166).
  */
 @ConfigurationProperties(prefix = "cors")
 public record CorsProperties(
@@ -37,5 +45,34 @@ public record CorsProperties(
         exposedHeaders = exposedHeaders != null ? exposedHeaders : List.of();
         allowCredentials = allowCredentials != null ? allowCredentials : Boolean.FALSE;
         maxAgeSeconds = maxAgeSeconds != null ? maxAgeSeconds : DEFAULT_MAX_AGE_SECONDS;
+
+        if (Boolean.TRUE.equals(allowCredentials)
+                && (allowedOrigins.contains("*")
+                || allowedOriginPatterns.stream().anyMatch(CorsProperties::matchesAnyHost))) {
+            throw new IllegalStateException(
+                    "cors.allow-credentials=true 와 host 전체 와일드카드(\"*\", \"http://*\", \"https://*\" 등) 는 함께 쓸 수 없습니다 — 임의 사이트의 자격증명 포함 교차 출처 요청이 허용됩니다. host 가 한정된 패턴(예: http://localhost:[*], https://*.example.com)이나 명시적 origin 으로 제한하거나 allow-credentials 를 false 로 내리세요 (이슈 #166)");
+        }
+    }
+
+    /**
+     * origin 패턴의 host 부분이 모든 host 를 매칭하는 bare {@code "*"} 인지 판정한다.
+     *
+     * <p>scheme({@code ://}) 이후, 포트({@code :})·경로({@code /}) 구분자 이전까지를 host 로 보고
+     * 정확히 {@code "*"} 인 경우만 참이다. 따라서 {@code "*"}/{@code "http://*"}/{@code "*://*"}/
+     * {@code "http://*:8080"} 은 참이고, host 가 한정된 {@code "https://*.example.com"}/
+     * {@code "http://localhost:[*]"}/{@code "http://[::1]:[*]"} 는 거짓이다.
+     */
+    private static boolean matchesAnyHost(String originPattern) {
+        int schemeIdx = originPattern.indexOf("://");
+        String afterScheme = schemeIdx >= 0 ? originPattern.substring(schemeIdx + 3) : originPattern;
+        int hostEnd = afterScheme.length();
+        for (int i = 0; i < afterScheme.length(); i++) {
+            char c = afterScheme.charAt(i);
+            if (c == ':' || c == '/') {
+                hostEnd = i;
+                break;
+            }
+        }
+        return afterScheme.substring(0, hostEnd).equals("*");
     }
 }
