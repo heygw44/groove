@@ -105,6 +105,7 @@ public class MemberCoupon extends BaseTimeEntity {
      * 곧장 EXPIRED 로 복원해 "내 쿠폰 목록" 표시 정합성을 지킨다.
      */
     public void restore(Instant now) {
+        Objects.requireNonNull(now, "now must not be null");
         transitionTo(expiresAt.isBefore(now) ? MemberCouponStatus.EXPIRED : MemberCouponStatus.ISSUED);
         this.usedAt = null;
         this.orderId = null;

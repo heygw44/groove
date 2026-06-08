@@ -84,6 +84,19 @@ class MemberCouponTest {
     }
 
     @Test
+    @DisplayName("restore: 만료 경계(now == expiresAt) — strict 비교라 만료 아님 → USED → ISSUED")
+    void restore_atExpiry() {
+        MemberCoupon mc = issued();
+        mc.use(ORDER_ID);
+
+        mc.restore(mc.getExpiresAt());   // expiresAt.isBefore(now) == false → ISSUED
+
+        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+        assertThat(mc.getUsedAt()).isNull();
+        assertThat(mc.getOrderId()).isNull();
+    }
+
+    @Test
     @DisplayName("expire: ISSUED → EXPIRED")
     void expire() {
         MemberCoupon mc = issued();
