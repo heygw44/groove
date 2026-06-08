@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * MemberCouponStatus 상태 전이 매트릭스 전수 검증 (4×4 = 16 케이스).
  *
- * <p>합법 전이는 docs/plans/coupon-system.md §3.3 기준 4종이다:
- * ISSUED→{USED,EXPIRED,CANCELLED}, USED→ISSUED(주문 취소/환불 복원).
+ * <p>합법 전이는 docs/plans/coupon-system.md §3.3 기준 5종이다:
+ * ISSUED→{USED,EXPIRED,CANCELLED}, USED→{ISSUED,EXPIRED}(주문 취소/환불 복원 — 이미 만료됐으면 EXPIRED).
  * EXPIRED·CANCELLED 는 종착이다.
  */
 @DisplayName("MemberCouponStatus — 전이 매트릭스 전수")
@@ -26,7 +26,8 @@ class MemberCouponStatusTest {
             new Pair(MemberCouponStatus.ISSUED, MemberCouponStatus.USED),
             new Pair(MemberCouponStatus.ISSUED, MemberCouponStatus.EXPIRED),
             new Pair(MemberCouponStatus.ISSUED, MemberCouponStatus.CANCELLED),
-            new Pair(MemberCouponStatus.USED, MemberCouponStatus.ISSUED)
+            new Pair(MemberCouponStatus.USED, MemberCouponStatus.ISSUED),
+            new Pair(MemberCouponStatus.USED, MemberCouponStatus.EXPIRED)
     );
 
     private static final Set<MemberCouponStatus> TERMINAL =
@@ -44,7 +45,7 @@ class MemberCouponStatusTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @MethodSource("allTransitions")
-    @DisplayName("16 케이스 매트릭스: 합법 전이 표에 포함된 4종만 true, 나머지는 false")
+    @DisplayName("16 케이스 매트릭스: 합법 전이 표에 포함된 5종만 true, 나머지는 false")
     void canTransitionTo_matrix(MemberCouponStatus from, MemberCouponStatus to) {
         boolean expected = LEGAL.contains(new Pair(from, to));
 

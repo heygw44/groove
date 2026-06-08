@@ -240,6 +240,22 @@ class CouponApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("복원 시점에 이미 만료된 USED 쿠폰 → ISSUED 가 아니라 EXPIRED 로 복원 (표시 정합성)")
+    void restore_expiredAtRestoreTime_becomesExpired() {
+        Coupon coupon = fixedCoupon(3_000L, 0L);
+        MemberCoupon mc = issued(coupon, MEMBER_ID);
+        mc.use(ORDER_ID);
+        ReflectionTestUtils.setField(mc, "expiresAt", NOW.minus(1, ChronoUnit.HOURS));
+        when(memberCouponRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(mc));
+
+        service.restoreForOrder(ORDER_ID);
+
+        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.EXPIRED);
+        assertThat(mc.getOrderId()).isNull();
+        assertThat(mc.getUsedAt()).isNull();
+    }
+
+    @Test
     @DisplayName("쿠폰 미적용 주문 복원 → no-op (예외 없음)")
     void restore_noCoupon_noop() {
         when(memberCouponRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
