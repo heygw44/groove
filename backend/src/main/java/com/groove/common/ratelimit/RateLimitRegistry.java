@@ -18,6 +18,12 @@ import java.util.Set;
  * 요청별로 적용할 {@link RateLimitPolicy}를 선택하고 정책당 토큰 버킷을 관리한다.
  * <p>등록된 정책은 {@code @Order} (또는 {@link org.springframework.core.Ordered})에 따라 정렬되며,
  * 가장 먼저 매치되는 정책이 적용된다. 정책 이름은 부팅 시점에 중복 여부를 검증한다.
+ *
+ * <p><b>수평 확장 제약 (#164)</b>: 버킷은 인스턴스 로컬 Caffeine 캐시({@code buckets})에 저장되므로
+ * <b>단일 인스턴스 배포를 전제</b>한다(ADR-13). 로드밸런서 뒤에 N대를 두고 수평 확장하면 인스턴스마다
+ * 독립 버킷을 유지하여 동일 IP/회원의 실효 한도가 N배가 되고, 무차별 대입·계정 열거·쿠폰 사재기 억제력이
+ * 인스턴스 수에 비례해 약화된다. 수평 확장 시에는 bucket4j-redis(+Lettuce) 분산 버킷으로 교체하거나
+ * 게이트웨이/WAF 계층 rate limit 으로 이관해야 한다. ({@code ARCHITECTURE.md} §10.5·§11.1·§11.3 참조)
  */
 @Component
 public class RateLimitRegistry {
