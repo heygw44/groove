@@ -16,7 +16,7 @@ import java.util.Set;
  * <p>합법 전이 (4종, 그 외는 모두 불법):
  * <pre>
  *   ISSUED → USED, EXPIRED, CANCELLED   (3)
- *   USED   → ISSUED                     (1, 주문 취소/환불 시 복원)
+ *   USED   → ISSUED, EXPIRED            (2, 주문 취소/환불 시 복원 — 이미 만료됐으면 EXPIRED)
  *   EXPIRED   → (종착)
  *   CANCELLED → (종착)
  * </pre>
@@ -32,7 +32,7 @@ public enum MemberCouponStatus {
     static {
         EnumMap<MemberCouponStatus, Set<MemberCouponStatus>> map = new EnumMap<>(MemberCouponStatus.class);
         map.put(ISSUED, EnumSet.of(USED, EXPIRED, CANCELLED));
-        map.put(USED, EnumSet.of(ISSUED));
+        map.put(USED, EnumSet.of(ISSUED, EXPIRED));
         map.put(EXPIRED, EnumSet.noneOf(MemberCouponStatus.class));
         map.put(CANCELLED, EnumSet.noneOf(MemberCouponStatus.class));
         TRANSITIONS = Collections.unmodifiableMap(map);

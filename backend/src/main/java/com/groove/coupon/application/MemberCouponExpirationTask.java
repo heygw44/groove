@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Instant;
 
 /**
@@ -34,21 +35,24 @@ public class MemberCouponExpirationTask {
 
     private final MemberCouponRepository repository;
     private final TransactionTemplate requiresNewTx;
+    private final Clock clock;
     private final int batchSize;
 
     public MemberCouponExpirationTask(
             MemberCouponRepository repository,
             @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
+            Clock clock,
             CouponExpirationProperties properties) {
         this.repository = repository;
         this.requiresNewTx = requiresNewTx;
+        this.clock = clock;
         this.batchSize = properties.batchSize();
     }
 
     @Scheduled(cron = "${groove.coupon.expiration.cron:0 0 * * * *}")
     public void expireOverdue() {
         try {
-            int total = expireOverdueAll(Instant.now());
+            int total = expireOverdueAll(clock.instant());
             if (total > 0) {
                 log.info("만료된 회원 쿠폰 {}건 EXPIRED 전환", total);
             }

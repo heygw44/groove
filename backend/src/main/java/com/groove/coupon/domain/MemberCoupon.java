@@ -99,10 +99,13 @@ public class MemberCoupon extends BaseTimeEntity {
     }
 
     /**
-     * 복원 (USED → ISSUED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을 비운다.
+     * 복원 (USED → ISSUED, 이미 만료됐으면 USED → EXPIRED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을
+     * 비운다. 만료 판정은 적용 경로({@code CouponApplicationService.applyToOrder})·만료 배치와 동일한 strict
+     * 비교({@code expiresAt < now})로 통일한다 — 취소/환불 시점이 만료 이후면 ISSUED 로 부활시키지 않고
+     * 곧장 EXPIRED 로 복원해 "내 쿠폰 목록" 표시 정합성을 지킨다.
      */
-    public void restore() {
-        transitionTo(MemberCouponStatus.ISSUED);
+    public void restore(Instant now) {
+        transitionTo(expiresAt.isBefore(now) ? MemberCouponStatus.EXPIRED : MemberCouponStatus.ISSUED);
         this.usedAt = null;
         this.orderId = null;
     }
