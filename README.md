@@ -33,8 +33,12 @@ docker-compose up -d
 curl http://localhost:8080/actuator/health
 
 # 4. API 문서 (Swagger UI) — 코드 자동 생성, Authorize 에 accessToken 입력 후 try-out
+#    docker(배포) 프로파일은 기본 비공개(#162) — .env 에 SPRINGDOC_ENABLED=true 설정 시 노출된다.
 open http://localhost:8080/swagger-ui.html
 ```
+
+> `docker-compose`(docker 프로파일) 배포에서는 API 표면 익명 노출을 막기 위해 Swagger UI/OpenAPI 가 **기본 비공개**(404)다.
+> 데모로 노출하려면 `.env` 에 `SPRINGDOC_ENABLED=true` 를 추가하고 재기동한다. `./gradlew bootRun`(local 프로파일)은 항상 노출된다.
 
 > IDE / 터미널에서 `./gradlew bootRun`(백엔드는 `backend/` 하위, #131)으로 직접 실행하면 **local 프로파일이 자동 주입**된다(`build.gradle.kts`):
 > ```bash
