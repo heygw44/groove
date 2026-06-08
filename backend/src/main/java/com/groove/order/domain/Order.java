@@ -213,6 +213,23 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
+     * 합법 전이일 때만 상태를 전진시키고, 아니면 무해하게 무시한다(멱등·발산 방어).
+     *
+     * <p>{@link #changeStatus} 는 불법 전이를 {@link IllegalStateTransitionException} 으로 거부하는 엄격한 단일
+     * 진입점이고, 이 메서드는 배송 자동 진행(이슈 #161)처럼 "이미 도달했거나 경로를 벗어난" 주문을 만나도 예외 없이
+     * 넘어가야 하는 호출자를 위한 관대한 변형이다. {@code reason} 이 의미를 갖는 전이(CANCELLED)에는 쓰지 않는다.
+     *
+     * @return 전이가 일어났으면 {@code true}, 불법이라 건너뛰었으면 {@code false}
+     */
+    public boolean advanceTo(OrderStatus target) {
+        if (!status.canTransitionTo(target)) {
+            return false;
+        }
+        changeStatus(target, null);
+        return true;
+    }
+
+    /**
      * 쿠폰 할인 적용 — PENDING 상태에서 {@code totalAmount} 확정 후 단 한 번 호출되는 것을 전제한다.
      *
      * <p>가드:

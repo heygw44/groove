@@ -1,6 +1,7 @@
 package com.groove.shipping.domain;
 
 import org.springframework.data.domain.Limit;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;
@@ -20,6 +21,13 @@ public interface ShippingRepository extends JpaRepository<Shipping, Long> {
      * {@code order_id} 는 UNIQUE 이므로 최종 방어선은 {@code uk_shipping_order} 이지만, 흔한 순차 재전달은 이 조회로 미리 거른다.
      */
     boolean existsByOrderId(Long orderId);
+
+    /**
+     * 식별자로 배송을 조회하되 {@code order} 를 함께 로드한다 — 자동 진행이 주문을 락스텝 전진(이슈 #161)시키려면
+     * order 가 필요하므로, 스케줄러가 배치 건별로 호출할 때 LAZY 추가 SELECT(N+1)를 없애려 fetch 해 둔다.
+     */
+    @EntityGraph(attributePaths = "order")
+    Optional<Shipping> findWithOrderById(Long id);
 
     /**
      * 자동 진행 스케줄러의 PREPARING → SHIPPED 대상 — {@code createdAtBefore} 이전에 생성돼 아직 준비 중인 배송.
