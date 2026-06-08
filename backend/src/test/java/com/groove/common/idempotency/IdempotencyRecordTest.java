@@ -18,7 +18,7 @@ class IdempotencyRecordTest {
     void start_initialState() {
         Instant before = Instant.now();
 
-        IdempotencyRecord record = IdempotencyRecord.start("key-1", "fp", Duration.ofHours(24));
+        IdempotencyRecord record = IdempotencyRecord.start("key-1", "fp", Duration.ofHours(24), Instant.now());
 
         assertThat(record.getIdempotencyKey()).isEqualTo("key-1");
         assertThat(record.getRequestFingerprint()).isEqualTo("fp");
@@ -32,7 +32,7 @@ class IdempotencyRecordTest {
     @Test
     @DisplayName("start — fingerprint 는 null 허용")
     void start_nullFingerprint() {
-        IdempotencyRecord record = IdempotencyRecord.start("key-1", null, Duration.ofHours(1));
+        IdempotencyRecord record = IdempotencyRecord.start("key-1", null, Duration.ofHours(1), Instant.now());
         assertThat(record.getRequestFingerprint()).isNull();
     }
 
@@ -40,22 +40,22 @@ class IdempotencyRecordTest {
     @DisplayName("start — blank key 거부")
     void start_blankKey_rejected() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> IdempotencyRecord.start("  ", null, Duration.ofHours(1)));
+                .isThrownBy(() -> IdempotencyRecord.start("  ", null, Duration.ofHours(1), Instant.now()));
     }
 
     @Test
     @DisplayName("start — 비양수 ttl 거부")
     void start_nonPositiveTtl_rejected() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> IdempotencyRecord.start("k", null, Duration.ZERO));
+                .isThrownBy(() -> IdempotencyRecord.start("k", null, Duration.ZERO, Instant.now()));
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> IdempotencyRecord.start("k", null, Duration.ofSeconds(-1)));
+                .isThrownBy(() -> IdempotencyRecord.start("k", null, Duration.ofSeconds(-1), Instant.now()));
     }
 
     @Test
     @DisplayName("complete — IN_PROGRESS → COMPLETED, 결과 캐싱")
     void complete_cachesResult() {
-        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofHours(1));
+        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofHours(1), Instant.now());
 
         record.complete("com.example.Dto", "{\"a\":1}");
 
@@ -68,7 +68,7 @@ class IdempotencyRecordTest {
     @Test
     @DisplayName("complete — 이미 완료된 레코드에 재호출 시 IllegalStateException")
     void complete_alreadyCompleted_rejected() {
-        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofHours(1));
+        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofHours(1), Instant.now());
         record.complete(null, null);
 
         assertThatIllegalStateException().isThrownBy(() -> record.complete("x", "y"));
@@ -77,7 +77,7 @@ class IdempotencyRecordTest {
     @Test
     @DisplayName("isExpired — expiresAt 기준 경계 포함")
     void isExpired_boundary() {
-        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofSeconds(10));
+        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofSeconds(10), Instant.now());
         Instant expiresAt = record.getExpiresAt();
 
         assertThat(record.isExpired(expiresAt.minusSeconds(1))).isFalse();
@@ -88,12 +88,12 @@ class IdempotencyRecordTest {
     @Test
     @DisplayName("fingerprintMismatch — 둘 다 non-null 이고 다를 때만 true")
     void fingerprintMismatch_rules() {
-        IdempotencyRecord withFp = IdempotencyRecord.start("k", "A", Duration.ofHours(1));
+        IdempotencyRecord withFp = IdempotencyRecord.start("k", "A", Duration.ofHours(1), Instant.now());
         assertThat(withFp.fingerprintMismatch("A")).isFalse();
         assertThat(withFp.fingerprintMismatch("B")).isTrue();
         assertThat(withFp.fingerprintMismatch(null)).isFalse();
 
-        IdempotencyRecord noFp = IdempotencyRecord.start("k", null, Duration.ofHours(1));
+        IdempotencyRecord noFp = IdempotencyRecord.start("k", null, Duration.ofHours(1), Instant.now());
         assertThat(noFp.fingerprintMismatch("B")).isFalse();
         assertThat(noFp.fingerprintMismatch(null)).isFalse();
     }
