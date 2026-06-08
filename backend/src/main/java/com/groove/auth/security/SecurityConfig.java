@@ -30,7 +30,7 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class, AuthRateLimitProperties.class})
+@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class, AuthRateLimitProperties.class, RefreshCookieProperties.class})
 public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {

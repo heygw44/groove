@@ -12,6 +12,12 @@ spring:
 jwt:
   secret: ${JWT_SECRET:local-dev-secret-key-minimum-256-bits-long}
 
+# 로컬 개발은 HTTP(localhost) 라 Secure 쿠키가 저장/전송되지 않으므로 refresh 쿠키 secure 를 false 로 내린다(#163).
+# 운영/도커는 application.yaml 기본값(true)을 그대로 쓴다.
+auth:
+  refresh-cookie:
+    secure: false
+
 # 로컬 개발용 Mock PG 웹훅 시크릿 fallback. 도커 프로파일에는 .env 의 PAYMENT_MOCK_WEBHOOK_SECRET 로 주입.
 payment:
   mock:

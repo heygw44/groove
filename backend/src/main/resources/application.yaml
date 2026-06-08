@@ -81,6 +81,12 @@ jwt:
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
 
+# Refresh Token 쿠키 속성 (#163). refresh 토큰은 HttpOnly; Secure; SameSite=Strict 쿠키로 내려가
+# JS 접근을 차단한다. 운영(HTTPS)은 secure=true 가 기본이며, 로컬 개발(HTTP)은 profile 에서 false 로 override.
+auth:
+  refresh-cookie:
+    secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
+
 # 인증 엔드포인트 Rate Limit (#23). 정책 수치는 운영 측정 후 W10에서 재조정 가능.
 groove:
   auth:

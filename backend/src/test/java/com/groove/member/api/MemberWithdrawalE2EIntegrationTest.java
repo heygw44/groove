@@ -2,6 +2,7 @@ package com.groove.member.api;
 
 import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
+import com.groove.auth.security.RefreshTokenCookieFactory;
 import com.groove.cart.domain.Cart;
 import com.groove.cart.domain.CartRepository;
 import com.groove.member.domain.Member;
@@ -24,8 +25,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -62,9 +61,6 @@ class MemberWithdrawalE2EIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -108,7 +104,8 @@ class MemberWithdrawalE2EIntegrationTest {
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + RAW_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
-        return objectMapper.readTree(result.getResponse().getContentAsString()).get("refreshToken").asText();
+        // refresh 토큰은 body 가 아닌 HttpOnly 쿠키로 내려간다 (#163)
+        return result.getResponse().getCookie(RefreshTokenCookieFactory.COOKIE_NAME).getValue();
     }
 
     @Test
@@ -135,8 +132,7 @@ class MemberWithdrawalE2EIntegrationTest {
 
         // 리프레시 불가 (revoke + soft delete)
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                        .cookie(new jakarta.servlet.http.Cookie(RefreshTokenCookieFactory.COOKIE_NAME, refreshToken)))
                 .andExpect(status().isUnauthorized());
 
         // 로그인 불가 (soft delete → findByEmailAndDeletedAtIsNull 비어 있음)
