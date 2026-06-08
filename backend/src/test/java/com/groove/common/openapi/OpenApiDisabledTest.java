@@ -49,9 +49,12 @@ class OpenApiDisabledTest {
     }
 
     @Test
-    @DisplayName("Swagger UI 정적 리소스 → 비활성 시 404")
+    @DisplayName("Swagger UI 정적 리소스·진입점 → 비활성 시 404")
     void swaggerUi_isNotServedWhenDisabled() throws Exception {
         mockMvc.perform(get("/swagger-ui/index.html"))
+                .andExpect(status().isNotFound());
+        // README 가 안내하는 진입점도 함께 가드한다 (springdoc 의 /swagger-ui.html → index.html 리다이렉트).
+        mockMvc.perform(get("/swagger-ui.html"))
                 .andExpect(status().isNotFound());
     }
 }
