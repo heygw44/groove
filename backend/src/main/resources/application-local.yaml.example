@@ -23,9 +23,10 @@ payment:
   mock:
     webhook-secret: ${PAYMENT_MOCK_WEBHOOK_SECRET:local-dev-mock-webhook-secret}
 
-# 로컬 개발용 CORS (모든 origin + credentials 허용)
+# 로컬 직접 접근(예: Vite dev server :5173)용 구체적 포트 와일드카드. bare "*" + credentials
+# 조합은 CorsProperties 가드가 거부하므로 와일드카드를 쓰지 말 것(#166).
 cors:
-  allowed-origin-patterns: ["*"]
+  allowed-origin-patterns: ["http://localhost:[*]", "http://127.0.0.1:[*]"]
   allow-credentials: true
 
 logging:
