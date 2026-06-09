@@ -42,7 +42,8 @@ public class ShippingCreationListener {
         } catch (DataIntegrityViolationException e) {
             log.info("배송 생성 건너뜀: order={} 이미 존재(중복 이벤트/경합)", event.orderNumber());
         } catch (RuntimeException e) {
-            log.error("배송 생성 실패: order={} — 주문은 PAID 이나 배송 미생성 (다음 reconciliation 에서 보충)",
+            // 실패 시점에 주문 상태를 확인하지 않으므로(관리자/환불로 PAID 가 아닐 수도 있음) PAID 를 단언하지 않는다.
+            log.error("배송 생성 실패: order={} — 배송 미생성, 주문이 PAID 면 다음 reconciliation 에서 보충",
                     event.orderNumber(), e);
         }
     }
