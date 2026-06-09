@@ -18,6 +18,7 @@ Faker 합성으로 카탈로그(genre/label/artist/album)와 테스트 회원을
   MEMBER_COUNT=80 LIMITED_COUNT=40 SINGLE_STOCK_COUNT=8
   OUT=db/seed/seed.sql SEED_PASSWORD=Test1234!
 """
+import hashlib
 import os
 import random
 import sys
@@ -77,6 +78,13 @@ def _esc(s: str) -> str:
 
 def q(s: str) -> str:
     return "'" + _esc(s) + "'"
+
+
+def email_hash(email: str) -> str:
+    """member.email_hash (V18 #186) — 재가입 차단용 점유 해시. NOT NULL + UNIQUE(uk_member_email_hash).
+    마이그레이션 백필 공식 SHA2(LOWER(TRIM(email)),256) 과 동일한 legacy(SHA-256) 해시를 채운다.
+    로그인 조회에는 쓰이지 않으므로(평문 email 로 조회) 서버 HMAC 비밀키 없이 결정적으로 생성 가능."""
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()
 
 
 def write_rows(f, table: str, columns: str, rows: list) -> None:
@@ -187,19 +195,21 @@ def main() -> None:
             write_rows(f, "album", cols, batch)
 
         # ── member (테스트 회원 + ADMIN 1) — loadtest*@groove.test ──────
-        member_cols = ("(id,email,password,name,phone,role,email_verified,"
+        member_cols = ("(id,email,email_hash,password,name,phone,role,email_verified,"
                        "deleted_at,created_at,updated_at)")
         member_rows = []
         for i in range(1, MEMBER_COUNT + 1):
+            email = f"loadtest{i:03d}@groove.test"
             phone = f"010-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}"
             member_rows.append(
-                f"({i},{q(f'loadtest{i:03d}@groove.test')},{q(pw_hash)},"
+                f"({i},{q(email)},{q(email_hash(email))},{q(pw_hash)},"
                 f"{q(fake_ko.name()[:50])},{q(phone)},{q(ROLE_USER)},1,NULL,{q(NOW)},{q(NOW)})"
             )
         admin_id = MEMBER_COUNT + 1
+        admin_email = "loadtest-admin@groove.test"
         admin_phone = f"010-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}"
         member_rows.append(
-            f"({admin_id},{q('loadtest-admin@groove.test')},{q(pw_hash)},"
+            f"({admin_id},{q(admin_email)},{q(email_hash(admin_email))},{q(pw_hash)},"
             f"{q('관리자')},{q(admin_phone)},{q(ROLE_ADMIN)},1,NULL,{q(NOW)},{q(NOW)})"
         )
         write_rows(f, "member", member_cols, member_rows)
