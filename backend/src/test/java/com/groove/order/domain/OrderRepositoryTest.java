@@ -142,38 +142,47 @@ class OrderRepositoryTest {
         assertThat(orderRepository.existsByMemberIdAndStatusIn(OTHER_MEMBER_ID, WITHDRAWAL_BLOCKING)).isFalse();
     }
 
+    // 이 쿼리는 member 필터가 없어 DB 전체의 종착 주문을 조회한다. 공유 Testcontainers 에 다른 테스트가
+    // 커밋한 주문이 섞일 수 있으므로, 전역 개수(containsExactly/isEmpty)가 아니라 이 테스트가 저장한 id 기준으로
+    // contains/doesNotContain 만 단언한다. ORDER BY updated_at ASC + LIMIT 에 내가 만든 최신 행이 잘리지 않도록
+    // limit 은 넉넉히 둔다.
+    private static final Limit GENEROUS_LIMIT = Limit.of(10_000);
+
     @Test
-    @DisplayName("비배송 종착 익명화 대상(#188) — PENDING/PAYMENT_FAILED/CANCELLED 만 조회, 진행/배송완료 주문은 제외")
+    @DisplayName("비배송 종착 익명화 대상(#188) — PENDING/PAYMENT_FAILED/CANCELLED 는 포함, 진행/배송완료 주문은 제외")
     void findTerminalNonShipping_selectsTerminalExcludesActive() {
         Order pending = saveOrder(memberId, OrderStatus.PENDING);
         Order paymentFailed = saveOrder(memberId, OrderStatus.PAYMENT_FAILED);
         Order cancelled = saveOrder(memberId, OrderStatus.CANCELLED);
-        saveOrder(memberId, OrderStatus.PAID);       // 진행 중 — 제외
-        saveOrder(memberId, OrderStatus.DELIVERED);  // 배송완료 배치 담당 — 제외
+        Order paid = saveOrder(memberId, OrderStatus.PAID);            // 진행 중 — 제외
+        Order delivered = saveOrder(memberId, OrderStatus.DELIVERED);  // 배송완료 배치 담당 — 제외
 
         // updated_at 은 @LastModifiedDate 라 과거로 못 박으므로 cutoff 를 미래로 잡아 방금 저장된 건이 모두 cutoff 이전이 되게 한다.
         Instant cutoff = Instant.now().plus(Duration.ofHours(1));
         List<OrderRepository.OrderNumberView> targets =
                 orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
-                        NON_SHIPPING_TERMINAL, cutoff, Limit.of(100));
+                        NON_SHIPPING_TERMINAL, cutoff, GENEROUS_LIMIT);
 
         assertThat(targets)
                 .extracting(OrderRepository.OrderNumberView::getId)
-                .containsExactlyInAnyOrder(pending.getId(), paymentFailed.getId(), cancelled.getId());
+                .contains(pending.getId(), paymentFailed.getId(), cancelled.getId())
+                .doesNotContain(paid.getId(), delivered.getId());
     }
 
     @Test
     @DisplayName("비배송 종착 익명화 대상(#188) — cutoff 이전(보존기간 미경과)이면 제외된다")
     void findTerminalNonShipping_recentlyUpdated_excluded() {
-        saveOrder(memberId, OrderStatus.CANCELLED);
+        Order cancelled = saveOrder(memberId, OrderStatus.CANCELLED);
 
         // 방금 저장돼 updated_at ≈ now 인데 cutoff 를 과거로 잡으면 대상에서 빠져야 한다.
         Instant cutoff = Instant.now().minus(Duration.ofHours(1));
         List<OrderRepository.OrderNumberView> targets =
                 orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
-                        NON_SHIPPING_TERMINAL, cutoff, Limit.of(100));
+                        NON_SHIPPING_TERMINAL, cutoff, GENEROUS_LIMIT);
 
-        assertThat(targets).isEmpty();
+        assertThat(targets)
+                .extracting(OrderRepository.OrderNumberView::getId)
+                .doesNotContain(cancelled.getId());
     }
 
     @Test
@@ -186,8 +195,10 @@ class OrderRepositoryTest {
         Instant cutoff = Instant.now().plus(Duration.ofHours(1));
         List<OrderRepository.OrderNumberView> targets =
                 orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
-                        NON_SHIPPING_TERMINAL, cutoff, Limit.of(100));
+                        NON_SHIPPING_TERMINAL, cutoff, GENEROUS_LIMIT);
 
-        assertThat(targets).isEmpty();
+        assertThat(targets)
+                .extracting(OrderRepository.OrderNumberView::getId)
+                .doesNotContain(cancelled.getId());
     }
 }
