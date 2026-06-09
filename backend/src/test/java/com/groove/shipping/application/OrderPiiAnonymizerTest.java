@@ -1,6 +1,8 @@
 package com.groove.shipping.application;
 
 import com.groove.order.domain.Order;
+import com.groove.order.domain.OrderRepository;
+import com.groove.order.domain.OrderStatus;
 import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.support.OrderFixtures;
@@ -17,6 +19,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("OrderPiiAnonymizer — 주문/배송 PII 마스킹 공유 로직")
@@ -24,15 +28,18 @@ class OrderPiiAnonymizerTest {
 
     private static final Instant NOW = Instant.parse("2026-06-09T10:00:00Z");
     private static final long SHIPPING_ID = 5L;
+    private static final long ORDER_ID = 7L;
 
     @Mock
     private ShippingRepository shippingRepository;
+    @Mock
+    private OrderRepository orderRepository;
 
     private OrderPiiAnonymizer anonymizer;
 
     @BeforeEach
     void setUp() {
-        anonymizer = new OrderPiiAnonymizer(shippingRepository);
+        anonymizer = new OrderPiiAnonymizer(shippingRepository, orderRepository);
     }
 
     /** 배송완료(DELIVERED) 상태의 배송을 주문과 함께 구성한다. */
@@ -96,5 +103,67 @@ class OrderPiiAnonymizerTest {
 
         assertThatCode(() -> assertThat(anonymizer.anonymizeForShipping(SHIPPING_ID, NOW)).isFalse())
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("anonymizeOrder — 배송 없는 게스트 종착 주문(PENDING)의 PII 를 마스킹한다 (배송 조회 안 함, true 반환)")
+    void anonymizeOrder_guestNoShipping_masksOrder() {
+        // 게스트 주문은 PENDING — 배송이 없는 종착 후보라 배송 조회를 건너뛴다.
+        Order order = OrderFixtures.guestOrder("ORD-PII-3", "guest@example.com", "01099998888");
+        given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
+
+        boolean done = anonymizer.anonymizeOrder(ORDER_ID, NOW);
+
+        assertThat(done).isTrue();
+        assertThat(order.getShippingInfo().recipientName()).isEqualTo("익명");
+        assertThat(order.getShippingInfo().recipientPhone()).isEqualTo("익명");
+        assertThat(order.getShippingInfo().address()).isEqualTo("익명");
+        assertThat(order.getShippingInfo().addressDetail()).isNull();
+        assertThat(order.getShippingInfo().zipCode()).isEqualTo("익명");
+        assertThat(order.getGuestEmail()).isNull();
+        assertThat(order.getGuestPhone()).isNull();
+        assertThat(order.getAnonymizedAt()).isEqualTo(NOW);
+        verify(shippingRepository, never()).findByOrderId(ORDER_ID);
+    }
+
+    @Test
+    @DisplayName("anonymizeOrder — 환불로 취소(CANCELLED)돼 배송 행이 있으면 주문·배송 PII 를 함께 마스킹한다")
+    void anonymizeOrder_cancelledWithShipping_masksOrderAndShipping() {
+        Order order = OrderFixtures.memberOrder("ORD-PII-4", 1L);
+        Shipping shipping = Shipping.prepare(order, order.getShippingInfo(), "track-4");
+        order.changeStatus(OrderStatus.CANCELLED, "환불");
+        given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
+        given(shippingRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(shipping));
+
+        boolean done = anonymizer.anonymizeOrder(ORDER_ID, NOW);
+
+        assertThat(done).isTrue();
+        assertThat(order.getAnonymizedAt()).isEqualTo(NOW);
+        assertThat(shipping.getRecipientName()).isEqualTo("익명");
+        assertThat(shipping.getAddress()).isEqualTo("익명");
+        assertThat(shipping.getAnonymizedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("anonymizeOrder — 이미 익명화된 주문이면 멱등 no-op (false 반환, 배송 조회 안 함)")
+    void anonymizeOrder_alreadyAnonymized_idempotentNoOp() {
+        Order order = OrderFixtures.memberOrder("ORD-PII-5", 1L);
+        Instant first = Instant.parse("2026-03-01T00:00:00Z");
+        order.anonymizePii(first);
+        given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
+
+        boolean done = anonymizer.anonymizeOrder(ORDER_ID, NOW);
+
+        assertThat(done).isFalse();
+        assertThat(order.getAnonymizedAt()).isEqualTo(first);
+        verify(shippingRepository, never()).findByOrderId(ORDER_ID);
+    }
+
+    @Test
+    @DisplayName("anonymizeOrder — 주문이 없으면 건너뛰고 false 반환")
+    void anonymizeOrder_orderMissing_returnsFalse() {
+        given(orderRepository.findById(ORDER_ID)).willReturn(Optional.empty());
+
+        assertThat(anonymizer.anonymizeOrder(ORDER_ID, NOW)).isFalse();
     }
 }

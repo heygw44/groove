@@ -110,6 +110,20 @@ class ShippingProvisionerTest {
     }
 
     @Test
+    @DisplayName("이미 PII 익명화된 주문이면(#188 심층 방어) 배송을 만들지 않고 false 반환 — 배송지가 '익명' 으로 마스킹됨")
+    void skipsWhenOrderAlreadyAnonymized() {
+        Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
+        order.anonymizePii(java.time.Instant.parse("2026-03-01T00:00:00Z"));
+        given(shippingRepository.existsByOrderId(ORDER_ID)).willReturn(false);
+        given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
+
+        boolean created = provisioner.provisionForOrder(ORDER_ID, ORDER_NUMBER);
+
+        assertThat(created).isFalse();
+        verify(shippingRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     @DisplayName("UNIQUE 충돌(DataIntegrityViolationException) 은 삼키지 않고 호출자로 전파한다")
     void propagatesUniqueViolation() {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);

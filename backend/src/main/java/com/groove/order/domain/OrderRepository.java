@@ -80,6 +80,24 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     List<OrderNumberView> findByStatusAndPaidAtBeforeOrderByPaidAtAsc(OrderStatus status, Instant cutoff, Limit limit);
 
     /**
+     * 비배송 종착 주문 PII 익명화 배치(#188, #170 후속) 대상 — 배송이 생성되지 않는 종착 주문
+     * (미결제 {@code PENDING} / {@code PAYMENT_FAILED} / 배송 생성 전 {@code CANCELLED}) 중 마지막 변경
+     * ({@code updated_at}) 후 보존기간이 지났고 아직 익명화되지 않은({@code anonymized_at IS NULL}) 건을
+     * {@code updated_at} 오름차순(오래된 것 먼저)으로 찾는다. 회원/게스트 주문 모두 대상이다.
+     *
+     * <p>종착 비배송 주문은 종착 후 추가 쓰기가 없어 {@code updated_at == 종착 시각}이라 세 상태에 통일된 cutoff
+     * 기준으로 쓴다 — 결제 시도 후 실패해 PENDING 에 잔류하는 등 최근 활동 건은 {@code updated_at} 갱신으로
+     * 자동 제외된다. 익명화에는 식별자만 필요하므로 경량 {@link OrderNumberView} 프로젝션으로 받아 full 엔티티
+     * 적재를 피한다 — 실제 마스킹은 {@code OrderPiiAnonymizer} 가 id 로 주문(+배송)을 재로딩해 수행한다.
+     * {@code limit} 으로 한 주기 처리량을 제한한다(메모리 바운드).
+     *
+     * <p>{@code updated_at} 인덱스는 기존 {@code delivered_at}/{@code paid_at} 배치와 동일하게 슬로우 쿼리 측정
+     * 후 W10 으로 연기한다 — 다만 장기 미결제 PENDING 이 누적되면 풀스캔 비용이 커질 수 있어 모니터링이 필요하다.
+     */
+    List<OrderNumberView> findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+            Collection<OrderStatus> statuses, Instant cutoff, Limit limit);
+
+    /**
      * 앨범 삭제 차단 검사 (#159) — 해당 album 을 참조하는 order_item 존재 여부.
      *
      * <p>{@code order_item.album_id} 는 ON DELETE RESTRICT FK 다. {@code AlbumService.delete} 가

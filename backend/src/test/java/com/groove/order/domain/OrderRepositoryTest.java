@@ -13,9 +13,13 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase.Replace;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Limit;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,6 +33,9 @@ class OrderRepositoryTest {
 
     private static final Set<OrderStatus> WITHDRAWAL_BLOCKING =
             EnumSet.of(OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.SHIPPED);
+
+    private static final Set<OrderStatus> NON_SHIPPING_TERMINAL =
+            EnumSet.of(OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED, OrderStatus.CANCELLED);
 
     private static final long OTHER_MEMBER_ID = 9_999L;
 
@@ -74,6 +81,7 @@ class OrderRepositoryTest {
                 order.changeStatus(OrderStatus.DELIVERED, null);
             }
             case CANCELLED -> order.changeStatus(OrderStatus.CANCELLED, "테스트");
+            case PAYMENT_FAILED -> order.changeStatus(OrderStatus.PAYMENT_FAILED, null);
             default -> throw new IllegalArgumentException("미지원 상태: " + target);
         }
         return orderRepository.saveAndFlush(order);
@@ -132,5 +140,54 @@ class OrderRepositoryTest {
         saveOrder(memberId, OrderStatus.PAID);
 
         assertThat(orderRepository.existsByMemberIdAndStatusIn(OTHER_MEMBER_ID, WITHDRAWAL_BLOCKING)).isFalse();
+    }
+
+    @Test
+    @DisplayName("비배송 종착 익명화 대상(#188) — PENDING/PAYMENT_FAILED/CANCELLED 만 조회, 진행/배송완료 주문은 제외")
+    void findTerminalNonShipping_selectsTerminalExcludesActive() {
+        Order pending = saveOrder(memberId, OrderStatus.PENDING);
+        Order paymentFailed = saveOrder(memberId, OrderStatus.PAYMENT_FAILED);
+        Order cancelled = saveOrder(memberId, OrderStatus.CANCELLED);
+        saveOrder(memberId, OrderStatus.PAID);       // 진행 중 — 제외
+        saveOrder(memberId, OrderStatus.DELIVERED);  // 배송완료 배치 담당 — 제외
+
+        // updated_at 은 @LastModifiedDate 라 과거로 못 박으므로 cutoff 를 미래로 잡아 방금 저장된 건이 모두 cutoff 이전이 되게 한다.
+        Instant cutoff = Instant.now().plus(Duration.ofHours(1));
+        List<OrderRepository.OrderNumberView> targets =
+                orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+                        NON_SHIPPING_TERMINAL, cutoff, Limit.of(100));
+
+        assertThat(targets)
+                .extracting(OrderRepository.OrderNumberView::getId)
+                .containsExactlyInAnyOrder(pending.getId(), paymentFailed.getId(), cancelled.getId());
+    }
+
+    @Test
+    @DisplayName("비배송 종착 익명화 대상(#188) — cutoff 이전(보존기간 미경과)이면 제외된다")
+    void findTerminalNonShipping_recentlyUpdated_excluded() {
+        saveOrder(memberId, OrderStatus.CANCELLED);
+
+        // 방금 저장돼 updated_at ≈ now 인데 cutoff 를 과거로 잡으면 대상에서 빠져야 한다.
+        Instant cutoff = Instant.now().minus(Duration.ofHours(1));
+        List<OrderRepository.OrderNumberView> targets =
+                orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+                        NON_SHIPPING_TERMINAL, cutoff, Limit.of(100));
+
+        assertThat(targets).isEmpty();
+    }
+
+    @Test
+    @DisplayName("비배송 종착 익명화 대상(#188) — 이미 익명화된(anonymized_at != null) 주문은 제외된다")
+    void findTerminalNonShipping_alreadyAnonymized_excluded() {
+        Order cancelled = saveOrder(memberId, OrderStatus.CANCELLED);
+        cancelled.anonymizePii(Instant.now());
+        orderRepository.saveAndFlush(cancelled);
+
+        Instant cutoff = Instant.now().plus(Duration.ofHours(1));
+        List<OrderRepository.OrderNumberView> targets =
+                orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+                        NON_SHIPPING_TERMINAL, cutoff, Limit.of(100));
+
+        assertThat(targets).isEmpty();
     }
 }
