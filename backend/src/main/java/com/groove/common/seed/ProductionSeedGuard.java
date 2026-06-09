@@ -1,5 +1,6 @@
 package com.groove.common.seed;
 
+import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,10 +44,11 @@ public class ProductionSeedGuard implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        // existsByEmail 은 soft-delete 포함 점유 확인이라 탈퇴 처리된 데모 계정도 잡아낸다.
+        // existsByEmailHash 는 soft-delete(익명화) 포함 점유 확인이라 탈퇴 처리된 데모 계정도 잡아낸다 (#170
+        // 부터 점유 판정이 평문 대신 정규화 이메일 해시 — 익명화로 평문이 치환돼도 해시는 보존되므로 그대로 감지).
         List<String> detected = new ArrayList<>();
-        if (memberRepository.existsByEmail(DemoAccounts.ADMIN_EMAIL)) detected.add(DemoAccounts.ADMIN_EMAIL);
-        if (memberRepository.existsByEmail(DemoAccounts.DEMO_USER_EMAIL)) detected.add(DemoAccounts.DEMO_USER_EMAIL);
+        if (memberRepository.existsByEmailHash(Member.hashEmail(DemoAccounts.ADMIN_EMAIL))) detected.add(DemoAccounts.ADMIN_EMAIL);
+        if (memberRepository.existsByEmailHash(Member.hashEmail(DemoAccounts.DEMO_USER_EMAIL))) detected.add(DemoAccounts.DEMO_USER_EMAIL);
         if (!detected.isEmpty()) {
             throw new IllegalStateException(
                     "운영(비-local) 프로파일로 기동했으나 DB 에서 데모 계정(" + String.join(", ", detected) + ")이 "

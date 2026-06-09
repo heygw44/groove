@@ -50,7 +50,7 @@ class ProductionSeedGuardIntegrationTest {
         removeDemoAccounts();
     }
 
-    // 가드는 existsByEmail(soft-delete 포함)로 감지하므로, 정리도 같은 기준(findAll 전수 — soft-delete 무관)으로
+    // 가드는 existsByEmailHash(soft-delete 포함)로 감지하므로, 정리도 같은 기준(findAll 전수 — soft-delete 무관)으로
     // 지운다. findByEmailAndDeletedAtIsNull(활성만)과의 비대칭으로 인한 공유 컨테이너 순서 의존 flake 를 막는다.
     private void removeDemoAccounts() {
         memberRepository.findAll().stream()

@@ -45,14 +45,29 @@ class MemberRepositoryTest {
     }
 
     @Test
-    @DisplayName("existsByEmail → 활성/탈퇴 무관하게 true (패턴 A)")
-    void existsByEmail_returnsTrueForExistingEmail() {
+    @DisplayName("existsByEmailHash → 정규화 이메일 해시로 점유 판정 (패턴 A)")
+    void existsByEmailHash_returnsTrueForExistingEmail() {
         memberRepository.saveAndFlush(
                 Member.register("dup@example.com", "$2a$12$hash", "철수", "01011112222")
         );
 
-        assertThat(memberRepository.existsByEmail("dup@example.com")).isTrue();
-        assertThat(memberRepository.existsByEmail("other@example.com")).isFalse();
+        assertThat(memberRepository.existsByEmailHash(Member.hashEmail("dup@example.com"))).isTrue();
+        assertThat(memberRepository.existsByEmailHash(Member.hashEmail("other@example.com"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("existsByEmailHash → 익명화(평문 치환) 후에도 원래 이메일·대소문자 변형 재가입 차단 (#170 회귀)")
+    void existsByEmailHash_blocksReSignupAfterAnonymization_caseInsensitive() {
+        Member member = Member.register("foo@x.com", "$2a$12$hash", "원회원", "01012345678");
+        member.withdraw(Instant.now());
+        member.anonymize(); // email 평문 → withdrawn-{id}@deleted.local, email_hash 는 보존
+        memberRepository.saveAndFlush(member);
+
+        // 평문은 치환됐어도 해시 점유가 남아 재가입을 막는다.
+        assertThat(member.getEmail()).doesNotContain("foo@x.com");
+        assertThat(memberRepository.existsByEmailHash(Member.hashEmail("foo@x.com"))).isTrue();
+        // 대소문자 변형도 정규화 후 같은 해시 → 차단 (collation ci 차단 시맨틱 유지).
+        assertThat(memberRepository.existsByEmailHash(Member.hashEmail("FOO@x.com"))).isTrue();
     }
 
     @Test
@@ -77,8 +92,8 @@ class MemberRepositoryTest {
         memberRepository.saveAndFlush(deleted);
 
         assertThat(memberRepository.findByEmailAndDeletedAtIsNull("gone@example.com")).isEmpty();
-        // 패턴 A: existsByEmail 은 탈퇴자도 점유한 것으로 본다 (재가입 차단).
-        assertThat(memberRepository.existsByEmail("gone@example.com")).isTrue();
+        // 패턴 A: existsByEmailHash 는 탈퇴자도 점유한 것으로 본다 (재가입 차단).
+        assertThat(memberRepository.existsByEmailHash(Member.hashEmail("gone@example.com"))).isTrue();
     }
 
     @Test

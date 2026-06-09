@@ -55,17 +55,19 @@ public class MemberService {
     /**
      * 회원가입.
      *
-     * <p>이메일 중복(soft delete 포함) 검사 → BCrypt 해시 → 영속화.
+     * <p>이메일 중복(soft delete·익명화 포함) 검사 → BCrypt 해시 → 영속화. 중복 검사는 평문이 아닌 정규화
+     * 이메일 해시({@link Member#hashEmail})로 한다 (#170, 패턴 A) — 탈퇴 익명화가 평문을 치환해도
+     * {@code email_hash} 는 보존되므로 같은 이메일의 재가입이 차단된다.
      *
-     * <p>선체크({@code existsByEmail})와 {@code save} 사이에 동시 가입 요청이 끼어들 수 있다.
-     * DB UNIQUE 제약이 최종 방어선이며, 위반 시 {@link DataIntegrityViolationException} 을
-     * 도메인 예외로 변환해 409 응답이 보장된다.
+     * <p>선체크({@code existsByEmailHash})와 {@code save} 사이에 동시 가입 요청이 끼어들 수 있다.
+     * DB UNIQUE 제약({@code uk_member_email_hash})이 최종 방어선이며, 위반 시 {@link DataIntegrityViolationException}
+     * 을 도메인 예외로 변환해 409 응답이 보장된다.
      *
      * @throws MemberEmailDuplicatedException 동일 이메일이 이미 존재
      */
     @Transactional
     public Member signup(SignupCommand command) {
-        if (memberRepository.existsByEmail(command.email())) {
+        if (memberRepository.existsByEmailHash(Member.hashEmail(command.email()))) {
             throw new MemberEmailDuplicatedException();
         }
         String passwordHash = passwordEncoder.encode(command.password());
@@ -113,9 +115,11 @@ public class MemberService {
      * 회원 탈퇴 (#78, API.md §3.2 — DELETE /members/me). soft delete.
      *
      * <p>본인 비밀번호를 BCrypt 비교로 재확인한 뒤, "진행 중" 주문이 없으면 {@code deleted_at} 을 찍고
+     * 회원 PII 를 익명화({@link Member#anonymize} — email 평문 치환·name/phone 마스킹, email_hash 는 보존)한 다음
      * {@link MemberWithdrawnEvent} 를 발행한다. 이벤트의 AFTER_COMMIT 리스너가 장바구니 삭제(cart)와
-     * 리프레시 토큰 정리(auth)를 각 모듈에서 수행한다 — 본 서비스는 자기 도메인(member soft delete)만
-     * 책임지고, 타 모듈 데이터는 직접 건드리지 않는다.
+     * 리프레시 토큰 정리(auth)를 각 모듈에서 수행한다 — 본 서비스는 자기 도메인(member soft delete·익명화)만
+     * 책임지고, 타 모듈 데이터는 직접 건드리지 않는다. 주문/배송 PII 는 배송완료 후 보존기간이 지나면
+     * {@code OrderPiiAnonymizationScheduler} 가 별도로 익명화한다 (#170 Part B).
      *
      * <p><b>멱등</b>: access 토큰은 stateless 라 탈퇴 직후에도 만료 전까지 유효하므로 재요청이 들어올 수
      * 있다. 활성/탈퇴 회원을 모두 조회({@code findById})해 이미 탈퇴 상태면 no-op 으로 끝낸다 — 이벤트를
@@ -150,6 +154,7 @@ public class MemberService {
         }
 
         member.withdraw(clock.instant());
+        member.anonymize();
         eventPublisher.publishEvent(new MemberWithdrawnEvent(memberId));
         log.info("회원 탈퇴 성공 memberId={}", memberId);
     }

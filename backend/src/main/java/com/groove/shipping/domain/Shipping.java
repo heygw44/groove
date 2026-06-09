@@ -36,6 +36,9 @@ public class Shipping extends BaseTimeEntity {
     /** DB {@code tracking_number} 컬럼 길이 — {@link #prepare} 가 선검증해 DB 예외를 막는다. */
     static final int MAX_TRACKING_NUMBER_LENGTH = 50;
 
+    /** PII 익명화 시 텍스트 필드에 채우는 마스킹 라벨 (#170 Part B). 모든 PII 컬럼 길이 안에 들어간다. */
+    static final String ANONYMIZED_TEXT = "익명";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -74,6 +77,13 @@ public class Shipping extends BaseTimeEntity {
 
     @Column(name = "delivered_at")
     private Instant deliveredAt;
+
+    /**
+     * 배송 PII 익명화 시점 (#170 Part B). 배송완료 후 보존기간이 지나면 {@code OrderPiiAnonymizationScheduler}
+     * 가 수령인/주소 PII 를 마스킹하고 이 시각을 찍는다 — 배치 대상 선별과 멱등 마커를 겸한다.
+     */
+    @Column(name = "anonymized_at")
+    private Instant anonymizedAt;
 
     protected Shipping() {
     }
@@ -132,6 +142,29 @@ public class Shipping extends BaseTimeEntity {
         this.status = next;
     }
 
+    /**
+     * 배송 PII 익명화 (#170 Part B). 배송완료 후 보존기간이 지난 배송의 수령인/주소 PII 를 마스킹한다.
+     * {@code address_detail} 은 원래 NULL 일 수 있어 NULL 로 비운다. 운송장 번호·상태·시각 등 비-PII 는 보존한다.
+     *
+     * <p><b>멱등</b>: 이미 익명화됐으면({@code anonymized_at != null}) no-op — 배치 재실행에 안전하다.
+     */
+    public void anonymizePii(Instant now) {
+        if (this.anonymizedAt != null) {
+            return;
+        }
+        this.recipientName = ANONYMIZED_TEXT;
+        this.recipientPhone = ANONYMIZED_TEXT;
+        this.address = ANONYMIZED_TEXT;
+        this.addressDetail = null;
+        this.zipCode = ANONYMIZED_TEXT;
+        this.anonymizedAt = now;
+    }
+
+    /** 이미 PII 익명화된 배송인지 여부 (#170 Part B). */
+    public boolean isAnonymized() {
+        return this.anonymizedAt != null;
+    }
+
     public Long getId() {
         return id;
     }
@@ -178,5 +211,9 @@ public class Shipping extends BaseTimeEntity {
 
     public Instant getDeliveredAt() {
         return deliveredAt;
+    }
+
+    public Instant getAnonymizedAt() {
+        return anonymizedAt;
     }
 }

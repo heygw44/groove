@@ -53,6 +53,9 @@ public class Order extends BaseTimeEntity {
     /** DB {@code zip_code} 컬럼 길이 — {@link OrderShippingInfo} 가 선검증한다. */
     static final int MAX_ZIP_CODE_LENGTH = 20;
 
+    /** PII 익명화 시 텍스트 필드에 채우는 마스킹 라벨 (#170 Part B). 모든 PII 컬럼 길이 안에 들어간다. */
+    static final String ANONYMIZED_TEXT = "익명";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -125,6 +128,13 @@ public class Order extends BaseTimeEntity {
 
     @Column(name = "safe_packaging_requested", nullable = false)
     private boolean safePackagingRequested;
+
+    /**
+     * 주문 PII 익명화 시점 (#170 Part B). 배송완료 후 보존기간이 지나면 {@code OrderPiiAnonymizationScheduler}
+     * 가 수령인/주소/게스트 PII 를 마스킹하고 이 시각을 찍는다 — 다음 주기에서 제외하는 멱등 마커다.
+     */
+    @Column(name = "anonymized_at")
+    private Instant anonymizedAt;
 
     /**
      * 페이징 쿼리({@code findByMemberId} 등)에서 컬렉션 fetch join 시 발생하는 인메모리 페이지네이션을
@@ -276,6 +286,34 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
+     * 주문 PII 익명화 (#170 Part B, GDPR/개인정보 파기·익명화 의무).
+     *
+     * <p>배송완료 후 보존기간이 지난 주문의 수령인/주소/게스트 PII 를 마스킹한다 — 회원/게스트 주문 모두
+     * 동일하게 적용된다(게스트 주문은 이 배치가 PII 를 비우는 유일한 경로). 주문번호·금액·상태·시각 등
+     * 비-PII 는 회계/이력 목적으로 보존한다. {@code address_detail} 은 원래 NULL 일 수 있어 NULL 로 비운다.
+     *
+     * <p><b>멱등</b>: 이미 익명화됐으면({@code anonymized_at != null}) no-op — 배치 재실행·중복 호출에 안전하다.
+     */
+    public void anonymizePii(Instant now) {
+        if (this.anonymizedAt != null) {
+            return;
+        }
+        this.recipientName = ANONYMIZED_TEXT;
+        this.recipientPhone = ANONYMIZED_TEXT;
+        this.address = ANONYMIZED_TEXT;
+        this.addressDetail = null;
+        this.zipCode = ANONYMIZED_TEXT;
+        this.guestEmail = null;
+        this.guestPhone = null;
+        this.anonymizedAt = now;
+    }
+
+    /** 이미 PII 익명화된 주문인지 여부 (#170 Part B). */
+    public boolean isAnonymized() {
+        return this.anonymizedAt != null;
+    }
+
+    /**
      * 항목 추가 + totalAmount 누적.
      */
     public void addItem(OrderItem item) {
@@ -335,6 +373,10 @@ public class Order extends BaseTimeEntity {
 
     public Instant getPaidAt() {
         return paidAt;
+    }
+
+    public Instant getAnonymizedAt() {
+        return anonymizedAt;
     }
 
     public Instant getCancelledAt() {

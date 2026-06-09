@@ -73,7 +73,7 @@ class MemberServiceTest {
                 "김철수",
                 "01012345678"
         );
-        when(memberRepository.existsByEmail(command.email())).thenReturn(false);
+        when(memberRepository.existsByEmailHash(Member.hashEmail(command.email()))).thenReturn(false);
         when(passwordEncoder.encode(command.password())).thenReturn("$2a$12$hashed");
         when(memberRepository.saveAndFlush(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -84,6 +84,9 @@ class MemberServiceTest {
         Member persisted = captor.getValue();
 
         assertThat(persisted.getEmail()).isEqualTo("user@example.com");
+        assertThat(persisted.getEmailHash())
+                .as("정규화 이메일 해시가 점유 컬럼으로 채워져야 함 (#170 패턴 A)")
+                .isEqualTo(Member.hashEmail("user@example.com"));
         assertThat(persisted.getPassword())
                 .as("DB에 평문이 아닌 해시가 저장되어야 함")
                 .isEqualTo("$2a$12$hashed")
@@ -102,7 +105,7 @@ class MemberServiceTest {
                 "박영희",
                 "01099998888"
         );
-        when(memberRepository.existsByEmail("dup@example.com")).thenReturn(true);
+        when(memberRepository.existsByEmailHash(Member.hashEmail("dup@example.com"))).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.signup(command))
                 .isInstanceOf(MemberEmailDuplicatedException.class);
@@ -110,7 +113,7 @@ class MemberServiceTest {
         verify(passwordEncoder, never()).encode(any());
         verify(memberRepository, never()).save(any(Member.class));
         verify(memberRepository, never()).saveAndFlush(any(Member.class));
-        verify(memberRepository, times(1)).existsByEmail("dup@example.com");
+        verify(memberRepository, times(1)).existsByEmailHash(Member.hashEmail("dup@example.com"));
     }
 
     @Test
@@ -122,10 +125,10 @@ class MemberServiceTest {
                 "동시가입",
                 "01077776666"
         );
-        when(memberRepository.existsByEmail("race@example.com")).thenReturn(false);
+        when(memberRepository.existsByEmailHash(Member.hashEmail("race@example.com"))).thenReturn(false);
         when(passwordEncoder.encode(command.password())).thenReturn("$2a$12$hashed");
         when(memberRepository.saveAndFlush(any(Member.class)))
-                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk_member_email"));
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk_member_email_hash"));
 
         assertThatThrownBy(() -> memberService.signup(command))
                 .isInstanceOf(MemberEmailDuplicatedException.class)
@@ -188,9 +191,10 @@ class MemberServiceTest {
     }
 
     @Test
-    @DisplayName("withdraw: 정상 → soft delete + MemberWithdrawnEvent 1회 발행")
-    void withdraw_success_softDeletesAndPublishesEvent() {
+    @DisplayName("withdraw: 정상 → soft delete + PII 익명화 + MemberWithdrawnEvent 1회 발행")
+    void withdraw_success_softDeletesAnonymizesAndPublishesEvent() {
         Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        String originalHash = member.getEmailHash();
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("P@ssw0rd!2024", "$2a$12$hash")).thenReturn(true);
         when(orderRepository.existsByMemberIdAndStatusIn(eq(1L), any())).thenReturn(false);
@@ -199,6 +203,13 @@ class MemberServiceTest {
 
         assertThat(member.isWithdrawn()).isTrue();
         assertThat(member.getDeletedAt()).isEqualTo(NOW);
+        // PII 익명화 (#170): 평문 제거, email_hash 는 보존(재가입 차단 유지).
+        assertThat(member.getEmail()).startsWith("withdrawn-").endsWith("@deleted.local");
+        assertThat(member.getName()).isEqualTo("탈퇴회원");
+        assertThat(member.getPhone()).isNull();
+        assertThat(member.getEmailHash())
+                .as("재가입 차단용 email_hash 는 익명화 후에도 보존")
+                .isEqualTo(originalHash);
         verify(eventPublisher).publishEvent(new MemberWithdrawnEvent(1L));
     }
 

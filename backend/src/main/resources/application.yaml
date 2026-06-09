@@ -149,6 +149,18 @@ groove:
       # 한 주기에 보충할 최대 건수 — 메모리 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${SHIPPING_RECONCILIATION_BATCH_SIZE:200}
 
+  # 주문/배송 PII 익명화 배치 (#170 Part B, GDPR/개인정보). 배송완료된 지 retention 이 지난 주문/배송의
+  # 수령인·주소·게스트 PII 를 interval 마다 마스킹한다. 회원 본인 PII 는 탈퇴 즉시 익명화되지만, 주문/배송
+  # 배송지 PII 는 분쟁 대응을 위해 보존기간 후 익명화한다(특히 게스트 주문은 이 배치가 유일한 익명화 경로).
+  privacy:
+    order-anonymization:
+      interval: ${ORDER_ANONYMIZATION_INTERVAL:PT1H}
+      initial-delay: ${ORDER_ANONYMIZATION_INITIAL_DELAY:PT10M}
+      # 배송완료(delivered_at) 후 이 기간이 지난 주문만 익명화 (delivered_at < now - retention).
+      retention: ${ORDER_ANONYMIZATION_RETENTION:P90D}
+      # 한 주기에 익명화할 최대 건수 — 메모리 바운드. 나머지는 다음 주기에 처리.
+      batch-size: ${ORDER_ANONYMIZATION_BATCH_SIZE:200}
+
 # CORS default 는 모든 origin 차단. profile 별 yaml 또는 환경 변수로 override.
 # 운영 환경에서는 cors.allowed-origins 를 명시적 도메인 화이트리스트로 설정.
 cors:
