@@ -121,6 +121,7 @@ class ShippingProvisionerTest {
 
         assertThat(created).isFalse();
         verify(shippingRepository, never()).saveAndFlush(any());
+        verify(trackingNumberGenerator, never()).generate();
     }
 
     @Test

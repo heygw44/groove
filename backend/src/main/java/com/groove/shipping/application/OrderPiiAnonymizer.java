@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
  * 배송완료 + 보존기간이 지난 주문/배송의 PII 를 익명화하는 단일 진입점 (#170 Part B) — {@link OrderPiiAnonymizationScheduler}
@@ -34,6 +36,14 @@ import java.time.Instant;
 public class OrderPiiAnonymizer {
 
     private static final Logger log = LoggerFactory.getLogger(OrderPiiAnonymizer.class);
+
+    /**
+     * {@link #anonymizeOrder} 가 익명화하는 비배송 종착 상태(#188) — PENDING 은 비종착이라
+     * {@code OrderStatus.isTerminal()} 로는 안 잡히고 COMPLETED/DELIVERED 는 배송완료 배치 담당이라 명시 열거한다.
+     * 배치 조회({@code OrderPiiAnonymizationScheduler})와 트랜잭션 내 재검증이 같은 집합을 쓰도록 단일 소스로 둔다.
+     */
+    public static final Set<OrderStatus> TERMINAL_NON_SHIPPING_STATUSES =
+            Set.copyOf(EnumSet.of(OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED, OrderStatus.CANCELLED));
 
     private final ShippingRepository shippingRepository;
     private final OrderRepository orderRepository;
@@ -83,6 +93,13 @@ public class OrderPiiAnonymizer {
             return false;
         }
         if (order.isAnonymized()) {
+            return false;
+        }
+        // TOCTOU 가드: 배치 조회는 시점 스냅샷이라, 조회 후 결제 콜백 등으로 주문이 PAID 로 전진했을 수 있다.
+        // 트랜잭션 안에서 상태를 재확인해 더 이상 비배송 종착 상태가 아니면(예: PAID) 익명화하지 않는다 — 마스킹된
+        // 배송지로 출고가 막히는 것을 방지한다(ShippingProvisioner 의 isAnonymized 가드와 양방향 방어).
+        if (!TERMINAL_NON_SHIPPING_STATUSES.contains(order.getStatus())) {
+            log.info("PII 익명화 건너뜀: 비배송 종착 상태 아님 order={}, status={}", order.getOrderNumber(), order.getStatus());
             return false;
         }
         order.anonymizePii(now);

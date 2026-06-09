@@ -1,7 +1,6 @@
 package com.groove.shipping.application;
 
 import com.groove.order.domain.OrderRepository;
-import com.groove.order.domain.OrderStatus;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
 import org.slf4j.Logger;
@@ -14,10 +13,8 @@ import org.springframework.stereotype.Component;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * 주문/배송 PII 익명화 배치 스케줄러 (#170 Part B, GDPR/개인정보 파기·익명화 의무) — 배송완료({@link ShippingStatus#DELIVERED})
@@ -44,13 +41,6 @@ import java.util.Set;
 public class OrderPiiAnonymizationScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(OrderPiiAnonymizationScheduler.class);
-
-    /**
-     * 비배송 종착 주문 대상 상태 (#188) — PENDING 은 비종착이라 {@code OrderStatus.isTerminal()} 로는 안 잡히고,
-     * COMPLETED/DELIVERED 는 배송완료 배치가 담당하므로, 의도를 정확히 드러내려 명시 열거한다.
-     */
-    private static final Set<OrderStatus> NON_SHIPPING_TERMINAL_STATUSES =
-            EnumSet.of(OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED, OrderStatus.CANCELLED);
 
     private final ShippingRepository shippingRepository;
     private final OrderRepository orderRepository;
@@ -110,8 +100,8 @@ public class OrderPiiAnonymizationScheduler {
 
     /**
      * 배송이 없는 종착 주문(#188) PII 익명화 — {@link #anonymizeDeliveredOrders()} 와 동일한 패턴이되 대상이
-     * 주문 상태({@link #NON_SHIPPING_TERMINAL_STATUSES}) + {@code updated_at} 기준이다. {@code anonymized_at IS NULL}
-     * 필터로 멱등하며, 건별 try/catch 로 한 건의 실패가 배치를 막지 않는다(다음 주기 재시도).
+     * 주문 상태({@link OrderPiiAnonymizer#TERMINAL_NON_SHIPPING_STATUSES}) + {@code updated_at} 기준이다.
+     * {@code anonymized_at IS NULL} 필터로 멱등하며, 건별 try/catch 로 한 건의 실패가 배치를 막지 않는다(다음 주기 재시도).
      */
     @Scheduled(
             fixedDelayString = "${groove.privacy.order-anonymization.interval:PT1H}",
@@ -121,7 +111,7 @@ public class OrderPiiAnonymizationScheduler {
         Instant cutoff = now.minus(retention);
         List<OrderRepository.OrderNumberView> targets =
                 orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
-                        NON_SHIPPING_TERMINAL_STATUSES, cutoff, batchLimit);
+                        OrderPiiAnonymizer.TERMINAL_NON_SHIPPING_STATUSES, cutoff, batchLimit);
         if (targets.isEmpty()) {
             return;
         }

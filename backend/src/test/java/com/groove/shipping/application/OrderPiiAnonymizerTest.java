@@ -166,4 +166,19 @@ class OrderPiiAnonymizerTest {
 
         assertThat(anonymizer.anonymizeOrder(ORDER_ID, NOW)).isFalse();
     }
+
+    @Test
+    @DisplayName("anonymizeOrder — 배치 조회 후 PAID 로 전진한 주문(TOCTOU 경합)은 익명화하지 않고 false (배송 조회 안 함)")
+    void anonymizeOrder_statusAdvancedToPaid_skips() {
+        // 배치가 PENDING 으로 조회했지만 그 사이 결제 콜백으로 PAID 가 된 상황 — 트랜잭션 내 재검증으로 걸러져야 한다.
+        Order order = OrderFixtures.memberOrder("ORD-PII-6", 1L);
+        order.changeStatus(OrderStatus.PAID, null);
+        given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
+
+        boolean done = anonymizer.anonymizeOrder(ORDER_ID, NOW);
+
+        assertThat(done).isFalse();
+        assertThat(order.getAnonymizedAt()).isNull();
+        verify(shippingRepository, never()).findByOrderId(ORDER_ID);
+    }
 }
