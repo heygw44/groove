@@ -9,6 +9,7 @@ import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.genre.domain.Genre;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
@@ -117,7 +118,7 @@ class ReviewServiceTest {
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(reviewRepository.existsByOrderIdAndAlbumId(ORDER_ID, ALBUM_ID)).willReturn(false);
         given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
-        given(memberRepository.getReferenceById(OWNER_ID)).willReturn(memberWithId(OWNER_ID, "김민수"));
+        given(memberRepository.findByIdAndDeletedAtIsNull(OWNER_ID)).willReturn(Optional.of(memberWithId(OWNER_ID, "김민수")));
         given(reviewRepository.saveAndFlush(any(Review.class))).willAnswer(inv -> {
             Review r = inv.getArgument(0);
             ReflectionTestUtils.setField(r, "id", 7L);
@@ -141,7 +142,7 @@ class ReviewServiceTest {
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(reviewRepository.existsByOrderIdAndAlbumId(ORDER_ID, ALBUM_ID)).willReturn(false);
         given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
-        given(memberRepository.getReferenceById(OWNER_ID)).willReturn(memberWithId(OWNER_ID, "Lee"));
+        given(memberRepository.findByIdAndDeletedAtIsNull(OWNER_ID)).willReturn(Optional.of(memberWithId(OWNER_ID, "Lee")));
         given(reviewRepository.saveAndFlush(any(Review.class))).willAnswer(inv -> inv.getArgument(0));
 
         ReviewResponse response = reviewService.create(command());
@@ -242,7 +243,7 @@ class ReviewServiceTest {
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(reviewRepository.existsByOrderIdAndAlbumId(ORDER_ID, ALBUM_ID)).willReturn(false);
         given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
-        given(memberRepository.getReferenceById(OWNER_ID)).willReturn(memberWithId(OWNER_ID, "박"));
+        given(memberRepository.findByIdAndDeletedAtIsNull(OWNER_ID)).willReturn(Optional.of(memberWithId(OWNER_ID, "박")));
         given(reviewRepository.saveAndFlush(any(Review.class)))
                 .willThrow(new DataIntegrityViolationException("uk_review_order_album"));
 
@@ -258,7 +259,7 @@ class ReviewServiceTest {
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(reviewRepository.existsByOrderIdAndAlbumId(ORDER_ID, ALBUM_ID)).willReturn(false);
         given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
-        given(memberRepository.getReferenceById(OWNER_ID)).willReturn(memberWithId(OWNER_ID, "박"));
+        given(memberRepository.findByIdAndDeletedAtIsNull(OWNER_ID)).willReturn(Optional.of(memberWithId(OWNER_ID, "박")));
         given(reviewRepository.saveAndFlush(any(Review.class)))
                 .willThrow(new DataIntegrityViolationException("fk_review_member 위반"));
 
@@ -276,6 +277,21 @@ class ReviewServiceTest {
 
         assertThatThrownBy(() -> reviewService.create(command()))
                 .isInstanceOf(AlbumNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("create → 회원 탈퇴/삭제(active 없음) → 404 MemberNotFound, 저장 안 함")
+    void create_memberWithdrawn() {
+        Album album = albumWithId(ALBUM_ID);
+        Order order = memberOrder(OWNER_ID, OrderStatus.DELIVERED, album);
+        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(reviewRepository.existsByOrderIdAndAlbumId(ORDER_ID, ALBUM_ID)).willReturn(false);
+        given(albumRepository.findById(ALBUM_ID)).willReturn(Optional.of(album));
+        given(memberRepository.findByIdAndDeletedAtIsNull(OWNER_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reviewService.create(command()))
+                .isInstanceOf(MemberNotFoundException.class);
+        then(reviewRepository).should(never()).saveAndFlush(any());
     }
 
     @Test

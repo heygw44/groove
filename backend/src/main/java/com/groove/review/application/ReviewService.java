@@ -5,6 +5,7 @@ import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
@@ -38,6 +39,7 @@ import java.util.Set;
  *   <li>배송 완료 — {@code order.status ∈ {DELIVERED, COMPLETED}} 아니면 {@link ReviewOrderNotDeliveredException} (422)</li>
  *   <li>항목 포함 — {@code order.items} 중 {@code albumId} 가 없으면 {@link AlbumNotInOrderException} (422)</li>
  *   <li>중복 없음 — {@code (orderId, albumId)} 리뷰가 이미 있으면 {@link DuplicateReviewException} (409). 최종 방어선은 {@code uk_review_order_album} — {@code saveAndFlush} 의 {@link DataIntegrityViolationException} 도 같은 예외로 흡수한다</li>
+ *   <li>회원 활성 — 토큰 유효기간 내 탈퇴(soft delete)·삭제된 회원이면 {@link MemberNotFoundException} (404). 프록시만 잡으면 {@code saveAndFlush} 의 FK 위반이 500 으로 전파되므로 여기서 명시적으로 막는다 (#171)</li>
  * </ol>
  *
  * <h2>조회 ({@link #listByAlbum})</h2>
@@ -92,7 +94,8 @@ public class ReviewService {
 
         Album album = albumRepository.findById(command.albumId())
                 .orElseThrow(AlbumNotFoundException::new);
-        Member member = memberRepository.getReferenceById(command.memberId());
+        Member member = memberRepository.findByIdAndDeletedAtIsNull(command.memberId())
+                .orElseThrow(MemberNotFoundException::new);
 
         Review review = Review.write(member, album, order, command.rating(), command.content());
         try {
