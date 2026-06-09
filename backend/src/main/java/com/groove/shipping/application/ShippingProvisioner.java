@@ -61,6 +61,12 @@ public class ShippingProvisioner {
             log.warn("배송 생성 건너뜀: 주문 없음 orderId={}", orderId);
             return false;
         }
+        // 심층 방어(#188): 장기 방치된 PENDING 주문은 PII 익명화 배치가 배송지를 "익명" 으로 마스킹한다. 그런 주문이
+        // 뒤늦은 결제로 PAID 가 돼 여기로 오면 "익명" 배송지로 출고될 수 있으므로, 익명화된 주문엔 배송을 만들지 않는다.
+        if (order.isAnonymized()) {
+            log.warn("배송 생성 건너뜀: 이미 PII 익명화된 주문 order={} — 배송지 마스킹됨", orderNumber);
+            return false;
+        }
         Shipping shipping = Shipping.prepare(order, order.getShippingInfo(), trackingNumberGenerator.generate());
         shippingRepository.saveAndFlush(shipping);
         // 운송장 번호를 주문에 비정규화한다(이슈 #116) — order 는 이 REQUIRES_NEW 트랜잭션에서 로드된 관리 상태라

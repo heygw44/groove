@@ -23,6 +23,13 @@ public interface ShippingRepository extends JpaRepository<Shipping, Long> {
     boolean existsByOrderId(Long orderId);
 
     /**
+     * 주문 식별자로 배송을 조회한다 ({@code order_id} UNIQUE → 최대 1건). 비배송 종착 주문 PII 익명화(#188)에서
+     * 환불로 취소된 주문처럼 배송 행이 함께 있으면 배송 PII 도 마스킹하기 위해, {@code OrderPiiAnonymizer} 가
+     * orderId 로 배송 존재 여부를 확인할 때 쓴다.
+     */
+    Optional<Shipping> findByOrderId(Long orderId);
+
+    /**
      * 식별자로 배송을 조회하되 {@code order} 를 함께 로드한다 — 자동 진행이 주문을 락스텝 전진(이슈 #161)시키려면
      * order 가 필요하므로, 스케줄러가 배치 건별로 호출할 때 LAZY 추가 SELECT(N+1)를 없애려 fetch 해 둔다.
      */

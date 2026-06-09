@@ -1,5 +1,6 @@
 package com.groove.shipping.application;
 
+import com.groove.order.domain.OrderRepository;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
 import org.slf4j.Logger;
@@ -31,8 +32,10 @@ import java.util.Objects;
  * {@code .batch-size} 로 제한한다(메모리 바운드). 전역 {@code @EnableScheduling} 은
  * {@code common.scheduling.SchedulingConfig} 에 있다 — 자체 {@code @EnableScheduling} 을 두지 않는다.
  *
- * <p><b>범위 밖(후속 과제)</b>: 배송이 생성되지 않는 주문(미결제 PENDING / PAYMENT_FAILED / 배송 생성 전 CANCELLED)의
- * 게스트 PII 는 이 배치(배송완료 기준)가 닿지 않는다 — 종착 비배송 상태를 별도 기준으로 익명화하는 후속 이슈가 필요하다.
+ * <p>배송이 생성되지 않는 종착 주문(미결제 PENDING / PAYMENT_FAILED / 배송 생성 전 CANCELLED)의 게스트·배송지
+ * PII 는 배송완료 기준 배치가 닿지 않으므로, {@link #anonymizeTerminalNonShippingOrders()} 가 주문 상태 +
+ * {@code updated_at}(종착 시각) + 보존기간 기준으로 별도 익명화한다(#188). 환불로 취소돼 배송 행을 가진 주문은
+ * {@link OrderPiiAnonymizer#anonymizeOrder} 가 배송 PII 까지 함께 마스킹한다.
  */
 @Component
 public class OrderPiiAnonymizationScheduler {
@@ -40,17 +43,20 @@ public class OrderPiiAnonymizationScheduler {
     private static final Logger log = LoggerFactory.getLogger(OrderPiiAnonymizationScheduler.class);
 
     private final ShippingRepository shippingRepository;
+    private final OrderRepository orderRepository;
     private final OrderPiiAnonymizer anonymizer;
     private final Clock clock;
     private final Duration retention;
     private final Limit batchLimit;
 
     public OrderPiiAnonymizationScheduler(ShippingRepository shippingRepository,
+                                          OrderRepository orderRepository,
                                           OrderPiiAnonymizer anonymizer,
                                           Clock clock,
                                           @Value("${groove.privacy.order-anonymization.retention:P90D}") Duration retention,
                                           @Value("${groove.privacy.order-anonymization.batch-size:200}") int batchSize) {
         this.shippingRepository = shippingRepository;
+        this.orderRepository = orderRepository;
         this.anonymizer = anonymizer;
         this.clock = clock;
         this.retention = Objects.requireNonNull(retention, "retention");
@@ -89,6 +95,37 @@ public class OrderPiiAnonymizationScheduler {
             anonymizer.anonymizeForShipping(shippingId, now);
         } catch (RuntimeException e) {
             log.warn("PII 익명화 실패: shippingId={} — 다음 주기에 재시도", shippingId, e);
+        }
+    }
+
+    /**
+     * 배송이 없는 종착 주문(#188) PII 익명화 — {@link #anonymizeDeliveredOrders()} 와 동일한 패턴이되 대상이
+     * 주문 상태({@link OrderPiiAnonymizer#TERMINAL_NON_SHIPPING_STATUSES}) + {@code updated_at} 기준이다.
+     * {@code anonymized_at IS NULL} 필터로 멱등하며, 건별 try/catch 로 한 건의 실패가 배치를 막지 않는다(다음 주기 재시도).
+     */
+    @Scheduled(
+            fixedDelayString = "${groove.privacy.order-anonymization.interval:PT1H}",
+            initialDelayString = "${groove.privacy.order-anonymization.initial-delay:PT10M}")
+    public void anonymizeTerminalNonShippingOrders() {
+        Instant now = clock.instant();
+        Instant cutoff = now.minus(retention);
+        List<OrderRepository.OrderNumberView> targets =
+                orderRepository.findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+                        OrderPiiAnonymizer.TERMINAL_NON_SHIPPING_STATUSES, cutoff, batchLimit);
+        if (targets.isEmpty()) {
+            return;
+        }
+        log.debug("비배송 종착 주문 PII 익명화 대상 {}건 (cutoff={}, limit={})", targets.size(), cutoff, batchLimit.max());
+        for (OrderRepository.OrderNumberView target : targets) {
+            anonymizeOneOrder(target.getId(), now);
+        }
+    }
+
+    private void anonymizeOneOrder(Long orderId, Instant now) {
+        try {
+            anonymizer.anonymizeOrder(orderId, now);
+        } catch (RuntimeException e) {
+            log.warn("PII 익명화 실패: orderId={} — 다음 주기에 재시도", orderId, e);
         }
     }
 }
