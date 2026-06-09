@@ -125,8 +125,13 @@ class MemberWithdrawalE2EIntegrationTest {
                         .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
                 .andExpect(status().isNoContent());
 
-        // soft delete 기록
-        assertThat(memberRepository.findById(memberId).orElseThrow().isWithdrawn()).isTrue();
+        // soft delete + PII 익명화 (#170): 평문 제거, email_hash 보존
+        Member withdrawn = memberRepository.findById(memberId).orElseThrow();
+        assertThat(withdrawn.isWithdrawn()).isTrue();
+        assertThat(withdrawn.getEmail()).startsWith("withdrawn-").endsWith("@deleted.local");
+        assertThat(withdrawn.getName()).isEqualTo("탈퇴회원");
+        assertThat(withdrawn.getPhone()).isNull();
+        assertThat(withdrawn.getEmailHash()).isEqualTo(Member.hashEmail(EMAIL));
         // cart 정리 (AFTER_COMMIT cart 리스너)
         assertThat(cartRepository.findByMemberId(memberId)).isEmpty();
 
@@ -162,7 +167,7 @@ class MemberWithdrawalE2EIntegrationTest {
     }
 
     @Test
-    @DisplayName("탈퇴 회원 이메일 재가입 불가 → 409 (패턴 A 점유 유지)")
+    @DisplayName("탈퇴 회원 이메일 재가입 불가 → 409 (평문 제거 후에도 email_hash 점유로 차단, 패턴 A)")
     void withdrawnEmail_cannotReSignup() throws Exception {
         Member member = persistMember();
         Long memberId = member.getId();
@@ -174,6 +179,10 @@ class MemberWithdrawalE2EIntegrationTest {
                         .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
                 .andExpect(status().isNoContent());
 
+        // 평문 이메일은 익명화로 제거됐지만(점유는 해시로 유지)...
+        assertThat(memberRepository.findById(memberId).orElseThrow().getEmail()).isNotEqualTo(EMAIL);
+
+        // ...같은 평문 이메일 재가입은 여전히 409 로 차단된다 (email_hash 점유).
         mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + RAW_PASSWORD

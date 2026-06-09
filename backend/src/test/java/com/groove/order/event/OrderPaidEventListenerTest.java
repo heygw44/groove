@@ -105,7 +105,7 @@ class OrderPaidEventListenerTest {
 
         // 리스너가 실제로 실행됐고(그 안에서 터졌고), 그럼에도 발행 트랜잭션의 쓰기는 커밋되어 있다.
         assertThat(recorder.received()).containsExactly(SAMPLE_EVENT);
-        assertThat(memberRepository.existsByEmail(email)).isTrue();
+        assertThat(memberRepository.existsByEmailHash(Member.hashEmail(email))).isTrue();
     }
 
     @TestConfiguration

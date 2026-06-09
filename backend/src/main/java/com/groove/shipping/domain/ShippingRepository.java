@@ -41,4 +41,17 @@ public interface ShippingRepository extends JpaRepository<Shipping, Long> {
      * 작은 과도 상태이므로 {@code idx_shipping_status} 의 status 프리픽스 스캔 + {@code shipped_at} 인메모리 필터로 충분하다.
      */
     List<Shipping> findByStatusAndShippedAtBefore(ShippingStatus status, Instant shippedAtBefore, Limit limit);
+
+    /**
+     * PII 익명화 배치(#170 Part B) 대상 — 배송완료({@code DELIVERED})된 지 보존기간이 지났고 아직 익명화되지
+     * 않은 배송을 {@code delivered_at} 오름차순(오래된 것 먼저)으로 찾는다. 보충에는 식별자만 필요하므로 경량
+     * {@link ShippingIdView} 프로젝션으로 받아 full 엔티티 적재를 피한다 — 실제 마스킹은 {@code OrderPiiAnonymizer}
+     * 가 id 로 배송(+주문)을 재로딩해 수행한다. {@code limit} 으로 한 주기 처리량을 제한한다(메모리 바운드).
+     */
+    List<ShippingIdView> findByStatusAndDeliveredAtBeforeAndAnonymizedAtIsNullOrderByDeliveredAtAsc(
+            ShippingStatus status, Instant cutoff, Limit limit);
+
+    interface ShippingIdView {
+        Long getId();
+    }
 }

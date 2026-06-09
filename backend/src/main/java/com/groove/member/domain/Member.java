@@ -1,5 +1,6 @@
 package com.groove.member.domain;
 
+import com.groove.common.hash.Sha256Hasher;
 import com.groove.common.persistence.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -11,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.Locale;
 
 /**
  * 회원 엔티티 (ERD §4.1).
@@ -29,13 +31,26 @@ public class Member extends BaseTimeEntity {
     @Column(name = "email", nullable = false, length = 255, unique = true)
     private String email;
 
+    /**
+     * 이메일 점유 해시 (#170, 패턴 A). 정규화된 이메일의 SHA-256 hex (64자) — {@link #hashEmail} 가 계산한다.
+     *
+     * <p>가입 중복 검사({@code MemberService.signup})와 재가입 차단의 권위 컬럼이다. 탈퇴 익명화는 {@code email}
+     * 평문을 치환하지만 이 해시는 보존하므로, 탈퇴 후에도 같은 이메일의 재가입이 차단된다(어뷰징 방지).
+     */
+    @Column(name = "email_hash", nullable = false, length = 64, unique = true)
+    private String emailHash;
+
     @Column(name = "password", nullable = false, length = 255)
     private String password;
 
     @Column(name = "name", nullable = false, length = 50)
     private String name;
 
-    @Column(name = "phone", nullable = false, length = 20)
+    /**
+     * 전화번호. 활성 회원은 가입 시 도메인 검증으로 항상 non-null 이지만, 탈퇴 익명화({@link #anonymize})가
+     * NULL 로 비울 수 있어 컬럼은 nullable 이다 (#170).
+     */
+    @Column(name = "phone", length = 20)
     private String phone;
 
     @Enumerated(EnumType.STRING)
@@ -53,11 +68,30 @@ public class Member extends BaseTimeEntity {
 
     private Member(String email, String passwordHash, String name, String phone, MemberRole role) {
         this.email = email;
+        this.emailHash = hashEmail(email);
         this.password = passwordHash;
         this.name = name;
         this.phone = phone;
         this.role = role;
         this.emailVerified = false;
+    }
+
+    /**
+     * 이메일 점유 해시 단일 진입점 (#170). 정규화(소문자화·trim) 후 SHA-256 hex 로 인코딩한다.
+     *
+     * <p>정규화하는 이유: 기존 {@code uk_member_email} 의 {@code utf8mb4_unicode_ci} collation 은 대소문자를
+     * 구분하지 않아 {@code Foo@x.com} 과 {@code foo@x.com} 을 같은 이메일로 차단해 왔다. 해시 점유로
+     * 전환하면서 정규화를 하지 않으면 두 값의 해시가 달라져 재가입 차단(패턴 A)이 약해지므로, 저장(가입)과
+     * 검사(중복) 양쪽이 이 메서드를 공유해 동일 시맨틱을 유지한다. 마이그레이션 백필
+     * ({@code SHA2(LOWER(TRIM(email)),256)}) 도 ASCII 이메일 기준 이 결과와 동치다.
+     *
+     * <p><b>후속 과제(보안 강화)</b>: 결정적 SHA-256 은 DB 유출 시 흔한 이메일 사전 대입으로 역추적될 수 있다
+     * (탈퇴 회원의 원본 이메일 재식별 위험). 점유 판정 용도라도 서버 비밀키 기반 HMAC-SHA-256(+버전 prefix로
+     * 키 롤링) 으로의 전환이 바람직하다. 다만 해시가 엔티티에서 계산돼 비밀키 주입이 어렵고(register 시그니처 변경),
+     * MySQL 에 HMAC 내장 함수가 없어 백필을 Java 마이그레이션으로 옮겨야 하므로 별도 이슈로 분리한다.
+     */
+    public static String hashEmail(String email) {
+        return Sha256Hasher.hex(email.strip().toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -87,8 +121,8 @@ public class Member extends BaseTimeEntity {
      *
      * <p>{@code deleted_at} 에 탈퇴 시점을 기록할 뿐 행을 물리 삭제하지 않는다. 주문·결제 이력은
      * 보존되고({@code orders.member_id → member ON DELETE SET NULL} 은 hard delete 대비 안전망일 뿐
-     * 본 흐름에서는 발동하지 않는다), 이메일은 점유 상태로 남아 재가입을 차단한다(패턴 A —
-     * {@link MemberRepository#existsByEmail}).
+     * 본 흐름에서는 발동하지 않는다), 이메일은 {@link #emailHash} 로 점유 상태가 남아 재가입을 차단한다
+     * (패턴 A — {@link MemberRepository#existsByEmailHash}). 평문 PII 제거는 {@link #anonymize} 가 맡는다 (#170).
      *
      * <p><b>멱등</b>: 이미 탈퇴한 회원에 다시 호출해도 최초 {@code deleted_at} 을 덮어쓰지 않는다.
      * 재탈퇴 요청을 no-op 으로 처리하기 위함이며, 호출자({@code MemberService.withdraw})는
@@ -105,6 +139,23 @@ public class Member extends BaseTimeEntity {
      */
     public boolean isWithdrawn() {
         return this.deletedAt != null;
+    }
+
+    /**
+     * 탈퇴 시 개인정보(PII) 익명화 (#170, GDPR/개인정보보호법 파기·익명화 의무).
+     *
+     * <p>{@code email} 평문은 {@code withdrawn-{id}@deleted.local} 로 치환해 제거하되, 재가입 차단의 권위
+     * 컬럼인 {@link #emailHash} 는 보존한다 — 탈퇴 후에도 같은 이메일의 재가입을 막는다(패턴 A). {@code name} 은
+     * 고정 라벨로, {@code phone} 은 NULL 로 비운다.
+     *
+     * <p>호출자({@code MemberService.withdraw})가 {@link #isWithdrawn()} 로 사전 분기해 활성 회원에 대해서만
+     * {@code withdraw()} 직후 1회 호출하므로 별도 멱등 가드는 두지 않는다. {@code deleted_at} 이 익명화 여부의
+     * 사실상 마커라 별도 anonymized 컬럼도 두지 않는다.
+     */
+    public void anonymize() {
+        this.email = "withdrawn-" + this.id + "@deleted.local";
+        this.name = "탈퇴회원";
+        this.phone = null;
     }
 
     /**
@@ -140,6 +191,10 @@ public class Member extends BaseTimeEntity {
 
     public String getEmail() {
         return email;
+    }
+
+    public String getEmailHash() {
+        return emailHash;
     }
 
     public String getPassword() {

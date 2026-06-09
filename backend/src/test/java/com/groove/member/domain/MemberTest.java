@@ -140,4 +140,42 @@ class MemberTest {
         assertThat(member.getPassword()).isEqualTo("$2a$10$hash");
         assertThat(member.getRole()).isEqualTo(MemberRole.USER);
     }
+
+    @Test
+    @DisplayName("register → 정규화된 이메일 해시(email_hash)가 채워짐 (#170)")
+    void register_populatesNormalizedEmailHash() {
+        Member member = newMember();
+
+        assertThat(member.getEmailHash())
+                .isEqualTo(Member.hashEmail("user@example.com"))
+                .hasSize(64);
+    }
+
+    @Test
+    @DisplayName("hashEmail → 대소문자·앞뒤 공백을 정규화해 동일 해시 (#170 패턴 A)")
+    void hashEmail_normalizesCaseAndWhitespace() {
+        String base = Member.hashEmail("foo@example.com");
+
+        assertThat(Member.hashEmail("FOO@example.com")).isEqualTo(base);
+        assertThat(Member.hashEmail("  Foo@Example.com  ")).isEqualTo(base);
+        assertThat(Member.hashEmail("other@example.com")).isNotEqualTo(base);
+    }
+
+    @Test
+    @DisplayName("anonymize → 평문 PII 제거(email 치환·name 마스킹·phone null), email_hash 는 보존 (#170)")
+    void anonymize_removesPlaintextPiiButKeepsEmailHash() {
+        Member member = newMember();
+        String originalHash = member.getEmailHash();
+
+        member.withdraw(Instant.parse("2026-05-22T00:00:00Z"));
+        member.anonymize();
+
+        assertThat(member.getEmail()).startsWith("withdrawn-").endsWith("@deleted.local");
+        assertThat(member.getEmail()).doesNotContain("user@example.com");
+        assertThat(member.getName()).isEqualTo("탈퇴회원");
+        assertThat(member.getPhone()).isNull();
+        assertThat(member.getEmailHash())
+                .as("재가입 차단용 email_hash 는 보존")
+                .isEqualTo(originalHash);
+    }
 }
