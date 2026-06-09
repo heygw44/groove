@@ -12,6 +12,7 @@ import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.support.CouponFixtures;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,9 +73,9 @@ class AdminCouponControllerTest {
         clearAll();
 
         Member active = memberRepository.saveAndFlush(
-                Member.register("active@example.com", "$2a$10$dummy", "Active", "01000000001"));
+                MemberFixtures.register("active@example.com", "$2a$10$dummy", "Active", "01000000001"));
         Member withdrawn = memberRepository.saveAndFlush(
-                Member.register("withdrawn@example.com", "$2a$10$dummy", "Withdrawn", "01000000002"));
+                MemberFixtures.register("withdrawn@example.com", "$2a$10$dummy", "Withdrawn", "01000000002"));
         withdrawn.withdraw(Instant.now());
         memberRepository.saveAndFlush(withdrawn);
 
@@ -461,7 +462,7 @@ class AdminCouponControllerTest {
     void grant_independentFromTotalQuantity() throws Exception {
         Coupon c = couponRepository.saveAndFlush(CouponFixtures.fixedAmount(1));
         Member another = memberRepository.saveAndFlush(
-                Member.register("another@example.com", "$2a$10$dummy", "Another", "01000000099"));
+                MemberFixtures.register("another@example.com", "$2a$10$dummy", "Another", "01000000099"));
 
         mockMvc.perform(post("/api/v1/admin/coupons/{id}/grant", c.getId())
                         .header(HttpHeaders.AUTHORIZATION, adminBearer)

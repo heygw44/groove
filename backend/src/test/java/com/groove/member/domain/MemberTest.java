@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MemberTest {
 
     private Member newMember() {
-        return Member.register("user@example.com", "$2a$10$hash", "김철수", "01012345678");
+        return Member.register("user@example.com", "v1:occupancyhash", "$2a$10$hash", "김철수", "01012345678");
     }
 
     @Test
@@ -142,23 +142,11 @@ class MemberTest {
     }
 
     @Test
-    @DisplayName("register → 정규화된 이메일 해시(email_hash)가 채워짐 (#170)")
-    void register_populatesNormalizedEmailHash() {
-        Member member = newMember();
+    @DisplayName("register → 전달받은 점유 해시를 그대로 저장 (#186 — 해시 계산은 EmailHasher 책임)")
+    void register_storesProvidedEmailHash() {
+        Member member = Member.register("user@example.com", "v1:occupancyhash", "$2a$10$hash", "김철수", "01012345678");
 
-        assertThat(member.getEmailHash())
-                .isEqualTo(Member.hashEmail("user@example.com"))
-                .hasSize(64);
-    }
-
-    @Test
-    @DisplayName("hashEmail → 대소문자·앞뒤 공백을 정규화해 동일 해시 (#170 패턴 A)")
-    void hashEmail_normalizesCaseAndWhitespace() {
-        String base = Member.hashEmail("foo@example.com");
-
-        assertThat(Member.hashEmail("FOO@example.com")).isEqualTo(base);
-        assertThat(Member.hashEmail("  Foo@Example.com  ")).isEqualTo(base);
-        assertThat(Member.hashEmail("other@example.com")).isNotEqualTo(base);
+        assertThat(member.getEmailHash()).isEqualTo("v1:occupancyhash");
     }
 
     @Test

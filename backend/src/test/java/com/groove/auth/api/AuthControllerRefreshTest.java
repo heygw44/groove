@@ -6,6 +6,7 @@ import com.groove.auth.domain.TokenHasher;
 import com.groove.auth.security.RefreshTokenCookieFactory;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,7 +75,7 @@ class AuthControllerRefreshTest {
     void setUp() {
         refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAll();
-        Member member = Member.register(
+        Member member = MemberFixtures.register(
                 EMAIL, passwordEncoder.encode(RAW_PASSWORD), "회전", "01099998888");
         memberRepository.saveAndFlush(member);
     }

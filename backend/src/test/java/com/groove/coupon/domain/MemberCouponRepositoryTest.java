@@ -3,6 +3,7 @@ package com.groove.coupon.domain;
 import com.groove.common.persistence.JpaAuditingConfig;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceUnitUtil;
@@ -62,7 +63,7 @@ class MemberCouponRepositoryTest {
     void setUp() {
         // member_coupon.member_id → member.id, coupon_id → coupon.id FK 때문에 둘 다 선행 존재해야 한다.
         Member member = memberRepository.saveAndFlush(
-                Member.register("coupon-repo-test@example.com", "$2a$12$hash", "쿠폰사용자", "01012345678"));
+                MemberFixtures.register("coupon-repo-test@example.com", "$2a$12$hash", "쿠폰사용자", "01012345678"));
         memberId = member.getId();
         coupon = couponRepository.saveAndFlush(Coupon.builder(
                         "정액 3천원", CouponDiscountType.FIXED_AMOUNT, 3_000, VALID_FROM, VALID_UNTIL)

@@ -8,8 +8,11 @@ import com.groove.member.event.MemberWithdrawnEvent;
 import com.groove.member.exception.MemberEmailDuplicatedException;
 import com.groove.member.exception.MemberNotFoundException;
 import com.groove.member.exception.MemberWithdrawalBlockedException;
+import com.groove.member.security.EmailHashProperties;
+import com.groove.member.security.EmailHasher;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
+import com.groove.support.MemberFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +27,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,11 +61,21 @@ class MemberServiceTest {
 
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
+    // 실제 EmailHasher(테스트 시크릿) — signup 이 v1/legacy 해시를 계산하므로 mock 대신 실물을 쓴다.
+    private final EmailHasher emailHasher =
+            new EmailHasher(new EmailHashProperties(MemberFixtures.TEST_EMAIL_HASH_SECRET));
+
     private MemberService memberService;
 
     @BeforeEach
     void setUp() {
-        memberService = new MemberService(memberRepository, passwordEncoder, orderRepository, eventPublisher, clock);
+        memberService = new MemberService(
+                memberRepository, passwordEncoder, orderRepository, eventPublisher, emailHasher, clock);
+    }
+
+    /** signup 의 양방향 점유 검사 인자 — v1(HMAC)·legacy(SHA-256) 순서. */
+    private List<String> occupancyHashes(String email) {
+        return List.of(emailHasher.hash(email), emailHasher.legacyHash(email));
     }
 
     @Test
@@ -73,7 +87,7 @@ class MemberServiceTest {
                 "김철수",
                 "01012345678"
         );
-        when(memberRepository.existsByEmailHash(Member.hashEmail(command.email()))).thenReturn(false);
+        when(memberRepository.existsByEmailHashIn(occupancyHashes(command.email()))).thenReturn(false);
         when(passwordEncoder.encode(command.password())).thenReturn("$2a$12$hashed");
         when(memberRepository.saveAndFlush(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -85,8 +99,9 @@ class MemberServiceTest {
 
         assertThat(persisted.getEmail()).isEqualTo("user@example.com");
         assertThat(persisted.getEmailHash())
-                .as("정규화 이메일 해시가 점유 컬럼으로 채워져야 함 (#170 패턴 A)")
-                .isEqualTo(Member.hashEmail("user@example.com"));
+                .as("v1(HMAC) 점유 해시가 점유 컬럼으로 채워져야 함 (#186 패턴 A)")
+                .isEqualTo(emailHasher.hash("user@example.com"))
+                .startsWith("v1:");
         assertThat(persisted.getPassword())
                 .as("DB에 평문이 아닌 해시가 저장되어야 함")
                 .isEqualTo("$2a$12$hashed")
@@ -105,7 +120,7 @@ class MemberServiceTest {
                 "박영희",
                 "01099998888"
         );
-        when(memberRepository.existsByEmailHash(Member.hashEmail("dup@example.com"))).thenReturn(true);
+        when(memberRepository.existsByEmailHashIn(occupancyHashes("dup@example.com"))).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.signup(command))
                 .isInstanceOf(MemberEmailDuplicatedException.class);
@@ -113,7 +128,7 @@ class MemberServiceTest {
         verify(passwordEncoder, never()).encode(any());
         verify(memberRepository, never()).save(any(Member.class));
         verify(memberRepository, never()).saveAndFlush(any(Member.class));
-        verify(memberRepository, times(1)).existsByEmailHash(Member.hashEmail("dup@example.com"));
+        verify(memberRepository, times(1)).existsByEmailHashIn(occupancyHashes("dup@example.com"));
     }
 
     @Test
@@ -125,7 +140,7 @@ class MemberServiceTest {
                 "동시가입",
                 "01077776666"
         );
-        when(memberRepository.existsByEmailHash(Member.hashEmail("race@example.com"))).thenReturn(false);
+        when(memberRepository.existsByEmailHashIn(occupancyHashes("race@example.com"))).thenReturn(false);
         when(passwordEncoder.encode(command.password())).thenReturn("$2a$12$hashed");
         when(memberRepository.saveAndFlush(any(Member.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk_member_email_hash"));
@@ -138,7 +153,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("getMyInfo: 활성 회원 존재 → 회원 반환")
     void getMyInfo_activeMember_returnsMember() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
 
         Member result = memberService.getMyInfo(1L);
@@ -158,7 +173,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("updateMyInfo: name·phone 모두 전달 → 둘 다 반영, email 불변")
     void updateMyInfo_bothFields_updatesMember() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
 
         Member result = memberService.updateMyInfo(1L, new UpdateProfileCommand("김영희", "01098765432"));
@@ -171,7 +186,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("updateMyInfo: 미전송 필드(null)는 미변경")
     void updateMyInfo_partial_keepsUnsentField() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         when(memberRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(member));
 
         Member result = memberService.updateMyInfo(1L, new UpdateProfileCommand("김영희", null));
@@ -193,7 +208,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("withdraw: 정상 → soft delete + PII 익명화 + MemberWithdrawnEvent 1회 발행")
     void withdraw_success_softDeletesAnonymizesAndPublishesEvent() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         String originalHash = member.getEmailHash();
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("P@ssw0rd!2024", "$2a$12$hash")).thenReturn(true);
@@ -216,7 +231,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("withdraw: 차단 상태 집합은 {PAID, PREPARING, SHIPPED} 으로 조회한다")
     void withdraw_queriesBlockingStatuses() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches(anyString(), eq("$2a$12$hash"))).thenReturn(true);
         when(orderRepository.existsByMemberIdAndStatusIn(eq(1L), any())).thenReturn(false);
@@ -233,7 +248,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("withdraw: 진행 중 주문 존재 → MemberWithdrawalBlockedException, soft delete·이벤트 없음")
     void withdraw_blockingOrder_throwsAndDoesNotWithdraw() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("P@ssw0rd!2024", "$2a$12$hash")).thenReturn(true);
         when(orderRepository.existsByMemberIdAndStatusIn(eq(1L), any())).thenReturn(true);
@@ -248,7 +263,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("withdraw: 비밀번호 불일치 → AuthException(MEMBER_PASSWORD_MISMATCH), 주문 검사·이벤트 없음")
     void withdraw_passwordMismatch_throwsBeforeOrderCheck() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("wrong", "$2a$12$hash")).thenReturn(false);
 
@@ -265,7 +280,7 @@ class MemberServiceTest {
     @Test
     @DisplayName("withdraw: 이미 탈퇴한 회원 → 멱등 no-op (이벤트 미발행, 주문 검사 생략)")
     void withdraw_alreadyWithdrawn_idempotentNoOp() {
-        Member member = Member.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
+        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         member.withdraw(Instant.parse("2026-05-01T00:00:00Z"));
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("P@ssw0rd!2024", "$2a$12$hash")).thenReturn(true);

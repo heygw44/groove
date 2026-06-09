@@ -8,6 +8,7 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.member.domain.Member;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderShippingInfo;
+import com.groove.support.MemberFixtures;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ReviewTest {
 
     private Member member() {
-        return Member.register("u@example.com", "$2a$10$hash", "김민수", "01000000001");
+        return MemberFixtures.register("u@example.com", "$2a$10$hash", "김민수", "01000000001");
     }
 
     private Album album() {

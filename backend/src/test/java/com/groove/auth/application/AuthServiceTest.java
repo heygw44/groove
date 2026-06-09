@@ -6,6 +6,7 @@ import com.groove.common.exception.ErrorCode;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.exception.MemberNotFoundException;
+import com.groove.support.MemberFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,7 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        member = Member.register(EMAIL, PASSWORD_HASH, "홍길동", "01012345678");
+        member = MemberFixtures.register(EMAIL, PASSWORD_HASH, "홍길동", "01012345678");
         ReflectionTestUtils.setField(member, "id", 1L);
     }
 

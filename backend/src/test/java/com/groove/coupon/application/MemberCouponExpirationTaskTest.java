@@ -8,6 +8,7 @@ import com.groove.coupon.domain.MemberCouponStatus;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.CouponFixtures;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,7 +59,7 @@ class MemberCouponExpirationTaskTest {
         // 회원당 1장 UNIQUE 제약 때문에 케이스마다 별도 회원이 필요하다 — 충분히 만들어 둔다.
         for (int i = 0; i < 10; i++) {
             Member m = memberRepository.saveAndFlush(
-                    Member.register("m" + i + "@example.com", "$2a$10$dummy", "M" + i, "0100000000" + i));
+                    MemberFixtures.register("m" + i + "@example.com", "$2a$10$dummy", "M" + i, "0100000000" + i));
             memberIds.add(m.getId());
         }
     }

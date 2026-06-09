@@ -20,6 +20,7 @@ import com.groove.member.application.MemberService;
 import com.groove.member.application.SignupCommand;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.member.security.EmailHasher;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
 import com.groove.order.api.dto.ShippingInfoRequest;
@@ -93,6 +94,7 @@ public class LocalDataSeeder implements ApplicationRunner {
     private final MemberService memberService;
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailHasher emailHasher;
     private final AdminCouponService adminCouponService;
     private final OrderService orderService;
     private final TransactionTemplate txTemplate;
@@ -106,6 +108,7 @@ public class LocalDataSeeder implements ApplicationRunner {
                            MemberService memberService,
                            MemberRepository memberRepository,
                            PasswordEncoder passwordEncoder,
+                           EmailHasher emailHasher,
                            AdminCouponService adminCouponService,
                            OrderService orderService,
                            @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE)
@@ -119,6 +122,7 @@ public class LocalDataSeeder implements ApplicationRunner {
         this.memberService = memberService;
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
+        this.emailHasher = emailHasher;
         this.adminCouponService = adminCouponService;
         this.orderService = orderService;
         this.txTemplate = txTemplate;
@@ -208,8 +212,10 @@ public class LocalDataSeeder implements ApplicationRunner {
     private Member seedDemoAccounts() {
         Member demoUser = memberService.signup(
                 new SignupCommand(DemoAccounts.DEMO_USER_EMAIL, DEMO_USER_PASSWORD, "데모유저", "01000000000"));
+        // 점유 해시는 서버 비밀키 HMAC 이라 도메인 팩토리 직접 경로에서도 EmailHasher 로 계산해 주입한다 (#186).
         Member admin = Member.registerAdmin(
-                DemoAccounts.ADMIN_EMAIL, passwordEncoder.encode(ADMIN_PASSWORD), "데모관리자", "01000000001");
+                DemoAccounts.ADMIN_EMAIL, emailHasher.hash(DemoAccounts.ADMIN_EMAIL),
+                passwordEncoder.encode(ADMIN_PASSWORD), "데모관리자", "01000000001");
         memberRepository.saveAndFlush(admin);
         return demoUser;
     }

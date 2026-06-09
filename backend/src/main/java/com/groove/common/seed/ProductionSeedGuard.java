@@ -1,7 +1,7 @@
 package com.groove.common.seed;
 
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.member.security.EmailHasher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -37,18 +37,21 @@ public class ProductionSeedGuard implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(ProductionSeedGuard.class);
 
     private final MemberRepository memberRepository;
+    private final EmailHasher emailHasher;
 
-    public ProductionSeedGuard(MemberRepository memberRepository) {
+    public ProductionSeedGuard(MemberRepository memberRepository, EmailHasher emailHasher) {
         this.memberRepository = memberRepository;
+        this.emailHasher = emailHasher;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        // existsByEmailHash 는 soft-delete(익명화) 포함 점유 확인이라 탈퇴 처리된 데모 계정도 잡아낸다 (#170
+        // existsByEmailHashIn 은 soft-delete(익명화) 포함 점유 확인이라 탈퇴 처리된 데모 계정도 잡아낸다 (#170
         // 부터 점유 판정이 평문 대신 정규화 이메일 해시 — 익명화로 평문이 치환돼도 해시는 보존되므로 그대로 감지).
+        // #186 전환 후엔 시드 계정이 v1(HMAC) 로 저장되나, 마이그레이션 이전 유입분(legacy SHA-256)도 잡도록 양방향 조회.
         List<String> detected = new ArrayList<>();
-        if (memberRepository.existsByEmailHash(Member.hashEmail(DemoAccounts.ADMIN_EMAIL))) detected.add(DemoAccounts.ADMIN_EMAIL);
-        if (memberRepository.existsByEmailHash(Member.hashEmail(DemoAccounts.DEMO_USER_EMAIL))) detected.add(DemoAccounts.DEMO_USER_EMAIL);
+        if (isOccupied(DemoAccounts.ADMIN_EMAIL)) detected.add(DemoAccounts.ADMIN_EMAIL);
+        if (isOccupied(DemoAccounts.DEMO_USER_EMAIL)) detected.add(DemoAccounts.DEMO_USER_EMAIL);
         if (!detected.isEmpty()) {
             throw new IllegalStateException(
                     "운영(비-local) 프로파일로 기동했으나 DB 에서 데모 계정(" + String.join(", ", detected) + ")이 "
@@ -57,5 +60,10 @@ public class ProductionSeedGuard implements ApplicationRunner {
                             + "(로컬 개발 DB 라면 SPRING_PROFILES_ACTIVE=local 로 기동) (이슈 #128)");
         }
         log.info("[seed-guard] 데모 계정 미감지 — 운영 시드 유입 가드 통과");
+    }
+
+    /** v1(HMAC)·legacy(SHA-256) 해시를 함께 조회해 마이그레이션 전후 유입분을 모두 감지한다 (#186). */
+    private boolean isOccupied(String email) {
+        return memberRepository.existsByEmailHashIn(emailHasher.occupancyHashes(email));
     }
 }

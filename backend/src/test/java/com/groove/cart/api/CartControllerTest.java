@@ -16,6 +16,7 @@ import com.groove.cart.domain.CartRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -97,7 +98,7 @@ class CartControllerTest {
         memberRepository.deleteAllInBatch();
 
         Member member = memberRepository.saveAndFlush(
-                Member.register("user@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "User", "01000000000"));
+                MemberFixtures.register("user@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "User", "01000000000"));
         memberId = member.getId();
 
         Long artistId = artistRepository.saveAndFlush(Artist.create("The Beatles", null)).getId();

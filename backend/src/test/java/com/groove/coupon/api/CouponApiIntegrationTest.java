@@ -8,12 +8,12 @@ import com.groove.coupon.domain.CouponRepository;
 import com.groove.coupon.domain.CouponStatus;
 import com.groove.coupon.domain.MemberCoupon;
 import com.groove.coupon.domain.MemberCouponRepository;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.support.OrderFixtures;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -92,9 +92,9 @@ class CouponApiIntegrationTest {
         memberRepository.deleteAllInBatch();
 
         ownerId = memberRepository.saveAndFlush(
-                Member.register("owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Owner", "01000000001")).getId();
+                MemberFixtures.register("owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Owner", "01000000001")).getId();
         Long otherMemberId = memberRepository.saveAndFlush(
-                Member.register("other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Other", "01000000002")).getId();
+                MemberFixtures.register("other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Other", "01000000002")).getId();
 
         ownerBearer = "Bearer " + jwtProvider.issueAccessToken(ownerId, MemberRole.USER);
         otherBearer = "Bearer " + jwtProvider.issueAccessToken(otherMemberId, MemberRole.USER);

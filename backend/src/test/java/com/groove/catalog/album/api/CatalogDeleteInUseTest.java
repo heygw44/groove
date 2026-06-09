@@ -13,13 +13,13 @@ import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.cart.domain.Cart;
 import com.groove.cart.domain.CartRepository;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderShippingInfo;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -144,7 +144,7 @@ class CatalogDeleteInUseTest {
     void deleteAlbum_inUseByCart_returns409() throws Exception {
         Album album = persistAlbum().album();
         Long memberId = memberRepository.saveAndFlush(
-                Member.register("album-del-cart-" + System.nanoTime() + "@example.com",
+                MemberFixtures.register("album-del-cart-" + System.nanoTime() + "@example.com",
                         "$2a$12$hash", "장바구니", "01012345678")).getId();
         Cart cart = Cart.openFor(memberId);
         cart.addOrAccumulate(album, 1);

@@ -36,6 +36,7 @@ import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.support.OrderFixtures;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -121,7 +122,7 @@ class CouponOrderIntegrationTest {
             Album album = albumRepository.save(Album.create("Title-" + tag, artist, genre, label,
                     (short) 2020, AlbumFormat.LP_12, unitPrice, stock,
                     AlbumStatus.SELLING, false, null, null));
-            Member member = memberRepository.save(Member.register(
+            Member member = memberRepository.save(MemberFixtures.register(
                     "c91-" + tag + "@example.com",
                     "encoded", "Coupon Tester", "010-1234-5678"));
 

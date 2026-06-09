@@ -4,6 +4,7 @@ import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.RefreshTokenCookieFactory;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,7 +59,7 @@ class AuthControllerLoginTest {
         // refresh_token 이 member 에 FK 를 가지므로 자식부터 삭제한다.
         refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAll();
-        Member member = Member.register(
+        Member member = MemberFixtures.register(
                 EMAIL,
                 passwordEncoder.encode(RAW_PASSWORD),
                 "홍길동",

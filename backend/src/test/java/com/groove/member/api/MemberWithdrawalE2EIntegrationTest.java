@@ -8,6 +8,7 @@ import com.groove.cart.domain.CartRepository;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.member.security.EmailHasher;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderShippingInfo;
@@ -80,6 +81,9 @@ class MemberWithdrawalE2EIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private EmailHasher emailHasher;
+
     @BeforeEach
     void setUp() {
         // 자식(비-cascade FK)부터 정리: refresh_token → orders → cart → member.
@@ -91,7 +95,7 @@ class MemberWithdrawalE2EIntegrationTest {
 
     private Member persistMember() {
         return memberRepository.saveAndFlush(
-                Member.register(EMAIL, passwordEncoder.encode(RAW_PASSWORD), "김철수", "01012345678"));
+                Member.register(EMAIL, emailHasher.hash(EMAIL), passwordEncoder.encode(RAW_PASSWORD), "김철수", "01012345678"));
     }
 
     private static OrderShippingInfo shipping() {
@@ -131,7 +135,7 @@ class MemberWithdrawalE2EIntegrationTest {
         assertThat(withdrawn.getEmail()).startsWith("withdrawn-").endsWith("@deleted.local");
         assertThat(withdrawn.getName()).isEqualTo("탈퇴회원");
         assertThat(withdrawn.getPhone()).isNull();
-        assertThat(withdrawn.getEmailHash()).isEqualTo(Member.hashEmail(EMAIL));
+        assertThat(withdrawn.getEmailHash()).isEqualTo(emailHasher.hash(EMAIL));
         // cart 정리 (AFTER_COMMIT cart 리스너)
         assertThat(cartRepository.findByMemberId(memberId)).isEmpty();
 

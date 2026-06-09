@@ -21,6 +21,13 @@ spring:
 jwt:
   secret: test-only-secret-key-minimum-256-bits-long-for-jwt-signing
 
+# 테스트 전용 이메일 점유 해시 HMAC 키 (#186) — 256bit 이상 필요 (EmailHashProperties 검증).
+# ⚠️ 이 값은 MemberFixtures.TEST_EMAIL_HASH_SECRET 과 byte-equal 이어야 한다 — @SpringBootTest 가 주입하는
+# EmailHasher 와 슬라이스/단위 테스트의 MemberFixtures 가 동일 해시를 내야 점유 단언이 일치한다.
+email:
+  hash:
+    secret: test-only-secret-key-minimum-256-bits-long-for-email-hash
+
 # 테스트용 CORS — 브라우저 정책상 와일드카드 origin + credentials 조합은 동작하지 않으므로
 # 로컬 개발 origin 패턴(임의 포트) 으로 한정.
 cors:

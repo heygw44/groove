@@ -22,6 +22,7 @@ import com.groove.order.domain.OrderStatus;
 import com.groove.review.domain.Review;
 import com.groove.review.domain.ReviewRepository;
 import com.groove.support.OrderFixtures;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -106,9 +107,9 @@ class ReviewApiIntegrationTest {
         memberRepository.deleteAllInBatch();
 
         ownerId = memberRepository.saveAndFlush(
-                Member.register("owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "김민수", "01000000001")).getId();
+                MemberFixtures.register("owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "김민수", "01000000001")).getId();
         otherMemberId = memberRepository.saveAndFlush(
-                Member.register("other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "이영희", "01000000002")).getId();
+                MemberFixtures.register("other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "이영희", "01000000002")).getId();
 
         Long artistId = artistRepository.saveAndFlush(Artist.create("The Beatles", "desc")).getId();
         Long genreId = genreRepository.saveAndFlush(Genre.create("Rock")).getId();

@@ -13,7 +13,6 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.OrderRepository;
@@ -25,6 +24,7 @@ import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
 import com.groove.review.domain.ReviewRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -289,7 +289,7 @@ class FullPurchaseJourneyE2ETest {
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.DELIVERED);
 
         Long someMemberId = memberRepository.saveAndFlush(
-                Member.register("member@example.com", DUMMY_PASSWORD_HASH, "박지성", "01000000009")).getId();
+                MemberFixtures.register("member@example.com", DUMMY_PASSWORD_HASH, "박지성", "01000000009")).getId();
         String someMemberBearer = "Bearer " + jwtProvider.issueAccessToken(someMemberId, MemberRole.USER);
         postReview(someMemberBearer, orderNumber, album1Id, 4, "게스트 주문이라 안 됨")
                 .andExpect(status().isForbidden())
@@ -301,7 +301,7 @@ class FullPurchaseJourneyE2ETest {
     @DisplayName("결제 실패 보상: FAILED 웹훅 → 결제 FAILED·주문 PAYMENT_FAILED·재고 복원·배송 미생성")
     void paymentFailure_compensates() throws Exception {
         Long memberId = memberRepository.saveAndFlush(
-                Member.register("buyer2@example.com", DUMMY_PASSWORD_HASH, "이영희", "01000000002")).getId();
+                MemberFixtures.register("buyer2@example.com", DUMMY_PASSWORD_HASH, "이영희", "01000000002")).getId();
         String bearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
 
         String orderNumber = placeMemberOrder(bearer, List.of(item(album1Id, 5)));
@@ -321,7 +321,7 @@ class FullPurchaseJourneyE2ETest {
     @DisplayName("멱등성: 동일 Idempotency-Key 동시 결제 요청 → 단일 Payment, 응답은 202/409 만(5xx 없음)")
     void concurrentSameIdempotencyKey_singlePayment() throws Exception {
         Long memberId = memberRepository.saveAndFlush(
-                Member.register("buyer3@example.com", DUMMY_PASSWORD_HASH, "최동석", "01000000003")).getId();
+                MemberFixtures.register("buyer3@example.com", DUMMY_PASSWORD_HASH, "최동석", "01000000003")).getId();
         String bearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
         String orderNumber = placeMemberOrder(bearer, List.of(item(album1Id, 1)));
         String idempotencyKey = "idem-" + orderNumber;

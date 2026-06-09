@@ -29,7 +29,8 @@ public final class SecretPlaceholderGuard {
     /** {@code .env.example} 에 동봉된 플레이스홀더 (정확 일치, 소문자). */
     private static final Set<String> KNOWN_PLACEHOLDERS = Set.of(
             "change-this-to-a-256-bit-secret-key-in-production",
-            "change-this-mock-webhook-secret-in-production"
+            "change-this-mock-webhook-secret-in-production",
+            "change-this-to-a-256-bit-email-hash-key-in-production"
     );
 
     /** "교체하라"는 의도를 드러내는 마커 (부분문자열, 대소문자 무시). */

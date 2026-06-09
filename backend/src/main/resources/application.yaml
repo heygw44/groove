@@ -81,6 +81,12 @@ jwt:
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
 
+# 이메일 점유 해시 HMAC 키 (#186). JWT 와 분리된 전용 시크릿(키 1개=용도 1개) — 미설정 시 기동 실패가 의도된 동작.
+# 로컬 개발용 fallback 은 application-local.yaml, 테스트용은 application-test.yaml 에 정의.
+email:
+  hash:
+    secret: ${EMAIL_HASH_SECRET}
+
 # Refresh Token 쿠키 속성 (#163). refresh 토큰은 HttpOnly; Secure; SameSite=Strict 쿠키로 내려가
 # JS 접근을 차단한다. 운영(HTTPS)은 secure=true 가 기본이며, 로컬 개발(HTTP)은 profile 에서 false 로 override.
 auth:

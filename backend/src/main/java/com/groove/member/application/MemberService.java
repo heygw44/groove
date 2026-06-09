@@ -8,6 +8,7 @@ import com.groove.member.event.MemberWithdrawnEvent;
 import com.groove.member.exception.MemberEmailDuplicatedException;
 import com.groove.member.exception.MemberNotFoundException;
 import com.groove.member.exception.MemberWithdrawalBlockedException;
+import com.groove.member.security.EmailHasher;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
 import org.slf4j.Logger;
@@ -38,17 +39,20 @@ public class MemberService {
     private final PasswordEncoder passwordEncoder;
     private final OrderRepository orderRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmailHasher emailHasher;
     private final Clock clock;
 
     public MemberService(MemberRepository memberRepository,
                          PasswordEncoder passwordEncoder,
                          OrderRepository orderRepository,
                          ApplicationEventPublisher eventPublisher,
+                         EmailHasher emailHasher,
                          Clock clock) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
         this.orderRepository = orderRepository;
         this.eventPublisher = eventPublisher;
+        this.emailHasher = emailHasher;
         this.clock = clock;
     }
 
@@ -56,10 +60,12 @@ public class MemberService {
      * 회원가입.
      *
      * <p>이메일 중복(soft delete·익명화 포함) 검사 → BCrypt 해시 → 영속화. 중복 검사는 평문이 아닌 정규화
-     * 이메일 해시({@link Member#hashEmail})로 한다 (#170, 패턴 A) — 탈퇴 익명화가 평문을 치환해도
-     * {@code email_hash} 는 보존되므로 같은 이메일의 재가입이 차단된다.
+     * 이메일 해시({@link EmailHasher})로 한다 (#170 패턴 A, #186) — 탈퇴 익명화가 평문을 치환해도
+     * {@code email_hash} 는 보존되므로 같은 이메일의 재가입이 차단된다. 신규 회원은 v1(HMAC) 해시로 저장하되,
+     * 점유 검사는 v1 과 legacy(SHA-256) 를 함께 보아 마이그레이션 이전 탈퇴 회원(평문 파기로 재계산 불가)도
+     * 차단한다.
      *
-     * <p>선체크({@code existsByEmailHash})와 {@code save} 사이에 동시 가입 요청이 끼어들 수 있다.
+     * <p>선체크({@code existsByEmailHashIn})와 {@code save} 사이에 동시 가입 요청이 끼어들 수 있다.
      * DB UNIQUE 제약({@code uk_member_email_hash})이 최종 방어선이며, 위반 시 {@link DataIntegrityViolationException}
      * 을 도메인 예외로 변환해 409 응답이 보장된다.
      *
@@ -67,16 +73,13 @@ public class MemberService {
      */
     @Transactional
     public Member signup(SignupCommand command) {
-        if (memberRepository.existsByEmailHash(Member.hashEmail(command.email()))) {
+        String email = command.email();
+        String emailHash = emailHasher.hash(email);
+        if (memberRepository.existsByEmailHashIn(emailHasher.occupancyHashes(email))) {
             throw new MemberEmailDuplicatedException();
         }
         String passwordHash = passwordEncoder.encode(command.password());
-        Member member = Member.register(
-                command.email(),
-                passwordHash,
-                command.name(),
-                command.phone()
-        );
+        Member member = Member.register(email, emailHash, passwordHash, command.name(), command.phone());
         try {
             return memberRepository.saveAndFlush(member);
         } catch (DataIntegrityViolationException ex) {
