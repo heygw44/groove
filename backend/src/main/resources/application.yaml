@@ -139,6 +139,15 @@ groove:
       ship-delay: ${SHIPPING_PROGRESS_SHIP_DELAY:PT5S}
       # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리를 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${SHIPPING_PROGRESS_BATCH_SIZE:200}
+    # 배송 생성 보충 안전망 (#169). AFTER_COMMIT 배송 생성이 실패해 PAID 인데 배송이 없는 고아 주문을
+    # interval 마다 스캔해 보충한다. 정상 흐름에선 대상이 비어 있는 저빈도 안전망.
+    reconciliation:
+      interval: ${SHIPPING_RECONCILIATION_INTERVAL:PT5M}
+      initial-delay: ${SHIPPING_RECONCILIATION_INITIAL_DELAY:PT5M}
+      # PAID 가 된 지 이 시간 이상 지난 주문만 대상 (paid_at < now - min-age) — 갓 결제된 건은 리스너가 곧 처리.
+      min-age: ${SHIPPING_RECONCILIATION_MIN_AGE:PT2M}
+      # 한 주기에 보충할 최대 건수 — 메모리 바운드. 나머지는 다음 주기에 처리.
+      batch-size: ${SHIPPING_RECONCILIATION_BATCH_SIZE:200}
 
 # CORS default 는 모든 origin 차단. profile 별 yaml 또는 환경 변수로 override.
 # 운영 환경에서는 cors.allowed-origins 를 명시적 도메인 화이트리스트로 설정.

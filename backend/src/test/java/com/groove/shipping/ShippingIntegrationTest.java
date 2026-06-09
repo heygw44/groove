@@ -5,6 +5,7 @@ import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
 import com.groove.order.event.OrderPaidEvent;
 import com.groove.shipping.application.ShippingProgressScheduler;
+import com.groove.shipping.application.ShippingReconciliationScheduler;
 import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
@@ -59,6 +60,8 @@ class ShippingIntegrationTest {
     private PlatformTransactionManager txManager;
     @Autowired
     private ShippingProgressScheduler progressScheduler;
+    @Autowired
+    private ShippingReconciliationScheduler reconciliationScheduler;
 
     private TransactionTemplate tx;
 
@@ -95,6 +98,17 @@ class ShippingIntegrationTest {
         return orderRepository.findById(orderId).orElseThrow().getStatus();
     }
 
+    /**
+     * 결제는 PAID 로 커밋됐지만 AFTER_COMMIT 배송 생성이 실패한 "고아 주문"을 재현한다 — 이벤트를 발행하지 않고
+     * 주문만 PAID 로 전이시켜 {@code paid_at} 을 찍는다(=리스너 미동작). reconciliation 의 보충 대상이 된다.
+     */
+    private void markPaidWithoutEvent(Order order) {
+        tx.executeWithoutResult(s -> {
+            Order managed = orderRepository.findById(order.getId()).orElseThrow();
+            managed.changeStatus(OrderStatus.PAID, null);
+        });
+    }
+
     @Test
     @DisplayName("결제 완료 이벤트 → PREPARING 배송 생성 + 배송지 스냅샷 복사, 중복 이벤트는 무해")
     void orderPaid_createsShipping_idempotent() {
@@ -115,6 +129,31 @@ class ShippingIntegrationTest {
 
         // 같은 이벤트 재전달 → 여전히 1건, 주문도 PREPARING 유지(중복 전이 없음)
         publishOrderPaid(order);
+        assertThat(shippingRepository.findAll()).hasSize(1);
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
+    }
+
+    @Test
+    @DisplayName("reconciliation — PAID 인데 배송이 없는 고아 주문을 보충 생성하고 PREPARING 으로 전진, 재실행은 무해 (이슈 #169)")
+    void reconciliation_provisionsOrphanedPaidOrder() {
+        Order order = persistGuestOrder();
+        // 리스너가 배송 생성에 실패한 상황 재현 — PAID 인데 배송 없음
+        markPaidWithoutEvent(order);
+        assertThat(shippingRepository.findAll()).isEmpty();
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PAID);
+
+        reconciliationScheduler.reconcileOrphanedOrders();
+
+        assertThat(shippingRepository.findAll()).hasSize(1);
+        Shipping shipping = shippingRepository.findAll().get(0);
+        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.PREPARING);
+        assertThat(shipping.getTrackingNumber()).isNotBlank();
+        assertThat(shipping.getOrder().getId()).isEqualTo(order.getId());
+        // 보충 생성에 맞춰 주문도 PREPARING 으로 락스텝 전진 → 더 이상 보충 대상이 아니다
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
+
+        // 재실행해도 대상이 비어 새로 만들지 않는다 (멱등)
+        reconciliationScheduler.reconcileOrphanedOrders();
         assertThat(shippingRepository.findAll()).hasSize(1);
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
     }

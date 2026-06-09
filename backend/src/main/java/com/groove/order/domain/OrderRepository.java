@@ -1,5 +1,6 @@
 package com.groove.order.domain;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -8,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +64,16 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
      * 는 차단 대상이 아니다.
      */
     boolean existsByMemberIdAndStatusIn(Long memberId, Collection<OrderStatus> statuses);
+
+    /**
+     * 배송 reconciliation 안전망(#169) 전용 — PAID 가 된 지 일정 시간 지났는데 아직 배송이 없는 고아 주문을 찾는다.
+     *
+     * <p>{@code paid_at} 은 {@link Order#changeStatus} 가 PAID 진입 시 찍는 시각이라 "결제 완료 후 경과"를 정확히
+     * 잰다 — {@code cutoff = now - min-age} 로 갓 결제돼 리스너가 곧 처리할 건은 제외한다. 정상 흐름에선 배송 생성과
+     * 함께 주문이 PREPARING 으로 전진하므로 PAID 잔류 집합은 과도 상태로 항상 소량이다(orders 상태 인덱스는
+     * 슬로우 쿼리 측정 후 W10 으로 연기). {@code limit} 으로 한 주기 처리량을 제한한다.
+     */
+    List<Order> findByStatusAndPaidAtBefore(OrderStatus status, Instant cutoff, Limit limit);
 
     /**
      * 앨범 삭제 차단 검사 (#159) — 해당 album 을 참조하는 order_item 존재 여부.
