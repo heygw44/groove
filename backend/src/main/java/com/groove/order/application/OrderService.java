@@ -152,6 +152,12 @@ public class OrderService {
         if (order.isGuestOrder() || !order.getMemberId().equals(memberId)) {
             throw new OrderNotFoundException();
         }
+        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이면 404 로 차단한다 (#187, place 와 일관) — cancel 은 member 전용.
+        // PENDING 은 탈퇴 차단 상태가 아니므로 쿠폰 적용 주문을 가진 회원이 탈퇴 후 취소를 시도할 수 있는데,
+        // restoreForOrder 가 쿠폰을 USED→ISSUED 로 되살려 익명화된 탈퇴회원에 사용가능 쿠폰이 재부착되는 비정합을 막는다.
+        if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
+        }
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.CANCELLED);
         }

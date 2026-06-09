@@ -391,6 +391,23 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("cancel — 탈퇴(soft delete) 회원이면 MemberNotFoundException, 상태·재고·쿠폰 복원 미실행 (#187)")
+    void cancel_memberWithdrawn_throws() {
+        long withdrawnMemberId = 99L;
+        Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
+        Order order = OrderFixtures.memberOrder("ORD-1", withdrawnMemberId);
+        order.addItem(OrderItem.create(a, 1));
+        given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
+        given(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).willReturn(false);
+
+        assertThatThrownBy(() -> orderService.cancel(withdrawnMemberId, "ORD-1", "변심"))
+                .isInstanceOf(MemberNotFoundException.class);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);   // 취소 미실행
+        assertThat(a.getStock()).isEqualTo(99);                          // 재고 미복원
+        verify(couponApplicationService, never()).restoreForOrder(any());
+    }
+
+    @Test
     @DisplayName("cancel — 미존재 주문이면 OrderNotFoundException")
     void cancel_missing_throwsNotFound() {
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-X")).willReturn(Optional.empty());
