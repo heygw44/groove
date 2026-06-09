@@ -3,6 +3,7 @@ package com.groove.auth.domain;
 import com.groove.common.persistence.JpaAuditingConfig;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,9 +48,9 @@ class RefreshTokenRepositoryTest {
     @BeforeEach
     void setUp() {
         Member primary = memberRepository.saveAndFlush(
-                Member.register("primary@example.com", "$2a$12$hash", "주", "01000000001"));
+                MemberFixtures.register("primary@example.com", "$2a$12$hash", "주", "01000000001"));
         Member other = memberRepository.saveAndFlush(
-                Member.register("other@example.com", "$2a$12$hash", "타", "01000000002"));
+                MemberFixtures.register("other@example.com", "$2a$12$hash", "타", "01000000002"));
         memberId = primary.getId();
         otherMemberId = other.getId();
     }

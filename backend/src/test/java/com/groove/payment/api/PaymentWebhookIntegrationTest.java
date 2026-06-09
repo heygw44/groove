@@ -18,7 +18,6 @@ import com.groove.coupon.domain.CouponRepository;
 import com.groove.coupon.domain.MemberCoupon;
 import com.groove.coupon.domain.MemberCouponRepository;
 import com.groove.coupon.domain.MemberCouponStatus;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.Order;
@@ -31,6 +30,7 @@ import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.InvalidWebhookSignatureException;
 import com.groove.payment.gateway.WebhookDispatcher;
 import com.groove.payment.gateway.WebhookNotification;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -118,7 +118,7 @@ class PaymentWebhookIntegrationTest {
         memberRepository.deleteAllInBatch();
 
         memberId = memberRepository.saveAndFlush(
-                Member.register("buyer@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Buyer", "01000000001")).getId();
+                MemberFixtures.register("buyer@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Buyer", "01000000001")).getId();
         Long artistId = artistRepository.saveAndFlush(Artist.create("The Beatles", null)).getId();
         Long genreId = genreRepository.saveAndFlush(Genre.create("Rock")).getId();
         Long labelId = labelRepository.saveAndFlush(Label.create("Apple Records")).getId();

@@ -19,6 +19,7 @@ import com.groove.order.api.dto.OrderItemRequest;
 import com.groove.order.application.OrderService;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.exception.InsufficientStockException;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -110,7 +111,7 @@ class OversellingBaselineTest {
         cleanupAll();
 
         Member member = memberRepository.saveAndFlush(
-                Member.register("oversell@example.com",
+                MemberFixtures.register("oversell@example.com",
                         "$2a$10$dummyhashvalueforintegrationtest...",
                         "Tester", "01000000000"));
         memberId = member.getId();

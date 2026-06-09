@@ -12,7 +12,6 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.Order;
@@ -22,6 +21,7 @@ import com.groove.order.domain.OrderStatus;
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -113,9 +113,9 @@ class PaymentApiIntegrationTest {
         memberRepository.deleteAllInBatch();
 
         ownerId = memberRepository.saveAndFlush(
-                Member.register("owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Owner", "01000000001")).getId();
+                MemberFixtures.register("owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Owner", "01000000001")).getId();
         otherMemberId = memberRepository.saveAndFlush(
-                Member.register("other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Other", "01000000002")).getId();
+                MemberFixtures.register("other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Other", "01000000002")).getId();
 
         Long artistId = artistRepository.saveAndFlush(Artist.create("The Beatles", null)).getId();
         Long genreId = genreRepository.saveAndFlush(Genre.create("Rock")).getId();

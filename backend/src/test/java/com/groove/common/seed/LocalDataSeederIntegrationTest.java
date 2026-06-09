@@ -17,6 +17,7 @@ import com.groove.member.application.MemberService;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.member.security.EmailHasher;
 import com.groove.order.application.OrderService;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
@@ -73,6 +74,7 @@ class LocalDataSeederIntegrationTest {
     @Autowired private AdminCouponService adminCouponService;
     @Autowired private OrderService orderService;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private EmailHasher emailHasher;
 
     @Autowired
     @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE)
@@ -89,7 +91,7 @@ class LocalDataSeederIntegrationTest {
         MockEnvironment seedEnv = new MockEnvironment();
         seedEnv.setActiveProfiles("local");
         seeder = new LocalDataSeeder(albumRepository, artistService, genreService, labelService,
-                albumService, memberService, memberRepository, passwordEncoder, adminCouponService,
+                albumService, memberService, memberRepository, passwordEncoder, emailHasher, adminCouponService,
                 orderService, txTemplate, seedEnv);
     }
 
@@ -170,7 +172,7 @@ class LocalDataSeederIntegrationTest {
         nonLocal.setActiveProfiles("prod");
         LocalDataSeeder guarded = new LocalDataSeeder(albumRepository, artistService, genreService,
                 labelService, albumService, memberService, memberRepository, passwordEncoder,
-                adminCouponService, orderService, txTemplate, nonLocal);
+                emailHasher, adminCouponService, orderService, txTemplate, nonLocal);
 
         guarded.run(null);
 

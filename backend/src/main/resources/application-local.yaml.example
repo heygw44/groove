@@ -12,6 +12,11 @@ spring:
 jwt:
   secret: ${JWT_SECRET:local-dev-secret-key-minimum-256-bits-long}
 
+# 로컬 개발용 이메일 점유 해시 HMAC 키 fallback (#186). 운영/도커 프로파일에는 EMAIL_HASH_SECRET 로 주입.
+email:
+  hash:
+    secret: ${EMAIL_HASH_SECRET:local-dev-email-hash-secret-minimum-256-bits-long}
+
 # 로컬 개발은 HTTP(localhost) 라 Secure 쿠키가 저장/전송되지 않으므로 refresh 쿠키 secure 를 false 로 내린다(#163).
 # 운영/도커는 application.yaml 기본값(true)을 그대로 쓴다.
 auth:

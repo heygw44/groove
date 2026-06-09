@@ -10,6 +10,7 @@ import com.groove.coupon.exception.CouponAlreadyIssuedException;
 import com.groove.coupon.exception.CouponSoldOutException;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -247,7 +248,7 @@ class CouponIssuanceConcurrencyTest {
     private List<Long> createMembers(int count) {
         List<Member> members = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            members.add(Member.register(
+            members.add(MemberFixtures.register(
                     "concurrency-" + i + "@example.com",
                     "$2a$10$dummyhashvalueforintegrationtest...",
                     "Member" + i,

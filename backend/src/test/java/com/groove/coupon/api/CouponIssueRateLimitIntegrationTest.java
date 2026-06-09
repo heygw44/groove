@@ -2,9 +2,9 @@ package com.groove.coupon.api;
 
 import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.auth.security.JwtProvider;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,9 +56,9 @@ class CouponIssueRateLimitIntegrationTest {
         memberRepository.deleteAllInBatch();
 
         Long ownerId = memberRepository.saveAndFlush(
-                Member.register("rl-owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Owner", "01000000001")).getId();
+                MemberFixtures.register("rl-owner@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Owner", "01000000001")).getId();
         Long otherId = memberRepository.saveAndFlush(
-                Member.register("rl-other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Other", "01000000002")).getId();
+                MemberFixtures.register("rl-other@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "Other", "01000000002")).getId();
         ownerBearer = "Bearer " + jwtProvider.issueAccessToken(ownerId, MemberRole.USER);
         otherBearer = "Bearer " + jwtProvider.issueAccessToken(otherId, MemberRole.USER);
     }

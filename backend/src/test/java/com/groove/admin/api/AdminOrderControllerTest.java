@@ -24,6 +24,7 @@ import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.support.OrderFixtures;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -94,8 +95,8 @@ class AdminOrderControllerTest {
     void setUp() {
         clearAll();
 
-        Member a = memberRepository.saveAndFlush(Member.register("a@example.com", "$2a$10$dummy", "A", "01000000001"));
-        Member b = memberRepository.saveAndFlush(Member.register("b@example.com", "$2a$10$dummy", "B", "01000000002"));
+        Member a = memberRepository.saveAndFlush(MemberFixtures.register("a@example.com", "$2a$10$dummy", "A", "01000000001"));
+        Member b = memberRepository.saveAndFlush(MemberFixtures.register("b@example.com", "$2a$10$dummy", "B", "01000000002"));
         memberA = a.getId();
         memberB = b.getId();
 

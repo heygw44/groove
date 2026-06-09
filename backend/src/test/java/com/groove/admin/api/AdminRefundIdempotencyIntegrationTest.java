@@ -26,6 +26,7 @@ import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.mock.MockPaymentGateway;
 import com.groove.support.OrderFixtures;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -103,7 +104,7 @@ class AdminRefundIdempotencyIntegrationTest {
     @BeforeEach
     void setUp() {
         clearAll();
-        Member m = memberRepository.saveAndFlush(Member.register("admin72@example.com", "$2a$10$dummy", "M", "01000000001"));
+        Member m = memberRepository.saveAndFlush(MemberFixtures.register("admin72@example.com", "$2a$10$dummy", "M", "01000000001"));
         memberId = m.getId();
 
         Artist artist = artistRepository.saveAndFlush(Artist.create("Artist", null));

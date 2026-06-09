@@ -17,6 +17,7 @@ import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -94,7 +95,7 @@ class MemberOrderControllerTest {
         memberRepository.deleteAllInBatch();
 
         Member member = memberRepository.saveAndFlush(
-                Member.register("user@example.com", "$2a$10$dummy...", "User", "01000000000"));
+                MemberFixtures.register("user@example.com", "$2a$10$dummy...", "User", "01000000000"));
 
         Artist artist = artistRepository.saveAndFlush(Artist.create("Artist", null));
         Genre genre = genreRepository.saveAndFlush(Genre.create("Rock"));
@@ -176,7 +177,7 @@ class MemberOrderControllerTest {
     @DisplayName("타 회원 주문은 본인 목록에 노출되지 않음")
     void list_excludesOtherMembers() throws Exception {
         Member other = memberRepository.saveAndFlush(
-                Member.register("other@example.com", "$2a$10$dummy...", "Other", "01000000001"));
+                MemberFixtures.register("other@example.com", "$2a$10$dummy...", "Other", "01000000001"));
         String otherBearer = "Bearer " + jwtProvider.issueAccessToken(other.getId(), MemberRole.USER);
 
         placeOrderWith(otherBearer, List.of(item(albumA, 1)));

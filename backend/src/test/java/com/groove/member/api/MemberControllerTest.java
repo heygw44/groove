@@ -5,6 +5,7 @@ import com.groove.auth.security.JwtProvider;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,7 +61,7 @@ class MemberControllerTest {
         memberRepository.deleteAllInBatch();
 
         Member member = memberRepository.saveAndFlush(
-                Member.register("user@example.com", passwordEncoder.encode(RAW_PASSWORD), "김철수", "01012345678"));
+                MemberFixtures.register("user@example.com", passwordEncoder.encode(RAW_PASSWORD), "김철수", "01012345678"));
         memberId = member.getId();
         userBearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
     }

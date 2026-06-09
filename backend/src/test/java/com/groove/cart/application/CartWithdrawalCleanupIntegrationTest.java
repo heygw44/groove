@@ -12,8 +12,8 @@ import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.cart.domain.CartRepository;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -86,7 +86,7 @@ class CartWithdrawalCleanupIntegrationTest {
         memberRepository.deleteAllInBatch();
 
         memberId = memberRepository.saveAndFlush(
-                Member.register("cart-withdraw@example.com", "$2a$12$hash", "장바구니", "01012345678")).getId();
+                MemberFixtures.register("cart-withdraw@example.com", "$2a$12$hash", "장바구니", "01012345678")).getId();
 
         Artist artist = artistRepository.saveAndFlush(Artist.create("The Beatles", null));
         Genre genre = genreRepository.saveAndFlush(Genre.create("Rock"));

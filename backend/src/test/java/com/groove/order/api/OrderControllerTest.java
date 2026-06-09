@@ -19,6 +19,7 @@ import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderNumberFormat;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -103,7 +104,7 @@ class OrderControllerTest {
         memberRepository.deleteAllInBatch();
 
         Member member = memberRepository.saveAndFlush(
-                Member.register("user@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "User", "01000000000"));
+                MemberFixtures.register("user@example.com", "$2a$10$dummyhashvalueforintegrationtest...", "User", "01000000000"));
         memberId = member.getId();
 
         Long artistId = artistRepository.saveAndFlush(Artist.create("The Beatles", null)).getId();
@@ -379,7 +380,7 @@ class OrderControllerTest {
         String orderNumber = placeMemberOrder(sellingAlbumId, 1);
 
         Member other = memberRepository.saveAndFlush(
-                Member.register("other@example.com", "$2a$10$dummy...", "Other", "01000000001"));
+                MemberFixtures.register("other@example.com", "$2a$10$dummy...", "Other", "01000000001"));
         String otherBearer = "Bearer " + jwtProvider.issueAccessToken(other.getId(), MemberRole.USER);
 
         mockMvc.perform(get("/api/v1/orders/" + orderNumber)
@@ -439,7 +440,7 @@ class OrderControllerTest {
         String orderNumber = placeMemberOrder(sellingAlbumId, 1);
 
         Member other = memberRepository.saveAndFlush(
-                Member.register("other2@example.com", "$2a$10$dummy...", "Other", "01000000002"));
+                MemberFixtures.register("other2@example.com", "$2a$10$dummy...", "Other", "01000000002"));
         String otherBearer = "Bearer " + jwtProvider.issueAccessToken(other.getId(), MemberRole.USER);
 
         mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/cancel")

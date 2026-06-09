@@ -4,6 +4,7 @@ import com.groove.member.application.MemberService;
 import com.groove.member.application.SignupCommand;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.member.security.EmailHasher;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,13 +39,14 @@ class ProductionSeedGuardIntegrationTest {
     @Autowired private MemberRepository memberRepository;
     @Autowired private MemberService memberService;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private EmailHasher emailHasher;
 
     private ProductionSeedGuard guard;
 
     @BeforeEach
     void setUp() {
         removeDemoAccounts();
-        guard = new ProductionSeedGuard(memberRepository);
+        guard = new ProductionSeedGuard(memberRepository, emailHasher);
     }
 
     @AfterEach
@@ -57,8 +59,8 @@ class ProductionSeedGuardIntegrationTest {
     // flake 를 유발하므로, 가드와 동일하게 emailHash 로 매칭한다.
     private void removeDemoAccounts() {
         Set<String> demoHashes = Set.of(
-                Member.hashEmail(DemoAccounts.ADMIN_EMAIL),
-                Member.hashEmail(DemoAccounts.DEMO_USER_EMAIL));
+                emailHasher.hash(DemoAccounts.ADMIN_EMAIL),
+                emailHasher.hash(DemoAccounts.DEMO_USER_EMAIL));
         memberRepository.findAll().stream()
                 .filter(m -> demoHashes.contains(m.getEmailHash()))
                 .forEach(memberRepository::delete);
@@ -79,7 +81,8 @@ class ProductionSeedGuardIntegrationTest {
     @DisplayName("데모 ADMIN 계정만 있어도 기동을 중단한다")
     void failsWhenAdminExists() {
         Member admin = Member.registerAdmin(
-                DemoAccounts.ADMIN_EMAIL, passwordEncoder.encode("admin1234"), "데모관리자", "01000000001");
+                DemoAccounts.ADMIN_EMAIL, emailHasher.hash(DemoAccounts.ADMIN_EMAIL),
+                passwordEncoder.encode("admin1234"), "데모관리자", "01000000001");
         memberRepository.saveAndFlush(admin);
 
         assertThatThrownBy(() -> guard.run(null))

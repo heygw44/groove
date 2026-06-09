@@ -1,6 +1,5 @@
 package com.groove.member.domain;
 
-import com.groove.common.hash.Sha256Hasher;
 import com.groove.common.persistence.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,7 +11,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
-import java.util.Locale;
 
 /**
  * 회원 엔티티 (ERD §4.1).
@@ -32,12 +30,16 @@ public class Member extends BaseTimeEntity {
     private String email;
 
     /**
-     * 이메일 점유 해시 (#170, 패턴 A). 정규화된 이메일의 SHA-256 hex (64자) — {@link #hashEmail} 가 계산한다.
+     * 이메일 점유 해시 (#170 패턴 A, #186). {@code EmailHasher} 가 계산한 정규화 이메일의 HMAC-SHA-256 값으로,
+     * 키 롤링용 버전 prefix 를 포함한다(예: {@code v1:<64 hex>}). 가입 중복 검사({@code MemberService.signup})와
+     * 재가입 차단의 권위 컬럼이다. 탈퇴 익명화는 {@code email} 평문을 치환하지만 이 해시는 보존하므로, 탈퇴 후에도
+     * 같은 이메일의 재가입이 차단된다(어뷰징 방지).
      *
-     * <p>가입 중복 검사({@code MemberService.signup})와 재가입 차단의 권위 컬럼이다. 탈퇴 익명화는 {@code email}
-     * 평문을 치환하지만 이 해시는 보존하므로, 탈퇴 후에도 같은 이메일의 재가입이 차단된다(어뷰징 방지).
+     * <p>해시는 엔티티가 아니라 서비스 레이어({@code EmailHasher} 빈 — 서버 비밀키 주입 필요)에서 계산해 생성자로
+     * 주입한다. 결정적 SHA-256 은 DB 유출 시 사전 대입으로 탈퇴 회원의 원본 이메일까지 역추적될 수 있어 HMAC 으로
+     * 전환했다(#186). 컬럼 폭은 prefix 수용을 위해 {@code VARCHAR(72)} 이다(V19 마이그레이션).
      */
-    @Column(name = "email_hash", nullable = false, length = 64, unique = true)
+    @Column(name = "email_hash", nullable = false, length = 72, unique = true)
     private String emailHash;
 
     @Column(name = "password", nullable = false, length = 255)
@@ -66,9 +68,9 @@ public class Member extends BaseTimeEntity {
     protected Member() {
     }
 
-    private Member(String email, String passwordHash, String name, String phone, MemberRole role) {
+    private Member(String email, String emailHash, String passwordHash, String name, String phone, MemberRole role) {
         this.email = email;
-        this.emailHash = hashEmail(email);
+        this.emailHash = emailHash;
         this.password = passwordHash;
         this.name = name;
         this.phone = phone;
@@ -77,30 +79,16 @@ public class Member extends BaseTimeEntity {
     }
 
     /**
-     * 이메일 점유 해시 단일 진입점 (#170). 정규화(소문자화·trim) 후 SHA-256 hex 로 인코딩한다.
-     *
-     * <p>정규화하는 이유: 기존 {@code uk_member_email} 의 {@code utf8mb4_unicode_ci} collation 은 대소문자를
-     * 구분하지 않아 {@code Foo@x.com} 과 {@code foo@x.com} 을 같은 이메일로 차단해 왔다. 해시 점유로
-     * 전환하면서 정규화를 하지 않으면 두 값의 해시가 달라져 재가입 차단(패턴 A)이 약해지므로, 저장(가입)과
-     * 검사(중복) 양쪽이 이 메서드를 공유해 동일 시맨틱을 유지한다. 마이그레이션 백필
-     * ({@code SHA2(LOWER(TRIM(email)),256)}) 도 ASCII 이메일 기준 이 결과와 동치다.
-     *
-     * <p><b>후속 과제(보안 강화)</b>: 결정적 SHA-256 은 DB 유출 시 흔한 이메일 사전 대입으로 역추적될 수 있다
-     * (탈퇴 회원의 원본 이메일 재식별 위험). 점유 판정 용도라도 서버 비밀키 기반 HMAC-SHA-256(+버전 prefix로
-     * 키 롤링) 으로의 전환이 바람직하다. 다만 해시가 엔티티에서 계산돼 비밀키 주입이 어렵고(register 시그니처 변경),
-     * MySQL 에 HMAC 내장 함수가 없어 백필을 Java 마이그레이션으로 옮겨야 하므로 별도 이슈로 분리한다.
-     */
-    public static String hashEmail(String email) {
-        return Sha256Hasher.hex(email.strip().toLowerCase(Locale.ROOT));
-    }
-
-    /**
      * 회원가입 정적 팩토리.
      *
+     * <p>이메일 점유 해시는 엔티티가 아니라 호출자({@code MemberService.signup})가 {@code EmailHasher} 로
+     * 미리 계산해 넘긴다 — 해시가 서버 비밀키(HMAC) 기반이라 엔티티에서 직접 계산할 수 없기 때문이다(#186).
+     *
+     * @param emailHash    {@code EmailHasher.hash} 로 계산한 점유 해시 (버전 prefix 포함, 예 {@code v1:...})
      * @param passwordHash 반드시 BCrypt 등으로 해시된 값. 평문 금지.
      */
-    public static Member register(String email, String passwordHash, String name, String phone) {
-        return new Member(email, passwordHash, name, phone, MemberRole.USER);
+    public static Member register(String email, String emailHash, String passwordHash, String name, String phone) {
+        return new Member(email, emailHash, passwordHash, name, phone, MemberRole.USER);
     }
 
     /**
@@ -110,10 +98,11 @@ public class Member extends BaseTimeEntity {
      * 통해서만 생성한다. 현재 유일한 소비자는 로컬 데모 시더({@code LocalDataSeeder}) 다 —
      * 운영 환경의 관리자 계정 발급 경로가 생기면 그쪽도 이 팩토리를 재사용한다.
      *
+     * @param emailHash    {@code EmailHasher.hash} 로 계산한 점유 해시 (버전 prefix 포함, #186)
      * @param passwordHash 반드시 BCrypt 등으로 해시된 값. 평문 금지.
      */
-    public static Member registerAdmin(String email, String passwordHash, String name, String phone) {
-        return new Member(email, passwordHash, name, phone, MemberRole.ADMIN);
+    public static Member registerAdmin(String email, String emailHash, String passwordHash, String name, String phone) {
+        return new Member(email, emailHash, passwordHash, name, phone, MemberRole.ADMIN);
     }
 
     /**

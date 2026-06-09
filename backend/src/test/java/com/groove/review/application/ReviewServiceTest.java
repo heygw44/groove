@@ -23,6 +23,7 @@ import com.groove.review.exception.DuplicateReviewException;
 import com.groove.review.exception.ReviewNotFoundException;
 import com.groove.review.exception.ReviewNotOwnedException;
 import com.groove.review.exception.ReviewOrderNotDeliveredException;
+import com.groove.support.MemberFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -75,7 +76,7 @@ class ReviewServiceTest {
     }
 
     private Member memberWithId(long id, String name) {
-        Member member = Member.register("u" + id + "@example.com", "$2a$10$hash", name, "0100000000" + id);
+        Member member = MemberFixtures.register("u" + id + "@example.com", "$2a$10$hash", name, "0100000000" + id);
         ReflectionTestUtils.setField(member, "id", id);
         return member;
     }

@@ -1,8 +1,8 @@
 package com.groove.order.event;
 
 import com.groove.auth.domain.RefreshTokenRepository;
-import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -99,13 +99,13 @@ class OrderPaidEventListenerTest {
         // AFTER_COMMIT 리스너는 커밋 이후에 실행되며, 던진 예외는 트랜잭션 동기화 수준에서 흡수된다 —
         // 발행 측 트랜잭션은 이미 커밋되었으므로 되돌릴 것도, 호출자에게 새어 나갈 것도 없다.
         tx.executeWithoutResult(status -> {
-            memberRepository.save(Member.register(email, "hash", "테스터", "010-0000-0000"));
+            memberRepository.save(MemberFixtures.register(email, "hash", "테스터", "010-0000-0000"));
             publisher.publishEvent(SAMPLE_EVENT);
         });
 
         // 리스너가 실제로 실행됐고(그 안에서 터졌고), 그럼에도 발행 트랜잭션의 쓰기는 커밋되어 있다.
         assertThat(recorder.received()).containsExactly(SAMPLE_EVENT);
-        assertThat(memberRepository.existsByEmailHash(Member.hashEmail(email))).isTrue();
+        assertThat(memberRepository.existsByEmailHash(MemberFixtures.hash(email))).isTrue();
     }
 
     @TestConfiguration

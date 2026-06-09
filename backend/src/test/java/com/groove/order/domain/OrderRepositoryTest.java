@@ -3,6 +3,7 @@ package com.groove.order.domain;
 import com.groove.common.persistence.JpaAuditingConfig;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,7 +44,7 @@ class OrderRepositoryTest {
     @BeforeEach
     void setUp() {
         Member member = memberRepository.saveAndFlush(
-                Member.register("order-repo-test@example.com", "$2a$12$hash", "주문자", "01012345678"));
+                MemberFixtures.register("order-repo-test@example.com", "$2a$12$hash", "주문자", "01012345678"));
         memberId = member.getId();
     }
 

@@ -11,6 +11,7 @@ import com.groove.common.exception.ErrorCode;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
+import com.groove.support.MemberFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -72,7 +73,7 @@ class RefreshTokenServiceTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         service = new RefreshTokenService(
                 refreshTokenRepository, refreshTokenAdmin, memberRepository, jwtProvider, jwtProperties, clock);
-        member = Member.register("user@example.com", "$2a$12$hash", "홍길동", "01012345678");
+        member = MemberFixtures.register("user@example.com", "$2a$12$hash", "홍길동", "01012345678");
         ReflectionTestUtils.setField(member, "id", MEMBER_ID);
     }
 
