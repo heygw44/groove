@@ -2,6 +2,8 @@ package com.groove.payment.application;
 
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
@@ -55,13 +57,16 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
     private final PaymentGateway paymentGateway;
+    private final MemberRepository memberRepository;
 
     public PaymentService(PaymentRepository paymentRepository,
                           OrderRepository orderRepository,
-                          PaymentGateway paymentGateway) {
+                          PaymentGateway paymentGateway,
+                          MemberRepository memberRepository) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.paymentGateway = paymentGateway;
+        this.memberRepository = memberRepository;
     }
 
     /**
@@ -74,6 +79,11 @@ public class PaymentService {
         if (!canRequestPaymentFor(order, callerMemberId)) {
             // 타 회원 주문 또는 회원 주문에 익명 접근 — 존재 노출 회피를 위해 404 로 통일.
             throw new OrderNotFoundException();
+        }
+        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이 자신의 PENDING 주문을 결제하는 윈도우를 차단한다
+        // (#187, #171·주문 생성과 일관) — 게스트 결제(callerMemberId == null)는 제외.
+        if (callerMemberId != null && !memberRepository.existsByIdAndDeletedAtIsNull(callerMemberId)) {
+            throw new MemberNotFoundException();
         }
 
         Payment existing = paymentRepository.findByOrderId(order.getId()).orElse(null);

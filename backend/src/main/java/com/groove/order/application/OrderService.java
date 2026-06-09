@@ -7,6 +7,8 @@ import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.exception.AlbumNotPurchasableException;
 import com.groove.coupon.application.CouponApplicationService;
 import com.groove.coupon.exception.CouponNotApplicableException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
@@ -66,15 +68,18 @@ public class OrderService {
     private final AlbumRepository albumRepository;
     private final OrderNumberGenerator orderNumberGenerator;
     private final CouponApplicationService couponApplicationService;
+    private final MemberRepository memberRepository;
 
     public OrderService(OrderRepository orderRepository,
                         AlbumRepository albumRepository,
                         OrderNumberGenerator orderNumberGenerator,
-                        CouponApplicationService couponApplicationService) {
+                        CouponApplicationService couponApplicationService,
+                        MemberRepository memberRepository) {
         this.orderRepository = orderRepository;
         this.albumRepository = albumRepository;
         this.orderNumberGenerator = orderNumberGenerator;
         this.couponApplicationService = couponApplicationService;
+        this.memberRepository = memberRepository;
     }
 
     /**
@@ -163,6 +168,11 @@ public class OrderService {
     @Transactional
     public Order place(Long memberId, OrderCreateRequest request) {
         validateOwnership(memberId, request.guest());
+        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이면 404 로 차단한다 (#187, #171 과 일관) — 게스트는 제외.
+        // member_id 는 단순 Long 컬럼이라 FK 500 은 안 나지만, 익명화된 탈퇴회원에 신규 주문이 귀속되는 비정합을 막는다.
+        if (memberId != null && !memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
+        }
         // 게스트 + memberCouponId 거부 — 회원 전용 쿠폰을 게스트가 사용하려는 경합을 즉시 차단한다
         // (이슈 #91 DoD: 게스트 + memberCouponId → COUPON_NOT_APPLICABLE 422).
         if (memberId == null && request.memberCouponId() != null) {

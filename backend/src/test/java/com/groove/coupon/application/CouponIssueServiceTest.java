@@ -12,6 +12,8 @@ import com.groove.coupon.exception.CouponAlreadyIssuedException;
 import com.groove.coupon.exception.CouponNotFoundException;
 import com.groove.coupon.exception.CouponNotIssuableException;
 import com.groove.coupon.exception.CouponSoldOutException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,8 +31,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -53,6 +57,9 @@ class CouponIssueServiceTest {
     @Mock
     private MemberCouponRepository memberCouponRepository;
 
+    @Mock
+    private MemberRepository memberRepository;
+
     private CouponIssueService service;
 
     private Coupon coupon;
@@ -60,7 +67,9 @@ class CouponIssueServiceTest {
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        service = new CouponIssueService(couponRepository, memberCouponRepository, clock);
+        service = new CouponIssueService(couponRepository, memberCouponRepository, memberRepository, clock);
+        // 활성 회원 기본값 — 가드(#187)는 모든 issue() 진입부에서 호출된다. 탈퇴 시나리오만 false 로 override 한다.
+        lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(MEMBER_ID)).thenReturn(true);
         coupon = Coupon.builder("정액 3천원", CouponDiscountType.FIXED_AMOUNT, 3_000,
                         NOW.minus(1, ChronoUnit.DAYS), NOW.plus(10, ChronoUnit.DAYS))
                 .totalQuantity(100)
@@ -161,5 +170,16 @@ class CouponIssueServiceTest {
 
         assertThatThrownBy(() -> service.issue(MEMBER_ID, COUPON_ID))
                 .isInstanceOf(CouponAlreadyIssuedException.class);
+    }
+
+    @Test
+    @DisplayName("탈퇴(soft delete) 회원 → MemberNotFoundException, 쿠폰 미조회·미증가 (#187)")
+    void issue_memberWithdrawn_throws() {
+        long withdrawnMemberId = 99L;
+        when(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.issue(withdrawnMemberId, COUPON_ID))
+                .isInstanceOf(MemberNotFoundException.class);
+        verifyNoInteractions(couponRepository, memberCouponRepository);
     }
 }

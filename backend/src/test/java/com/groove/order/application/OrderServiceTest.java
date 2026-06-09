@@ -9,6 +9,8 @@ import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.label.domain.Label;
 import com.groove.cart.exception.AlbumNotPurchasableException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
@@ -41,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -56,13 +59,17 @@ class OrderServiceTest {
     private OrderNumberGenerator orderNumberGenerator;
     @Mock
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
+    @Mock
+    private MemberRepository memberRepository;
 
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
         orderService = new OrderService(orderRepository, albumRepository, orderNumberGenerator,
-                couponApplicationService);
+                couponApplicationService, memberRepository);
+        // 활성 회원 기본값 — 가드(#187)는 회원 주문(memberId != null)일 때만 호출된다. 탈퇴 시나리오만 false 로 override 한다.
+        lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
     }
 
     private Album album(long id, AlbumStatus status, int stock, long price) {
@@ -139,6 +146,8 @@ class OrderServiceTest {
         assertThat(order.getGuestEmail()).isEqualTo("guest@example.com");
         assertThat(order.getGuestPhone()).isEqualTo("01012345678");
         assertThat(order.getMemberId()).isNull();
+        // 게스트 주문은 탈퇴 회원 가드(#187)를 거치지 않는다 — memberId == null 이라 회원 검사를 호출하지 않음.
+        verify(memberRepository, never()).existsByIdAndDeletedAtIsNull(any());
     }
 
     @Test
@@ -160,6 +169,19 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> orderService.place(null, req))
                 .isInstanceOf(InvalidOrderOwnershipException.class);
+    }
+
+    @Test
+    @DisplayName("회원 주문 — 탈퇴(soft delete) 회원이면 MemberNotFoundException, album 미조회·미저장 (#187)")
+    void place_memberWithdrawn_throws() {
+        long withdrawnMemberId = 99L;
+        given(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).willReturn(false);
+
+        assertThatThrownBy(() -> orderService.place(withdrawnMemberId,
+                memberRequest(new OrderItemRequest(10L, 1))))
+                .isInstanceOf(MemberNotFoundException.class);
+        verify(albumRepository, never()).findById(any());
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
