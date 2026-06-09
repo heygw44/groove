@@ -84,6 +84,11 @@ public class Member extends BaseTimeEntity {
      * 전환하면서 정규화를 하지 않으면 두 값의 해시가 달라져 재가입 차단(패턴 A)이 약해지므로, 저장(가입)과
      * 검사(중복) 양쪽이 이 메서드를 공유해 동일 시맨틱을 유지한다. 마이그레이션 백필
      * ({@code SHA2(LOWER(TRIM(email)),256)}) 도 ASCII 이메일 기준 이 결과와 동치다.
+     *
+     * <p><b>후속 과제(보안 강화)</b>: 결정적 SHA-256 은 DB 유출 시 흔한 이메일 사전 대입으로 역추적될 수 있다
+     * (탈퇴 회원의 원본 이메일 재식별 위험). 점유 판정 용도라도 서버 비밀키 기반 HMAC-SHA-256(+버전 prefix로
+     * 키 롤링) 으로의 전환이 바람직하다. 다만 해시가 엔티티에서 계산돼 비밀키 주입이 어렵고(register 시그니처 변경),
+     * MySQL 에 HMAC 내장 함수가 없어 백필을 Java 마이그레이션으로 옮겨야 하므로 별도 이슈로 분리한다.
      */
     public static String hashEmail(String email) {
         return Sha256Hasher.hex(email.strip().toLowerCase(Locale.ROOT));

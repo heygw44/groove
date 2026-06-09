@@ -79,13 +79,13 @@ groove:
       interval: PT1H
       initial-delay: PT1H
       min-age: PT0S
-  # PII 익명화 배치도 자동 실행하지 않는다 — anonymizeDeliveredOrders() 를 직접 호출해 검증한다.
-  # retention 0 이면 갓 배송완료된 주문도 즉시 익명화 대상.
+  # PII 익명화 배치는 initial-delay 로 자동 실행을 막는다 — 배치 로직은 단위 테스트(Mockito)로 검증한다.
+  # retention 은 양수여야 하므로(스케줄러 생성자 검증) PT1H 로 둔다; 통합 테스트는 스케줄러를 직접 호출하지 않는다.
   privacy:
     order-anonymization:
       interval: PT1H
       initial-delay: PT1H
-      retention: PT0S
+      retention: PT1H
 
 # Mock PG — 테스트에서는 결정적·즉시 동작. 성공률/실패 분기 검증은 단위 테스트에서 properties 를 직접 구성.
 # auto-webhook 은 기본값(true) 유지 — MockPaymentWiringTest 가 비동기 발사 경로를 검증한다. 결정적 검증이

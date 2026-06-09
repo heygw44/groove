@@ -96,4 +96,16 @@ class OrderPiiAnonymizationSchedulerTest {
                 shippingRepository, anonymizer, Clock.fixed(NOW, ZoneOffset.UTC), RETENTION, 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("retention 이 0/음수면 생성자에서 IllegalArgumentException (조기 익명화 방지)")
+    void constructor_nonPositiveRetention_throws() {
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        assertThatThrownBy(() -> new OrderPiiAnonymizationScheduler(
+                shippingRepository, anonymizer, clock, Duration.ZERO, BATCH_SIZE))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OrderPiiAnonymizationScheduler(
+                shippingRepository, anonymizer, clock, Duration.ofDays(-1), BATCH_SIZE))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

@@ -96,12 +96,16 @@ public class OrderService {
      * 게스트 주문 단건 조회 (API.md §3.5).
      *
      * <p>email 매칭 실패·회원 주문에 게스트로 접근하는 경우는 모두 404 로 통일.
+     *
+     * <p>PII 익명화(#170 Part B)로 {@code guestEmail} 이 NULL 이 된 주문(배송완료 후 보존기간 경과)은
+     * 매칭할 평문이 없으므로 404 로 통일한다 — null 가드 없이 {@code equalsIgnoreCase} 를 호출하면 NPE(500).
      */
     @Transactional(readOnly = true)
     public Order findForGuest(String orderNumber, String email) {
         Order order = orderRepository.findByOrderNumber(orderNumber)
                 .orElseThrow(OrderNotFoundException::new);
-        if (!order.isGuestOrder() || !order.getGuestEmail().equalsIgnoreCase(email)) {
+        if (!order.isGuestOrder() || order.getGuestEmail() == null
+                || !order.getGuestEmail().equalsIgnoreCase(email)) {
             throw new OrderNotFoundException();
         }
         return order;

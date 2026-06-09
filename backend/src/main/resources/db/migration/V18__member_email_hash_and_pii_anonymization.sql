@@ -33,6 +33,16 @@ ALTER TABLE member
 ALTER TABLE member
     MODIFY COLUMN phone VARCHAR(20) NULL;
 
+-- 2-1) 백카탈로그 익명화: #170 이전에 이미 탈퇴(deleted_at)했으나 평문 PII 가 남은 회원도 익명화한다.
+--      email_hash 백필(1단계)이 원본 이메일의 해시를 이미 점유시켰으므로(재가입 차단 유지), 여기서는 평문만
+--      제거한다 — Member.anonymize() 와 동일 규칙(email→withdrawn-{id}@deleted.local, name 마스킹, phone NULL).
+--      id 가 PK 라 치환 email 은 유일해 uk_member_email 과 충돌하지 않는다. 반드시 1·2단계 뒤에 실행한다.
+UPDATE member
+SET email = CONCAT('withdrawn-', id, '@deleted.local'),
+    name  = '탈퇴회원',
+    phone = NULL
+WHERE deleted_at IS NOT NULL;
+
 -- 3) orders / shipping 익명화 마커. 배치가 'DELIVERED + 보존기간 경과 + anonymized_at IS NULL' 을
 --    대상으로 잡고, 익명화 후 anonymized_at 을 찍어 다음 주기에서 제외(멱등)한다.
 --    전용 인덱스(delivered_at/anonymized_at)는 프로젝트 컨벤션(V8/V12)대로 슬로우 쿼리 측정 후 W10 으로

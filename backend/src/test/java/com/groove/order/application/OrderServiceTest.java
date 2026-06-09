@@ -272,6 +272,17 @@ class OrderServiceTest {
     }
 
     @Test
+    @DisplayName("findForGuest — 익명화된 게스트 주문(guestEmail=null) 은 NPE 가 아니라 404 (#170)")
+    void findForGuest_anonymizedOrder_throwsNotFoundNotNpe() {
+        Order order = OrderFixtures.guestOrder("ORD-G", "g@x.com", null);
+        order.anonymizePii(java.time.Instant.parse("2026-06-09T00:00:00Z")); // guestEmail → null
+        given(orderRepository.findByOrderNumber("ORD-G")).willReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.findForGuest("ORD-G", "g@x.com"))
+                .isInstanceOf(OrderNotFoundException.class);
+    }
+
+    @Test
     @DisplayName("findForGuest — 회원 주문에 게스트로 접근하면 404")
     void findForGuest_memberOrder_throwsNotFound() {
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);

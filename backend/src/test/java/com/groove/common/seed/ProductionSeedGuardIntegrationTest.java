@@ -15,6 +15,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -50,12 +52,15 @@ class ProductionSeedGuardIntegrationTest {
         removeDemoAccounts();
     }
 
-    // 가드는 existsByEmailHash(soft-delete 포함)로 감지하므로, 정리도 같은 기준(findAll 전수 — soft-delete 무관)으로
-    // 지운다. findByEmailAndDeletedAtIsNull(활성만)과의 비대칭으로 인한 공유 컨테이너 순서 의존 flake 를 막는다.
+    // 가드는 existsByEmailHash(soft-delete 포함)로 감지하므로, 정리도 같은 기준(email_hash)으로 지운다.
+    // 평문 email 기준 필터는 익명화된 데모 계정(email 치환·email_hash 유지)을 놓쳐 공유 컨테이너 순서 의존
+    // flake 를 유발하므로, 가드와 동일하게 emailHash 로 매칭한다.
     private void removeDemoAccounts() {
+        Set<String> demoHashes = Set.of(
+                Member.hashEmail(DemoAccounts.ADMIN_EMAIL),
+                Member.hashEmail(DemoAccounts.DEMO_USER_EMAIL));
         memberRepository.findAll().stream()
-                .filter(m -> DemoAccounts.ADMIN_EMAIL.equals(m.getEmail())
-                        || DemoAccounts.DEMO_USER_EMAIL.equals(m.getEmail()))
+                .filter(m -> demoHashes.contains(m.getEmailHash()))
                 .forEach(memberRepository::delete);
     }
 

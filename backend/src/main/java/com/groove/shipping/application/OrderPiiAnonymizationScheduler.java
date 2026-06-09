@@ -54,6 +54,11 @@ public class OrderPiiAnonymizationScheduler {
         this.anonymizer = anonymizer;
         this.clock = clock;
         this.retention = Objects.requireNonNull(retention, "retention");
+        if (retention.isZero() || retention.isNegative()) {
+            // 보존기간이 0/음수면 cutoff 가 미래가 돼 배송완료 직후(보존기간 전)에 PII 가 익명화될 수 있다.
+            throw new IllegalArgumentException(
+                    "groove.privacy.order-anonymization.retention 은 양수여야 합니다: " + retention);
+        }
         if (batchSize <= 0) {
             throw new IllegalArgumentException(
                     "groove.privacy.order-anonymization.batch-size 는 양수여야 합니다: " + batchSize);
