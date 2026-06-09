@@ -1,17 +1,15 @@
 package com.groove.shipping.application;
 
-import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
-import com.groove.support.OrderFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -48,19 +46,26 @@ class ShippingReconciliationSchedulerTest {
                 Clock.fixed(NOW, ZoneOffset.UTC), MIN_AGE, BATCH_SIZE);
     }
 
-    private static Order paidOrder(Long id, String orderNumber) {
-        Order order = OrderFixtures.memberOrder(orderNumber, 1L);
-        order.changeStatus(OrderStatus.PAID, null);
-        ReflectionTestUtils.setField(order, "id", id);
-        return order;
+    private static OrderRepository.OrderNumberView view(Long id, String orderNumber) {
+        return new OrderRepository.OrderNumberView() {
+            @Override
+            public Long getId() {
+                return id;
+            }
+
+            @Override
+            public String getOrderNumber() {
+                return orderNumber;
+            }
+        };
     }
 
     @Test
-    @DisplayName("PAID·배송없음 고아를 프로비저너로 보충한다 (cutoff = now - min-age, batch-size 만큼 조회)")
+    @DisplayName("PAID·배송없음 고아를 프로비저너로 보충한다 (cutoff = now - min-age, batch-size 만큼 paid_at 오름차순 조회)")
     void reconcile_orphanFound_provisions() {
-        given(orderRepository.findByStatusAndPaidAtBefore(
+        given(orderRepository.findByStatusAndPaidAtBeforeOrderByPaidAtAsc(
                 eq(OrderStatus.PAID), eq(NOW.minus(MIN_AGE)), eq(Limit.of(BATCH_SIZE))))
-                .willReturn(List.of(paidOrder(7L, "ORD-A")));
+                .willReturn(List.of(view(7L, "ORD-A")));
         given(provisioner.provisionForOrder(7L, "ORD-A")).willReturn(true);
 
         scheduler.reconcileOrphanedOrders();
@@ -69,11 +74,26 @@ class ShippingReconciliationSchedulerTest {
     }
 
     @Test
-    @DisplayName("한 건이 실패해도 나머지를 계속 보충한다 (스케줄러 스레드로 예외 미전파)")
+    @DisplayName("한 건이 실패해도 실패 건을 시도한 뒤 나머지를 계속 보충한다 (스케줄러 스레드로 예외 미전파)")
     void reconcile_oneFailure_continues() {
-        given(orderRepository.findByStatusAndPaidAtBefore(any(), any(), any()))
-                .willReturn(List.of(paidOrder(1L, "ORD-BAD"), paidOrder(2L, "ORD-GOOD")));
+        given(orderRepository.findByStatusAndPaidAtBeforeOrderByPaidAtAsc(any(), any(), any()))
+                .willReturn(List.of(view(1L, "ORD-BAD"), view(2L, "ORD-GOOD")));
         given(provisioner.provisionForOrder(1L, "ORD-BAD")).willThrow(new RuntimeException("DB 일시 장애"));
+        given(provisioner.provisionForOrder(2L, "ORD-GOOD")).willReturn(true);
+
+        assertThatCode(() -> scheduler.reconcileOrphanedOrders()).doesNotThrowAnyException();
+
+        verify(provisioner).provisionForOrder(1L, "ORD-BAD");   // 실패 건도 실제로 시도됨
+        verify(provisioner).provisionForOrder(2L, "ORD-GOOD");  // 실패 후에도 다음 건 계속 진행
+    }
+
+    @Test
+    @DisplayName("리스너와 경합한 DataIntegrityViolationException 은 실패로 보지 않고 흡수, 다음 건은 계속 진행")
+    void reconcile_uniqueViolation_absorbedNotFailure() {
+        given(orderRepository.findByStatusAndPaidAtBeforeOrderByPaidAtAsc(any(), any(), any()))
+                .willReturn(List.of(view(1L, "ORD-RACE"), view(2L, "ORD-GOOD")));
+        given(provisioner.provisionForOrder(1L, "ORD-RACE"))
+                .willThrow(new DataIntegrityViolationException("uk_shipping_order"));
         given(provisioner.provisionForOrder(2L, "ORD-GOOD")).willReturn(true);
 
         assertThatCode(() -> scheduler.reconcileOrphanedOrders()).doesNotThrowAnyException();
@@ -84,7 +104,7 @@ class ShippingReconciliationSchedulerTest {
     @Test
     @DisplayName("대상이 없으면 프로비저너를 건드리지 않는다")
     void reconcile_noOrphans_noop() {
-        given(orderRepository.findByStatusAndPaidAtBefore(any(), any(), any())).willReturn(List.of());
+        given(orderRepository.findByStatusAndPaidAtBeforeOrderByPaidAtAsc(any(), any(), any())).willReturn(List.of());
 
         scheduler.reconcileOrphanedOrders();
 

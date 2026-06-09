@@ -1,11 +1,11 @@
 package com.groove.shipping.application;
 
-import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -63,21 +63,26 @@ public class ShippingReconciliationScheduler {
             initialDelayString = "${groove.shipping.reconciliation.initial-delay:PT5M}")
     public void reconcileOrphanedOrders() {
         Instant cutoff = clock.instant().minus(minAge);
-        List<Order> orphans = orderRepository.findByStatusAndPaidAtBefore(OrderStatus.PAID, cutoff, batchLimit);
+        List<OrderRepository.OrderNumberView> orphans =
+                orderRepository.findByStatusAndPaidAtBeforeOrderByPaidAtAsc(OrderStatus.PAID, cutoff, batchLimit);
         if (orphans.isEmpty()) {
             return;
         }
         log.debug("배송 보충 대상 {}건 (cutoff={}, limit={})", orphans.size(), cutoff, batchLimit.max());
-        for (Order order : orphans) {
+        for (OrderRepository.OrderNumberView order : orphans) {
             provisionOne(order);
         }
     }
 
-    private void provisionOne(Order order) {
+    private void provisionOne(OrderRepository.OrderNumberView order) {
         try {
             if (provisioner.provisionForOrder(order.getId(), order.getOrderNumber())) {
                 log.info("배송 보충: order={} — 리스너 누락분 복구", order.getOrderNumber());
             }
+        } catch (DataIntegrityViolationException e) {
+            // 리스너의 늦은 재시도와 경합해 다른 트랜잭션이 먼저 배송을 만든 경우 — 이미 보충됨(정상). 리스너와
+            // 동일하게 INFO 흡수해 정상 경합을 '실패' 알람으로 오인하지 않는다. 다음 주기엔 existsByOrderId 가 걸러낸다.
+            log.info("배송 보충 건너뜀: order={} 이미 존재(리스너와 경합)", order.getOrderNumber());
         } catch (RuntimeException e) {
             log.warn("배송 보충 실패: order={} — 다음 주기에 재시도", order.getOrderNumber(), e);
         }
