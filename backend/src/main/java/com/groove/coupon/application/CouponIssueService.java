@@ -9,6 +9,8 @@ import com.groove.coupon.exception.CouponAlreadyIssuedException;
 import com.groove.coupon.exception.CouponNotFoundException;
 import com.groove.coupon.exception.CouponNotIssuableException;
 import com.groove.coupon.exception.CouponSoldOutException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -46,13 +48,16 @@ public class CouponIssueService {
 
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
+    private final MemberRepository memberRepository;
     private final Clock clock;
 
     public CouponIssueService(CouponRepository couponRepository,
                               MemberCouponRepository memberCouponRepository,
+                              MemberRepository memberRepository,
                               Clock clock) {
         this.couponRepository = couponRepository;
         this.memberCouponRepository = memberCouponRepository;
+        this.memberRepository = memberRepository;
         this.clock = clock;
     }
 
@@ -66,6 +71,12 @@ public class CouponIssueService {
      */
     @Transactional
     public MemberCouponResponse issue(Long memberId, Long couponId) {
+        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이면 404 로 차단한다 (#187, #171 과 일관) — 익명화된
+        // 탈퇴회원에 신규 쿠폰이 귀속되는 비정합을 막는다. 데모/테스트 전용 issueWithoutLock·
+        // issueWithPessimisticLock 은 프로덕션 경로가 아니므로 가드를 두지 않는다.
+        if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
+        }
         validateIssuable(couponId);
         requireNotYetIssued(couponId, memberId);
 

@@ -7,6 +7,8 @@ import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.domain.Cart;
 import com.groove.cart.domain.CartRepository;
 import com.groove.cart.exception.AlbumNotPurchasableException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,10 +32,13 @@ public class CartService {
 
     private final CartRepository cartRepository;
     private final AlbumRepository albumRepository;
+    private final MemberRepository memberRepository;
 
-    public CartService(CartRepository cartRepository, AlbumRepository albumRepository) {
+    public CartService(CartRepository cartRepository, AlbumRepository albumRepository,
+                       MemberRepository memberRepository) {
         this.cartRepository = cartRepository;
         this.albumRepository = albumRepository;
+        this.memberRepository = memberRepository;
     }
 
     @Transactional(readOnly = true)
@@ -92,6 +97,12 @@ public class CartService {
     }
 
     private Cart getOrCreate(Long memberId) {
+        // 모든 장바구니 쓰기(addItem/changeItemQuantity/removeItem/clear)의 공통 진입점 — 토큰 유효기간 내
+        // 탈퇴(soft delete)한 회원이면 여기서 404 로 차단한다 (#187, #171 과 일관). 읽기(find)와 탈퇴 이벤트의
+        // deleteForMember 는 이 메서드를 거치지 않으므로 탈퇴 회원의 장바구니 정리는 영향받지 않는다.
+        if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
+        }
         return cartRepository.findByMemberIdWithItems(memberId)
                 .orElseGet(() -> cartRepository.save(Cart.openFor(memberId)));
     }

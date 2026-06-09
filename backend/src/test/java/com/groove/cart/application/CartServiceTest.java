@@ -12,6 +12,8 @@ import com.groove.cart.domain.Cart;
 import com.groove.cart.domain.CartRepository;
 import com.groove.cart.exception.AlbumNotPurchasableException;
 import com.groove.cart.exception.CartItemNotFoundException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,8 +28,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CartService 단위 테스트")
@@ -37,12 +41,16 @@ class CartServiceTest {
     private CartRepository cartRepository;
     @Mock
     private AlbumRepository albumRepository;
+    @Mock
+    private MemberRepository memberRepository;
 
     private CartService cartService;
 
     @BeforeEach
     void setUp() {
-        cartService = new CartService(cartRepository, albumRepository);
+        cartService = new CartService(cartRepository, albumRepository, memberRepository);
+        // 활성 회원 기본값 — 가드(#187)는 쓰기 진입점 getOrCreate 에서 호출된다. 탈퇴 시나리오만 false 로 override 한다.
+        lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
     }
 
     private Album album(long id, AlbumStatus status) {
@@ -151,6 +159,18 @@ class CartServiceTest {
         cartService.deleteForMember(1L);
 
         verify(cartRepository, never()).delete(any(Cart.class));
+        verify(cartRepository, never()).save(any(Cart.class));
+    }
+
+    @Test
+    @DisplayName("쓰기(clear) → 탈퇴(soft delete) 회원이면 MemberNotFoundException, cart 미조회·미저장 (#187)")
+    void write_memberWithdrawn_throws() {
+        long withdrawnMemberId = 99L;
+        when(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).thenReturn(false);
+
+        assertThatThrownBy(() -> cartService.clear(withdrawnMemberId))
+                .isInstanceOf(MemberNotFoundException.class);
+        verify(cartRepository, never()).findByMemberIdWithItems(any());
         verify(cartRepository, never()).save(any(Cart.class));
     }
 }

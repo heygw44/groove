@@ -1,6 +1,8 @@
 package com.groove.payment.application;
 
 import com.groove.common.exception.DomainException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
@@ -32,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,12 +53,16 @@ class PaymentServiceTest {
     private OrderRepository orderRepository;
     @Mock
     private PaymentGateway paymentGateway;
+    @Mock
+    private MemberRepository memberRepository;
 
     private PaymentService paymentService;
 
     @BeforeEach
     void setUp() {
-        paymentService = new PaymentService(paymentRepository, orderRepository, paymentGateway);
+        paymentService = new PaymentService(paymentRepository, orderRepository, paymentGateway, memberRepository);
+        // 활성 회원 기본값 — 가드(#187)는 회원 결제(callerMemberId != null)일 때만 호출된다. 탈퇴 시나리오만 false 로 override 한다.
+        lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
     }
 
     /** lenient 모드 Order 목 — 테스트마다 사용하는 getter 가 달라 strict 모드면 UnnecessaryStubbing 으로 깨진다. */
@@ -224,6 +231,22 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> paymentService.requestPayment(1L, request()))
                 .isInstanceOf(PaymentGatewayException.class);
 
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("requestPayment: 탈퇴(soft delete) 회원이 본인 PENDING 주문 결제 → 404, PG·저장 미호출 (#187)")
+    void requestPayment_memberWithdrawn_throwsNotFound() {
+        long withdrawnMemberId = 7L;
+        Order order = order(false, withdrawnMemberId, OrderStatus.PENDING);
+        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
+        when(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).thenReturn(false);
+
+        assertThatThrownBy(() -> paymentService.requestPayment(withdrawnMemberId, request()))
+                .isInstanceOf(MemberNotFoundException.class);
+
+        verify(paymentRepository, never()).findByOrderId(any());
+        verify(paymentGateway, never()).request(any());
         verify(paymentRepository, never()).save(any());
     }
 

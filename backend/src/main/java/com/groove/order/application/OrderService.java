@@ -7,6 +7,8 @@ import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.exception.AlbumNotPurchasableException;
 import com.groove.coupon.application.CouponApplicationService;
 import com.groove.coupon.exception.CouponNotApplicableException;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
@@ -66,15 +68,18 @@ public class OrderService {
     private final AlbumRepository albumRepository;
     private final OrderNumberGenerator orderNumberGenerator;
     private final CouponApplicationService couponApplicationService;
+    private final MemberRepository memberRepository;
 
     public OrderService(OrderRepository orderRepository,
                         AlbumRepository albumRepository,
                         OrderNumberGenerator orderNumberGenerator,
-                        CouponApplicationService couponApplicationService) {
+                        CouponApplicationService couponApplicationService,
+                        MemberRepository memberRepository) {
         this.orderRepository = orderRepository;
         this.albumRepository = albumRepository;
         this.orderNumberGenerator = orderNumberGenerator;
         this.couponApplicationService = couponApplicationService;
+        this.memberRepository = memberRepository;
     }
 
     /**
@@ -147,6 +152,12 @@ public class OrderService {
         if (order.isGuestOrder() || !order.getMemberId().equals(memberId)) {
             throw new OrderNotFoundException();
         }
+        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이면 404 로 차단한다 (#187, place 와 일관) — cancel 은 member 전용.
+        // PENDING 은 탈퇴 차단 상태가 아니므로 쿠폰 적용 주문을 가진 회원이 탈퇴 후 취소를 시도할 수 있는데,
+        // restoreForOrder 가 쿠폰을 USED→ISSUED 로 되살려 익명화된 탈퇴회원에 사용가능 쿠폰이 재부착되는 비정합을 막는다.
+        if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
+        }
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.CANCELLED);
         }
@@ -163,6 +174,11 @@ public class OrderService {
     @Transactional
     public Order place(Long memberId, OrderCreateRequest request) {
         validateOwnership(memberId, request.guest());
+        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이면 404 로 차단한다 (#187, #171 과 일관) — 게스트는 제외.
+        // member_id 는 단순 Long 컬럼이라 FK 500 은 안 나지만, 익명화된 탈퇴회원에 신규 주문이 귀속되는 비정합을 막는다.
+        if (memberId != null && !memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
+        }
         // 게스트 + memberCouponId 거부 — 회원 전용 쿠폰을 게스트가 사용하려는 경합을 즉시 차단한다
         // (이슈 #91 DoD: 게스트 + memberCouponId → COUPON_NOT_APPLICABLE 422).
         if (memberId == null && request.memberCouponId() != null) {

@@ -23,4 +23,11 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     Optional<Member> findByEmailAndDeletedAtIsNull(String email);
 
     Optional<Member> findByIdAndDeletedAtIsNull(Long id);
+
+    /**
+     * 활성 회원 존재 검사 (#187) — 엔티티 로드 없이 {@code deleted_at IS NULL} 행의 존재만 본다.
+     * 토큰 유효기간 내 탈퇴(soft delete)한 회원의 주문/장바구니/쿠폰/결제 쓰기를 차단하는
+     * 경량 가드용이다 (Member 엔티티가 필요한 리뷰 작성은 {@link #findByIdAndDeletedAtIsNull} 를 쓴다).
+     */
+    boolean existsByIdAndDeletedAtIsNull(Long id);
 }
