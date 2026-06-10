@@ -1,5 +1,6 @@
 package com.groove.catalog.album.application;
 
+import com.groove.catalog.album.api.dto.AlbumSummaryResponse;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumRepository;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -28,23 +30,27 @@ import org.springframework.test.context.TestPropertySource;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * <b>의도적 N+1 보존 시연 자료</b> (#34, ERD §4.6 [W10]).
+ * <b>N+1 제거 회귀 가드</b> (#203, ERD §4.6 [W10]).
  *
- * <p>{@code GET /albums} 목록 응답이 artist/genre/label 을 페치 조인 없이 lazy 로 끌어와
- * Hibernate 가 album 1건 + (artist + genre + label) per-row 의 별도 SELECT 를 발행함을 고정한다.
- * W10 에서 fetch join 또는 EntityGraph 로 개선하기 전까지 본 테스트가 시연 자료의 보존을
- * 보장한다 — 누군가 "성능 버그" 로 오해해 fetch join 을 추가하면 이 테스트가 즉시 실패한다.
+ * <p>{@code GET /albums} 목록 응답이 artist/genre/label({@code @ManyToOne(LAZY)})을
+ * {@link AlbumRepository#findAll} 의 {@code @EntityGraph} 로 동반 페치해 N+1 SELECT 를 제거했음을
+ * Hibernate {@link Statistics} 로 고정한다. W9 베이스라인(#196)에서는 5행 조회 시 본 쿼리 1 +
+ * 평점집계 1 + lazy resolve 15 = {@code prepareStatementCount 17}, {@code entityFetchCount 15}
+ * (행 P개로 일반화 시 {@code 1 + 1 + 3P})였다.
  *
- * <p>판정 기준: 5건 조회 시 쿼리 수 > 5 (count + albums 본 쿼리 + lazy proxy resolve N×3).
- * 본 게이트는 정확한 수치를 고정하지 않고 "1쿼리가 아니다" 를 보장한다 — Hibernate 버전 변화에
- * 따른 미세한 쿼리 수 차이로 깨지는 것을 막기 위함.
+ * <p>개선 후 판정 기준: 페치 조인으로 {@code entityFetchCount == 0}, {@code prepareStatementCount}
+ * 는 본 쿼리 1 + 평점집계 1 = <b>2 로 행수 무관 상수</b>. 누군가 {@code @EntityGraph} 를 제거해
+ * N+1 을 재유발하면 본 테스트가 즉시 실패한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
 @TestPropertySource(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
-@DisplayName("AlbumService.search — 의도적 N+1 보존 (W10 시연)")
+@DisplayName("AlbumService.search — N+1 제거 회귀 가드 (#203)")
 class AlbumQueryN1Test {
+
+    /** 평점집계 IN 쿼리는 빈 페이지가 아니면 항상 실행되므로, 본 쿼리(1) + 평점집계(1) = 상수. */
+    private static final long EXPECTED_QUERY_COUNT = 2L;
 
     @Autowired
     private AlbumService albumService;
@@ -69,16 +75,89 @@ class AlbumQueryN1Test {
 
     private Statistics statistics;
 
+    private static final AlbumSearchCondition SELLING_ALL = new AlbumSearchCondition(
+            null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
+
     @BeforeEach
     void setUp() {
+        SessionFactory sessionFactory = entityManagerFactory.unwrap(SessionFactory.class);
+        statistics = sessionFactory.getStatistics();
+        statistics.setStatisticsEnabled(true);
+    }
+
+    @Test
+    @DisplayName("5건 SELLING 검색 — @EntityGraph 페치 조인으로 lazy resolve 0, 쿼리 2개")
+    void search_fetchesAssociationsInOneQuery_noN1() {
+        seedAlbums(5);
+
+        Page<AlbumSummaryResponse> page = albumService.search(SELLING_ALL, PageRequest.of(0, 20));
+
+        assertThat(page.getTotalElements()).isEqualTo(5);
+
+        // artist/genre/label 이 본 쿼리에 OUTER JOIN 으로 인라인 → 행마다 풀리는 lazy fetch 가 0.
+        assertThat(statistics.getEntityFetchCount())
+                .as("@EntityGraph 동반 페치로 추가 lazy resolve 가 없어야 한다 (W9 베이스라인 15 → 0)")
+                .isZero();
+        // 본 쿼리 1 + 평점집계 1. 단일 페이지(5 < 20)라 count 쿼리는 스킵된다.
+        assertThat(statistics.getPrepareStatementCount())
+                .as("@EntityGraph 를 제거하면 lazy resolve 가 살아나 이 어서션이 깨진다 — N+1 재발 가드")
+                .isEqualTo(EXPECTED_QUERY_COUNT);
+
+        // 페치가 실제로 됐는지(프록시 null 아님) — 연관 값이 DTO 에 채워졌는지 확인.
+        AlbumSummaryResponse first = page.getContent().getFirst();
+        assertThat(first.artist()).isNotNull();
+        assertThat(first.artist().name()).isNotNull();
+        assertThat(first.genre()).isNotNull();
+        assertThat(first.genre().name()).isNotNull();
+        assertThat(first.label()).isNotNull();
+        assertThat(first.label().name()).isNotNull();
+    }
+
+    /**
+     * <b>행수 무관 상수화 증명</b> — 베이스라인의 {@code 1 + 1 + 3P} 선형 증가가 제거됐음을 직접 보인다.
+     * 행 수를 3건과 7건으로 달리해도 {@code prepareStatementCount} 가 동일(2)함을 단언한다.
+     */
+    @Test
+    @DisplayName("[#203] 행수가 달라도 쿼리 수 상수 — 3건·7건 모두 2개")
+    void search_keepsQueryCountConstant_regardlessOfRowCount() {
+        long count3 = measureQueryCountForRows(3);
+        long count7 = measureQueryCountForRows(7);
+
+        System.out.printf(
+                "[#203 N+1 after] rows=3 → prepareStatementCount=%d, rows=7 → prepareStatementCount=%d "
+                        + "(entityFetchCount=0, queryExecutionCount=2)%n",
+                count3, count7);
+
+        assertThat(count3)
+                .as("행수가 늘어도 쿼리 수가 선형 증가하지 않아야 한다 (베이스라인 1+1+3P → 상수 2)")
+                .isEqualTo(count7)
+                .isEqualTo(EXPECTED_QUERY_COUNT);
+    }
+
+    /** 주어진 행 수로 재적재 후 search 1회의 prepareStatementCount 를 측정한다. */
+    private long measureQueryCountForRows(int rows) {
+        seedAlbums(rows);
+
+        Page<AlbumSummaryResponse> page = albumService.search(SELLING_ALL, PageRequest.of(0, 20));
+
+        assertThat(page.getTotalElements()).isEqualTo(rows);
+        assertThat(statistics.getEntityFetchCount()).isZero();
+        return statistics.getPrepareStatementCount();
+    }
+
+    /**
+     * 공유 Testcontainers DB 격리: 전체 wipe 후 정확히 {@code count} 건 적재한다. 각 album 이 unique
+     * artist/genre/label 을 참조하도록 해 1차 캐시 hit 으로 측정이 흐려지는 것을 막고, 적재 후
+     * {@link EntityManager#clear()} 로 영속성 컨텍스트를 비운 뒤 {@link Statistics#clear()} 로
+     * 측정을 0 에서 시작한다 — search 호출만 통계에 잡히도록.
+     */
+    private void seedAlbums(int count) {
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
         genreRepository.deleteAllInBatch();
         labelRepository.deleteAllInBatch();
 
-        // 각 album 이 unique artist/genre/label 을 참조하도록 — 1차 캐시 hit 으로 N+1 이 가려지는
-        // 것을 막아 시연 자료의 정확성을 보장한다.
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < count; i++) {
             Artist artist = artistRepository.saveAndFlush(Artist.create("Artist " + i, null));
             Genre genre = genreRepository.saveAndFlush(Genre.create("Genre " + i));
             Label label = labelRepository.saveAndFlush(Label.create("Label " + i));
@@ -88,65 +167,7 @@ class AlbumQueryN1Test {
                     AlbumStatus.SELLING, false, null, null));
         }
 
-        // Persistence Context 초기화 — 이전 saveAndFlush 가 채워둔 1차 캐시로 인해 N+1 이
-        // 가려지는 것을 막는다. 서비스 호출은 항상 비어있는 세션에서 시작해야 시연 자료가 정확.
         entityManager.clear();
-
-        SessionFactory sessionFactory = entityManagerFactory.unwrap(SessionFactory.class);
-        statistics = sessionFactory.getStatistics();
-        statistics.setStatisticsEnabled(true);
         statistics.clear();
-    }
-
-    @Test
-    @DisplayName("5건 SELLING 검색 시 쿼리 수 > 5 — fetch join 미적용으로 lazy proxy 가 행마다 풀림")
-    void search_triggersN1Selects_byDesign() {
-        AlbumSearchCondition cond = new AlbumSearchCondition(
-                null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
-
-        var page = albumService.search(cond, PageRequest.of(0, 20));
-
-        assertThat(page.getTotalElements()).isEqualTo(5);
-
-        // unique 연관 5×3 = 15 lazy load + albums 본 쿼리 1 + (단일 페이지라 count 스킵될 수 있음)
-        // → 최소 15 이상 예상. 정확한 수치는 Hibernate 버전에 따라 달라질 수 있어 5 (행 수) 이상만 게이트.
-        long queryCount = statistics.getPrepareStatementCount();
-        assertThat(queryCount)
-                .as("페치 조인을 추가하면 이 어서션이 깨진다 — W10 시연 자료 보호 (행수=%d, 쿼리수=%d)", 5, queryCount)
-                .isGreaterThan(5);
-    }
-
-    /**
-     * <b>#195 N+1 baseline 측정</b> — W10 개선 전 기준선 수치를 콘솔에 박제한다.
-     *
-     * <p>위 가드 테스트가 "1쿼리가 아니다"만 보장하는 것과 달리, 본 메서드는 Hibernate {@link Statistics}
-     * 의 4개 지표를 그대로 출력해 {@code docs/measurement/baseline.md} §3.1 로 옮기기 위한 것이다.
-     * 정확한 수치는 환경(공유 Testcontainers DB)·Hibernate 버전에 따라 흔들리므로 하드코딩하지 않고
-     * 약한 하한만 단언한다 — 수치 자체는 콘솔 로그로 박제.
-     */
-    @Test
-    @DisplayName("[#195] 5건 SELLING 검색의 N+1 baseline 수치 박제 (W10 Before)")
-    void search_recordsExactQueryCounts_forBaseline() {
-        AlbumSearchCondition cond = new AlbumSearchCondition(
-                null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
-
-        var page = albumService.search(cond, PageRequest.of(0, 20));
-
-        long rows = page.getTotalElements();
-        long prepareStatementCount = statistics.getPrepareStatementCount();
-        long entityFetchCount = statistics.getEntityFetchCount();
-        long queryExecutionCount = statistics.getQueryExecutionCount();
-        long entityLoadCount = statistics.getEntityLoadCount();
-
-        System.out.printf(
-                "[#195 N+1 baseline] rows=%d, prepareStatementCount=%d, entityFetchCount=%d, "
-                        + "queryExecutionCount=%d, entityLoadCount=%d%n",
-                rows, prepareStatementCount, entityFetchCount, queryExecutionCount, entityLoadCount);
-
-        // 자기 데이터로만 단언 (공유 DB 격리: deleteAllInBatch 후 정확히 5건 적재) + lazy resolve 하한.
-        assertThat(rows).isEqualTo(5);
-        assertThat(entityFetchCount)
-                .as("artist/genre/label lazy proxy 가 행마다 풀려 추가 fetch 가 발생해야 한다 (N 직접 노출)")
-                .isGreaterThanOrEqualTo(5);
     }
 }

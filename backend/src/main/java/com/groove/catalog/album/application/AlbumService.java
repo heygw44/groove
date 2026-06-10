@@ -165,8 +165,9 @@ public class AlbumService {
      *
      * <p>{@link AlbumSpecs} 의 동적 Specification 을 합쳐 페이징 조회한다. 응답 DTO 변환을
      * 트랜잭션 내에서 수행하여 {@code open-in-view=false} 환경에서도 LazyInitializationException
-     * 을 피한다. 단, artist/genre/label 페치 조인을 의도적으로 사용하지 않으므로 DTO 변환 시점에
-     * lazy proxy 가 풀리며 <b>N+1 SELECT 가 발생</b>한다 — W10 시연용 (ERD §4.6) 의도된 동작.
+     * 을 피한다. artist/genre/label({@code @ManyToOne(LAZY)})은 {@link AlbumRepository#findAll}
+     * 의 {@code @EntityGraph} 로 동반 페치하므로(#203) DTO 변환 시점의 N+1 SELECT 가 제거된다 —
+     * 본 쿼리 1 + 평점집계 1 로 행수 무관 상수화 (이전 W9 베이스라인은 {@code 1 + 1 + 3P}).
      */
     @Transactional(readOnly = true)
     public Page<AlbumSummaryResponse> search(AlbumSearchCondition condition, Pageable pageable) {
