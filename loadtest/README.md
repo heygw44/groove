@@ -14,7 +14,10 @@
 - `coupon-issuance.js` — k6 스파이크 스크립트 (토큰 풀 → ramping-vus 쇄도 → `issue_latency`/`coupon_issued` 집계)
 - `seed-coupon-loadtest.sql` — 한정 100장 ACTIVE 쿠폰 1건 + 로그인 가능한 회원 600명 시드 (재실행 가능)
 - `search.js` — 앨범 검색 부하 (#192, W9): 토큰 풀 → ramping-vus 지속 탐색 → `search_latency` 집계. N+1·슬로우 쿼리 Before 측정
+- `order.js` — 주문 생성 부하 (#193, W9): 토큰 풀 → ramping-vus 다중 상품 주문 → `order_created`/`order_latency` 집계
+- `payment.js` — 결제·멱등성 부하 (#193, W9): 주문 1건 생성 → 동일 멱등키 결제 2회 → 중복 결제 없음(`payment_duplicated`=0) 검증
 - `lib/auth.js` — W9 시나리오 공통 하네스(`buildTokenPool`/`seedEmail`). 시드 회원 로그인 → access token 풀
+- `lib/orders.js` — W9 주문 페이로드 공통 헬퍼(`buildOrderBody`). albumId 분산으로 재고 경합 최소화. order/payment 가 재사용
 - `summary.json` — 쿠폰 k6 end-of-test 요약(최근 실행 캡처)
 - `search-summary.json` — 검색 k6 end-of-test 요약(최근 실행 캡처)
 
@@ -127,3 +130,70 @@ env 오버라이드: `BASE_URL`(기본 `http://localhost:8080`), `MEMBER_COUNT`(
 
 → checks·실패율은 건전하지만 **search p95 930 ms** 로 SLO(800 ms)를 초과. 원인은 의도 보존된 **N+1·`title LIKE
 '%kw%'` 풀스캔**(`EXPLAIN` 시 type=ALL)이며, 본 수치가 W10 개선의 **Before 베이스라인**이다.
+
+---
+
+# 주문·결제 부하 (order.js / payment.js)
+
+주문 생성(`POST /api/v1/orders`)과 결제(`POST /api/v1/payments`)의 처리량/지연 Before 베이스라인을 박제하고,
+결제의 **멱등성**(동일 `Idempotency-Key` 재요청이 중복 결제를 만들지 않음)을 부하 상황에서 check 로 검증한다.
+재고 차감은 락 없이 단순 구현된 W6 경로(W10 시작점)이며, **동시성 정합성은 W9-3 에서 별도 측정**한다 — 여기서는
+처리량과 멱등성 정확성에 집중한다. 두 시나리오 모두 search 와 동일한 메인 시드(앨범 50,000건 + 회원 80명)를 공유한다.
+
+- `order.js` — 매 iteration 마다 서로 다른 앨범 3종을 주문. 시드 앨범 ~8%(SOLD_OUT/HIDDEN/stock=1)는 409/422
+  로 거절되는데 이는 정상 도메인 응답이라 `expectedStatuses` 로 실패 집계에서 제외하고 `order_rejected` 로 집계한다.
+- `payment.js` — iteration 당 주문 1건 생성(측정 제외 phase) → 멱등키 1개로 결제 2회 → `paymentId` 동일성 검증.
+  멱등 위반(`payment_duplicated`)에 `count==0` 하드 threshold 를 건다.
+
+## 실행 절차
+
+```bash
+# 1~3) MySQL 기동·앱 기동·메인 시드 — search.js 절차와 동일(scripts/seed.sh --docker --yes).
+#       앱 기동 시 AUTH_RATE_LIMIT_LOGIN_CAPACITY 를 크게 주입해 setup 로그인 버스트(80건) 간섭 제거.
+#       payment.js 측정 시에는 PAYMENT_MOCK_DELAY_MIN/MAX 를 0 으로 무력화한다 — Mock PG 의 처리 지연
+#       (기본 100~500ms)은 설정된 가짜 sleep 이라, 0 으로 두어야 payment_latency 가 실제 서버 비용
+#       (멱등성 이중기록 + DB)을 잰다. (주문/결제에서 429 가 보이면 해당 도메인 rate-limit capacity 도 크게 주입)
+DB_PORT=3307 DB_PASSWORD=changeme \
+AUTH_RATE_LIMIT_LOGIN_CAPACITY=1000000 \
+PAYMENT_MOCK_DELAY_MIN=0ms PAYMENT_MOCK_DELAY_MAX=0ms \
+./backend/gradlew -p backend bootRun
+DB_PASSWORD=changeme ./scripts/seed.sh --docker --yes
+
+# 4) k6 실행 (사전 조회 불필요 — 시드 데이터에 바로 의존)
+k6 run loadtest/order.js      # → loadtest/order-summary.json
+k6 run loadtest/payment.js    # → loadtest/payment-summary.json
+
+# 5) (선택) 멱등성 DB 교차검증 — 결제 row 수가 첫 결제 건수(payment_requested)와 일치(재요청 추가 row 없음)
+docker exec groove-mysql-1 mysql -ugroove -pchangeme groove \
+  -e "SELECT COUNT(*) FROM payment; SELECT COUNT(*) FROM idempotency_record;"
+```
+
+env 오버라이드: `BASE_URL`(기본 `http://localhost:8080`), `MEMBER_COUNT`(기본 80), `ALBUM_COUNT`(기본 50000),
+`PASSWORD`(기본 `Test1234!`), `EMAIL_PREFIX`(기본 `loadtest`), `EMAIL_DOMAIN`(기본 `@groove.test`).
+
+> `ALBUM_COUNT` 는 실제 시드된 앨범 수 **이하**여야 한다 — 더 크면 범위 밖 albumId 가 404 를 받아 order 경로가
+> `http_req_failed`·checks breach(red)로 설정 불일치를 드러낸다. 또한 두 시나리오는 `order_created`/`payment_requested`
+> 에 `count>0` 게이트가 있어, 시드 누락 등으로 주문/결제가 0건이면 진공 통과 없이 실패한다.
+
+결과 해석:
+- order — `checks` rate > 0.99, `order_latency` p95·p99(주문 요청만), `http_req_failed{phase:order}`, `order_created`/`order_rejected` Counter.
+- payment — **`payment_duplicated` count == 0**(멱등 위반 0), 첫 결제·재요청 모두 202, `payment_latency` p95·p99(첫 결제만), `http_req_failed{phase:payment}`.
+
+> 주문은 재고를 영구 차감하고 결제는 `payment`/`idempotency_record` row 를 쌓으므로, 반복 측정 전에는
+> `scripts/seed.sh --docker --yes` 로 재시드해 stock·결제·멱등 기록을 리셋하는 것을 권장한다.
+
+## 결과 비교 표 양식 (W9-5 에서 채움)
+
+로컬 1머신(Apple Silicon, Docker MySQL 8.4) 기준. 절대 수치는 머신 종속이며 **추세·정확성**이 핵심이다.
+아래는 본 시나리오 작성 시 캡처한 Before 베이스라인이며, W9-5 측정 시 같은 양식에 run 을 덧붙인다.
+TPS·p50/p95/p99 는 `order-summary.json`/`payment-summary.json` 의 커스텀 Trend(`order_latency`/`payment_latency`)
+와 `http_reqs` 에서, error rate 는 `http_req_failed{phase:order|payment}` 에서 읽는다.
+
+| 시나리오 | run | TPS(req/s) | p50 | p95 | p99 | error rate | 비고 |
+|---|---|---|---|---|---|---|---|
+| order(주문생성, 50VU 60s) | 1 | 873 | 49 ms | 65 ms | 83 ms | 0% | created 44,723 / rejected 12,844 (409·422 정상) |
+| payment(결제, 30VU 60s, Mock지연0) | 1 | 405 | 55 ms | 101 ms | 131 ms | 0% | **payment_duplicated=0** (DB: payment 13,377 = 첫결제 13,377) |
+
+> 지연은 성공 응답(order 201·payment 202)만 집계한다. 멱등성 검증: 동일 `Idempotency-Key` 재요청 13,377건이
+> 추가 결제 row 를 단 1건도 만들지 않았다(payment rows == 첫 결제 건수 == DISTINCT order_id).
+> checks 100%(첫 결제·재요청 모두 202 + 동일 paymentId).
