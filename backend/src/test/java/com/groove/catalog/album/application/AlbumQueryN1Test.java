@@ -134,6 +134,35 @@ class AlbumQueryN1Test {
                 .isEqualTo(EXPECTED_QUERY_COUNT);
     }
 
+    /**
+     * <b>keyword 경로 + label=null 회귀 가드</b> — {@code AlbumSpecs.keyword} 가 WHERE 용
+     * {@code artist LEFT JOIN} 을 추가하는 경로에서 {@code @EntityGraph} 페치 조인과 겹쳐도
+     * (artist 조인 2개) N+1 이 없고, {@code label=null} 앨범이 OUTER JOIN 으로 결과에서 누락되지
+     * 않음을 함께 고정한다. SELLING_ALL 경로만 보면 이 조합이 한 번도 실행되지 않아 생기는 갭을 메운다.
+     */
+    @Test
+    @DisplayName("[#203] keyword 검색 + label=null 혼합 — artist 이중조인에도 N+1 없음, null 행 누락 없음")
+    void search_withKeywordAndNullLabel_noN1() {
+        seedKeywordAlbums();
+
+        AlbumSearchCondition cond = new AlbumSearchCondition(
+                "Groove", null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
+        Page<AlbumSummaryResponse> page = albumService.search(cond, PageRequest.of(0, 20));
+
+        // keyword 의 artist LEFT JOIN + @EntityGraph 의 artist fetch 조인이 겹쳐도 lazy resolve 0.
+        assertThat(statistics.getEntityFetchCount())
+                .as("keyword 경로에서도 artist/genre/label 이 본 쿼리에 동반 페치돼야 한다")
+                .isZero();
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(EXPECTED_QUERY_COUNT);
+
+        // label=null 앨범이 LEFT OUTER JOIN 으로 결과에 포함(누락 없음) — 3건 중 1건은 label 없음.
+        assertThat(page.getTotalElements()).isEqualTo(3);
+        assertThat(page.getContent())
+                .as("label=null 앨범도 결과에 포함돼야 한다 (INNER JOIN 이면 누락)")
+                .anyMatch(a -> a.label() == null)
+                .allMatch(a -> a.artist() != null && a.genre() != null);
+    }
+
     /** 주어진 행 수로 재적재 후 search 1회의 prepareStatementCount 를 측정한다. */
     private long measureQueryCountForRows(int rows) {
         seedAlbums(rows);
@@ -164,6 +193,32 @@ class AlbumQueryN1Test {
             albumRepository.saveAndFlush(Album.create(
                     "Album " + i, artist, genre, label,
                     (short) (1965 + i), AlbumFormat.LP_12, 30000L, 5,
+                    AlbumStatus.SELLING, false, null, null));
+        }
+
+        entityManager.clear();
+        statistics.clear();
+    }
+
+    /**
+     * keyword("Groove") 로 전부 매칭되는 3건을 unique artist/genre 로 적재하되, 첫 행은
+     * {@code label=null} 로 둔다 — keyword 의 artist 조인 + {@code @EntityGraph} 페치 조인이
+     * 겹치는 경로와 nullable label 의 OUTER JOIN 동작을 한 번에 커버하기 위함.
+     */
+    private void seedKeywordAlbums() {
+        albumRepository.deleteAllInBatch();
+        artistRepository.deleteAllInBatch();
+        genreRepository.deleteAllInBatch();
+        labelRepository.deleteAllInBatch();
+
+        for (int i = 0; i < 3; i++) {
+            Artist artist = artistRepository.saveAndFlush(Artist.create("Artist " + i, null));
+            Genre genre = genreRepository.saveAndFlush(Genre.create("Genre " + i));
+            Label label = (i == 0) ? null
+                    : labelRepository.saveAndFlush(Label.create("Label " + i));
+            albumRepository.saveAndFlush(Album.create(
+                    "Groove Hits " + i, artist, genre, label,
+                    (short) (1970 + i), AlbumFormat.LP_12, 30000L, 5,
                     AlbumStatus.SELLING, false, null, null));
         }
 
