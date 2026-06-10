@@ -16,8 +16,9 @@
 - `search.js` — 앨범 검색 부하 (#192, W9): 토큰 풀 → ramping-vus 지속 탐색 → `search_latency` 집계. N+1·슬로우 쿼리 Before 측정
 - `order.js` — 주문 생성 부하 (#193, W9): 토큰 풀 → ramping-vus 다중 상품 주문 → `order_created`/`order_latency` 집계
 - `payment.js` — 결제·멱등성 부하 (#193, W9): 주문 1건 생성 → 동일 멱등키 결제 2회 → 중복 결제 없음(`payment_duplicated`=0) 검증
+- `flash-sale.js` — 한정반 오버셀 재현 (#194, W9): admin 으로 재고 100 리셋 → ramping-vus 로 단일 한정반에 동시 쇄도 → `order_created`(201) vs 최종 재고로 오버셀 판정(Before)
 - `lib/auth.js` — W9 시나리오 공통 하네스(`buildTokenPool`/`seedEmail`). 시드 회원 로그인 → access token 풀
-- `lib/orders.js` — W9 주문 페이로드 공통 헬퍼(`buildOrderBody`). albumId 분산으로 재고 경합 최소화. order/payment 가 재사용
+- `lib/orders.js` — W9 주문 페이로드 공통 헬퍼(`buildOrderBody` 분산 / `buildSingleAlbumOrder` 단일고정). order/payment/flash-sale 가 재사용
 - `summary.json` — 쿠폰 k6 end-of-test 요약(최근 실행 캡처)
 - `search-summary.json` — 검색 k6 end-of-test 요약(최근 실행 캡처)
 
@@ -197,3 +198,80 @@ TPS·p50/p95/p99 는 `order-summary.json`/`payment-summary.json` 의 커스텀 T
 > 지연은 성공 응답(order 201·payment 202)만 집계한다. 멱등성 검증: 동일 `Idempotency-Key` 재요청 13,377건이
 > 추가 결제 row 를 단 1건도 만들지 않았다(payment rows == 첫 결제 건수 == DISTINCT order_id).
 > checks 100%(첫 결제·재요청 모두 202 + 동일 paymentId).
+
+---
+
+# 한정반 오버셀 부하 (flash-sale.js)
+
+재고 100인 단일 **한정반** 앨범에 동시 주문을 몰아 **오버셀(oversell)을 부하로 재현**한다(W10 동시성 개선의 Before).
+현재 `OrderService.place()` 의 재고 차감은 락 없는 read-modify-write(SELECT → 인메모리 `adjustStock(-qty)` →
+커밋 시 dirty-check flush)라 동시 주문 시 lost-update 가 발생한다(W6 의도 보존, `OversellingBaselineTest` 가
+단위테스트로 입증). 백엔드는 수정하지 않으며, W10-3(비관적 락) 적용 후 동일 스크립트로 After 를 측정한다.
+
+- **재고 리셋은 setup() 이 자동 수행**한다 — admin 으로 로그인해 `GET /api/v1/albums/{id}` 로 현재 재고를 읽고
+  `PATCH /api/v1/admin/albums/{id}/stock`(delta 증감)으로 정확히 100 으로 맞춘다. 재실행마다 동일 조건이 된다.
+- 워밍업 없이 곧장 PEAK 로 급상승(스파이크)한다 — 소량 워밍 VU 가 재고를 미리 소진하면 오버셀이 증폭되지 않기 때문.
+- Before 측정이라 실패를 게이트하지 않는다 — 소진 후 409, 단일 행 경합으로 인한 5xx 는 기대되는 결과다.
+  유일한 하드 게이트는 `order_created: count>0`(주문이 실제로 일어났는지).
+
+## 실행 절차
+
+```bash
+# 1~3) MySQL 기동·앱 기동·메인 시드 — search.js 절차와 동일(scripts/seed.sh --docker --yes).
+#       앱 기동 시 AUTH_RATE_LIMIT_LOGIN_CAPACITY 를 크게 주입해 setup 로그인 버스트(회원 80 + admin 1) 간섭 제거.
+#       주문 경로 자체에는 rate limit 이 없으므로 별도 capacity 주입은 불필요하다.
+DB_PORT=3307 DB_PASSWORD=changeme \
+AUTH_RATE_LIMIT_LOGIN_CAPACITY=1000000 \
+./backend/gradlew -p backend bootRun
+DB_PASSWORD=changeme ./scripts/seed.sh --docker --yes
+
+# 4) 타깃 한정반 id 조회 (판매중 한정반 1건) → TARGET_ALBUM_ID 로 전달(미지정 시 기본 1)
+TID=$(docker exec groove-mysql-1 mysql -ugroove -pchangeme groove -N \
+  -e "SELECT id FROM album WHERE is_limited=1 AND status='SELLING' ORDER BY id LIMIT 1;")
+
+# 5) k6 실행 — 부하 레벨 100/500/1000 을 PEAK_VUS 로 바꿔 반복(요약은 매번 flash-sale-summary.json 덮어씀)
+k6 run -e TARGET_ALBUM_ID=$TID -e PEAK_VUS=1000 loadtest/flash-sale.js
+
+# 6) 오버셀 교차검증 — 최종 재고와 영속화된 주문 수 비교
+docker exec groove-mysql-1 mysql -ugroove -pchangeme groove \
+  -e "SELECT stock FROM album WHERE id=$TID; SELECT COUNT(*),SUM(quantity) FROM order_item WHERE album_id=$TID;"
+```
+
+env 오버라이드: `BASE_URL`(기본 `http://localhost:8080`), `TARGET_ALBUM_ID`(기본 1), `PEAK_VUS`(기본 1000, 부하 레벨),
+`INITIAL_STOCK`(기본 100), `MEMBER_COUNT`(기본 80), `PASSWORD`(기본 `Test1234!`),
+`ADMIN_EMAIL`(기본 `loadtest-admin@groove.test`), `ADMIN_PASSWORD`(기본 `PASSWORD`).
+
+> 재고 리셋은 setup() 의 admin API 로 자동 수행된다. admin 경로가 막힌 환경이라면 수동 대안:
+> `UPDATE album SET stock=100, status='SELLING' WHERE id=<id>;`
+
+## 오버셀 판정
+
+teardown 이 최종 재고를 `final_stock` Gauge 로 emit 하고, handleSummary 가 `order_created`(201) 와 합산해
+**단일 이진 판정을 자동 출력**한다(`[#194 오버셀 baseline] ... → 오버셀 재현됨 / 없음`).
+
+```
+오버셀 판정(자동): order_created > 100        (재고보다 많이 팔림 — 이슈 DoD)
+              OR  order_created > consumed   (lost-update — 주문 수 > 실제 재고 감소량, consumed = 100 − finalStock)
+```
+
+> 락 경합으로 성공 응답이 100 미만에 머물러도(베이스라인 단위테스트 success 27~34 < 100) lost-update 조건이
+> 잡아낸다. teardown 재고 조회가 실패하면 `created > 100` 약식 판정으로 폴백한다.
+
+결과 JSON 은 `loadtest/flash-sale-summary.json` 에 보존된다(최근 실행 = 1000 VU 캡처). After 는 W10-3 비관적
+락 적용 뒤 동일 스크립트로 같은 양식에 덧붙인다.
+
+## 결과 (실측 — Before)
+
+로컬 1머신(Apple Silicon, Docker MySQL 8.4, 앱 docker 프로파일). 타깃 한정반 1건(재고 100 리셋), 회원 80 라운드로빈.
+절대 수치는 머신 종속이며 **오버셀 재현(추세)** 이 핵심이다.
+
+| 부하(PEAK_VUS) | order_created(201) | finalStock | consumed | lost-update | 오버셀 | order p95 | soldout(409) / failed(5xx) |
+|---|---|---|---|---|---|---|---|
+| 100 | **221** | 0 | 100 | **121** | ✅ created>100 | 264 ms | 8,380 / 959(9.9%) |
+| 500 | **222** | 0 | 100 | **122** | ✅ created>100 | 704 ms | 10,726 / 727(6.2%) |
+| 1000 | **211** | 0 | 100 | **111** | ✅ created>100 | 1.25 s | 10,834 / 685(5.8%) |
+
+→ 세 레벨 모두 **재고 100에 201 성공이 211~222건** = 재고보다 ~2.2배 과판매(`created > 100`)이고, 최종 재고는
+0인데 영속화된 주문은 211~222건이라 **lost-update 111~122건**이 자동 판정됐다. 단일 행 경합으로 5xx(락 타임아웃·
+데드락)가 6~10% 발생(`order_failed`)하는 것도 Before 의 실패 양상이다. W10-3(비관적 락/원자적 차감) 후 동일
+시나리오에서 `created ≤ 100` · `lost-update 0` 으로 수렴해야 한다.
