@@ -115,4 +115,38 @@ class AlbumQueryN1Test {
                 .as("페치 조인을 추가하면 이 어서션이 깨진다 — W10 시연 자료 보호 (행수=%d, 쿼리수=%d)", 5, queryCount)
                 .isGreaterThan(5);
     }
+
+    /**
+     * <b>#195 N+1 baseline 측정</b> — W10 개선 전 기준선 수치를 콘솔에 박제한다.
+     *
+     * <p>위 가드 테스트가 "1쿼리가 아니다"만 보장하는 것과 달리, 본 메서드는 Hibernate {@link Statistics}
+     * 의 4개 지표를 그대로 출력해 {@code docs/measurement/baseline.md} §3.1 로 옮기기 위한 것이다.
+     * 정확한 수치는 환경(공유 Testcontainers DB)·Hibernate 버전에 따라 흔들리므로 하드코딩하지 않고
+     * 약한 하한만 단언한다 — 수치 자체는 콘솔 로그로 박제.
+     */
+    @Test
+    @DisplayName("[#195] 5건 SELLING 검색의 N+1 baseline 수치 박제 (W10 Before)")
+    void search_recordsExactQueryCounts_forBaseline() {
+        AlbumSearchCondition cond = new AlbumSearchCondition(
+                null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
+
+        var page = albumService.search(cond, PageRequest.of(0, 20));
+
+        long rows = page.getTotalElements();
+        long prepareStatementCount = statistics.getPrepareStatementCount();
+        long entityFetchCount = statistics.getEntityFetchCount();
+        long queryExecutionCount = statistics.getQueryExecutionCount();
+        long entityLoadCount = statistics.getEntityLoadCount();
+
+        System.out.printf(
+                "[#195 N+1 baseline] rows=%d, prepareStatementCount=%d, entityFetchCount=%d, "
+                        + "queryExecutionCount=%d, entityLoadCount=%d%n",
+                rows, prepareStatementCount, entityFetchCount, queryExecutionCount, entityLoadCount);
+
+        // 자기 데이터로만 단언 (공유 DB 격리: deleteAllInBatch 후 정확히 5건 적재) + lazy resolve 하한.
+        assertThat(rows).isEqualTo(5);
+        assertThat(entityFetchCount)
+                .as("artist/genre/label lazy proxy 가 행마다 풀려 추가 fetch 가 발생해야 한다 (N 직접 노출)")
+                .isGreaterThanOrEqualTo(5);
+    }
 }
