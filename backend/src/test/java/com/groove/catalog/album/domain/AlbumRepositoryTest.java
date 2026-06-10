@@ -96,10 +96,10 @@ class AlbumRepositoryTest {
     }
 
     @Test
-    @DisplayName("[W10 보존] album 검색 인덱스가 의도적으로 누락되어 있음 — FK 인덱스만 존재")
-    void searchIndexes_areIntentionallyMissing() {
-        // ERD §4.6 [W10] 슬로우 쿼리 측정 시연 보존: search/year/title/limited 인덱스는 V6 에서 생성하지 않는다.
-        // PR 리뷰가 "버그"로 오해하는 것을 막기 위해 본 테스트로 의도를 코드에 고정한다.
+    @DisplayName("[#204] album 검색 인덱스가 V21 에서 도입됨 — FULLTEXT + 필터/정렬 복합 인덱스")
+    void searchIndexes_areAdded() {
+        // W10-2(#204): V6 헤더의 [W10] 의도적 누락 인덱스를 V21 에서 도입했다. 풀스캔 Before/After 시연 완료.
+        // 이 가드가 깨지면(인덱스 누락) 검색 성능 개선이 회귀했다는 신호다 — #203 의 N+1 가드 전환과 동일 의도.
         @SuppressWarnings("unchecked")
         List<String> indexNames = (List<String>) em.createNativeQuery(
                 "SELECT INDEX_NAME FROM information_schema.STATISTICS " +
@@ -111,13 +111,35 @@ class AlbumRepositoryTest {
                 "PRIMARY",
                 "idx_album_artist",
                 "idx_album_genre",
-                "idx_album_label"
-        );
-        assertThat(indexNames).doesNotContain(
+                "idx_album_label",
+                // V20 도입 (#204)
+                "ft_album_keyword",
+                "idx_album_status_created",
                 "idx_album_search",
                 "idx_album_year",
-                "idx_album_title",
                 "idx_album_limited"
         );
+        // 키워드는 단일 B-Tree(idx_album_title)가 아니라 FULLTEXT 로 해소했으므로 plain title 인덱스는 두지 않는다.
+        assertThat(indexNames).doesNotContain("idx_album_title");
+    }
+
+    @Test
+    @DisplayName("[#204] updateArtistNameByArtistId → 해당 artist 의 모든 album.artist_name 일괄 갱신")
+    void updateArtistNameByArtistId_syncsDenormalizedColumn() {
+        Album a1 = albumRepository.saveAndFlush(Album.create(
+                "T1", artist, genre, null, (short) 2020, AlbumFormat.LP_12, 1000L, 1,
+                AlbumStatus.SELLING, false, null, null));
+        Album a2 = albumRepository.saveAndFlush(Album.create(
+                "T2", artist, genre, null, (short) 2021, AlbumFormat.LP_12, 1000L, 1,
+                AlbumStatus.SELLING, false, null, null));
+        // create 시 비정규화 컬럼이 artist.name 으로 채워진다.
+        assertThat(a1.getArtistName()).isEqualTo("The Beatles");
+
+        int updated = albumRepository.updateArtistNameByArtistId(artist.getId(), "Renamed");
+        em.clear(); // 벌크 UPDATE 는 영속성 컨텍스트를 우회하므로 재조회 위해 비운다.
+
+        assertThat(updated).isEqualTo(2);
+        assertThat(albumRepository.findById(a1.getId()).orElseThrow().getArtistName()).isEqualTo("Renamed");
+        assertThat(albumRepository.findById(a2.getId()).orElseThrow().getArtistName()).isEqualTo("Renamed");
     }
 }

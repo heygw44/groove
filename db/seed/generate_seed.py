@@ -194,6 +194,11 @@ def main() -> None:
         if batch:
             write_rows(f, "album", cols, batch)
 
+        # ── album.artist_name 비정규화 백필 (#204) ─────────────────────
+        # FULLTEXT(title, artist_name) 검색용 복제본. 위 INSERT 는 artist_name 을 생략(DEFAULT '')하므로
+        # 적재 후 artist.name 으로 채운다 (V21 마이그레이션의 백필과 동일 — 측정 DB 에서 artist 명 검색 동작 보장).
+        f.write("UPDATE album a JOIN artist ar ON a.artist_id = ar.id SET a.artist_name = ar.name;\n\n")
+
         # ── member (테스트 회원 + ADMIN 1) — loadtest*@groove.test ──────
         member_cols = ("(id,email,email_hash,password,name,phone,role,email_verified,"
                        "deleted_at,created_at,updated_at)")

@@ -1,12 +1,7 @@
 package com.groove.catalog.album.domain;
 
-import com.groove.catalog.artist.domain.Artist;
-import jakarta.persistence.criteria.Join;
-import jakarta.persistence.criteria.JoinType;
-import jakarta.persistence.criteria.Predicate;
+import com.groove.common.persistence.FulltextFunctionContributor;
 import org.springframework.data.jpa.domain.Specification;
-
-import java.util.Locale;
 
 /**
  * 앨범 공개 검색용 {@link Specification} 모음 (#34, API §3.3 GET /albums).
@@ -14,16 +9,12 @@ import java.util.Locale;
  * <p>각 메서드는 단일 필터를 표현하며 입력이 null/blank 일 때 {@code conjunction()}(noop)
  * 을 반환해 동적 조합 시 영향이 없도록 한다.
  *
- * <p><b>의도적 N+1 (W10 시연 보존)</b>: artist/genre/label 어떤 연관도
- * {@code root.fetch(...)} 로 끌어오지 않는다. 페치 조인을 추가하면 시연 자료가 사라지므로
- * 절대 추가 금지. {@link #keyword(String)} 는 artist 와의 LEFT JOIN 만 걸어 search 조건을
- * 만들고 fetch 는 하지 않는다 (Hibernate 가 별도 SELECT 로 artist/genre/label 을 N+1 로
- * 조회하는 경로 보존). ERD §4.6 [W10] 인덱스 누락도 함께 시연 자료로 보존.
+ * <p>{@link #keyword(String)} 는 비정규화된 {@code artist_name} 을 포함한 단일 테이블
+ * {@code FULLTEXT(title, artist_name)} 를 {@code MATCH ... AGAINST(... IN BOOLEAN MODE)} 로
+ * 검색한다 (#204) — 풀스캔을 fulltext 인덱스 접근으로 전환한다. artist/genre/label 동반 페치는
+ * {@code AlbumRepository} 의 {@code @EntityGraph}(#203) 가 담당하며 Specs 자체는 fetch 하지 않는다.
  */
 public final class AlbumSpecs {
-
-    /** LIKE 패턴에서 역할을 갖는 문자들을 escape 하기 위한 escape character. */
-    private static final char LIKE_ESCAPE = '\\';
 
     private AlbumSpecs() {
     }
@@ -114,42 +105,44 @@ public final class AlbumSpecs {
     }
 
     /**
-     * 키워드 OR 검색: {@code album.title LIKE %k%} OR {@code artist.name LIKE %k%} (대소문자 무시).
+     * 키워드 검색: 비정규화 단일 테이블 {@code FULLTEXT(title, artist_name)} 를
+     * {@code MATCH(title, artist_name) AGAINST(? IN BOOLEAN MODE)} 로 검색한다 (#204).
+     * relevance score {@code > 0} 인 행을 매칭으로 본다.
      *
-     * <p>artist 는 search 조건 LEFT JOIN 만 사용하고 fetch 는 하지 않는다 — N+1 보존.
-     * countQuery 가 join 을 중복 평가하면 결과 카운트가 부풀려질 수 있어, count 단계에서는
-     * artist join 자체를 생성하지 않도록 query 가 count 인지 확인 후 skip 하지는 않는다 —
-     * Spring Data 가 자동으로 페이징 count 쿼리를 별도로 빌드하므로 same Specification 재호출이
-     * 안전하다 (artist 와 album 은 ManyToOne, count distinct 불필요).
+     * <p><b>왜 비정규화 + FULLTEXT 인가</b>: 기존 {@code LOWER(title) LIKE '%k%' OR LOWER(artist.
+     * name) LIKE '%k%'} 는 선행 와일드카드 + {@code LOWER()} 래핑으로 인덱스를 못 타 50,000건
+     * 풀스캔이었다(베이스라인 #196). title 과 artist.name 이 서로 다른 테이블이라 단순히 두
+     * FULLTEXT 를 OR 로 묶으면 cross-table OR 가 인덱스를 무력화하므로, artist 이름을 album 에
+     * 비정규화해 단일 FULLTEXT 한 방으로 구동한다 → {@code type=ALL → fulltext}.
      *
-     * <p>대소문자 변환은 {@link Locale#ROOT} 로 고정 — JVM default Locale 의존 시 Turkish 환경
-     * (`I → ı`) 에서 DB collation(utf8mb4_unicode_ci) 결과와 어긋나는 silent miss 가 발생.
-     *
-     * <p>사용자 입력의 LIKE 메타 문자({@code %}, {@code _}, {@code \}) 는 escape 처리해
-     * {@code ?keyword=50%} 가 모든 행에 매칭되는 의도치 않은 와일드카드 동작을 막는다.
+     * <p><b>의미 차이</b>: ngram(token=2) 파서 + 따옴표 구문(phrase) 으로 부분일치(substring)
+     * 의미를 보존하지만, 1글자 키워드는 ngram 최소 토큰(2) 미만이라 매칭되지 않는다. 사용자 입력의
+     * boolean-mode 연산자({@code + - > < ( ) ~ * " @}) 는 제거해 의도치 않은 FT 문법 해석을 막는다.
      */
     public static Specification<Album> keyword(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return Specification.unrestricted();
         }
-        String escaped = escapeLikePattern(keyword.trim().toLowerCase(Locale.ROOT));
-        String pattern = "%" + escaped + "%";
-        return (root, query, cb) -> {
-            Join<Album, Artist> artist = root.join("artist", JoinType.LEFT);
-            Predicate titleMatch = cb.like(cb.lower(root.get("title")), pattern, LIKE_ESCAPE);
-            Predicate artistMatch = cb.like(cb.lower(artist.get("name")), pattern, LIKE_ESCAPE);
-            return cb.or(titleMatch, artistMatch);
-        };
+        String phrase = toFulltextPhrase(keyword);
+        if (phrase.isEmpty()) {
+            return Specification.unrestricted();
+        }
+        return (root, query, cb) -> cb.greaterThan(
+                cb.function(FulltextFunctionContributor.FUNCTION_NAME, Double.class,
+                        root.get("title"), root.get("artistName"), cb.literal(phrase)),
+                0.0);
     }
 
     /**
-     * LIKE 메타 문자 escape. {@code %}, {@code _}, escape 자체({@code \}) 를 모두 escape.
-     * escape 자체를 가장 먼저 처리해야 추가 escape 가 이중 처리되지 않는다.
+     * FULLTEXT boolean-mode 연산자/구분자를 제거한 뒤 따옴표 구문(phrase) 으로 감싼다 — ngram 파서가
+     * 연속된 bigram(부분일치)으로 매칭하도록. 연산자만으로 이뤄진 입력은 빈 문자열을 반환해 호출 측이
+     * noop 으로 처리한다. 닫는 따옴표가 구문을 깨지 않도록 입력의 {@code "} 도 함께 제거한다.
      */
-    private static String escapeLikePattern(String input) {
-        return input
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_");
+    private static String toFulltextPhrase(String keyword) {
+        String sanitized = keyword.trim().replaceAll("[+\\-><()~*\"@]", " ").trim();
+        if (sanitized.isBlank()) {
+            return "";
+        }
+        return "\"" + sanitized + "\"";
     }
 }

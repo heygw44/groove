@@ -220,28 +220,30 @@ class AlbumQueryControllerTest {
         }
 
         @Test
-        @DisplayName("keyword → title 또는 artist.name LIKE OR 매칭")
+        @DisplayName("keyword → title 또는 artist_name FULLTEXT 매칭 (#204)")
         void filter_byKeywordOrAlbumTitleOrArtistName() throws Exception {
             persistAlbum("Abbey Road", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
             persistAlbum("Some Stones Album", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
             persistAlbum("Aftermath", stones, rock, apple, (short) 1966, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
 
+            // title("Some Stones Album") + 비정규화 artist_name("The Rolling Stones") 양쪽에서 매칭 → 2건.
             mockMvc.perform(get("/api/v1/albums").param("keyword", "stones"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content.length()").value(2));
         }
 
         @Test
-        @DisplayName("keyword 의 LIKE 메타문자(%/_) 는 escape 되어 와일드카드로 동작하지 않음")
-        void filter_keywordEscapesLikeMetaCharacters() throws Exception {
+        @DisplayName("[#204] keyword 의 FULLTEXT boolean 연산자(+ - * 등)는 제거되어 리터럴로 매칭")
+        void filter_keywordSanitizesFulltextOperators() throws Exception {
             persistAlbum("Abbey Road", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
-            persistAlbum("50% Off", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
+            persistAlbum("Some Stones Album", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
 
-            // ?keyword=% 가 모든 행에 매칭되면 escape 미적용 — 정확히 "%" 를 포함한 행만 매칭되어야 한다.
-            mockMvc.perform(get("/api/v1/albums").param("keyword", "%"))
+            // "+stones*" 의 FT 연산자(+, *)가 그대로 해석되면 문법 오류/의도치 않은 매칭이 된다.
+            // sanitize 후 phrase "stones" 로 매칭되어 "Some Stones Album" 1건만 나와야 한다.
+            mockMvc.perform(get("/api/v1/albums").param("keyword", "+stones*"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content.length()").value(1))
-                    .andExpect(jsonPath("$.content[0].title").value("50% Off"));
+                    .andExpect(jsonPath("$.content[0].title").value("Some Stones Album"));
         }
 
         @Test

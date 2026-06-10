@@ -277,11 +277,14 @@ erDiagram
 - `idx_album_genre` (genre_id)
 - `idx_album_label` (label_id)
 
-[W10] (슬로우 쿼리 측정 후 추가):
+[W10] **도입 완료 (V21, #204)** — 슬로우 쿼리 측정(#196) 후 추가:
+- `ft_album_keyword` FULLTEXT (title, artist_name) WITH PARSER ngram — 키워드 검색. `idx_album_title`(단일 B-Tree) 대신 FULLTEXT 채택: 선행 와일드카드(`%k%`) 부분일치는 B-Tree 로 해소 불가하고, title·artist.name 의 cross-table OR 가 인덱스를 무력화하므로 artist 이름을 `artist_name` 으로 비정규화해 단일 테이블 FULLTEXT 로 구동(`type=ALL → fulltext`).
 - `idx_album_search` (genre_id, status, price) — 카테고리 + 상태 + 가격 필터
+- `idx_album_status_created` (status, created_at) — 기본 목록(SELLING + createdAt 정렬) 조기 종료
 - `idx_album_year` (release_year) — 연도 필터
-- `idx_album_title` (title) — 키워드 검색 (FULLTEXT 검토 후보)
 - `idx_album_limited` (is_limited, status) — 한정반 목록
+
+> `artist_name VARCHAR(200) NOT NULL` 비정규화 컬럼(V21)은 FULLTEXT 검색 전용이며 API 응답엔 노출하지 않는다. 동기화: `AlbumService.create/update`(artist 로부터 파생) + `ArtistService.update`(이름 변경 시 `album` 벌크 UPDATE).
 
 **비즈니스 룰**
 
@@ -699,19 +702,23 @@ erDiagram
 
 검색·정렬·필터 인덱스는 **의도적으로 누락** → W9 측정 시 슬로우 쿼리 재현 → W10 시연용 인덱스 추가.
 
-### 5.2 W10 시점 추가 인덱스 (시연 산출물)
+### 5.2 W10 시점 추가 인덱스 (시연 산출물 — V21/#204 적용 완료)
+
+키워드 풀스캔(`type=ALL`)은 단일 B-Tree 로 해소 불가(선행 와일드카드 + cross-table OR)라 artist 이름을 비정규화한 단일 테이블 FULLTEXT 로 전환했다. 상세: [`docs/improvements/search-index.md`](./improvements/search-index.md).
 
 ```sql
--- 아티스트 이름 검색
-CREATE INDEX idx_artist_name ON artist(name);
+-- (V21) 키워드 검색 비정규화 + FULLTEXT (idx_album_title 단일 B-Tree 대체)
+ALTER TABLE album ADD COLUMN artist_name VARCHAR(200) NOT NULL DEFAULT '';
+UPDATE album a JOIN artist ar ON a.artist_id = ar.id SET a.artist_name = ar.name;
+ALTER TABLE album ADD FULLTEXT INDEX ft_album_keyword (title, artist_name) WITH PARSER ngram;
 
--- 검색 시연용 복합 인덱스
-CREATE INDEX idx_album_search ON album(genre_id, status, price);
-CREATE INDEX idx_album_year ON album(release_year);
-CREATE INDEX idx_album_title ON album(title);
-CREATE INDEX idx_album_limited ON album(is_limited, status);
+-- (V21) 필터/정렬 경로 복합 인덱스
+ALTER TABLE album ADD INDEX idx_album_status_created (status, created_at);
+ALTER TABLE album ADD INDEX idx_album_search (genre_id, status, price);
+ALTER TABLE album ADD INDEX idx_album_year (release_year);
+ALTER TABLE album ADD INDEX idx_album_limited (is_limited, status);
 
--- 회원 주문 조회 최적화
+-- 회원 주문 조회 최적화 (후속 — 본 #204 범위 외)
 CREATE INDEX idx_orders_member_created ON orders(member_id, created_at);
 CREATE INDEX idx_orders_status_created ON orders(status, created_at);
 
