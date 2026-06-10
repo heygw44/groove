@@ -24,3 +24,9 @@ export function buildOrderBody({ n, albumCount, itemCount = 2 }) {
   }
   return { items, shipping: SHIPPING };
 }
+
+// 단일 앨범 1종을 주문하는 본문 — flash-sale.js(#194) 가 동일 한정반에 동시 쇄도시켜 재고 경합을 일으킬 때
+// 사용한다. buildOrderBody 와 달리 albumId 를 분산하지 않고 의도적으로 한 앨범에 고정한다.
+export function buildSingleAlbumOrder(albumId, quantity = 1) {
+  return { items: [{ albumId, quantity }], shipping: SHIPPING };
+}
