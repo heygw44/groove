@@ -66,6 +66,7 @@ CLAUDE.md
 ### Private docs (do not expose on remote) ###
 docs/features/
 docs/interview-prep/
+docs/portfolio/
 
 ### Frontend (Vue 3 + Vite, #113) ###
 frontend/node_modules/
