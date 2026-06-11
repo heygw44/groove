@@ -1,8 +1,8 @@
 # Overselling Baseline — 락 없는 재고 차감의 동시성 결함 (#46)
 
-> **상태**: Before (W6 시점, 락 미적용 baseline)
-> **다음 작업**: W10-3 비관적 락 적용 후 같은 시나리오 재실행 → After 캡처로 갱신
-> **관련 이슈**: [#43 — 의도적 락 미적용](https://github.com/heygw44/groove/issues/43), [#46 — 본 baseline 보존](https://github.com/heygw44/groove/issues/46), W10-3 (비관적 락 적용 — 마일스톤 진입 시 별도 이슈 발급)
+> **상태**: Before/After 완료 — W6 baseline(본 문서) + W10-3 비관적 락 After(#205)
+> **After 측정·서사**: [`docs/improvements/concurrency.md`](../improvements/concurrency.md)(#205) — 비관적 락 적용 + flash-sale 재측정
+> **관련 이슈**: [#43 — 의도적 락 미적용](https://github.com/heygw44/groove/issues/43), [#46 — 본 baseline 보존](https://github.com/heygw44/groove/issues/46), [#205 — 비관적 락 적용](https://github.com/heygw44/groove/issues/205)
 
 ---
 
@@ -30,19 +30,20 @@
 
 ### 2.2 실행
 
-본 baseline 테스트는 클래스 레벨 `@Disabled` 로 일반 빌드에서 제외되어 있다. 시연 시 일시적으로 어노테이션을 주석 처리한 뒤 단일 클래스만 지정해 실행한다:
+#205 이후 `OversellingBaselineTest` 는 두 메서드를 가진다 — baseline 시연(`concurrentOrders_withoutLock_produceOversell`,
+**메서드 레벨 `@Disabled`**)은 `placeWithoutLock` 으로 락 미적용 결함을 재현하고, After 검증
+(`concurrentOrders_withPessimisticLock_noOversell`, **active**)은 `place` 의 비관적 락이 오버셀 0 임을 단언한다.
+
+baseline 시연 시 메서드의 `@Disabled` 만 일시 제거한 뒤 실행한다:
 
 ```bash
-# 1) 임시로 @Disabled 비활성화 (클래스 헤더 주석 처리)
-#    @Disabled("W10-3 ...") → // @Disabled("W10-3 ...")
-
+# 1) 임시로 baseline 메서드의 @Disabled 비활성화 (주석 처리)
 # 2) 단일 클래스 실행 (info 로그 캡처)
 ./gradlew test --tests "com.groove.order.concurrency.OversellingBaselineTest" -i
-
 # 3) 시연 끝난 뒤 @Disabled 복구
 ```
 
-> 일반 CI 빌드는 `@Disabled` 로 자동 SKIP 되므로 본 테스트가 빌드 수명에 영향을 주지 않는다.
+> active After 검증은 일반 CI 빌드에서 실행되고, baseline 시연 메서드는 `@Disabled` 로 자동 SKIP 된다.
 
 ### 2.3 시나리오 파라미터
 
@@ -151,23 +152,34 @@ order_lines = 34
 
 W10-3 의 비관적 락(`SELECT ... FOR UPDATE`) 은 **SELECT 시점에 row lock 을 획득**해 다른 TX 의 SELECT 를 대기시키므로, 위 두 결함(deadlock 폭주 + lost-update) 을 모두 제거한다.
 
-## 5. W10-3 After 가이드 (예고)
+## 5. After (W10-3, #205) — PESSIMISTIC_WRITE 락 적용
 
-W10-3 에서는 다음 옵션 중 하나를 적용한다:
+`AlbumRepository.findByIdForUpdate`(`@Lock(LockModeType.PESSIMISTIC_WRITE)`)로 재고 차감 직전
+`SELECT ... FOR UPDATE` 행 락을 선점해 read-modify-write 를 직렬화했다. 측정·서사 전문은
+[`docs/improvements/concurrency.md`](../improvements/concurrency.md)(#205) 참조.
 
-- **PESSIMISTIC_WRITE 락**: 재고 차감 직전 `SELECT ... FOR UPDATE`
-- **OPTIMISTIC 락**: `@Version` + 충돌 시 재시도
+active 검증(`concurrentOrders_withPessimisticLock_noOversell`) 콘솔 실측:
 
-After 자료는 본 문서의 §3 캡처 슬롯을 동일 포맷으로 갱신하고, §6 에 Before/After diff 표를 추가한다.
+```
+[#205 비관적] success=100, insufficient=100, other=0, finalStock=0, actualDecrement=100, persistedOrders=100 | elapsedMs=776, tps=257.7, p95Ms=475
+```
 
-## 6. Before/After 비교 (W10-3 이후 채움)
+→ `persistedOrders 100 == actualDecrement 100` (lost-update 0), `success 100 == 재고`, deadlock thrash(`other`) 0.
 
-| 지표 | Before (W6, 본 문서) | After (W10-3) |
+## 6. Before/After 비교
+
+인프로세스(재고 100 / 동시 200):
+
+| 지표 | Before (W6 baseline, §3) | After (#205, 비관적 락) |
 |---|---|---|
-| success > stock | 발생 | 미발생 (예상) |
-| finalStock < 0 | 발생 가능 | 항상 ≥ 0 (예상) |
-| persistedOrders 합 | > 100 | ≤ 100 |
-| 평균 처리 시간 (elapsedMs) | TODO | TODO |
+| success > stock | 발생(영속 주문 > 차감량) | 미발생 (success 100 == 차감 100) |
+| finalStock < 0 | 발생 가능 | 항상 0 (음수 진입 없음) |
+| persistedOrders vs actualDecrement | persisted > 차감 (lost-update 14~19) | persisted == 차감 (**lost-update 0**) |
+| other (CannotAcquireLock) | 다수(단일 행 경합 thrash) | **0** (FOR UPDATE 직렬화) |
+| 처리량 / p95 | — (대부분 락 실패) | ~258 req/s · ~475 ms |
+
+k6 HTTP(flash-sale, 재고 100): created 211~222 → **정확히 100**, lost-update 111~122 → **0**, 스파이크 5xx
+5.8~9.9% → **0%** (3단계 100/500/1000 VU 모두). 상세 표는 [concurrency.md](../improvements/concurrency.md) §4.2.
 
 ---
 

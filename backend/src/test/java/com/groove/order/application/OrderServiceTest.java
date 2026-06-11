@@ -107,8 +107,8 @@ class OrderServiceTest {
     void place_member_success() {
         Album a1 = album(10L, AlbumStatus.SELLING, 100, 30000L);
         Album a2 = album(11L, AlbumStatus.SELLING, 50, 15000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a1));
-        given(albumRepository.findById(11L)).willReturn(Optional.of(a2));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a1));
+        given(albumRepository.findByIdForUpdate(11L)).willReturn(Optional.of(a2));
         given(orderNumberGenerator.generate()).willReturn("ORD-20260508-A1B2C3");
         given(orderRepository.existsByOrderNumber("ORD-20260508-A1B2C3")).willReturn(false);
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
@@ -133,7 +133,7 @@ class OrderServiceTest {
     @DisplayName("게스트 주문 정상 생성 — guestEmail/Phone 보존, memberId null")
     void place_guest_success() {
         Album a1 = album(10L, AlbumStatus.SELLING, 100, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a1));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a1));
         given(orderNumberGenerator.generate()).willReturn("ORD-20260508-G1G1G1");
         given(orderRepository.existsByOrderNumber("ORD-20260508-G1G1G1")).willReturn(false);
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
@@ -159,7 +159,7 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> orderService.place(1L, req))
                 .isInstanceOf(InvalidOrderOwnershipException.class);
-        verify(albumRepository, never()).findById(any());
+        verify(albumRepository, never()).findByIdForUpdate(any());
     }
 
     @Test
@@ -180,14 +180,14 @@ class OrderServiceTest {
         assertThatThrownBy(() -> orderService.place(withdrawnMemberId,
                 memberRequest(new OrderItemRequest(10L, 1))))
                 .isInstanceOf(MemberNotFoundException.class);
-        verify(albumRepository, never()).findById(any());
+        verify(albumRepository, never()).findByIdForUpdate(any());
         verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
     @DisplayName("album 미존재 → AlbumNotFoundException")
     void place_albumNotFound() {
-        given(albumRepository.findById(99L)).willReturn(Optional.empty());
+        given(albumRepository.findByIdForUpdate(99L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> orderService.place(1L, memberRequest(
                 new OrderItemRequest(99L, 1))))
@@ -198,7 +198,7 @@ class OrderServiceTest {
     @DisplayName("album.status = HIDDEN → AlbumNotPurchasableException")
     void place_hiddenRejected() {
         Album a = album(10L, AlbumStatus.HIDDEN, 100, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
 
         assertThatThrownBy(() -> orderService.place(1L, memberRequest(
                 new OrderItemRequest(10L, 1))))
@@ -209,7 +209,7 @@ class OrderServiceTest {
     @DisplayName("album.status = SOLD_OUT → AlbumNotPurchasableException")
     void place_soldOutRejected() {
         Album a = album(10L, AlbumStatus.SOLD_OUT, 100, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
 
         assertThatThrownBy(() -> orderService.place(1L, memberRequest(
                 new OrderItemRequest(10L, 1))))
@@ -220,7 +220,7 @@ class OrderServiceTest {
     @DisplayName("재고 부족 → InsufficientStockException, 재고 미차감")
     void place_insufficientStock() {
         Album a = album(10L, AlbumStatus.SELLING, 2, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
 
         assertThatThrownBy(() -> orderService.place(1L, memberRequest(
                 new OrderItemRequest(10L, 5))))
@@ -457,7 +457,7 @@ class OrderServiceTest {
     @DisplayName("orderNumber 가 이미 존재하면 다음 후보로 재발급 (최대 3회)")
     void place_skipsExistingOrderNumber() {
         Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
         given(orderNumberGenerator.generate())
                 .willReturn("ORD-20260508-AAAAAA", "ORD-20260508-BBBBBB", "ORD-20260508-CCCCCC");
         given(orderRepository.existsByOrderNumber("ORD-20260508-AAAAAA")).willReturn(true);
@@ -479,7 +479,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> orderService.place(null,
                 guestRequestWithCoupon(guest, 7L, new OrderItemRequest(10L, 1))))
                 .isInstanceOf(com.groove.coupon.exception.CouponNotApplicableException.class);
-        verify(albumRepository, never()).findById(any());
+        verify(albumRepository, never()).findByIdForUpdate(any());
         verify(orderRepository, never()).save(any(Order.class));
         verify(couponApplicationService, never()).applyToOrder(any(), any(), any());
     }
@@ -488,7 +488,7 @@ class OrderServiceTest {
     @DisplayName("회원 주문 + memberCouponId → 저장 후 applyToOrder 호출")
     void place_memberWithCoupon_callsApply() {
         Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
         given(orderNumberGenerator.generate()).willReturn("ORD-20260528-A1A1A1");
         given(orderRepository.existsByOrderNumber("ORD-20260528-A1A1A1")).willReturn(false);
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> {
@@ -507,7 +507,7 @@ class OrderServiceTest {
     @DisplayName("회원 주문 + memberCouponId == null → applyToOrder 미호출")
     void place_memberNoCoupon_doesNotApply() {
         Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
         given(orderNumberGenerator.generate()).willReturn("ORD-20260528-B2B2B2");
         given(orderRepository.existsByOrderNumber("ORD-20260528-B2B2B2")).willReturn(false);
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> inv.getArgument(0));
@@ -538,7 +538,7 @@ class OrderServiceTest {
     @DisplayName("쿠폰 적용 실패 → 예외 전파 (Spring 트랜잭션 롤백 신호) — 재고/주문 정합성은 Spring 위임")
     void place_couponApplyFails_propagates() {
         Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
-        given(albumRepository.findById(10L)).willReturn(Optional.of(a));
+        given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
         given(orderNumberGenerator.generate()).willReturn("ORD-20260528-F4F4F4");
         given(orderRepository.existsByOrderNumber("ORD-20260528-F4F4F4")).willReturn(false);
         given(orderRepository.save(any(Order.class))).willAnswer(inv -> {

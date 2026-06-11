@@ -56,6 +56,12 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     Page<Order> findByMemberIdAndStatus(Long memberId, OrderStatus status, Pageable pageable);
 
     /**
+     * 회원 본인 주문 수 — 공유 DB(Testcontainers 재사용) 환경에서 동시성 테스트가 자신이 만든 주문만
+     * 집계하도록 member 스코프로 좁힌 카운트다 (전역 {@code count()} 는 타 테스트 데이터에 오염될 수 있음).
+     */
+    long countByMemberId(Long memberId);
+
+    /**
      * 회원 탈퇴 차단 검사 (#78) — 주어진 상태 집합에 해당하는 회원 주문의 존재 여부.
      *
      * <p>{@code MemberService.withdraw} 가 "진행 중" 으로 보는 {@code {PAID, PREPARING, SHIPPED}} 으로

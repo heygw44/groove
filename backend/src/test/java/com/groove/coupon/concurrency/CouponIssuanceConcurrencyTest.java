@@ -10,6 +10,8 @@ import com.groove.coupon.exception.CouponAlreadyIssuedException;
 import com.groove.coupon.exception.CouponSoldOutException;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
+import com.groove.support.ConcurrencyHarness;
+import com.groove.support.ConcurrencyHarness.LoadResult;
 import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
@@ -27,13 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (이슈 #90 비고). 멱등 재시도 부수효과 1회는 엔드포인트 레벨에서 {@code CouponApiIntegrationTest}
  * (Idempotency-Key replay)가 검증한다.
  *
- * <p><b>실측(#93)</b>: {@link #runConcurrently} 가 wall-clock(elapsedMs)·요청별 지연을 수집해 TPS·p95 를
+ * <p><b>실측(#93)</b>: 공용 {@link ConcurrencyHarness} 가 wall-clock(elapsedMs)·요청별 지연을 수집해 TPS·p95 를
  * 콘솔에 박제한다 — 3종 전략(베이스라인/비관적/원자적)의 정확성·처리량 비교표
  * (docs/troubleshooting/coupon-issuance-concurrency.md §3·§6) 근거다.
  */
@@ -64,7 +60,6 @@ class CouponIssuanceConcurrencyTest {
     private static final int LIMIT = 100;
     private static final int CONCURRENT_REQUESTS = 300;
     private static final int THREAD_POOL_SIZE = 32;
-    private static final long DONE_GATE_TIMEOUT_SECONDS = 60L;
     private static final Instant VALID_FROM = Instant.now().minus(1, ChronoUnit.DAYS);
     private static final Instant VALID_UNTIL = Instant.now().plus(10, ChronoUnit.DAYS);
 
@@ -107,7 +102,7 @@ class CouponIssuanceConcurrencyTest {
         AtomicInteger soldOut = new AtomicInteger();
         AtomicInteger other = new AtomicInteger();
 
-        LoadResult result = runConcurrently(CONCURRENT_REQUESTS, i -> {
+        LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, CONCURRENT_REQUESTS, i -> {
             try {
                 couponIssueService.issue(memberIds.get(i), couponId);
                 success.incrementAndGet();
@@ -140,7 +135,7 @@ class CouponIssuanceConcurrencyTest {
         AtomicInteger soldOut = new AtomicInteger();
         AtomicInteger other = new AtomicInteger();
 
-        LoadResult result = runConcurrently(CONCURRENT_REQUESTS, i -> {
+        LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, CONCURRENT_REQUESTS, i -> {
             try {
                 couponIssueService.issueWithPessimisticLock(memberIds.get(i), couponId);
                 success.incrementAndGet();
@@ -174,7 +169,7 @@ class CouponIssuanceConcurrencyTest {
         AtomicInteger alreadyIssued = new AtomicInteger();
         AtomicInteger other = new AtomicInteger();
 
-        runConcurrently(attempts, i -> {
+        ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, attempts, i -> {
             try {
                 couponIssueService.issue(memberId, couponId);
                 success.incrementAndGet();
@@ -208,7 +203,7 @@ class CouponIssuanceConcurrencyTest {
         AtomicInteger soldOut = new AtomicInteger();
         AtomicInteger other = new AtomicInteger();
 
-        LoadResult result = runConcurrently(CONCURRENT_REQUESTS, i -> {
+        LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, CONCURRENT_REQUESTS, i -> {
             try {
                 couponIssueService.issueWithoutLock(memberIds.get(i), couponId);
                 success.incrementAndGet();
@@ -264,64 +259,5 @@ class CouponIssuanceConcurrencyTest {
                         + " | elapsedMs={}, tps={}, p95Ms={}",
                 label, success.get(), soldOut.get(), other.get(), issuedCount, persisted, LIMIT,
                 result.elapsedMs(), String.format("%.1f", result.tps()), result.p95Millis());
-    }
-
-    /** ready 게이트로 동시 출발시키는 부하 하니스 (OversellingBaselineTest 패턴) — wall-clock·요청별 지연을 수집한다. */
-    private LoadResult runConcurrently(int requests, java.util.function.IntConsumer task) throws InterruptedException {
-        CountDownLatch readyGate = new CountDownLatch(1);
-        CountDownLatch doneGate = new CountDownLatch(requests);
-        ConcurrentLinkedQueue<Long> latenciesNanos = new ConcurrentLinkedQueue<>();
-        ExecutorService pool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
-        boolean settled;
-        long startNanos;
-        long endNanos;
-        try {
-            for (int i = 0; i < requests; i++) {
-                final int index = i;
-                pool.submit(() -> {
-                    try {
-                        readyGate.await();
-                        long reqStart = System.nanoTime();
-                        task.accept(index);
-                        latenciesNanos.add(System.nanoTime() - reqStart);
-                    } catch (InterruptedException ex) {
-                        Thread.currentThread().interrupt();
-                    } finally {
-                        doneGate.countDown();
-                    }
-                });
-            }
-            startNanos = System.nanoTime();
-            readyGate.countDown();
-            settled = doneGate.await(DONE_GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            endNanos = System.nanoTime();
-        } finally {
-            pool.shutdown();
-            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
-                pool.shutdownNow();
-            }
-        }
-        assertThat(settled).as("동시 요청들이 timeout 안에 완료되어야 결과가 유효하다").isTrue();
-        long elapsedMs = (endNanos - startNanos) / 1_000_000L;
-        return new LoadResult(requests, elapsedMs, new ArrayList<>(latenciesNanos));
-    }
-
-    /** 부하 측정 결과 — 처리량(TPS)·p95 지연(ms)을 요청별 지연에서 파생한다. */
-    private record LoadResult(int requests, long elapsedMs, List<Long> latenciesNanos) {
-
-        double tps() {
-            return elapsedMs == 0 ? 0.0 : requests / (elapsedMs / 1000.0);
-        }
-
-        long p95Millis() {
-            if (latenciesNanos.isEmpty()) {
-                return 0L;
-            }
-            List<Long> sorted = new ArrayList<>(latenciesNanos);
-            Collections.sort(sorted);
-            int idx = (int) Math.ceil(0.95 * sorted.size()) - 1;
-            idx = Math.max(0, Math.min(idx, sorted.size() - 1));
-            return sorted.get(idx) / 1_000_000L;
-        }
     }
 }
