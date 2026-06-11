@@ -23,10 +23,9 @@ import http from 'k6/http';
 import exec from 'k6/execution';
 import { check } from 'k6';
 import { Counter, Gauge, Trend } from 'k6/metrics';
-import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.2/index.js';
 import { buildTokenPool, seedEmail } from './lib/auth.js';
 import { buildSingleAlbumOrder } from './lib/orders.js';
-import { redactSetupTokens } from './lib/summary.js';
+import { redactedSummary } from './lib/summary.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const MEMBER_COUNT = Number(__ENV.MEMBER_COUNT || 80);
@@ -176,9 +175,6 @@ export function teardown(data) {
 }
 
 export function handleSummary(data) {
-  // setup() 토큰 풀(실제 JWT)을 비식별화한다 — 평문 토큰 유출 방지(#219, 공용 헬퍼로 통일).
-  redactSetupTokens(data);
-
   const created = data.metrics.order_created ? data.metrics.order_created.values.count : 0;
   const soldout = data.metrics.order_soldout ? data.metrics.order_soldout.values.count : 0;
   const failed = data.metrics.order_failed ? data.metrics.order_failed.values.count : 0;
@@ -206,8 +202,6 @@ export function handleSummary(data) {
   console.log(
     `[#194 오버셀 baseline] order_created(201)=${created}, order_soldout(409)=${soldout}, order_failed(기타)=${failed} → ${verdict}`,
   );
-  return {
-    'loadtest/flash-sale-summary.json': JSON.stringify(data, null, 2),
-    stdout: textSummary(data, { indent: ' ', enableColors: true }),
-  };
+  // setup() 토큰 풀(실제 JWT) 비식별화 + 표준 산출물 — 공용 헬퍼로 통일(#219). verdict 는 metrics 만 읽어 무관.
+  return redactedSummary(data, 'loadtest/flash-sale-summary.json');
 }
