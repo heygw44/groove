@@ -1,0 +1,33 @@
+meta {
+  name: Refresh Token
+  type: http
+  seq: 3
+  tags: [
+    auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/auth/refresh
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "refreshToken": "{{refreshToken}}"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  const json = res.getBody();
+  test('has accessToken', () => expect(json).to.have.property('accessToken'));
+  test('has refreshToken', () => expect(json).to.have.property('refreshToken'));
+  bru.setEnvVar('accessToken', json.accessToken);
+  bru.setEnvVar('refreshToken', json.refreshToken);
+}

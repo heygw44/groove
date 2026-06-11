@@ -1,0 +1,38 @@
+meta {
+  name: 4) Request Payment
+  type: http
+  seq: 4
+  tags: [
+    memberflow
+  ]
+}
+
+post {
+  url: {{baseUrl}}/payments
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Idempotency-Key: {{idempotencyKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "orderNumber": "{{orderNumber}}",
+    "method": "CARD"
+  }
+}
+
+script:pre-request {
+  bru.setEnvVar('idempotencyKey', bru.interpolate('{{$randomUUID}}'));
+}
+
+script:post-response {
+  test('Status 201 또는 202 (접수)', () => expect([201, 202]).to.include(res.getStatus()));
+  const json = res.getBody();
+  test('has paymentId', () => expect(json).to.have.property('paymentId'));
+  if (json && json.paymentId) { bru.setEnvVar('paymentId', json.paymentId); }
+}

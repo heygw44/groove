@@ -1,0 +1,24 @@
+meta {
+  name: 6) Get Order Detail
+  type: http
+  seq: 7
+  tags: [
+    memberflow
+  ]
+}
+
+get {
+  url: {{baseUrl}}/orders/{{orderNumber}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  const json = res.getBody();
+  if (json.trackingNumber) { bru.setEnvVar('trackingNumber', json.trackingNumber); }
+}

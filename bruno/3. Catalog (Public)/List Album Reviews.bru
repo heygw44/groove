@@ -1,0 +1,25 @@
+meta {
+  name: List Album Reviews
+  type: http
+  seq: 3
+  tags: [
+    catalog
+  ]
+}
+
+get {
+  url: {{baseUrl}}/albums/1/reviews?page=0&size=20&sort=createdAt,desc
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 0
+  size: 20
+  sort: createdAt,desc
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('content 배열', () => expect(res.getBody().content).to.be.an('array'));
+}

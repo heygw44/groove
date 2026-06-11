@@ -1,0 +1,27 @@
+meta {
+  name: List Available Coupons
+  type: http
+  seq: 1
+  tags: [
+    coupons
+  ]
+}
+
+get {
+  url: {{baseUrl}}/coupons?page=0&size=20&sort=validUntil,asc
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 0
+  size: 20
+  sort: validUntil,asc
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  const json = res.getBody();
+  test('content 배열', () => expect(json.content).to.be.an('array'));
+  if (json.content && json.content.length > 0) { bru.setEnvVar('couponId', json.content[0].couponId); }
+}

@@ -1,0 +1,28 @@
+meta {
+  name: Logout
+  type: http
+  seq: 4
+  tags: [
+    auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/auth/logout
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "refreshToken": "{{refreshToken}}"
+  }
+}
+
+script:post-response {
+  test('Status 200 (RFC 7009 멱등)', () => expect(res.getStatus()).to.equal(200));
+}

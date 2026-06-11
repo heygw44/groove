@@ -1,0 +1,30 @@
+meta {
+  name: Change Order Status
+  type: http
+  seq: 9
+  tags: [
+    admin
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/admin/orders/{{orderNumber}}/status
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "target": "PREPARING",
+    "reason": "수동 진행"
+  }
+}
+
+script:post-response {
+  test('Status 200 / 409 전이불가 / 422 비허용대상', () => expect([200, 409, 422]).to.include(res.getStatus()));
+}

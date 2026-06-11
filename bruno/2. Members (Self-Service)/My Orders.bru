@@ -1,0 +1,30 @@
+meta {
+  name: My Orders
+  type: http
+  seq: 3
+  tags: [
+    members
+  ]
+}
+
+get {
+  url: {{baseUrl}}/members/me/orders?page=0&size=20&sort=createdAt,desc
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 0
+  size: 20
+  sort: createdAt,desc
+  ~status: DELIVERED
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('content 배열', () => expect(res.getBody().content).to.be.an('array'));
+}

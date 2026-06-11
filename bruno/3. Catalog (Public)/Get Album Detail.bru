@@ -1,0 +1,19 @@
+meta {
+  name: Get Album Detail
+  type: http
+  seq: 2
+  tags: [
+    catalog
+  ]
+}
+
+get {
+  url: {{baseUrl}}/albums/1
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('has id', () => expect(res.getBody()).to.have.property('id'));
+}

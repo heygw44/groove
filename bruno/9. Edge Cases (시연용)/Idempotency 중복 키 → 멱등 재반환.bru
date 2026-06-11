@@ -1,0 +1,34 @@
+meta {
+  name: Idempotency 중복 키 → 멱등 재반환
+  type: http
+  seq: 2
+  tags: [
+    edge
+  ]
+}
+
+post {
+  url: {{baseUrl}}/payments
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Idempotency-Key: {{idempotencyKey}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "orderNumber": "{{orderNumber}}",
+    "method": "CARD"
+  }
+}
+
+script:post-response {
+  test('멱등 재반환 200 또는 202', () => expect([200, 202]).to.include(res.getStatus()));
+  test('Same paymentId returned', () => {
+      expect(res.getBody().paymentId).to.eql(bru.getEnvVar('paymentId'));
+  });
+}

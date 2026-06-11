@@ -1,0 +1,23 @@
+meta {
+  name: 8. Admin
+  seq: 9
+}
+
+auth {
+  mode: inherit
+}
+
+script:pre-request {
+  if (!bru.getEnvVar('adminAccessToken')) {
+    await bru.sendRequest({
+      method: 'POST',
+      url: bru.getEnvVar('baseUrl') + '/auth/login',
+      headers: { 'Content-Type': 'application/json' },
+      data: { email: bru.getEnvVar('adminEmail'), password: bru.getEnvVar('adminPassword') },
+    }, function (err, res) {
+      if (!err && res && res.data && res.data.accessToken) {
+        bru.setEnvVar('adminAccessToken', res.data.accessToken);
+      }
+    });
+  }
+}

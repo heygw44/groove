@@ -1,0 +1,22 @@
+meta {
+  name: Get Order Detail (Admin)
+  type: http
+  seq: 8
+  tags: [
+    admin
+  ]
+}
+
+get {
+  url: {{baseUrl}}/admin/orders/{{orderNumber}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+}
+
+script:post-response {
+  test('Status 200 또는 404', () => expect([200, 404]).to.include(res.getStatus()));
+}

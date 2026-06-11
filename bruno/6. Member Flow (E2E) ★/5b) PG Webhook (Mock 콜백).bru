@@ -1,0 +1,33 @@
+meta {
+  name: 5b) PG Webhook (Mock 콜백)
+  type: http
+  seq: 6
+  tags: [
+    memberflow
+  ]
+}
+
+post {
+  url: {{baseUrl}}/payments/webhook
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-Mock-Signature: {{webhookSecret}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "pgTransactionId": "{{pgTransactionId}}",
+    "status": "PAID",
+    "failureReason": null,
+    "occurredAt": "2026-06-05T14:23:05.000Z"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('has outcome', () => expect(res.getBody()).to.have.property('outcome'));
+}

@@ -1,0 +1,28 @@
+meta {
+  name: List Albums (Admin)
+  type: http
+  seq: 3
+  tags: [
+    admin
+  ]
+}
+
+get {
+  url: {{baseUrl}}/admin/albums?page=0&size=20
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 0
+  size: 20
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('content 배열', () => expect(res.getBody().content).to.be.an('array'));
+}

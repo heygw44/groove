@@ -1,0 +1,30 @@
+meta {
+  name: Update Artist
+  type: http
+  seq: 8
+  tags: [
+    admin
+  ]
+}
+
+put {
+  url: {{baseUrl}}/admin/artists/{{createdArtistId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "TestArtist-Updated-{{$randomUUID}}",
+    "description": "수정됨"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+}

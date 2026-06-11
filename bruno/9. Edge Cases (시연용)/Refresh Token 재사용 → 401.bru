@@ -1,0 +1,28 @@
+meta {
+  name: Refresh Token 재사용 → 401
+  type: http
+  seq: 1
+  tags: [
+    edge
+  ]
+}
+
+post {
+  url: {{baseUrl}}/auth/refresh
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "refreshToken": "already-used-token-here"
+  }
+}
+
+script:post-response {
+  test('Status 401', () => expect(res.getStatus()).to.equal(401));
+}

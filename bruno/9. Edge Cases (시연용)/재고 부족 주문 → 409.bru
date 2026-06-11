@@ -1,0 +1,39 @@
+meta {
+  name: 재고 부족 주문 → 409
+  type: http
+  seq: 3
+  tags: [
+    edge
+  ]
+}
+
+post {
+  url: {{baseUrl}}/orders
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "items": [
+      { "albumId": 1, "quantity": 99 }
+    ],
+    "shipping": {
+      "recipientName": "테스트",
+      "recipientPhone": "01012345678",
+      "address": "서울시",
+      "addressDetail": "1호",
+      "zipCode": "12345",
+      "safePackagingRequested": false
+    }
+  }
+}
+
+script:post-response {
+  test('Status 409', () => expect(res.getStatus()).to.equal(409));
+}

@@ -1,0 +1,29 @@
+meta {
+  name: Update Cart Item Quantity
+  type: http
+  seq: 3
+  tags: [
+    cart
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/cart/items/{{cartItemId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "quantity": 3
+  }
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+}

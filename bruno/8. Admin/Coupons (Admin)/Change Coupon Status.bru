@@ -1,0 +1,29 @@
+meta {
+  name: Change Coupon Status
+  type: http
+  seq: 4
+  tags: [
+    admin
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/admin/coupons/{{couponId}}/status
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "target": "SUSPENDED"
+  }
+}
+
+script:post-response {
+  test('Status 200 또는 409(전이 불가)', () => expect([200, 409]).to.include(res.getStatus()));
+}

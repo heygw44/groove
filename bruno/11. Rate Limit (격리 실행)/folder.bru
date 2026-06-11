@@ -1,0 +1,12 @@
+meta {
+  name: 11. Rate Limit (격리 실행)
+  seq: 12
+}
+
+auth {
+  mode: inherit
+}
+
+docs {
+  로그인 rate limit 429 를 결정론적으로 검증하는 격리 폴더. 본 요청이 로그인 버킷을 소진하므로 기본 test:postman / test:postman:full 에는 포함하지 않고 전용 스크립트로만 실행한다 — 이렇게 해야 다른 스위트가 1분 내 재실행 가능하다.
+}

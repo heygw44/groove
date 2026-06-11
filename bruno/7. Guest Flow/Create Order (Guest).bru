@@ -1,0 +1,45 @@
+meta {
+  name: Create Order (Guest)
+  type: http
+  seq: 1
+  tags: [
+    guestflow
+  ]
+}
+
+post {
+  url: {{baseUrl}}/orders
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "guest": {
+      "email": "guest@example.com",
+      "phone": "01098765432"
+    },
+    "items": [
+      { "albumId": 1, "quantity": 1 }
+    ],
+    "shipping": {
+      "recipientName": "홍길동",
+      "recipientPhone": "01098765432",
+      "address": "부산시 해운대구 해운대로 1",
+      "addressDetail": "101호",
+      "zipCode": "48099",
+      "safePackagingRequested": false
+    }
+  }
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  const json = res.getBody();
+  test('has orderNumber', () => expect(json).to.have.property('orderNumber'));
+  bru.setEnvVar('guestOrderNumber', json.orderNumber);
+}

@@ -1,0 +1,22 @@
+meta {
+  name: Delete Album
+  type: http
+  seq: 6
+  tags: [
+    admin
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/admin/albums/{{createdAlbumId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+}
+
+script:post-response {
+  test('Status 204 또는 409(주문 참조 중)', () => expect([204, 409]).to.include(res.getStatus()));
+}

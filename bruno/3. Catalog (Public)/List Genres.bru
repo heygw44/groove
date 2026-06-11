@@ -1,0 +1,19 @@
+meta {
+  name: List Genres
+  type: http
+  seq: 4
+  tags: [
+    catalog
+  ]
+}
+
+get {
+  url: {{baseUrl}}/genres
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('배열 응답', () => expect(res.getBody()).to.be.an('array'));
+}

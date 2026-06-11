@@ -1,0 +1,18 @@
+meta {
+  name: 7) Get Shipping Status
+  type: http
+  seq: 8
+  tags: [
+    memberflow
+  ]
+}
+
+get {
+  url: {{baseUrl}}/shippings/{{trackingNumber}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200 또는 404(아직 배송 미생성)', () => expect([200, 404]).to.include(res.getStatus()));
+}

@@ -1,0 +1,33 @@
+meta {
+  name: Add to Cart
+  type: http
+  seq: 1
+  tags: [
+    cart
+  ]
+}
+
+post {
+  url: {{baseUrl}}/cart/items
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "albumId": 1,
+    "quantity": 2
+  }
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  const json = res.getBody();
+  test('items 배열', () => expect(json.items).to.be.an('array'));
+  if (json.items && json.items.length > 0) { bru.setEnvVar('cartItemId', json.items[0].itemId); }
+}

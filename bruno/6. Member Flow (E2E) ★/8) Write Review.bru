@@ -1,0 +1,33 @@
+meta {
+  name: 8) Write Review
+  type: http
+  seq: 9
+  tags: [
+    memberflow
+  ]
+}
+
+post {
+  url: {{baseUrl}}/reviews
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "orderNumber": "{{orderNumber}}",
+    "albumId": 1,
+    "rating": 5,
+    "content": "음질 정말 좋네요"
+  }
+}
+
+script:post-response {
+  test('작성 201 / 미배송 422 / 중복 409', () => expect([201, 422, 409]).to.include(res.getStatus()));
+  if (res.getStatus() === 201) { bru.setEnvVar('reviewId', res.getBody().reviewId); }
+}

@@ -1,0 +1,29 @@
+meta {
+  name: List Coupon Policies
+  type: http
+  seq: 2
+  tags: [
+    admin
+  ]
+}
+
+get {
+  url: {{baseUrl}}/admin/coupons?page=0&size=20
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 0
+  size: 20
+  ~status: ACTIVE
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('content 배열', () => expect(res.getBody().content).to.be.an('array'));
+}
