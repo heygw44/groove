@@ -166,7 +166,7 @@ class OversellingBaselineTest {
 
         int finalStock = albumRepository.findById(albumId).orElseThrow().getStock();
         int actualDecrement = INITIAL_STOCK - finalStock;
-        long persistedOrders = orderRepository.count();
+        long persistedOrders = orderRepository.countByMemberId(memberId);
         logMeasurement("비관적", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
 
         // 오버셀 0 의 증거 — 비관적 락(SELECT ... FOR UPDATE)이 read-modify-write 를 직렬화하면:
@@ -205,7 +205,7 @@ class OversellingBaselineTest {
 
         int finalStock = albumRepository.findById(albumId).orElseThrow().getStock();
         int actualDecrement = INITIAL_STOCK - finalStock;
-        long persistedOrders = orderRepository.count();
+        long persistedOrders = orderRepository.countByMemberId(memberId);
         logMeasurement("baseline", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
 
         // 통과 조건 = "오버셀 증거". lost-update 시 다음 중 하나 이상이 성립한다:

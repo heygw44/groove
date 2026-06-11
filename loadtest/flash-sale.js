@@ -175,6 +175,12 @@ export function teardown(data) {
 }
 
 export function handleSummary(data) {
+  // setup() 가 반환한 토큰 풀(실제 JWT)이 요약 파일에 평문으로 박히지 않도록 비식별화한다 — 비밀 유출 방지.
+  // in-place 치환(goja 에 structuredClone 미보장). textSummary 는 metrics 만 쓰므로 영향 없음.
+  if (data.setup_data && Array.isArray(data.setup_data.tokens)) {
+    data.setup_data.tokens = [`<redacted:${data.setup_data.tokens.length}>`];
+  }
+
   const created = data.metrics.order_created ? data.metrics.order_created.values.count : 0;
   const soldout = data.metrics.order_soldout ? data.metrics.order_soldout.values.count : 0;
   const failed = data.metrics.order_failed ? data.metrics.order_failed.values.count : 0;
