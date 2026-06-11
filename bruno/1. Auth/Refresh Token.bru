@@ -9,25 +9,16 @@ meta {
 
 post {
   url: {{baseUrl}}/auth/refresh
-  body: json
-  auth: inherit
-}
-
-headers {
-  Content-Type: application/json
-}
-
-body:json {
-  {
-    "refreshToken": "{{refreshToken}}"
-  }
+  body: none
+  auth: none
 }
 
 script:post-response {
+  // refresh 토큰은 HttpOnly 쿠키로 수신/회전한다(#163). 쿠키는 직전 Login 이 설정했고,
+  // Bruno 쿠키 jar 가 /api/v1/auth 경로로 자동 전송한다. 응답 body 엔 accessToken 만 있다.
   test('Status 200', () => expect(res.getStatus()).to.equal(200));
   const json = res.getBody();
   test('has accessToken', () => expect(json).to.have.property('accessToken'));
-  test('has refreshToken', () => expect(json).to.have.property('refreshToken'));
+  test('회전된 refresh 쿠키 재발급', () => expect(JSON.stringify(res.getHeaders())).to.include('refreshToken'));
   bru.setEnvVar('accessToken', json.accessToken);
-  bru.setEnvVar('refreshToken', json.refreshToken);
 }

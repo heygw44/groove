@@ -9,20 +9,32 @@ meta {
 
 post {
   url: {{baseUrl}}/auth/refresh
-  body: json
-  auth: inherit
+  body: none
+  auth: none
 }
 
 headers {
-  Content-Type: application/json
+  Cookie: refreshToken={{revokedRefreshToken}}
 }
 
-body:json {
-  {
-    "refreshToken": "already-used-token-here"
-  }
+script:pre-request {
+  // 실제 회전으로 revoke 된 refresh 토큰을 준비한다(jar 비의존).
+  // ① 로그인으로 refresh 토큰 A 획득 → ② A 로 1회 refresh(회전) → A revoke
+  //  → ③ jar 를 비워 본 요청이 명시적 Cookie(revoke된 A)만 보내도록 한다
+  //    (Auth 폴더가 남긴 유효 refresh 쿠키가 본 요청을 덮어써 200 이 되는 것을 방지).
+  const base = bru.getEnvVar('baseUrl');
+  const extract = (sc) => {
+    const s = Array.isArray(sc) ? sc.join('; ') : (sc || '');
+    const m = /refreshToken=([^;]+)/.exec(s);
+    return m ? m[1] : '';
+  };
+  let tokenA = '';
+  await bru.sendRequest({ method: 'POST', url: base + '/auth/login', headers: { 'Content-Type': 'application/json' }, data: { email: 'user@example.com', password: bru.getEnvVar('memberPassword') } }, function (err, res) { if (!err && res) { tokenA = extract(res.headers && res.headers['set-cookie']); } });
+  await bru.sendRequest({ method: 'POST', url: base + '/auth/refresh', headers: { Cookie: 'refreshToken=' + tokenA } }, function () { /* 회전 — A revoke */ });
+  bru.setEnvVar('revokedRefreshToken', tokenA);
+  bru.cookies.jar().clear();
 }
 
 script:post-response {
-  test('Status 401', () => expect(res.getStatus()).to.equal(401));
+  test('재사용된(revoke된) refresh 토큰 → 401', () => expect(res.getStatus()).to.equal(401));
 }
