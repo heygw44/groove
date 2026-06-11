@@ -1,0 +1,26 @@
+meta {
+  name: List Artists
+  type: http
+  seq: 6
+  tags: [
+    catalog
+  ]
+}
+
+get {
+  url: {{baseUrl}}/artists
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 0
+  size: 20
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  const json = res.getBody();
+  test('content 배열', () => expect(json.content).to.be.an('array'));
+  if (json.content && json.content.length > 0) { bru.setEnvVar('artistId', json.content[0].id); }
+}

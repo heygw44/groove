@@ -1,0 +1,22 @@
+meta {
+  name: Delete Genre
+  type: http
+  seq: 3
+  tags: [
+    admin
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/admin/genres/{{createdGenreId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+}
+
+script:post-response {
+  test('Status 204 또는 409(사용 중)', () => expect([204, 409]).to.include(res.getStatus()));
+}

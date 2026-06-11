@@ -1,0 +1,22 @@
+meta {
+  name: Remove Cart Item
+  type: http
+  seq: 4
+  tags: [
+    cart
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/cart/items/{{cartItemId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+script:post-response {
+  test('Status 200 또는 204', () => expect([200, 204]).to.include(res.getStatus()));
+}

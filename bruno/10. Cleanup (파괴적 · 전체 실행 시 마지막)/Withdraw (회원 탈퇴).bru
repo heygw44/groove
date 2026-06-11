@@ -1,0 +1,29 @@
+meta {
+  name: Withdraw (회원 탈퇴)
+  type: http
+  seq: 2
+  tags: [
+    cleanup
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/members/me
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "password": "{{memberPassword}}"
+  }
+}
+
+script:post-response {
+  test('Status 204 또는 409(진행중 주문)', () => expect([204, 409]).to.include(res.getStatus()));
+}

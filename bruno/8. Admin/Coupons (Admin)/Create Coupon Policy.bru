@@ -1,0 +1,44 @@
+meta {
+  name: Create Coupon Policy
+  type: http
+  seq: 1
+  tags: [
+    admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/admin/coupons
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "신규가입 5천원",
+    "discountType": "FIXED_AMOUNT",
+    "discountValue": 5000,
+    "minOrderAmount": 10000,
+    "totalQuantity": 100,
+    "perMemberLimit": 1,
+    "validFrom": "{{couponValidFrom}}",
+    "validUntil": "{{couponValidUntil}}"
+  }
+}
+
+script:pre-request {
+  const now = new Date();
+  bru.setEnvVar('couponValidFrom', new Date(now.getTime() - 5 * 60 * 1000).toISOString());
+  bru.setEnvVar('couponValidUntil', new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString());
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  const json = res.getBody();
+  if (json.couponId) { bru.setEnvVar('couponId', json.couponId); }
+}

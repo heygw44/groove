@@ -1,0 +1,22 @@
+meta {
+  name: 9) Delete Review
+  type: http
+  seq: 10
+  tags: [
+    memberflow
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/reviews/{{reviewId}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+script:post-response {
+  test('Status 204 또는 404(미작성)', () => expect([204, 404]).to.include(res.getStatus()));
+}

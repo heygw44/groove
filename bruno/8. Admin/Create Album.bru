@@ -1,0 +1,41 @@
+meta {
+  name: Create Album
+  type: http
+  seq: 2
+  tags: [
+    admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/admin/albums
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Abbey Road",
+    "artistId": 1,
+    "genreId": 1,
+    "labelId": 1,
+    "releaseYear": 1969,
+    "format": "LP_12",
+    "price": 35000,
+    "stock": 100,
+    "status": "SELLING",
+    "isLimited": false,
+    "coverImageUrl": "https://example.com/cover.jpg",
+    "description": "Mastered from the original tapes"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  bru.setEnvVar('createdAlbumId', res.getBody().id);
+}

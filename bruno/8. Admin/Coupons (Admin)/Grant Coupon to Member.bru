@@ -1,0 +1,29 @@
+meta {
+  name: Grant Coupon to Member
+  type: http
+  seq: 3
+  tags: [
+    admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/admin/coupons/{{couponId}}/grant
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "memberId": 1
+  }
+}
+
+script:post-response {
+  test('Status 201 / 404 / 409', () => expect([201, 404, 409]).to.include(res.getStatus()));
+}

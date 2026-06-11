@@ -1,0 +1,32 @@
+meta {
+  name: Issue Coupon (선착순)
+  type: http
+  seq: 2
+  tags: [
+    coupons
+  ]
+}
+
+post {
+  url: {{baseUrl}}/coupons/{{couponId}}/issue
+  body: none
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Idempotency-Key: {{idempotencyKey}}
+}
+
+script:pre-request {
+  bru.setEnvVar('idempotencyKey', bru.interpolate('{{$randomUUID}}'));
+}
+
+script:post-response {
+  test('발급 201 / 이미발급 409 / 소진 409', () => expect([201, 409]).to.include(res.getStatus()));
+  if (res.getStatus() === 201) {
+    bru.setEnvVar('memberCouponId', res.getBody().memberCouponId);
+  } else {
+    bru.setEnvVar('memberCouponId', '');
+  }
+}

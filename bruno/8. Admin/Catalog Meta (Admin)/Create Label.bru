@@ -1,0 +1,30 @@
+meta {
+  name: Create Label
+  type: http
+  seq: 4
+  tags: [
+    admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/admin/labels
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "TestLabel-{{$randomUUID}}"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  bru.setEnvVar('createdLabelId', res.getBody().id);
+}

@@ -1,0 +1,39 @@
+meta {
+  name: Update Album
+  type: http
+  seq: 4
+  tags: [
+    admin
+  ]
+}
+
+put {
+  url: {{baseUrl}}/admin/albums/{{createdAlbumId}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Abbey Road (Remastered)",
+    "artistId": 1,
+    "genreId": 1,
+    "labelId": 1,
+    "releaseYear": 1969,
+    "format": "LP_12",
+    "price": 39000,
+    "status": "SELLING",
+    "isLimited": false,
+    "coverImageUrl": "https://example.com/cover.jpg",
+    "description": "2019 stereo remaster"
+  }
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+}

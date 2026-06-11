@@ -1,0 +1,19 @@
+meta {
+  name: List Labels
+  type: http
+  seq: 5
+  tags: [
+    catalog
+  ]
+}
+
+get {
+  url: {{baseUrl}}/labels
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  test('Status 200', () => expect(res.getStatus()).to.equal(200));
+  test('배열 응답', () => expect(res.getBody()).to.be.an('array'));
+}

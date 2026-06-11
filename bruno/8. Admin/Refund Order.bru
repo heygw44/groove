@@ -1,0 +1,29 @@
+meta {
+  name: Refund Order
+  type: http
+  seq: 10
+  tags: [
+    admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/admin/orders/{{orderNumber}}/refund
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reason": "고객 요청"
+  }
+}
+
+script:post-response {
+  test('Status 200 / 404 / 409', () => expect([200, 404, 409]).to.include(res.getStatus()));
+}

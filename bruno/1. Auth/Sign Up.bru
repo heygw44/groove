@@ -1,0 +1,31 @@
+meta {
+  name: Sign Up
+  type: http
+  seq: 1
+  tags: [
+    auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/auth/signup
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "user@example.com",
+    "password": "P@ssw0rd!2024",
+    "name": "김철수",
+    "phone": "01012345678"
+  }
+}
+
+script:post-response {
+  test('회원가입 201 / 이미가입 409 / rate-limit 429', () => expect([201, 409, 429]).to.include(res.getStatus()));
+}

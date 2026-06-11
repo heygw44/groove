@@ -1,0 +1,11 @@
+auth {
+  mode: none
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:8080/api/v1
+}
+
+docs {
+  LP 전문 이커머스 백엔드 API 컬렉션. 전체 엔드포인트 + 응답 검증 스크립트 + Rate Limit 엣지 케이스 포함 (이슈 #141, W8). baseUrl 기본값은 http://localhost:8080/api/v1 이며, 인증 요청은 {{accessToken}}(회원)·{{adminAccessToken}}(관리자) 를 사용한다. 관리자/엣지/웹훅 폴더 실행 주의사항은 README 의 Postman/Newman 절을 참고.
+}

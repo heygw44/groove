@@ -1,0 +1,42 @@
+meta {
+  name: 3) Create Order
+  type: http
+  seq: 3
+  tags: [
+    memberflow
+  ]
+}
+
+post {
+  url: {{baseUrl}}/orders
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "items": [
+      { "albumId": 1, "quantity": 2 }
+    ],
+    "shipping": {
+      "recipientName": "김철수",
+      "recipientPhone": "01012345678",
+      "address": "서울시 강남구 테헤란로 123",
+      "addressDetail": "456호",
+      "zipCode": "06234",
+      "safePackagingRequested": true
+    }
+  }
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  const json = res.getBody();
+  test('has orderNumber', () => expect(json).to.have.property('orderNumber'));
+  bru.setEnvVar('orderNumber', json.orderNumber);
+}

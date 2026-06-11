@@ -1,0 +1,46 @@
+meta {
+  name: Rate Limit 초과 → 429
+  type: http
+  seq: 1
+  tags: [
+    ratelimit
+  ]
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "ratelimit@example.com",
+    "password": "wrong-password"
+  }
+}
+
+script:pre-request {
+  // 분당 10회 제한 버킷을 본 요청 전에 10회 선요청으로 소진 → 본 요청(11번째)이 429 가 되도록 강제.
+  // 본 요청과 동일한 body(이메일 + 잘못된 비밀번호)를 재사용한다.
+  const N = 10;
+  const url = bru.getEnvVar('baseUrl') + '/auth/login';
+  const data = { "email": "ratelimit@example.com", "password": "wrong-password" };
+  for (let i = 0; i < N; i++) {
+    await bru.sendRequest({
+      method: 'POST',
+      url,
+      headers: { 'Content-Type': 'application/json' },
+      data,
+    }, function () { /* 응답 무시 — 버킷 소진만 목적 */ });
+  }
+}
+
+script:post-response {
+  test('429 Too Many Requests', () => expect(res.getStatus()).to.eql(429));
+  test('Retry-After 헤더 존재', () => expect(res.getHeaders()).to.have.property('retry-after'));
+}

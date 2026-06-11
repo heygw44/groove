@@ -2,8 +2,14 @@
   "name": "groove",
   "version": "1.0.0",
   "private": true,
-  "description": "Groove API Postman 컬렉션을 Newman 으로 헤드리스 검증한다 (이슈 #141). 백엔드(localhost:8080)와 데모 시드가 떠 있어야 한다.",
+  "description": "Groove API 컬렉션을 헤드리스 검증한다 (이슈 #141). 기본은 Bruno(bruno/), 레거시 Postman(postman/)도 병행 유지. 백엔드(localhost:8080)와 데모 시드가 떠 있어야 한다.",
   "scripts": {
+    "test:bruno": "cd bruno && bru run -r --env \"Groove Local\" --exclude-tags members,coupons,admin,cleanup,ratelimit",
+    "test:bruno:admin": "cd bruno && bru run -r --env \"Groove Local\" --tags admin",
+    "test:bruno:full": "cd bruno && bru run -r --env \"Groove Local\" --exclude-tags cleanup,ratelimit",
+    "test:bruno:cleanup": "cd bruno && bru run -r --env \"Groove Local\" --tags cleanup",
+    "test:bruno:ratelimit": "cd bruno && bru run -r --env \"Groove Local\" --tags ratelimit",
+    "test:bruno:report": "cd bruno && bru run -r --env \"Groove Local\" --exclude-tags members,coupons,admin,cleanup,ratelimit --reporter-junit ../reports/bruno-junit.xml",
     "test:postman": "newman run postman/groove.collection.json -e postman/groove.environment.json --folder \"0. Health\" --folder \"1. Auth\" --folder \"3. Catalog (Public)\" --folder \"4. Cart\" --folder \"6. Member Flow (E2E) ★\" --folder \"7. Guest Flow\" --folder \"9. Edge Cases (시연용)\"",
     "test:postman:admin": "newman run postman/groove.collection.json -e postman/groove.environment.json --folder \"8. Admin\"",
     "test:postman:full": "newman run postman/groove.collection.json -e postman/groove.environment.json --folder \"0. Health\" --folder \"1. Auth\" --folder \"2. Members (Self-Service)\" --folder \"3. Catalog (Public)\" --folder \"4. Cart\" --folder \"5. Coupons\" --folder \"6. Member Flow (E2E) ★\" --folder \"7. Guest Flow\" --folder \"8. Admin\" --folder \"9. Edge Cases (시연용)\"",
@@ -12,6 +18,9 @@
     "test:postman:report": "npm run test:postman -- -r cli,junit --reporter-junit-export reports/postman-junit.xml"
   },
   "devDependencies": {
+    "@usebruno/cli": "^3.4.2",
+    "@usebruno/converters": "^0.20.0",
+    "@usebruno/lang": "^0.36.0",
     "newman": "^6.2.1"
   }
 }

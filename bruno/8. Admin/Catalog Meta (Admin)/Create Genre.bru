@@ -1,0 +1,30 @@
+meta {
+  name: Create Genre
+  type: http
+  seq: 1
+  tags: [
+    admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/admin/genres
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "TestGenre-{{$randomUUID}}"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  bru.setEnvVar('createdGenreId', res.getBody().id);
+}

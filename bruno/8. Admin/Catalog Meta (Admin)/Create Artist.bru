@@ -1,0 +1,31 @@
+meta {
+  name: Create Artist
+  type: http
+  seq: 6
+  tags: [
+    admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/admin/artists
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{adminAccessToken}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "TestArtist-{{$randomUUID}}",
+    "description": "포스트맨 데모용 아티스트"
+  }
+}
+
+script:post-response {
+  test('Status 201', () => expect(res.getStatus()).to.equal(201));
+  bru.setEnvVar('createdArtistId', res.getBody().id);
+}
