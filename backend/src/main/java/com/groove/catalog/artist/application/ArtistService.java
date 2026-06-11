@@ -44,7 +44,13 @@ public class ArtistService {
     public Artist update(Long id, ArtistCommand command) {
         Artist artist = artistRepository.findById(id)
                 .orElseThrow(ArtistNotFoundException::new);
+        boolean nameChanged = !artist.getName().equals(command.name());
         artist.update(command.name(), command.description());
+        if (nameChanged) {
+            // album.artist_name 비정규화(#204) 동기화 — FULLTEXT 검색용 복제본을 일괄 갱신.
+            // 이름이 실제 바뀐 경우에만 호출해 불필요한 벌크 UPDATE 를 피한다.
+            albumRepository.updateArtistNameByArtistId(id, command.name());
+        }
         return artist;
     }
 

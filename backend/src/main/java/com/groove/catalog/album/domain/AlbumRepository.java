@@ -6,6 +6,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * 앨범 영속성.
@@ -35,4 +38,17 @@ public interface AlbumRepository extends JpaRepository<Album, Long>, JpaSpecific
     boolean existsByGenre_Id(Long genreId);
 
     boolean existsByLabel_Id(Long labelId);
+
+    /**
+     * 비정규화 {@code artist_name}(#204) 동기화 — artist 이름 변경 시 해당 artist 의 모든 album 을
+     * 일괄 갱신한다. FULLTEXT 검색용 복제본이라 ArtistService.update 의 이름 변경 경로에서만 호출된다.
+     *
+     * <p>{@code clearAutomatically}/{@code flushAutomatically} 는 의도적으로 끈다 — 호출 시점에
+     * 영속성 컨텍스트에 dirty 상태인 {@code Artist} 가 있는데, 컨텍스트를 clear 하면 그 변경이 flush
+     * 전에 유실된다. 두 변경은 서로 다른 테이블(artist/album)이라 같은 트랜잭션 커밋 시 안전하게 함께
+     * 반영되며, update 흐름은 이후 album 을 읽지 않으므로 stale 우려가 없다.
+     */
+    @Modifying
+    @Query("UPDATE Album a SET a.artistName = :name WHERE a.artist.id = :artistId")
+    int updateArtistNameByArtistId(@Param("artistId") Long artistId, @Param("name") String name);
 }

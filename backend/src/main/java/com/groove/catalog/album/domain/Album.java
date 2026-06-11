@@ -38,6 +38,16 @@ public class Album extends BaseTimeEntity {
     @Column(name = "title", nullable = false, length = 300)
     private String title;
 
+    /**
+     * artist.name 의 비정규화 복제본 (#204). 키워드 검색을 단일 테이블 {@code FULLTEXT(title,
+     * artist_name)} 로 구동하기 위한 것 — title 과 artist.name 이 다른 테이블이라 cross-table OR
+     * 가 FULLTEXT 인덱스를 무력화하는 문제를 회피한다(ES 의 flattened 검색 문서 패턴). API 응답엔
+     * 노출하지 않으며(검색 전용), 동기화는 {@link #create}/{@link #update}(artist 로부터 파생) 와
+     * artist 이름 변경 시 벌크 UPDATE(ArtistService) 가 담당한다.
+     */
+    @Column(name = "artist_name", nullable = false, length = 200)
+    private String artistName;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "artist_id", nullable = false)
     private Artist artist;
@@ -84,6 +94,7 @@ public class Album extends BaseTimeEntity {
                   AlbumStatus status, boolean limited, String coverImageUrl, String description) {
         this.title = title;
         this.artist = artist;
+        this.artistName = artist.getName();
         this.genre = genre;
         this.label = label;
         this.releaseYear = releaseYear;
@@ -115,6 +126,7 @@ public class Album extends BaseTimeEntity {
                        AlbumStatus status, boolean limited, String coverImageUrl, String description) {
         this.title = title;
         this.artist = artist;
+        this.artistName = artist.getName();
         this.genre = genre;
         this.label = label;
         this.releaseYear = releaseYear;
@@ -146,6 +158,11 @@ public class Album extends BaseTimeEntity {
 
     public String getTitle() {
         return title;
+    }
+
+    /** artist.name 의 비정규화 복제본 (#204, FULLTEXT 검색 전용 — API 미노출). */
+    public String getArtistName() {
+        return artistName;
     }
 
     public Artist getArtist() {

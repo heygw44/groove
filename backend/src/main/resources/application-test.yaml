@@ -4,6 +4,13 @@ spring:
     password: test
   flyway:
     enabled: true
+    # #204: static 싱글턴 Testcontainers MySQL 을 @DataJpaTest 슬라이스와 @SpringBootTest 가 공유한다.
+    # member 의 V20__email_hash_hmac_backfill 은 @Component(EmailHasher 주입) Java 마이그레이션이라 전체
+    # 컨텍스트에서만 Flyway 에 등록되고 슬라이스에서는 resolve 되지 않는다. 공유 컨테이너 + 컨텍스트 생성
+    # 순서에 따라 V20 이 슬라이스엔 missing, 전체엔 (슬라이스가 더 높은 V21 을 먼저 적용한 경우) out-of-order
+    # 로 보인다. 프로덕션은 전체 빈이 모든 마이그레이션을 순서대로 resolve/적용하므로 무관 — 테스트 한정 완화.
+    out-of-order: true
+    ignore-migration-patterns: "*:missing"
   jpa:
     hibernate:
       ddl-auto: validate

@@ -78,7 +78,7 @@ cd backend
 
 ## 6. 주의 / 메모
 
-- **keyword 검색 경로**: `AlbumSpecs.keyword`가 WHERE 절용 `root.join("artist", LEFT)`(non-fetch)를 만든다. `@EntityGraph` 페치 조인과 합쳐지면 artist 테이블 조인이 둘 생길 수 있으나 to-one이라 행 증식이 없어 무해하다(쿼리 수 상수 유지).
+- **keyword 검색 경로**: (#203 당시) `AlbumSpecs.keyword`가 WHERE 절용 `root.join("artist", LEFT)`(non-fetch)를 만들어 `@EntityGraph` 페치 조인과 겹쳐도 to-one이라 무해했다. 이후 #204에서 keyword를 비정규화 `artist_name` 기반 단일 테이블 FULLTEXT(`MATCH ... AGAINST`)로 전환하며 이 artist 조인은 제거됐다 — N+1 가드(`entityFetchCount=0`, 쿼리 2개)는 그대로 유지된다([`search-index.md`](./search-index.md)).
 - **count 쿼리**: Spring Data는 count 쿼리에 EntityGraph를 적용하지 않아 불필요한 조인이 없다.
 - **정렬**: 컨트롤러 화이트리스트가 root 스칼라(id/createdAt/price/releaseYear)뿐이라 연관 정렬 조인 이슈가 없다.
 - **단건 조회(`findDetail`)**: 본 이슈 범위 외. 단건이라 N+1이 3으로 고정(비선형)이고 별도 `findById` 경로다.
