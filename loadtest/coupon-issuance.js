@@ -14,7 +14,7 @@ import exec from 'k6/execution';
 import { check } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
 import { uuidv4 } from 'https://jslib.k6.io/k6-utils/1.4.0/index.js';
-import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.2/index.js';
+import { redactedSummary } from './lib/summary.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const COUPON_ID = __ENV.COUPON_ID || '1';
@@ -98,8 +98,6 @@ export default function (data) {
 }
 
 export function handleSummary(data) {
-  return {
-    'loadtest/summary.json': JSON.stringify(data, null, 2),
-    stdout: textSummary(data, { indent: ' ', enableColors: true }),
-  };
+  // setup() 토큰 풀(실제 JWT)을 비식별화한 뒤 요약을 기록한다 — 평문 토큰 유출 방지(#219).
+  return redactedSummary(data, 'loadtest/summary.json');
 }
