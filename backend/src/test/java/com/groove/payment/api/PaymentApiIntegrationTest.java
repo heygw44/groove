@@ -12,6 +12,9 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
+import com.groove.common.idempotency.IdempotencyRecord;
+import com.groove.common.idempotency.IdempotencyRecordRepository;
+import com.groove.common.idempotency.IdempotencyStatus;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.Order;
@@ -34,11 +37,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -89,6 +95,8 @@ class PaymentApiIntegrationTest {
     @Autowired
     private MemberRepository memberRepository;
     @Autowired
+    private IdempotencyRecordRepository idempotencyRecordRepository;
+    @Autowired
     private JwtProvider jwtProvider;
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
@@ -103,6 +111,7 @@ class PaymentApiIntegrationTest {
     void setUp() {
         // FK 의존 순서: payment → orders → album → artist/genre/label, member.
         // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        idempotencyRecordRepository.deleteAllInBatch(); // 멱등 마커(FK 무관) — 만료 재사용 테스트 격리
         refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -305,6 +314,48 @@ class PaymentApiIntegrationTest {
                         .content(requestBody(second.getOrderNumber(), "CARD")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSE_MISMATCH"));
+    }
+
+    @Test
+    @DisplayName("멱등 키 만료 후 재사용 → 잠금 해제되어 다른 주문으로 새 결제 생성(Payment 2건)")
+    void request_keyReuseAfterExpiry_reprocessesNewPayment() throws Exception {
+        Order first = persistOrder(ownerId, OrderStatus.PENDING);
+        Order second = persistOrder(ownerId, OrderStatus.PENDING);
+        String key = "key-expiry-reuse";
+
+        // 1) 최초 결제 — 키 K 로 first 주문 결제
+        MvcResult firstResult = mockMvc.perform(post("/api/v1/payments")
+                        .header(HttpHeaders.AUTHORIZATION, ownerBearer)
+                        .header(IDEMPOTENCY_HEADER, key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(first.getOrderNumber(), "CARD")))
+                .andExpect(status().isAccepted())
+                .andReturn();
+        long firstPaymentId = objectMapper.readTree(firstResult.getResponse().getContentAsString()).get("paymentId").asLong();
+
+        // 2) 해당 키의 멱등 레코드 TTL 을 과거로 강제 — 정리 스케줄러를 기다리지 않고 만료를 모사
+        //    (IdempotencyServiceTest.saveExpiredCompleted 와 동일 기법). 만료 회수 분기는
+        //    isCompleted() && isExpired() 가 전제이므로, setField 전에 마커가 COMPLETED 임을 먼저 고정한다.
+        IdempotencyRecord record = idempotencyRecordRepository.findByIdempotencyKey(key).orElseThrow();
+        assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
+        ReflectionTestUtils.setField(record, "expiresAt", Instant.now().minus(Duration.ofMinutes(1)));
+        idempotencyRecordRepository.saveAndFlush(record);
+
+        // 3) 같은 키 K 를 다른 주문(다른 fingerprint)으로 재사용 — 만료 전이면
+        //    request_keyReuseWithDifferentBody_returns409 처럼 409 REUSE_MISMATCH 였겠지만,
+        //    TTL 만료가 키 잠금을 해제해 새로 처리된다("TTL 후엔 새 처리", IdempotencyService).
+        MvcResult secondResult = mockMvc.perform(post("/api/v1/payments")
+                        .header(HttpHeaders.AUTHORIZATION, ownerBearer)
+                        .header(IDEMPOTENCY_HEADER, key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(second.getOrderNumber(), "CARD")))
+                .andExpect(status().isAccepted())
+                .andReturn();
+        long secondPaymentId = objectMapper.readTree(secondResult.getResponse().getContentAsString()).get("paymentId").asLong();
+
+        assertThat(secondPaymentId).isNotEqualTo(firstPaymentId);
+        assertThat(paymentRepository.count()).isEqualTo(2);
+        assertThat(paymentRepository.findById(secondPaymentId).orElseThrow().getOrder().getId()).isEqualTo(second.getId());
     }
 
     @Test
