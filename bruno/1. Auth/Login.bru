@@ -28,7 +28,7 @@ script:post-response {
   test('Status 200', () => expect(res.getStatus()).to.equal(200));
   const json = res.getBody();
   test('has accessToken', () => expect(json).to.have.property('accessToken'));
-  test('has refreshToken', () => expect(json).to.have.property('refreshToken'));
+  // refresh 토큰은 응답 body 가 아닌 HttpOnly 쿠키(refreshToken)로 내려간다(#163)
+  test('refresh 토큰 HttpOnly 쿠키 발급', () => expect(JSON.stringify(res.getHeaders())).to.include('refreshToken'));
   bru.setEnvVar('accessToken', json.accessToken);
-  bru.setEnvVar('refreshToken', json.refreshToken);
 }
