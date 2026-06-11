@@ -40,8 +40,9 @@ import java.util.stream.Collectors;
  *
  * <p>재고 조정({@link #adjustStock(Long, int)}) 은 동시 admin 호출에 대해 last-write-wins —
  * 비관적 락 미적용이라 두 admin 이 같은 album 에 동시 delta 를 보내면 한쪽이 lost update 된다
- * (재고 음수로는 절대 가지 않으므로 안전성 위반은 아님). 비관적 락은 W6 주문 도메인에서
- * 카탈로그 전반과 함께 도입한다.
+ * (재고 음수로는 절대 가지 않으므로 안전성 위반은 아님). #205 는 주문 차감 경로(order place)에만
+ * {@code SELECT ... FOR UPDATE} 비관적 락을 도입했고, 이 admin 조정 경로(및 주문 취소·환불·결제실패 복원)는
+ * 여전히 last-write-wins 다 — 카탈로그 전반의 대칭 잠금은 후속 과제(#W11-4 등).
  *
  * <p>전체 갱신({@link #update(Long, AlbumCommand)}) 은 stock 을 인자로 받지 않는다 —
  * 변경 경로는 반드시 {@link #adjustStock(Long, int)}.

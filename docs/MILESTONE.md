@@ -1068,17 +1068,17 @@
 **선행**: #W10-2
 
 **작업 내용**
-- [ ] 재고 차감 부분에 비관적 락 (`SELECT ... FOR UPDATE`) 적용
-- [ ] 동시성 테스트 재실행 → 오버셀 0건 검증
-- [ ] k6 flash-sale.js 재측정 (TPS, 에러율, 응답시간)
-- [ ] `docs/improvements/concurrency.md` (단계별 비교)
-  - 단계 a: 락 없음 (오버셀 발생)
+- [x] 재고 차감 부분에 비관적 락 (`SELECT ... FOR UPDATE`) 적용 — `AlbumRepository.findByIdForUpdate`
+- [x] 동시성 테스트 재실행 → 오버셀 0건 검증 — `OversellingBaselineTest` active 검증
+- [x] k6 flash-sale.js 재측정 (TPS, 에러율, 응답시간) — 100/500/1000 VU
+- [x] `docs/improvements/concurrency.md` (단계별 비교)
+  - 단계 a: 락 없음 (오버셀 발생) — `placeWithoutLock` baseline 보존
   - 단계 b: 비관적 락 (정합성 OK, TPS 측정)
-  - (시간 여유 시 c: 낙관적 락 또는 Redis 분산락 비교)
+  - (c: 낙관적 락 / Redis 분산락 비교 → #W11-4 로 이연)
 
 **완료 조건**
-- [ ] 오버셀 0건 측정 검증
-- [ ] TPS·응답시간 Before/After 표 작성
+- [x] 오버셀 0건 측정 검증 — created 211~222 → 100, lost-update 111~122 → 0
+- [x] TPS·응답시간 Before/After 표 작성 — 5xx 5.8~9.9% → 0%, order p95(1000VU) 1.25s → 342ms
 
 ---
 

@@ -19,7 +19,10 @@ import com.groove.order.api.dto.OrderItemRequest;
 import com.groove.order.application.OrderService;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.exception.InsufficientStockException;
+import com.groove.support.ConcurrencyHarness;
+import com.groove.support.ConcurrencyHarness.LoadResult;
 import com.groove.support.MemberFixtures;
+import com.groove.support.OrderFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,39 +37,34 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 오버셀 baseline 재현 테스트 (#46, W6-6).
+ * 주문 재고 차감 동시성 테스트 (#46 baseline · #205 비관적 락).
  *
- * <p>의도: 락 없이 구현된 {@link OrderService#place} 의 재고 차감이 동시 주문 시
- * lost-update / oversell 을 일으키는 것을 측정 가능한 형태로 보존한다 (W10-3 비관적 락 적용 후
- * 같은 시나리오를 재실행해 Before/After 비교 자료를 만든다).
+ * <p>쿠폰 선착순 발급(#90, {@code CouponIssuanceConcurrencyTest})과 같은 서사다 — 베이스라인(락 없음)은
+ * lost-update(오버셀)를 재현({@code @Disabled} 로 보존)하고, 비관적 락 경로({@code SELECT ... FOR UPDATE})는
+ * 오버셀 0 을 증명한다. 두 시나리오가 한 클래스에서 Before/After 비교 자료를 만든다.
  *
- * <p>본 테스트는 일반 빌드에서 실행되지 않도록 클래스 레벨 {@link Disabled} 로 격리된다.
- * 시연 시 {@link Disabled} 만 일시적으로 제거하고 실행한 뒤 결과를
- * {@code docs/troubleshooting/overselling-baseline.md} 에 캡처해 보존한다.
- *
- * <p>"수정"이 아니라 "기록"이 목적인 테스트이므로 assertion 의 의미는 통상의 "기능 통과"가 아니라
- * "오버셀 발생을 증명" 한다는 점에 있다 — 다음 세 시그널 중 하나라도 성립해야 baseline 으로 유효하다:
  * <ul>
- *   <li>{@code successCount > INITIAL_STOCK} — 재고를 초과한 주문이 영속화 (이상적 시나리오)</li>
- *   <li>{@code finalStock < 0} — 마지막 write 가 음수로 진입 (도메인 가드 우회)</li>
- *   <li>{@code persistedOrders > actualDecrement} — 영속 주문 수가 실제 차감량 초과
- *       (MySQL InnoDB row lock + deadlock detection 환경에서 가장 두드러지는 시그널)</li>
+ *   <li>{@link #concurrentOrders_withoutLock_produceOversell} — 락 미적용
+ *       ({@link OrderService#placeWithoutLock}) baseline. {@code @Disabled} 로 일반 CI 빌드에서 제외하며,
+ *       시연 시 어노테이션을 일시 제거해 실행한 뒤 결과를
+ *       {@code docs/troubleshooting/overselling-baseline.md} 에 캡처한다.</li>
+ *   <li>{@link #concurrentOrders_withPessimisticLock_noOversell} — 비관적 락
+ *       ({@link OrderService#place}) active 검증. created ≤ 재고, lost-update 0 을 단언하는 회귀 가드다 —
+ *       누군가 {@code findByIdForUpdate} 락을 제거하면 즉시 실패한다.</li>
  * </ul>
+ *
+ * <p>동시 출발·지연 수집은 공용 {@link ConcurrencyHarness} 가 담당한다(쿠폰 테스트와 동일 하니스, TPS·p95 박제 →
+ * docs/improvements/concurrency.md §4 근거).
  */
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
-@DisplayName("오버셀 baseline (#46) — 락 없는 재고 차감의 동시성 결함 재현")
-@Disabled("W10-3 비관적 락 적용 후 활성화 — 본 테스트는 락 미적용 상태의 baseline 시연용이며 일반 CI 빌드에서는 실행하지 않는다 (#46)")
+@DisplayName("주문 재고 차감 동시성 (#46 baseline · #205 비관적 락)")
 class OversellingBaselineTest {
 
     private static final Logger log = LoggerFactory.getLogger(OversellingBaselineTest.class);
@@ -74,7 +72,6 @@ class OversellingBaselineTest {
     private static final int INITIAL_STOCK = 100;
     private static final int CONCURRENT_REQUESTS = 200;
     private static final int THREAD_POOL_SIZE = 64;
-    private static final long DONE_GATE_TIMEOUT_SECONDS = 60L;
 
     @Autowired
     private OrderService orderService;
@@ -147,91 +144,98 @@ class OversellingBaselineTest {
     }
 
     @Test
-    @DisplayName("재고 100짜리 앨범에 동시 200건 주문 → 락 없는 차감으로 오버셀 발생")
-    void concurrentOrders_withoutLock_produceOversell() throws InterruptedException {
-        CountDownLatch readyGate = new CountDownLatch(1);
-        CountDownLatch doneGate = new CountDownLatch(CONCURRENT_REQUESTS);
-        ExecutorService pool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    @DisplayName("비관적 락 — 재고 100 / 동시 200 주문 → 정확히 100 성공, 오버셀 0 (lost-update 0)")
+    void concurrentOrders_withPessimisticLock_noOversell() throws InterruptedException {
+        OrderCreateRequest request = singleAlbumOrder();
 
-        AtomicInteger successCount = new AtomicInteger();
-        AtomicInteger insufficientCount = new AtomicInteger();
-        AtomicInteger otherFailureCount = new AtomicInteger();
+        AtomicInteger success = new AtomicInteger();
+        AtomicInteger insufficient = new AtomicInteger();
+        AtomicInteger other = new AtomicInteger();
 
-        OrderCreateRequest request = new OrderCreateRequest(
-                List.of(new OrderItemRequest(albumId, 1)),
-                null,
-                com.groove.support.OrderFixtures.sampleShippingInfoRequest(),
-                null);
-
-        boolean settled;
-        long elapsedMs;
-        try {
-            for (int i = 0; i < CONCURRENT_REQUESTS; i++) {
-                pool.submit(() -> {
-                    try {
-                        readyGate.await();
-                        orderService.place(memberId, request);
-                        successCount.incrementAndGet();
-                    } catch (InterruptedException ex) {
-                        Thread.currentThread().interrupt();
-                        otherFailureCount.incrementAndGet();
-                    } catch (InsufficientStockException ex) {
-                        insufficientCount.incrementAndGet();
-                    } catch (Throwable ex) {
-                        otherFailureCount.incrementAndGet();
-                        log.warn("예상 외 예외", ex);
-                    } finally {
-                        doneGate.countDown();
-                    }
-                });
+        LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, CONCURRENT_REQUESTS, i -> {
+            try {
+                orderService.place(memberId, request);
+                success.incrementAndGet();
+            } catch (InsufficientStockException ex) {
+                insufficient.incrementAndGet();
+            } catch (RuntimeException ex) {
+                other.incrementAndGet();
+                log.warn("예상 외 예외", ex);
             }
-
-            long startNanos = System.nanoTime();
-            readyGate.countDown();
-            settled = doneGate.await(DONE_GATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
-        } finally {
-            // doneGate.await() 가 InterruptedException 을 던지거나 submit 단계에서 예외가 날 경우에도
-            // ExecutorService 가 반드시 종료되도록 finally 로 감싼다 (CodeRabbit 리뷰 반영).
-            pool.shutdown();
-            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
-                pool.shutdownNow();
-            }
-        }
+        });
 
         int finalStock = albumRepository.findById(albumId).orElseThrow().getStock();
         int actualDecrement = INITIAL_STOCK - finalStock;
         long persistedOrders = orderRepository.count();
+        logMeasurement("비관적", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
 
-        log.info("[#46 오버셀 baseline] initialStock={}, concurrentRequests={}, threadPool={}, elapsedMs={}",
-                INITIAL_STOCK, CONCURRENT_REQUESTS, THREAD_POOL_SIZE, elapsedMs);
-        log.info("[#46 오버셀 baseline] success={}, insufficient={}, other={}, finalStock={}, actualDecrement={}, persistedOrders={}",
-                successCount.get(), insufficientCount.get(), otherFailureCount.get(),
-                finalStock, actualDecrement, persistedOrders);
+        // 오버셀 0 의 증거 — 비관적 락(SELECT ... FOR UPDATE)이 read-modify-write 를 직렬화하면:
+        //   success == 재고, finalStock == 0(음수 진입 없음), persistedOrders == 실제 차감량(lost-update 0).
+        assertThat(success.get()).as("정확히 재고만큼만 주문 성공").isEqualTo(INITIAL_STOCK);
+        assertThat(insufficient.get()).as("나머지는 재고부족(409)으로 거절").isEqualTo(CONCURRENT_REQUESTS - INITIAL_STOCK);
+        assertThat(finalStock).as("최종 재고 == 0 (음수 진입 없음)").isZero();
+        assertThat(persistedOrders).as("영속 주문 수 == 실제 차감량 (lost-update 0)").isEqualTo(actualDecrement);
+        assertThat(persistedOrders).as("오버셀 0 — 영속 주문 ≤ 초기 재고").isLessThanOrEqualTo(INITIAL_STOCK);
+        assertThat(other.get()).as("FOR UPDATE 직렬화로 deadlock 폭주 없음").isZero();
+    }
 
-        assertThat(settled)
-                .as("동시 요청들이 timeout 안에 완료되어야 결과가 유효하다")
-                .isTrue();
+    @Test
+    @Disabled("오버셀 baseline 시연용 — 락 없는 read-modify-write 의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#46)")
+    @DisplayName("베이스라인(락 없음) — 재고 100 / 동시 200 주문 → lost-update 로 오버셀 재현")
+    void concurrentOrders_withoutLock_produceOversell() throws InterruptedException {
+        OrderCreateRequest request = singleAlbumOrder();
 
-        // 본 테스트의 통과 조건 = "오버셀 증거" 다.
-        // 락 없는 read-modify-write 구간에서 lost-update 가 발생하면 다음 시그널 중
-        // 하나 이상이 반드시 나타난다:
-        //   (1) successCount > INITIAL_STOCK
-        //       — 재고보다 많은 주문이 영속화됨 (이상적 오버셀 시나리오)
-        //   (2) finalStock < 0
-        //       — 마지막 write 가 음수로 진입 (도메인 가드를 우회한 경우)
-        //   (3) persistedOrders > actualDecrement
-        //       — 영속된 주문 수가 실제 재고 차감량을 초과 (락 없는 lost-update 의 직접 증거)
-        // MySQL InnoDB 의 row-level lock + deadlock detection 으로 (1)/(2) 보다는 (3) 이
-        // 두드러질 수 있다 (deadlock 으로 일부 TX 가 롤백되지만, 살아남은 TX 들 사이에서는
-        // lost-update 가 누적된다). OS 스케줄링·JPA flush 타이밍에 따라 비결정적이므로 OR 로 검증.
-        boolean oversold = successCount.get() > INITIAL_STOCK
+        AtomicInteger success = new AtomicInteger();
+        AtomicInteger insufficient = new AtomicInteger();
+        AtomicInteger other = new AtomicInteger();
+
+        LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, CONCURRENT_REQUESTS, i -> {
+            try {
+                // 락 미적용 demo 경로 — 동시 read-modify-write 로 lost-update 를 노출한다.
+                orderService.placeWithoutLock(memberId, request);
+                success.incrementAndGet();
+            } catch (InsufficientStockException ex) {
+                insufficient.incrementAndGet();
+            } catch (RuntimeException ex) {
+                // 락 없는 동시 쓰기는 같은 album 행을 두고 락 경합/데드락을 일으켜 다수가
+                // CannotAcquireLockException 으로 롤백된다. 커밋된 소수에서 lost-update 가 누적된다.
+                other.incrementAndGet();
+            }
+        });
+
+        int finalStock = albumRepository.findById(albumId).orElseThrow().getStock();
+        int actualDecrement = INITIAL_STOCK - finalStock;
+        long persistedOrders = orderRepository.count();
+        logMeasurement("baseline", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
+
+        // 통과 조건 = "오버셀 증거". lost-update 시 다음 중 하나 이상이 성립한다:
+        //   (1) successCount > INITIAL_STOCK    — 재고를 초과한 주문이 영속화 (이상적 오버셀 시나리오)
+        //   (2) finalStock < 0                  — 마지막 write 가 음수 재고로 진입 (도메인 가드 우회)
+        //   (3) persistedOrders > actualDecrement — 영속 주문 수가 실제 차감량을 초과 (lost-update 직접 증거)
+        // MySQL InnoDB row lock + deadlock detection 으로 (1)/(2) 보다 (3) 이 두드러진다 — OR 로 검증.
+        boolean oversold = success.get() > INITIAL_STOCK
                 || finalStock < 0
                 || persistedOrders > actualDecrement;
         assertThat(oversold)
                 .as("오버셀 baseline — success(%d)>stock(%d) 또는 finalStock(%d)<0 또는 persistedOrders(%d)>actualDecrement(%d) 중 하나는 성립해야 한다",
-                        successCount.get(), INITIAL_STOCK, finalStock,
-                        persistedOrders, actualDecrement)
+                        success.get(), INITIAL_STOCK, finalStock, persistedOrders, actualDecrement)
                 .isTrue();
+    }
+
+    private OrderCreateRequest singleAlbumOrder() {
+        return new OrderCreateRequest(
+                List.of(new OrderItemRequest(albumId, 1)),
+                null,
+                OrderFixtures.sampleShippingInfoRequest(),
+                null);
+    }
+
+    /** 콘솔 박제용 측정 로그 — 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 한 줄. (overselling-baseline.md §3.1 포맷) */
+    private void logMeasurement(String label, AtomicInteger success, AtomicInteger insufficient, AtomicInteger other,
+                                int finalStock, int actualDecrement, long persistedOrders, LoadResult result) {
+        log.info("[#205 {}] success={}, insufficient={}, other={}, finalStock={}, actualDecrement={}, persistedOrders={}"
+                        + " | elapsedMs={}, tps={}, p95Ms={}",
+                label, success.get(), insufficient.get(), other.get(), finalStock, actualDecrement, persistedOrders,
+                result.elapsedMs(), String.format("%.1f", result.tps()), result.p95Millis());
     }
 }

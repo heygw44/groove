@@ -1,14 +1,18 @@
 package com.groove.catalog.album.domain;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import java.util.Optional;
 
 /**
  * 앨범 영속성.
@@ -32,6 +36,18 @@ public interface AlbumRepository extends JpaRepository<Album, Long>, JpaSpecific
     @Override
     @EntityGraph(attributePaths = {"artist", "genre", "label"})
     Page<Album> findAll(Specification<Album> spec, Pageable pageable);
+
+    /**
+     * 주문 재고 차감(#205)용 비관적 락 조회 — album 행을 {@code SELECT ... FOR UPDATE} 로 잠근다
+     * ({@code CouponRepository.findByIdForUpdate} 와 동일 패턴). SELECT 시점에 행 락을 선점하므로
+     * 동시 주문의 read-modify-write 구간이 직렬화되어 lost-update(오버셀)가 제거된다.
+     *
+     * <p>락은 재고가 있는 album 행만 잡으면 되므로 artist/genre/label 페치 없이 최소 쿼리로 둔다
+     * ({@code OrderService.place} 는 이 연관들을 읽지 않는다). 행 락은 트랜잭션 종료 시 해제된다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Album a WHERE a.id = :id")
+    Optional<Album> findByIdForUpdate(@Param("id") Long id);
 
     boolean existsByArtist_Id(Long artistId);
 

@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -39,8 +40,15 @@ import java.util.List;
  * <ol>
  *   <li>회원/게스트 정합성 가드 (XOR). 게스트 + {@code memberCouponId} 동시 지정 시 즉시 거부 (#91).</li>
  *   <li>각 라인 album 로딩 + 구매 가능(SELLING) 검증.</li>
- *   <li>재고 검증 + 차감 — <b>락 없이 단순 구현</b>. 동일 album 동시 주문 시
- *       lost-update / oversell 가능성을 의도적으로 노출 (W6-6 재현, W10-3 비관적 락 시연).</li>
+ *   <li>재고 검증 + 차감 — <b>비관적 락</b>({@code SELECT ... FOR UPDATE}, {@link AlbumRepository#findByIdForUpdate})으로
+ *       SELECT 시점에 album 행 락을 선점해 read-modify-write 구간을 직렬화한다. 이로써 <b>동시 주문(place↔place)</b>
+ *       간 lost-update / oversell 을 차단한다 (#205; W6-6 에서 의도적으로 노출했던 결함의 핵심 해소).
+ *       다중 album 주문은 albumId 오름차순으로 락을 획득해 deadlock 을 피한다.
+ *       락 미적용 baseline 재현은 테스트 전용 {@link #placeWithoutLock} 로 보존한다.
+ *       <br><b>알려진 한계</b>: 재고를 되돌리는 경로({@link #cancel} 취소·{@code AdminOrderService.refund} 환불·
+ *       {@code PaymentCallbackService} 결제실패 보상·{@code AlbumService.adjustStock} admin PATCH)는 아직 락 없는
+ *       last-write-wins 라, place 와 이 경로들 간에는 album.stock lost-update 창이 남는다(음수 가드로 안전성 위반은
+ *       없음). 카탈로그 전반의 대칭 잠금은 후속 과제(#W11-4 등).</li>
  *   <li>orderNumber 발급 (사전 존재 체크 최대 3회).</li>
  *   <li>Order + OrderItem 생성 후 영속화.</li>
  *   <li>쿠폰 적용 (#91) — {@code memberCouponId} 가 있으면 저장된 orderId 로
@@ -171,8 +179,32 @@ public class OrderService {
         return order;
     }
 
+    /**
+     * 주문 생성 — 재고 차감에 비관적 락({@code SELECT ... FOR UPDATE})을 적용해 lost-update / oversell 을
+     * 차단한다 (#205). 프로덕션 진입점.
+     */
     @Transactional
     public Order place(Long memberId, OrderCreateRequest request) {
+        return placeInternal(memberId, request, true);
+    }
+
+    /**
+     * 락 미적용 주문 생성 — <b>테스트/시연 전용</b> baseline 재현 경로. 락 없는 read-modify-write 로
+     * 동시 주문 시 lost-update(오버셀)를 노출한다 (쿠폰의 {@code CouponIssueService#issueWithoutLock} 대칭).
+     *
+     * <p>프로덕션 호출 금지 — {@code OversellingBaselineTest} 의 baseline 측정에서만 사용하며, {@link #place}
+     * 와의 Before/After 비교 자료를 만든다.
+     */
+    @Transactional
+    public Order placeWithoutLock(Long memberId, OrderCreateRequest request) {
+        return placeInternal(memberId, request, false);
+    }
+
+    /**
+     * {@link #place}(락) 와 {@link #placeWithoutLock}(락 없음) 의 공유 본문. {@code useLock} 만 재고 조회 전략을
+     * 가른다 — true 면 {@link AlbumRepository#findByIdForUpdate}(행 락 선점), false 면 {@code findById}(락 없음).
+     */
+    private Order placeInternal(Long memberId, OrderCreateRequest request, boolean useLock) {
         validateOwnership(memberId, request.guest());
         // 토큰 유효기간 내 탈퇴(soft delete)한 회원이면 404 로 차단한다 (#187, #171 과 일관) — 게스트는 제외.
         // member_id 는 단순 Long 컬럼이라 FK 500 은 안 나지만, 익명화된 탈퇴회원에 신규 주문이 귀속되는 비정합을 막는다.
@@ -185,10 +217,16 @@ public class OrderService {
             throw new CouponNotApplicableException("게스트 주문에는 쿠폰을 적용할 수 없습니다");
         }
 
-        // 1) 도메인 검증 + 재고 차감 — 실패 시 orderNumber 발급 비용을 아낀다.
-        List<ResolvedLine> lines = new ArrayList<>(request.items().size());
-        for (OrderItemRequest line : request.items()) {
-            Album album = loadPurchasable(line.albumId());
+        // 1) 도메인 검증 + 재고 차감 — 실패 시 orderNumber 발급 비용을 아낀다(소진 거절이 다수인 flash-sale 에서 중요).
+        // 락 경로의 다중 album 주문만 라인을 albumId 오름차순으로 처리해 락 획득 순서를 일관화한다
+        // (서로 다른 순서로 여러 행을 FOR UPDATE 로 잡아 발생하는 deadlock 차단). OrderItem 순서는 기능 무관.
+        // 단일 항목(대다수)은 정렬이 무의미하므로 stream 할당을 건너뛴다.
+        List<OrderItemRequest> orderedItems = (useLock && request.items().size() > 1)
+                ? request.items().stream().sorted(Comparator.comparingLong(OrderItemRequest::albumId)).toList()
+                : request.items();
+        List<ResolvedLine> lines = new ArrayList<>(orderedItems.size());
+        for (OrderItemRequest line : orderedItems) {
+            Album album = loadPurchasable(line.albumId(), useLock);
             decreaseStock(album, line.quantity());
             lines.add(new ResolvedLine(album, line.quantity()));
         }
@@ -258,8 +296,14 @@ public class OrderService {
         return candidate;
     }
 
-    private Album loadPurchasable(Long albumId) {
-        Album album = albumRepository.findById(albumId)
+    /**
+     * 구매 가능 album 로딩 + SELLING 검증. {@code useLock} 이면 {@code SELECT ... FOR UPDATE} 로 행 락을
+     * 선점해(#205) 이어지는 재고 차감의 lost-update 를 막는다. 락 미적용 baseline 경로는 일반 {@code findById}.
+     */
+    private Album loadPurchasable(Long albumId, boolean useLock) {
+        Album album = (useLock
+                ? albumRepository.findByIdForUpdate(albumId)
+                : albumRepository.findById(albumId))
                 .orElseThrow(AlbumNotFoundException::new);
         if (album.getStatus() != AlbumStatus.SELLING) {
             throw new AlbumNotPurchasableException();
