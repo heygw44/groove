@@ -38,7 +38,8 @@ import org.springframework.web.bind.annotation.RestController;
  * 여부를 검증하고, 게스트 주문은 익명 호출자도 결제를 시작할 수 있다. {@code GET /payments/{id}} 는
  * {@code anyRequest().authenticated()} 기본 정책으로 보호되는 회원 전용 엔드포인트다.
  *
- * <p>TODO(W10): {@code POST /payments} 회원당 분당 5회 레이트 리밋 (API.md §3.6) — 본 이슈(#W7-3) 범위 외.
+ * <p>{@code POST /payments} 는 {@link com.groove.payment.api.ratelimit.PaymentRateLimitPolicy} 가
+ * 회원당 분당 5회 Rate Limit 을 적용한다 (#208, API.md §1.6 — 회원은 JWT memberId, 게스트·토큰 부재 시 IP 폴백).
  */
 @Tag(name = "결제", description = "결제 요청(회원/게스트, 멱등) · 본인 결제 단건 조회")
 @RestController

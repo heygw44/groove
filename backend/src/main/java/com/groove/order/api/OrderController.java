@@ -105,8 +105,9 @@ public class OrderController {
     /**
      * 게스트 본인 주문 조회 — orderNumber 와 email 매칭.
      *
-     * <p>TODO(W10): orderNumber + email 페어 무차별 대입 방지 위해 IP/email 기준 rate limit 도입
-     * (API.md §3.5 명시). 본 이슈(#44) 범위에서는 게스트 lookup 만 구현하고 보안 강화는 후속 처리.
+     * <p>orderNumber+email 페어 무차별 대입 방지를 위해
+     * {@link com.groove.order.api.ratelimit.OrderGuestLookupRateLimitPolicy} 가 IP 단위 Rate Limit 을
+     * 적용한다 (#208, API.md §3.5).
      */
     @Operation(summary = "게스트 본인 주문 조회",
             description = "비로그인 게스트가 주문번호와 주문 시 입력한 이메일을 함께 제시해 자신의 주문을 조회한다. "

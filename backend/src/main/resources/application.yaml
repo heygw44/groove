@@ -124,8 +124,19 @@ groove:
     in-progress-grace: ${IDEMPOTENCY_IN_PROGRESS_GRACE:PT1H}
     cleanup-cron: ${IDEMPOTENCY_CLEANUP_CRON:0 0 * * * *}
     cleanup-batch-size: ${IDEMPOTENCY_CLEANUP_BATCH_SIZE:1000}
-  # 결제 웹훅 유실 대비 폴링 동기화 (#W7-4). PENDING 결제를 interval 마다 PG query() 로 조회한다.
+  # 게스트 주문 조회 Rate Limit (#208). POST /orders/{orderNumber}/guest-lookup — IP당 분당 10회로 orderNumber+email 무차별 대입을 억제한다.
+  order:
+    rate-limit:
+      guest-lookup:
+        capacity: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_CAPACITY:10}
+        refill-period: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_REFILL_PERIOD:PT1M}
   payment:
+    # 결제 Rate Limit (#208). POST /payments 회원당 분당 5회(API.md §1.6) — JWT memberId 로 키잉(게스트·토큰 부재 시 IP 폴백).
+    rate-limit:
+      post:
+        capacity: ${PAYMENT_RATE_LIMIT_POST_CAPACITY:5}
+        refill-period: ${PAYMENT_RATE_LIMIT_POST_REFILL_PERIOD:PT1M}
+    # 결제 웹훅 유실 대비 폴링 동기화 (#W7-4). PENDING 결제를 interval 마다 PG query() 로 조회한다.
     reconciliation:
       interval: ${PAYMENT_RECONCILIATION_INTERVAL:PT1M}
       initial-delay: ${PAYMENT_RECONCILIATION_INITIAL_DELAY:PT1M}

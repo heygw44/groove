@@ -77,7 +77,11 @@ import static org.assertj.core.api.Assertions.assertThat;
         "payment.mock.auto-webhook=false",
         // 16 동시 요청(+PAID 경로의 콜백 REQUIRED·배송 REQUIRES_NEW 중첩)이 Hikari 기본 풀(10)을 넘겨
         // connection-timeout 5xx 로 플레이키해지지 않도록 풀을 동시성 한도의 2배로 명시한다.
-        "spring.datasource.hikari.maximum-pool-size=32"
+        "spring.datasource.hikari.maximum-pool-size=32",
+        // 이 테스트는 멱등성 수렴(직교 관심사)을 검증한다 — 같은 회원이 16 동시 요청을 쏘므로 운영 기본
+        // capacity(5/분)면 PaymentRateLimitPolicy 가 일부를 429 로 막아 불변식(accepted+conflict=16)이 깨진다.
+        // rate limit 자체는 PaymentRateLimitIntegrationTest 가 검증하므로 여기선 한도를 동시성보다 크게 둔다.
+        "groove.payment.rate-limit.post.capacity=100"
 })
 @Import(TestcontainersConfig.class)
 @DisplayName("결제 멱등성 동시성 통합 테스트 (#207)")
