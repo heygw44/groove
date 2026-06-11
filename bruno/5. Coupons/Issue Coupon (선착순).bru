@@ -24,5 +24,9 @@ script:pre-request {
 
 script:post-response {
   test('발급 201 / 이미발급 409 / 소진 409', () => expect([201, 409]).to.include(res.getStatus()));
-  if (res.getStatus() === 201) { bru.setEnvVar('memberCouponId', res.getBody().memberCouponId); }
+  if (res.getStatus() === 201) {
+    bru.setEnvVar('memberCouponId', res.getBody().memberCouponId);
+  } else {
+    bru.setEnvVar('memberCouponId', '');
+  }
 }

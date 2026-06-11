@@ -3,21 +3,29 @@
 // 입력:  postman/groove.collection.json + postman/groove.environment.json
 // 출력:  bruno/  (.bru 파일 트리 + environments/ + bruno.json)
 //
-// 실행:  (1회성, dev 의존성은 미보존 — 필요 시 ad-hoc 설치)
-//   npm i --no-save @usebruno/converters @usebruno/lang
-//   node scripts/postman-to-bruno.mjs
+// 실행:  node scripts/postman-to-bruno.mjs   (@usebruno/converters·lang 은 devDependencies)
 //
-// 컨버터가 자동 처리하지 못하는 3가지를 변환 단계에서 보정한다(아래 patch* / 주석 참고):
+// 변환 단계 보정(컨버터 자동처리 불가) + PR #216 CodeRabbit 리뷰 반영을 patch* 에 내장한다:
 //   1) type=secret 환경변수 값 누락 → 평문 vars 로 보존 (Postman env 도 평문이라 노출 동등)
-//   2) pm.variables.replaceIn('{{$guid}}') / body 의 {{$guid}} → Bruno 네이티브 {{$randomUUID}}
+//   2) body·script 의 {{$guid}} → Bruno 네이티브 {{$randomUUID}}
 //   3) Rate Limit 의 pm.sendRequest 미번역 + 지역변수 충돌 → bru.sendRequest 루프로 재작성
+//   4) 8.Admin 폴더 pre-request 에 admin 토큰 1회 로그인 주입(중첩 서브폴더 선실행 우회)
+//   5) URL 쿼리/params:query 이중 소스 제거 + 일부 요청 body/script 정합화(patchRequestObject)
 import { postmanToBruno, postmanToBrunoEnvironment } from '@usebruno/converters';
 import { jsonToBruV2, jsonToCollectionBru, envJsonToBruV2 } from '@usebruno/lang';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const ROOT = process.cwd();
+// 보정 6(CodeRabbit #216): 실행 디렉터리(process.cwd) 의존 + 무조건 삭제는 위험 →
+// 스크립트 위치 기준으로 루트를 잡고, 입력 파일 존재를 확인한 뒤에만 bruno/ 를 삭제한다.
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'bruno');
+const COLLECTION = path.join(ROOT, 'postman/groove.collection.json');
+const ENVIRONMENT = path.join(ROOT, 'postman/groove.environment.json');
+if (!fs.existsSync(COLLECTION) || !fs.existsSync(ENVIRONMENT)) {
+  throw new Error(`postman 입력 파일을 찾을 수 없습니다(${COLLECTION}). bruno/ 삭제를 중단합니다.`);
+}
 
 // 폴더 선두 번호 → 카테고리 태그 (기존 newman --folder 선택을 bru --tags 로 대체)
 const TAG_BY_INDEX = {
@@ -60,6 +68,39 @@ function patchRequestObject(item) {
       "test('Retry-After 헤더 존재', () => expect(res.getHeaders()).to.have.property('retry-after'));",
     ].join('\n');
   }
+
+  // ── 보정 5(CodeRabbit #216): 요청별 정합화 ──
+  // Change Password: 하드코딩 비번 → 환경변수 (재실행 시 cleanup 연계 깨짐 방지)
+  if (item.name === 'Change Password' && r.body && typeof r.body.json === 'string') {
+    r.body.json = r.body.json.replace('"P@ssw0rd!2024"', '"{{memberPassword}}"');
+  }
+  // Issue Coupon: 201 아닐 때(409) memberCouponId 초기화 → 이전 실행 stale 값 오염 방지
+  if (item.name === 'Issue Coupon (선착순)' && r.script) {
+    r.script.res = [
+      "test('발급 201 / 이미발급 409 / 소진 409', () => expect([201, 409]).to.include(res.getStatus()));",
+      'if (res.getStatus() === 201) {',
+      "  bru.setEnvVar('memberCouponId', res.getBody().memberCouponId);",
+      '} else {',
+      "  bru.setEnvVar('memberCouponId', '');",
+      '}',
+    ].join('\n');
+  }
+  // PG Webhook: 서명(X-Mock-Signature) 기반이므로 컬렉션 Bearer 상속 금지 → auth: none 명시
+  if (item.name.includes('PG Webhook') && r.auth) {
+    r.auth.mode = 'none';
+  }
+  // Create Coupon Policy: 고정 2026 만료일 → 실행시점 상대값(연도 경과 시 생성 실패 방지)
+  if (item.name === 'Create Coupon Policy' && r.body && typeof r.body.json === 'string') {
+    r.body.json = r.body.json
+      .replace('"2026-01-01T00:00:00.000Z"', '"{{couponValidFrom}}"')
+      .replace('"2026-12-31T23:59:59.000Z"', '"{{couponValidUntil}}"');
+    r.script = r.script || {};
+    r.script.req = [
+      'const now = new Date();',
+      "bru.setEnvVar('couponValidFrom', new Date(now.getTime() - 5 * 60 * 1000).toISOString());",
+      "bru.setEnvVar('couponValidUntil', new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString());",
+    ].join('\n');
+  }
 }
 
 function reqToBru(item, tag) {
@@ -69,7 +110,8 @@ function reqToBru(item, tag) {
     meta: { name: item.name, type: 'http', seq: item.seq, ...(tag ? { tags: [tag] } : {}) },
     http: {
       method: (r.method || 'get').toLowerCase(),
-      url: r.url || '',
+      // 보정 5(CodeRabbit #216): 쿼리는 params:query 가 단일 소스 → URL 쿼리스트링 제거(이중 소스 방지)
+      url: (r.params || []).some((p) => p.type === 'query') ? (r.url || '').split('?')[0] : (r.url || ''),
       body: r.body?.mode || 'none',
       auth: r.auth?.mode || 'none',
     },
@@ -156,8 +198,8 @@ function writeFolderChildren(dir, items, tag) {
   }
 }
 
-const pm = JSON.parse(fs.readFileSync(path.join(ROOT, 'postman/groove.collection.json'), 'utf8'));
-const env = JSON.parse(fs.readFileSync(path.join(ROOT, 'postman/groove.environment.json'), 'utf8'));
+const pm = JSON.parse(fs.readFileSync(COLLECTION, 'utf8'));
+const env = JSON.parse(fs.readFileSync(ENVIRONMENT, 'utf8'));
 
 const bru = await postmanToBruno(pm);
 const benv = await postmanToBrunoEnvironment(env);

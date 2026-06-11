@@ -19,6 +19,8 @@
   },
   "devDependencies": {
     "@usebruno/cli": "^3.4.2",
+    "@usebruno/converters": "^0.20.0",
+    "@usebruno/lang": "^0.36.0",
     "newman": "^6.2.1"
   }
 }

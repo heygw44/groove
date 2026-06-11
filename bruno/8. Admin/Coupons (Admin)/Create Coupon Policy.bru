@@ -26,9 +26,15 @@ body:json {
     "minOrderAmount": 10000,
     "totalQuantity": 100,
     "perMemberLimit": 1,
-    "validFrom": "2026-01-01T00:00:00.000Z",
-    "validUntil": "2026-12-31T23:59:59.000Z"
+    "validFrom": "{{couponValidFrom}}",
+    "validUntil": "{{couponValidUntil}}"
   }
+}
+
+script:pre-request {
+  const now = new Date();
+  bru.setEnvVar('couponValidFrom', new Date(now.getTime() - 5 * 60 * 1000).toISOString());
+  bru.setEnvVar('couponValidUntil', new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString());
 }
 
 script:post-response {
