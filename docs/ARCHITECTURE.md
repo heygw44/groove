@@ -63,7 +63,7 @@
 flowchart TB
     subgraph clients["클라이언트 · 검증 도구"]
         Vue["Vue 3 SPA"]
-        Postman["Postman · Newman"]
+        Bruno["Bruno"]
         k6["k6 부하 테스트"]
     end
 
@@ -537,7 +537,7 @@ volumes:
 
 ```
        ┌──────────────┐
-       │ E2E (소량)   │  Postman 컬렉션, 시드 후 수동 시연
+       │ E2E (소량)   │  Bruno 컬렉션, 시드 후 수동/헤드리스 시연
        ├──────────────┤
        │ 통합 테스트  │  @SpringBootTest + Testcontainers MySQL
        │  (중심축)    │  도메인 흐름, Repository, 트랜잭션, 동시성
