@@ -41,6 +41,11 @@ jobs:
         # --no-daemon 미사용: setup-gradle 가 daemon 수명·캐시 flush 를 관리한다.
         # 백엔드는 backend/ 로 이동(#131). frontendBuild 는 ../frontend 를 읽으므로 전체 checkout 이면 동작.
         working-directory: backend
+        env:
+          # 긴 스위트(~24분)에서 Ryuk keepalive 가 CPU 포화로 타임아웃되면 MySQL 컨테이너를 회수해
+          # 이후 DB 의존 테스트가 연쇄 Connection refused 로 떨어진다(PR #222 CI 재현). CI 러너는 job
+          # 종료 후 통째 폐기되어 컨테이너 누수가 없으므로 Ryuk 를 끈다 — reaper 없이도 안전.
+          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: ./gradlew build
 
       - name: Upload test & coverage reports
