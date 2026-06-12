@@ -21,26 +21,18 @@ import java.time.Instant;
 /**
  * Refresh Token 의 발급·회전·무효화·재사용 감지 (이슈 #22).
  *
- * <p>회전(rotate) 흐름:
- * <ol>
- *   <li>JWT 파싱으로 형식·서명·만료·typ 검증 → memberId 확보</li>
- *   <li>본문의 SHA-256 해시로 DB 행 조회 (모르는 토큰 → 401)</li>
- *   <li>이미 revoked 상태 → 재사용으로 간주, 같은 사용자 활성 토큰 전체 무효화</li>
- *   <li>DB 만료 검증 (JWT 검증과 별개의 방어선)</li>
- *   <li>새 access·refresh 발급 + 새 행 영속화</li>
- *   <li>{@link RefreshTokenRepository#revokeIfActive} 로 atomic CAS — 0 행이면 동시 회전
- *       경쟁에서 패배한 케이스. <b>전체 무효화 없이 단순 거부</b>한다 — 정상 사용자의
- *       동시 요청(네트워크 재시도/더블 클릭) 가능성이 있고, 실제 도난된 토큰은
- *       다음 사용 시 {@code isRevoked()=true} 로 잡혀 정상적으로 재사용 분기로 진입한다.</li>
- * </ol>
+ * 회전(rotate) 흐름: JWT 파싱으로 형식·서명·만료·typ 검증 후 memberId 확보, 본문의 SHA-256 해시로 DB 행
+ * 조회(모르는 토큰은 401), 이미 revoked 면 재사용으로 간주해 같은 사용자 활성 토큰 전체 무효화, DB
+ * 만료 검증(JWT 검증과 별개의 방어선), 새 access·refresh 발급 후 새 행 영속화. 마지막으로
+ * RefreshTokenRepository.revokeIfActive 로 atomic CAS 하는데, 0 행이면 동시 회전 경쟁에서 패배한 케이스다
+ * — 전체 무효화 없이 단순 거부한다. 정상 사용자의 동시 요청(네트워크 재시도/더블 클릭) 가능성이 있고, 실제
+ * 도난된 토큰은 다음 사용 시 isRevoked()=true 로 잡혀 재사용 분기로 진입하기 때문이다.
  *
- * <p>만료 검사 순서: revoked → DB expired 순으로 검사한다. 만료된 토큰의 재사용은
- * 재사용 분기에 들어가지 않고 단순 만료 응답만 반환한다 — 이미 expire 된 토큰은
- * 공격자가 새로 사용해도 access 발급으로 이어지지 않으므로 전체 세션 무효화까지
- * 가지 않는다.
+ * 만료 검사 순서는 revoked → DB expired 순. 만료된 토큰의 재사용은 재사용 분기 대신 단순 만료 응답만
+ * 반환한다 — 이미 expire 된 토큰은 공격자가 새로 사용해도 access 발급으로 이어지지 않으므로 전체 세션
+ * 무효화까지 가지 않는다.
  *
- * <p>{@code revoke} 는 RFC 7009 와 같이 토큰 유효성 노출을 차단하기 위해
- * 무효 입력에도 멱등 무동작으로 처리한다.
+ * revoke 는 RFC 7009 와 같이 토큰 유효성 노출을 차단하기 위해 무효 입력에도 멱등 무동작으로 처리한다.
  */
 @Service
 public class RefreshTokenService {
@@ -122,8 +114,8 @@ public class RefreshTokenService {
 
         int affected = refreshTokenRepository.revokeIfActive(existing.getId(), now, newRow.getId());
         if (affected == 0) {
-            // 동시 회전 race 패배 — 정상 사용자의 동시 요청일 가능성이 있으므로 전체 무효화는 하지 않는다.
-            // 외부 트랜잭션 롤백으로 방금 INSERT 한 newRow 가 함께 취소되어 부작용 없음.
+            // 동시 회전 race 패배 — 정상 사용자의 동시 요청일 가능성이 있으므로 전체 무효화는 하지
+            // 않는다. 외부 트랜잭션 롤백으로 방금 INSERT 한 newRow 가 함께 취소되어 부작용 없음.
             log.warn("리프레시 회전 race 패배 - 단순 거부 memberId={} tokenId={}",
                     memberId, existing.getId());
             throw new AuthException(ErrorCode.AUTH_INVALID_TOKEN);
