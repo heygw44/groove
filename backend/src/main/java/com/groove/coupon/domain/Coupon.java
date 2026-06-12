@@ -18,12 +18,12 @@ import java.util.Objects;
 /**
  * 쿠폰 정책 (ERD §4.15, docs/plans/coupon-system.md §3).
  *
- * <p>할인 규칙(정액/정률·상한·최소주문금액)과 발급 제약(한정수량·회원당 한도·유효기간)을 담는 정책
- * 엔티티다. 정책 1건이 N명의 {@link MemberCoupon} 으로 발급된다. 핫 카운터 {@code issuedCount} 의
- * 동시성 제어(선착순 발급)는 후속 이슈(#90)에서 다룬다 — 본 이슈는 모델·할인계산·상태머신만 다룬다.
+ * 할인 규칙(정액/정률·상한·최소주문금액)과 발급 제약(한정수량·회원당 한도·유효기간)을 담는 정책 엔티티다.
+ * 정책 1건이 N명의 MemberCoupon 으로 발급된다. 핫 카운터 issuedCount 의 동시성 제어(선착순 발급)는 후속 이슈(#90)에서
+ * 다루며, 본 이슈는 모델·할인계산·상태머신만 다룬다.
  *
- * <p>도메인 가드는 DB CHECK 제약(V14)의 이중 방어선이다 — {@link OrderItem} 과 동일하게 생성 시점에
- * 한 번 검증한다. 상태 변경은 {@link #changeStatus(CouponStatus)} 단일 진입점만 허용한다.
+ * 도메인 가드는 DB CHECK 제약(V14)의 이중 방어선이다 — OrderItem 과 동일하게 생성 시점에 한 번 검증한다.
+ * 상태 변경은 changeStatus(CouponStatus) 단일 진입점만 허용한다.
  */
 @Entity
 @Table(name = "coupon")
@@ -91,8 +91,9 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
-     * 쿠폰 정책 빌더 진입점. 필수값(이름·할인방식·할인값·유효기간)을 받고, 선택값(상한·최소주문금액·
-     * 한정수량·회원당한도)은 {@link Builder} 의 fluent 메서드로 설정한다. 검증은 {@link Builder#build()}.
+     * 쿠폰 정책 빌더 진입점. 필수값(이름·할인방식·할인값·유효기간)을 받고,
+     * 선택값(상한·최소주문금액·한정수량·회원당한도)은
+     * Builder 의 fluent 메서드로 설정한다. 검증은 Builder.build().
      */
     public static Builder builder(String name, CouponDiscountType discountType, long discountValue,
                                   Instant validFrom, Instant validUntil) {
@@ -100,14 +101,9 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
-     * 주문 소계(subtotal) 에 대한 할인액을 계산한다.
-     *
-     * <ul>
-     *   <li>{@code subtotal < minOrderAmount} → {@link CouponMinOrderNotMetException} (422).</li>
-     *   <li>{@link CouponDiscountType} 에 원시 할인액 산정을 위임한다.</li>
-     *   <li>결과는 {@code min(raw, subtotal)} — {@code discount ≤ subtotal} 불변식으로
-     *       {@code payable = subtotal − discount ≥ 0} 을 보장한다.</li>
-     * </ul>
+     * 주문 소계(subtotal) 에 대한 할인액을 계산한다. subtotal < minOrderAmount 면 CouponMinOrderNotMetException(422).
+     * 원시 할인액 산정은 CouponDiscountType 에 위임하고, 결과는 min(raw, subtotal) — discount ≤ subtotal 불변식으로
+     * payable = subtotal − discount ≥ 0 을 보장한다.
      */
     public long calculateDiscount(long subtotal) {
         if (subtotal < minOrderAmount) {
@@ -118,9 +114,9 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
-     * 지정 시각 기준 발급 가능 여부 — 정책 상태가 {@link CouponStatus#ACTIVE} 이고 현재가 발급 기간
-     * ({@code validFrom ≤ now ≤ validUntil}) 안인지를 판단한다. 소진({@code issuedCount}) 여부는
-     * 포함하지 않는다 — 소진은 발급 경로의 원자적 조건부 UPDATE 가 판정한다 (#90, 설계 §4).
+     * 지정 시각 기준 발급 가능 여부 — 정책 상태가 CouponStatus.ACTIVE 이고 현재가 발급 기간
+     * (validFrom ≤ now ≤ validUntil) 안인지를 판단한다. 소진(issuedCount) 여부는 포함하지 않으며, 소진은 발급
+     * 경로의 원자적 조건부 UPDATE 가 판정한다 (#90, 설계 §4).
      */
     public boolean isIssuable(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
@@ -130,22 +126,21 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
-     * 남은 발급 수량 — {@code max(0, totalQuantity − issuedCount)}. 무제한({@code totalQuantity == null})
-     * 이면 {@code null}. {@code CouponResponse.remainingQuantity} 산정에 쓰인다 (API.md §3.9). CHECK 제약상
-     * 음수가 될 수 없지만, API 노출값이 음수로 새지 않도록 0 하한으로 방어한다.
+     * 남은 발급 수량 — max(0, totalQuantity − issuedCount). 무제한(totalQuantity == null)이면 null.
+     * CouponResponse.remainingQuantity 산정에 쓰인다 (API.md §3.9). CHECK 제약상 음수가 될 수 없지만, API 노출값이
+     * 음수로 새지 않도록 0 하한으로 방어한다.
      */
     public Integer remainingQuantity() {
         return totalQuantity == null ? null : Math.max(0, totalQuantity - issuedCount);
     }
 
     /**
-     * 발급 슬롯 1개를 차감 시도 — 한정수량 여유가 있으면(또는 무제한) {@code issuedCount} 를 증가시키고
-     * {@code true}, 소진이면 {@code false} 를 반환한다 (read-check-increment).
+     * 발급 슬롯 1개를 차감 시도 — 한정수량 여유가 있으면(또는 무제한) issuedCount 를 증가시키고 true, 소진이면 false 를
+     * 반환한다 (read-check-increment).
      *
-     * <p><b>동시성 주의</b>: 본 메서드는 그 자체로 원자적이지 않다 — 정확성은 호출자의 잠금 전략에
-     * 달려 있다 (설계 §4). 비관적 락 경로({@code findByIdForUpdate})는 행 락으로 안전하고, 락 없는
-     * 베이스라인 경로는 lost-update 로 <b>초과발급을 재현</b>한다. 프로덕션 발급 경로는 본 메서드 대신
-     * {@link CouponRepository#incrementIssuedCount(Long)} 의 원자적 조건부 UPDATE 를 쓴다.
+     * 동시성 주의: 본 메서드는 그 자체로 원자적이지 않다 — 정확성은 호출자의 잠금 전략에 달려 있다 (설계 §4). 비관적 락
+     * 경로(findByIdForUpdate)는 행 락으로 안전하고, 락 없는 베이스라인 경로는 lost-update 로 초과발급을 재현한다.
+     * 프로덕션 발급 경로는 본 메서드 대신 CouponRepository.incrementIssuedCount 의 원자적 조건부 UPDATE 를 쓴다.
      */
     public boolean tryIssueOne() {
         if (totalQuantity != null && issuedCount >= totalQuantity) {
@@ -155,10 +150,7 @@ public class Coupon extends BaseTimeEntity {
         return true;
     }
 
-    /**
-     * 상태 전이 단일 진입점. {@link CouponStatus#canTransitionTo} 가 false 면
-     * {@link IllegalCouponStateTransitionException}.
-     */
+    /** 상태 전이 단일 진입점. CouponStatus.canTransitionTo 가 false 면 IllegalCouponStateTransitionException. */
     public void changeStatus(CouponStatus next) {
         Objects.requireNonNull(next, "next status must not be null");
         if (!status.canTransitionTo(next)) {
@@ -216,11 +208,11 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
-     * 쿠폰 정책 빌더. 초기 상태 ACTIVE, {@code issuedCount=0}.
+     * 쿠폰 정책 빌더. 초기 상태 ACTIVE, issuedCount=0.
      *
-     * <p>선택값 기본: 상한 없음(무제한), 최소주문금액 0, 한정수량 {@code null}(무제한 발급),
-     * 회원당 1장. 회원당 한도는 v1 에서 1 로 고정되며 {@code UNIQUE(coupon_id, member_id)} 로 DB 가
-     * 강제한다 (설계 §7). {@link #build()} 가 DB CHECK 제약(V14)의 이중 방어로 값을 검증한다.
+     * 선택값 기본: 상한 없음(무제한), 최소주문금액 0, 한정수량 null(무제한 발급), 회원당 1장. 회원당 한도는 v1 에서
+     * 1 로 고정되며 UNIQUE(coupon_id, member_id) 로 DB 가 강제한다 (설계 §7). build() 가 DB CHECK 제약(V14)의 이중
+     * 방어로 값을 검증한다.
      */
     public static final class Builder {
 

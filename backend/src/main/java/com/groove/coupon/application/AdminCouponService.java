@@ -23,34 +23,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.Instant;
 
 /**
- * 관리자 쿠폰 CRUD · 직접지급 트랜잭션 경계 (API.md §3.10, 이슈 #92).
+ * 관리자 쿠폰 CRUD · 직접지급 트랜잭션 경계 (API.md §3.10, #92).
  *
- * <p>도메인 단일 Aggregate({@link Coupon}/{@link MemberCoupon}) 만 조작하므로 {@code coupon}
- * 모듈 안에 둔다 — 주문·결제를 함께 조율하는 {@code AdminOrderService} 가 {@code admin} 모듈에
- * 있는 것과 대조된다.
+ * 단일 Aggregate(Coupon/MemberCoupon)만 조작하므로 coupon 모듈에 둔다 — 주문·결제를 함께 조율하는
+ * AdminOrderService 가 admin 모듈에 있는 것과 대조된다.
  *
- * <h2>입력 검증</h2>
- * <p>형식·필수값은 DTO Bean Validation 으로 1차 차단되고, 정률 1~100·{@code validUntil>validFrom}
- * ·정률 상한 필수 같은 의미 검증은 {@link Coupon.Builder#build()} 가 처리한다 — 도메인이 던진
- * {@link IllegalArgumentException} 을 {@link ValidationException} 으로 매핑해 400 으로 응답한다.
- * try 범위는 {@code build()} 한 줄로 좁혀 의도가 명확하다.
+ * 입력 검증: 형식·필수값은 DTO Bean Validation 으로 1차 차단되고, 정률 1~100·validUntil>validFrom·정률 상한
+ * 필수 같은 의미 검증은 Coupon.Builder.build() 가 처리한다 — 도메인이 던진 IllegalArgumentException 을
+ * ValidationException 으로 매핑해 400 으로 응답한다.
  *
- * <h2>상태 변경</h2>
- * <p>{@link #changeStatus} 는 행 락({@code findByIdForUpdate}) 으로 동시 변경 race 를 직렬화하고,
- * 사전 검증({@link CouponStatus#canTransitionTo}) 으로 불법 전이를 409
- * {@link IllegalCouponStateTransitionException} 로 응답한다. 멱등 PATCH 관용에 따라 동일 상태로의
- * self-transition({@code from == target}) 은 거부하지 않고 현재 상태를 그대로 반환한다.
+ * 상태 변경: changeStatus 는 행 락(findByIdForUpdate)으로 동시 변경 race 를 직렬화하고, canTransitionTo 위반은
+ * 409(IllegalCouponStateTransitionException). 멱등 PATCH 관용에 따라 self-transition(from == target)은 거부하지
+ * 않고 현재 상태를 그대로 반환한다.
  *
- * <h2>직접지급</h2>
- * <p>{@link #grant} 는 선착순 한정수량({@code total_quantity})과 독립적으로 {@code member_coupon}
- * 1행을 INSERT 한다 — {@link CouponRepository#incrementIssuedCount} 를 호출하지 않으므로 정책의
- * {@code issuedCount} 는 변하지 않는다. 정책이 {@link Coupon#isIssuable(Instant)} 인지 가드해
- * SUSPENDED/ENDED/만료된 쿠폰을 즉시-만료 회원 쿠폰으로 발급하는 운영 사고를 차단한다. 활성
- * 회원만 허용하고, 이미 보유한 회원은 409 — 동시 발급 race 의 UNIQUE 충돌 시에도 같은 409 로
- * 응답한다.
+ * 직접지급: grant 는 선착순 한정수량(total_quantity)과 독립적으로 member_coupon 1행을 INSERT 한다 —
+ * incrementIssuedCount 를 호출하지 않으므로 issuedCount 는 변하지 않는다. 정책이 isIssuable 인지 가드해
+ * SUSPENDED/ENDED/만료 쿠폰을 즉시-만료 회원 쿠폰으로 발급하는 운영 사고를 차단한다. 활성 회원만 허용하고, 이미
+ * 보유한 회원은 409 — 동시 발급 race 의 UNIQUE 충돌 시에도 같은 409 로 응답한다.
  */
 @Service
 public class AdminCouponService {
@@ -73,7 +64,7 @@ public class AdminCouponService {
     }
 
     /**
-     * 쿠폰 정책 생성. 도메인 빌더 검증 실패는 400 {@code VALIDATION_FAILED} 로 매핑한다.
+     * 쿠폰 정책 생성. 도메인 빌더 검증 실패는 400 VALIDATION_FAILED 로 매핑한다.
      */
     @Transactional
     public Coupon create(AdminCouponCreateRequest request) {
@@ -96,7 +87,7 @@ public class AdminCouponService {
     }
 
     /**
-     * 쿠폰 정책 목록 — {@code status} 가 주어지면 필터, 없으면 전체.
+     * 쿠폰 정책 목록 — status 가 주어지면 필터, 없으면 전체.
      */
     @Transactional(readOnly = true)
     public Page<Coupon> list(CouponStatus status, Pageable pageable) {
@@ -107,11 +98,7 @@ public class AdminCouponService {
 
     /**
      * 쿠폰 정책 상태 변경. 행 락으로 동시 변경 race 를 직렬화한다.
-     *
-     * <ul>
-     *   <li>self-transition ({@code from == target}) — 멱등 처리, 현재 상태 그대로 반환 (200).</li>
-     *   <li>{@code canTransitionTo} 위반 — 409 {@link IllegalCouponStateTransitionException}.</li>
-     * </ul>
+     * self-transition(from == target)은 멱등 처리해 현재 상태 그대로 반환(200), canTransitionTo 위반은 409(IllegalCouponStateTransitionException).
      */
     @Transactional
     public Coupon changeStatus(Long couponId, CouponStatus target) {
@@ -130,7 +117,7 @@ public class AdminCouponService {
     }
 
     /**
-     * 특정 회원에게 쿠폰 직접지급. 선착순 한정수량과 독립 — {@code issuedCount} 비증가.
+     * 특정 회원에게 쿠폰 직접지급. 선착순 한정수량과 독립 — issuedCount 비증가.
      *
      * @throws CouponNotFoundException      쿠폰 미존재 (404)
      * @throws CouponNotIssuableException   쿠폰이 ACTIVE 가 아니거나 발급 기간 밖 (422)

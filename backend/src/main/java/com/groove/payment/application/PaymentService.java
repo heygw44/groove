@@ -26,28 +26,21 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 결제 요청 접수 트랜잭션 경계 (#W7-3, API.md §3.6).
  *
- * <h2>멱등 실행 규약</h2>
- * <p>{@link #requestPayment} 는 {@link com.groove.common.idempotency.IdempotencyService#execute} 의
- * {@code action} 으로 호출되는 것을 전제로 한다 — 따라서 자기 트랜잭션({@code @Transactional})을 관리하고
- * 반환 전에 커밋한다. 호출자(컨트롤러)는 비트랜잭션이어야 한다 (그래야 "action 커밋 → 멱등성 마커
- * COMPLETED 커밋" 순서가 보장된다 — {@code IdempotencyService} 의 호출 규약 참조).
+ * requestPayment 는 IdempotencyService.execute 의 action 으로 호출되는 것을 전제로 자기 트랜잭션(@Transactional)을
+ * 관리하고 반환 전에 커밋한다. 호출자(컨트롤러)는 비트랜잭션이어야 "action 커밋 → 멱등성 마커 COMPLETED 커밋" 순서가
+ * 보장된다(IdempotencyService 의 호출 규약).
  *
- * <h2>처리 순서</h2>
- * <ol>
- *   <li>주문 로딩 + 회원 주문이면 호출자 소유 검증 (불일치/익명 → {@link OrderNotFoundException} 404).</li>
- *   <li>주문에 이미 접수된 결제가 있으면 그대로 반환 (주문 레벨 멱등 — {@code uk_payment_order} 충돌 사전 회피).</li>
- *   <li>주문 상태가 PENDING 아니면 409 ({@link IllegalStateTransitionException}, API.md — {@code ORDER_INVALID_STATE_TRANSITION}).</li>
- *   <li>결제 금액이 0 이하면 422 ({@code DomainException}, {@code DOMAIN_RULE_VIOLATION}).</li>
- *   <li>PG {@code request()} 호출 — 실패 시 {@link PaymentGatewayException} (502).</li>
- *   <li>{@code Payment(PENDING)} 저장 후 응답 DTO 반환.</li>
- * </ol>
+ * 처리 순서: 주문 로딩 + 회원 주문이면 호출자 소유 검증(불일치/익명 → OrderNotFoundException 404) → 이미 접수된 결제가
+ * 있으면 그대로 반환(주문 레벨 멱등, uk_payment_order 충돌 사전 회피) → 상태가 PENDING 아니면 409
+ * (IllegalStateTransitionException, ORDER_INVALID_STATE_TRANSITION) → 금액 0 이하면 422
+ * (DomainException, DOMAIN_RULE_VIOLATION) → PG request() 호출(실패 시 PaymentGatewayException 502) →
+ * Payment(PENDING) 저장 후 응답.
  *
- * <p>결제 확정(PAID/FAILED 전이, {@code paidAt} 기록, 주문 상태 전이)은 #W7-4 웹훅/폴링 범위다 —
- * 본 서비스는 주문 상태를 변경하지 않는다.
+ * 결제 확정(PAID/FAILED 전이, paidAt 기록, 주문 상태 전이)은 #W7-4 웹훅/폴링 범위이며 본 서비스는 주문 상태를 바꾸지
+ * 않는다.
  *
- * <h2>알려진 한계</h2>
- * <p>PG {@code request()} 호출이 {@code @Transactional} 안에서 일어나 (Mock 처리 지연 동안) DB 커넥션을
- * 점유한다 — v1 Mock 지연은 짧아 허용한다. 실 PG 도입 시 PG 호출과 영속화를 분리하는 것을 재검토한다.
+ * 알려진 한계: PG request() 호출이 @Transactional 안에서 일어나 (Mock 처리 지연 동안) DB 커넥션을 점유한다 —
+ * v1 Mock 지연은 짧아 허용. 실 PG 도입 시 PG 호출과 영속화 분리를 재검토.
  */
 @Service
 public class PaymentService {
@@ -69,9 +62,7 @@ public class PaymentService {
         this.memberRepository = memberRepository;
     }
 
-    /**
-     * 결제 요청 접수. {@code callerMemberId} 는 인증 회원의 id (게스트/익명이면 {@code null}).
-     */
+    /** 결제 요청 접수. callerMemberId 는 인증 회원의 id (게스트/익명이면 null). */
     @Transactional
     public PaymentApiResponse requestPayment(Long callerMemberId, PaymentCreateRequest request) {
         Order order = orderRepository.findByOrderNumber(request.orderNumber())
@@ -117,8 +108,7 @@ public class PaymentService {
 
     /**
      * 회원 본인 주문의 결제 단건 조회 (API.md §3.6).
-     *
-     * <p>타 회원/게스트 주문의 결제는 존재 노출 회피를 위해 {@link PaymentNotFoundException}(404) 으로 통일한다.
+     * 타 회원/게스트 주문의 결제는 존재 노출 회피를 위해 PaymentNotFoundException(404) 으로 통일한다.
      */
     @Transactional(readOnly = true)
     public PaymentApiResponse findForMember(Long memberId, Long paymentId) {

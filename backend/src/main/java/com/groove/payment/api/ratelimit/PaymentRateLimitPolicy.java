@@ -2,7 +2,6 @@ package com.groove.payment.api.ratelimit;
 
 import com.groove.auth.security.JwtProvider;
 import com.groove.common.exception.AuthException;
-import com.groove.common.ratelimit.RateLimitFilter;
 import com.groove.common.ratelimit.RateLimitKeyResolver;
 import com.groove.common.ratelimit.RateLimitPolicy;
 import com.groove.common.ratelimit.RequestPaths;
@@ -15,15 +14,14 @@ import org.springframework.stereotype.Component;
 import java.util.function.Supplier;
 
 /**
- * {@code POST /api/v1/payments} 에 대한 <b>회원 단위</b> Rate Limit 정책 (#208, API.md §1.6 — 회원당 분당 5회).
+ * POST /api/v1/payments 에 대한 회원 단위 Rate Limit 정책 (#208, API.md §1.6 — 회원당 분당 5회).
  *
- * <p>결제 접수는 회원/게스트 공통(permitAll)이라 키잉은 회원이면 memberId, 게스트면 IP 다. 단,
- * {@link RateLimitFilter} 는 Spring Security 필터보다 먼저 실행되어 {@code SecurityContext} 가 아직
- * 비어 있으므로 — principal 대신 Authorization 헤더의 Bearer 토큰을 {@link JwtProvider} 로 직접 디코드해
- * memberId 를 키로 삼는다. 토큰이 없거나(게스트) 위조면 IP 로 폴백해 키가 항상 결정된다.
+ * 결제 접수는 회원/게스트 공통(permitAll)이라 키잉은 회원이면 memberId, 게스트면 IP 다. RateLimitFilter 는
+ * Spring Security 필터보다 먼저 실행돼 SecurityContext 가 아직 비어 있으므로, principal 대신 Authorization 헤더의
+ * Bearer 토큰을 JwtProvider 로 직접 디코드해 memberId 를 키로 삼는다. 토큰이 없거나(게스트) 위조면 IP 로 폴백해
+ * 키가 항상 결정된다.
  *
- * <p>한도/리필 주기는 {@link PaymentRateLimitProperties} 에서 주입받는다. 초과 시 {@code RateLimitFilter}
- * 가 429 + {@code Retry-After} 를 작성한다.
+ * 한도/리필 주기는 PaymentRateLimitProperties 에서 주입받고, 초과 시 RateLimitFilter 가 429 + Retry-After 를 작성한다.
  */
 @Component
 public class PaymentRateLimitPolicy implements RateLimitPolicy {

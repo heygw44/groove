@@ -1,6 +1,5 @@
 package com.groove.coupon.application;
 
-import com.groove.coupon.domain.Coupon;
 import com.groove.coupon.domain.MemberCoupon;
 import com.groove.coupon.domain.MemberCouponRepository;
 import com.groove.coupon.domain.MemberCouponStatus;
@@ -22,24 +21,15 @@ import java.time.Instant;
 /**
  * 회원 쿠폰을 주문에 적용/복원하는 조율 서비스 (#91, docs/plans/coupon-system.md §5).
  *
- * <p>두 호출자를 가진다:
- * <ul>
- *   <li>{@code OrderService.place} — 주문 생성 시 적용 ({@link #applyToOrder}).</li>
- *   <li>{@code OrderService.cancel} + {@code AdminOrderService.refund} — 취소·환불 시 복원
- *       ({@link #restoreForOrder}). 양 경로 모두 호출되어야 한다 (이슈 #91 DoD HIGH 리스크).</li>
- * </ul>
+ * 호출자는 둘 — OrderService.place 가 적용(applyToOrder), OrderService.cancel + AdminOrderService.refund 가
+ * 복원(restoreForOrder)한다. 취소·환불 양 경로 모두 복원을 호출해야 한다(#91 DoD HIGH 리스크).
  *
- * <h2>트랜잭션 경계</h2>
- * <p>두 진입점 모두 {@code Propagation.MANDATORY} — 호출자({@code OrderService.place/cancel},
- * {@code AdminOrderService.refund}) 의 {@code @Transactional} 안에서 실행된다. 적용은 주문 저장과
- * 같은 트랜잭션이어야 {@code MemberCoupon.use(orderId)} 와 {@code Order.discountAmount} 가 함께
- * 커밋된다 — 한쪽만 커밋되면 정합성이 깨진다.
+ * 트랜잭션 경계: 두 진입점 모두 Propagation.MANDATORY — 호출자의 @Transactional 안에서 실행된다. 적용은 주문
+ * 저장과 같은 트랜잭션이어야 MemberCoupon.use(orderId) 와 Order.discountAmount 가 함께 커밋된다.
  *
- * <h2>동시성</h2>
- * <p>{@link #applyToOrder} 는 {@code findByIdForUpdate} 로 회원 쿠폰 행을 잠근다 — 같은 쿠폰을
- * 동시에 두 주문에 적용하려는 race 에서 두 번째는 첫 번째 커밋 후 {@code status=USED} 를 본다.
- * {@link #restoreForOrder} 는 단일 row 변경이라 추가 락이 필요 없다 — 주문 상태 머신이 cancel 과
- * refund 의 동시 진입을 막는다 (cancel = PENDING 한정, refund = PAID 한정).
+ * 동시성: applyToOrder 는 findByIdForUpdate 로 회원 쿠폰 행을 잠가 같은 쿠폰을 두 주문에 동시 적용하는 race 를
+ * 막는다(두 번째는 status=USED 를 본다). restoreForOrder 는 단일 row 변경이라 추가 락이 불필요 — 주문 상태
+ * 머신이 cancel(PENDING 한정)과 refund(PAID 한정)의 동시 진입을 막는다.
  */
 @Service
 public class CouponApplicationService {
@@ -55,22 +45,14 @@ public class CouponApplicationService {
     }
 
     /**
-     * 회원 쿠폰을 주문에 적용한다 — 검증 → 할인 계산 → {@code Order.applyDiscount} → {@code use(orderId)}.
+     * 회원 쿠폰을 주문에 적용한다 — 검증 → 할인 계산 → Order.applyDiscount → use(orderId).
      *
-     * <p>호출 시점: {@code orderRepository.save(order)} 직후 (orderId 가 부여된 뒤). 같은 트랜잭션이므로
-     * {@code MemberCoupon.use} 의 dirty 변경은 커밋 시 함께 영속화된다. 검증 실패는 예외로 트랜잭션 전체를
-     * 롤백시켜 재고 차감·주문 저장도 되돌아가게 한다.
+     * 호출 시점: orderRepository.save(order) 직후(orderId 부여 뒤). 같은 트랜잭션이라 MemberCoupon.use 의 dirty
+     * 변경은 함께 커밋되고, 검증 실패는 트랜잭션 전체를 롤백해 재고 차감·주문 저장도 되돌린다.
      *
-     * <p>검증 순서 (저비용 → 고비용, fail-fast):
-     * <ol>
-     *   <li>존재 → {@link CouponNotFoundException} (404)</li>
-     *   <li>소유자 → {@link CouponNotOwnedException} (403, 메시지에 memberId 노출 안 함)</li>
-     *   <li>상태 ISSUED 가 아님 → USED/EXPIRED/CANCELLED 별 매핑</li>
-     *   <li>만료 시각 경과 → {@link CouponExpiredException} (422)</li>
-     *   <li>{@link Coupon#calculateDiscount} (min_order, 정액/정률, 상한, {@code discount ≤ subtotal})</li>
-     *   <li>{@code order.applyDiscount} (PENDING + 0 ≤ discount ≤ total 가드)</li>
-     *   <li>{@code memberCoupon.use(orderId)} (ISSUED → USED 전이)</li>
-     * </ol>
+     * 검증은 저비용→고비용 fail-fast: 존재(404) → 소유자(403, 메시지에 memberId 노출 안 함) → ISSUED 상태(USED/
+     * EXPIRED/CANCELLED 별 매핑) → 만료(422) → Coupon.calculateDiscount(min_order·정액/정률·상한·discount≤subtotal)
+     * → order.applyDiscount(PENDING + 0≤discount≤total 가드) → memberCoupon.use(orderId)(ISSUED→USED).
      *
      * @return 적용된 할인 금액 — 호출자 로깅/검증용
      */
@@ -111,17 +93,14 @@ public class CouponApplicationService {
     }
 
     /**
-     * 주문에 적용된 쿠폰을 복원한다 — USED → ISSUED (복원 시점에 이미 만료됐으면 USED → EXPIRED). 쿠폰
-     * 미적용 주문은 no-op.
+     * 주문에 적용된 쿠폰을 복원한다 — USED → ISSUED (복원 시점에 이미 만료됐으면 USED → EXPIRED). 쿠폰 미적용 주문은 no-op.
      *
-     * <p>호출 시점: {@code OrderService.cancel} 의 재고 복원 직후, {@code AdminOrderService.refund} 의
-     * 재고 복원 직후. {@code MemberCoupon.restore(now)} 가 {@code usedAt} 과 {@code orderId} 를 함께 비우고,
-     * 주입된 {@code clock} 기준으로 만료 여부를 판정해 만료 쿠폰이 ISSUED 로 부활하지 않게 한다.
+     * 호출 시점: OrderService.cancel / AdminOrderService.refund 의 재고 복원 직후. MemberCoupon.restore(now) 가
+     * usedAt 과 orderId 를 비우고 clock 기준 만료 여부를 판정해 만료 쿠폰이 ISSUED 로 부활하지 않게 한다.
      *
-     * <p>{@code findByOrderId} 는 {@code MemberCoupon.use(orderId)} 가 USED 로 전이시킨 행만 반환되므로
-     * 정상 흐름에서는 status==USED 가 보장된다. 그럼에도 status≠USED 가 관측되면 외부 수정·만료 배치
-     * race 등 데이터 이상 신호이므로 WARN 으로 기록하고 복원을 스킵한다 — {@code MemberCoupon.restore()}
-     * 가 던질 {@link IllegalStateException} 을 막으면서, 무성공으로 사라지지 않게 한다.
+     * findByOrderId 는 use(orderId) 가 USED 로 전이시킨 행만 반환하므로 정상 흐름에선 status==USED 가 보장된다.
+     * 그럼에도 status≠USED 가 관측되면 외부 수정·만료 배치 race 등 데이터 이상 신호이므로 WARN 기록 후 복원을
+     * 스킵한다 — restore() 가 던질 IllegalStateException 을 막으면서 무성공으로 사라지지 않게 한다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void restoreForOrder(Long orderId) {
