@@ -34,36 +34,17 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * 주문 생성 트랜잭션 경계 (issue #43, API.md §3.5).
+ * 주문 생성 트랜잭션 경계 (#43, API.md §3.5).
  *
- * <p>처리 순서:
- * <ol>
- *   <li>회원/게스트 정합성 가드 (XOR). 게스트 + {@code memberCouponId} 동시 지정 시 즉시 거부 (#91).</li>
- *   <li>각 라인 album 로딩 + 구매 가능(SELLING) 검증.</li>
- *   <li>재고 검증 + 차감 — <b>비관적 락</b>({@code SELECT ... FOR UPDATE}, {@link AlbumRepository#findByIdForUpdate})으로
- *       SELECT 시점에 album 행 락을 선점해 read-modify-write 구간을 직렬화한다. 이로써 <b>동시 주문(place↔place)</b>
- *       간 lost-update / oversell 을 차단한다 (#205; W6-6 에서 의도적으로 노출했던 결함의 핵심 해소).
- *       다중 album 주문은 albumId 오름차순으로 락을 획득해 deadlock 을 피한다.
- *       락 미적용 baseline 재현은 테스트 전용 {@link #placeWithoutLock} 로 보존한다.
- *       <br><b>알려진 한계</b>: 재고를 되돌리는 경로({@link #cancel} 취소·{@code AdminOrderService.refund} 환불·
- *       {@code PaymentCallbackService} 결제실패 보상·{@code AlbumService.adjustStock} admin PATCH)는 아직 락 없는
- *       last-write-wins 라, place 와 이 경로들 간에는 album.stock lost-update 창이 남는다(음수 가드로 안전성 위반은
- *       없음). 카탈로그 전반의 대칭 잠금은 후속 과제(#W11-4 등).</li>
- *   <li>orderNumber 발급 (사전 존재 체크 최대 3회).</li>
- *   <li>Order + OrderItem 생성 후 영속화.</li>
- *   <li>쿠폰 적용 (#91) — {@code memberCouponId} 가 있으면 저장된 orderId 로
- *       {@code CouponApplicationService.applyToOrder} 호출. 검증 실패는 동일 트랜잭션 롤백으로
- *       재고/주문도 되돌린다.</li>
- * </ol>
+ * 재고 차감은 비관적 락(SELECT ... FOR UPDATE)으로 직렬화해 동시 주문 간 lost-update/oversell 을 막는다
+ * (#205, W6-6 에서 의도적으로 노출했던 결함 해소). 다중 album 은 albumId 오름차순으로 락을 잡아 deadlock 을
+ * 피한다. 락 없는 baseline 재현은 placeWithoutLock(테스트 전용)으로 보존한다.
  *
- * <p>RuntimeException 이 발생하면 Spring 의 기본 정책으로 트랜잭션 전체가 롤백되어 재고 차감도 함께 되돌려진다.
+ * 쿠폰 적용 실패는 같은 트랜잭션 롤백으로 재고/주문까지 되돌린다(#91). cancel 은 재고 복원 직후 쿠폰을
+ * USED→ISSUED 로 되살려 취소·환불 양 경로의 복원 누락을 막는다(#91).
  *
- * <p>{@code cancel} 은 재고 복원 직후 {@code CouponApplicationService.restoreForOrder} 를 호출해
- * 적용된 쿠폰을 ISSUED 로 되돌린다 (#91 DoD HIGH 리스크: 취소·환불 양 경로 복원 누락 금지).
- *
- * <p>응답 DTO({@code OrderItemResponse}) 는 {@code album_title_snapshot} 컬럼과 {@code album.id}(프록시
- * 키만 사용) 만 노출하므로 LAZY 강제 초기화는 두지 않는다 — cart 와 달리 album.title / artist.name 을
- * 응답에 포함하지 않는다.
+ * 알려진 한계: 재고를 되돌리는 경로(취소·환불·결제실패 보상·admin 재고조정)는 아직 락 없는 last-write-wins 라,
+ * place 와 이 경로들 간에는 album.stock lost-update 창이 남는다(음수 가드로 안전성 위반은 없음). 상세 ARCHITECTURE.md §12 #1.
  */
 @Service
 public class OrderService {
@@ -92,8 +73,7 @@ public class OrderService {
 
     /**
      * 회원 본인 주문 단건 조회 (API.md §3.5).
-     *
-     * <p>타 회원/게스트 주문은 존재 노출 회피를 위해 {@link OrderNotFoundException}(404) 으로 통일한다.
+     * 타 회원/게스트 주문은 존재 노출 회피로 404 통일.
      */
     @Transactional(readOnly = true)
     public Order findForMember(Long memberId, String orderNumber) {
@@ -107,11 +87,10 @@ public class OrderService {
 
     /**
      * 게스트 주문 단건 조회 (API.md §3.5).
+     * email 매칭 실패·회원 주문에 게스트 접근은 모두 404 통일.
      *
-     * <p>email 매칭 실패·회원 주문에 게스트로 접근하는 경우는 모두 404 로 통일.
-     *
-     * <p>PII 익명화(#170 Part B)로 {@code guestEmail} 이 NULL 이 된 주문(배송완료 후 보존기간 경과)은
-     * 매칭할 평문이 없으므로 404 로 통일한다 — null 가드 없이 {@code equalsIgnoreCase} 를 호출하면 NPE(500).
+     * PII 익명화(#170 Part B)로 guestEmail 이 NULL 이 된 주문(배송완료 후 보존기간 경과)은 매칭할 평문이
+     * 없으므로 404 통일 — null 가드 없이 equalsIgnoreCase 호출 시 NPE(500).
      */
     @Transactional(readOnly = true)
     public Order findForGuest(String orderNumber, String email) {
@@ -127,12 +106,11 @@ public class OrderService {
     /**
      * 회원 주문 목록 조회 (API.md §3.5).
      *
-     * <p>{@code status} null 이면 전체, 지정 시 status 필터 적용. JPQL {@code IS NULL OR ...}
-     * 패턴 대신 derived method 2종 분기로 처리한다 — 옵티마이저가 단순 인덱스 스캔을 선택하기 쉽다.
+     * status null 이면 전체, 지정 시 필터. IS NULL OR ... JPQL 대신 derived method 2종 분기로 처리해
+     * 옵티마이저가 단순 인덱스 스캔을 택하기 쉽게 한다.
      *
-     * <p>페이지 쿼리는 컬렉션 fetch join 을 두지 않고 ({@link Order#getItems items} 의
-     * {@code @BatchSize} 활용) 트랜잭션 안에서 items 를 강제 초기화한다 — 컨트롤러의 응답 매핑
-     * (SUMMARY DTO) 시점에 발생하는 {@code LazyInitializationException} 회피.
+     * 페이지 쿼리는 컬렉션 fetch join 없이(items @BatchSize 활용) 트랜잭션 안에서 items 를 강제 초기화한다 —
+     * 컨트롤러 응답 매핑(SUMMARY DTO) 시점의 LazyInitializationException 회피.
      */
     @Transactional(readOnly = true)
     public Page<Order> listForMember(Long memberId, OrderStatus status, Pageable pageable) {
@@ -144,14 +122,13 @@ public class OrderService {
     }
 
     /**
-     * 회원 본인 주문 취소 (API.md §3.5, 이슈 #44).
+     * 회원 본인 주문 취소 (API.md §3.5, #44).
      *
-     * <p>본 이슈는 PENDING 한정 — PAID/PREPARING 에서의 취소는 환불 흐름이 필요하므로
-     * W7 결제 도메인에서 다룬다. {@link OrderStatus#canTransitionTo} 가 PAID→CANCELLED 를
-     * 허용하더라도 서비스 레벨에서 PENDING 만 통과시킨다 (이중 방어선이지만 정책 명확).
+     * PENDING 한정 — PAID/PREPARING 취소는 환불 흐름이 필요해 W7 결제 도메인에서 다룬다.
+     * canTransitionTo 가 PAID→CANCELLED 를 허용해도 서비스 레벨에서 PENDING 만 통과시킨다(이중 방어선).
      *
-     * <p>재고 복원은 ApplicationService 에서 조율한다 ({@link #place} 와 대칭) — Order 와 Album 은
-     * 서로 다른 Aggregate 이므로 도메인 메서드 안에서 다른 Aggregate 를 변경하지 않는다.
+     * 재고 복원은 ApplicationService 에서 조율한다(place 와 대칭) — Order 와 Album 은 다른 Aggregate 라
+     * 도메인 메서드 안에서 다른 Aggregate 를 변경하지 않는다.
      */
     @Transactional
     public Order cancel(Long memberId, String orderNumber, String reason) {
@@ -180,8 +157,8 @@ public class OrderService {
     }
 
     /**
-     * 주문 생성 — 재고 차감에 비관적 락({@code SELECT ... FOR UPDATE})을 적용해 lost-update / oversell 을
-     * 차단한다 (#205). 프로덕션 진입점.
+     * 주문 생성 — 재고 차감에 비관적 락(SELECT ... FOR UPDATE)을 적용해 lost-update/oversell 을 차단한다
+     * (#205). 프로덕션 진입점.
      */
     @Transactional
     public Order place(Long memberId, OrderCreateRequest request) {
@@ -189,11 +166,10 @@ public class OrderService {
     }
 
     /**
-     * 락 미적용 주문 생성 — <b>테스트/시연 전용</b> baseline 재현 경로. 락 없는 read-modify-write 로
-     * 동시 주문 시 lost-update(오버셀)를 노출한다 (쿠폰의 {@code CouponIssueService#issueWithoutLock} 대칭).
+     * 락 미적용 주문 생성 — 테스트/시연 전용 baseline 재현 경로. 락 없는 read-modify-write 로 동시 주문 시
+     * lost-update(오버셀)를 노출한다(쿠폰의 CouponIssueService.issueWithoutLock 대칭).
      *
-     * <p>프로덕션 호출 금지 — {@code OversellingBaselineTest} 의 baseline 측정에서만 사용하며, {@link #place}
-     * 와의 Before/After 비교 자료를 만든다.
+     * 프로덕션 호출 금지 — OversellingBaselineTest 의 baseline 측정에서만 사용하며 place 와의 Before/After 비교 자료를 만든다.
      */
     @Transactional
     public Order placeWithoutLock(Long memberId, OrderCreateRequest request) {
@@ -201,8 +177,8 @@ public class OrderService {
     }
 
     /**
-     * {@link #place}(락) 와 {@link #placeWithoutLock}(락 없음) 의 공유 본문. {@code useLock} 만 재고 조회 전략을
-     * 가른다 — true 면 {@link AlbumRepository#findByIdForUpdate}(행 락 선점), false 면 {@code findById}(락 없음).
+     * place(락)와 placeWithoutLock(락 없음)의 공유 본문. useLock 만 재고 조회 전략을 가른다 —
+     * true 면 AlbumRepository.findByIdForUpdate(행 락 선점), false 면 findById(락 없음).
      */
     private Order placeInternal(Long memberId, OrderCreateRequest request, boolean useLock) {
         validateOwnership(memberId, request.guest());
@@ -240,7 +216,7 @@ public class OrderService {
 
         Order persisted = orderRepository.save(order);
 
-        // 3) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다 ({@link MemberCoupon#use(Long)} 가 orderId 를 기록).
+        // 3) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다 (MemberCoupon.use(orderId) 가 orderId 를 기록).
         // 같은 트랜잭션이라 적용 실패는 재고 차감/주문 저장과 함께 롤백된다 (이슈 #91 DoD: 실패 시 정합성 유지).
         // memberId 는 윗 가드(게스트+쿠폰 거부) + validateOwnership XOR 결과로 여기서 memberCouponId 가 비지 않으면 항상 non-null.
         if (request.memberCouponId() != null) {
@@ -297,8 +273,8 @@ public class OrderService {
     }
 
     /**
-     * 구매 가능 album 로딩 + SELLING 검증. {@code useLock} 이면 {@code SELECT ... FOR UPDATE} 로 행 락을
-     * 선점해(#205) 이어지는 재고 차감의 lost-update 를 막는다. 락 미적용 baseline 경로는 일반 {@code findById}.
+     * 구매 가능 album 로딩 + SELLING 검증. useLock 이면 SELECT ... FOR UPDATE 로 행 락을 선점해(#205)
+     * 이어지는 재고 차감의 lost-update 를 막는다. 락 미적용 baseline 경로는 일반 findById.
      */
     private Album loadPurchasable(Long albumId, boolean useLock) {
         Album album = (useLock

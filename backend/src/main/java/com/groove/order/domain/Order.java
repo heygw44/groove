@@ -25,18 +25,17 @@ import java.util.Objects;
 /**
  * 주문 (ERD §4.9, glossary §3.4).
  *
- * <p>회원/게스트 주문을 동일 테이블에서 표현한다. {@code memberId} XOR {@code guestEmail} —
- * 정확히 한 쪽만 채워져야 하며 이 규칙은 도메인 정적 팩토리에서 검증한다 (DB 제약은 없음, ERD §4.9).
+ * 회원/게스트 주문을 동일 테이블에서 표현한다. memberId XOR guestEmail — 정확히 한 쪽만 채워져야 하며 이 규칙은
+ * 도메인 정적 팩토리에서 검증한다 (DB 제약은 없음, ERD §4.9).
  *
- * <p>상태 변경은 {@link #changeStatus(OrderStatus, String)} 단일 진입점만 허용한다.
- * 합법 전이는 {@link OrderStatus#canTransitionTo(OrderStatus)} 가 판정하며 위반 시
- * {@link IllegalStateTransitionException} (HTTP 409) 이다.
+ * 상태 변경은 changeStatus(OrderStatus, String) 단일 진입점만 허용한다. 합법 전이는
+ * OrderStatus.canTransitionTo 가 판정하며 위반 시 IllegalStateTransitionException (HTTP 409).
  *
- * <p>OrderItem 은 aggregate child — {@code cascade=ALL + orphanRemoval=true} 로
- * Order 를 통해서만 변경된다. {@code totalAmount} 는 {@link #addItem(OrderItem)} 호출 시 갱신된다.
+ * OrderItem 은 aggregate child — cascade=ALL + orphanRemoval=true 로 Order 를 통해서만 변경되고,
+ * totalAmount 는 addItem 호출 시 갱신된다.
  *
- * <p>본 이슈(#42) 는 모델 + 상태 머신만 다룬다. orderNumber 발급기, 재고 차감, API 진입점은
- * 후속 이슈(#W6-3) 에서 추가된다 — 따라서 정적 팩토리는 외부에서 채번된 orderNumber 를 받는다.
+ * 본 이슈(#42)는 모델 + 상태 머신만 다룬다. orderNumber 발급기·재고 차감·API 진입점은 후속 이슈(#W6-3)에서 추가되며,
+ * 그래서 정적 팩토리는 외부에서 채번된 orderNumber 를 받는다.
  */
 @Entity
 @Table(name = "orders")
@@ -80,24 +79,22 @@ public class Order extends BaseTimeEntity {
     private long totalAmount;
 
     /**
-     * 쿠폰 할인 금액 (원, 0 이상). {@code payable = totalAmount − discountAmount} 의 차감분.
+     * 쿠폰 할인 금액 (원, 0 이상). payable = totalAmount − discountAmount 의 차감분이며 쿠폰 미적용 주문에서는 0.
      *
-     * <p>쿠폰 미적용 주문에서는 {@code 0} 으로 유지된다. DB CHECK ({@code ck_orders_discount_within_total},
-     * V15) 가 {@code 0 ≤ discount_amount ≤ total_amount} 를 2차 방어하지만, 1차 방어는 도메인
-     * {@link #applyDiscount(long)} 가 한다 — 적용 시점 검증으로 CHECK 위반이 DB 까지 닿지 않게 한다.
+     * DB CHECK (ck_orders_discount_within_total, V15) 가 0 ≤ discount_amount ≤ total_amount 를 2차 방어하지만,
+     * 1차 방어는 도메인 applyDiscount 가 적용 시점 검증으로 CHECK 위반을 DB 까지 닿지 않게 막는다.
      *
-     * <p>설계상 PENDING 상태에서만 변경된다 (적용/취소복원 모두 PENDING 진입 시점). 그래서 가드 변경자
-     * {@link #applyDiscount(long)} 가 status 확인을 함께 수행한다 — totalAmount 가 확정되기 전(addItem 도중)에
-     * 적용되면 CHECK 위반이 가능하므로 호출자({@code OrderService.place})는 totalAmount 확정 후 호출한다.
+     * 설계상 PENDING 상태에서만 변경된다(적용/취소복원 모두 PENDING 진입 시점)라 가드 변경자 applyDiscount 가 status
+     * 확인을 함께 수행한다. totalAmount 확정 전(addItem 도중)에 적용되면 CHECK 위반이 가능하므로 호출자
+     * (OrderService.place)는 totalAmount 확정 후 호출한다.
      */
     @Column(name = "discount_amount", nullable = false)
     private long discountAmount;
 
     /**
-     * 발급된 운송장 번호 (이슈 #116). 결제 완료 후 {@code shipping} 모듈의
-     * {@link com.groove.shipping.application.ShippingCreationListener} 가 배송 생성 직후 기록한다 —
-     * 결제 전(배송 미생성)에는 {@code null}. {@link OrderResponse} 가 그대로 노출해 프론트가 별도 매핑 없이
-     * {@code GET /shippings/{trackingNumber}} 로 배송 추적하게 한다 (라이브 배송 상태는 그 엔드포인트가 담당).
+     * 발급된 운송장 번호 (이슈 #116). 결제 완료 후 shipping 모듈의 ShippingCreationListener 가 배송 생성 직후
+     * 기록하며, 결제 전(배송 미생성)에는 null. OrderResponse 가 그대로 노출해 프론트가 별도 매핑 없이
+     * GET /shippings/{trackingNumber} 로 배송 추적하게 한다 (라이브 배송 상태는 그 엔드포인트가 담당).
      */
     @Column(name = "tracking_number", length = 64)
     private String trackingNumber;
@@ -137,12 +134,10 @@ public class Order extends BaseTimeEntity {
     private Instant anonymizedAt;
 
     /**
-     * 페이징 쿼리({@code findByMemberId} 등)에서 컬렉션 fetch join 시 발생하는 인메모리 페이지네이션을
-     * 회피하기 위해 {@link BatchSize} 를 둔다 — Hibernate 가 Order 페이지를 SQL LIMIT 으로 가져온 뒤
-     * items 를 IN 쿼리로 일괄 로드한다 (N+1 도 함께 방지).
-     *
-     * <p>{@link OrderBy}("id ASC") 가 IN 쿼리에 명시적 정렬을 부여한다 — auto-increment PK 기준
-     * 삽입 순서를 보장해 {@code OrderSummaryResponse.representativeAlbumTitle} 이 결정적이도록 한다.
+     * 페이징 쿼리(findByMemberId 등)에서 컬렉션 fetch join 시 발생하는 인메모리 페이지네이션을 회피하려고
+     * BatchSize 를 둔다 — Hibernate 가 Order 페이지를 SQL LIMIT 으로 가져온 뒤 items 를 IN 쿼리로 일괄 로드한다
+     * (N+1 도 함께 방지). OrderBy("id ASC") 가 IN 쿼리에 명시적 정렬을 부여해 auto-increment PK 기준 삽입 순서를
+     * 보장하므로 OrderSummaryResponse.representativeAlbumTitle 이 결정적이다.
      */
     @BatchSize(size = 50)
     @OrderBy("id ASC")
@@ -169,9 +164,7 @@ public class Order extends BaseTimeEntity {
         this.discountAmount = 0L;
     }
 
-    /**
-     * 회원 주문 생성. 초기 상태 PENDING. {@code shipping} 은 배송지 스냅샷 — 결제 완료 시 그대로 배송 행으로 복사된다.
-     */
+    /** 회원 주문 생성. 초기 상태 PENDING. shipping 은 배송지 스냅샷 — 결제 완료 시 그대로 배송 행으로 복사된다. */
     public static Order placeForMember(String orderNumber, Long memberId, OrderShippingInfo shipping) {
         if (orderNumber == null || orderNumber.isBlank()) {
             throw new IllegalArgumentException("orderNumber must not be blank");
@@ -183,9 +176,7 @@ public class Order extends BaseTimeEntity {
         return new Order(orderNumber, memberId, null, null, shipping);
     }
 
-    /**
-     * 게스트 주문 생성. 초기 상태 PENDING. {@code guestPhone} 은 nullable, {@code shipping} 은 배송지 스냅샷.
-     */
+    /** 게스트 주문 생성. 초기 상태 PENDING. guestPhone 은 nullable, shipping 은 배송지 스냅샷. */
     public static Order placeForGuest(String orderNumber, String guestEmail, String guestPhone,
                                       OrderShippingInfo shipping) {
         if (orderNumber == null || orderNumber.isBlank()) {
@@ -199,14 +190,9 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
-     * 상태 전이 단일 진입점.
-     *
-     * <ul>
-     *   <li>{@link OrderStatus#canTransitionTo} 가 false → {@link IllegalStateTransitionException}.</li>
-     *   <li>PAID 진입 시 {@code paidAt = now}.</li>
-     *   <li>CANCELLED 진입 시 {@code cancelledAt = now}, {@code cancelledReason = reason}.</li>
-     *   <li>그 외 전이는 {@code reason} 을 무시한다.</li>
-     * </ul>
+     * 상태 전이 단일 진입점. OrderStatus.canTransitionTo 가 false 면 IllegalStateTransitionException.
+     * PAID 진입 시 paidAt = now, CANCELLED 진입 시 cancelledAt = now·cancelledReason = reason, 그 외 전이는 reason 을
+     * 무시한다.
      */
     public void changeStatus(OrderStatus next, String reason) {
         Objects.requireNonNull(next, "next status must not be null");
@@ -223,13 +209,13 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
-     * 합법 전이일 때만 상태를 전진시키고, 아니면 무해하게 무시한다(멱등·발산 방어).
+     * 합법 전이일 때만 상태를 전진시키고 아니면 무해하게 무시한다(멱등·발산 방어). changeStatus 가 불법 전이를
+     * IllegalStateTransitionException 으로 거부하는 엄격한 단일 진입점이라면, 이 메서드는 배송 자동 진행(이슈 #161)처럼
+     * "이미 도달했거나 경로를 벗어난" 주문을 만나도 예외 없이 넘어가야 하는 호출자를 위한 관대한 변형이다. reason 이
+     * 의미를
+     * 갖는 전이(CANCELLED)에는 쓰지 않는다.
      *
-     * <p>{@link #changeStatus} 는 불법 전이를 {@link IllegalStateTransitionException} 으로 거부하는 엄격한 단일
-     * 진입점이고, 이 메서드는 배송 자동 진행(이슈 #161)처럼 "이미 도달했거나 경로를 벗어난" 주문을 만나도 예외 없이
-     * 넘어가야 하는 호출자를 위한 관대한 변형이다. {@code reason} 이 의미를 갖는 전이(CANCELLED)에는 쓰지 않는다.
-     *
-     * @return 전이가 일어났으면 {@code true}, 불법이라 건너뛰었으면 {@code false}
+     * @return 전이가 일어났으면 true, 불법이라 건너뛰었으면 false
      */
     public boolean advanceTo(OrderStatus target) {
         if (!status.canTransitionTo(target)) {
@@ -240,19 +226,16 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
-     * 쿠폰 할인 적용 — PENDING 상태에서 {@code totalAmount} 확정 후 단 한 번 호출되는 것을 전제한다.
+     * 쿠폰 할인 적용 — PENDING 상태에서 totalAmount 확정 후 단 한 번 호출되는 것을 전제한다.
      *
-     * <p>가드:
-     * <ul>
-     *   <li>{@code status != PENDING} → {@link IllegalStateTransitionException}({@code status → PENDING}).
-     *       두 번째 인자에 PENDING 을 둬 "PENDING 으로 되돌아가야 할인이 가능하다" 는 의도를 메시지로 드러낸다.
-     *       결제 이후 할인 변경을 금지해 결제 금액과 주문 금액의 정합성을 지킨다.</li>
-     *   <li>{@code amount < 0} 또는 {@code amount > totalAmount} → {@link IllegalArgumentException} —
-     *       DB CHECK ({@code ck_orders_discount_within_total}, V15) 위반을 사전 차단한다.</li>
-     * </ul>
+     * 가드: status != PENDING 이면 IllegalStateTransitionException(status → PENDING) — 두 번째 인자에 PENDING 을 둬
+     * "PENDING 으로 되돌아가야 할인이 가능하다"는 의도를 메시지로 드러내며, 결제 이후 할인 변경을 금지해 결제 금액과
+     * 주문
+     * 금액의 정합성을 지킨다. amount < 0 또는 amount > totalAmount 면 IllegalArgumentException — DB CHECK
+     * (ck_orders_discount_within_total, V15) 위반을 사전 차단한다.
      *
-     * <p>중복 호출은 막지 않는다 — {@code OrderService.place} 는 라이프사이클상 1회만 호출하며,
-     * 이상 동작이 발생해도 마지막 값이 CHECK 안에 있으면 데이터 정합성은 깨지지 않는다.
+     * 중복 호출은 막지 않는다 — OrderService.place 는 라이프사이클상 1회만 호출하며, 이상 동작이 발생해도 마지막 값이
+     * CHECK 안에 있으면 데이터 정합성은 깨지지 않는다.
      */
     public void applyDiscount(long amount) {
         if (status != OrderStatus.PENDING) {
@@ -270,13 +253,10 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
-     * 배송 생성 시 발급된 운송장 번호를 주문에 기록한다 (이슈 #116).
-     *
-     * <p>{@code shipping} 모듈의 {@code ShippingCreationListener} 가 결제 완료 후 배송 생성 직후 호출한다 —
-     * 쓰기 방향이 shipping→order 라 모듈 의존(shipping 이 order 를 안다)을 깨지 않는다. 주문 상세 응답이
-     * 운송장 번호를 노출해 프론트가 별도 매핑 없이 배송 추적을 연결할 수 있게 한다.
-     *
-     * <p>멱등 — 이미 기록돼 있으면 무시한다(중복 이벤트·경합 시 첫 값 보존).
+     * 배송 생성 시 발급된 운송장 번호를 주문에 기록한다 (이슈 #116). shipping 모듈의 ShippingCreationListener 가
+     * 결제 완료 후 배송 생성 직후 호출한다 — 쓰기 방향이 shipping→order 라 모듈 의존(shipping 이 order 를 안다)을 깨지
+     * 않으며, 주문 상세 응답이 운송장 번호를 노출해 프론트가 별도 매핑 없이 배송 추적을 연결할 수 있게 한다.
+     * 멱등 — 이미 기록돼 있으면 무시한다(중복 이벤트·경합 시 첫 값 보존).
      */
     public void recordTrackingNumber(String trackingNumber) {
         if (this.trackingNumber != null) {
@@ -288,11 +268,10 @@ public class Order extends BaseTimeEntity {
     /**
      * 주문 PII 익명화 (#170 Part B, GDPR/개인정보 파기·익명화 의무).
      *
-     * <p>배송완료 후 보존기간이 지난 주문의 수령인/주소/게스트 PII 를 마스킹한다 — 회원/게스트 주문 모두
-     * 동일하게 적용된다(게스트 주문은 이 배치가 PII 를 비우는 유일한 경로). 주문번호·금액·상태·시각 등
-     * 비-PII 는 회계/이력 목적으로 보존한다. {@code address_detail} 은 원래 NULL 일 수 있어 NULL 로 비운다.
-     *
-     * <p><b>멱등</b>: 이미 익명화됐으면({@code anonymized_at != null}) no-op — 배치 재실행·중복 호출에 안전하다.
+     * 배송완료 후 보존기간이 지난 주문의 수령인/주소/게스트 PII 를 마스킹한다 — 회원/게스트 주문 모두 동일 적용
+     * (게스트 주문은 이 배치가 PII 를 비우는 유일한 경로). 주문번호·금액·상태·시각 등 비-PII 는 회계/이력 목적으로
+     * 보존하며, address_detail 은 원래 NULL 일 수 있어 NULL 로 비운다.
+     * 멱등: 이미 익명화됐으면(anonymized_at != null) no-op — 배치 재실행·중복 호출에 안전하다.
      */
     public void anonymizePii(Instant now) {
         if (this.anonymizedAt != null) {
@@ -313,9 +292,7 @@ public class Order extends BaseTimeEntity {
         return this.anonymizedAt != null;
     }
 
-    /**
-     * 항목 추가 + totalAmount 누적.
-     */
+    /** 항목 추가 + totalAmount 누적. */
     public void addItem(OrderItem item) {
         if (item == null) {
             throw new IllegalArgumentException("item must not be null");
@@ -363,9 +340,8 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
-     * 실제 청구 금액 — {@code totalAmount − discountAmount}. {@link com.groove.coupon.domain.Coupon}
-     * 의 {@code discount ≤ subtotal} 불변식과 {@link #applyDiscount} 의 가드, V15 의 CHECK 가
-     * 함께 {@code ≥ 0} 을 보장한다. {@code PaymentService.requestPayment} 가 PG 청구액으로 사용한다.
+     * 실제 청구 금액 — totalAmount − discountAmount. Coupon 의 discount ≤ subtotal 불변식과 applyDiscount 의 가드,
+     * V15 의 CHECK 가 함께 ≥ 0 을 보장한다. PaymentService.requestPayment 가 PG 청구액으로 사용한다.
      */
     public long getPayableAmount() {
         return totalAmount - discountAmount;
@@ -387,9 +363,7 @@ public class Order extends BaseTimeEntity {
         return cancelledReason;
     }
 
-    /**
-     * 주문 시점에 캡처된 배송지 스냅샷. 결제 완료 후 {@code shipping} 행을 만들 때 그대로 복사된다.
-     */
+    /** 주문 시점에 캡처된 배송지 스냅샷. 결제 완료 후 shipping 행을 만들 때 그대로 복사된다. */
     public OrderShippingInfo getShippingInfo() {
         return new OrderShippingInfo(recipientName, recipientPhone, address, addressDetail, zipCode,
                 safePackagingRequested);

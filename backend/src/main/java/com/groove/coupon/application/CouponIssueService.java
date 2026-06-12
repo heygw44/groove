@@ -22,23 +22,17 @@ import java.util.Locale;
 /**
  * 선착순 쿠폰 발급 — 동시성 헤드라인 (#90, decisions/coupon-concurrency.md).
  *
- * <p>초과발급 없는 선착순 발급을 <b>3단계</b>로 제공한다. 프로덕션은 {@link #issue} (원자적 조건부
- * UPDATE) 만 쓰며, 나머지 둘은 단계적 시연·동시성 테스트 전용이다:
- * <ol>
- *   <li>{@link #issueWithoutLock} — 베이스라인(락 없음). lost-update 로 <b>초과발급을 재현</b>한다.</li>
- *   <li>{@link #issueWithPessimisticLock} — {@code SELECT ... FOR UPDATE} 행 락. 정확하나 직렬화.</li>
- *   <li>{@link #issue} — <b>최종</b>. 원자적 조건부 UPDATE 로 한 문장에 소진 검사+증가. 행 락이 짧다.</li>
- * </ol>
+ * 초과발급 없는 선착순 발급을 3단계로 제공한다. 프로덕션은 issue(원자적 조건부 UPDATE)만 쓰고, 나머지 둘은
+ * 단계적 시연·동시성 테스트 전용이다 — issueWithoutLock(락 없음, lost-update 로 초과발급 재현),
+ * issueWithPessimisticLock(SELECT ... FOR UPDATE 행 락, 정확하나 직렬화), issue(원자적 조건부 UPDATE 로 한
+ * 문장에 소진 검사+증가, 행 락이 짧다).
  *
- * <h2>회원당 1장 보증</h2>
- * 사전 검사({@code existsByCoupon_IdAndMemberId})로 흔한 경우를 거르고, 사전 검사를 통과한 동시 중복
- * 요청은 {@code uk_member_coupon_coupon_member} UNIQUE 가 잡는다 — INSERT 충돌 시 트랜잭션이 롤백되며
- * <b>이미 증가시킨 카운터도 함께 되돌아가</b>(같은 트랜잭션) 슬롯 누수가 없다 (DoD "정확히 1장").
+ * 회원당 1장 보증: 사전 검사(existsByCoupon_IdAndMemberId)로 흔한 경우를 거르고, 사전 검사를 통과한 동시 중복은
+ * uk_member_coupon_coupon_member UNIQUE 가 잡는다 — INSERT 충돌 시 트랜잭션이 롤백되며 이미 증가시킨 카운터도
+ * 함께 되돌아가(같은 트랜잭션) 슬롯 누수가 없다(DoD "정확히 1장").
  *
- * <h2>트랜잭션 경계</h2>
- * {@link #issue} 는 {@code @Transactional} 자기완결 메서드다 — {@code @Idempotent} 컨트롤러가
- * 비트랜잭션으로 호출하고 이 메서드가 커밋한 뒤 멱등성 마커가 COMPLETED 로 갱신된다
- * ({@code IdempotencyService} 호출 규약, {@code PaymentController} 와 동일).
+ * 트랜잭션 경계: issue 는 @Transactional 자기완결 메서드다 — @Idempotent 컨트롤러가 비트랜잭션으로 호출하고 이
+ * 메서드가 커밋한 뒤 멱등성 마커가 COMPLETED 로 갱신된다(IdempotencyService 호출 규약, PaymentController 와 동일).
  */
 @Service
 public class CouponIssueService {
@@ -62,12 +56,12 @@ public class CouponIssueService {
     }
 
     /**
-     * <b>프로덕션 발급 경로 — 원자적 조건부 UPDATE.</b>
+     * 프로덕션 발급 경로 — 원자적 조건부 UPDATE.
      *
-     * <p>status+{@code issued_count < total_quantity} 검사와 증가를 단일 UPDATE 문으로 원자 처리하므로
-     * 핫 카운터 경합에도 초과발급이 없다 (affected=1 성공 / 0 발급불가 → 재조회로 소진·비ACTIVE 판별).
-     * 발급 기간(validFrom·validUntil)은 UPDATE 가 검사하지 않으므로 {@link #validateIssuable} 사전 검사가
-     * 게이트한다 — 기간 경계는 고정 시각이라 관리자 트리거 경합이 없어 사전 검사로 충분하다.
+     * status + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로 원자 처리하므로 핫 카운터 경합에도
+     * 초과발급이 없다(affected=1 성공 / 0 발급불가 → 재조회로 소진·비ACTIVE 판별). 발급 기간(validFrom·validUntil)은
+     * UPDATE 가 검사하지 않으므로 validateIssuable 사전 검사가 게이트한다 — 기간 경계는 고정 시각이라 관리자
+     * 트리거 경합이 없어 사전 검사로 충분하다.
      */
     @Transactional
     public MemberCouponResponse issue(Long memberId, Long couponId) {
@@ -101,7 +95,7 @@ public class CouponIssueService {
     }
 
     /**
-     * 비관적 락 단계 — coupon 행을 {@code FOR UPDATE} 로 잠그고 read-check-increment 한다 (시연·테스트 전용).
+     * 비관적 락 단계 — coupon 행을 FOR UPDATE 로 잠그고 read-check-increment 한다 (시연·테스트 전용).
      */
     @Transactional
     public MemberCouponResponse issueWithPessimisticLock(Long memberId, Long couponId) {
@@ -117,11 +111,11 @@ public class CouponIssueService {
     }
 
     /**
-     * <b>베이스라인 — 락 없는 read-check-increment.</b> 동시 발급 시 lost-update 로 초과발급을 재현한다
-     * (decisions/coupon-concurrency.md "Before"). 일반 빌드에서는 호출되지 않으며 동시성 테스트만 호출한다.
+     * 베이스라인 — 락 없는 read-check-increment. 동시 발급 시 lost-update 로 초과발급을 재현한다
+     * (decisions/coupon-concurrency.md "Before"). 일반 빌드에선 호출되지 않으며 동시성 테스트만 호출한다.
      *
-     * <p>회원당 1장 사전 검사를 의도적으로 생략한다 — 초과발급 노출 테스트가 서로 다른 회원으로 글로벌
-     * 카운터를 때리므로 사전 검사는 무의미하고, "순진한 구현"의 결함을 그대로 드러내기 위함이다.
+     * 회원당 1장 사전 검사를 의도적으로 생략한다 — 초과발급 노출 테스트가 서로 다른 회원으로 글로벌 카운터를
+     * 때리므로 사전 검사는 무의미하고, "순진한 구현"의 결함을 그대로 드러내기 위함이다.
      */
     @Transactional
     public MemberCouponResponse issueWithoutLock(Long memberId, Long couponId) {
@@ -170,9 +164,9 @@ public class CouponIssueService {
     }
 
     /**
-     * 예외 cause 체인에서 {@code uk_member_coupon_coupon_member}(회원당 1장) UNIQUE 위반인지 판별한다.
-     * Hibernate {@link ConstraintViolationException#getConstraintName()} 을 우선 보고, 드라이버/방언별로
-     * null 일 수 있어 메시지 substring 도 폴백으로 확인한다.
+     * 예외 cause 체인에서 uk_member_coupon_coupon_member(회원당 1장) UNIQUE 위반인지 판별한다.
+     * Hibernate ConstraintViolationException.getConstraintName() 을 우선 보고, 드라이버/방언별로 null 일 수
+     * 있어 메시지 substring 도 폴백으로 확인한다.
      */
     private boolean isMemberCouponUniqueViolation(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {

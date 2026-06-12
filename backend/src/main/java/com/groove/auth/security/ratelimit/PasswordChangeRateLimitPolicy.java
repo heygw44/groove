@@ -14,20 +14,19 @@ import org.springframework.stereotype.Component;
 import java.util.function.Supplier;
 
 /**
- * {@code PATCH /api/v1/members/me/password} 에 대한 <b>회원 단위</b> Rate Limit 정책 (#81, #167).
+ * PATCH /api/v1/members/me/password 에 대한 회원 단위 Rate Limit 정책 (#81, #167).
  *
- * <p>인증된 엔드포인트이므로 "회원당 N회" 를 키로 쓴다. 단, {@link com.groove.common.ratelimit.RateLimitFilter}
- * 는 Spring Security 필터보다 먼저 실행되어 {@code SecurityContext} 가 아직 비어 있으므로 — principal 대신
- * Authorization 헤더의 Bearer 토큰을 {@link JwtProvider} 로 직접 디코드해 memberId 를 키로 삼는다
- * ({@link com.groove.coupon.api.ratelimit.CouponIssueRateLimitPolicy} 와 동일 패턴). 토큰이 없거나
- * 위조면(곧 Security 가 401 처리) IP 로 폴백해 키가 항상 결정된다.
+ * 인증된 엔드포인트이므로 "회원당 N회" 를 키로 쓴다. 단, RateLimitFilter 는 Spring Security 필터보다
+ * 먼저 실행되어 SecurityContext 가 아직 비어 있으므로 — principal 대신 Authorization 헤더의 Bearer
+ * 토큰을 JwtProvider 로 직접 디코드해 memberId 를 키로 삼는다(CouponIssueRateLimitPolicy 와 동일 패턴).
+ * 토큰이 없거나 위조면(곧 Security 가 401 처리) IP 로 폴백해 키가 항상 결정된다.
  *
- * <p>IP 만 키로 쓰면 (1) NAT/CGNAT 뒤 정상 사용자들이 한도를 서로 소진하고, (2) 탈취한 access 토큰으로
+ * IP 만 키로 쓰면 (1) NAT/CGNAT 뒤 정상 사용자들이 한도를 서로 소진하고, (2) 탈취한 access 토큰으로
  * "현재 비밀번호" 를 브루트포스할 때 프록시 로테이션으로 IP 만 바꾸면 계정 단위 누적 제한이 사라진다.
  * memberId 키잉으로 두 문제를 모두 차단한다.
  *
- * <p>한도/리필 주기는 {@link AuthRateLimitProperties} 에서 주입받는다.
- * 한도 초과 시 {@code RateLimitFilter} 가 429 + {@code Retry-After} 응답을 작성한다.
+ * 한도/리필 주기는 AuthRateLimitProperties 에서 주입받는다. 한도 초과 시 RateLimitFilter 가 429 +
+ * Retry-After 응답을 작성한다.
  */
 @Component
 public class PasswordChangeRateLimitPolicy implements RateLimitPolicy {
@@ -69,8 +68,8 @@ public class PasswordChangeRateLimitPolicy implements RateLimitPolicy {
     }
 
     /**
-     * 비밀번호 변경 요청자의 memberId 를 키로 반환한다. 토큰 부재/위조 시 IP 폴백 — 그 요청들은 어차피
-     * Security 에서 401 이지만, 키가 null 이 되지 않도록 결정적 폴백을 둔다.
+     * 비밀번호 변경 요청자의 memberId 를 키로 반환한다. 토큰 부재/위조 시 IP 폴백 — 그 요청들은
+     * 어차피 Security 에서 401 이지만, 키가 null 이 되지 않도록 결정적 폴백을 둔다.
      */
     private String resolveMemberKey(HttpServletRequest request) {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);

@@ -16,29 +16,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 결제 결과 콜백 적용 트랜잭션 경계 (#W7-4) — 웹훅 수신({@code PaymentWebhookController} /
- * {@code PaymentWebhookHandler})과 폴링 동기화({@code PaymentReconciliationScheduler})의 공통 처리 경로.
+ * 결제 결과 콜백 적용 트랜잭션 경계 (#W7-4) — 웹훅 수신(PaymentWebhookController / PaymentWebhookHandler)과
+ * 폴링 동기화(PaymentReconciliationScheduler)의 공통 처리 경로.
  *
- * <h2>멱등 실행 규약</h2>
- * <p>{@link #applyResult} 는 {@link com.groove.common.idempotency.IdempotencyService#execute} 의
- * {@code action} 으로 호출되는 것을 전제로 자기 트랜잭션({@code @Transactional})을 관리하고 반환 전에 커밋한다 —
- * 호출자(컨트롤러/디스패처/스케줄러)는 비트랜잭션이어야 한다 ({@code IdempotencyService} 호출 규약). 이중
- * 안전선: PG 거래 식별자 단위 멱등성(IdempotencyService 같은 키 공유) + 결제 상태 재확인(PENDING 아니면 무시).
+ * 멱등 실행 규약: applyResult 는 IdempotencyService.execute 의 action 으로 호출되는 것을 전제로 자기
+ * 트랜잭션(@Transactional)을 관리하고 반환 전에 커밋한다 — 호출자(컨트롤러/디스패처/스케줄러)는 비트랜잭션이어야
+ * 한다. 이중 안전선: PG 거래 식별자 단위 멱등성(IdempotencyService 같은 키 공유) + 결제 상태 재확인(PENDING 아니면 무시).
  *
- * <h2>처리</h2>
- * <ul>
- *   <li>PAID — Payment {@code PENDING→PAID}({@code paidAt} 기록), Order {@code PENDING→PAID},
- *       {@link OrderPaidEvent} 발행. 발행만 한다 — 후속 처리(배송 생성 등) 구독은 #W7-5.</li>
- *   <li>FAILED — 보상 트랜잭션: Payment {@code PENDING→FAILED}, Order {@code PENDING→PAYMENT_FAILED},
- *       각 OrderItem 의 album 재고 복원 + 적용 쿠폰 {@code USED→ISSUED} 복원. 어느 단계든 실패하면 트랜잭션
- *       전체가 롤백되어 다음 콜백/폴링에 재시도된다 ({@code OrderService.cancel} 의 보상과 같은 패턴 — Aggregate
- *       조율은 도메인이 아닌 ApplicationService 책임). PAYMENT_FAILED 는 종착 상태라 cancel/refund 로 들어올 수
- *       없으므로, 쿠폰 복원은 여기서 하지 않으면 영영 못 한다.</li>
- *   <li>알 수 없는 거래 / 이미 종착 상태 — 무해하게 무시(상태 전이 0회).</li>
- * </ul>
+ * 처리:
+ * - PAID — Payment PENDING→PAID(paidAt 기록), Order PENDING→PAID, OrderPaidEvent 발행(후속 배송 생성 구독은 #W7-5).
+ * - FAILED — 보상 트랜잭션: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 각 OrderItem 의 album 재고
+ *   복원 + 적용 쿠폰 USED→ISSUED. 어느 단계든 실패하면 트랜잭션 전체가 롤백돼 다음 콜백/폴링에 재시도된다
+ *   (OrderService.cancel 의 보상과 같은 패턴 — Aggregate 조율은 ApplicationService 책임). PAYMENT_FAILED 는
+ *   종착 상태라 cancel/refund 로 들어올 수 없으므로, 쿠폰 복원은 여기서 하지 않으면 영영 못 한다.
+ * - 알 수 없는 거래 / 이미 종착 상태 — 무해하게 무시(상태 전이 0회).
  *
- * <p>주의: 결제 PENDING 중 주문이 다른 경로로 CANCELLED 된 경우(현재 {@code OrderService.cancel} 은 PENDING
- * 주문만 취소하므로 결제는 PENDING 으로 남는다) 콜백 적용 시 주문 상태 전이가 거부돼 트랜잭션이 롤백된다 — 이
+ * 주의: 결제 PENDING 중 주문이 다른 경로로 CANCELLED 된 경우(현재 OrderService.cancel 은 PENDING 주문만
+ * 취소하므로 결제는 PENDING 으로 남는다) 콜백 적용 시 주문 상태 전이가 거부돼 트랜잭션이 롤백된다 — 이
  * "결제 중 취소" 정합성은 결제 취소/환불 흐름과 함께 별도 이슈에서 다룬다.
  */
 @Service
@@ -46,7 +40,7 @@ public class PaymentCallbackService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentCallbackService.class);
 
-    /** {@code failureReason} 미상 시 기록할 기본 사유. */
+    /** failureReason 미상 시 기록할 기본 사유. */
     private static final String DEFAULT_FAILURE_REASON = "PG 결제 실패 통보";
 
     private final PaymentRepository paymentRepository;
@@ -61,8 +55,8 @@ public class PaymentCallbackService {
     }
 
     /**
-     * {@code pgTransactionId} 에 대한 {@code IdempotencyService} 키. 웹훅(HTTP/인프로세스) 경로와 폴링 경로가
-     * 같은 키를 써 서로의 중복까지 한 곳에서 차단한다 — 어느 조합으로 중복 수신해도 상태 전이는 1회다.
+     * pgTransactionId 에 대한 IdempotencyService 키. 웹훅(HTTP/인프로세스) 경로와 폴링 경로가 같은 키를 써 서로의
+     * 중복까지 한 곳에서 차단한다 — 어느 조합으로 중복 수신해도 상태 전이는 1회다.
      */
     public static String idempotencyKeyFor(String pgTransactionId) {
         return "payment-callback:" + pgTransactionId;
@@ -70,8 +64,8 @@ public class PaymentCallbackService {
 
     /**
      * @param pgTransactionId PG 거래 식별자
-     * @param result          PG 가 통보한 최종 결과 — {@link PaymentStatus#PAID} 또는 {@link PaymentStatus#FAILED}
-     * @param failureReason   실패 사유 (FAILED 일 때만 의미, {@code null} 이면 기본 사유 기록)
+     * @param result          PG 가 통보한 최종 결과 — PaymentStatus.PAID 또는 PaymentStatus.FAILED
+     * @param failureReason   실패 사유 (FAILED 일 때만 의미, null 이면 기본 사유 기록)
      */
     @Transactional
     public PaymentCallbackResult applyResult(String pgTransactionId, PaymentStatus result, String failureReason) {
