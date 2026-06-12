@@ -2,11 +2,11 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.6 |
+| 버전 | 1.7 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-04 |
-| 변경 내용 | v1.6 (M13 쿠폰 구현 완료 반영): §4.15 `coupon`·§4.16 `member_coupon` 을 **계획 → 구현 완료**(V14/V16)로 갱신, `orders.discount_amount`(V15)·`tracking_number`(V17, 배송 운송장 비정규화) 반영. 선착순 발급 동시성은 원자적 조건부 UPDATE 로 구현([decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)). §7 마이그레이션 표를 실제 적용분(V1~V17)으로 현행화. 백엔드 소스 경로를 `backend/` 이동에 맞춰 정정. v1.5 (확장: 쿠폰 시스템 — V14/V15 계획 반영): `coupon`·`member_coupon` 2개 테이블 신설(§4.15/§4.16) — §8 v2 후보였던 `coupon`/`coupon_issue` 를 정식 도메인으로 승격. `orders` 에 `discount_amount` 컬럼 추가(주문 총액 대비 할인액, payable = total_amount − discount_amount 파생) — `applied_member_coupon_id` 대신 `member_coupon.order_id` 역참조로 순환 FK 회피. 선착순 발급 동시성은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) ADR(DB 단계적: 베이스라인→비관적 락→원자적 조건부 UPDATE)에 따른다. 설계 전문은 [plans/coupon-system.md](./plans/coupon-system.md). 본 변경은 **계획 단계** — 구현/마이그레이션 적용 시점에 상태 갱신. v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
-| DB | MySQL 8 (InnoDB, utf8mb4) |
+| 최종 수정일 | 2026-06-12 |
+| 변경 내용 | v1.7 (V18~V22 반영): 회원 PII 익명화·재가입 차단 해시를 위한 `member.email_hash`(V18 CHAR(64) → V19 VARCHAR(72), #170/#186)·`uk_member_email_hash` UNIQUE, `phone` NULL 허용(탈퇴 익명화), `orders`/`shipping` 의 `anonymized_at` 마커(V18) 반영. 검색 인덱스(`artist_name` 비정규화 + FULLTEXT, V21/#204)를 §4.6 컬럼 표에 정식 편입하고, 주문/리뷰 목록 복합 인덱스(`idx_orders_member_created`·`idx_orders_status_created`·`idx_review_album_created`, V22/#225)를 "예정/후속"에서 "적용 완료"로 갱신. §7 마이그레이션 표를 V1~V22 로 현행화하고 V20(member HMAC 백필 Java 마이그레이션)을 명시. DB 표기를 실제 이미지(MySQL 8.4)에 맞춤. v1.6 (M13 쿠폰 구현 완료 반영): §4.15 `coupon`·§4.16 `member_coupon` 을 **계획 → 구현 완료**(V14/V16)로 갱신, `orders.discount_amount`(V15)·`tracking_number`(V17, 배송 운송장 비정규화) 반영. 선착순 발급 동시성은 원자적 조건부 UPDATE 로 구현([decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)). §7 마이그레이션 표를 실제 적용분(V1~V17)으로 현행화. 백엔드 소스 경로를 `backend/` 이동에 맞춰 정정. v1.5 (확장: 쿠폰 시스템 — V14/V15 계획 반영): `coupon`·`member_coupon` 2개 테이블 신설(§4.15/§4.16) — §8 v2 후보였던 `coupon`/`coupon_issue` 를 정식 도메인으로 승격. `orders` 에 `discount_amount` 컬럼 추가(주문 총액 대비 할인액, payable = total_amount − discount_amount 파생) — `applied_member_coupon_id` 대신 `member_coupon.order_id` 역참조로 순환 FK 회피. 선착순 발급 동시성은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) ADR(DB 단계적: 베이스라인→비관적 락→원자적 조건부 UPDATE)에 따른다. 설계 전문은 [plans/coupon-system.md](./plans/coupon-system.md). 본 변경은 **계획 단계** — 구현/마이그레이션 적용 시점에 상태 갱신. v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
+| DB | MySQL 8.4 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | PRD.md, ARCHITECTURE.md |
 
@@ -108,9 +108,10 @@ erDiagram
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | email | VARCHAR(255) | NOT NULL, UNIQUE | 로그인 식별자 |
+| email_hash | VARCHAR(72) | NOT NULL, UNIQUE | 이메일 점유 해시 — 탈퇴 익명화 후에도 재가입을 차단(V18). #186 에서 결정적 SHA-256 → 서버 키 HMAC(키버전 prefix 포함)으로 전환하며 CHAR(64) → VARCHAR(72) 로 확장(V19) |
 | password | VARCHAR(255) | NOT NULL | BCrypt 해시 (cost 12) |
 | name | VARCHAR(50) | NOT NULL | |
-| phone | VARCHAR(20) | NOT NULL | 숫자만 10~11자 [APP] |
+| phone | VARCHAR(20) | NULL | 숫자만 10~11자 [APP]. 가입 시 도메인 검증으로 항상 non-null, 탈퇴 익명화 시 NULL 로 비움(V18) |
 | role | VARCHAR(20) | NOT NULL, DEFAULT 'USER' | enum: USER, ADMIN |
 | email_verified | BOOLEAN | NOT NULL, DEFAULT FALSE | 이메일 인증 여부 |
 | deleted_at | DATETIME(6) | NULL | 탈퇴 시각 (soft delete) |
@@ -123,6 +124,9 @@ erDiagram
 - `uk_member_email` UNIQUE (email)
 - `idx_member_role` (role) — ADMIN 필터링용
 
+[V18]:
+- `uk_member_email_hash` UNIQUE (email_hash) — 탈퇴 익명화 후 재가입 차단(평문 email 은 마스킹되지만 해시는 점유 유지)
+
 [W10] 추가 후보 없음.
 
 **비즈니스 룰**
@@ -132,6 +136,7 @@ erDiagram
 | email 중복 불가 | [DB] | uk_member_email UNIQUE |
 | 비밀번호 BCrypt 해시 저장 (cost 12) | [APP] | 평문 저장 금지, @Bean PasswordEncoder |
 | 탈퇴는 soft delete만 허용 (물리 삭제 없음) | [APP] | deleted_at 설정 후 저장 |
+| 탈퇴 즉시 PII 익명화 (email 마스킹·name·phone 비움) | [APP] | Member.anonymize() — email_hash 는 보존해 재가입 차단(#170) |
 
 ---
 
@@ -256,6 +261,7 @@ erDiagram
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | title | VARCHAR(300) | NOT NULL | 앨범명 |
+| artist_name | VARCHAR(200) | NOT NULL | artist.name 비정규화 (V21). FULLTEXT 검색 전용 — cross-table OR 제거용이며 API 응답엔 노출하지 않음. 동기화는 §4.6 인덱스 비고 참조 |
 | artist_id | BIGINT | NOT NULL, FK → artist.id | |
 | genre_id | BIGINT | NOT NULL, FK → genre.id | |
 | label_id | BIGINT | NULL, FK → label.id | 레이블 정보 없는 경우 NULL |
@@ -375,6 +381,7 @@ erDiagram
 | safe_packaging_requested | BOOLEAN | NOT NULL, DEFAULT FALSE | 배송지 스냅샷 — LP 안전 포장 요청 (V12) |
 | discount_amount | BIGINT | NOT NULL, DEFAULT 0, CHECK (0 ≤ discount_amount ≤ total_amount) | 쿠폰 할인액 (V15). 미사용 주문은 0 |
 | tracking_number | VARCHAR(64) | NULL | 배송 운송장번호 비정규화 (V17). 배송 생성 시 `ShippingCreationListener` 가 기록, 결제 전 NULL |
+| anonymized_at | DATETIME(6) | NULL | 주문 PII 익명화 마커 (V18, #170). 배송 완료 + 보존기간 경과 주문을 배치가 익명화한 뒤 기록, 멱등 처리용 |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
 
@@ -388,9 +395,9 @@ erDiagram
 - `uk_orders_number` UNIQUE (order_number)
 - `idx_orders_guest_email` (guest_email) — 게스트 주문 조회
 
-[W10] (슬로우 쿼리 측정 후 추가):
-- `idx_orders_member_created` (member_id, created_at) — 회원 주문 조회용
-- `idx_orders_status_created` (status, created_at) — 관리자 상태별 조회
+[W10] **도입 완료 (V22, #225)** — 슬로우 쿼리 측정 후 추가:
+- `idx_orders_member_created` (member_id, created_at) — 회원 주문 목록(member_id ref + created_at 정렬 커버, filesort 제거)
+- `idx_orders_status_created` (status, created_at) — 관리자 상태별 조회(status 인덱스 부재로 인한 풀스캔 + filesort 제거)
 
 **비즈니스 룰**
 
@@ -531,6 +538,7 @@ erDiagram
 | safe_packaging_requested | BOOLEAN | NOT NULL, DEFAULT FALSE | LP 안전 포장 요청 |
 | shipped_at | DATETIME(6) | NULL | |
 | delivered_at | DATETIME(6) | NULL | |
+| anonymized_at | DATETIME(6) | NULL | 배송 PII 익명화 마커 (V18, #170). 주문 익명화 배치가 수령인 정보를 비운 뒤 기록, 멱등 처리용 |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
 
@@ -574,8 +582,8 @@ erDiagram
 - `uk_review_order_album` UNIQUE (order_id, album_id) — 1주문-1상품-1리뷰
 - `idx_review_member` (member_id) — 내 리뷰 목록용
 
-[W10] (슬로우 쿼리 측정 후 추가):
-- `idx_review_album_created` (album_id, created_at) — 상품별 리뷰 조회
+[W10] **도입 완료 (V22, #225)** — 슬로우 쿼리 측정 후 추가:
+- `idx_review_album_created` (album_id, created_at) — 상품별 리뷰 조회(album_id ref + created_at 정렬 커버, filesort 제거)
 
 **비즈니스 룰**
 
@@ -702,7 +710,7 @@ erDiagram
 
 검색·정렬·필터 인덱스는 **의도적으로 누락** → W9 측정 시 슬로우 쿼리 재현 → W10 시연용 인덱스 추가.
 
-### 5.2 W10 시점 추가 인덱스 (시연 산출물 — V21/#204 적용 완료)
+### 5.2 W10 시점 추가 인덱스 (시연 산출물 — 검색 V21/#204 + 주문·리뷰 목록 V22/#225 적용 완료)
 
 키워드 풀스캔(`type=ALL`)은 단일 B-Tree 로 해소 불가(선행 와일드카드 + cross-table OR)라 artist 이름을 비정규화한 단일 테이블 FULLTEXT 로 전환했다. 상세: [`docs/improvements/search-index.md`](./improvements/search-index.md).
 
@@ -718,14 +726,14 @@ ALTER TABLE album ADD INDEX idx_album_search (genre_id, status, price);
 ALTER TABLE album ADD INDEX idx_album_year (release_year);
 ALTER TABLE album ADD INDEX idx_album_limited (is_limited, status);
 
--- 회원 주문 조회 최적화 (후속 — 본 #204 범위 외)
-CREATE INDEX idx_orders_member_created ON orders(member_id, created_at);
-CREATE INDEX idx_orders_status_created ON orders(status, created_at);
+-- (V22, #225) 회원 주문 목록 + 관리자 상태별 조회 (본 #204 범위 밖, 별도 마이그레이션으로 도입)
+ALTER TABLE orders ADD INDEX idx_orders_member_created (member_id, created_at), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE orders ADD INDEX idx_orders_status_created (status, created_at),     ALGORITHM=INPLACE, LOCK=NONE;
 
 -- (idx_payment_status_created 는 W7-4 / V11, idx_shipping_status 는 W7-6 / V12 에서 이미 추가)
 
--- 상품별 리뷰
-CREATE INDEX idx_review_album_created ON review(album_id, created_at);
+-- (V22, #225) 상품별 리뷰 목록
+ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at), ALGORITHM=INPLACE, LOCK=NONE;
 ```
 
 각 인덱스 추가 전후로 `EXPLAIN` 결과·응답시간을 비교하여 README에 기록.
@@ -754,7 +762,7 @@ CREATE INDEX idx_review_album_created ON review(album_id, created_at);
 
 ## 7. Flyway 마이그레이션 파일
 
-실제 적용 파일은 `backend/src/main/resources/db/migration/`. 현재 V1~V17 적용 완료.
+실제 적용 파일은 `backend/src/main/resources/db/migration/`(SQL)과 `backend/src/main/java/com/groove/member/migration/`(Java). 현재 V1~V22 적용 완료.
 
 | 버전 | 파일명 | 내용 | 적용 시점 | 상태 |
 |---|---|---|---|---|
@@ -775,9 +783,13 @@ CREATE INDEX idx_review_album_created ON review(album_id, created_at);
 | V15 | `V15__order_coupon_columns.sql` | orders `discount_amount` ALTER + CHECK | 확장 M13 | 적용 완료 |
 | V16 | `V16__member_coupon_expiration_index.sql` | member_coupon 만료 배치·coupon 정렬 인덱스 | 확장 M13 | 적용 완료 |
 | V17 | `V17__order_tracking_number.sql` | orders `tracking_number` 비정규화 (#116) | M15 | 적용 완료 |
-| V18+ | `V*__add_search_indexes.sql` | W10 시연용 검색·정렬 인덱스 | W10 | 예정 |
+| V18 | `V18__member_email_hash_and_pii_anonymization.sql` | member `email_hash`(CHAR(64)) + `uk_member_email_hash`, `phone` NULL 허용, orders/shipping `anonymized_at` (#170) | 보안/익명화 | 적용 완료 |
+| V19 | `V19__widen_email_hash_column.sql` | member `email_hash` 폭 확장 CHAR(64) → VARCHAR(72) — HMAC 키버전 prefix 수용 (#186) | 보안/익명화 | 적용 완료 |
+| V20 | `V20__email_hash_hmac_backfill.java` (Java 마이그레이션) | 활성 회원 `email_hash` 를 HMAC 으로 재계산·백필 — MySQL 내장 HMAC 부재로 `EmailHasher` DI 사용 (#186) | 보안/익명화 | 적용 완료 |
+| V21 | `V21__add_search_indexes.sql` | album `artist_name` 비정규화 + `ft_album_keyword` FULLTEXT(ngram) + 필터/정렬 복합 인덱스 4종 (#204) | W10 | 적용 완료 |
+| V22 | `V22__add_order_review_list_indexes.sql` | orders/review 목록 복합 인덱스 3종 — V8/V13 의 [W10] 누락분 보완 (#225) | W10 | 적용 완료 |
 
-> **W10 검색 인덱스 의도적 보류**: §5의 카탈로그/주문 검색·정렬 인덱스(`idx_album_*` 등)는 N+1·슬로우 쿼리 Before/After 시연(W10)을 위해 의도적으로 아직 추가하지 않았다. 실제 도입 시 미적용 최대 버전 다음(V18+)으로 배정한다. 한 번 적용된 마이그레이션은 수정 금지 원칙 유지.
+> **W10 검색·목록 인덱스**: §5의 카탈로그 검색·정렬 인덱스(`idx_album_*`·`ft_album_keyword`)는 슬로우 쿼리 Before/After 시연(W10)을 위해 V6 시점에 의도적으로 누락해 두었다가 V21(#204)에서 도입했고, 주문/리뷰 목록 복합 인덱스는 V8/V13 헤더가 약속했으나 누락돼 있던 것을 V22(#225)에서 보완했다. 한 번 적용된 마이그레이션은 수정 금지 원칙을 유지한다(V8/V13 본문은 손대지 않고 V22 와 본 표에만 기록).
 
 > **V4 범위**: 당초 1회로 묶었던 catalog 마이그레이션을 W5-1(genre/label, V4) → W5-2(artist, V5) → W5-3(album, V6) 으로 분리 도입(#31). 모두 적용 완료.
 

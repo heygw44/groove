@@ -137,6 +137,7 @@
 |---|---|---|---|
 | GET | `/members/me` | USER | 내 정보 조회 |
 | PATCH | `/members/me` | USER | 내 정보 수정 |
+| PATCH | `/members/me/password` | USER | 비밀번호 변경 (변경 시 활성 세션 전부 무효화) |
 | DELETE | `/members/me` | USER | 회원 탈퇴 (soft delete) |
 | GET | `/members/me/orders` | USER | 내 주문 목록 |
 
@@ -349,6 +350,33 @@
 ```
 
 **Response 200** (`/members/me` 동일 스키마)
+
+---
+
+#### PATCH `/members/me/password` — 비밀번호 변경
+
+현재 비밀번호를 재확인한 뒤 새 비밀번호로 교체한다. 새 비밀번호는 회원가입과 동일한 정책(최소 10자 +
+영문·숫자·특수문자 각 1자 이상)을 따르며, 현재 비밀번호와 같으면 거부된다. 성공하면 본인의 기존 활성
+세션(리프레시 토큰)이 모두 무효화되어 재로그인이 필요하다.
+
+**Headers**: `Authorization: Bearer ...`
+
+**Request**
+```json
+{
+  "currentPassword": "P@ssw0rd123!",
+  "newPassword": "N3wP@ssw0rd!"
+}
+```
+
+**Response 204** — 변경 성공 (본문 없음, 기존 활성 세션 전부 무효화)
+
+**오류**
+- `400 VALIDATION_FAILED` — 새 비밀번호 정책 위반, 또는 새 비밀번호가 현재와 동일
+- `400 MEMBER_PASSWORD_MISMATCH` — 현재 비밀번호 불일치
+- `401` — 인증 실패 (토큰 미제공·만료·무효)
+- `404 MEMBER_NOT_FOUND` — 활성 회원 없음 (탈퇴 후 토큰 만료 전 윈도)
+- `429` — 비밀번호 변경 Rate Limit 초과
 
 ---
 

@@ -75,7 +75,7 @@ flowchart TB
         Sched["Scheduler<br/>결제 폴링 · 배송 진행"]
     end
 
-    DB[("MySQL 8<br/>+ Flyway")]
+    DB[("MySQL 8.4<br/>+ Flyway")]
 
     clients -->|"HTTP /api/v1"| Sec
     Sec --> Domains
@@ -570,7 +570,7 @@ volumes:
 ```
 
 ### 13.2 통합 테스트 전략
-- Testcontainers MySQL 8 사용 (실 환경 동일)
+- Testcontainers MySQL 8.4 사용 (실 환경 동일)
 - `@Sql`로 시드 데이터 주입
 - **동시성 테스트**: `CountDownLatch` + `ExecutorService`로 동시 요청 시뮬레이션 → 핵심 시연 포인트
 - 기본은 트랜잭션 자동 롤백, 동시성 테스트는 명시적 cleanup

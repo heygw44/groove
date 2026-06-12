@@ -3,10 +3,12 @@
 | 항목 | 값 |
 |---|---|
 | 프로젝트명 (가칭) | Groove — LP 전문 셀렉트샵 백엔드 |
-| 버전 | 1.0 |
+| 버전 | 1.1 |
 | 작성일 | 2026-05-05 |
+| 최종 수정일 | 2026-06-12 |
+| 변경 내용 | v1.1: 코어(W1~W7) 완료 후 확장 마일스톤으로 구현된 쿠폰(M13)·데모 프론트엔드(M15)를 비목표에서 제거하고 §3.1 목표의 확장 항목으로 반영. 스택 표기를 실제 이미지(MySQL 8.4)에 맞춤. |
 | 진행 기간 | 12주 (단독) |
-| 스택 | Java 21, Spring Boot 4.0.x, MySQL 8, Docker Compose |
+| 스택 | Java 21, Spring Boot 4.0.x, MySQL 8.4, Docker Compose |
 | 산출물 | 백엔드 REST API + Bruno 컬렉션 + 설계 문서 일체 |
 
 ---
@@ -42,12 +44,12 @@
 - 통합 테스트 기반의 신뢰성 있는 코드베이스 (라인 커버리지 60%+)
 - 부하 테스트로 식별한 실제 병목을 해결하는 사례 1건 이상 (Before/After 그래프)
 - 결제·주문 정합성 민감 영역에 대한 명확한 트랜잭션 경계 및 멱등성 처리
+- 확장 마일스톤 — 코어(W1~W7)를 완성한 뒤 선착순 동시성 시연을 위한 **쿠폰 시스템(M13)** 과 흐름을 눈으로 확인하는 **데모 프론트엔드(Vue, M15)** 를 추가 구현 (상세 진행은 MILESTONE.md)
 
 ### 3.2 비목표
 - 실제 PG사 연동 (모킹으로 처리)
 - 분산 시스템 운영 (단일 인스턴스 + Docker Compose 가정)
-- 프론트엔드 / UI
-- 다음 기능군: 추천, Elasticsearch 검색, 쿠폰, 포인트, 위시리스트, 1:1 문의, 실시간 채팅, 소셜 로그인
+- 다음 기능군: 추천, Elasticsearch 검색, 포인트, 위시리스트, 1:1 문의, 실시간 채팅, 소셜 로그인
 - LP 도메인 특정 비목표:
   - 중고 LP 취급 (컨디션 등급별 가격 차별화 — v2 후보)
   - 예약 주문 (pre-order)
@@ -265,10 +267,10 @@
 | 언어 | Java 21 | 가상 스레드(Virtual Threads) 활용 가능 |
 | 프레임워크 | Spring Boot 4.0.x | Spring Framework 7, Jakarta EE 11 |
 | 빌드 | Gradle (Kotlin DSL) | |
-| DB | MySQL 8 | 한국 백엔드 채용 친화도 |
+| DB | MySQL 8.4 | 한국 백엔드 채용 친화도 |
 | ORM | Spring Data JPA + Hibernate | |
 | 마이그레이션 | Flyway | |
-| 인증 | Spring Security 6.x + JWT | jjwt 또는 Nimbus JOSE |
+| 인증 | Spring Security 7.x + JWT | jjwt 0.12.x ([decisions/jwt-library.md](./decisions/jwt-library.md)) |
 | 테스트 | JUnit 5, Spring Boot Test, Testcontainers | |
 | 부하테스트 | k6 | |
 | 컨테이너 | Docker, Docker Compose | |
