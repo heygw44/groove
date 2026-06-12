@@ -56,6 +56,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>{@link #concurrentOrders_withPessimisticLock_noOversell} — 비관적 락
  *       ({@link OrderService#place}) active 검증. created ≤ 재고, lost-update 0 을 단언하는 회귀 가드다 —
  *       누군가 {@code findByIdForUpdate} 락을 제거하면 즉시 실패한다.</li>
+ *   <li>{@link #concurrentOrders_singleStockRarity_exactlyOneSucceeds} — 단일 재고(stock=1) 경계 시연(#209).
+ *       1장짜리 희귀반에 동시 100 주문 → 정확히 1 성공. 오버셀의 가장 극적인 degenerate 경계에서도 락이
+ *       보편적으로 동작함을 결정론적으로 증명한다(시드 stock=1 8건의 인프로세스 대응).</li>
  * </ul>
  *
  * <p>동시 출발·지연 수집은 공용 {@link ConcurrencyHarness} 가 담당한다(쿠폰 테스트와 동일 하니스, TPS·p95 박제 →
@@ -72,6 +75,10 @@ class OversellingBaselineTest {
     private static final int INITIAL_STOCK = 100;
     private static final int CONCURRENT_REQUESTS = 200;
     private static final int THREAD_POOL_SIZE = 64;
+
+    // 단일 재고(stock=1) 경계 시연 (#209) — 1장짜리 희귀반에 동시 100 주문 → 정확히 1 성공.
+    private static final int SINGLE_STOCK = 1;
+    private static final int SINGLE_STOCK_REQUESTS = 100;
 
     @Autowired
     private OrderService orderService;
@@ -101,6 +108,7 @@ class OversellingBaselineTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     private Long albumId;
+    private Long rarityAlbumId;
     private Long memberId;
 
     @BeforeEach
@@ -120,6 +128,12 @@ class OversellingBaselineTest {
         albumId = albumRepository.saveAndFlush(
                 Album.create("Oversell Baseline", artist, genre, label,
                         (short) 2026, AlbumFormat.LP_12, 10_000L, INITIAL_STOCK,
+                        AlbumStatus.SELLING, false, null, null)).getId();
+
+        // 단일 재고(stock=1) 희귀반 — 같은 artist/genre/label 재사용 (#209 경계 시연 대상).
+        rarityAlbumId = albumRepository.saveAndFlush(
+                Album.create("Single Stock Rarity", artist, genre, label,
+                        (short) 2026, AlbumFormat.LP_12, 10_000L, SINGLE_STOCK,
                         AlbumStatus.SELLING, false, null, null)).getId();
     }
 
@@ -180,6 +194,43 @@ class OversellingBaselineTest {
     }
 
     @Test
+    @DisplayName("비관적 락 — 단일 재고(stock=1) 희귀반 / 동시 100 주문 → 정확히 1 성공, 99 재고부족, 오버셀 0 (#209)")
+    void concurrentOrders_singleStockRarity_exactlyOneSucceeds() throws InterruptedException {
+        // 오버셀의 가장 극적인 경계 — 1장짜리 희귀반을 100명이 동시에 집어도 정확히 1명만 성공해야 한다.
+        // 재고 100(동시 200) 케이스의 degenerate 형태로, 같은 place() 락 경로가 경계에서도 보편적임을 증명한다.
+        OrderCreateRequest request = singleAlbumOrder(rarityAlbumId);
+
+        AtomicInteger success = new AtomicInteger();
+        AtomicInteger insufficient = new AtomicInteger();
+        AtomicInteger other = new AtomicInteger();
+
+        LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, SINGLE_STOCK_REQUESTS, i -> {
+            try {
+                orderService.place(memberId, request);
+                success.incrementAndGet();
+            } catch (InsufficientStockException ex) {
+                insufficient.incrementAndGet();
+            } catch (RuntimeException ex) {
+                other.incrementAndGet();
+                log.warn("예상 외 예외", ex);
+            }
+        });
+
+        int finalStock = albumRepository.findById(rarityAlbumId).orElseThrow().getStock();
+        int actualDecrement = SINGLE_STOCK - finalStock;
+        long persistedOrders = orderRepository.countByMemberId(memberId);
+        logMeasurement("단일재고", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
+
+        // 단일 행 FOR UPDATE 가 100 트랜잭션을 직렬화 → 1건만 차감·commit, 나머지 99건은 stock=0 을 읽고 거절.
+        assertThat(success.get()).as("정확히 1건만 성공").isEqualTo(SINGLE_STOCK);
+        assertThat(insufficient.get()).as("나머지 99건은 재고부족(409)으로 거절").isEqualTo(SINGLE_STOCK_REQUESTS - SINGLE_STOCK);
+        assertThat(finalStock).as("최종 재고 == 0 (음수 진입 없음)").isZero();
+        assertThat(persistedOrders).as("영속 주문 수 == 실제 차감량 (lost-update 0)").isEqualTo(actualDecrement);
+        assertThat(persistedOrders).as("오버셀 0 — 영속 주문 ≤ 1").isLessThanOrEqualTo(SINGLE_STOCK);
+        assertThat(other.get()).as("FOR UPDATE 직렬화로 deadlock 폭주 없음").isZero();
+    }
+
+    @Test
     @Disabled("오버셀 baseline 시연용 — 락 없는 read-modify-write 의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#46)")
     @DisplayName("베이스라인(락 없음) — 재고 100 / 동시 200 주문 → lost-update 로 오버셀 재현")
     void concurrentOrders_withoutLock_produceOversell() throws InterruptedException {
@@ -223,8 +274,12 @@ class OversellingBaselineTest {
     }
 
     private OrderCreateRequest singleAlbumOrder() {
+        return singleAlbumOrder(albumId);
+    }
+
+    private OrderCreateRequest singleAlbumOrder(Long targetAlbumId) {
         return new OrderCreateRequest(
-                List.of(new OrderItemRequest(albumId, 1)),
+                List.of(new OrderItemRequest(targetAlbumId, 1)),
                 null,
                 OrderFixtures.sampleShippingInfoRequest(),
                 null);
