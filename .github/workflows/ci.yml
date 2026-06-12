@@ -41,6 +41,13 @@ jobs:
         # --no-daemon 미사용: setup-gradle 가 daemon 수명·캐시 flush 를 관리한다.
         # 백엔드는 backend/ 로 이동(#131). frontendBuild 는 ../frontend 를 읽으므로 전체 checkout 이면 동작.
         working-directory: backend
+        env:
+          # CI 러너는 job 종료 후 통째 폐기되어 컨테이너 누수가 없고, 본 프로젝트엔 Ryuk 가 긴 스위트에서
+          # 컨테이너를 회수한 전례가 있어(local 환경 gotcha) ephemeral CI 에선 Ryuk 를 끈다 — 부수 효과로
+          # 컨테이너 하나가 줄어 메모리 여유도 생긴다. (#222 CI 실패의 근본 원인은 Ryuk 가 아니라 캐시된
+          # @SpringBootTest 컨텍스트들의 Hikari idle 커넥션 누적 → MySQL max_connections 근접·OOM 이었고,
+          # 그 수정은 application-test.yaml 의 spring.datasource.hikari.minimum-idle=0 이다.)
+          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: ./gradlew build
 
       - name: Upload test & coverage reports

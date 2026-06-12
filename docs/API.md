@@ -116,7 +116,8 @@
 - 적용 대상 (예시):
   - `POST /auth/login`: IP당 분당 10회
   - `POST /auth/signup`: IP당 분당 3회
-  - `POST /payments`: 회원당 분당 5회
+  - `POST /payments`: 회원당 분당 5회 (`PaymentRateLimitPolicy` — JWT memberId 키잉, 게스트·토큰 부재 시 IP 폴백 / config: `groove.payment.rate-limit.post`)
+  - `POST /orders/{orderNumber}/guest-lookup`: IP당 분당 10회 (`OrderGuestLookupRateLimitPolicy` — orderNumber+email 무차별 대입 억제 / config: `groove.order.rate-limit.guest-lookup`)
   - `POST /coupons/{id}/issue`: 회원당 분당 발급 제한 (`CouponIssueRateLimitPolicy` — 선착순 폭주 시 1인 반복요청 억제)
 
 ---
