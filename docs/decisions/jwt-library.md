@@ -126,8 +126,8 @@ runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6") // Jackson 직렬화 (Spring 
 
 **보안 고려사항 (구현 시점에 적용)**
 - `JWT_SECRET`은 32바이트(256비트) 이상으로 강제 검증 (`Keys.hmacShaKeyFor(...)` 시 길이 부족 즉시 예외).
-- `parseClaimsJws` 사용 (서명 미포함 토큰을 차단하기 위해 `parseClaimsJwt` 금지).
-- `clock skew`는 60초로 명시 (`JwtParserBuilder.setAllowedClockSkewSeconds(60)`).
+- `parseSignedClaims` 사용 (서명 미포함 토큰을 차단하기 위해 `parseUnsecuredClaims` 금지) — jjwt 0.12 빌더 API.
+- `clock skew`는 30초로 명시 (`Jwts.parser().clockSkewSeconds(30)`, `JwtProvider.CLOCK_SKEW_SECONDS`).
 - 시크릿은 환경변수만으로 주입(`application*.yaml`에 평문 보관 금지).
 
 ---
