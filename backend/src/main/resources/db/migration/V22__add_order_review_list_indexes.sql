@@ -18,10 +18,9 @@
 --
 -- 온라인 DDL(ALGORITHM=INPLACE, LOCK=NONE) — V11/V16/V21 컨벤션. 엔진 미지원이면 즉시 실패.
 --
--- ※ 체크섬 주의: 본 작업에서 V8/V13 의 [W10] 주석 1줄을 "V22 에서 보완" 으로 갱신했다(본문 SQL 미변경).
---    Flyway 체크섬은 주석까지 포함하므로, V8/V13 을 이미 적용한 persistent DB 는 부팅 검증이 실패한다.
---    CI(fresh Testcontainers)·시드 측정(fresh compose 볼륨)은 무영향. 스테일 로컬 볼륨은
---    `flyway repair` 또는 `docker compose down -v` 후 재기동 필요.
+-- ※ V8/V13 은 이미 적용된 마이그레이션이라 본문·주석을 수정하지 않는다(Flyway 체크섬은 주석까지 포함 →
+--    수정 시 기존 DB 의 validate 가 실패). 그래서 V8/V13 의 [W10] 누락분 해소 사실은 손대지 않고
+--    본 V22 헤더와 docs/improvements/index-coverage.md 에만 기록한다.
 ALTER TABLE orders ADD INDEX idx_orders_member_created (member_id, created_at), ALGORITHM=INPLACE, LOCK=NONE;
 ALTER TABLE orders ADD INDEX idx_orders_status_created (status, created_at),     ALGORITHM=INPLACE, LOCK=NONE;
 ALTER TABLE review ADD INDEX idx_review_album_created  (album_id, created_at),   ALGORITHM=INPLACE, LOCK=NONE;

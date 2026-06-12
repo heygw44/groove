@@ -261,7 +261,7 @@ V8/V13 의 `[W10]` 의도적 누락 인덱스 3종을 V22 에서 도입한 Befor
 
 ### 6.1 측정 데이터
 
-`scripts/seed.sh`(album 50,000 · member 81) 위에 측정 전용 `loadtest/seed-order-review-loadtest.sql` 로 orders 50,000 + review 50,000(주문 1건당 리뷰 1건)을 합성한다. 분포: `member_id` 1..80 라운드로빈(회원당 ≈625) · `status` DELIVERED 60%/PAID 20%/PENDING 10%/CANCELLED 10% · `album_id` 1..500 라운드로빈(앨범당 ≈100). 기준 값 `member_id=1`(625) · `status='DELIVERED'`(30,000) · `album_id=1`(100).
+`scripts/seed.sh`(album 50,000 · member 81) 위에 측정 전용 `loadtest/seed-order-review-loadtest.sql` 로 orders 50,000 + review 50,000(주문 1건당 리뷰 1건)을 합성한다. 분포 기준은 실제 시드 행에서 읽는다(하드코딩 X): `member_id` 는 USER 회원(기본 80명)에 라운드로빈(회원당 ≈625) · `status` DELIVERED 60%/PAID 20%/PENDING 10%/CANCELLED 10% · `album_id` 는 앞 500개 앨범에 라운드로빈(앨범당 ≈100). 기준 값 `member_id=1`(625) · `status='DELIVERED'`(30,000) · `album_id=1`(100).
 
 ### 6.2 EXPLAIN 캡처 (각 쿼리 `... ORDER BY created_at DESC LIMIT 20`)
 
@@ -312,7 +312,7 @@ mq "ALTER TABLE review DROP INDEX idx_tmp_review_album;"
 mq "SHOW INDEX FROM orders;"; mq "SHOW INDEX FROM review;"
 ```
 
-> ⚠️ `docker compose down -v` 는 로컬 측정 볼륨을 파괴한다(seed 로 재현 가능). V8/V13 주석 갱신으로 체크섬이 바뀌므로 스테일 볼륨에 재기동하면 Flyway validate 가 실패한다 — fresh 볼륨에서 측정할 것(`index-coverage.md` §6).
+> ⚠️ `docker compose down -v` 는 로컬 측정 볼륨을 파괴한다(seed 로 재현 가능). 측정은 깨끗한 baseline 을 위해 fresh 볼륨을 권장한다(V8/V13 은 수정하지 않으므로 체크섬 이슈는 없다).
 
 ---
 

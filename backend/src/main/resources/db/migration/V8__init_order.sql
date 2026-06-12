@@ -11,7 +11,7 @@
 --   - idx_order_item_order      (order_id)           -- 주문 상세 조회
 --   - idx_order_item_album      (album_id)           -- FK 기본
 --
--- [W10→V22 보완] (#225, 슬로우 쿼리 측정 후 V22__add_order_review_list_indexes.sql 에서 추가됨):
+-- [W10] (슬로우 쿼리 측정 후 추가, 본 V8 에서는 의도적 누락):
 --   - idx_orders_member_created (member_id, created_at)  -- 회원 주문 목록
 --   - idx_orders_status_created (status, created_at)     -- 관리자 상태별 조회
 --
