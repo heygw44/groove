@@ -48,30 +48,25 @@ import java.util.List;
 /**
  * 로컬 데모 자동 시드 (이슈 #103).
  *
- * <p>{@code local} 프로파일 기동 시 데모 프론트(M14, #102~#110)가 빈 화면이 되지 않도록 샘플
- * 카탈로그·데모 계정·쿠폰 동시성 데모용 유저 풀·한정 쿠폰·리뷰 데모용 DELIVERED 주문을 자동 생성한다.
+ * local 프로파일 기동 시 데모 프론트(M14, #102~#110)가 빈 화면이 되지 않도록 샘플 카탈로그·데모 계정·쿠폰 동시성 데모용
+ * 유저 풀·한정 쿠폰·리뷰 데모용 DELIVERED 주문을 자동 생성한다.
  *
- * <h2>프로파일 격리</h2>
- * <p>{@code @Profile("local")} 이므로 {@code docker}·{@code test} 프로파일에서는 빈 자체가 등록되지
- * 않아 동작하지 않는다 (테스트는 전부 {@code @ActiveProfiles("test")}). 운영/도커 경로 무영향이 보장된다.
+ * 프로파일 격리: @Profile("local") 이라 docker·test 프로파일에서는 빈 자체가 등록되지 않아 동작하지 않는다(테스트는 전부
+ * @ActiveProfiles("test")). 운영/도커 경로 무영향 보장.
  *
- * <p><b>주의</b>: 활성 프로파일은 외부에서 주입한다({@code application.yaml} 에 기본값 폴백 없음 — 이슈 #128).
- * 미설정 시 Spring 은 {@code default} 프로파일만 활성화하므로 이 시더({@code @Profile("local")})는 등록되지
- * 않는다(로컬 개발은 {@code build.gradle.kts} 의 bootRun 이 {@code local} 을 자동 주입). 추가로
- * {@link #run} 진입 시 활성 프로파일에 {@code local} 이 실제로 포함되는지 한 번 더 확인하는 런타임 안전망을
- * 두고, 운영(비-local) 경로는 {@link ProductionSeedGuard} 가 데모 계정 유입을 fail-fast 로 차단한다.
+ * 주의: 활성 프로파일은 외부에서 주입한다(application.yaml 에 기본값 폴백 없음 — 이슈 #128). 미설정 시 Spring 은 default
+ * 프로파일만 활성화하므로 이 시더(@Profile("local"))는 등록되지 않는다(로컬 개발은 build.gradle.kts 의 bootRun 이 local 을
+ * 자동 주입). 추가로 run 진입 시 활성 프로파일에 local 이 실제로 포함되는지 한 번 더 확인하는 런타임 안전망을 두고,
+ * 운영(비-local) 경로는 ProductionSeedGuard 가 데모 계정 유입을 fail-fast 로 차단한다.
  *
- * <h2>멱등성</h2>
- * <p>앨범이 한 장이라도 있으면(=이미 시드됨) 전체를 건너뛴다 (이슈 DoD: 재기동 시 중복 생성 없음).
- * 시드 본체는 단일 트랜잭션({@link #txTemplate})으로 감싸 <b>all-or-nothing</b> 으로 커밋한다 —
- * 중간 단계가 실패하면 앨범을 포함해 전부 롤백되어 앨범 카운트 가드가 다음 기동에서 깨끗한 재시드를
- * 보장한다(부분 시드 잔존 방지).
+ * 멱등성: 앨범이 한 장이라도 있으면(=이미 시드됨) 전체를 건너뛴다(이슈 DoD: 재기동 시 중복 생성 없음). 시드 본체는 단일
+ * 트랜잭션(txTemplate)으로 감싸 all-or-nothing 으로 커밋한다 — 중간 단계가 실패하면 앨범을 포함해 전부 롤백되어 앨범 카운트
+ * 가드가 다음 기동에서 깨끗한 재시드를 보장한다(부분 시드 잔존 방지).
  *
- * <h2>생성 경로</h2>
- * <p>유효성·BCrypt 해싱을 보장하기 위해 가능한 한 기존 application service 를 경유한다. 서비스가
- * 노출하지 않는 두 가지만 도메인/리포지터리를 직접 사용한다: (1) 관리자 role 지정
- * ({@link Member#registerAdmin}), (2) 주문 상태 전진(PENDING→…→DELIVERED) — 결제/배송 행 없이
- * 리뷰 전제조건(주문 DELIVERED)만 만족시키면 되므로 Mock PG·스케줄러를 우회한다.
+ * 생성 경로: 유효성·BCrypt 해싱을 보장하기 위해 가능한 한 기존 application service 를 경유한다. 서비스가 노출하지 않는 두
+ * 가지만 도메인/리포지터리를 직접 사용한다: (1) 관리자 role 지정(Member.registerAdmin), (2) 주문 상태
+ * 전진(PENDING→…→DELIVERED) — 결제/배송 행 없이 리뷰 전제조건(주문 DELIVERED)만 만족시키면 되므로 Mock PG·스케줄러를
+ * 우회한다.
  */
 @Component
 @Profile("local")
@@ -248,9 +243,9 @@ public class LocalDataSeeder implements ApplicationRunner {
     /**
      * 데모 USER 의 DELIVERED 주문 1건 — 리뷰 데모(#108)가 즉시 동작하도록.
      *
-     * <p>{@code place} 로 PENDING 주문을 만든 뒤 같은 트랜잭션의 managed 엔티티를 직접 전진시킨다
-     * (PENDING→PAID→PREPARING→SHIPPED→DELIVERED, 전부 합법 전이). 결제/배송 행은 만들지 않는다 —
-     * 리뷰 전제조건은 주문 상태(DELIVERED/COMPLETED)·소유자·주문 라인뿐이라 자기완결적이다.
+     * place 로 PENDING 주문을 만든 뒤 같은 트랜잭션의 managed 엔티티를 직접
+     * 전진시킨다(PENDING→PAID→PREPARING→SHIPPED→DELIVERED, 전부 합법 전이). 결제/배송 행은 만들지 않는다 — 리뷰
+     * 전제조건은 주문 상태(DELIVERED/COMPLETED)·소유자·주문 라인뿐이라 자기완결적이다.
      */
     private void seedDeliveredOrder(Member demoUser, List<Album> albums) {
         Album target = albums.get(0);

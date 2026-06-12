@@ -15,20 +15,17 @@ import java.util.List;
 /**
  * 운영(비-local) 프로파일 기동 시 데모 시드 유입을 차단하는 fail-fast 가드 (이슈 #128).
  *
- * <p>{@code application.yaml} 의 {@code spring.profiles.active} 기본값(:local 폴백)을 제거했으므로
- * 운영은 {@code docker}(docker-compose 가 명시 주입) 로 기동된다. 만에 하나 과거 프로파일 오설정으로
- * {@link LocalDataSeeder} 가 운영 DB 에 데모 계정을 시드했다면, 알려진 비밀번호({@code admin1234} 등)로
- * 외부 로그인·쿠폰 발급이 가능해 위험하다. 이 가드는 기동 시 데모 계정을 감지하면 {@link IllegalStateException}
- * 을 던져 <b>기동을 중단</b>한다(운영자 즉시 인지 — {@code JwtProperties} 와 동일한 fail-fast).
+ * application.yaml 의 spring.profiles.active 기본값(:local 폴백)을 제거했으므로 운영은 docker(docker-compose 가 명시
+ * 주입)로 기동된다. 만에 하나 과거 프로파일 오설정으로 LocalDataSeeder 가 운영 DB 에 데모 계정을 시드했다면, 알려진
+ * 비밀번호(admin1234 등)로 외부 로그인·쿠폰 발급이 가능해 위험하다. 이 가드는 기동 시 데모 계정을 감지하면
+ * IllegalStateException 을 던져 기동을 중단한다(운영자 즉시 인지 — JwtProperties 와 동일한 fail-fast).
  *
- * <h2>프로파일 조건</h2>
- * <p>{@code @Profile("!local & !test")} — 부팅 가능한 비-local 프로파일({@code docker}, 향후 실 PG 의 {@code prod})
- * 에서 활성화하고, {@code local}(시드 정상 동작)과 {@code test}(통합 테스트가 데모 계정을 커밋)는 배제한다.
+ * 프로파일 조건: @Profile("!local & !test") — 부팅 가능한 비-local 프로파일(docker, 향후 실 PG 의 prod)에서 활성화하고,
+ * local(시드 정상 동작)과 test(통합 테스트가 데모 계정을 커밋)는 배제한다.
  *
- * <p><b>참고</b>: {@code SPRING_PROFILES_ACTIVE} 미설정({@code default} 프로파일) 경로는 Mock PG 빈이 비-default
- * 프로파일 한정({@code @Profile({"local","dev","test","docker"})})이라 컨텍스트가 이 가드(ApplicationRunner)
- * 실행 전에 부팅 실패한다 — 데모 시드도 일어나지 않으므로({@code LocalDataSeeder} 가 {@code @Profile("local")})
- * 안전하며, 이 가드가 직접 보호하는 대상은 아니다.
+ * 참고: SPRING_PROFILES_ACTIVE 미설정(default 프로파일) 경로는 Mock PG 빈이 비-default 프로파일
+ * 한정(@Profile({"local","dev","test","docker"}))이라 컨텍스트가 이 가드(ApplicationRunner) 실행 전에 부팅 실패한다 —
+ * 데모 시드도 일어나지 않으므로(LocalDataSeeder 가 @Profile("local")) 안전하며, 이 가드가 직접 보호하는 대상은 아니다.
  */
 @Component
 @Profile("!local & !test")
