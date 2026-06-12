@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 2.0 |
+| 버전 | 2.1 |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-04 |
-| 변경 내용 | v2.0 (W6~W7 + 확장 M13 쿠폰 + M14/M15 프론트 반영 — 전면 현행화): §4.1 패키지 구조를 현재 구현 기준으로 갱신(cart/order/payment/shipping/review/admin 구현 완료 + `coupon` 모듈 + `web`(SpaForwardConfig)·`common/scheduling` 추가), `backend/`(Spring Boot) + `frontend/`(Vue3) 형제 구조·node-gradle 통합 빌드 명시. ADR-11(쿠폰 선착순=원자적 조건부 UPDATE)·ADR-12(Vue3 SPA + node-gradle)·ADR-13(Caffeine rate-limit 저장) 추가. §5.5 쿠폰 발급 rate-limit·§5.7 쿠폰 발급 동시성 신설, §6.2 실제 이벤트(`OrderPaidEvent`·`MemberWithdrawnEvent`)로 정정, §10 프론트 빌드·프로파일(`.yaml`) 현행화. v1.2 (W5 완료 반영): catalog 4개 서브도메인 구현 완료 표기, AlbumQueryController + AlbumSpecs 동적 검색, 의도적 N+1 보존 정책(W10 시연용) 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain`) 기준으로 정정. |
+| 최종 수정일 | 2026-06-12 |
+| 변경 내용 | v2.1 (W12 문서화): §12 "알려진 한계 및 의도적 트레이드오프" 신설 — 코드 주석에 흩어진 의도적 한계 5종(재고 복원 last-write-wins·스케줄러 단일 인스턴스·rate-limit 인메모리·멱등성 409·Redis 미도입)과 각 도입 트리거를 한곳에 정리, 기존 §10.5·§11·§14와 상호 참조로 중복 제거. 이후 섹션 번호 +1(테스트 §13·컨벤션 §14·미해결 §15) (#226). v2.0 (W6~W7 + 확장 M13 쿠폰 + M14/M15 프론트 반영 — 전면 현행화): §4.1 패키지 구조를 현재 구현 기준으로 갱신(cart/order/payment/shipping/review/admin 구현 완료 + `coupon` 모듈 + `web`(SpaForwardConfig)·`common/scheduling` 추가), `backend/`(Spring Boot) + `frontend/`(Vue3) 형제 구조·node-gradle 통합 빌드 명시. ADR-11(쿠폰 선착순=원자적 조건부 UPDATE)·ADR-12(Vue3 SPA + node-gradle)·ADR-13(Caffeine rate-limit 저장) 추가. §5.5 쿠폰 발급 rate-limit·§5.7 쿠폰 발급 동시성 신설, §6.2 실제 이벤트(`OrderPaidEvent`·`MemberWithdrawnEvent`)로 정정, §10 프론트 빌드·프로파일(`.yaml`) 현행화. v1.2 (W5 완료 반영): catalog 4개 서브도메인 구현 완료 표기, AlbumQueryController + AlbumSpecs 동적 검색, 의도적 N+1 보존 정책(W10 시연용) 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain`) 기준으로 정정. |
 | 관련 문서 | PRD.md, ERD.md, API.md, glossary.md, MILESTONE.md |
 
 ---
@@ -501,11 +501,13 @@ volumes:
 
 현 배포는 **단일 인스턴스를 전제**한다(§1 비목표: 분산 시스템). Rate Limit 버킷은 인스턴스 로컬 Caffeine 캐시에 저장되므로(ADR-13, `common.ratelimit.RateLimitRegistry`), 로드밸런서 뒤에 N대를 두고 수평 확장하면 인스턴스마다 독립 버킷을 유지하여 **동일 IP/회원의 실효 한도가 N배**가 된다. 그 결과 로그인 무차별 대입·계정 열거(signup)·비밀번호 변경·쿠폰 사재기 억제력이 인스턴스 수에 비례해 약화된다(단일 인스턴스 배포면 무해).
 
-따라서 **수평 확장(예: `docker-compose` `deploy.replicas` 증설) 시에는 분산 버킷(bucket4j-redis + Lettuce)으로 전환하거나 게이트웨이/WAF 계층 rate limit 으로 이관하는 것이 필수**다. 도입 트리거·위치는 §11.1·§11.3 참조.
+따라서 **수평 확장(예: `docker-compose` `deploy.replicas` 증설) 시에는 분산 버킷(Bucket4j 분산 백엔드 — `Bucket4jLettuce`/`LettuceBasedProxyManager`, CAS 기반)으로 전환하거나 게이트웨이/WAF 계층 rate limit 으로 이관하는 것이 필수**다. 도입 트리거·위치는 §11.1·§11.3 참조. 이 제약은 §12에 정리한 알려진 한계 #3의 상세 다룸이다.
 
 ---
 
 ## 11. 확장 포인트 (조건부 도입)
+
+각 확장 포인트는 "지금 무엇을 의도적으로 안 했는가"의 이면이다 — 대응하는 **현재 한계와 도입 판단 기준**은 §12에 한곳으로 정리했다.
 
 ### 11.1 Redis 도입 트리거 및 위치
 
@@ -531,9 +533,29 @@ volumes:
 
 ---
 
-## 12. 테스트 아키텍처
+## 12. 알려진 한계 및 의도적 트레이드오프
 
-### 12.1 테스트 피라미드
+아래 항목들은 **누락이 아니라 범위 결정**이다. §1의 우선순위(단순성 · 측정 가능성 · 조건부 확장)와 비목표(분산 시스템 · 단일 인스턴스 가정)의 직접적 귀결로, **정합성(안전성)은 유지하면서 확장·운영 강화만 "측정된 필요"가 생길 때까지 의도적으로 유보**했다. 각 한계는 코드 주석에 근거가 남아 있고, 도입 트리거와 도입 시 위치(§10.5·§11)를 함께 명시한다.
+
+| # | 한계 | 근거 (코드) | 의도적 선택 / 도입 트리거 |
+|---|------|-------------|---------------------------|
+| 1 | 재고 **복원 경로**(취소·환불·결제실패 보상·admin 재고조정)는 비관락 미적용 — last-write-wins | `order/application/OrderService.java` 클래스 javadoc "알려진 한계" 블록 | 주문(place) 핫경로만 `SELECT … FOR UPDATE`(#205)로 직렬화. 저빈도 복원은 단순화 — **음수 가드로 oversell 0(안전성 위반 없음)**, place↔복원 간 lost-update 창만 잔존. 복원 경합이 실측되면 카탈로그 대칭 잠금 도입(#W11-4) |
+| 2 | 스케줄러 **단일 인스턴스 가정** — 분산락 없음 | `common.scheduling.SchedulingConfig`(단일 `@EnableScheduling`) + `@Scheduled` 배치 6종 | 단일 인스턴스 배포 전제(§1 비목표). 다중화 시 **ShedLock**(`@EnableSchedulerLock` + `JdbcTemplateLockProvider`)로 각 배치를 노드 간 1회 실행 보장 → §11.3 |
+| 3 | rate-limit **인메모리** Caffeine — 단일 인스턴스 | `common/ratelimit/RateLimitRegistry.java` "수평 확장 제약(#164)" javadoc | 단일 인스턴스면 무해. 다중화 시 실효 한도 N배 → Bucket4j 분산 백엔드 또는 게이트웨이/WAF로 이관 → **상세 §10.5**, 위치 §11.1 |
+| 4 | 멱등성 **재시도 소진 시 409** — 응답 유실 가능 | `common/idempotency/IdempotencyService.java` "알려진 한계" javadoc | action 커밋 후 완료갱신 트랜잭션이 실패하면 키가 `IN_PROGRESS`로 남아 `ttl + in-progress-grace` 동안 409 → `IdempotencyRecordCleanupTask`가 회수. **부수효과는 이미 반영 → 같은 키 재시도 금지(새 키 사용)**. TTL/grace 상수 조정 또는 분산 합의로 강화 |
+| 5 | **Redis/캐싱 미도입** | Redis 의존성·`@Cacheable`/`@EnableCaching` 부재, #210(분산락 비교) 컷(NOT_PLANNED) | 단일 인스턴스 + MySQL 비관락(#205)으로 oversell 0·목표 TPS 달성 → 한계 효용 낮고 운영 복잡도가 범위 초과. 카탈로그 read 부하 실측 시 도입 → **트리거·위치 §11.1** |
+
+**보충**
+
+- **#1 (재고 복원):** `OrderService` 클래스 javadoc은 _"재고를 되돌리는 경로(…)는 아직 락 없는 last-write-wins 라, place 와 이 경로들 간에는 album.stock lost-update 창이 남는다(음수 가드로 안전성 위반은 없음)"_ 라고 명시한다. 핫경로(동시 주문)의 oversell 결함(#205, W6-6에서 의도적으로 노출)은 비관락으로 해소했고, 저빈도 복원 경로는 안전성을 해치지 않는 선에서 단순하게 둔 것이다. 락 미적용 baseline 은 테스트 전용 `placeWithoutLock` 으로 보존된다.
+- **#2 (스케줄러):** 만료·정리·reconciliation·진행·익명화 배치 6종(`MemberCouponExpirationTask`·`IdempotencyRecordCleanupTask`·`PaymentReconciliationScheduler`·`ShippingReconciliationScheduler`·`ShippingProgressScheduler`·`OrderPiiAnonymizationScheduler`)이 모두 `common.scheduling.SchedulingConfig` 의 단일 `@EnableScheduling` 으로 구동된다 — 노드가 하나면 중복 실행이 없다. 다중 인스턴스로 가면 각 배치가 노드마다 동시에 돌므로, ShedLock 의 `@EnableSchedulerLock` + `JdbcTemplateLockProvider` 로 락을 **기존 MySQL 에 두면**(새 인프라 불필요) "노드 간 최대 1회"가 보장된다. reconciliation·익명화는 멱등(중복 방어 `existsBy…`·`uk_…`)이라 안전망이 한 번 더 겹친다.
+- **#4 (멱등성 409):** `execute(key, …, action)` 은 같은 키를 정확히 한 번 실행하고 결과를 캐싱하지만, "action 커밋 → 마커 COMPLETED 커밋" 사이에 후자가 실패하면 마커가 `IN_PROGRESS` 로 남는다. 이 구간의 같은-키 요청은 409이며, 이는 **이중 실행을 막기 위한 의도된 보수적 동작**이다 — action 부수효과는 이미 반영됐으므로 호출자는 같은 키로 재시도하지 말고 새 `Idempotency-Key` 를 써야 한다. 잔류 마커는 `IdempotencyRecordCleanupTask` 가 `ttl + in-progress-grace` 경과 후 회수한다.
+
+---
+
+## 13. 테스트 아키텍처
+
+### 13.1 테스트 피라미드
 
 ```
        ┌──────────────┐
@@ -547,13 +569,13 @@ volumes:
        └──────────────┘
 ```
 
-### 12.2 통합 테스트 전략
+### 13.2 통합 테스트 전략
 - Testcontainers MySQL 8 사용 (실 환경 동일)
 - `@Sql`로 시드 데이터 주입
 - **동시성 테스트**: `CountDownLatch` + `ExecutorService`로 동시 요청 시뮬레이션 → 핵심 시연 포인트
 - 기본은 트랜잭션 자동 롤백, 동시성 테스트는 명시적 cleanup
 
-### 12.3 부하 테스트 (k6)
+### 13.3 부하 테스트 (k6)
 - 폴더: `loadtest/`
 - 시나리오:
   - `search.js` — 상품 검색
@@ -564,7 +586,7 @@ volumes:
 
 ---
 
-## 13. 코드 컨벤션
+## 14. 코드 컨벤션
 
 - 패키지명: 전 소문자, 단수형 (`order`, `payment`)
 - 클래스명: PascalCase, 역할 접미사 명확 (`OrderService`, `OrderController`, `OrderRepository`)
@@ -574,8 +596,8 @@ volumes:
 
 ---
 
-## 14. 미해결 결정 / 향후 검토
+## 15. 미해결 결정 / 향후 검토
 
 - ~~**시드 데이터 출처**~~: **결정됨** — 카탈로그는 Discogs 덤프, 트랜잭션은 Python Faker 하이브리드([decisions/seed-data.md](./decisions/seed-data.md)). 시드 스크립트 적용은 W8.
-- **한정반 시연 시 Redis 도입 여부**: W9 부하 측정 결과에 따라 결정 (쿠폰 핫 로우는 ADR-11 원자적 UPDATE 로 v1 해소)
+- ~~**한정반 시연 시 Redis 도입 여부**~~: **종결** — W9 측정 결과 MySQL 비관락(#205)으로 oversell 0·목표 TPS 달성, Redis 분산락 비교(#210)는 한계 효용 낮아 컷(NOT_PLANNED). 쿠폰 핫 로우는 ADR-11 원자적 UPDATE 로 v1 해소. 상세는 §12 #5(Redis/캐싱 미도입).
 - **가상 스레드(Virtual Threads) 활성화**: 통합 테스트 안정화 후 옵션으로 시도, 효과 측정 후 채택 여부 결정
