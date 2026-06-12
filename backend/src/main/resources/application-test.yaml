@@ -2,6 +2,16 @@ spring:
   datasource:
     # Testcontainers ServiceConnection 이 실제 자격을 주입하므로 placeholder 통과용 더미.
     password: test
+    hikari:
+      # #222: 56개 @SpringBootTest 컨텍스트가 TestContext 캐시에 상주하며 각자 Hikari 풀의 idle 커넥션을
+      # 점유한다. 기본값(minimum-idle = maximum-pool-size = 10)이면 캐시된 비활성 컨텍스트들이 커넥션을
+      # 계속 물어 누적 동시 커넥션이 MySQL 기본 max_connections(151) 턱밑까지 찬다(로컬 실측 피크 143).
+      # 컨텍스트가 몇 개만 늘어도 한도를 넘겨 신규 컨텍스트 Flyway 연결이 거부되고, 커넥션·메모리 폭증으로
+      # 러너에서 MySQL 컨테이너가 OOM-kill(exit 137) → 이후 전 테스트가 연쇄 Connection refused 로 떨어진다.
+      # 비활성 컨텍스트가 idle 커넥션을 즉시(10s) 반납하도록 minimum-idle=0 으로 둔다. 활성 컨텍스트는
+      # maximum-pool-size 까지 그대로 버스트하므로 동시성 테스트(overselling·coupon·idempotency)는 영향 없다.
+      minimum-idle: 0
+      idle-timeout: 10000
   flyway:
     enabled: true
     # #204: static 싱글턴 Testcontainers MySQL 을 @DataJpaTest 슬라이스와 @SpringBootTest 가 공유한다.
