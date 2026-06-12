@@ -7,7 +7,7 @@
 --   - uk_review_order_album UNIQUE (order_id, album_id)  -- 1주문-1상품-1리뷰
 --   - idx_review_member     (member_id)                  -- 내 리뷰 목록용
 --
--- [W10] (슬로우 쿼리 측정 후 추가, 본 V13 에서는 의도적 누락 — ERD §5.2):
+-- [W10→V22 보완] (#225, 슬로우 쿼리 측정 후 V22__add_order_review_list_indexes.sql 에서 추가됨 — ERD §5.2):
 --   - idx_review_album_created (album_id, created_at)    -- 상품별 리뷰 조회
 --     ※ album_id 단일 조회는 fk_review_album 인덱스로 받쳐지므로 W5 기능 자체는 동작한다.
 --

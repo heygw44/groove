@@ -5,6 +5,7 @@ import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,10 +15,14 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase.Replace;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -44,6 +49,9 @@ class OrderRepositoryTest {
 
     @Autowired
     private MemberRepository memberRepository;
+
+    @Autowired
+    private EntityManager em;
 
     // orders.member_id → member.id FK 때문에 실제 회원이 선행 존재해야 한다.
     private Long memberId;
@@ -200,5 +208,52 @@ class OrderRepositoryTest {
         assertThat(targets)
                 .extracting(OrderRepository.OrderNumberView::getId)
                 .doesNotContain(cancelled.getId());
+    }
+
+    // ── 회원 주문 목록 핫 경로 (#225, idx_orders_member_created / idx_orders_status_created) ──
+    // member_id 스코프 쿼리라 setUp 의 고유 회원으로 격리된다(공유 Testcontainers 안전).
+
+    @Test
+    @DisplayName("findByMemberId(#225) — 내 주문을 created_at DESC 페이지로 반환 (정렬 보존)")
+    void findByMemberId_returnsMyOrdersSortedByCreatedAtDesc() {
+        Order paid = saveOrder(memberId, OrderStatus.PAID);
+        Order delivered = saveOrder(memberId, OrderStatus.DELIVERED);
+        Order pending = saveOrder(memberId, OrderStatus.PENDING);
+
+        Page<Order> page = orderRepository.findByMemberId(
+                memberId, PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        assertThat(page.getContent())
+                .extracting(Order::getId)
+                .containsExactlyInAnyOrder(paid.getId(), delivered.getId(), pending.getId());
+        assertThat(page.getContent())
+                .isSortedAccordingTo(Comparator.comparing(Order::getCreatedAt).reversed());
+    }
+
+    @Test
+    @DisplayName("findByMemberIdAndStatus(#225) — 내 주문 중 해당 status 만 반환")
+    void findByMemberIdAndStatus_filtersByStatus() {
+        Order paid = saveOrder(memberId, OrderStatus.PAID);
+        saveOrder(memberId, OrderStatus.DELIVERED);
+
+        Page<Order> page = orderRepository.findByMemberIdAndStatus(
+                memberId, OrderStatus.PAID, PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        assertThat(page.getContent()).extracting(Order::getId).containsExactly(paid.getId());
+    }
+
+    @Test
+    @DisplayName("[#225] 주문 목록 복합 인덱스가 V22 에서 도입됨 — (member_id|status, created_at)")
+    void listIndexes_areAdded() {
+        // V8 헤더의 [W10] 의도적 누락 인덱스를 V22 에서 도입했다(filesort/풀스캔 Before→After 시연 완료).
+        // 가드가 깨지면(인덱스 누락) 목록 쿼리 성능 개선 회귀 신호다 — AlbumRepositoryTest.searchIndexes_areAdded 와 동일 의도.
+        @SuppressWarnings("unchecked")
+        List<String> indexNames = (List<String>) em.createNativeQuery(
+                "SELECT INDEX_NAME FROM information_schema.STATISTICS " +
+                        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orders' " +
+                        "GROUP BY INDEX_NAME")
+                .getResultList();
+
+        assertThat(indexNames).contains("idx_orders_member_created", "idx_orders_status_created");
     }
 }
