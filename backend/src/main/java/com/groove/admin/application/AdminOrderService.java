@@ -35,29 +35,25 @@ import java.util.Set;
 /**
  * 관리자 주문 조회 / 상태 강제 전환 / 환불 트랜잭션 경계 (이슈 #69, PRD §5.3·§6.9, G2 게이트).
  *
- * <p>주문(order)·결제(payment) 두 도메인을 조율하므로 어느 한쪽 모듈이 아닌 {@code admin} 모듈에 둔다 —
- * Aggregate 간 조율은 도메인이 아닌 ApplicationService 책임이라는 기존 패턴({@code PaymentCallbackService},
- * {@code OrderService#cancel} 의 재고 복원)과 동일하다.
+ * 주문(order)·결제(payment) 두 도메인을 조율하므로 어느 한쪽 모듈이 아닌 admin 모듈에 둔다 — Aggregate 간 조율은
+ * 도메인이 아닌 ApplicationService 책임이라는 기존 패턴(PaymentCallbackService, OrderService.cancel 의 재고 복원)과
+ * 동일.
  *
- * <h2>상태 강제 전환의 범위</h2>
- * <p>{@link #changeStatus} 는 부수효과(재고 복원·환불)가 없는 <b>전진 전이</b>({@link #FORCEABLE_TARGETS})만
- * 허용한다. 취소(CANCELLED)·결제실패(PAYMENT_FAILED)·결제완료(PAID) 로의 전환은 재고/결제 상태가 함께
- * 바뀌어야 하므로 이 메서드로 처리하지 않는다 — 취소·환불은 {@link #refund}, 결제 확정은 웹훅/폴링 경로
- * ({@code PaymentCallbackService})가 담당한다. 허용 대상이라도 실제 전이가 {@link OrderStatus#canTransitionTo}
- * 위반이면 409({@link IllegalStateTransitionException}).
+ * 상태 강제 전환의 범위: changeStatus 는 부수효과(재고 복원·환불)가 없는 전진 전이(FORCEABLE_TARGETS)만 허용한다.
+ * 취소(CANCELLED)·결제실패(PAYMENT_FAILED)·결제완료(PAID) 로의 전환은 재고/결제 상태가 함께 바뀌어야 하므로 이 메서드로
+ * 처리하지 않는다 — 취소·환불은 refund, 결제 확정은 웹훅/폴링 경로(PaymentCallbackService)가 담당한다. 허용 대상이라도
+ * 실제 전이가 OrderStatus.canTransitionTo 위반이면 409(IllegalStateTransitionException).
  *
- * <h2>환불</h2>
- * <p>{@link #refund} 는 단일 트랜잭션에서 PG {@code refund()} 호출 + {@code Payment} REFUNDED 전이 +
- * {@code Order} CANCELLED 전이 + 각 라인 재고 복원 + 쿠폰 USED→ISSUED 복원을 수행한다
- * ({@code PaymentCallbackService} 의 FAILED 보상 트랜잭션과 같은 패턴). 어느 단계든 실패하면 트랜잭션
- * 전체가 롤백된다. PG 호출이 트랜잭션 안에서 일어나 DB 커넥션을 점유하는 한계는 {@code PaymentService} 와
- * 동일하게 v1 Mock 지연이 짧아 허용한다. 쿠폰 복원은 {@code OrderService.cancel} 과 대칭으로
- * 호출되어야 하며 누락 시 환불된 주문의 쿠폰이 USED 인 채로 남는다 (이슈 #91 HIGH 리스크).
+ * 환불: refund 는 단일 트랜잭션에서 PG refund() 호출 + Payment REFUNDED 전이 + Order CANCELLED 전이 + 각 라인 재고
+ * 복원 + 쿠폰 USED→ISSUED 복원을 수행한다(PaymentCallbackService 의 FAILED 보상 트랜잭션과 같은 패턴). 어느 단계든
+ * 실패하면 트랜잭션 전체가 롤백된다. PG 호출이 트랜잭션 안에서 일어나 DB 커넥션을 점유하는 한계는 PaymentService 와
+ * 동일하게 v1 Mock 지연이 짧아 허용한다. 쿠폰 복원은 OrderService.cancel 과 대칭으로 호출되어야 하며 누락 시 환불된
+ * 주문의 쿠폰이 USED 인 채로 남는다 (이슈 #91 HIGH 리스크).
  *
- * <p>멱등: 이미 {@code REFUNDED} 인 결제에 재요청하면 PG 호출/상태 전이/재고 복원 없이 현재 상태로 응답한다
- * (이슈 #69 DoD "중복 환불 요청 무해"). 동시 이중 제출 race 는 {@code OrderService#place} 의 재고 차감과
- * 동일하게 v1 에서 노출된 채로 둔다 — 관리자 단건 조작이라 충돌 확률이 무시 가능하며, 만에 하나 두 번째가
- * {@code Payment.markRefunded()} 의 방어선에 걸려도 트랜잭션 롤백으로 끝난다.
+ * 멱등: 이미 REFUNDED 인 결제에 재요청하면 PG 호출/상태 전이/재고 복원 없이 현재 상태로 응답한다 (이슈 #69 DoD
+ * "중복 환불 요청 무해"). 동시 이중 제출 race 는 OrderService.place 의 재고 차감과 동일하게 v1 에서 노출된 채로 둔다 —
+ * 관리자 단건 조작이라 충돌 확률이 무시 가능하며, 만에 하나 두 번째가 Payment.markRefunded() 의 방어선에 걸려도
+ * 트랜잭션 롤백으로 끝난다.
  */
 @Service
 public class AdminOrderService {
@@ -65,7 +61,7 @@ public class AdminOrderService {
     private static final Logger log = LoggerFactory.getLogger(AdminOrderService.class);
 
     /**
-     * {@code PATCH /status} 로 강제 전환 가능한 대상 상태 — 재고/결제 부수효과가 없는 전진 전이만.
+     * PATCH /status 로 강제 전환 가능한 대상 상태 — 재고/결제 부수효과가 없는 전진 전이만.
      * (PENDING/PAID/PAYMENT_FAILED/CANCELLED 는 의도적으로 제외 — 위 클래스 Javadoc 참조.)
      */
     private static final Set<OrderStatus> FORCEABLE_TARGETS =
@@ -88,10 +84,9 @@ public class AdminOrderService {
 
     /**
      * 전체 주문 목록 — 상태/회원/기간 필터 + 페이징. 들어온 필터만 골라 AND 결합한다 (없으면 전체).
-     *
-     * <p>회원 주문 목록({@code OrderService#listForMember})과 동일하게 컬렉션 fetch join 을 두지 않고
-     * ({@link Order#getItems items} 의 {@code @BatchSize} 활용) 트랜잭션 안에서 items 를 강제 초기화한다 —
-     * 컨트롤러의 SUMMARY 응답 매핑({@code itemCount}) 시점 {@code LazyInitializationException} 회피.
+     * 회원 주문 목록(OrderService.listForMember)과 동일하게 컬렉션 fetch join 을 두지 않고(Order.getItems 의
+     * @BatchSize 활용) 트랜잭션 안에서 items 를 강제 초기화한다 — 컨트롤러의 SUMMARY 응답 매핑(itemCount) 시점
+     * LazyInitializationException 회피.
      */
     @Transactional(readOnly = true)
     public Page<Order> list(AdminOrderSearchCriteria criteria, Pageable pageable) {
@@ -109,16 +104,15 @@ public class AdminOrderService {
             specs.add(OrderSpecifications.createdAtBefore(criteria.to()));
         }
         Page<Order> page = orderRepository.findAll(Specification.allOf(specs), pageable);
-        // 응답 매핑({@code AdminOrderSummaryResponse.from}) 이 컨트롤러에서 detached 엔티티의 items.size() 를 본다 —
-        // {@code spring.jpa.open-in-view=false} 이므로 트랜잭션 종료 전에 items 를 일괄 강제 초기화한다
-        // ({@code @BatchSize} 가 N+1 을 IN 쿼리 1번으로 흡수). 응답 DTO 에 다른 LAZY 연관 접근을 추가할 거면 여기도 함께 초기화해야 한다.
+        // 응답 매핑(AdminOrderSummaryResponse.from) 이 컨트롤러에서 detached 엔티티의 items.size() 를 본다 —
+        // spring.jpa.open-in-view=false 이므로 트랜잭션 종료 전에 items 를 일괄 강제 초기화한다
+        // (@BatchSize 가 N+1 을 IN 쿼리 1번으로 흡수). 응답 DTO 에 다른 LAZY 연관 접근을 추가할 거면 여기도 함께
+        // 초기화해야 한다.
         page.forEach(order -> order.getItems().size());
         return page;
     }
 
-    /**
-     * 주문 상세 (관리자) — 회원/게스트 주문 모두 조회 가능 (소유자 검증 없음).
-     */
+    /** 주문 상세 (관리자) — 회원/게스트 주문 모두 조회 가능 (소유자 검증 없음). */
     @Transactional(readOnly = true)
     public Order findDetail(String orderNumber) {
         return orderRepository.findByOrderNumber(orderNumber)
@@ -128,8 +122,9 @@ public class AdminOrderService {
     /**
      * 주문 상태 강제 전환. 사유는 컨트롤러가 필수로 강제한다 (운영 감사 추적).
      *
-     * @throws DomainException                  허용 대상이 아닌 상태로의 전환 시도 (422 {@code DOMAIN_RULE_VIOLATION})
-     * @throws IllegalStateTransitionException  허용 대상이지만 현재 상태에서 불법 전이 (409 {@code ORDER_INVALID_STATE_TRANSITION})
+     * @throws DomainException                  허용 대상이 아닌 상태로의 전환 시도 (422 DOMAIN_RULE_VIOLATION)
+     * @throws IllegalStateTransitionException  허용 대상이지만 현재 상태에서 불법 전이 (409
+     * ORDER_INVALID_STATE_TRANSITION)
      * @throws OrderNotFoundException           주문 미존재 (404)
      */
     @Transactional
@@ -151,7 +146,7 @@ public class AdminOrderService {
      *
      * @throws OrderNotFoundException          주문 미존재 (404)
      * @throws PaymentNotFoundException        해당 주문에 결제 없음 (404)
-     * @throws PaymentNotRefundableException   결제가 PAID 가 아님 — PENDING/FAILED (409 {@code PAYMENT_NOT_REFUNDABLE})
+     * @throws PaymentNotRefundableException   결제가 PAID 가 아님 — PENDING/FAILED (409 PAYMENT_NOT_REFUNDABLE)
      * @throws IllegalStateTransitionException 주문이 CANCELLED 로 전이 불가 (SHIPPED 이후 등, 409)
      * @throws PaymentGatewayException         PG 환불 호출 실패 (502)
      */
@@ -162,7 +157,7 @@ public class AdminOrderService {
         // Payment 를 PESSIMISTIC_WRITE 로 잠가 동시 환불 요청 두 건이 상태 확인 → PG refund() 호출까지
         // 동시에 통과해 PG 가 이중 환불을 받는 race 를 차단한다 (CodeRabbit 리뷰 반영). 락은 트랜잭션 종료 시
         // 해제되고, order_id UNIQUE 라 정확히 한 row 만 잠그므로 데드락 가능성 없음. PG 측 멱등 키는 #72 도입
-        // ({@link Payment#refundIdempotencyKey()}) — 보상 트랜잭션 부분 실패 후 재시도에도 PG 실호출 1회 보장.
+        // (Payment.refundIdempotencyKey()) — 보상 트랜잭션 부분 실패 후 재시도에도 PG 실호출 1회 보장.
         Payment payment = paymentRepository.findByOrderIdForUpdate(order.getId())
                 .orElseThrow(PaymentNotFoundException::new);
 

@@ -9,20 +9,17 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 결제 완료 시 배송을 자동 생성하는 리스너 (#W7-6) — {@link OrderPaidEvent} 를 {@link TransactionPhase#AFTER_COMMIT}
- * 으로 받아 {@link ShippingProvisioner} 로 위임해 배송을 {@code PREPARING} 상태로 만들고 운송장 번호를 발급한다.
+ * 결제 완료 시 배송을 자동 생성하는 리스너 (#W7-6) — OrderPaidEvent 를 AFTER_COMMIT 으로 받아 ShippingProvisioner 로 위임해
+ * 배송을 PREPARING 상태로 만들고 운송장 번호를 발급한다.
  *
- * <h2>{@code AFTER_COMMIT} 인 이유</h2>
- * <p>이벤트는 결제 결과 적용 트랜잭션 안에서 발행된다(={@code PaymentCallbackService.applyResult()}). AFTER_COMMIT
- * 으로 바인딩하면 그 트랜잭션이 커밋된 뒤에만 실행되므로 "확정되지 않은 결제"에 대해 배송이 새지 않는다. 실제 DB
- * 쓰기는 {@link ShippingProvisioner#provisionForOrder} 의 {@code REQUIRES_NEW} 트랜잭션이 담당한다 — AFTER_COMMIT
- * 시점에는 활성 트랜잭션이 없기 때문이다.
+ * AFTER_COMMIT 인 이유: 이벤트는 결제 결과 적용 트랜잭션 안에서 발행된다(=PaymentCallbackService.applyResult()).
+ * AFTER_COMMIT 바인딩이면 그 트랜잭션 커밋 뒤에만 실행되므로 "확정되지 않은 결제"에 배송이 새지 않는다. 실제 DB 쓰기는
+ * provisionForOrder 의 REQUIRES_NEW 트랜잭션이 담당한다 — AFTER_COMMIT 시점에는 활성 트랜잭션이 없기 때문.
  *
- * <h2>실패 격리와 보충</h2>
- * <p>AFTER_COMMIT 리스너의 예외는 트랜잭션 동기화 과정에서 흡수돼 호출자(결제 콜백)로 전파되지 않으므로 여기서
- * 잡아 로그로 남긴다. {@link DataIntegrityViolationException}(중복 이벤트/경합)은 "이미 생성됨"으로 흡수하고, 그 밖의
- * 일시 실패는 주문이 PAID 인데 배송이 없는 상태로 남지만 — {@link ShippingReconciliationScheduler} 가 주기적으로
- * 스캔해 보충하므로 영구 고아가 되지 않는다(이슈 #169).
+ * 실패 격리와 보충: AFTER_COMMIT 리스너의 예외는 트랜잭션 동기화 과정에서 흡수돼 호출자(결제 콜백)로 전파되지 않으므로 여기서
+ * 잡아 로그로 남긴다. DataIntegrityViolationException(중복 이벤트/경합)은 "이미 생성됨"으로 흡수하고, 그 밖의 일시 실패는
+ * 주문이 PAID 인데 배송이 없는 상태로 남지만 ShippingReconciliationScheduler 가 주기적으로 스캔해 보충하므로 영구 고아가 되지
+ * 않는다(이슈 #169).
  */
 @Component
 public class ShippingCreationListener {

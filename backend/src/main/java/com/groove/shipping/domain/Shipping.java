@@ -21,19 +21,18 @@ import java.util.Objects;
 /**
  * 배송 (ERD §4.13, glossary §3.6).
  *
- * <p>주문당 배송 1건 — {@code order_id} UNIQUE. 결제 완료 이벤트({@code OrderPaidEvent}) 의 AFTER_COMMIT
- * 리스너가 {@link #prepare} 로 {@link ShippingStatus#PREPARING} 상태로 생성하고, 시연용 자동 진행
- * 스케줄러가 {@link #markShipped()} → {@link #markDelivered()} 로 한 단계씩 밀어준다. 배송지 정보는 주문
- * 시점에 캡처된 {@link OrderShippingInfo} 스냅샷을 그대로 복사한다 — 주문이 사후에 바뀌어도 발송된 배송에는 영향이 없다.
+ * 주문당 배송 1건 — order_id UNIQUE. 결제 완료 이벤트(OrderPaidEvent)의 AFTER_COMMIT 리스너가 prepare 로 PREPARING 상태로
+ * 생성하고, 시연용 자동 진행 스케줄러가 markShipped → markDelivered 로 한 단계씩 밀어준다. 배송지 정보는 주문 시점에 캡처된
+ * OrderShippingInfo 스냅샷을 그대로 복사한다 — 주문이 사후에 바뀌어도 발송된 배송에는 영향이 없다.
  *
- * <p>상태 전이 규칙은 {@link ShippingStatus#canTransitionTo(ShippingStatus)} 가 판정한다 —
- * {@code Payment} 와 동일하게 DB 트리거를 두지 않고 애플리케이션 레벨에 일원화하며, 위반 시 {@link IllegalStateException}.
+ * 상태 전이 규칙은 ShippingStatus.canTransitionTo 가 판정한다 — Payment 와 동일하게 DB 트리거를 두지 않고 애플리케이션
+ * 레벨에 일원화, 위반 시 IllegalStateException.
  */
 @Entity
 @Table(name = "shipping")
 public class Shipping extends BaseTimeEntity {
 
-    /** DB {@code tracking_number} 컬럼 길이 — {@link #prepare} 가 선검증해 DB 예외를 막는다. */
+    /** DB tracking_number 컬럼 길이 — prepare 가 선검증해 DB 예외를 막는다. */
     static final int MAX_TRACKING_NUMBER_LENGTH = 50;
 
     /** PII 익명화 시 텍스트 필드에 채우는 마스킹 라벨 (#170 Part B). 모든 PII 컬럼 길이 안에 들어간다. */
@@ -79,8 +78,8 @@ public class Shipping extends BaseTimeEntity {
     private Instant deliveredAt;
 
     /**
-     * 배송 PII 익명화 시점 (#170 Part B). 배송완료 후 보존기간이 지나면 {@code OrderPiiAnonymizationScheduler}
-     * 가 수령인/주소 PII 를 마스킹하고 이 시각을 찍는다 — 배치 대상 선별과 멱등 마커를 겸한다.
+     * 배송 PII 익명화 시점 (#170 Part B). 배송완료 후 보존기간이 지나면 OrderPiiAnonymizationScheduler 가 수령인/주소 PII 를
+     * 마스킹하고 이 시각을 찍는다 — 배치 대상 선별과 멱등 마커를 겸한다.
      */
     @Column(name = "anonymized_at")
     private Instant anonymizedAt;
@@ -101,7 +100,7 @@ public class Shipping extends BaseTimeEntity {
     }
 
     /**
-     * 배송 준비 시작 — 결제 완료 후 호출한다. 초기 상태 {@link ShippingStatus#PREPARING}.
+     * 배송 준비 시작 — 결제 완료 후 호출한다. 초기 상태 PREPARING.
      *
      * @param order          배송 대상 주문 (1:1)
      * @param shippingInfo   주문 시점에 캡처된 배송지 스냅샷
@@ -120,7 +119,7 @@ public class Shipping extends BaseTimeEntity {
     }
 
     /**
-     * 발송 처리 — 자동 진행 스케줄러가 {@code PREPARING} 인 배송을 일정 시간 경과 후 호출한다. {@code shippedAt} 을 기록한다.
+     * 발송 처리 — 자동 진행 스케줄러가 PREPARING 인 배송을 일정 시간 경과 후 호출한다. shippedAt 을 기록한다.
      */
     public void markShipped() {
         transitionTo(ShippingStatus.SHIPPED);
@@ -128,7 +127,7 @@ public class Shipping extends BaseTimeEntity {
     }
 
     /**
-     * 배송 완료 처리 — 자동 진행 스케줄러가 {@code SHIPPED} 인 배송을 일정 시간 경과 후 호출한다. {@code deliveredAt} 을 기록한다.
+     * 배송 완료 처리 — 자동 진행 스케줄러가 SHIPPED 인 배송을 일정 시간 경과 후 호출한다. deliveredAt 을 기록한다.
      */
     public void markDelivered() {
         transitionTo(ShippingStatus.DELIVERED);
@@ -143,10 +142,10 @@ public class Shipping extends BaseTimeEntity {
     }
 
     /**
-     * 배송 PII 익명화 (#170 Part B). 배송완료 후 보존기간이 지난 배송의 수령인/주소 PII 를 마스킹한다.
-     * {@code address_detail} 은 원래 NULL 일 수 있어 NULL 로 비운다. 운송장 번호·상태·시각 등 비-PII 는 보존한다.
+     * 배송 PII 익명화 (#170 Part B). 배송완료 후 보존기간이 지난 배송의 수령인/주소 PII 를 마스킹한다. address_detail 은 원래
+     * NULL 일 수 있어 NULL 로 비운다. 운송장 번호·상태·시각 등 비-PII 는 보존.
      *
-     * <p><b>멱등</b>: 이미 익명화됐으면({@code anonymized_at != null}) no-op — 배치 재실행에 안전하다.
+     * 멱등: 이미 익명화됐으면(anonymized_at != null) no-op — 배치 재실행에 안전.
      */
     public void anonymizePii(Instant now) {
         if (this.anonymizedAt != null) {

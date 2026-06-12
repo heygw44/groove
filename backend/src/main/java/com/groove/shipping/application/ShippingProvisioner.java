@@ -12,21 +12,17 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 결제 완료 주문에 배송을 생성(프로비저닝)하는 단일 진입점 — 정상 경로인 {@link ShippingCreationListener}
- * (AFTER_COMMIT)와 안전망인 {@link ShippingReconciliationScheduler}(주기 보충, 이슈 #169)가 같은 로직을 공유한다.
+ * 결제 완료 주문에 배송을 생성(프로비저닝)하는 단일 진입점 — 정상 경로인 ShippingCreationListener(AFTER_COMMIT)와 안전망인
+ * ShippingReconciliationScheduler(주기 보충, 이슈 #169)가 같은 로직을 공유한다.
  *
- * <h2>독립 트랜잭션({@link Propagation#REQUIRES_NEW})</h2>
- * <p>리스너는 AFTER_COMMIT 시점이라 활성 트랜잭션이 없고, 스케줄러는 주문마다 격리된 커밋 경계가 필요하다 —
- * 둘 다 이 메서드의 {@code REQUIRES_NEW} 로 충족한다.
+ * 독립 트랜잭션(REQUIRES_NEW): 리스너는 AFTER_COMMIT 시점이라 활성 트랜잭션이 없고, 스케줄러는 주문마다 격리된 커밋 경계가
+ * 필요해 둘 다 이 메서드의 REQUIRES_NEW 로 충족한다.
  *
- * <h2>한 주문당 배송 1건</h2>
- * <p>{@link ShippingRepository#existsByOrderId} 로 흔한 재시도/중복을 미리 거르고, 최종 방어선은
- * {@code uk_shipping_order} UNIQUE 다 — {@code saveAndFlush} 로 동기 flush 해 충돌을 즉시 드러낸다.
+ * 한 주문당 배송 1건: existsByOrderId 로 흔한 재시도/중복을 미리 거르고, 최종 방어선은 uk_shipping_order UNIQUE 다 —
+ * saveAndFlush 로 동기 flush 해 충돌을 즉시 드러낸다.
  *
- * <h2>예외를 삼키지 않는다</h2>
- * <p>충돌({@code DataIntegrityViolationException})·일시 장애 예외는 호출자(리스너/스케줄러)로 전파한다 —
- * {@code REQUIRES_NEW} 트랜잭션이 깨끗이 롤백되고, "이미 존재(흡수)" vs "실패(재시도)" 분기와 로깅은 호출자가
- * 정책에 맞게 처리한다.
+ * 충돌(DataIntegrityViolationException)·일시 장애 예외는 호출자(리스너/스케줄러)로 전파한다 — REQUIRES_NEW 트랜잭션이 깨끗이
+ * 롤백되고, "이미 존재(흡수)" vs "실패(재시도)" 분기와 로깅은 호출자가 정책에 맞게 처리한다.
  */
 @Component
 public class ShippingProvisioner {
@@ -46,10 +42,10 @@ public class ShippingProvisioner {
     }
 
     /**
-     * 주문에 배송이 없으면 {@code PREPARING} 배송을 만들고 운송장을 발급한 뒤, 주문을 PAID→PREPARING 으로 락스텝
-     * 전진(이슈 #161)시키고 운송장 번호를 비정규화(이슈 #116)한다. 이미 있거나 주문이 없으면 무해하게 건너뛴다.
+     * 주문에 배송이 없으면 PREPARING 배송을 만들고 운송장을 발급한 뒤, 주문을 PAID→PREPARING 으로 락스텝 전진(이슈 #161)시키고
+     * 운송장 번호를 비정규화(이슈 #116)한다. 이미 있거나 주문이 없으면 무해하게 건너뛴다.
      *
-     * @return 새로 생성하면 {@code true}, 이미 있거나 주문이 없어 건너뛰면 {@code false}
+     * @return 새로 생성하면 true, 이미 있거나 주문이 없어 건너뛰면 false
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean provisionForOrder(Long orderId, String orderNumber) {
