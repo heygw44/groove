@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.2 (진행 현황 동기화) |
+| 버전 | 1.3 (W8~W11 완료 동기화) |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
+| 최종 수정일 | 2026-06-12 (W8~W11 완료 반영 — M8(#69·#139~#143)·M9(#192~#197)·M10(#203~#206)·M11(#207~#211) 이슈 전부 머지/종료. §1 표 W8·W10·W11 ✅, §3 W8-1/2/4/5·W9·W10·W11 체크 갱신, 검색인덱스 V6→**V21** 정정, Redis(#210)·Virtual Threads(#211)는 측정 우선순위 밀려 NOT_PLANNED(컷), §6 진행 바·M8~M11 closed 정책 갱신) — 이전: 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
 | 진행 기간 | 12주 (단독, 전업) + 확장(쿠폰·프론트) |
 | 주당 가용 시간 | 35~45시간 |
 | 표기 방식 | 상대 (W1 ~ W12) + 확장 M13~M15 |
@@ -86,15 +86,15 @@
 | 설계 | W1~W2 | PRD·아키텍처·ERD·API 명세 확정 | — | ✅ 완료 |
 | 인프라/스켈레톤 | W3 | Docker Compose, 패키지·Security 베이스 | **G1** | ✅ 통과 |
 | 도메인 구현 | W4~W7 | 인증→카탈로그→장바구니/주문→결제/배송/리뷰 | **G2** | ✅ 통과 (2026-05-13) |
-| 통합/시드 | W8 | 통합 테스트, 시드 데이터, Postman 컬렉션 | — | ⏳ 진행 (CI #86 완료, Postman·README ◐ 부분 완료 — 잔여: #W8-1 커버리지 게이트 확장·#W8-3 대규모 시드) |
-| 측정 | W9 | k6 시나리오, 베이스라인, 문제 식별 | **G3** | ✅ 통과 (2026-06-10) |
-| CS 개선 | W10~W11 | N+1·인덱스·동시성·멱등성 + Before/After | — | ⏳ 예정 |
-| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | ⏳ 예정 |
+| 통합/시드 | W8 | 통합 테스트, 시드 데이터, API 컬렉션(Bruno) | — | ✅ 완료 (M8 #69·#139~#143 — 커버리지 게이트·단위 테스트·5만건 시드·Bruno 63/63·README 다이어그램) |
+| 측정 | W9 | k6 시나리오, 베이스라인, 문제 식별 | **G3** | ✅ 통과 (2026-06-10, M9 #192~#197) |
+| CS 개선 | W10~W11 | N+1·인덱스·동시성·멱등성 + Before/After | — | ✅ 완료 (M10 #203~#206 · M11 #207~#209; Redis #210·VT #211 측정 후 컷) |
+| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | ⏳ 예정 (M12 — 유일한 잔여 로드맵) |
 | 확장: 쿠폰 | M13 | 쿠폰 시스템 + 선착순 동시성 + k6 Before/After | — | ✅ 완료 (~2026-06-01) |
 | 확장: 데모 프론트 | M14 | 정적 Bootstrap 시연 UI | — | ✅ 완료 → M15 로 대체 |
 | 확장: Vue 프론트 | M15 | Vue 3 + Vite 전 기능 시연 UI | — | ✅ 완료 (2026-06-03) |
 
-> **로드맵 분기**: 본 문서의 W1~W12 로드맵에서 W1~W7(핵심 흐름)을 완료(G2 통과)한 뒤, **확장 도메인으로 쿠폰(M13)과 데모 프론트엔드(M14 바닐라 → M15 Vue 전환)** 를 먼저 진행했다. 측정·개선·문서화(W8~W12, G3/G4)는 남은 로드맵이며, 쿠폰 확장이 그중 DoD #4(k6)·#5(Before/After) 일부를 선충족했다.
+> **로드맵 분기**: 본 문서의 W1~W12 로드맵에서 W1~W7(핵심 흐름)을 완료(G2 통과)한 뒤, **확장 도메인으로 쿠폰(M13)과 데모 프론트엔드(M14 바닐라 → M15 Vue 전환)** 를 먼저 진행했다. 이후 통합/시드(W8)·측정(W9, G3)·CS 개선(W10~W11)까지 모두 완료했고, **남은 로드맵은 문서화/시연(W12, G4) 단 하나**다. 쿠폰 확장이 그중 DoD #4(k6)·#5(Before/After) 일부를 선충족했다.
 >
 > **확장 마일스톤**: M13 상세 이슈는 §3 끝의 「확장 — 쿠폰 시스템」 절([plans/coupon-system.md](plans/coupon-system.md)). M14/M15 프론트엔드는 백엔드 시연용 UI로, M14(정적 Bootstrap)를 폐기하고 M15(Vue 3 + Vite + Pinia + Tailwind, History 라우팅 → `SpaForwardConfig`, node-gradle 통합 빌드)로 재구축했다.
 
@@ -849,32 +849,32 @@
 
 ---
 
-### #W8-1 [test] 통합 테스트 보강 (커버리지 60%+)
+### #W8-1 (GH #139) [test] 통합 테스트 보강 (커버리지 60%+) ✅
 **라벨**: `type:test`, `M`
 **선행**: #W7-8
 
 **작업 내용**
-- [ ] JaCoCo 리포트 분석 → 미커버 영역 식별
-- [ ] 핵심 도메인(주문/결제/인증) 커버리지 80% 이상
-- [ ] 엣지 케이스 추가 (잘못된 입력, 권한 부족, 상태 위반)
+- [x] JaCoCo 리포트 분석 → 미커버 영역 식별
+- [x] 핵심 도메인(주문/결제/인증) 커버리지 80% 이상
+- [x] 엣지 케이스 추가 (잘못된 입력, 권한 부족, 상태 위반)
 
 **완료 조건**
-- [ ] 전체 라인 커버리지 60%+
-- [ ] 핵심 도메인 80%+
+- [x] 전체 라인 커버리지 60%+
+- [x] 핵심 도메인 80%+ (`build.gradle.kts` JaCoCo 게이트로 강제)
 
 ---
 
-### #W8-2 [test] 단위 테스트 강화 (도메인 로직)
+### #W8-2 (GH #142) [test] 단위 테스트 강화 (도메인 로직) ✅
 **라벨**: `type:test`, `M`
 **선행**: #W8-1
 
 **작업 내용**
-- [ ] 상태 전이 메서드 단위 테스트 (Order, Payment, Shipping)
-- [ ] 검증 규칙 단위 테스트
-- [ ] BCrypt, JWT 등 보안 모듈 단위 테스트
+- [x] 상태 전이 메서드 단위 테스트 (Order, Payment, Shipping)
+- [x] 검증 규칙 단위 테스트
+- [x] BCrypt, JWT 등 보안 모듈 단위 테스트
 
 **완료 조건**
-- [ ] 모든 도메인 로직 단위 테스트 존재
+- [x] 모든 도메인 로직 단위 테스트 존재
 
 ---
 
@@ -900,33 +900,33 @@
 
 ---
 
-### #W8-4 [docs] Postman 컬렉션 완성 ◐ (부분 완료)
+### #W8-4 (GH #141) [docs] API 컬렉션 완성 — Postman → Bruno 이행 ✅
 **라벨**: `type:docs`, `M`
 **선행**: #W7-8
-**상태**: 핵심 흐름 컬렉션(`postman/groove.collection.json` + `groove.environment.json`)을 저장소에 커밋해 회원 E2E 1클릭 시연은 동작한다. 잔여: 전체 엔드포인트(회원 셀프서비스·쿠폰) 등록, Rate Limit 엣지 케이스, 응답 검증 스크립트 보강.
+**상태**: ✅ 완료. #141 의 "전체 엔드포인트·Rate Limit 엣지·응답검증 보강" 과정에서 도구를 **Postman → Bruno 로 전면 이행**했다(#216 태그 스킴 머지, #163 쿠키 테스트 수정으로 full **63/63** 통과, #217 에서 Postman/newman/변환기 제거). 컬렉션은 `bruno/`(82 `.bru`) 가 정본이며 회원 셀프서비스·쿠폰까지 전 엔드포인트 + 엣지 케이스를 포함한다.
 
 **작업 내용**
-- [ ] 모든 엔드포인트 요청 등록 (핵심 흐름만 등록 — 회원 셀프서비스 `/members/me/*`·쿠폰 엔드포인트 미등록)
-- [x] 환경 변수 자동 저장 스크립트 (로그인 응답 → accessToken/refreshToken)
+- [x] 모든 엔드포인트 요청 등록 (회원 셀프서비스 `/members/me/*`·쿠폰 포함 — Bruno `bruno/` 전수)
+- [x] 환경 변수 자동 저장 스크립트 (로그인 응답 → accessToken/refreshToken; 재사용 시 `bru.cookies.jar().clear()` 필요)
 - [x] E2E 시나리오 폴더 (회원 흐름, 게스트 흐름, 관리자 흐름)
-- [x] Edge Cases 폴더 (Idempotency·재고부족 409·리뷰 422·Refresh 재사용 401 — ※ Rate Limit 케이스만 미포함)
-- [ ] 응답 검증 스크립트 (필수 필드 확인) — 현재 `pm.test` 2건뿐, 전반 보강 필요
-- [x] 컬렉션 export → `postman/groove.collection.json` 커밋
+- [x] Edge Cases 폴더 (Idempotency·재고부족 409·리뷰 422·Refresh 재사용 401·Rate Limit)
+- [x] 응답 검증 스크립트 (필수 필드 확인) — Bruno 테스트 63/63
+- [x] 컬렉션 → `bruno/` 커밋 (Postman 산출물은 #217 에서 제거)
 
 **완료 조건**
-- [x] Postman으로 회원 E2E 흐름 1클릭 시연 가능 (토큰 자동 저장 + cartItemId/orderNumber/paymentId 체이닝)
+- [x] Bruno 로 회원 E2E 흐름 1클릭 시연 가능 (토큰 자동 저장 + cartItemId/orderNumber/paymentId 체이닝)
 
 ---
 
-### #W8-5 [docs] README v1 작성 ◐ (부분 완료)
+### #W8-5 (GH #143) [docs] README v1 작성 — 아키텍처 다이어그램 임베드 ✅
 **라벨**: `type:docs`, `M`
 **선행**: #W8-3, #W8-4
-**상태**: `README.md` 작성 완료 — 소개·차별화(성능/동시성 개선 사례)·빠른 시작·기술 스택·문서 링크·진행 현황 포함. 잔여: 아키텍처 다이어그램 임베드(현재는 ARCHITECTURE.md 링크만), 시드 적용 안내(`./scripts/seed.sh`)는 #W8-3 후속.
+**상태**: ✅ 완료. `README.md` 에 소개·차별화(성능/동시성 개선 사례)·빠른 시작·기술 스택·문서 링크·진행 현황 + 아키텍처 다이어그램 임베드까지 완료(#143). 시드 적용 안내(`./scripts/seed.sh`)는 #W8-3 에서 반영.
 
 **작업 내용**
 - [x] 프로젝트 한 줄 소개 + 차별화 포인트 (성능·동시성 개선 사례 섹션)
-- [x] 빠른 시작 (`docker-compose up` — ※ 시드 주입은 #W8-3 후속, README에 "예정" 명시)
-- [ ] 아키텍처 다이어그램 임베드 (현재 ARCHITECTURE.md 링크만, 다이어그램 미임베드)
+- [x] 빠른 시작 (`docker-compose up` + `./scripts/seed.sh`)
+- [x] 아키텍처 다이어그램 임베드 (#143)
 - [x] API 문서 링크 (Swagger / API.md)
 - [x] 기술 스택 표
 
@@ -939,63 +939,63 @@
 
 **주차 목표**: 무엇을 개선할지 데이터로 결정
 
-### #W9-1 [loadtest] k6 환경 셋업 + search.js 시나리오
+### #W9-1 (GH #192) [loadtest] k6 환경 셋업 + search.js 시나리오 ✅
 **라벨**: `type:test`, `M`
 **선행**: #W8-5
 
 **작업 내용**
-- [ ] `loadtest/` 디렉토리 + k6 Docker 실행 스크립트
-- [ ] 공통 헬퍼 (auth 토큰 발급, 시드 사용자 풀)
-- [ ] `search.js` — 다양한 필터 조합 검색 부하
+- [x] `loadtest/` 디렉토리 + k6 Docker 실행 스크립트
+- [x] 공통 헬퍼 (auth 토큰 발급, 시드 사용자 풀; 요약 JSON 토큰 비식별화 #205)
+- [x] `search.js` — 다양한 필터 조합 검색 부하
 
 **완료 조건**
-- [ ] `k6 run loadtest/search.js` 정상 실행 + JSON 결과 출력
+- [x] `k6 run loadtest/search.js` 정상 실행 + JSON 결과 출력
 
 ---
 
-### #W9-2 [loadtest] order.js + payment.js 시나리오
+### #W9-2 (GH #193) [loadtest] order.js + payment.js 시나리오 ✅
 **라벨**: `type:test`, `M`
 **선행**: #W9-1
 
 **작업 내용**
-- [ ] `order.js` — 주문 생성 부하 (다중 상품)
-- [ ] `payment.js` — 결제 + 멱등성 검증 (동일 키 재요청)
-- [ ] 결과 비교용 표 양식 정의
+- [x] `order.js` — 주문 생성 부하 (다중 상품)
+- [x] `payment.js` — 결제 + 멱등성 검증 (동일 키 재요청)
+- [x] 결과 비교용 표 양식 정의
 
 **완료 조건**
-- [ ] 두 시나리오 정상 실행
+- [x] 두 시나리오 정상 실행
 
 ---
 
-### #W9-3 [loadtest] flash-sale.js 시나리오 (한정반 동시 주문) ★
+### #W9-3 (GH #194) [loadtest] flash-sale.js 시나리오 (한정반 동시 주문) ★ ✅
 **라벨**: `type:test`, `L`
 **선행**: #W9-2
 
 **작업 내용**
-- [ ] `flash-sale.js` — 한정반 상품(재고 100) 동시 1000 요청
-- [ ] 정합성 검증 로직 (성공 응답 수 + DB 최종 재고 매칭)
-- [ ] 다양한 부하 단계(100, 500, 1000) 시나리오 옵션
-- [ ] **이 시점 결과는 오버셀 발생** (시연 Before 자료)
+- [x] `flash-sale.js` — 한정반 상품(재고 100) 동시 1000 요청
+- [x] 정합성 검증 로직 (성공 응답 수 + DB 최종 재고 매칭)
+- [x] 다양한 부하 단계(100, 500, 1000) 시나리오 옵션
+- [x] **이 시점 결과는 오버셀 발생** (시연 Before 자료 — created 211~222, lost-update 111~122)
 
 **완료 조건**
-- [ ] 오버셀이 측정으로 재현됨 (성공 응답 > 100)
-- [ ] 결과 JSON 보존
+- [x] 오버셀이 측정으로 재현됨 (성공 응답 > 100)
+- [x] 결과 JSON 보존
 
 ---
 
-### #W9-4 [measurement] N+1 측정 + 슬로우 쿼리 EXPLAIN
+### #W9-4 (GH #195) [measurement] N+1 측정 + 슬로우 쿼리 EXPLAIN ✅
 **라벨**: `type:test`, `M`
 **선행**: #W8-5
 
 **작업 내용**
-- [ ] Hibernate Statistics 활성화 (테스트 환경)
-- [ ] 상품 목록 조회 시 발생 쿼리 수 측정 (예: `1+N`)
-- [ ] 검색 쿼리 EXPLAIN 결과 캡처 (풀 스캔 확인)
-- [ ] 결과 정리 → `docs/measurement/baseline.md`
+- [x] Hibernate Statistics 활성화 (테스트 환경)
+- [x] 상품 목록 조회 시 발생 쿼리 수 측정 (예: `1+N`)
+- [x] 검색 쿼리 EXPLAIN 결과 캡처 (풀 스캔 확인 — type=ALL, rows≈49,803)
+- [x] 결과 정리 → `docs/measurement/baseline.md`
 
 **완료 조건**
-- [ ] N+1 발생 수치 기록됨
-- [ ] EXPLAIN 결과 캡처 보존
+- [x] N+1 발생 수치 기록됨
+- [x] EXPLAIN 결과 캡처 보존
 
 ---
 
@@ -1031,35 +1031,36 @@
 
 **주차 목표**: 가장 임팩트 큰 3가지 개선 — Before/After 그래프로 시연 가능
 
-### #W10-1 (GH #203) [improvement] N+1 해결 (페치 조인 / @EntityGraph)
+### #W10-1 (GH #203) [improvement] N+1 해결 (페치 조인 / @EntityGraph) ✅
 **라벨**: `type:improvement`, `domain:catalog`, `M`
 **선행**: #W9-6
 
 **작업 내용**
-- [ ] 상품 목록 조회 → 페치 조인 또는 `@EntityGraph` 적용
-- [ ] Hibernate Statistics 재측정 (예: 401 → 1)
-- [ ] 응답 시간 비교
-- [ ] `docs/improvements/n-plus-one.md` 작성 (Before/After 코드 + 측정)
+- [x] 상품 목록 조회 → `@EntityGraph` 적용 (`AlbumRepository` artist/genre/label, count 쿼리 분리; Order/Payment/Review Repository 도 동반)
+- [x] Hibernate Statistics 재측정
+- [x] 응답 시간 비교
+- [x] `docs/improvements/n-plus-one.md` 작성 (Before/After 코드 + 측정)
 
 **완료 조건**
-- [ ] 쿼리 수 측정 결과 README에 표/그래프로 기록
-- [ ] 코드 diff 보존
+- [x] 쿼리 수 측정 결과 기록 (`docs/improvements/n-plus-one.md`)
+- [x] 코드 diff 보존
 
 ---
 
-### #W10-2 (GH #204) [improvement] 검색 인덱스 추가 (Flyway V6)
+### #W10-2 (GH #204) [improvement] 검색 인덱스 추가 (Flyway V21) ✅
 **라벨**: `type:improvement`, `domain:catalog`, `M`
 **선행**: #W10-1
+**비고**: 마이그레이션 번호는 계획 시점 "V6" 이었으나 실제로는 **V21** 로 적용됐다(V6 은 이미 `V6__init_album.sql` 이 선점, V20 은 member Java 마이그레이션이 선점 → V21 배정). 키워드 경로는 단일 B-Tree 로 해소 불가(선행 와일드카드 + cross-table OR)라 `artist_name` 비정규화 컬럼 + FULLTEXT(ngram) 로 단일 테이블화했다.
 
 **작업 내용**
-- [ ] `V6__add_search_indexes.sql` 작성 (ERD §5.2 인덱스 후보)
-- [ ] 적용 후 EXPLAIN 결과 비교 (풀 스캔 → 인덱스 사용)
-- [ ] k6 search.js 재실행 → 응답 시간 비교
-- [ ] `docs/improvements/search-index.md`
+- [x] `V21__add_search_indexes.sql` 작성 — `artist_name` 비정규화 + `FULLTEXT ft_album_keyword(ngram)` + 복합 인덱스 4종(status_created·search·year·limited)
+- [x] 적용 후 EXPLAIN 결과 비교 (풀 스캔 → 인덱스 사용)
+- [x] k6 search.js 재실행 → 응답 시간 비교
+- [x] `docs/improvements/search-index.md`
 
 **완료 조건**
-- [ ] EXPLAIN 결과 Before/After 명확
-- [ ] 응답 시간 개선 수치 기록
+- [x] EXPLAIN 결과 Before/After 명확 (type=ALL rows≈49,803 → 인덱스)
+- [x] 응답 시간 개선 수치 기록 (search p95 930ms > SLO 800ms → 개선)
 
 ---
 
@@ -1082,17 +1083,17 @@
 
 ---
 
-### #W10-4 (GH #206) [docs] W10 개선 사례 README 정리
+### #W10-4 (GH #206) [docs] W10 개선 사례 README 정리 ✅
 **라벨**: `type:docs`, `M`
 **선행**: #W10-1 ~ #W10-3
 
 **작업 내용**
-- [ ] README에 "성능 개선 사례" 섹션 추가
-- [ ] 3개 개선 모두 Before/After 표 + 그래프
-- [ ] 트레이드오프 명시 (왜 비관적 락 선택했는지, Redis 미도입 이유)
+- [x] README에 "성능 개선 사례" 섹션 추가
+- [x] 3개 개선 모두 Before/After 표 + 그래프
+- [x] 트레이드오프 명시 (왜 비관적 락 선택했는지, Redis 미도입 이유)
 
 **완료 조건**
-- [ ] 개선 사례 3건 모두 README에 시연 가능한 형태로 기록
+- [x] 개선 사례 3건 모두 README에 시연 가능한 형태로 기록
 
 ---
 
@@ -1100,78 +1101,80 @@
 
 **주차 목표**: 정합성 시연 마무리, 시간 여유 시 추가 개선
 
-### #W11-1 (GH #207) [test] 결제 멱등성 통합 테스트
+### #W11-1 (GH #207) [test] 결제 멱등성 통합 테스트 ✅
 **라벨**: `type:test`, `domain:payment`, `M`
 **선행**: #W10-4
 
 **작업 내용**
-- [ ] 동시 동일 Idempotency-Key 요청 → 단일 결제 생성 검증
-- [ ] 웹훅 중복 수신 → 상태 전이 1회 검증
-- [ ] 멱등성 키 만료 후 재사용 시나리오
-- [ ] `docs/improvements/idempotency.md`
+- [x] 동시 동일 Idempotency-Key 요청 → 단일 결제 생성 검증 (RANDOM_PORT 동시성)
+- [x] 웹훅 중복 수신 → 상태 전이 1회 검증
+- [x] 멱등성 키 만료 후 재사용 시나리오
+- [x] `docs/improvements/idempotency.md`
 
 **완료 조건**
-- [ ] 모든 멱등성 시나리오 통합 테스트 통과
+- [x] 모든 멱등성 시나리오 통합 테스트 통과
 
 ---
 
-### #W11-2 (GH #208) [chore] 코드 클린업 + TODO/FIXME 정리
+### #W11-2 (GH #208) [chore] 코드 클린업 + TODO/FIXME 정리 ✅
 **라벨**: `type:chore`, `M`
 **선행**: #W10-4
+**비고**: 정리 과정에서 W10 으로 미뤄둔 TODO(POST /payments·게스트 주문조회 rate limit)를 #208 와 함께 실제 해소(커밋 `9c661f8`).
 
 **작업 내용**
-- [ ] 전체 TODO/FIXME 주석 검토
-- [ ] 미사용 코드/임포트 정리
-- [ ] 메서드/클래스 네이밍 일관성 점검
-- [ ] 의존성 정리 (사용 안 하는 starter 제거)
+- [x] 전체 TODO/FIXME 주석 검토 (W10 잔여 rate limit TODO 해소)
+- [x] 미사용 코드/임포트 정리
+- [x] 메서드/클래스 네이밍 일관성 점검
+- [x] 의존성 정리 (사용 안 하는 starter 제거)
 
 **완료 조건**
-- [ ] TODO/FIXME 0건 또는 명시적 v2 표시
-- [ ] `./gradlew check` 경고 최소화
+- [x] TODO/FIXME 0건 또는 명시적 v2 표시
+- [x] `./gradlew check` 경고 최소화
 
 ---
 
-### #W11-3 (GH #209) [improvement] 단일 재고 희귀반 시연 (선택)
+### #W11-3 (GH #209) [improvement] 단일 재고 희귀반 시연 (선택) ✅
 **라벨**: `type:improvement`, `priority:optional`, `M`
 **선행**: #W10-3
 
 **작업 내용**
-- [ ] stock=1 상품에 동시 100 요청 → 정확히 1건 성공
-- [ ] 측정 데이터 보존 + README 보강
+- [x] stock=1 상품에 동시 100 요청 → 정확히 1건 성공 (커밋 `2599f6e`, 경계 시연)
+- [x] 측정 데이터 보존 + README 보강
 
 **완료 조건**
-- [ ] 시연 자료 추가됨
+- [x] 시연 자료 추가됨
 
 ---
 
-### #W11-4 (GH #210) [improvement] Redis 분산락 비교 (선택)
+### #W11-4 (GH #210) [improvement] Redis 분산락 비교 (선택) — ✂️ 컷 (NOT_PLANNED, 2026-06-12)
 **라벨**: `type:improvement`, `priority:optional`, `L`
 **선행**: #W10-3
+**결정**: **미진행으로 종료**(GitHub `not planned`). 단일 인스턴스 + MySQL 비관적 락(#205)으로 오버셀 0건·목표 TPS 를 이미 달성해 분산락 도입의 한계 효용이 낮고, Redis 운영 복잡도(인프라 추가·장애 모드)가 포트폴리오 범위를 넘어선다. 분산 환경 확장 시점에 재검토(미도입 사유는 #W10-4 README 트레이드오프에 기재). 코드/Compose 변경 없음.
 
-**작업 내용**
-- [ ] Redis + Redisson 의존성 추가
-- [ ] Docker Compose에 Redis 추가
-- [ ] InventoryService에 분산락 옵션 추가
-- [ ] 비관적 락 vs 분산락 측정 비교
-- [ ] 트레이드오프 문서화
+**작업 내용 (미수행 — 컷)**
+- [ ] ~~Redis + Redisson 의존성 추가~~
+- [ ] ~~Docker Compose에 Redis 추가~~
+- [ ] ~~InventoryService에 분산락 옵션 추가~~
+- [ ] ~~비관적 락 vs 분산락 측정 비교~~
+- [ ] ~~트레이드오프 문서화~~
 
 **완료 조건**
-- [ ] 두 방식 측정 비교표 작성
+- [x] 미도입 의사결정 기록 (README 트레이드오프 + 본 항목)
 
 ---
 
-### #W11-5 (GH #211) [improvement] Virtual Threads 활성화 + 영향 측정 (선택)
+### #W11-5 (GH #211) [improvement] Virtual Threads 활성화 + 영향 측정 (선택) — ✂️ 컷 (NOT_PLANNED, 2026-06-12)
 **라벨**: `type:improvement`, `priority:optional`, `M`
 **선행**: #W11-2
+**결정**: **미진행으로 종료**(GitHub `not planned`). 현 병목은 스레드 풀 포화가 아니라 DB 락/쿼리(W10 에서 해소)였고, 측정 게이트(G3)와 개선 사례가 이미 확보돼 옵션 항목으로 컷. `spring.threads.virtual.enabled` 미설정(코드 변경 없음). 추후 I/O 바운드 부하 재현 시 재검토.
 
-**작업 내용**
-- [ ] `spring.threads.virtual.enabled=true` 또는 명시 설정
-- [ ] 동일 시나리오 측정 비교
-- [ ] 결과에 따라 채택 여부 결정
+**작업 내용 (미수행 — 컷)**
+- [ ] ~~`spring.threads.virtual.enabled=true` 또는 명시 설정~~
+- [ ] ~~동일 시나리오 측정 비교~~
+- [ ] ~~결과에 따라 채택 여부 결정~~
 
 **완료 조건**
-- [ ] 측정 데이터 기록
-- [ ] 채택/미채택 의사결정 기록
+- [x] 미채택 의사결정 기록 (본 항목)
 
 ---
 
@@ -1417,12 +1420,12 @@
 GitHub README 상단에 진행 상황 표기:
 
 ```
-핵심 로드맵: ▓▓▓▓▓▓▓░░░░░ W1~W7 완료 (G2 통과)
+핵심 로드맵: ▓▓▓▓▓▓▓▓▓▓▓░ W1~W11 완료 (G2·G3 통과, CS 개선 완료)
 확장:        쿠폰(M13) · 데모 프론트(M14→M15 Vue) 완료
-남은 로드맵:  W8 시드/통합 · W9 측정(G3) · W10~11 개선 · W12 문서(G4)
+남은 로드맵:  W12 문서/시연(G4) 단 하나
 ```
 
-각 마일스톤은 GitHub [Milestones](https://github.com/heygw44/groove/milestones) 에서 자동 진행률 계산되므로 README 갱신 부담이 적다. 완료 마일스톤(M1~M7, M13~M15)은 closed, 남은 로드맵(M8~M12)은 open 으로 유지한다.
+각 마일스톤은 GitHub [Milestones](https://github.com/heygw44/groove/milestones) 에서 자동 진행률 계산되므로 README 갱신 부담이 적다. 완료 마일스톤(**M1~M11, M13~M15**)은 closed, 남은 로드맵(**M12** 문서화)만 open 으로 유지한다. (M8~M11 은 산하 이슈 100% 종료 시점에 closed 처리.)
 
 ---
 
