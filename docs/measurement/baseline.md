@@ -255,6 +255,67 @@ N+1 행은 #203(`@EntityGraph`) 완료로 채웠다 — 상세 [`docs/improvemen
 
 ---
 
+## 6. 주문/리뷰 목록 복합 인덱스 (#225, V22)
+
+V8/V13 의 `[W10]` 의도적 누락 인덱스 3종을 V22 에서 도입한 Before/After 의 raw 캡처. 서사·해석은 [`docs/improvements/index-coverage.md`](../improvements/index-coverage.md), 본 절은 수치·재현 절차.
+
+### 6.1 측정 데이터
+
+`scripts/seed.sh`(album 50,000 · member 81) 위에 측정 전용 `loadtest/seed-order-review-loadtest.sql` 로 orders 50,000 + review 50,000(주문 1건당 리뷰 1건)을 합성한다. 분포 기준은 실제 시드 행에서 읽는다(하드코딩 X): `member_id` 는 USER 회원(기본 80명)에 라운드로빈(회원당 ≈625) · `status` DELIVERED 60%/PAID 20%/PENDING 10%/CANCELLED 10% · `album_id` 는 앞 500개 앨범에 라운드로빈(앨범당 ≈100). 기준 값 `member_id=1`(625) · `status='DELIVERED'`(30,000) · `album_id=1`(100).
+
+### 6.2 EXPLAIN 캡처 (각 쿼리 `... ORDER BY created_at DESC LIMIT 20`)
+
+| # | 쿼리 WHERE | Before type/key/Extra/cost | After (V22) type/key/Extra/cost |
+|---|---|---|---|
+| Q1 | `orders member_id=1` | `ref` / member_id FK / **filesort** / 218.75 | `ref` / `idx_orders_member_created` / **backward index scan** / 218.75 |
+| Q2 | `orders status='DELIVERED'` | **`ALL`** / NULL / Using where; **filesort** / **5105.85** (rows 49,536) | `ref` / `idx_orders_status_created` / **backward index scan** / **2933.55** (rows 24,768) |
+| Q3 | `orders member_id=1 AND status='PAID'` | `ref` / member_id FK / Using where; **filesort** / 218.75 | `ref` / `idx_orders_member_created` / Using where; **backward index scan** / 218.75 |
+| Q4 | `review album_id=1` | `ref` / album_id FK / **filesort** / 35.00 | `ref` / `idx_review_album_created` / **backward index scan** / 35.00 |
+
+요지: **filesort 4/4 제거**(`using_filesort: true→false`), status 경로는 풀스캔(`ALL`)→`ref` + cost 5105.85→2933.55. member/album 경로의 cost 동일값은 정렬 비용이 `query_cost` 에 포함되지 않기 때문 — 결정적 증거는 filesort 플래그 + `LIMIT` 조기 종료. V22 복합 인덱스는 `member_id`/`album_id` FK 자동 인덱스를 흡수한다(복합 DROP 시 `needed in a foreign key constraint` 거부로 확인).
+
+### 6.3 재현 절차
+
+```bash
+# 1) mysql 기동(fresh) — 스키마는 앱 1회 부팅 시 Flyway V1..V22 가 생성. compose 의 mysql 은 3306 미발행이라
+#    host gradle bootRun 으로 마이그레이션을 적용하려면 포트 발행 override 가 필요(또는 docker compose up app).
+printf 'services:\n  mysql:\n    ports: ["3306:3306"]\n' > /tmp/groove-port-override.yml
+docker compose down -v
+docker compose -f docker-compose.yml -f /tmp/groove-port-override.yml up -d --wait mysql
+./backend/gradlew -p backend bootRun &   # Flyway V1..V22 적용 후(Started GrooveApplication) 종료
+
+# 2) 데이터 적재
+DB_PASSWORD=changeme ./scripts/seed.sh --docker --yes
+docker compose exec -T -e MYSQL_PWD=changeme mysql mysql -ugroove groove < loadtest/seed-order-review-loadtest.sql
+
+mq() { docker compose exec -T -e MYSQL_PWD=changeme mysql mysql -ugroove groove -e "$1"; }
+mq "ANALYZE TABLE orders, review;"
+
+# 3) Before 토폴로지 복원(pre-V22): FK용 단일컬럼 인덱스 추가 후 V22 복합 제거
+mq "ALTER TABLE orders ADD INDEX idx_tmp_orders_member (member_id);"
+mq "ALTER TABLE orders DROP INDEX idx_orders_member_created, DROP INDEX idx_orders_status_created;"
+mq "ALTER TABLE review ADD INDEX idx_tmp_review_album (album_id);"
+mq "ALTER TABLE review DROP INDEX idx_review_album_created;"
+mq "EXPLAIN SELECT * FROM orders WHERE member_id=1 ORDER BY created_at DESC LIMIT 20\G"
+mq "EXPLAIN SELECT * FROM orders WHERE status='DELIVERED' ORDER BY created_at DESC LIMIT 20\G"
+mq "EXPLAIN SELECT * FROM orders WHERE member_id=1 AND status='PAID' ORDER BY created_at DESC LIMIT 20\G"
+mq "EXPLAIN SELECT * FROM review WHERE album_id=1 ORDER BY created_at DESC LIMIT 20\G"
+# (query_cost 는 동일 쿼리에 EXPLAIN FORMAT=JSON)
+
+# 4) After 토폴로지(V22) 복원: 복합 재추가 후 임시 단일컬럼 제거 → EXPLAIN 재캡처
+mq "ALTER TABLE orders ADD INDEX idx_orders_member_created (member_id, created_at), ADD INDEX idx_orders_status_created (status, created_at);"
+mq "ALTER TABLE orders DROP INDEX idx_tmp_orders_member;"
+mq "ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at);"
+mq "ALTER TABLE review DROP INDEX idx_tmp_review_album;"
+
+# 5) DoD: 앱 정상 부팅(1단계 'Successfully applied 22 migrations ... now at version v22') + 인덱스 3종 확인
+mq "SHOW INDEX FROM orders;"; mq "SHOW INDEX FROM review;"
+```
+
+> ⚠️ `docker compose down -v` 는 로컬 측정 볼륨을 파괴한다(seed 로 재현 가능). 측정은 깨끗한 baseline 을 위해 fresh 볼륨을 권장한다(V8/V13 은 수정하지 않으므로 체크섬 이슈는 없다).
+
+---
+
 ## 참조
 
 - **부하 스크립트·실행 절차·결과 해석**: [`loadtest/README.md`](../../loadtest/README.md) (search/order/payment/flash-sale/coupon)
