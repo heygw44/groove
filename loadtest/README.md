@@ -244,6 +244,26 @@ env 오버라이드: `BASE_URL`(기본 `http://localhost:8080`), `TARGET_ALBUM_I
 > 재고 리셋은 setup() 의 admin API 로 자동 수행된다. admin 경로가 막힌 환경이라면 수동 대안:
 > `UPDATE album SET stock=100, status='SELLING' WHERE id=<id>;`
 
+## 단일 재고(stock=1) 경계 시연 (#209)
+
+오버셀의 가장 극적인 경계 — **1장짜리 희귀반에 동시 100 주문 → 정확히 1건만 성공**. 신규 스크립트 없이
+`INITIAL_STOCK=1` 오버라이드만으로 재현한다(setup 이 타깃 재고를 1로 리셋). 시드의 `stock=1` 8건
+(id 545·643·749·750·971·1037·1069·1841) 중 하나를 `TARGET_ALBUM_ID` 로 줘도 되고, 임의 한정반을 써도 된다.
+
+```bash
+# 타깃을 stock=1 로 리셋 후 동시 100 스파이크 → order_created 정확히 1, 오버셀 없음
+k6 run -e TARGET_ALBUM_ID=$TID -e INITIAL_STOCK=1 -e PEAK_VUS=100 loadtest/flash-sale.js
+
+# 교차검증 — 최종 재고 0, 영속 주문 정확히 1
+docker exec groove-mysql-1 mysql -ugroove -pchangeme groove \
+  -e "SELECT stock FROM album WHERE id=$TID; SELECT COUNT(*) FROM order_item WHERE album_id=$TID;"
+```
+
+기대: `order_created=1`, 자동 판정 `오버셀 없음`, `order_item` 정확히 1행. 결정론적 증명은 인프로세스
+회귀 가드 `OversellingBaselineTest.concurrentOrders_singleStockRarity_exactlyOneSucceeds` 가 담당하며
+(`success=1, insufficient=99, other=0, finalStock=0, persistedOrders=1`), 본 k6 는 HTTP 부하로 같은 결론을
+재현하는 선택 시연이다. Before/After 측정 맥락은 [concurrency.md](../docs/improvements/concurrency.md) §4.1 참조.
+
 ## 오버셀 판정
 
 teardown 이 최종 재고를 `final_stock` Gauge 로 emit 하고, handleSummary 가 `order_created`(201) 와 합산해
