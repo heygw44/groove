@@ -69,6 +69,14 @@ public class Payment extends BaseTimeEntity {
     @Column(name = "failure_reason", length = 500)
     private String failureReason;
 
+    /**
+     * 누적 환불액 (#239 부분 반품). 발송 전 전액 환불({@link #markRefunded()})은 {@code amount} 전액을, 부분
+     * 반품 환불({@link #refund(long, Instant)})은 claim 환불액을 누적한다. {@code refundedAmount == amount} 가 되면
+     * 결제가 {@code REFUNDED}(종착), 그 전엔 {@code PARTIALLY_REFUNDED} 다.
+     */
+    @Column(name = "refunded_amount", nullable = false)
+    private long refundedAmount;
+
     protected Payment() {
     }
 
@@ -144,6 +152,35 @@ public class Payment extends BaseTimeEntity {
      */
     public void markRefunded() {
         transitionTo(PaymentStatus.REFUNDED);
+        this.refundedAmount = this.amount;
+    }
+
+    /**
+     * 부분/전액 환불 확정 (#239 반품) — 검수 통과 후 PG {@code refund()} 성공 시 claim 환불액을 누적한다.
+     *
+     * <p>같은 결제에 여러 반품(claim)이 들어오면 환불액이 누적되며, 누적 환불액이 결제 전액에 도달하면
+     * {@code REFUNDED}(종착), 아직 일부면 {@code PARTIALLY_REFUNDED} 로 전이한다. 호출 측({@code ClaimService})은
+     * PAID/PARTIALLY_REFUNDED 인지 먼저 확인한다. 방어선으로 {@link PaymentStatus#canTransitionTo} 위반·환불액 초과는
+     * 예외. {@code Payment} 는 환불 시각 컬럼을 두지 않는다 — PG 응답({@code RefundResponse.refundedAt})이 신뢰 원천.
+     *
+     * @param amount 이번 claim 환불액 (KRW, 양수) — 누적 환불액 + amount 가 결제 전액을 넘으면 안 된다
+     * @param now    환불 처리 시각 (현재는 미저장, 시그니처 통일·향후 확장 대비)
+     */
+    public void refund(long amount, Instant now) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("환불액은 양수여야 합니다: " + amount);
+        }
+        if (this.refundedAmount + amount > this.amount) {
+            throw new IllegalArgumentException(
+                    "누적 환불액이 결제액을 초과합니다: 기환불=" + this.refundedAmount + ", 요청=" + amount + ", 결제액=" + this.amount);
+        }
+        long next = this.refundedAmount + amount;
+        PaymentStatus target = next == this.amount ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;
+        // 이미 PARTIALLY_REFUNDED 인 채로 추가 부분 환불이면 상태는 그대로(자기 전이 불법)라 전이를 건너뛰고 누적액만 갱신한다.
+        if (this.status != target) {
+            transitionTo(target);
+        }
+        this.refundedAmount = next;
     }
 
     /**
@@ -164,6 +201,25 @@ public class Payment extends BaseTimeEntity {
             throw new IllegalStateException("영속화 전 결제는 환불 멱등 키를 생성할 수 없습니다 (id=null)");
         }
         return "refund:" + id + ":" + pgTransactionId;
+    }
+
+    /**
+     * 부분 반품(#239) PG 환불 호출용 멱등 키 — {@code "refund:{paymentId}:claim:{claimId}"} 결정적 derivation.
+     *
+     * <p>같은 결제에 여러 claim 환불이 들어오므로 claim 마다 distinct 키여야 각 claim 의 PG 호출이 독립적으로 멱등하다
+     * (보상 트랜잭션 부분 실패 후 재시도 시 해당 claim 의 PG 실호출 1회 보장). 무인자 {@link #refundIdempotencyKey()}
+     * 는 발송 전 전액 환불({@code AdminOrderService.refund}) 전용이라 키 공간이 겹치지 않는다.
+     *
+     * @param claimId 환불을 일으킨 반품(claim) 식별자 — null 이면 키 결정성이 깨지므로 차단
+     */
+    public String refundIdempotencyKey(Long claimId) {
+        if (id == null) {
+            throw new IllegalStateException("영속화 전 결제는 환불 멱등 키를 생성할 수 없습니다 (id=null)");
+        }
+        if (claimId == null) {
+            throw new IllegalArgumentException("claimId must not be null");
+        }
+        return "refund:" + id + ":claim:" + claimId;
     }
 
     private void transitionTo(PaymentStatus next) {
@@ -192,6 +248,10 @@ public class Payment extends BaseTimeEntity {
 
     public long getAmount() {
         return amount;
+    }
+
+    public long getRefundedAmount() {
+        return refundedAmount;
     }
 
     public PaymentStatus getStatus() {

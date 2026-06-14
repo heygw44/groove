@@ -16,6 +16,7 @@ import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentGatewayException;
 import com.groove.payment.exception.PaymentNotFoundException;
 import com.groove.payment.exception.PaymentNotRefundableException;
+import com.groove.payment.gateway.GatewayRefunds;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.RefundRequest;
 import com.groove.payment.gateway.RefundResponse;
@@ -204,10 +205,6 @@ public class AdminOrderService {
         // 중간 단계 실패 후 재시도가 와도 PG 실호출은 1회로 정상화된다.
         RefundRequest request = new RefundRequest(
                 payment.getPgTransactionId(), payment.getAmount(), reason, payment.refundIdempotencyKey());
-        try {
-            return paymentGateway.refund(request);
-        } catch (RuntimeException gatewayFailure) {
-            throw new PaymentGatewayException(gatewayFailure);
-        }
+        return GatewayRefunds.refund(paymentGateway, request);
     }
 }

@@ -81,6 +81,16 @@ public enum ErrorCode {
     COUPON_NOT_APPLICABLE(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_NOT_APPLICABLE", "주문에 적용할 수 없는 쿠폰입니다"),
     COUPON_INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "COUPON_INVALID_STATE_TRANSITION", "쿠폰 상태를 변경할 수 없습니다"),
 
+    // CLAIM (M16 #239 — 반품 역물류)
+    CLAIM_NOT_FOUND(HttpStatus.NOT_FOUND, "CLAIM_NOT_FOUND", "반품 정보를 찾을 수 없습니다"),
+    CLAIM_ORDER_NOT_RETURNABLE(HttpStatus.UNPROCESSABLE_ENTITY, "CLAIM_ORDER_NOT_RETURNABLE", "배송이 완료된 주문만 반품할 수 있습니다"),
+    CLAIM_WINDOW_EXPIRED(HttpStatus.UNPROCESSABLE_ENTITY, "CLAIM_WINDOW_EXPIRED", "반품 가능 기한이 지났습니다"),
+    CLAIM_WINDOW_NOT_DETERMINABLE(HttpStatus.UNPROCESSABLE_ENTITY, "CLAIM_WINDOW_NOT_DETERMINABLE", "배송 완료 정보가 없어 반품 기한을 확인할 수 없습니다"),
+    CLAIM_QUANTITY_EXCEEDED(HttpStatus.CONFLICT, "CLAIM_QUANTITY_EXCEEDED", "반품 가능 수량을 초과했습니다"),
+    CLAIM_ITEM_NOT_IN_ORDER(HttpStatus.UNPROCESSABLE_ENTITY, "CLAIM_ITEM_NOT_IN_ORDER", "해당 주문에 포함되지 않은 항목입니다"),
+    CLAIM_NO_ITEMS(HttpStatus.UNPROCESSABLE_ENTITY, "CLAIM_NO_ITEMS", "반품할 항목을 1개 이상 선택해 주세요"),
+    CLAIM_INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "CLAIM_INVALID_STATE_TRANSITION", "현재 반품 상태에서는 처리할 수 없는 요청입니다"),
+
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요"),
 

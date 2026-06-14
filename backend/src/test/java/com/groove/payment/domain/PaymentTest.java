@@ -176,6 +176,96 @@ class PaymentTest {
     }
 
     @Test
+    @DisplayName("markRefunded: 전액 환불이므로 refundedAmount 를 결제액 전액으로 채운다 (#239)")
+    void markRefunded_setsRefundedAmountToFull() {
+        Payment payment = pending("tx-full");
+        payment.markPaid();
+
+        payment.markRefunded();
+
+        assertThat(payment.getRefundedAmount()).isEqualTo(payment.getAmount());
+    }
+
+    @Test
+    @DisplayName("refund: 부분 환불은 PARTIALLY_REFUNDED 로 누적, 전액 도달 시 REFUNDED (#239)")
+    void refund_partialThenFull() {
+        Payment payment = pending("tx-partial");
+        payment.markPaid();
+        Instant now = Instant.parse("2026-06-12T00:00:00Z");
+
+        payment.refund(10_000L, now);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualTo(10_000L);
+
+        // 추가 부분 환불 — 아직 전액 미달이라 PARTIALLY_REFUNDED 유지(자기 전이 없이 누적만).
+        payment.refund(5_000L, now);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualTo(15_000L);
+
+        // 잔액 환불 — 누적이 전액(35000)에 도달해 REFUNDED.
+        payment.refund(20_000L, now);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualTo(35_000L);
+    }
+
+    @Test
+    @DisplayName("refund: 한 번에 전액이면 곧장 REFUNDED")
+    void refund_fullInOneShot() {
+        Payment payment = pending("tx-oneshot");
+        payment.markPaid();
+
+        payment.refund(35_000L, Instant.parse("2026-06-12T00:00:00Z"));
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualTo(35_000L);
+    }
+
+    @Test
+    @DisplayName("refund: 누적 환불액이 결제액을 초과하면 IllegalArgumentException")
+    void refund_rejectsExceedingCumulative() {
+        Payment payment = pending("tx-exceed");
+        payment.markPaid();
+        Instant now = Instant.parse("2026-06-12T00:00:00Z");
+        payment.refund(30_000L, now);
+
+        assertThatThrownBy(() -> payment.refund(10_000L, now))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("refund: amount 가 0 이하면 IllegalArgumentException")
+    void refund_rejectsNonPositiveAmount() {
+        Payment payment = pending("tx-zero");
+        payment.markPaid();
+        Instant now = Instant.parse("2026-06-12T00:00:00Z");
+
+        assertThatThrownBy(() -> payment.refund(0L, now)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> payment.refund(-1L, now)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("refund: PAID 가 아닌 결제(PENDING)에 호출하면 상태 전이 가드로 IllegalStateException")
+    void refund_rejectsNonPaid() {
+        Payment payment = pending("tx-notpaid");
+
+        assertThatThrownBy(() -> payment.refund(1_000L, Instant.parse("2026-06-12T00:00:00Z")))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("refundIdempotencyKey(claimId): 'refund:{id}:claim:{claimId}' 결정적 + null claimId 거부 (#239)")
+    void refundIdempotencyKey_perClaim() {
+        Payment payment = pending("mock-tx-claim");
+        ReflectionTestUtils.setField(payment, "id", 7L);
+
+        assertThat(payment.refundIdempotencyKey(99L)).isEqualTo("refund:7:claim:99");
+        assertThat(payment.refundIdempotencyKey(99L)).isEqualTo(payment.refundIdempotencyKey(99L));
+        // claim 마다 distinct 키
+        assertThat(payment.refundIdempotencyKey(100L)).isNotEqualTo(payment.refundIdempotencyKey(99L));
+        assertThatThrownBy(() -> payment.refundIdempotencyKey(null)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("refundIdempotencyKey: 'refund:{id}:{pgTransactionId}' 형식을 결정적으로 반환한다 (#72)")
     void refundIdempotencyKey_returnsDeterministicValue() {
         Payment payment = pending("mock-tx-xyz");

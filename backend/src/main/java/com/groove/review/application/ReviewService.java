@@ -25,7 +25,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -51,9 +50,8 @@ import java.util.Set;
 @Service
 public class ReviewService {
 
-    /** 리뷰 작성이 허용되는 주문 상태 — "DELIVERED 이상" (glossary §2.10, API.md §3.8). */
-    private static final Set<OrderStatus> REVIEWABLE_ORDER_STATUSES =
-            EnumSet.of(OrderStatus.DELIVERED, OrderStatus.COMPLETED);
+    /** 리뷰 작성이 허용되는 주문 상태 — "DELIVERED 이상" (glossary §2.10, API.md §3.8). 반품 자격(#239)과 공유. */
+    private static final Set<OrderStatus> REVIEWABLE_ORDER_STATUSES = OrderStatus.DELIVERED_OR_COMPLETED;
 
     /** 1주문-1상품-1리뷰 UNIQUE 제약 이름 (V13__init_review.sql) — 경합 시 이 제약 위반만 409 로 흡수한다. */
     private static final String UK_REVIEW_ORDER_ALBUM = "uk_review_order_album";

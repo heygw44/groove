@@ -108,6 +108,15 @@ public class Order extends BaseTimeEntity {
     @Column(name = "cancelled_reason", length = 500)
     private String cancelledReason;
 
+    /**
+     * 전량 반품 완료 시점 (#239 역물류). 배송완료(DELIVERED)/완료(COMPLETED) 주문이 반품(claim)으로 모든
+     * OrderItem 의 누적 반품 수량이 주문 수량과 같아지면 {@code ClaimService.completeRefund} 가 찍는 마커다.
+     * OrderStatus 를 건드리지 않고("상태 폭발" 회피) "배송된 사실"은 유지한 채 전량 환불 여부만 표식한다 — 부분 반품만
+     * 있으면 null 로 남고, Claim aggregate 가 부분 반품의 진실 원천이다. 멱등 마커로도 쓰인다(이미 찍혀 있으면 보존).
+     */
+    @Column(name = "returned_at")
+    private Instant returnedAt;
+
     @Column(name = "recipient_name", nullable = false, length = MAX_RECIPIENT_NAME_LENGTH)
     private String recipientName;
 
@@ -292,6 +301,23 @@ public class Order extends BaseTimeEntity {
         return this.anonymizedAt != null;
     }
 
+    /**
+     * 전량 반품 완료 마커를 찍는다 (#239) — 모든 OrderItem 이 반품(claim) 환불되어 결제 전액이 환불됐을 때
+     * {@code ClaimService.completeRefund} 가 호출한다. OrderStatus 는 DELIVERED/COMPLETED 로 유지해 "배송된 사실"을
+     * 보존하고, 환불 여부만 별도 마커로 표식한다. 멱등 — 이미 찍혀 있으면 첫 값을 보존한다.
+     */
+    public void markReturned(Instant now) {
+        if (this.returnedAt != null) {
+            return;
+        }
+        this.returnedAt = now;
+    }
+
+    /** 전량 반품으로 환불 완료된 주문인지 여부 (#239). 부분 반품만 있거나 미반품이면 {@code null}. */
+    public boolean isReturned() {
+        return this.returnedAt != null;
+    }
+
     /** 항목 추가 + totalAmount 누적. */
     public void addItem(OrderItem item) {
         if (item == null) {
@@ -361,6 +387,11 @@ public class Order extends BaseTimeEntity {
 
     public String getCancelledReason() {
         return cancelledReason;
+    }
+
+    /** 전량 반품 완료 시점 (#239) — 부분 반품만 있거나 미반품이면 {@code null}. */
+    public Instant getReturnedAt() {
+        return returnedAt;
     }
 
     /** 주문 시점에 캡처된 배송지 스냅샷. 결제 완료 후 shipping 행을 만들 때 그대로 복사된다. */
