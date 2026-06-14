@@ -13,21 +13,23 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ShippingStatus 상태 전이 매트릭스 전수 검증 (3×3 = 9 케이스).
+ * ShippingStatus 상태 전이 매트릭스 전수 검증 (4×4 = 16 케이스).
  *
  * <p>OrderStatus(8×8)·PaymentStatus(4×4) 와 동일한 패턴으로 통일한다 (#142) —
  * "합법 전이 표 + 종착 상태" 두 단을 SSOT 로 두고, 매트릭스의 나머지 셀은 모두 불법(false).
- * 합법 전이는 2종(PREPARING→SHIPPED, SHIPPED→DELIVERED).
+ * 합법 전이는 4종(PREPARING→SHIPPED, PREPARING→CANCELLED, SHIPPED→DELIVERED, SHIPPED→CANCELLED) — #233 에서 CANCELLED 추가.
  */
 @DisplayName("ShippingStatus — 전이 매트릭스 전수")
 class ShippingStatusTest {
 
     private static final Set<Pair> LEGAL = Set.of(
             new Pair(ShippingStatus.PREPARING, ShippingStatus.SHIPPED),
-            new Pair(ShippingStatus.SHIPPED, ShippingStatus.DELIVERED)
+            new Pair(ShippingStatus.PREPARING, ShippingStatus.CANCELLED),
+            new Pair(ShippingStatus.SHIPPED, ShippingStatus.DELIVERED),
+            new Pair(ShippingStatus.SHIPPED, ShippingStatus.CANCELLED)
     );
 
-    private static final Set<ShippingStatus> TERMINAL = EnumSet.of(ShippingStatus.DELIVERED);
+    private static final Set<ShippingStatus> TERMINAL = EnumSet.of(ShippingStatus.DELIVERED, ShippingStatus.CANCELLED);
 
     static Stream<Arguments> allTransitions() {
         Stream.Builder<Arguments> b = Stream.builder();
@@ -41,7 +43,7 @@ class ShippingStatusTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @MethodSource("allTransitions")
-    @DisplayName("9 케이스 매트릭스: 합법 전이 표에 포함된 2종만 true, 나머지는 false")
+    @DisplayName("16 케이스 매트릭스: 합법 전이 표에 포함된 4종만 true, 나머지는 false")
     void canTransitionTo_matrix(ShippingStatus from, ShippingStatus to) {
         boolean expected = LEGAL.contains(new Pair(from, to));
 
@@ -68,7 +70,7 @@ class ShippingStatusTest {
 
     @ParameterizedTest
     @MethodSource("allStatuses")
-    @DisplayName("isTerminal: DELIVERED 만 true")
+    @DisplayName("isTerminal: DELIVERED·CANCELLED 만 true")
     void isTerminal(ShippingStatus s) {
         assertThat(s.isTerminal()).isEqualTo(TERMINAL.contains(s));
     }
@@ -78,7 +80,7 @@ class ShippingStatusTest {
     }
 
     @Test
-    @DisplayName("종착 상태(DELIVERED) 에서 어떤 상태로도 전이 불가")
+    @DisplayName("종착 상태(DELIVERED·CANCELLED) 에서 어떤 상태로도 전이 불가")
     void terminalStates_noOutgoing() {
         for (ShippingStatus terminal : TERMINAL) {
             for (ShippingStatus next : ShippingStatus.values()) {

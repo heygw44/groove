@@ -26,7 +26,8 @@ import java.util.Objects;
  * OrderShippingInfo 스냅샷을 그대로 복사한다 — 주문이 사후에 바뀌어도 발송된 배송에는 영향이 없다.
  *
  * 상태 전이 규칙은 ShippingStatus.canTransitionTo 가 판정한다 — Payment 와 동일하게 DB 트리거를 두지 않고 애플리케이션
- * 레벨에 일원화, 위반 시 IllegalStateException.
+ * 레벨에 일원화, 위반 시 IllegalStateException. 발송 전(PREPARING/SHIPPED) 취소·환불 시에는 cancel 로 CANCELLED 로
+ * 전이시켜 자동 진행 스케줄러가 더 이상 밀지 않게 한다 (#233).
  */
 @Entity
 @Table(name = "shipping")
@@ -132,6 +133,15 @@ public class Shipping extends BaseTimeEntity {
     public void markDelivered() {
         transitionTo(ShippingStatus.DELIVERED);
         this.deliveredAt = Instant.now();
+    }
+
+    /**
+     * 배송 취소 — 발송 전(PREPARING/SHIPPED) 주문이 취소·환불될 때 보상 트랜잭션이 호출한다 (#233). 자동 진행
+     * 스케줄러가 더 이상 전진시키지 않도록 종착 상태(CANCELLED)로 전이한다. DELIVERED·이미 CANCELLED(=종착)에서는
+     * 불법 전이로 IllegalStateException — 호출 측(ShippingService.cancelForOrder)이 종착 배송은 건너뛴다.
+     */
+    public void cancel() {
+        transitionTo(ShippingStatus.CANCELLED);
     }
 
     private void transitionTo(ShippingStatus next) {

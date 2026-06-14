@@ -57,6 +57,13 @@ public class ShippingProvisioner {
             log.warn("배송 생성 건너뜀: 주문 없음 orderId={}", orderId);
             return false;
         }
+        // 프로비저닝 가드(#233): OrderPaidEvent 의 AFTER_COMMIT 리스너는 결제 적용 트랜잭션 커밋 뒤에 실행되므로, 그 사이
+        // 별도 트랜잭션의 환불이 끼어들어 주문이 이미 CANCELLED(종착)가 됐을 수 있다. 종착 주문에 배송을 만들면 환불된 주문에
+        // 고아 배송이 생기므로 생성하지 않는다 — advanceTo(PREPARING) 도 어차피 무해 무시돼 PREPARING 으로 못 가는 상태다.
+        if (order.getStatus().isTerminal()) {
+            log.warn("배송 생성 건너뜀: 주문이 종착 상태({}) order={} — 발송 전 취소/환불", order.getStatus(), orderNumber);
+            return false;
+        }
         // 심층 방어(#188): 장기 방치된 PENDING 주문은 PII 익명화 배치가 배송지를 "익명" 으로 마스킹한다. 그런 주문이
         // 뒤늦은 결제로 PAID 가 돼 여기로 오면 "익명" 배송지로 출고될 수 있으므로, 익명화된 주문엔 배송을 만들지 않는다.
         if (order.isAnonymized()) {

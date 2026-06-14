@@ -1,6 +1,5 @@
 package com.groove.shipping.application;
 
-import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderStatus;
 import com.groove.shipping.api.dto.ShippingResponse;
 import com.groove.shipping.domain.Shipping;
@@ -11,6 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.function.Consumer;
 
 /**
  * 배송 조회 + 자동 진행 트랜잭션 경계.
@@ -25,9 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 전진시킨다(합법 전이만, 아니면 무해 무시). 정상 흐름에서 배송이 DELIVERED 에 도달하면 주문도 DELIVERED 가 되어 리뷰 작성
  * 자격을 만족. 주문을 함께 로드하려고 findWithOrderById 로 조회해 LAZY 추가 SELECT(배치 N+1)를 피한다.
  *
- * 배송은 물리적 진행(스케줄러=택배사 시뮬레이션)을 반영해 항상 전진시키되, 주문이 종착 상태(환불 CANCELLED 등)라 배송을 더
- * 이상 따라가지 못하면 상태 발산을 WARN 으로 드러낸다 — 환불 시 배송 자체를 중단/취소하는 보강은 별도 과제(배송 상태 머신에
- * 취소 상태 부재).
+ * 발송 전 취소·환불 동기화(이슈 #233): 주문이 종착 상태(환불 CANCELLED 등)면 자동 진행을 아예 건너뛴다 — 종착 주문의
+ * 배송을 SHIPPED/DELIVERED 로 밀지 않는다. 발송 전 취소·환불은 cancelForOrder 가 배송도 CANCELLED 로 전이시키므로,
+ * 환불된 주문이 어떤 경로로도 DELIVERED 로 찍히지 않는다.
  */
 @Service
 public class ShippingService {
@@ -49,34 +50,43 @@ public class ShippingService {
 
     @Transactional
     public void advanceToShipped(Long shippingId) {
-        shippingRepository.findWithOrderById(shippingId).ifPresent(shipping -> {
-            if (shipping.getStatus() == ShippingStatus.PREPARING) {
-                shipping.markShipped();
-                lockstepOrder(shipping, OrderStatus.SHIPPED);
-            }
-        });
+        advance(shippingId, ShippingStatus.PREPARING, OrderStatus.SHIPPED, Shipping::markShipped);
     }
 
     @Transactional
     public void advanceToDelivered(Long shippingId) {
-        shippingRepository.findWithOrderById(shippingId).ifPresent(shipping -> {
-            if (shipping.getStatus() == ShippingStatus.SHIPPED) {
-                shipping.markDelivered();
-                lockstepOrder(shipping, OrderStatus.DELIVERED);
+        advance(shippingId, ShippingStatus.SHIPPED, OrderStatus.DELIVERED, Shipping::markDelivered);
+    }
+
+    /**
+     * 주문에 연결된 배송을 취소(CANCELLED)시킨다 — 발송 전(PREPARING/SHIPPED) 주문이 취소·환불될 때 보상 트랜잭션
+     * (AdminOrderService.refund)이 같은 트랜잭션에서 호출한다 (#233). 배송이 없거나 이미 종착(DELIVERED/CANCELLED)이면
+     * 무해하게 무시한다 — refund 는 order.canTransitionTo(CANCELLED) 가 참일 때만(SHIPPED 이후 불가) 도달하므로
+     * 실제로는 PREPARING 배송이 대상이다.
+     */
+    @Transactional
+    public void cancelForOrder(Long orderId) {
+        shippingRepository.findByOrderId(orderId).ifPresent(shipping -> {
+            if (!shipping.getStatus().isTerminal()) {
+                shipping.cancel();
+                log.info("발송 전 취소·환불로 배송 취소 — orderId={}, tracking={}", orderId, shipping.getTrackingNumber());
             }
         });
     }
 
     /**
-     * 배송 전이에 주문을 락스텝으로 따라가게 한다. Order.advanceTo 는 합법 전이만 수행하므로(아니면 무해 무시) 정상 흐름·관리자
-     * 선전이(이미 도달)에는 영향이 없다. 다만 주문이 종착 상태(취소/결제실패)라 배송을 따라갈 수 없으면 — 배송은 계속 전진하되 —
-     * 상태 발산을 로그로 드러낸다(조용히 어긋나지 않도록, CodeRabbit 리뷰 반영).
+     * 자동 진행 한 단계 — 배송이 기대 상태({@code from})이고 주문이 종착(취소/결제실패)이 아닐 때만 배송을 전이({@code mark})
+     * 시키고, 같은 트랜잭션의 주문도 {@code Order.advanceTo} 로 락스텝 전진시킨다(이슈 #161). 종착 주문은 전진시키지 않는다
+     * (#233) — 발송 전 취소·환불된 주문이 어떤 경로로도 DELIVERED 로 찍히지 않게 한다. {@code Order.advanceTo} 는 합법
+     * 전이만 수행하므로(관리자 선전이로 이미 도달했거나 한 단계 뒤처져도 무해 무시) 정상 흐름엔 영향이 없다. order 는
+     * findWithOrderById 로 동반 로드돼 추가 SELECT(N+1)가 없다.
      */
-    private void lockstepOrder(Shipping shipping, OrderStatus target) {
-        Order order = shipping.getOrder();
-        if (!order.advanceTo(target) && order.getStatus().isTerminal()) {
-            log.warn("주문이 종착 상태({})라 배송을 따라가지 못함 — order={}, tracking={}, 배송 목표={}",
-                    order.getStatus(), order.getOrderNumber(), shipping.getTrackingNumber(), target);
-        }
+    private void advance(Long shippingId, ShippingStatus from, OrderStatus target, Consumer<Shipping> mark) {
+        shippingRepository.findWithOrderById(shippingId).ifPresent(shipping -> {
+            if (shipping.getStatus() == from && !shipping.getOrder().getStatus().isTerminal()) {
+                mark.accept(shipping);
+                shipping.getOrder().advanceTo(target);
+            }
+        });
     }
 }

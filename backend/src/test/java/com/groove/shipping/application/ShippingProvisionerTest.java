@@ -70,18 +70,18 @@ class ShippingProvisionerTest {
     }
 
     @Test
-    @DisplayName("주문이 PAID 가 아니면(취소됨) 배송은 생성하되 주문 상태는 전이하지 않는다")
-    void skipsOrderTransitionWhenOrderNotPaid() {
+    @DisplayName("주문이 종착(취소·환불)이면 배송을 만들지 않고 false 반환 — AFTER_COMMIT race 가드 (#233)")
+    void skipsWhenOrderTerminal() {
+        // OrderPaidEvent 의 AFTER_COMMIT 리스너가 도는 사이 별도 트랜잭션의 환불로 주문이 이미 CANCELLED 가 된 race 재현.
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
-        order.changeStatus(OrderStatus.CANCELLED, "취소");
+        order.changeStatus(OrderStatus.CANCELLED, "환불");
         given(shippingRepository.existsByOrderId(ORDER_ID)).willReturn(false);
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
-        given(trackingNumberGenerator.generate()).willReturn(TRACKING);
 
         boolean created = provisioner.provisionForOrder(ORDER_ID, ORDER_NUMBER);
 
-        assertThat(created).isTrue();
-        verify(shippingRepository).saveAndFlush(any());
+        assertThat(created).isFalse();
+        verify(shippingRepository, never()).saveAndFlush(any());
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 

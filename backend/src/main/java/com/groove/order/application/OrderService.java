@@ -147,6 +147,8 @@ public class OrderService {
             throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.CANCELLED);
         }
         order.changeStatus(OrderStatus.CANCELLED, reason);
+        // 배송 취소 동기화(#233)는 여기서 불필요하다 — 배송은 결제 완료(PAID) 후에야 생성되는데 cancel 은 PENDING 한정이라
+        // 취소 시점에 배송 행이 존재하지 않는다. 발송 전(PAID/PREPARING) 취소·환불의 배송 동기화는 refund 경로가 담당한다.
         for (OrderItem item : order.getItems()) {
             item.getAlbum().adjustStock(item.getQuantity());
         }
