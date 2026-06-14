@@ -170,7 +170,8 @@ public class Payment extends BaseTimeEntity {
         if (amount <= 0) {
             throw new IllegalArgumentException("환불액은 양수여야 합니다: " + amount);
         }
-        if (this.refundedAmount + amount > this.amount) {
+        // 뺄셈(양수 − 양수)으로 비교해 refundedAmount + amount 덧셈 오버플로를 피한다 (불변식: amount >= refundedAmount).
+        if (amount > this.amount - this.refundedAmount) {
             throw new IllegalArgumentException(
                     "누적 환불액이 결제액을 초과합니다: 기환불=" + this.refundedAmount + ", 요청=" + amount + ", 결제액=" + this.amount);
         }

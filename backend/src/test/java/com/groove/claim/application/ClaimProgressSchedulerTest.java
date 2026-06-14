@@ -57,11 +57,11 @@ class ClaimProgressSchedulerTest {
     @Test
     @DisplayName("각 단계 대상을 advanceToInTransit/advanceToInspecting/completeRefund 로 한 단계씩 위임")
     void advancesEachCandidateOneStep() {
-        given(claimRepository.findByStatusAndApprovedAtBefore(eq(ClaimStatus.APPROVED), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndApprovedAtBeforeOrderByApprovedAtAscIdAsc(eq(ClaimStatus.APPROVED), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of(claimWithId(1L)));
-        given(claimRepository.findByStatusAndInTransitAtBefore(eq(ClaimStatus.IN_TRANSIT), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndInTransitAtBeforeOrderByInTransitAtAscIdAsc(eq(ClaimStatus.IN_TRANSIT), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of(claimWithId(2L)));
-        given(claimRepository.findByStatusAndInspectingAtBefore(eq(ClaimStatus.INSPECTING), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndInspectingAtBeforeOrderByInspectingAtAscIdAsc(eq(ClaimStatus.INSPECTING), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of(claimWithId(3L)));
 
         scheduler.progressClaims();
@@ -75,11 +75,11 @@ class ClaimProgressSchedulerTest {
     @Test
     @DisplayName("대상이 없으면 ClaimService 를 호출하지 않는다")
     void noCandidates_noop() {
-        given(claimRepository.findByStatusAndApprovedAtBefore(any(), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndApprovedAtBeforeOrderByApprovedAtAscIdAsc(any(), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of());
-        given(claimRepository.findByStatusAndInTransitAtBefore(any(), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndInTransitAtBeforeOrderByInTransitAtAscIdAsc(any(), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of());
-        given(claimRepository.findByStatusAndInspectingAtBefore(any(), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndInspectingAtBeforeOrderByInspectingAtAscIdAsc(any(), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of());
 
         scheduler.progressClaims();
@@ -90,11 +90,11 @@ class ClaimProgressSchedulerTest {
     @Test
     @DisplayName("한 건 실패해도 배치의 나머지는 계속 진행한다")
     void perItemFailureIsIsolated() {
-        given(claimRepository.findByStatusAndApprovedAtBefore(eq(ClaimStatus.APPROVED), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndApprovedAtBeforeOrderByApprovedAtAscIdAsc(eq(ClaimStatus.APPROVED), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of(claimWithId(1L), claimWithId(2L)));
-        given(claimRepository.findByStatusAndInTransitAtBefore(any(), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndInTransitAtBeforeOrderByInTransitAtAscIdAsc(any(), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of());
-        given(claimRepository.findByStatusAndInspectingAtBefore(any(), any(Instant.class), any(Limit.class)))
+        given(claimRepository.findByStatusAndInspectingAtBeforeOrderByInspectingAtAscIdAsc(any(), any(Instant.class), any(Limit.class)))
                 .willReturn(List.of());
         willThrow(new RuntimeException("DB hiccup")).given(claimService).advanceToInTransit(1L);
 

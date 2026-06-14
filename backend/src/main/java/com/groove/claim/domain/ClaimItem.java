@@ -73,9 +73,12 @@ public class ClaimItem extends BaseTimeEntity {
         this.claim = claim;
     }
 
-    /** 이 항목의 반품 정가 합 — {@code unitPriceSnapshot × quantity}. 할인 미반영(claim 환불액 비례 배분의 기준 분자). */
+    /**
+     * 이 항목의 반품 정가 합 — {@code unitPriceSnapshot × quantity}. 할인 미반영(claim 환불액 비례 배분의 기준 분자).
+     * 곱셈 오버플로는 {@link Math#multiplyExact}로 조용한 음수 wrap 대신 {@link ArithmeticException}으로 드러낸다.
+     */
     public long getGross() {
-        return unitPriceSnapshot * quantity;
+        return Math.multiplyExact(unitPriceSnapshot, (long) quantity);
     }
 
     public Long getId() {

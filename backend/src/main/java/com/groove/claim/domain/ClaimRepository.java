@@ -57,15 +57,19 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
 
     /**
      * 자동 진행 스케줄러의 APPROVED → IN_TRANSIT 대상 — {@code approvedAtBefore} 이전에 승인돼 회수 대기 중인 반품.
-     * 스케줄러는 식별자만 쓰므로 {@code items} 는 로드하지 않는다. {@code idx_claim_status} 가 받친다.
+     * 스케줄러는 식별자만 쓰므로 {@code items} 는 로드하지 않는다. {@code idx_claim_status} 가 받친다. 오래 기다린
+     * 건부터 공정하게 소진되도록 단계 시각 오름차순 + {@code id} tie-breaker 로 정렬한다(일부 건 반복 실패 시 적체 방지).
      */
-    List<Claim> findByStatusAndApprovedAtBefore(ClaimStatus status, Instant approvedAtBefore, Limit limit);
+    List<Claim> findByStatusAndApprovedAtBeforeOrderByApprovedAtAscIdAsc(
+            ClaimStatus status, Instant approvedAtBefore, Limit limit);
 
-    /** 자동 진행 스케줄러의 IN_TRANSIT → INSPECTING 대상 — {@code inTransitAtBefore} 이전에 회수 시작된 반품. */
-    List<Claim> findByStatusAndInTransitAtBefore(ClaimStatus status, Instant inTransitAtBefore, Limit limit);
+    /** 자동 진행 스케줄러의 IN_TRANSIT → INSPECTING 대상 — {@code inTransitAtBefore} 이전에 회수 시작된 반품(FIFO 정렬). */
+    List<Claim> findByStatusAndInTransitAtBeforeOrderByInTransitAtAscIdAsc(
+            ClaimStatus status, Instant inTransitAtBefore, Limit limit);
 
-    /** 자동 진행 스케줄러의 INSPECTING → REFUNDED(검수 자동통과+환불) 대상 — {@code inspectingAtBefore} 이전 검수 시작분. */
-    List<Claim> findByStatusAndInspectingAtBefore(ClaimStatus status, Instant inspectingAtBefore, Limit limit);
+    /** 자동 진행 스케줄러의 INSPECTING → REFUNDED(검수 자동통과+환불) 대상 — {@code inspectingAtBefore} 이전 검수 시작분(FIFO 정렬). */
+    List<Claim> findByStatusAndInspectingAtBeforeOrderByInspectingAtAscIdAsc(
+            ClaimStatus status, Instant inspectingAtBefore, Limit limit);
 
     /** 관리자 반품 목록 — 주문번호 노출을 위해 {@code order} 를 fetch 한다(ManyToOne, 인메모리 페이지네이션 무관). */
     @Override

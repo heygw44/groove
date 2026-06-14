@@ -216,8 +216,12 @@ public class ClaimService {
 
         long refundAmount = computeRefundAmount(order, claim, payment);
         Instant now = clock.instant();
-        callGatewayRefund(payment, claim, refundAmount);
-        payment.refund(refundAmount, now);
+        // 환불액 0(환불 가능액 소진 — 정상 경로에선 결제 상태 가드가 차단하는 방어선)이면 PG 호출/누적 갱신을 건너뛴다.
+        // RefundRequest 는 양수만 허용하므로 0 을 넘기면 예외가 되기 때문이다. 재입고/상태 전이는 그대로 진행한다.
+        if (refundAmount > 0) {
+            callGatewayRefund(payment, claim, refundAmount);
+            payment.refund(refundAmount, now);
+        }
         // 검수 통과 항목 재입고 — claim 락 보유 트랜잭션 안에서 claimItem.orderItem.album 을 지연 로드한다(반품 항목
         // 수가 적어 N+1 비용 미미). 불합격(REJECTED)은 이 경로를 타지 않으므로 미재입고.
         for (ClaimItem item : claim.getItems()) {
@@ -280,13 +284,19 @@ public class ClaimService {
      * {@code RefundRequest} 의 양수 제약을 만족시킨다.
      */
     static long proportionalRefund(long payable, long totalGross, long cumGrossIncl, long alreadyRefunded) {
+        long remaining = payable - alreadyRefunded;
+        if (remaining <= 0) {
+            // 환불 가능액 소진 — 0 을 돌려주고 호출 측이 PG/누적 갱신을 건너뛴다(정상 경로에선 결제 상태 가드가 먼저 차단).
+            return 0;
+        }
         long target = totalGross == 0 ? payable
                 : BigInteger.valueOf(payable).multiply(BigInteger.valueOf(cumGrossIncl))
                         .add(BigInteger.valueOf(totalGross / 2))
                         .divide(BigInteger.valueOf(totalGross))
                         .longValueExact();
         long increment = target - alreadyRefunded;
-        return increment > 0 ? increment : Math.min(1, payable - alreadyRefunded);
+        // 증분이 양수면 잔여 한도로 캡(반올림 초과 방지), 0 이하면 최소 1원으로 전진(remaining ≥ 1 보장).
+        return increment > 0 ? Math.min(increment, remaining) : 1;
     }
 
     private void callGatewayRefund(Payment payment, Claim claim, long amount) {

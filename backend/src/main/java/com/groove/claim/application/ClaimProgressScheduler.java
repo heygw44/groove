@@ -70,13 +70,16 @@ public class ClaimProgressScheduler {
     public void progressClaims() {
         Instant now = clock.instant();
         advance("APPROVED→IN_TRANSIT",
-                claimRepository.findByStatusAndApprovedAtBefore(ClaimStatus.APPROVED, now.minus(approveDelay), batchLimit),
+                claimRepository.findByStatusAndApprovedAtBeforeOrderByApprovedAtAscIdAsc(
+                        ClaimStatus.APPROVED, now.minus(approveDelay), batchLimit),
                 claim -> claimService.advanceToInTransit(claim.getId()));
         advance("IN_TRANSIT→INSPECTING",
-                claimRepository.findByStatusAndInTransitAtBefore(ClaimStatus.IN_TRANSIT, now.minus(transitDelay), batchLimit),
+                claimRepository.findByStatusAndInTransitAtBeforeOrderByInTransitAtAscIdAsc(
+                        ClaimStatus.IN_TRANSIT, now.minus(transitDelay), batchLimit),
                 claim -> claimService.advanceToInspecting(claim.getId()));
         advance("INSPECTING→REFUNDED",
-                claimRepository.findByStatusAndInspectingAtBefore(ClaimStatus.INSPECTING, now.minus(inspectDelay), batchLimit),
+                claimRepository.findByStatusAndInspectingAtBeforeOrderByInspectingAtAscIdAsc(
+                        ClaimStatus.INSPECTING, now.minus(inspectDelay), batchLimit),
                 claim -> claimService.completeRefund(claim.getId()));
     }
 

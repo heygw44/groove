@@ -52,6 +52,8 @@ CREATE TABLE claim_item (
     PRIMARY KEY (id),
     CONSTRAINT ck_claim_item_quantity CHECK (quantity > 0),
     CONSTRAINT ck_claim_item_unit_price CHECK (unit_price_snapshot >= 0),
+    -- 한 반품(claim) 안에서 같은 주문 항목 중복 방지 — APP(ClaimService 가 요청 라인 수량 합산)의 DB 방어선.
+    CONSTRAINT uk_claim_item_order_item UNIQUE (claim_id, order_item_id),
     CONSTRAINT fk_claim_item_claim FOREIGN KEY (claim_id) REFERENCES claim (id) ON DELETE CASCADE,
     CONSTRAINT fk_claim_item_order_item FOREIGN KEY (order_item_id) REFERENCES order_item (id) ON DELETE CASCADE,
     INDEX idx_claim_item_claim (claim_id)

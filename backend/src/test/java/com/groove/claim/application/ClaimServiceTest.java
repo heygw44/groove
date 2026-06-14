@@ -335,4 +335,10 @@ class ClaimServiceTest {
     void proportionalRefund_zeroIncrementFloor() {
         assertThat(ClaimService.proportionalRefund(100L, 100L, 0L, 0L)).isEqualTo(1L);
     }
+
+    @Test
+    @DisplayName("proportionalRefund: 환불 가능액 소진(잔여 0)이면 0 (호출 측이 PG/누적 갱신을 건너뜀)")
+    void proportionalRefund_exhaustedReturnsZero() {
+        assertThat(ClaimService.proportionalRefund(1L, 100L, 200L, 1L)).isZero();
+    }
 }
