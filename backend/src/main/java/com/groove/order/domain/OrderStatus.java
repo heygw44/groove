@@ -34,6 +34,13 @@ public enum OrderStatus {
     CANCELLED,
     PAYMENT_FAILED;
 
+    /**
+     * "배송완료 이상" 주문 상태 집합 — 리뷰 작성 자격(#59)과 반품 접수 자격(#239)이 공유하는 경계다.
+     * {@code DELIVERED} 또는 {@code COMPLETED} 면 상품이 고객에게 도달했다고 본다.
+     */
+    public static final Set<OrderStatus> DELIVERED_OR_COMPLETED = Collections.unmodifiableSet(
+            EnumSet.of(DELIVERED, COMPLETED));
+
     private static final Map<OrderStatus, Set<OrderStatus>> TRANSITIONS;
 
     static {

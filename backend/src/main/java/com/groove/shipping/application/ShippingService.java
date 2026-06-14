@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -46,6 +48,18 @@ public class ShippingService {
         Shipping shipping = shippingRepository.findByTrackingNumber(trackingNumber)
                 .orElseThrow(ShippingNotFoundException::new);
         return ShippingResponse.from(shipping);
+    }
+
+    /**
+     * 주문에 연결된 배송의 완료(DELIVERED) 시각을 조회한다 — 반품 기한(수령 후 N일) 산정의 anchor 다 (#239).
+     * 반품(claim)은 배송완료 후에만 접수되므로 {@code ClaimService.request} 가 이 시각 + 반품 window 로 기한을 잰다.
+     * claim → shipping 결합을 이 좁은 read 메서드 하나로 한정한다(admin 이 {@link #cancelForOrder} 로 크로스모듈
+     * 호출하는 선례와 동일). 배송이 없거나 아직 DELIVERED 가 아니면 {@code Optional.empty} — 호출 측이 기한 산정
+     * 불가로 처리한다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Instant> findDeliveredAt(Long orderId) {
+        return shippingRepository.findByOrderId(orderId).map(Shipping::getDeliveredAt);
     }
 
     @Transactional

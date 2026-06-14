@@ -1,0 +1,235 @@
+package com.groove.claim;
+
+import com.groove.catalog.album.domain.Album;
+import com.groove.catalog.album.domain.AlbumFormat;
+import com.groove.catalog.album.domain.AlbumRepository;
+import com.groove.catalog.album.domain.AlbumStatus;
+import com.groove.catalog.artist.domain.Artist;
+import com.groove.catalog.artist.domain.ArtistRepository;
+import com.groove.catalog.genre.domain.Genre;
+import com.groove.catalog.genre.domain.GenreRepository;
+import com.groove.catalog.label.domain.Label;
+import com.groove.catalog.label.domain.LabelRepository;
+import com.groove.auth.domain.RefreshTokenRepository;
+import com.groove.claim.application.ClaimCreateCommand;
+import com.groove.claim.application.ClaimService;
+import com.groove.claim.domain.Claim;
+import com.groove.claim.domain.ClaimRepository;
+import com.groove.claim.domain.ClaimStatus;
+import com.groove.member.domain.Member;
+import com.groove.member.domain.MemberRepository;
+import com.groove.order.domain.Order;
+import com.groove.order.domain.OrderItem;
+import com.groove.order.domain.OrderRepository;
+import com.groove.order.domain.OrderStatus;
+import com.groove.payment.domain.Payment;
+import com.groove.payment.domain.PaymentMethod;
+import com.groove.payment.domain.PaymentRepository;
+import com.groove.payment.domain.PaymentStatus;
+import com.groove.payment.gateway.PaymentGateway;
+import com.groove.payment.gateway.mock.MockPaymentGateway;
+import com.groove.shipping.domain.Shipping;
+import com.groove.shipping.domain.ShippingRepository;
+import com.groove.support.MemberFixtures;
+import com.groove.support.OrderFixtures;
+import com.groove.support.TestcontainersConfig;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * 반품 환불 전 과정 통합 테스트 (#239) — 부분→전량 누적 정합 + claim 별 PG 멱등(실호출 1회).
+ *
+ * <p>회수·검수 자동 진행은 시간 의존이라, 스케줄러 대신 {@link ClaimService} 의 단계 위임 메서드를 직접 호출해
+ * 결정적으로 INSPECTING 까지 민 뒤 환불을 검증한다(스케줄러 자체는 {@code ClaimProgressSchedulerTest} 가 단위 검증).
+ */
+@SpringBootTest
+@ActiveProfiles("test")
+@Import(TestcontainersConfig.class)
+@DisplayName("반품 환불 통합 — 부분→전량 정합 + claim 별 PG 멱등 (#239)")
+class ClaimRefundIntegrationTest {
+
+    private static final long UNIT_PRICE = 15_000L;
+
+    @Autowired
+    private ClaimService claimService;
+    @Autowired
+    private ClaimRepository claimRepository;
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+    @Autowired
+    private OrderRepository orderRepository;
+    @Autowired
+    private PaymentRepository paymentRepository;
+    @Autowired
+    private ShippingRepository shippingRepository;
+    @Autowired
+    private AlbumRepository albumRepository;
+    @Autowired
+    private ArtistRepository artistRepository;
+    @Autowired
+    private GenreRepository genreRepository;
+    @Autowired
+    private LabelRepository labelRepository;
+    @Autowired
+    private MemberRepository memberRepository;
+    @Autowired
+    private PaymentGateway paymentGateway;
+
+    private Long memberId;
+    private Long albumId;
+    private int seq;
+
+    @BeforeEach
+    void setUp() {
+        clearAll();
+        Member m = memberRepository.saveAndFlush(
+                MemberFixtures.register("claim-int@example.com", "$2a$10$dummy", "회원", "01000000001"));
+        memberId = m.getId();
+        String uniq = "-" + System.nanoTime();
+        Artist artist = artistRepository.saveAndFlush(Artist.create("Artist" + uniq, null));
+        Genre genre = genreRepository.saveAndFlush(Genre.create("Rock" + uniq));
+        Label label = labelRepository.saveAndFlush(Label.create("Label" + uniq));
+        Album album = albumRepository.saveAndFlush(Album.create("Album", artist, genre, label,
+                (short) 2020, AlbumFormat.LP_12, UNIT_PRICE, 100, AlbumStatus.SELLING, false, null, null));
+        albumId = album.getId();
+    }
+
+    @AfterEach
+    void tearDown() {
+        clearAll();
+    }
+
+    private void clearAll() {
+        // 자식(FK 참조)부터 정리 — refresh_token/claim/shipping/payment → orders/member 순. orders 삭제는
+        // order_item/claim/shipping/review 등 ON DELETE CASCADE 를 타지만, 명시적으로 먼저 비워 의존을 끊는다.
+        refreshTokenRepository.deleteAllInBatch();
+        claimRepository.deleteAllInBatch();
+        shippingRepository.deleteAllInBatch();
+        paymentRepository.deleteAllInBatch();
+        orderRepository.deleteAllInBatch();
+        albumRepository.deleteAllInBatch();
+        artistRepository.deleteAllInBatch();
+        genreRepository.deleteAllInBatch();
+        labelRepository.deleteAllInBatch();
+        memberRepository.deleteAllInBatch();
+    }
+
+    // --- 헬퍼 ----------------------------------------------------------------
+
+    private Order persistDeliveredOrder(int qty) {
+        Album album = albumRepository.findById(albumId).orElseThrow();
+        Order order = OrderFixtures.memberOrder("ORD-CLM-" + (++seq) + "-" + System.nanoTime(), memberId);
+        order.addItem(OrderItem.create(album, qty));
+        order.changeStatus(OrderStatus.PAID, null);
+        order.changeStatus(OrderStatus.PREPARING, null);
+        order.changeStatus(OrderStatus.SHIPPED, null);
+        order.changeStatus(OrderStatus.DELIVERED, null);
+        Order saved = orderRepository.saveAndFlush(order);
+
+        Payment payment = Payment.initiate(saved, saved.getPayableAmount(), PaymentMethod.CARD, "MOCK",
+                "mock-tx-" + seq + "-" + System.nanoTime());
+        payment.markPaid();
+        paymentRepository.saveAndFlush(payment);
+
+        Shipping shipping = Shipping.prepare(saved, saved.getShippingInfo(), "trk-" + seq + "-" + System.nanoTime());
+        shipping.markShipped();
+        shipping.markDelivered(); // delivered_at = now → 반품 기한 이내
+        shippingRepository.saveAndFlush(shipping);
+        return saved;
+    }
+
+    private Long requestClaim(String orderNumber, Long orderItemId, int quantity) {
+        ClaimCreateCommand command = new ClaimCreateCommand(memberId, orderNumber, "단순 변심",
+                List.of(new ClaimCreateCommand.Line(orderItemId, quantity)));
+        return claimService.request(command).getId();
+    }
+
+    private void driveToInspecting(Long claimId) {
+        claimService.approve(claimId);
+        claimService.advanceToInTransit(claimId);
+        claimService.advanceToInspecting(claimId);
+    }
+
+    // --- 테스트 --------------------------------------------------------------
+
+    @Test
+    @DisplayName("부분 반품 후 전량 반품 — 결제 PARTIALLY_REFUNDED→REFUNDED, 재고 누적 복원, 전량 시 returned_at")
+    void partialThenFull_accumulatesRefundAndRestock() {
+        Order order = persistDeliveredOrder(2); // total/payable = 30000
+        Long orderItemId = order.getItems().get(0).getId();
+        Long orderId = order.getId();
+        int stockBefore = albumRepository.findById(albumId).orElseThrow().getStock();
+
+        // 1) 부분 반품 (1/2)
+        Long claimA = requestClaim(order.getOrderNumber(), orderItemId, 1);
+        driveToInspecting(claimA);
+        claimService.completeRefund(claimA);
+
+        Payment afterPartial = paymentRepository.findByOrderId(orderId).orElseThrow();
+        assertThat(afterPartial.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
+        assertThat(afterPartial.getRefundedAmount()).isEqualTo(UNIT_PRICE);
+        assertThat(albumRepository.findById(albumId).orElseThrow().getStock()).isEqualTo(stockBefore + 1);
+        assertThat(orderRepository.findById(orderId).orElseThrow().getReturnedAt()).isNull();
+
+        // 2) 나머지 반품 (1/2) → 전량
+        Long claimB = requestClaim(order.getOrderNumber(), orderItemId, 1);
+        driveToInspecting(claimB);
+        claimService.completeRefund(claimB);
+
+        Payment afterFull = paymentRepository.findByOrderId(orderId).orElseThrow();
+        assertThat(afterFull.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(afterFull.getRefundedAmount()).isEqualTo(2 * UNIT_PRICE);
+        assertThat(albumRepository.findById(albumId).orElseThrow().getStock()).isEqualTo(stockBefore + 2);
+        assertThat(orderRepository.findById(orderId).orElseThrow().getReturnedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("환불 보상 트랜잭션 부분 실패 후 재시도 — claim 별 멱등 키로 PG 실호출 1회 (#72/#239)")
+    void compensatingFailure_thenRetry_pgCalledOncePerClaim() {
+        Order order = persistDeliveredOrder(2);
+        Long orderItemId = order.getItems().get(0).getId();
+        Long orderId = order.getId();
+        Long claimId = requestClaim(order.getOrderNumber(), orderItemId, 2); // 전량 반품
+        driveToInspecting(claimId);
+
+        MockPaymentGateway mock = (MockPaymentGateway) paymentGateway;
+        int callsBefore = mock.refundCallCount();
+
+        // 재입고 시 오버플로를 유발하도록 재고를 Integer.MAX_VALUE 로 — adjustStock(+2)가 IllegalStockAdjustmentException.
+        Album album = albumRepository.findById(albumId).orElseThrow();
+        ReflectionTestUtils.setField(album, "stock", Integer.MAX_VALUE);
+        albumRepository.saveAndFlush(album);
+
+        // 1차 환불 — PG 호출 후 재입고 실패 → 트랜잭션 롤백.
+        assertThatThrownBy(() -> claimService.completeRefund(claimId)).isInstanceOf(RuntimeException.class);
+
+        // 롤백되어 claim INSPECTING / payment PAID 유지, 단 PG 측엔 1건 기록.
+        assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(mock.refundCallCount()).isEqualTo(callsBefore + 1);
+
+        // 재고를 정상값으로 낮춰 재시도가 성공하도록.
+        Album fixed = albumRepository.findById(albumId).orElseThrow();
+        ReflectionTestUtils.setField(fixed, "stock", 10);
+        albumRepository.saveAndFlush(fixed);
+
+        // 2차 환불 (재시도) — 같은 claim → 같은 멱등 키 → PG 실호출 추가 없음.
+        Claim result = claimService.completeRefund(claimId);
+
+        assertThat(result.getStatus()).isEqualTo(ClaimStatus.REFUNDED);
+        assertThat(mock.refundCallCount()).as("같은 claim 재시도 → PG 실호출 추가 없음").isEqualTo(callsBefore + 1);
+        assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(albumRepository.findById(albumId).orElseThrow().getStock()).isEqualTo(10 + 2);
+    }
+}

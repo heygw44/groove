@@ -166,6 +166,23 @@ groove:
       # 한 주기에 보충할 최대 건수 — 메모리 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${SHIPPING_RECONCILIATION_BATCH_SIZE:200}
 
+  # 반품 자동 진행 (#239). 실 택배사 연동 없음 — interval 마다 APPROVED→IN_TRANSIT→INSPECTING→REFUNDED 를
+  # 한 단계씩 민다(검수 자동통과+환불 포함). 검수 불합격(REJECTED)만 관리자 수동. 시연 시 각 delay 를 수 초로 줄인다.
+  claim:
+    # 반품 가능 기한 — 배송완료(delivered_at) 후 이 기간 이내만 접수 (수령 후 N일).
+    return-window: ${CLAIM_RETURN_WINDOW:P7D}
+    progress:
+      interval: ${CLAIM_PROGRESS_INTERVAL:PT2S}
+      initial-delay: ${CLAIM_PROGRESS_INITIAL_DELAY:PT5S}
+      # APPROVED 로 이 시간 이상 머문 반품을 IN_TRANSIT(회수 시작)으로 (approved_at < now - approve-delay).
+      approve-delay: ${CLAIM_PROGRESS_APPROVE_DELAY:PT5S}
+      # IN_TRANSIT 로 이 시간 이상 머문 반품을 INSPECTING(검수)으로 (in_transit_at < now - transit-delay).
+      transit-delay: ${CLAIM_PROGRESS_TRANSIT_DELAY:PT5S}
+      # INSPECTING 으로 이 시간 이상 머문 반품을 검수 자동통과+환불(REFUNDED)로 (inspecting_at < now - inspect-delay).
+      inspect-delay: ${CLAIM_PROGRESS_INSPECT_DELAY:PT5S}
+      # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리/PG 호출량을 바운드. 나머지는 다음 주기에 처리.
+      batch-size: ${CLAIM_PROGRESS_BATCH_SIZE:200}
+
   # 주문/배송 PII 익명화 배치 (#170 Part B, GDPR/개인정보). 배송완료된 지 retention 이 지난 주문/배송의
   # 수령인·주소·게스트 PII 를 interval 마다 마스킹한다. 회원 본인 PII 는 탈퇴 즉시 익명화되지만, 주문/배송
   # 배송지 PII 는 분쟁 대응을 위해 보존기간 후 익명화한다(특히 게스트 주문은 이 배치가 유일한 익명화 경로).
