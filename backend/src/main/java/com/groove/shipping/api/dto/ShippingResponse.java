@@ -13,7 +13,7 @@ import java.time.Instant;
  * 진행 상태/시각만 노출하고, 연락처·우편번호·상세 주소는 내리지 않는다.
  *
  * @param trackingNumber          운송장 번호
- * @param status                  배송 상태 (PREPARING / SHIPPED / DELIVERED)
+ * @param status                  배송 상태 (PREPARING / SHIPPED / DELIVERED / CANCELLED)
  * @param recipientName           수령인 이름
  * @param address                 기본 주소
  * @param safePackagingRequested  LP 안전 포장 요청 여부
@@ -24,7 +24,7 @@ import java.time.Instant;
 public record ShippingResponse(
         @Schema(description = "운송장 번호 (UUID 형식)", example = "550e8400-e29b-41d4-a716-446655440000")
         String trackingNumber,
-        @Schema(description = "배송 상태 (PREPARING / SHIPPED / DELIVERED)", example = "SHIPPED")
+        @Schema(description = "배송 상태 (PREPARING / SHIPPED / DELIVERED / CANCELLED)", example = "SHIPPED")
         ShippingStatus status,
         @Schema(description = "수령인 이름", example = "홍길동")
         String recipientName,

@@ -10,6 +10,7 @@ import com.groove.shipping.exception.ShippingNotFoundException;
 import com.groove.support.OrderFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -159,15 +160,89 @@ class ShippingServiceTest {
     }
 
     @Test
-    @DisplayName("advanceToDelivered — 주문이 취소(종착)면 배송만 전이하고 주문은 CANCELLED 유지 — 예외 없음")
-    void advanceToDelivered_orderCancelled_skipsOrderTransition() {
+    @DisplayName("advanceToShipped — 주문이 취소(종착)면 배송을 전진시키지 않는다 (#233) — 배송 PREPARING 유지")
+    void advanceToShipped_orderTerminal_skipsAdvance() {
+        // 발송 전 환불로 주문은 CANCELLED, 배송은 아직 PREPARING(취소 동기화 전 잔여 윈도우). 스케줄러가 밀면 안 된다.
+        Shipping shipping = shippingWithOrderAt(OrderStatus.CANCELLED);
+        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+
+        shippingService.advanceToShipped(1L);
+
+        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.PREPARING);
+        assertThat(shipping.getOrder().getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("advanceToDelivered — 주문이 취소(종착)면 배송을 전진시키지 않는다 (#233) — 배송 SHIPPED 유지, 예외 없음")
+    void advanceToDelivered_orderTerminal_skipsAdvance() {
         Shipping shipping = shippingWithOrderAt(OrderStatus.CANCELLED);
         shipping.markShipped();
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
 
         assertThatCode(() -> shippingService.advanceToDelivered(1L)).doesNotThrowAnyException();
 
-        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
+        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.SHIPPED);
         assertThat(shipping.getOrder().getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Nested
+    @DisplayName("cancelForOrder — 발송 전 취소·환불 배송 동기화 (#233)")
+    class CancelForOrder {
+
+        @Test
+        @DisplayName("PREPARING 배송이 있으면 CANCELLED 로 전이")
+        void cancelsPreparingShipping() {
+            Shipping shipping = preparingShipping();
+            given(shippingRepository.findByOrderId(10L)).willReturn(Optional.of(shipping));
+
+            shippingService.cancelForOrder(10L);
+
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("SHIPPED 배송도 CANCELLED 로 전이 (#239 대비, 메서드 자체는 종착이 아니면 취소)")
+        void cancelsShippedShipping() {
+            Shipping shipping = preparingShipping();
+            shipping.markShipped();
+            given(shippingRepository.findByOrderId(10L)).willReturn(Optional.of(shipping));
+
+            shippingService.cancelForOrder(10L);
+
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("배송이 없으면 무해 (no-op)")
+        void noShipping_noop() {
+            given(shippingRepository.findByOrderId(10L)).willReturn(Optional.empty());
+
+            assertThatCode(() -> shippingService.cancelForOrder(10L)).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("이미 종착(DELIVERED)인 배송은 건드리지 않는다")
+        void terminalDelivered_noop() {
+            Shipping shipping = preparingShipping();
+            shipping.markShipped();
+            shipping.markDelivered();
+            given(shippingRepository.findByOrderId(10L)).willReturn(Optional.of(shipping));
+
+            shippingService.cancelForOrder(10L);
+
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
+        }
+
+        @Test
+        @DisplayName("이미 CANCELLED 인 배송은 그대로 (중복 환불에 멱등)")
+        void alreadyCancelled_noop() {
+            Shipping shipping = preparingShipping();
+            shipping.cancel();
+            given(shippingRepository.findByOrderId(10L)).willReturn(Optional.of(shipping));
+
+            shippingService.cancelForOrder(10L);
+
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+        }
     }
 }

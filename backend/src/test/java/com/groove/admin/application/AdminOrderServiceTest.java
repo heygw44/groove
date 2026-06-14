@@ -73,13 +73,15 @@ class AdminOrderServiceTest {
     private PaymentGateway paymentGateway;
     @Mock
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
+    @Mock
+    private com.groove.shipping.application.ShippingService shippingService;
 
     private AdminOrderService service;
 
     @BeforeEach
     void setUp() {
         service = new AdminOrderService(orderRepository, paymentRepository, paymentGateway,
-                couponApplicationService);
+                couponApplicationService, shippingService);
     }
 
     private Album album(int initialStock) {
@@ -225,6 +227,8 @@ class AdminOrderServiceTest {
             assertThat(captor.getValue().idempotencyKey()).isEqualTo(EXPECTED_IDEM_KEY);
             // #91: 쿠폰 복원 호출 (적용 여부 무관 — 서비스 내부에서 미적용 주문은 no-op).
             verify(couponApplicationService).restoreForOrder(order.getId());
+            // #233: 발송 전 배송 취소 동기화 호출 (배송 없거나 종착이면 서비스 내부에서 no-op).
+            verify(shippingService).cancelForOrder(order.getId());
         }
 
         @Test
@@ -246,6 +250,8 @@ class AdminOrderServiceTest {
             verifyNoInteractions(paymentGateway);
             // #91: 멱등 분기에서는 쿠폰 복원도 호출되지 않음 (이미 환불·복원 완료된 상태).
             verifyNoInteractions(couponApplicationService);
+            // #233: 멱등 분기에서는 배송 취소 동기화도 호출되지 않음.
+            verifyNoInteractions(shippingService);
         }
 
         @Test

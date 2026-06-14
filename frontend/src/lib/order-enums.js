@@ -28,6 +28,7 @@ export const SHIPPING_STATUS_LABEL = {
   PREPARING: '배송 준비 중',
   SHIPPED: '배송 중',
   DELIVERED: '배송 완료',
+  CANCELLED: '배송 취소',
 }
 
 /** 배송 진행 단계(표시 순서) — 진행 바 렌더용. */

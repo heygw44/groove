@@ -19,6 +19,7 @@ import com.groove.payment.exception.PaymentNotRefundableException;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.RefundRequest;
 import com.groove.payment.gateway.RefundResponse;
+import com.groove.shipping.application.ShippingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -44,8 +45,9 @@ import java.util.Set;
  * 처리하지 않는다 — 취소·환불은 refund, 결제 확정은 웹훅/폴링 경로(PaymentCallbackService)가 담당한다. 허용 대상이라도
  * 실제 전이가 OrderStatus.canTransitionTo 위반이면 409(IllegalStateTransitionException).
  *
- * 환불: refund 는 단일 트랜잭션에서 PG refund() 호출 + Payment REFUNDED 전이 + Order CANCELLED 전이 + 각 라인 재고
- * 복원 + 쿠폰 USED→ISSUED 복원을 수행한다(PaymentCallbackService 의 FAILED 보상 트랜잭션과 같은 패턴). 어느 단계든
+ * 환불: refund 는 단일 트랜잭션에서 PG refund() 호출 + Payment REFUNDED 전이 + Order CANCELLED 전이 + 발송 전 배송
+ * CANCELLED 동기화(#233) + 각 라인 재고 복원 + 쿠폰 USED→ISSUED 복원을 수행한다(PaymentCallbackService 의 FAILED
+ * 보상 트랜잭션과 같은 패턴). 어느 단계든
  * 실패하면 트랜잭션 전체가 롤백된다. PG 호출이 트랜잭션 안에서 일어나 DB 커넥션을 점유하는 한계는 PaymentService 와
  * 동일하게 v1 Mock 지연이 짧아 허용한다. 쿠폰 복원은 OrderService.cancel 과 대칭으로 호출되어야 하며 누락 시 환불된
  * 주문의 쿠폰이 USED 인 채로 남는다 (이슈 #91 HIGH 리스크).
@@ -71,15 +73,18 @@ public class AdminOrderService {
     private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
     private final CouponApplicationService couponApplicationService;
+    private final ShippingService shippingService;
 
     public AdminOrderService(OrderRepository orderRepository,
                              PaymentRepository paymentRepository,
                              PaymentGateway paymentGateway,
-                             CouponApplicationService couponApplicationService) {
+                             CouponApplicationService couponApplicationService,
+                             ShippingService shippingService) {
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
         this.couponApplicationService = couponApplicationService;
+        this.shippingService = shippingService;
     }
 
     /**
@@ -142,7 +147,8 @@ public class AdminOrderService {
     }
 
     /**
-     * 환불 처리 — PG 환불 + Payment REFUNDED + Order CANCELLED + 재고 복원. 멱등(이미 환불됨이면 부수효과 없음).
+     * 환불 처리 — PG 환불 + Payment REFUNDED + Order CANCELLED + 발송 전 배송 CANCELLED(#233) + 재고 복원.
+     * 멱등(이미 환불됨이면 부수효과 없음).
      *
      * @throws OrderNotFoundException          주문 미존재 (404)
      * @throws PaymentNotFoundException        해당 주문에 결제 없음 (404)
@@ -176,6 +182,10 @@ public class AdminOrderService {
         RefundResponse pgResponse = callGatewayRefund(payment, reason);
         payment.markRefunded();
         order.changeStatus(OrderStatus.CANCELLED, reason);
+        // 발송 전(PREPARING) 배송이 있으면 같은 트랜잭션에서 CANCELLED 로 동기화한다 (이슈 #233). 없거나 종착이면 no-op.
+        // 이게 없으면 자동 진행 스케줄러가 환불된 주문의 배송을 DELIVERED 까지 밀어버린다. canTransitionTo(CANCELLED) 가
+        // 참인 경로(SHIPPED 이후 불가)만 도달하므로 배송은 미생성이거나 PREPARING 이다.
+        shippingService.cancelForOrder(order.getId());
         int restored = 0;
         for (OrderItem item : order.getItems()) {
             item.getAlbum().adjustStock(item.getQuantity());

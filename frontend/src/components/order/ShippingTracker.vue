@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { trackShipping } from '@/api/shippings'
 import { SHIPPING_STEPS, shippingStatusLabel } from '@/lib/order-enums'
 import { formatDate } from '@/lib/format'
@@ -14,12 +14,13 @@ const shipping = ref(null)
 const error = ref('')
 const POLL_MS = 2000
 const MAX_ATTEMPTS = 30 // ~60s. 로컬 스케줄러는 PREPARING→DELIVERED ~12s.
+const TERMINAL_STATUSES = ['DELIVERED', 'CANCELLED'] // 더 이상 진행 없음 — 폴링 종료
 const poller = usePolling()
 
 async function pollOnce() {
   shipping.value = await trackShipping(props.trackingNumber)
   error.value = ''
-  return shipping.value.status === 'DELIVERED' // 종착 — 폴링 종료
+  return TERMINAL_STATUSES.includes(shipping.value.status) // 종착(완료·취소) — 폴링 종료
 }
 
 function start() {
@@ -41,6 +42,8 @@ function start() {
 
 watch(() => props.trackingNumber, start, { immediate: true })
 
+// 발송 전 취소·환불된 배송은 진행 단계 바 대신 취소 안내를 보여준다 (#233).
+const isCancelled = computed(() => shipping.value?.status === 'CANCELLED')
 const reached = (idx) => SHIPPING_STEPS.indexOf(shipping.value?.status) >= idx
 const passed = (idx) => SHIPPING_STEPS.indexOf(shipping.value?.status) > idx
 </script>
@@ -58,6 +61,13 @@ const passed = (idx) => SHIPPING_STEPS.indexOf(shipping.value?.status) > idx
   </div>
 
   <div v-else-if="!shipping" class="flex justify-center py-6"><BaseSpinner /></div>
+
+  <div
+    v-else-if="isCancelled"
+    class="rounded-lg bg-rust-500/10 px-4 py-3 text-sm text-rust-600"
+  >
+    {{ shippingStatusLabel(shipping.status) }}되었습니다.
+  </div>
 
   <div v-else class="rounded-lg border border-vinyl-800/15 bg-cream-50 px-4 py-4">
     <ol class="flex items-center">

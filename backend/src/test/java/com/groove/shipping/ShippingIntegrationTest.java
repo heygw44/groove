@@ -6,6 +6,7 @@ import com.groove.order.domain.OrderStatus;
 import com.groove.order.event.OrderPaidEvent;
 import com.groove.shipping.application.ShippingProgressScheduler;
 import com.groove.shipping.application.ShippingReconciliationScheduler;
+import com.groove.shipping.application.ShippingService;
 import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
@@ -62,6 +63,8 @@ class ShippingIntegrationTest {
     private ShippingProgressScheduler progressScheduler;
     @Autowired
     private ShippingReconciliationScheduler reconciliationScheduler;
+    @Autowired
+    private ShippingService shippingService;
 
     private TransactionTemplate tx;
 
@@ -217,5 +220,67 @@ class ShippingIntegrationTest {
     void getByTrackingNumber_malformed_returns400() throws Exception {
         mockMvc.perform(get("/api/v1/shippings/not!a!tracking"))
                 .andExpect(status().isBadRequest());
+    }
+
+    /** 주문을 종착(취소)으로 전이시킨다 — 발송 전 환불의 주문 측 효과 재현. */
+    private void cancelOrder(Order order) {
+        tx.executeWithoutResult(s -> {
+            Order managed = orderRepository.findById(order.getId()).orElseThrow();
+            managed.changeStatus(OrderStatus.CANCELLED, "환불");
+        });
+    }
+
+    @Test
+    @DisplayName("발송 전 환불로 배송이 CANCELLED 되면 자동 진행 스케줄러가 DELIVERED 로 밀지 않는다 (#233)")
+    void cancelledShipping_notAdvancedByScheduler() {
+        Order order = persistGuestOrder();
+        publishOrderPaid(order); // PREPARING 배송 + 주문 PREPARING
+        Long shippingId = shippingRepository.findAll().get(0).getId();
+
+        // refund 효과 재현: 주문 CANCELLED + 배송 CANCELLED 동기화(ShippingService.cancelForOrder)
+        cancelOrder(order);
+        shippingService.cancelForOrder(order.getId());
+        assertThat(shippingRepository.findById(shippingId).orElseThrow().getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+
+        // 스케줄러를 여러 번 돌려도 CANCELLED 유지 — 어떤 경로로도 DELIVERED 로 가지 않는다 (AC)
+        progressScheduler.progressShipments();
+        progressScheduler.progressShipments();
+        progressScheduler.progressShipments();
+
+        assertThat(shippingRepository.findById(shippingId).orElseThrow().getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("주문이 종착(취소)인데 배송이 PREPARING 으로 남아도 스케줄러가 전진시키지 않는다 (#233 잔여 윈도우 가드)")
+    void terminalOrder_preparingShipping_notAdvanced() {
+        Order order = persistGuestOrder();
+        publishOrderPaid(order); // PREPARING 배송 + 주문 PREPARING
+        Long shippingId = shippingRepository.findAll().get(0).getId();
+
+        // 배송 취소 동기화가 누락된 잔여 윈도우 재현: 주문만 CANCELLED, 배송은 PREPARING 유지
+        cancelOrder(order);
+
+        progressScheduler.progressShipments();
+        progressScheduler.progressShipments();
+
+        // 종착 주문 가드가 advanceToShipped 를 막아 배송이 PREPARING 그대로 — DELIVERED 로 새지 않는다
+        assertThat(shippingRepository.findById(shippingId).orElseThrow().getStatus()).isEqualTo(ShippingStatus.PREPARING);
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("이미 CANCELLED 된 주문에 OrderPaidEvent 가 와도 배송을 만들지 않는다 (#233 AFTER_COMMIT 가드)")
+    void cancelledOrder_noShippingProvisioned() {
+        Order order = persistGuestOrder();
+        // 발송 전 환불로 주문이 먼저 CANCELLED 가 된 뒤, 늦게 도착한 OrderPaidEvent 의 AFTER_COMMIT 리스너가 도는 race
+        cancelOrder(order);
+
+        tx.executeWithoutResult(s -> publisher.publishEvent(
+                new OrderPaidEvent(order.getId(), order.getOrderNumber(), order.getMemberId(), 1L)));
+
+        // 프로비저닝 가드가 종착 주문에 배송을 만들지 않는다
+        assertThat(shippingRepository.findByOrderId(order.getId())).isEmpty();
+        assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.CANCELLED);
     }
 }

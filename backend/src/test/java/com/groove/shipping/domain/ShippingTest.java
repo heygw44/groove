@@ -121,6 +121,68 @@ class ShippingTest {
 
             assertThatThrownBy(shipping::markShipped).isInstanceOf(IllegalStateException.class);
             assertThatThrownBy(shipping::markDelivered).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(shipping::cancel).isInstanceOf(IllegalStateException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("상태 전이 — cancel (발송 전 취소·환불 #233)")
+    class Cancel {
+
+        private Shipping shipping() {
+            return Shipping.prepare(order(), OrderFixtures.sampleShippingInfo(), TRACKING);
+        }
+
+        @Test
+        @DisplayName("cancel — PREPARING → CANCELLED")
+        void cancel_fromPreparing() {
+            Shipping shipping = shipping();
+
+            shipping.cancel();
+
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("cancel — SHIPPED → CANCELLED")
+        void cancel_fromShipped() {
+            Shipping shipping = shipping();
+            shipping.markShipped();
+
+            shipping.cancel();
+
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("cancel — DELIVERED 에서는 불법 전이 → IllegalStateException")
+        void cancel_fromDelivered_throws() {
+            Shipping shipping = shipping();
+            shipping.markShipped();
+            shipping.markDelivered();
+
+            assertThatThrownBy(shipping::cancel).isInstanceOf(IllegalStateException.class);
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
+        }
+
+        @Test
+        @DisplayName("cancel — 두 번째 호출(이미 CANCELLED, 종착)은 IllegalStateException")
+        void cancel_twice_throws() {
+            Shipping shipping = shipping();
+            shipping.cancel();
+
+            assertThatThrownBy(shipping::cancel).isInstanceOf(IllegalStateException.class);
+            assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("CANCELLED 이후 어떤 전이도 거부 (종착)")
+        void cancelled_isTerminal() {
+            Shipping shipping = shipping();
+            shipping.cancel();
+
+            assertThatThrownBy(shipping::markShipped).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(shipping::markDelivered).isInstanceOf(IllegalStateException.class);
         }
     }
 }
