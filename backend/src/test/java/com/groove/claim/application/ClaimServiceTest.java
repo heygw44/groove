@@ -2,6 +2,7 @@ package com.groove.claim.application;
 
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.genre.domain.Genre;
@@ -75,20 +76,26 @@ class ClaimServiceTest {
     private CouponApplicationService couponApplicationService;
     @Mock
     private ShippingService shippingService;
+    @Mock
+    private AlbumRepository albumRepository;
 
     private ClaimService claimService;
+
+    private static final long ALBUM_ID = 50L;
 
     @BeforeEach
     void setUp() {
         claimService = new ClaimService(claimRepository, orderRepository, paymentRepository, paymentGateway,
-                couponApplicationService, shippingService, CLOCK, WINDOW);
+                couponApplicationService, shippingService, albumRepository, CLOCK, WINDOW);
     }
 
     // --- fixtures -----------------------------------------------------------
 
     private Album album(long price) {
-        return Album.create("Album", Artist.create("A", null), Genre.create("Rock"), Label.create("L"),
+        Album album = Album.create("Album", Artist.create("A", null), Genre.create("Rock"), Label.create("L"),
                 (short) 2020, AlbumFormat.LP_12, price, 100, AlbumStatus.SELLING, false, null, null);
+        ReflectionTestUtils.setField(album, "id", ALBUM_ID);
+        return album;
     }
 
     /** unitPrice×qty 한 항목 + 선택 할인 + DELIVERED 상태로 세팅한 주문(주문/항목 id 주입). */
@@ -239,7 +246,6 @@ class ClaimServiceTest {
     void completeRefund_partial() {
         Order order = deliveredOrder(15_000L, 2, 0); // total/payable = 30000
         Claim claim = inspectingClaim(order, 1); // 1/2 반품 → gross 15000
-        int stockBefore = order.getItems().get(0).getAlbum().getStock();
         Payment payment = paidPayment(order);
         given(claimRepository.findByIdForUpdate(7L)).willReturn(Optional.of(claim));
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
@@ -251,7 +257,7 @@ class ClaimServiceTest {
         assertThat(result.getRefundAmount()).isEqualTo(15_000L);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
         assertThat(payment.getRefundedAmount()).isEqualTo(15_000L);
-        assertThat(order.getItems().get(0).getAlbum().getStock()).isEqualTo(stockBefore + 1);
+        verify(albumRepository).restoreStock(ALBUM_ID, 1); // 검수 통과 1개 재입고
         assertThat(order.getReturnedAt()).isNull();
         verify(paymentGateway).refund(any());
         verify(couponApplicationService, never()).restoreForOrder(any());
@@ -274,6 +280,7 @@ class ClaimServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
         assertThat(payment.getRefundedAmount()).isEqualTo(24_000L);
         assertThat(order.getReturnedAt()).isNotNull();
+        verify(albumRepository).restoreStock(ALBUM_ID, 2); // 전량 재입고
         verify(couponApplicationService).restoreForOrder(ORDER_ID);
     }
 
@@ -288,7 +295,7 @@ class ClaimServiceTest {
         Claim result = claimService.completeRefund(7L);
 
         assertThat(result.getStatus()).isEqualTo(ClaimStatus.REQUESTED);
-        verifyNoInteractions(paymentRepository, paymentGateway, couponApplicationService);
+        verifyNoInteractions(paymentRepository, paymentGateway, couponApplicationService, albumRepository);
     }
 
     @Test
@@ -305,6 +312,7 @@ class ClaimServiceTest {
         assertThatThrownBy(() -> claimService.completeRefund(7L))
                 .isInstanceOf(PaymentNotRefundableException.class);
         verify(paymentGateway, never()).refund(any());
+        verifyNoInteractions(albumRepository);
     }
 
     // --- proportionalRefund (비례 배분 단위) ---------------------------------

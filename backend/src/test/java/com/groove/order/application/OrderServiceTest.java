@@ -41,6 +41,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -371,8 +372,8 @@ class OrderServiceTest {
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(result.getCancelledAt()).isNotNull();
         assertThat(result.getCancelledReason()).isEqualTo("단순 변심");
-        assertThat(a1.getStock()).isEqualTo(100);
-        assertThat(a2.getStock()).isEqualTo(50);
+        verify(albumRepository).restoreStock(10L, 2);
+        verify(albumRepository).restoreStock(11L, 3);
     }
 
     @Test
@@ -387,7 +388,7 @@ class OrderServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(result.getCancelledReason()).isNull();
-        assertThat(a.getStock()).isEqualTo(100);
+        verify(albumRepository).restoreStock(10L, 1);
     }
 
     @Test
@@ -403,7 +404,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> orderService.cancel(withdrawnMemberId, "ORD-1", "변심"))
                 .isInstanceOf(MemberNotFoundException.class);
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);   // 취소 미실행
-        assertThat(a.getStock()).isEqualTo(99);                          // 재고 미복원
+        verify(albumRepository, never()).restoreStock(any(), anyInt());  // 재고 미복원
         verify(couponApplicationService, never()).restoreForOrder(any());
     }
 
@@ -437,7 +438,7 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-1", null))
                 .isInstanceOf(IllegalStateTransitionException.class);
-        assertThat(a.getStock()).isEqualTo(99);
+        verify(albumRepository, never()).restoreStock(any(), anyInt());
     }
 
     @Test
@@ -530,7 +531,7 @@ class OrderServiceTest {
         orderService.cancel(1L, "ORD-20260528-C3C3C3", "변심");
 
         assertThat(order.getStatus()).isEqualTo(com.groove.order.domain.OrderStatus.CANCELLED);
-        assertThat(a.getStock()).isEqualTo(2);   // 재고 복원
+        verify(albumRepository).restoreStock(10L, 2);   // 재고 복원
         verify(couponApplicationService).restoreForOrder(777L);
     }
 

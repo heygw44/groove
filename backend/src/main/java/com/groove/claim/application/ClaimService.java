@@ -11,6 +11,8 @@ import com.groove.claim.exception.ExcessiveReturnQuantityException;
 import com.groove.claim.exception.OrderNotReturnableException;
 import com.groove.claim.exception.ReturnWindowExpiredException;
 import com.groove.claim.exception.ReturnWindowNotDeterminableException;
+import com.groove.catalog.album.domain.AlbumRepository;
+import com.groove.catalog.album.domain.StockRestorer;
 import com.groove.coupon.application.CouponApplicationService;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
@@ -43,6 +45,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 반품(claim) 접수/승인/거부/환불 트랜잭션 경계 (#239).
@@ -71,6 +74,7 @@ public class ClaimService {
     private final PaymentGateway paymentGateway;
     private final CouponApplicationService couponApplicationService;
     private final ShippingService shippingService;
+    private final AlbumRepository albumRepository;
     private final Clock clock;
     private final Duration returnWindow;
 
@@ -80,6 +84,7 @@ public class ClaimService {
                         PaymentGateway paymentGateway,
                         CouponApplicationService couponApplicationService,
                         ShippingService shippingService,
+                        AlbumRepository albumRepository,
                         Clock clock,
                         @Value("${groove.claim.return-window:P7D}") Duration returnWindow) {
         this.claimRepository = claimRepository;
@@ -88,6 +93,7 @@ public class ClaimService {
         this.paymentGateway = paymentGateway;
         this.couponApplicationService = couponApplicationService;
         this.shippingService = shippingService;
+        this.albumRepository = albumRepository;
         this.clock = clock;
         this.returnWindow = returnWindow;
     }
@@ -222,11 +228,12 @@ public class ClaimService {
             callGatewayRefund(payment, claim, refundAmount);
             payment.refund(refundAmount, now);
         }
-        // 검수 통과 항목 재입고 — claim 락 보유 트랜잭션 안에서 claimItem.orderItem.album 을 지연 로드한다(반품 항목
-        // 수가 적어 N+1 비용 미미). 불합격(REJECTED)은 이 경로를 타지 않으므로 미재입고.
-        for (ClaimItem item : claim.getItems()) {
-            item.getOrderItem().getAlbum().adjustStock(item.getQuantity());
-        }
+        // 검수 통과 항목 재입고 — 원자적 가산 UPDATE(StockRestorer, albumId 오름차순, #234)로 place(FOR UPDATE)·
+        // 동시 복원과의 lost-update·데드락을 없앤다. claimItem.orderItem.album 은 @ManyToOne(LAZY) 프록시라 .getId() 는
+        // SELECT 없이 FK 만 반환한다(album 본문 미초기화). 불합격(REJECTED)은 이 경로를 타지 않으므로 미재입고.
+        StockRestorer.restore(albumRepository, claim.getItems().stream()
+                .collect(Collectors.groupingBy(item -> item.getOrderItem().getAlbum().getId(),
+                        Collectors.summingInt(ClaimItem::getQuantity))));
         boolean fullyReturned = payment.getStatus() == PaymentStatus.REFUNDED;
         if (fullyReturned) {
             // 전량 반품 — 쿠폰 USED→ISSUED 복원(부분 반품은 부당이득 방지로 미복원) + 주문 전량 반품 마커.

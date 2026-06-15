@@ -38,11 +38,11 @@ import java.util.stream.Collectors;
  * <p>FK 검증 정책: artist/genre/label 각각 {@code findById} 로 엔티티를 로드하고 없으면
  * 도메인별 NotFound (404) 를 던진다. label 은 nullable — id 가 null 이면 검증을 건너뛴다.
  *
- * <p>재고 조정({@link #adjustStock(Long, int)}) 은 동시 admin 호출에 대해 last-write-wins —
- * 비관적 락 미적용이라 두 admin 이 같은 album 에 동시 delta 를 보내면 한쪽이 lost update 된다
- * (재고 음수로는 절대 가지 않으므로 안전성 위반은 아님). #205 는 주문 차감 경로(order place)에만
- * {@code SELECT ... FOR UPDATE} 비관적 락을 도입했고, 이 admin 조정 경로(및 주문 취소·환불·결제실패 복원)는
- * 여전히 last-write-wins 다 — 카탈로그 전반의 대칭 잠금은 후속 과제(#W11-4 등).
+ * <p>재고 조정({@link #adjustStock(Long, int)}) 은 비관적 락({@code SELECT ... FOR UPDATE}, #205 재사용)으로
+ * 동시 admin 호출·주문 차감과 직렬화된다 — 갱신값을 응답에 그대로 써야 하고 음수/오버플로 가드를
+ * {@code Album.adjustStock} 한 곳에 유지하려는 선택이다(#234). 주문 취소·환불·결제실패 보상·반품 재입고의
+ * 복원 경로는 원자적 가산 UPDATE({@link com.groove.catalog.album.domain.StockRestorer})로 lost-update 를
+ * 없앴다 — 비관 vs 낙관 vs 원자적 트레이드오프는 docs/improvements/concurrency.md §7.
  *
  * <p>전체 갱신({@link #update(Long, AlbumCommand)}) 은 stock 을 인자로 받지 않는다 —
  * 변경 경로는 반드시 {@link #adjustStock(Long, int)}.
@@ -130,9 +130,15 @@ public class AlbumService {
         return initializeAssociations(album);
     }
 
+    /**
+     * 관리자 단건 재고조정 (delta 는 음수 가능). album 행을 비관락(SELECT … FOR UPDATE, #205 재사용)으로 잠가
+     * 동시 조정·주문 차감과의 lost-update 를 막는다 (#234). 음수/오버플로 가드는 {@code Album.adjustStock} 에
+     * 일원화되고, in-memory 엔티티가 권위값이라 반환 stock 이 신선하다 — 복원 핫경로의 원자적 UPDATE 와 달리
+     * 갱신값을 그대로 응답해야 하므로 FOR-UPDATE + dirty-check 가 적합하다.
+     */
     @Transactional
     public Album adjustStock(Long id, int delta) {
-        Album album = albumRepository.findById(id)
+        Album album = albumRepository.findByIdForUpdate(id)
                 .orElseThrow(AlbumNotFoundException::new);
         album.adjustStock(delta);
         return initializeAssociations(album);

@@ -2,6 +2,7 @@ package com.groove.admin.application;
 
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.genre.domain.Genre;
@@ -75,18 +76,24 @@ class AdminOrderServiceTest {
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
     @Mock
     private com.groove.shipping.application.ShippingService shippingService;
+    @Mock
+    private AlbumRepository albumRepository;
 
     private AdminOrderService service;
+
+    private static final long ALBUM_ID = 50L;
 
     @BeforeEach
     void setUp() {
         service = new AdminOrderService(orderRepository, paymentRepository, paymentGateway,
-                couponApplicationService, shippingService);
+                couponApplicationService, shippingService, albumRepository);
     }
 
     private Album album(int initialStock) {
-        return Album.create("Album", Artist.create("Artist", null), Genre.create("Rock"), Label.create("Label"),
+        Album album = Album.create("Album", Artist.create("Artist", null), Genre.create("Rock"), Label.create("Label"),
                 (short) 2020, AlbumFormat.LP_12, UNIT_PRICE, initialStock, AlbumStatus.SELLING, false, null, null);
+        ReflectionTestUtils.setField(album, "id", ALBUM_ID);
+        return album;
     }
 
     /** orderNumber/배송지를 끼운 PENDING 회원 주문 + 라인 1개(qty=2). place() 의 재고 차감은 흉내 내지 않는다. */
@@ -214,7 +221,7 @@ class AdminOrderServiceTest {
             assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             assertThat(order.getCancelledReason()).isEqualTo("운영 환불");
-            assertThat(album.getStock()).isEqualTo(QTY);
+            verify(albumRepository).restoreStock(ALBUM_ID, QTY);
             assertThat(result.alreadyRefunded()).isFalse();
             assertThat(result.refundedAt()).isEqualTo(refundedAt);
 
@@ -246,7 +253,7 @@ class AdminOrderServiceTest {
             assertThat(result.alreadyRefunded()).isTrue();
             assertThat(result.refundedAt()).isNull();
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
-            assertThat(album.getStock()).isEqualTo(5);
+            verifyNoInteractions(albumRepository);
             verifyNoInteractions(paymentGateway);
             // #91: 멱등 분기에서는 쿠폰 복원도 호출되지 않음 (이미 환불·복원 완료된 상태).
             verifyNoInteractions(couponApplicationService);
@@ -267,7 +274,7 @@ class AdminOrderServiceTest {
                     .isInstanceOf(PaymentNotRefundableException.class);
             assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
-            assertThat(album.getStock()).isZero();
+            verifyNoInteractions(albumRepository);
             verifyNoInteractions(paymentGateway);
         }
 
@@ -299,7 +306,7 @@ class AdminOrderServiceTest {
                     .isInstanceOf(IllegalStateTransitionException.class);
             assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
             assertThat(order.getStatus()).isEqualTo(OrderStatus.SHIPPED);
-            assertThat(album.getStock()).isZero();
+            verifyNoInteractions(albumRepository);
             verifyNoInteractions(paymentGateway);
         }
 
@@ -337,7 +344,7 @@ class AdminOrderServiceTest {
                     .isInstanceOf(PaymentGatewayException.class);
             assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
-            assertThat(album.getStock()).isZero();
+            verifyNoInteractions(albumRepository);
         }
     }
 }

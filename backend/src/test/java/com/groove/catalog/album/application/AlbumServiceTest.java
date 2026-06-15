@@ -194,7 +194,7 @@ class AlbumServiceTest {
     @Test
     @DisplayName("adjustStock → 미존재 album → 404")
     void adjustStock_throwsWhenAlbumMissing() {
-        given(albumRepository.findById(1L)).willReturn(Optional.empty());
+        given(albumRepository.findByIdForUpdate(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> albumService.adjustStock(1L, 1))
                 .isInstanceOf(AlbumNotFoundException.class);
@@ -206,7 +206,7 @@ class AlbumServiceTest {
         Album existing = Album.create("X", Artist.create("A", null), Genre.create("G"), null,
                 (short) 1990, AlbumFormat.EP, 0L, 1,
                 AlbumStatus.SELLING, false, null, null);
-        given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.findByIdForUpdate(1L)).willReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> albumService.adjustStock(1L, -2))
                 .isInstanceOf(IllegalStockAdjustmentException.class);
@@ -219,7 +219,7 @@ class AlbumServiceTest {
         Album existing = Album.create("X", Artist.create("A", null), Genre.create("G"), null,
                 (short) 1990, AlbumFormat.EP, 0L, 5,
                 AlbumStatus.SELLING, false, null, null);
-        given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.findByIdForUpdate(1L)).willReturn(Optional.of(existing));
 
         Album result = albumService.adjustStock(1L, 3);
 
@@ -292,7 +292,7 @@ class AlbumServiceTest {
         Album existing = Album.create("X", Artist.create("A", null), Genre.create("G"), null,
                 (short) 1990, AlbumFormat.EP, 0L, 1_000_000,
                 AlbumStatus.SELLING, false, null, null);
-        given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
+        given(albumRepository.findByIdForUpdate(1L)).willReturn(Optional.of(existing));
 
         assertThatThrownBy(() -> albumService.adjustStock(1L, Integer.MAX_VALUE))
                 .isInstanceOf(IllegalStockAdjustmentException.class);

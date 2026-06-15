@@ -146,10 +146,94 @@ cd backend
 - **자매 사례 대비**: 쿠폰(#93)은 글로벌 카운터 1개라 **원자적 조건부 UPDATE**(`issued_count+1 WHERE issued_count<total`)로
   락 보유를 최소화했다. 주문 재고도 동일 기법(`UPDATE album SET stock=stock-:q WHERE id=:id AND stock>=:q`)이
   가능하지만, 본 이슈는 도메인 가드(`adjustStock`)·취소 복원 경로와의 대칭을 유지하려 **비관적 락**을 택했다.
-- **알려진 한계 — 잠금은 place↔place 한정**: 본 이슈는 재고 **차감**(order place) 경로에만 비관적 락을 적용했다.
-  재고를 **되돌리는** 경로(`OrderService.cancel` 취소 · `AdminOrderService.refund` 환불 · `PaymentCallbackService`
-  결제실패 보상 · `AlbumService.adjustStock` admin PATCH)는 여전히 락 없는 last-write-wins 라, place 와 이 경로들
-  사이에는 `album.stock` lost-update 창이 남는다(`Album.adjustStock` 음수 가드로 안전성 위반·음수 재고는 없음).
-  본 회귀 테스트(`OversellingBaselineTest`)는 place↔place 만 검증하므로 이 한계를 덮지 못한다 — 카탈로그 전반의
-  대칭 잠금은 후속 과제로 둔다.
-- **낙관적 락(`@Version`) / Redis 분산락 비교**는 범위를 넘어 **#W11-4** 로 이연한다(이슈 #205 작업 내용 c).
+- **복원 경로 lost-update (해소: [#234](https://github.com/heygw44/groove/issues/234))**: 본 이슈(#205)는 재고
+  **차감**(order place) 경로에만 비관적 락을 적용했고, 재고를 **되돌리는** 경로(취소·환불·결제실패 보상·반품
+  재입고·admin 조정)는 락 없는 last-write-wins 로 남겨 place↔복원 lost-update 창이 있었다. #234 가 복원 경로를
+  **원자적 가산 UPDATE**(`AlbumRepository.restoreStock`)로, admin 단건 조정을 **대칭 비관락**(`findByIdForUpdate`
+  재사용)으로 닫았다 — 상세 §7.
+- **Redis 분산락 비교**는 범위를 넘어 **#W11-4** 로 이연한다(이슈 #205 작업 내용 c). 낙관적 락(`@Version`)
+  비교는 §7 트레이드오프 표에서 다룬다.
+
+## 7. 복원 경로 lost-update — 원자적 가산 UPDATE (#234)
+
+> 이슈 [#234](https://github.com/heygw44/groove/issues/234) · 마일스톤 M16(Flow Hardening) · 도메인 catalog·order
+> 자매 사례: §1~§6(place 비관락 #205) · [`coupon-issuance-concurrency.md`](../troubleshooting/coupon-issuance-concurrency.md)(#90 원자적 조건부 UPDATE)
+> 상세 메커니즘: [`stock-restoration-concurrency.md`](../troubleshooting/stock-restoration-concurrency.md)
+
+### 7.1 문제
+
+`place`(차감)는 비관락으로 직렬화됐지만(§3), 재고를 **되돌리는** 다섯 경로는 락 없는 read-modify-write
+(`item.getAlbum().adjustStock(qty)` → dirty-check UPDATE)였다:
+
+| # | 경로 | 메서드 | delta |
+|---|------|--------|-------|
+| 1 | 주문 취소 | `OrderService.cancel` | +qty |
+| 2 | 관리자 환불 | `AdminOrderService.refund` | +qty |
+| 3 | 결제 실패 보상 | `PaymentCallbackService.applyResult`(FAILED) | +qty |
+| 4 | 반품 재입고 | `ClaimService.completeRefund` | +qty |
+| 5 | admin 단건 조정 | `AlbumService.adjustStock` | ±delta |
+
+place(FOR UPDATE)와 이 경로들이 같은 `album.stock` 을 두고 경합하면 복원분/차감분 한쪽이 유실된다
+(`ck_album_stock_non_negative` 가드로 음수·oversell 은 0이지만 정합성 창은 잔존).
+
+### 7.2 해결 — 같은 도메인에서 세 전략 비교 (비관 vs 낙관 vs 원자적)
+
+| 전략 | 적용 | 장점 | 단점 | 본 이슈 채택 |
+|---|---|---|---|---|
+| **비관적 락**(`SELECT … FOR UPDATE`) | place(#205), admin 조정(#234 경로 5) | 도메인 가드(`adjustStock`)를 한 곳에 유지, in-memory 엔티티가 권위값이라 **갱신 stock 즉시 반환** | 행 락 보유시간만큼 직렬화(처리량↓), 추가 SELECT 1회 | **경로 5** (조정 결과를 응답에 써야 함) |
+| **원자적 가산 UPDATE**(`SET stock=stock+:delta`) | 복원 경로 1~4(#234) | 락 보유 없음, DB 한 문장에 상대 증분 → place·동시 복원과 행 단위 직렬화, **재시도 불필요** | 영속성 컨텍스트 우회(stale in-memory·`clear` 주의), 갱신값 재조회 필요 | **경로 1~4** (#90 쿠폰 패턴 재사용) |
+| **낙관적 락**(`@Version` + 재시도) | (미채택) | 락 보유 0, 충돌만 감지 | 프로젝트가 의도적으로 last-write-wins 선택(Artist), Album **모든** 쓰기에 `OptimisticLockException` 처리·재시도 전파 + `spring-retry` 신규 의존성 | ❌ blast radius 과다 |
+
+```java
+// AlbumRepository.java (#234) — 복원 경로 1~4
+@Modifying(flushAutomatically = true) // clearAutomatically=false: 복원 후 같은 tx 에서 markReturned/쿠폰복원 등
+@Query("UPDATE Album a SET a.stock = a.stock + :delta WHERE a.id = :id") // 관리 엔티티 변경이 detach 로 유실되지 않게
+int restoreStock(@Param("id") Long id, @Param("delta") int delta);
+```
+
+네 경로는 `restoreStock` 을 직접 부르지 않고 공통 헬퍼 `catalog.album.domain.StockRestorer` 를 통한다 — 복원량을
+`albumId` 오름차순으로 **정렬**(place 가 다중 album 락을 albumId 오름차순으로 잡는 것과 같은 순서 → place↔복원·
+복원↔복원의 다중 album 데드락 예방)하고 같은 album 의 여러 라인을 **합산**(락 획득·flush 횟수 절감)한다.
+
+`clearAutomatically` 를 끄는 이유: 네 경로 모두 복원 호출 **이후**에도 같은 트랜잭션에서 관리 엔티티를 변경한다
+(`restoreForOrder`→MemberCoupon, `completeRefund`의 `order.markReturned`/`claim.markRefunded`). 컨텍스트를 clear 하면
+이들이 detach 되어 변경이 커밋 시 유실된다. `adjustStock`(in-memory) 호출을 제거했으므로 Album 은 dirty 가 아니라
+dirty-check 가 stale 절대값으로 증분을 덮어쓰지도 않는다(메커니즘 상세: troubleshooting 문서 §3).
+
+### 7.3 Before / After 측정
+
+**인프로세스 (JUnit, `StockRestoreConcurrencyTest`)** — Testcontainers MySQL 8.4, 재고 200, 선행 주문 50,
+동시 place 50(−1)·cancel 50(+1) 인터리브(스레드 64). 불변: `finalStock == 시드후재고 − 성공 place + 성공 cancel`.
+
+| 지표 | Before (RMW 복원, `@Disabled` baseline) | After (#234, 원자적 가산 UPDATE) |
+|---|---|---|
+| place 성공 / cancel(복원) 성공 | 12 / 49 (나머지는 락경합 롤백) | **50 / 50** |
+| other (CannotAcquireLock 등) | **39** (단일 행 thrash) | **0** |
+| finalStock vs expected | 207 vs 237 → **lost-update 30** | **150 == 150 (lost-update 0)** |
+| 음수 재고 | 없음(가드) | 없음 |
+
+> After 실측: `[#234 원자적] placeSuccess=50, cancelSuccess=50, other=0, stockAfterSeed=150, finalStock=150, expected=150 | elapsedMs=693, tps=144.3, p95Ms=449`.
+> Before(baseline): `[#234 baseline] placeSuccess=12, restoreSuccess=49, other=39, initialStock=200, finalStock=207, expected=237` → lost-update 30 + 락경합 롤백 39.
+>
+> 음수 가드 회귀(AC): 재고 1 에 동시 admin `adjustStock(-1)` 2건 → `success=1, rejected=1, finalStock=0`
+> (FOR-UPDATE 직렬화 + `Album.adjustStock` 음수 가드, 회귀 가드 `concurrentAdminAdjust_singleStock_negativeGuard`).
+
+**k6 HTTP (`loadtest/stock-restore.js`)** — place(−1)·cancel(+1) 를 `shared-iterations` 로 동시 인터리브.
+handleSummary 가 `expected = stock_after_seed − place_created + cancel_ok` 와 `final_stock` 을 비교해
+lost-update 를 자동 판정한다(After: `lost-update 0`, Before: `lost-update N`). 결정론적 증명은 위 JUnit 가드가,
+HTTP 재현은 본 k6 가 담당한다(실행: `loadtest/README.md` "재고 복원 lost-update 부하" 절).
+
+### 7.4 검증
+
+```bash
+cd backend
+./gradlew test --tests "com.groove.order.concurrency.StockRestoreConcurrencyTest"
+```
+
+- `concurrentPlaceAndCancel_atomicRestore_noLostUpdate`(**active**) — lost-update 0 회귀 가드(복원이 RMW 로
+  되돌아가면 즉시 실패).
+- `concurrentAdminAdjust_singleStock_negativeGuard`(**active**) — 음수 가드 동시성 회귀 가드.
+- `concurrentPlaceAndRmwRestore_baseline_producesLostUpdate`(**`@Disabled`**) — RMW 복원 baseline 시연용.
+
+회귀 점검: `OrderServiceTest`·`AdminOrderServiceTest`·`PaymentCallbackServiceTest`·`ClaimServiceTest`·
+`AlbumServiceTest`(복원 단언을 `restoreStock` 상호작용으로 전환) 전체 통과.

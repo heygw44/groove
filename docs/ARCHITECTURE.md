@@ -539,7 +539,7 @@ volumes:
 
 | # | 한계 | 근거 (코드) | 의도적 선택 / 도입 트리거 |
 |---|------|-------------|---------------------------|
-| 1 | 재고 **복원 경로**(취소·환불·결제실패 보상·admin 재고조정)는 비관락 미적용 — last-write-wins | `order/application/OrderService.java` 클래스 javadoc "알려진 한계" 블록 | 주문(place) 핫경로만 `SELECT … FOR UPDATE`(#205)로 직렬화. 저빈도 복원은 단순화 — **음수 가드로 oversell 0(안전성 위반 없음)**, place↔복원 간 lost-update 창만 잔존. 복원 경합이 실측되면 카탈로그 대칭 잠금 도입(#W11-4) |
+| 1 | ~~재고 **복원 경로** 비관락 미적용 — last-write-wins~~ → **해소(#234)** | `catalog/album/domain/AlbumRepository.java#restoreStock` · `order/application/OrderService.java` javadoc | place(#205 비관락)에 더해 복원 경로(취소·환불·결제실패·반품)는 **원자적 가산 UPDATE**(`stock=stock+:delta`), admin 단건 조정은 **대칭 비관락**(`findByIdForUpdate` 재사용)으로 place↔복원 lost-update 창을 제거. 트레이드오프(비관 vs 낙관 vs 원자적) → §12 보충 / `concurrency.md §7` |
 | 2 | 스케줄러 **단일 인스턴스 가정** — 분산락 없음 | `common.scheduling.SchedulingConfig`(단일 `@EnableScheduling`) + `@Scheduled` 배치 6종 | 단일 인스턴스 배포 전제(§1 비목표). 다중화 시 **ShedLock**(`@EnableSchedulerLock` + `JdbcTemplateLockProvider`)로 각 배치를 노드 간 1회 실행 보장 → §11.3 |
 | 3 | rate-limit **인메모리** Caffeine — 단일 인스턴스 | `common/ratelimit/RateLimitRegistry.java` "수평 확장 제약(#164)" javadoc | 단일 인스턴스면 무해. 다중화 시 실효 한도 N배 → Bucket4j 분산 백엔드 또는 게이트웨이/WAF로 이관 → **상세 §10.5**, 위치 §11.1 |
 | 4 | 멱등성 **재시도 소진 시 409** — 응답 유실 가능 | `common/idempotency/IdempotencyService.java` "알려진 한계" javadoc | action 커밋 후 완료갱신 트랜잭션이 실패하면 키가 `IN_PROGRESS`로 남아 `ttl + in-progress-grace` 동안 409 → `IdempotencyRecordCleanupTask`가 회수. **부수효과는 이미 반영 → 같은 키 재시도 금지(새 키 사용)**. TTL/grace 상수 조정 또는 분산 합의로 강화 |
@@ -547,7 +547,7 @@ volumes:
 
 **보충**
 
-- **#1 (재고 복원):** `OrderService` 클래스 javadoc은 _"재고를 되돌리는 경로(…)는 아직 락 없는 last-write-wins 라, place 와 이 경로들 간에는 album.stock lost-update 창이 남는다(음수 가드로 안전성 위반은 없음)"_ 라고 명시한다. 핫경로(동시 주문)의 oversell 결함(#205, W6-6에서 의도적으로 노출)은 비관락으로 해소했고, 저빈도 복원 경로는 안전성을 해치지 않는 선에서 단순하게 둔 것이다. 락 미적용 baseline 은 테스트 전용 `placeWithoutLock` 으로 보존된다.
+- **#1 (재고 복원, 해소 #234):** 핫경로(동시 주문)의 oversell 는 비관락(#205)으로, **복원 경로의 lost-update 는 #234** 로 닫았다. 복원 경로(취소·환불·결제실패 보상·반품 재입고)는 **원자적 가산 UPDATE**(`AlbumRepository.restoreStock` — `UPDATE album SET stock=stock+:delta WHERE id=:id`, 쿠폰 #90 패턴 재사용)로 둔다 — DB 가 행 X-락 안에서 상대 증분을 적용해 place(`FOR UPDATE`)·동시 복원과 직렬화되므로 lost-update 창이 사라진다. admin 단건 재고조정(`AlbumService.adjustStock`, delta 음수 가능)은 갱신값을 응답에 써야 하고 음수 가드를 `Album.adjustStock` 한 곳에 유지하려 **대칭 비관락**(`findByIdForUpdate` 재사용)을 택했다. **비관 vs 낙관(`@Version`) vs 원자적 UPDATE** 트레이드오프와 Before/After(JUnit `StockRestoreConcurrencyTest` · k6 `loadtest/stock-restore.js`)는 `docs/improvements/concurrency.md §7`. 락 미적용 baseline 은 `placeWithoutLock` + `@Disabled` 복원 baseline 으로 보존된다.
 - **#2 (스케줄러):** 만료·정리·reconciliation·진행·익명화 배치 6종(`MemberCouponExpirationTask`·`IdempotencyRecordCleanupTask`·`PaymentReconciliationScheduler`·`ShippingReconciliationScheduler`·`ShippingProgressScheduler`·`OrderPiiAnonymizationScheduler`)이 모두 `common.scheduling.SchedulingConfig` 의 단일 `@EnableScheduling` 으로 구동된다 — 노드가 하나면 중복 실행이 없다. 다중 인스턴스로 가면 각 배치가 노드마다 동시에 돌므로, ShedLock 의 `@EnableSchedulerLock` + `JdbcTemplateLockProvider` 로 락을 **기존 MySQL 에 두면**(새 인프라 불필요) "노드 간 최대 1회"가 보장된다. reconciliation·익명화는 멱등(중복 방어 `existsBy…`·`uk_…`)이라 안전망이 한 번 더 겹친다.
 - **#4 (멱등성 409):** `execute(key, …, action)` 은 같은 키를 정확히 한 번 실행하고 결과를 캐싱하지만, "action 커밋 → 마커 COMPLETED 커밋" 사이에 후자가 실패하면 마커가 `IN_PROGRESS` 로 남는다. 이 구간의 같은-키 요청은 409이며, 이는 **이중 실행을 막기 위한 의도된 보수적 동작**이다 — action 부수효과는 이미 반영됐으므로 호출자는 같은 키로 재시도하지 말고 새 `Idempotency-Key` 를 써야 한다. 잔류 마커는 `IdempotencyRecordCleanupTask` 가 `ttl + in-progress-grace` 경과 후 회수한다.
 

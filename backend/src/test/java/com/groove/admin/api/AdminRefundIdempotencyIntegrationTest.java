@@ -52,9 +52,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <ol>
  *   <li>앨범 재고를 {@code Integer.MAX_VALUE} 로 세팅 + PAID 주문(qty=2) + PAID 결제.</li>
  *   <li><b>1차 환불 호출</b>: {@code paymentGateway.refund()} 성공 → {@code payment.markRefunded()} 성공 →
- *       {@code order.changeStatus(CANCELLED)} 성공 → {@code album.adjustStock(+2)} 가 오버플로로
- *       {@link com.groove.catalog.album.exception.IllegalStockAdjustmentException} → 트랜잭션 전체 롤백.
- *       이 시점 PG 측엔 첫 환불 응답이 캐시되어 있다 (실세계 PG 라면 환불이 확정되어 있을 것).</li>
+ *       {@code order.changeStatus(CANCELLED)} 성공 → {@code AlbumRepository.restoreStock(+2)}(원자적 가산
+ *       UPDATE, #234)가 INT 오버플로로 {@code DataIntegrityViolationException}(DB out-of-range) → 트랜잭션 전체
+ *       롤백. 이 시점 PG 측엔 첫 환불 응답이 캐시되어 있다 (실세계 PG 라면 환불이 확정되어 있을 것).</li>
  *   <li>재고를 정상 범위로 조정해 보상 트랜잭션 재시도가 성공할 수 있도록 만든다.</li>
  *   <li><b>2차 환불 호출 (재시도)</b>: 같은 결제 → 같은 멱등 키 →
  *       {@code MockPaymentGateway} 가 캐시 응답을 그대로 반환 ({@code refundCallCount()} 증가 없음).
@@ -110,7 +110,7 @@ class AdminRefundIdempotencyIntegrationTest {
         Artist artist = artistRepository.saveAndFlush(Artist.create("Artist", null));
         Genre genre = genreRepository.saveAndFlush(Genre.create("Rock"));
         Label label = labelRepository.saveAndFlush(Label.create("Label"));
-        // 1차 환불에서 adjustStock(+2) 가 오버플로 → IllegalStockAdjustmentException 으로 롤백을 유도하기 위한 초기치.
+        // 1차 환불에서 restoreStock(+2) 가 INT 오버플로 → DataIntegrityViolation(DB out-of-range)으로 롤백을 유도하기 위한 초기치 (#234).
         Album album = albumRepository.saveAndFlush(Album.create("Album", artist, genre, label,
                 (short) 2020, AlbumFormat.LP_12, UNIT_PRICE, Integer.MAX_VALUE,
                 AlbumStatus.SELLING, false, null, null));
@@ -158,12 +158,14 @@ class AdminRefundIdempotencyIntegrationTest {
         MockPaymentGateway mockGateway = (MockPaymentGateway) paymentGateway;
         int callsBefore = mockGateway.refundCallCount();
 
-        // 1차 환불 — adjustStock(+2) 가 오버플로로 IllegalStockAdjustmentException → 트랜잭션 롤백 → 400 응답.
+        // 1차 환불 — restoreStock(+2) 가 INT 오버플로로 DataIntegrityViolation(DB out-of-range) → 트랜잭션 롤백 → 500 응답 (#234).
+        // 원자적 가산 UPDATE 는 도메인 가드(adjustStock)를 우회하므로 오버플로가 DB 레벨에서 거절된다 — 현실 불가능한
+        // 경계(refund qty ≤ ordered qty, stock ≪ INT_MAX)지만 보상 트랜잭션 부분 실패→롤백 경로를 결정적으로 유발한다.
         mockMvc.perform(post("/api/v1/admin/orders/{n}/refund", orderNumber)
                         .header(HttpHeaders.AUTHORIZATION, adminBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"오버플로 유발\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().is5xxServerError());
 
         // 1차 호출로 PG 측엔 환불이 1건 기록되었지만 DB 는 롤백되어 PAID/PAID 가 유지된다.
         Order rolledBack = orderRepository.findByOrderNumber(orderNumber).orElseThrow();

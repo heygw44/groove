@@ -2,6 +2,7 @@ package com.groove.payment.application;
 
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
+import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.genre.domain.Genre;
@@ -48,18 +49,25 @@ class PaymentCallbackServiceTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
+    @Mock
+    private AlbumRepository albumRepository;
 
     private PaymentCallbackService service;
 
+    private static final long ALBUM_ID = 50L;
+
     @BeforeEach
     void setUp() {
-        service = new PaymentCallbackService(paymentRepository, eventPublisher, couponApplicationService);
+        service = new PaymentCallbackService(paymentRepository, eventPublisher, couponApplicationService,
+                albumRepository);
     }
 
     private static Album album(int stock) {
-        return Album.create("Abbey Road", Artist.create("The Beatles", null), Genre.create("Rock"),
+        Album album = Album.create("Abbey Road", Artist.create("The Beatles", null), Genre.create("Rock"),
                 Label.create("Apple Records"), (short) 1969, AlbumFormat.LP_12, 35000L, stock,
                 AlbumStatus.SELLING, false, null, null);
+        ReflectionTestUtils.setField(album, "id", ALBUM_ID);
+        return album;
     }
 
     private static Payment pendingPayment(Album album, int quantity) {
@@ -83,7 +91,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(payment.getPaidAt()).isNotNull();
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAID);
-        assertThat(album.getStock()).isEqualTo(99);
+        verifyNoInteractions(albumRepository); // 성공 결제는 재고 미복원
 
         ArgumentCaptor<OrderPaidEvent> event = ArgumentCaptor.forClass(OrderPaidEvent.class);
         verify(eventPublisher).publishEvent(event.capture());
@@ -107,7 +115,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
         assertThat(payment.getFailureReason()).isEqualTo("카드 한도 초과");
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
-        assertThat(album.getStock()).isEqualTo(100); // 98 + 2 복원
+        verify(albumRepository).restoreStock(ALBUM_ID, 2); // 2 복원
         verify(couponApplicationService).restoreForOrder(7L); // 적용 쿠폰 복원 — 이슈 #158
         verifyNoInteractions(eventPublisher);
     }
@@ -147,8 +155,7 @@ class PaymentCallbackServiceTest {
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(album.getStock()).isEqualTo(99);
-        verifyNoInteractions(eventPublisher, couponApplicationService);
+        verifyNoInteractions(eventPublisher, couponApplicationService, albumRepository);
     }
 
     @Test
@@ -158,6 +165,6 @@ class PaymentCallbackServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.applyResult(PG_TX, PaymentStatus.REFUNDED, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(paymentRepository, eventPublisher, couponApplicationService);
+        verifyNoInteractions(paymentRepository, eventPublisher, couponApplicationService, albumRepository);
     }
 }

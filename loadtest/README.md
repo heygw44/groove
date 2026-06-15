@@ -17,6 +17,7 @@
 - `order.js` — 주문 생성 부하 (#193, W9): 토큰 풀 → ramping-vus 다중 상품 주문 → `order_created`/`order_latency` 집계
 - `payment.js` — 결제·멱등성 부하 (#193, W9): 주문 1건 생성 → 동일 멱등키 결제 2회 → 중복 결제 없음(`payment_duplicated`=0) 검증
 - `flash-sale.js` — 한정반 오버셀 재현 (#194, W9): admin 으로 재고 100 리셋 → ramping-vus 로 단일 한정반에 동시 쇄도 → `order_created`(201) vs 최종 재고로 오버셀 판정(Before)
+- `stock-restore.js` — 재고 복원 lost-update (#234, M16): 선행 PENDING 주문 시드 → 같은 앨범에 place(−1)·cancel(+1) 동시 인터리브 → `expected = stockAfterSeed − place + cancel` vs `finalStock` 으로 lost-update 자동 판정(Before/After)
 - `lib/auth.js` — W9 시나리오 공통 하네스(`buildTokenPool`/`seedEmail`). 시드 회원 로그인 → access token 풀
 - `lib/orders.js` — W9 주문 페이로드 공통 헬퍼(`buildOrderBody` 분산 / `buildSingleAlbumOrder` 단일고정). order/payment/flash-sale 가 재사용
 - `summary.json` — 쿠폰 k6 end-of-test 요약(최근 실행 캡처)
@@ -295,3 +296,51 @@ teardown 이 최종 재고를 `final_stock` Gauge 로 emit 하고, handleSummary
 0인데 영속화된 주문은 211~222건이라 **lost-update 111~122건**이 자동 판정됐다. 단일 행 경합으로 5xx(락 타임아웃·
 데드락)가 6~10% 발생(`order_failed`)하는 것도 Before 의 실패 양상이다. W10-3(비관적 락/원자적 차감) 후 동일
 시나리오에서 `created ≤ 100` · `lost-update 0` 으로 수렴해야 한다.
+
+---
+
+# 재고 복원 lost-update 부하 (stock-restore.js)
+
+`place`(차감, #205 비관락)와 **재고 복원 경로**(취소·환불·결제실패 보상·반품 재입고)를 같은 앨범 행에서 동시에
+인터리브해 **place↔복원 lost-update** 를 부하 계층에서 측정한다(#234, M16). 복원이 락 없는 read-modify-write 면
+place 와 복원이 같은 `album.stock` 을 두고 경합해 lost-update 가 누적된다(Before). #234 의 원자적 가산 UPDATE
+(`AlbumRepository.restoreStock` — `UPDATE album SET stock=stock+:delta WHERE id=:id`)는 DB 한 문장에서 상대 증분을
+적용하고 place 의 `SELECT … FOR UPDATE` 와 같은 행에서 직렬화되어 lost-update 0 이어야 한다(After).
+
+- **setup() 자동 준비**: admin 으로 재고를 `INITIAL_STOCK`(기본 `max(300, 3·SEED_ORDERS)`, ≥2·SEED 라야 최악
+  인터리빙에서도 재고부족 미발생)으로 리셋 → 토큰 풀 로그인 → 선행 PENDING 주문 `SEED_ORDERS` 건 생성(동시
+  구간에서 취소할 대상, 취소는 본인만 가능하므로 소유 토큰을 함께 기록).
+- **default()**: 전역 카운터 짝수=신규 `POST /orders`(−1), 홀수=선행 주문 `POST /orders/{n}/cancel`(+1). 두 작업이
+  같은 album 행에서 동시 경합한다(총 `2·SEED_ORDERS` 회, `shared-iterations`).
+
+## 실행 절차
+
+```bash
+# 1~3) MySQL·앱·메인 시드 — flash-sale 절차와 동일(AUTH_RATE_LIMIT_LOGIN_CAPACITY 크게).
+TID=$(docker exec groove-mysql-1 mysql -ugroove -pchangeme groove -N \
+  -e "SELECT id FROM album WHERE status='SELLING' ORDER BY id LIMIT 1;")
+
+# 4) Before(현행 main) → After(#234 적용 코드) 각각에서 동일 실행 후 자동 판정 비교
+k6 run -e TARGET_ALBUM_ID=$TID -e SEED_ORDERS=100 -e PEAK_VUS=100 loadtest/stock-restore.js
+
+# 5) 교차검증 — 최종 재고와 기대치(stockAfterSeed − place + cancel) 비교
+docker exec groove-mysql-1 mysql -ugroove -pchangeme groove \
+  -e "SELECT stock FROM album WHERE id=$TID;"
+```
+
+env 오버라이드: `TARGET_ALBUM_ID`(기본 1), `SEED_ORDERS`(기본 100, =복원 횟수), `PEAK_VUS`(기본 100),
+`INITIAL_STOCK`(기본 `max(300, 3·SEED_ORDERS)`), 그 외 `flash-sale.js` 와 동일.
+
+## lost-update 판정
+
+teardown 이 `final_stock`, setup 이 `stock_after_seed` Gauge 를 emit 하고 handleSummary 가 자동 판정한다:
+
+```
+expected = stock_after_seed − place_created(201) + cancel_ok(200)
+lost     = expected − final_stock        # 원자적이면 0, 락 없는 RMW 면 ≠ 0
+```
+
+결정론적 증명은 인프로세스 회귀 가드 `StockRestoreConcurrencyTest`
+(`concurrentPlaceAndCancel_atomicRestore_noLostUpdate` = lost-update 0,
+`@Disabled` baseline = RMW 복원 lost-update 재현)가 담당하며, 본 k6 는 HTTP 부하로 같은 결론을 재현한다.
+Before/After 측정 맥락은 [concurrency.md](../docs/improvements/concurrency.md) §5 참조.
