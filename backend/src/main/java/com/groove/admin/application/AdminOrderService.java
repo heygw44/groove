@@ -1,5 +1,7 @@
 package com.groove.admin.application;
 
+import com.groove.catalog.album.domain.AlbumRepository;
+import com.groove.catalog.album.domain.StockRestorer;
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 import com.groove.coupon.application.CouponApplicationService;
@@ -33,6 +35,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 관리자 주문 조회 / 상태 강제 전환 / 환불 트랜잭션 경계 (이슈 #69, PRD §5.3·§6.9, G2 게이트).
@@ -75,17 +78,20 @@ public class AdminOrderService {
     private final PaymentGateway paymentGateway;
     private final CouponApplicationService couponApplicationService;
     private final ShippingService shippingService;
+    private final AlbumRepository albumRepository;
 
     public AdminOrderService(OrderRepository orderRepository,
                              PaymentRepository paymentRepository,
                              PaymentGateway paymentGateway,
                              CouponApplicationService couponApplicationService,
-                             ShippingService shippingService) {
+                             ShippingService shippingService,
+                             AlbumRepository albumRepository) {
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
         this.couponApplicationService = couponApplicationService;
         this.shippingService = shippingService;
+        this.albumRepository = albumRepository;
     }
 
     /**
@@ -187,11 +193,9 @@ public class AdminOrderService {
         // 이게 없으면 자동 진행 스케줄러가 환불된 주문의 배송을 DELIVERED 까지 밀어버린다. canTransitionTo(CANCELLED) 가
         // 참인 경로(SHIPPED 이후 불가)만 도달하므로 배송은 미생성이거나 PREPARING 이다.
         shippingService.cancelForOrder(order.getId());
-        int restored = 0;
-        for (OrderItem item : order.getItems()) {
-            item.getAlbum().adjustStock(item.getQuantity());
-            restored++;
-        }
+        // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순)로 place(FOR UPDATE)·동시 복원과의 lost-update·데드락을 없앤다 (#234).
+        int restored = StockRestorer.restore(albumRepository, order.getItems().stream()
+                .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
         // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (이슈 #91 DoD HIGH 리스크: cancel + refund 양 경로 복원).
         // 미적용 주문은 no-op. REFUNDED 멱등 분기에서는 호출되지 않으므로 중복 복원 우려 없음.
         couponApplicationService.restoreForOrder(order.getId());

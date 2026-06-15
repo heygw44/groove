@@ -3,6 +3,7 @@ package com.groove.order.application;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
+import com.groove.catalog.album.domain.StockRestorer;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.exception.AlbumNotPurchasableException;
 import com.groove.coupon.application.CouponApplicationService;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 주문 생성 트랜잭션 경계 (#43, API.md §3.5).
@@ -43,8 +45,9 @@ import java.util.List;
  * 쿠폰 적용 실패는 같은 트랜잭션 롤백으로 재고/주문까지 되돌린다(#91). cancel 은 재고 복원 직후 쿠폰을
  * USED→ISSUED 로 되살려 취소·환불 양 경로의 복원 누락을 막는다(#91).
  *
- * 알려진 한계: 재고를 되돌리는 경로(취소·환불·결제실패 보상·admin 재고조정)는 아직 락 없는 last-write-wins 라,
- * place 와 이 경로들 간에는 album.stock lost-update 창이 남는다(음수 가드로 안전성 위반은 없음). 상세 ARCHITECTURE.md §12 #1.
+ * 재고 복원 경로(취소·환불·결제실패 보상·반품 재입고)는 원자적 가산 UPDATE(AlbumRepository.restoreStock, #234)로,
+ * admin 단건 재고조정은 비관락(findByIdForUpdate, #205 재사용)으로 lost-update 를 제거했다 — place 핫경로와 대칭.
+ * 상세 docs/improvements/concurrency.md §7 (트레이드오프: 비관 vs 낙관 vs 원자적).
  */
 @Service
 public class OrderService {
@@ -149,9 +152,11 @@ public class OrderService {
         order.changeStatus(OrderStatus.CANCELLED, reason);
         // 배송 취소 동기화(#233)는 여기서 불필요하다 — 배송은 결제 완료(PAID) 후에야 생성되는데 cancel 은 PENDING 한정이라
         // 취소 시점에 배송 행이 존재하지 않는다. 발송 전(PAID/PREPARING) 취소·환불의 배송 동기화는 refund 경로가 담당한다.
-        for (OrderItem item : order.getItems()) {
-            item.getAlbum().adjustStock(item.getQuantity());
-        }
+        // 재고 복원 — 원자적 가산 UPDATE 로 place(FOR UPDATE)·동시 복원과의 lost-update 창을 없앤다 (#234).
+        // adjustStock(in-memory) 대신 restoreStock 를 써야 stale 절대값 dirty-check 가 증분을 덮어쓰지 않는다.
+        // StockRestorer 가 albumId 오름차순으로 정렬해 place 와 같은 락 순서로 다중 album 데드락을 피한다.
+        StockRestorer.restore(albumRepository, order.getItems().stream()
+                .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
         // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (이슈 #91 DoD HIGH 리스크: 양 경로 모두 복원).
         // 미적용 주문은 no-op 이므로 분기 없이 안전하게 호출한다.
         couponApplicationService.restoreForOrder(order.getId());

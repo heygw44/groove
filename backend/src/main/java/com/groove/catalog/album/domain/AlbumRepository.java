@@ -67,4 +67,30 @@ public interface AlbumRepository extends JpaRepository<Album, Long>, JpaSpecific
     @Modifying
     @Query("UPDATE Album a SET a.artistName = :name WHERE a.artist.id = :artistId")
     int updateArtistNameByArtistId(@Param("artistId") Long artistId, @Param("name") String name);
+
+    /**
+     * 재고 복원(취소·환불·결제실패 보상·반품 재입고)용 원자적 가산 UPDATE — place 의 비관락(#205)과 달리
+     * 행을 미리 잠그지 않고 DB 가 한 문장 안에서 {@code stock = stock + :delta} 를 상대 증분으로 적용한다
+     * ({@code CouponRepository.incrementIssuedCount} 패턴). InnoDB 가 매칭 행에 X-락을 걸고 절대값이
+     * 아닌 증분을 쓰므로, 동시 place(SELECT … FOR UPDATE)·동시 복원과 같은 행에서 직렬화되어
+     * place↔복원 간 album.stock lost-update 창이 제거된다 (#234). delta 는 복원량(양수)만 전달된다.
+     *
+     * <p>{@code clearAutomatically} 는 의도적으로 끈다 — 호출 측은 이 메서드 이후에도 같은 트랜잭션에서
+     * 관리 엔티티를 변경한다(취소·환불의 {@code CouponApplicationService.restoreForOrder} → MemberCoupon,
+     * 반품의 {@code order.markReturned}/{@code claim.markRefunded}). 컨텍스트를 clear 하면 이 엔티티들이
+     * detach 되어 이후 변경이 커밋 시 dirty-check 되지 않고 유실된다. {@code flushAutomatically} 는 켜서
+     * 직전 dirty 상태를 먼저 flush 해 쓰기 순서를 결정적으로 둔다(보류 변경은 order/payment/claim 등 다른
+     * 테이블이라 album UPDATE 와 충돌하지 않는다).
+     *
+     * <p>벌크 UPDATE 는 영속성 컨텍스트를 우회하므로 그래프로 로드된 Album 의 in-memory stock 은 stale 로
+     * 남는다 — 복원 경로는 이후 stock 을 재조회/직렬화하지 않으므로 무해하다. 단, 호출 측이 Album 을
+     * {@code adjustStock} 으로 dirty 화하면 dirty-check 가 stale 절대값 UPDATE 를 내보내 이 증분을 덮어쓰므로,
+     * 복원 루프에서는 {@code adjustStock} 을 호출하지 않고 이 메서드만 쓴다.
+     *
+     * <p>네 복원 경로는 직접 호출하지 않고 {@link StockRestorer} 를 통해 albumId 오름차순으로 정렬·합산한 뒤
+     * 호출한다 — place(#205)가 다중 album 락을 albumId 오름차순으로 잡는 것과 같은 순서라 데드락을 피한다.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE Album a SET a.stock = a.stock + :delta WHERE a.id = :id")
+    int restoreStock(@Param("id") Long id, @Param("delta") int delta);
 }

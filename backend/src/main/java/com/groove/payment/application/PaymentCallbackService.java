@@ -1,5 +1,7 @@
 package com.groove.payment.application;
 
+import com.groove.catalog.album.domain.AlbumRepository;
+import com.groove.catalog.album.domain.StockRestorer;
 import com.groove.coupon.application.CouponApplicationService;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
@@ -14,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.stream.Collectors;
 
 /**
  * 결제 결과 콜백 적용 트랜잭션 경계 (#W7-4) — 웹훅 수신(PaymentWebhookController / PaymentWebhookHandler)과
@@ -46,12 +50,15 @@ public class PaymentCallbackService {
     private final PaymentRepository paymentRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final CouponApplicationService couponApplicationService;
+    private final AlbumRepository albumRepository;
 
     public PaymentCallbackService(PaymentRepository paymentRepository, ApplicationEventPublisher eventPublisher,
-                                  CouponApplicationService couponApplicationService) {
+                                  CouponApplicationService couponApplicationService,
+                                  AlbumRepository albumRepository) {
         this.paymentRepository = paymentRepository;
         this.eventPublisher = eventPublisher;
         this.couponApplicationService = couponApplicationService;
+        this.albumRepository = albumRepository;
     }
 
     /**
@@ -95,11 +102,9 @@ public class PaymentCallbackService {
         } else {
             payment.markFailed(failureReason != null ? failureReason : DEFAULT_FAILURE_REASON);
             order.changeStatus(OrderStatus.PAYMENT_FAILED, null);
-            int restored = 0;
-            for (OrderItem item : order.getItems()) {
-                item.getAlbum().adjustStock(item.getQuantity());
-                restored++;
-            }
+            // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순)로 place(FOR UPDATE)·동시 복원과의 lost-update·데드락을 없앤다 (#234).
+            int restored = StockRestorer.restore(albumRepository, order.getItems().stream()
+                    .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
             // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (cancel/refund 와 같은 보상 패턴, 재고 복원 직후).
             // 미적용 주문은 no-op 이라 분기 없이 안전. PAYMENT_FAILED 는 종착 상태라 cancel/refund 로
             // 들어올 수 없으므로 여기서 복원하지 않으면 쿠폰이 영구 USED 로 고착된다(이슈 #158).
