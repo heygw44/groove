@@ -139,12 +139,12 @@ public class AdminClaimController {
                     + "부분 환불·재고 복원·쿠폰 최소주문금액 재계산을 수행하고, 전량 취소 시 주문을 CANCELLED 로 전이한다. "
                     + "ADMIN 권한 필요.")
     @ApiResponse(responseCode = "200", description = "부분 취소 성공 — 생성된 CANCEL 클레임 상세")
-    @ApiResponse(responseCode = "400", description = "요청 형식 오류")
+    @ApiResponse(responseCode = "400", description = "요청 형식 오류 — 취소 항목 누락(@NotEmpty)·주문번호 누락 등 입력 검증 실패")
     @ApiResponse(responseCode = "401", description = "미인증")
     @ApiResponse(responseCode = "403", description = "권한 부족")
     @ApiResponse(responseCode = "404", description = "주문 또는 결제를 찾을 수 없음")
     @ApiResponse(responseCode = "409", description = "취소 가능 수량 초과 또는 환불 불가 결제 상태 (PAID/PARTIALLY_REFUNDED 아님)")
-    @ApiResponse(responseCode = "422", description = "발송 전 주문이 아님 (CLAIM_ORDER_NOT_CANCELLABLE) 또는 취소 항목 없음")
+    @ApiResponse(responseCode = "422", description = "발송 전 주문이 아님 (CLAIM_ORDER_NOT_CANCELLABLE)")
     @ApiResponse(responseCode = "502", description = "PG 환불 호출 실패 (PAYMENT_GATEWAY_FAILURE)")
     @PostMapping("/cancel")
     public ResponseEntity<ClaimResponse> cancel(@Valid @RequestBody OrderPartialCancelRequest request) {
