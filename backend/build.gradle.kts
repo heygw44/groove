@@ -29,6 +29,9 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // 카탈로그 조회 캐시 (#236). spring-context-support + CaffeineCacheManager 자동구성을 끌어온다 —
+    // Caffeine(아래 ben-manes) 가 classpath 에 있으면 Caffeine provider 가 자동 선택된다.
+    implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-security")

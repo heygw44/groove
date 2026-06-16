@@ -33,4 +33,15 @@ public record AlbumSearchCondition(
                 keyword, newArtistId, genreId, labelId, minPrice, maxPrice,
                 minYear, maxYear, format, limited, status);
     }
+
+    /**
+     * 공개 기본 랜딩 조건 여부 — 모든 필터가 비어 있고 status 가 {@link AlbumStatus#SELLING} 으로 강제된
+     * 상태. 랜딩 목록 캐시 가드({@link AlbumCaches#isLandingRequest})에서 사용한다 — 이 경우의 첫 페이지만
+     * 캐시되고, 필터가 하나라도 있으면 캐시를 우회한다.
+     */
+    public boolean isPublicLanding() {
+        return keyword == null && artistId == null && genreId == null && labelId == null
+                && minPrice == null && maxPrice == null && minYear == null && maxYear == null
+                && format == null && limited == null && status == AlbumStatus.SELLING;
+    }
 }

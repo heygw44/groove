@@ -20,6 +20,9 @@ import com.groove.cart.domain.CartRepository;
 import com.groove.order.domain.OrderRepository;
 import com.groove.review.domain.AlbumRatingView;
 import com.groove.review.domain.ReviewRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -85,6 +88,9 @@ public class AlbumService {
         this.orderRepository = orderRepository;
     }
 
+    // 신규 앨범이 공개 랜딩 첫 페이지에 등장할 수 있어 랜딩 목록을 비운다. 상세 캐시는 아직 이 id 의
+    // 엔트리가 없으므로 evict 대상이 아니다.
+    @CacheEvict(cacheNames = AlbumCaches.LANDING_LIST, allEntries = true)
     @Transactional
     public Album create(AlbumCommand command, int initialStock) {
         Artist artist = loadArtist(command.artistId());
@@ -108,6 +114,10 @@ public class AlbumService {
         return initializeAssociations(albumRepository.save(album));
     }
 
+    @Caching(evict = {
+            @CacheEvict(cacheNames = AlbumCaches.DETAIL, key = "#id"),
+            @CacheEvict(cacheNames = AlbumCaches.LANDING_LIST, allEntries = true)
+    })
     @Transactional
     public Album update(Long id, AlbumCommand command) {
         Album album = albumRepository.findById(id)
@@ -139,6 +149,10 @@ public class AlbumService {
      * 일원화되고, in-memory 엔티티가 권위값이라 반환 stock 이 신선하다 — 복원 핫경로의 원자적 UPDATE 와 달리
      * 갱신값을 그대로 응답해야 하므로 FOR-UPDATE + dirty-check 가 적합하다.
      */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = AlbumCaches.DETAIL, key = "#id"),
+            @CacheEvict(cacheNames = AlbumCaches.LANDING_LIST, allEntries = true)
+    })
     @Transactional
     public Album adjustStock(Long id, int delta) {
         Album album = albumRepository.findByIdForUpdate(id)
@@ -153,6 +167,10 @@ public class AlbumService {
      * {@code UnexpectedRollbackException} 이 발생하므로, 비트랜잭션 컨트롤러에서 직접 호출하는
      * 현재 구조를 유지한다.
      */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = AlbumCaches.DETAIL, key = "#id"),
+            @CacheEvict(cacheNames = AlbumCaches.LANDING_LIST, allEntries = true)
+    })
     @Transactional
     public void delete(Long id) {
         Album album = albumRepository.findById(id)
@@ -179,6 +197,10 @@ public class AlbumService {
      * 의 {@code @EntityGraph} 로 동반 페치하므로(#203) DTO 변환 시점의 N+1 SELECT 가 제거된다 —
      * 본 쿼리 1 + 평점집계 1 로 행수 무관 상수화 (이전 W9 베이스라인은 {@code 1 + 1 + 3P}).
      */
+    // 공개 기본 랜딩(필터 전무 + 기본 첫 페이지)만 단일 엔트리로 캐시한다 — 필터 검색·비기본 정렬·admin
+    // 목록은 condition 가드가 false 라 캐시를 우회한다. sync=true 로 키별 단일 로딩(스탬피드 방지).
+    @Cacheable(cacheNames = AlbumCaches.LANDING_LIST, key = AlbumCaches.LANDING_KEY,
+            condition = AlbumCaches.LANDING_CONDITION, sync = true)
     @Transactional(readOnly = true)
     public Page<AlbumSummaryResponse> search(AlbumSearchCondition condition, Pageable pageable) {
         Page<Album> page = albumRepository.findAll(buildSpec(condition), pageable);
@@ -230,6 +252,9 @@ public class AlbumService {
      * Public 노출 정책상 status=HIDDEN 은 컨트롤러에서 거르지 않고 (관리자가 단건 URL 을 직접 줄 수
      * 있어야 함) 조회 자체는 status 무관하게 허용한다 — Public 목록(검색) 에서만 SELLING 으로 필터된다.
      */
+    // 상세는 id 별로 캐시. 반환 DTO 는 완전 구체화된 record 라 lazy 프록시가 캐시에 남지 않는다.
+    // sync=true 로 동일 id 동시 미스 시 단일 로딩(스탬피드 방지).
+    @Cacheable(cacheNames = AlbumCaches.DETAIL, key = "#id", sync = true)
     @Transactional(readOnly = true)
     public AlbumDetailResponse findDetail(Long id) {
         Album album = albumRepository.findById(id)

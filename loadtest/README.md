@@ -20,6 +20,7 @@
 - `stock-restore.js` — 재고 복원 lost-update (#234, M16): 선행 PENDING 주문 시드 → 같은 앨범에 place(−1)·cancel(+1) 동시 인터리브 → `expected = stockAfterSeed − place + cancel` vs `finalStock` 으로 lost-update 자동 판정(Before/After)
 - `deep-page.js` — 커서(keyset) vs offset 깊은 페이지 지연 비교 (#235, M16): setup 에서 깊은 커서 1개 확보 → `/albums?page=N`(offset)과 `/albums/scroll?cursor=…`(keyset)을 번갈아 측정 → `offset_deep_latency`/`keyset_deep_latency` 로 p95 격차 박제(`handleSummary` 가 개선율 로그). 시드가 클수록(ALBUM_COUNT=50000 기본) 격차가 두드러진다. 실행: `k6 run -e DEEP_ROW=10000 loadtest/deep-page.js`
   - **정렬키별 측정 (#244)**: `SORT` 를 바꿔 정렬 화이트리스트(`createdAt`/`price`/`releaseYear`) 전 경로의 keyset 이점을 잰다 — `-e SORT=price,desc` / `-e SORT=releaseYear,desc`. V25 커버링 인덱스(`idx_album_status_price`·`idx_album_status_year`) Before/After 결과·EXPLAIN 은 [docs/improvements/keyset-index-coverage.md](../docs/improvements/keyset-index-coverage.md) §4 참조(price keyset p95 910→173 ms 로 붕괴됐던 깊은 페이지 이점 회복).
+- `catalog-cache.js` — 카탈로그 조회 캐시 Before/After (#236, M16): 상세(`/albums/{id}`)·랜딩(`/albums`) 핫경로를 ramping-vus 로 측정 → `detail_latency`/`landing_latency` p95 박제. teardown 이 `/actuator/metrics/cache.gets` 로 적중률 로깅(local 프로파일). 캐시 OFF(SPRING_CACHE_TYPE=none) vs ON 앱을 상대로 같은 스크립트 실행. 측정·서사: [docs/improvements/catalog-cache.md](../docs/improvements/catalog-cache.md)
 - `lib/auth.js` — W9 시나리오 공통 하네스(`buildTokenPool`/`seedEmail`). 시드 회원 로그인 → access token 풀
 - `lib/orders.js` — W9 주문 페이로드 공통 헬퍼(`buildOrderBody` 분산 / `buildSingleAlbumOrder` 단일고정). order/payment/flash-sale 가 재사용
 - `summary.json` — 쿠폰 k6 end-of-test 요약(최근 실행 캡처)
