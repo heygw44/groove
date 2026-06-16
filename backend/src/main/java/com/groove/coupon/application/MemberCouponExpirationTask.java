@@ -13,20 +13,16 @@ import java.time.Clock;
 import java.time.Instant;
 
 /**
- * 회원 보유 쿠폰 만료 배치 (이슈 #92 DoD).
+ * 회원 보유 쿠폰 만료 배치.
  *
- * <p>{@code groove.coupon.expiration.cron} cron 으로 주기 실행되며(기본 매시 정각), {@code expires_at}
- * 이 지난 {@code ISSUED} 행을 {@code groove.coupon.expiration.batch-size} 개씩 독립 트랜잭션으로
- * {@code EXPIRED} 로 전환한다 — {@code IdempotencyRecordCleanupTask} 와 동일 구조. cron 을 {@code "-"}
- * 로 두면 비활성화된다 (테스트 프로파일에서 사용).
+ * <p>groove.coupon.expiration.cron cron 으로 주기 실행되며(기본 매시 정각), expires_at 이 지난 ISSUED 행을
+ * groove.coupon.expiration.batch-size 개씩 독립 트랜잭션으로 EXPIRED 로 전환한다. cron 을 "-" 로 두면
+ * 비활성화된다.
  *
- * <p>USED/CANCELLED 는 종착 상태라 WHERE 조건에서 자동 제외된다. 벌크 UPDATE 는 도메인 메서드
- * {@code MemberCoupon.expire()} 를 우회하지만, {@code MemberCouponStatus.canTransitionTo} 가
- * {@code ISSUED → EXPIRED} 를 허용하므로 도메인 규칙과 정합한다 — 도메인 가드는 단건 경로의 백스톱으로
- * 남는다.
+ * <p>USED/CANCELLED 는 종착 상태라 WHERE 조건에서 제외된다. 벌크 UPDATE 는 MemberCoupon.expire() 를
+ * 우회한다.
  *
- * <p>스케줄러 스레드에서 예외가 새어 나가면 다음 실행에 영향을 주므로, 배치 실패는 잡아서 로깅만 한다 —
- * 다음 주기에 재시도된다.
+ * <p>배치 실패는 잡아서 로깅만 하고 다음 주기에 재시도한다.
  */
 @Component
 public class MemberCouponExpirationTask {
@@ -57,17 +53,14 @@ public class MemberCouponExpirationTask {
                 log.info("만료된 회원 쿠폰 {}건 EXPIRED 전환", total);
             }
         } catch (Exception e) {
-            // 스케줄러 스레드가 죽지 않도록 보호하되, OutOfMemoryError 등 치명적 Error 는 전파시킨다 (#92 리뷰).
-            // 다음 주기에 재시도.
+            // 스케줄러 스레드가 죽지 않도록 Exception 만 잡고 Error 는 전파시킨다. 다음 주기에 재시도.
             log.warn("회원 쿠폰 만료 처리 실패 — 다음 주기에 재시도", e);
         }
     }
 
     /**
-     * {@code expires_at < cutoff} 인 ISSUED 회원 쿠폰을 모두 EXPIRED 로 전환한다. {@code cutoff} 고정값
-     * 기준이라 대상 집합은 유한하며, 배치 단위로 영향 행 수가 배치 크기 미만이 될 때까지 반복한다.
-     *
-     * @return 전환된 총 행 수
+     * expires_at < cutoff 인 ISSUED 회원 쿠폰을 모두 EXPIRED 로 전환한다. 영향 행 수가 배치 크기 미만이 될
+     * 때까지 배치 단위로 반복하고, 전환된 총 행 수를 반환한다.
      */
     int expireOverdueAll(Instant cutoff) {
         int total = 0;

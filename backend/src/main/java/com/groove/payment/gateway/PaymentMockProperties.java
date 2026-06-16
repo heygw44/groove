@@ -6,17 +6,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * Mock PG 동작 파라미터 (ARCHITECTURE.md §7.2).
+ * Mock PG 동작 파라미터. payment.mock.* 키와 매핑되며 compact constructor 에서 검증한다.
  *
- * <p>{@code application.yaml} 의 {@code payment.mock.*} 키와 매핑된다. compact constructor 에서
- * 검증하므로 잘못된 운영 설정은 빈 생성 시점에 즉시 실패한다.
- *
- * @param successRate      결제 성공 비율 (0.0~1.0) — 웹훅이 {@code PAID} 로 발사될 확률
- * @param delayMin         {@code request/query/refund} 호출 처리 지연 하한 (음수 불가)
- * @param delayMax         처리 지연 상한 ({@code >= delayMin})
- * @param webhookDelayMin  웹훅 콜백 발사 지연 하한 (음수 불가)
- * @param webhookDelayMax  웹훅 콜백 발사 지연 상한 ({@code >= webhookDelayMin})
- * @param webhookSecret    웹훅 통보에 실어 보낼 서명 값 (검증은 #W7-4)
+ * <p>successRate: 결제 성공 비율(0.0~1.0). delayMin/delayMax: 호출 처리 지연 범위.
+ * webhookDelayMin/webhookDelayMax: 웹훅 콜백 발사 지연 범위. webhookSecret: 웹훅 서명 값.
  */
 @ConfigurationProperties(prefix = "payment.mock")
 public record PaymentMockProperties(

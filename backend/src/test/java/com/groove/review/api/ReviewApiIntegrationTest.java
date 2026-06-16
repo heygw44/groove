@@ -50,10 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 리뷰 작성/조회/삭제 + 카탈로그 평점 연동 통합 테스트 (#59).
- *
- * <p>Testcontainers MySQL 위에서 부팅된 MockMvc 로 실 필터·서비스·DB·Flyway(V13) 를 모두 거친다.
- * DoD: 모든 API 정상 동작 / 배송 완료 전 422 / 중복 409 / 타인 리뷰 삭제 차단 403 / 앨범 조회 응답에 평균 평점·리뷰 수 반영.
+ * 리뷰 작성/조회/삭제 + 카탈로그 평점 연동 통합 테스트. MockMvc 로 실 필터·서비스·DB 를 모두 거친다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -95,8 +92,7 @@ class ReviewApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: review → orders/album/member, orders → album, album → artist/genre/label.
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        // FK 의존 순서로 정리: refresh_token, review → orders → album → artist/genre/label → member.
         refreshTokenRepository.deleteAllInBatch();
         reviewRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -130,7 +126,7 @@ class ReviewApiIntegrationTest {
         return String.format("ORD-20260512-A%05d", ORDER_SEQ.incrementAndGet());
     }
 
-    /** PENDING 에서 시작해 합법 전이만으로 {@code status} 까지 끌어올린 회원 주문을 영속화한다 (album 1점). */
+    /** PENDING 에서 합법 전이로 status 까지 끌어올린 회원 주문을 영속화한다(album 1개). */
     private Order persistMemberOrder(Long memberId, OrderStatus status) {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = Order.placeForMember(nextOrderNumber(), memberId, OrderFixtures.sampleShippingInfo());

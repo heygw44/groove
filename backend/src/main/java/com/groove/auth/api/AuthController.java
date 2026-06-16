@@ -87,12 +87,10 @@ public class AuthController {
     }
 
     /**
-     * Refresh Token 회전 엔드포인트 (#22, #163 쿠키 전환).
+     * Refresh Token 회전 엔드포인트.
      *
-     * <p>refresh 토큰은 HttpOnly 쿠키({@link RefreshTokenCookieFactory#COOKIE_NAME})로 수신한다.
-     * 새 access 토큰을 body 로, 회전된 새 refresh 토큰을 다시 HttpOnly 쿠키로 내린다.
-     * 쿠키 미존재는 무효 토큰과 동일하게 401 로 응답하고, 재사용·만료·형식 오류는
-     * {@code GlobalExceptionHandler} 가 401 ProblemDetail 로 변환한다.
+     * <p>refresh 토큰은 HttpOnly 쿠키로 수신한다. 새 access 토큰을 body 로, 회전된 새 refresh
+     * 토큰을 다시 HttpOnly 쿠키로 내린다. 쿠키 미존재·재사용·만료·형식 오류는 401.
      */
     @Operation(summary = "토큰 갱신",
             description = "HttpOnly 쿠키(refreshToken)의 토큰을 회전해 새 accessToken 을 body 로 발급하고, 회전된 새 "
@@ -112,11 +110,10 @@ public class AuthController {
     }
 
     /**
-     * 로그아웃 엔드포인트 (#163 쿠키 전환).
+     * 로그아웃 엔드포인트.
      *
-     * <p>refresh 토큰은 HttpOnly 쿠키로 수신한다. RFC 7009 § 2.2 — 토큰 유효성과 무관하게 항상 200.
-     * 쿠키가 있으면 revoke 하고, 없거나 형식 오류·만료·미존재면 멱등 무동작으로 끝난다.
-     * 어느 경우든 응답에 Max-Age=0 쿠키를 실어 브라우저의 refresh 쿠키를 즉시 삭제한다.
+     * <p>refresh 토큰은 HttpOnly 쿠키로 수신한다. 쿠키가 있으면 revoke 하고, 없거나 무효면 무동작.
+     * 어느 경우든 Max-Age=0 쿠키를 실어 refresh 쿠키를 삭제하며 토큰 유효성과 무관하게 항상 200.
      */
     @Operation(summary = "로그아웃",
             description = "HttpOnly 쿠키(refreshToken)를 revoke 하고 쿠키를 삭제한다. RFC 7009 에 따라 토큰 유효성과 무관하게 항상 200 (멱등).")

@@ -8,7 +8,7 @@ export const FORMAT_LABEL = {
   SINGLE_7: '7" 싱글',
 }
 
-/** AlbumStatus enum → 한글 라벨. (공개 카탈로그는 SELLING/SOLD_OUT 만 노출) */
+/** AlbumStatus enum → 한글 라벨. */
 export const STATUS_LABEL = {
   SELLING: '판매중',
   SOLD_OUT: '품절',
@@ -25,10 +25,10 @@ export function statusLabel(status) {
   return STATUS_LABEL[status] || status || ''
 }
 
-/** 카탈로그 필터 — 포맷 select 옵션. FORMAT_LABEL 에서 파생해 단일 출처를 유지한다. */
+/** 카탈로그 필터 — 포맷 select 옵션. FORMAT_LABEL 에서 파생. */
 export const FORMAT_OPTIONS = Object.entries(FORMAT_LABEL).map(([value, label]) => ({ value, label }))
 
-/** 카탈로그 정렬 — 백엔드 화이트리스트(createdAt/price/releaseYear)와 일치하는 조합만 노출. */
+/** 카탈로그 정렬 옵션(createdAt/price/releaseYear). */
 export const SORT_OPTIONS = [
   { value: 'createdAt,desc', label: '최신순' },
   { value: 'price,asc', label: '가격 낮은순' },

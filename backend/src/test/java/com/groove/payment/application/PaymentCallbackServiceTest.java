@@ -79,12 +79,12 @@ class PaymentCallbackServiceTest {
     }
 
     @Test
-    @DisplayName("PAID: 결제·주문을 확정하고 OrderPaidEvent 를 아웃박스에 발행한다 (재고 불변, #237)")
+    @DisplayName("PAID: 결제·주문을 확정하고 OrderPaidEvent 를 아웃박스에 발행한다 (재고 불변)")
     void applyResult_paid_confirmsAndPublishesEvent() {
         Album album = album(99);
         Payment payment = pendingPayment(album, 1);
-        ReflectionTestUtils.setField(payment, "id", 42L); // 단위 테스트라 미영속 — paymentId 단언이 공허해지지 않게 고정값 주입
-        ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID); // 아웃박스 aggregateId(long) — 실 흐름은 영속 주문이라 non-null
+        ReflectionTestUtils.setField(payment, "id", 42L); // paymentId 고정값 주입
+        ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID); // 아웃박스 aggregateId 주입
         given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.PAID, null);
@@ -96,7 +96,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAID);
         verifyNoInteractions(albumRepository); // 성공 결제는 재고 미복원
 
-        // 아웃박스에 ORDER_PAID 이벤트가 PAID 와 같은 트랜잭션에서 기록된다 (릴레이가 후속 배송 생성을 발행).
+        // 아웃박스에 ORDER_PAID 이벤트가 PAID 와 같은 트랜잭션에서 기록된다.
         ArgumentCaptor<OrderPaidEvent> event = ArgumentCaptor.forClass(OrderPaidEvent.class);
         verify(outboxEventPublisher).publish(eq(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE), eq(ORDER_ID),
                 eq(OrderPaidEvent.OUTBOX_EVENT_TYPE), event.capture());
@@ -111,7 +111,7 @@ class PaymentCallbackServiceTest {
     void applyResult_failed_compensates() {
         Album album = album(98); // 주문이 2개 차감했다고 가정
         Payment payment = pendingPayment(album, 2);
-        ReflectionTestUtils.setField(payment.getOrder(), "id", 7L); // 단위 테스트라 미영속 — restoreForOrder 인자 단언용
+        ReflectionTestUtils.setField(payment.getOrder(), "id", 7L); // restoreForOrder 인자 주입
         given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.FAILED, "카드 한도 초과");
@@ -121,7 +121,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getFailureReason()).isEqualTo("카드 한도 초과");
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
         verify(albumRepository).restoreStock(ALBUM_ID, 2); // 2 복원
-        verify(couponApplicationService).restoreForOrder(7L); // 적용 쿠폰 복원 — 이슈 #158
+        verify(couponApplicationService).restoreForOrder(7L); // 적용 쿠폰 복원
         verifyNoInteractions(outboxEventPublisher);
     }
 

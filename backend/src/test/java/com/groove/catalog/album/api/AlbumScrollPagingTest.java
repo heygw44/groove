@@ -33,13 +33,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * GET /api/v1/albums/scroll (keyset 커서 페이징) MockMvc 통합 테스트 (#235).
- *
- * <p>헤드라인 AC: 동일 정렬키(같은 price)가 여럿이어도 전 페이지를 walk 했을 때 누락·중복 없이 전체를
- * 정확히 한 번씩 돌려준다(id tiebreaker 로 전순서 보장). 기존 offset 엔드포인트 회귀는
- * {@code AlbumQueryControllerTest} 가 담당한다.
- */
+// GET /api/v1/albums/scroll (keyset 커서 페이징) MockMvc 통합 테스트.
+// 동일 정렬키가 여럿이어도 전 페이지를 walk 하면 누락·중복 없이 전체를 정확히 한 번씩 반환한다(id tiebreaker).
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -122,8 +117,7 @@ class AlbumScrollPagingTest {
 
         List<Long> collected = walkAll("price,asc", 2);
 
-        // 동일 price → id ASC tiebreaker 로 전순서 = 삽입 순(id 오름차순). 집합뿐 아니라 순서까지
-        // 단언해 본 기능의 헤드라인 AC 인 "정렬 결정성"을 실제로 검증한다(누락·중복 + 순서).
+        // 동일 price → id ASC tiebreaker 로 삽입 순서대로. 순서까지 단언
         assertThat(collected).containsExactlyElementsOf(expected);
     }
 
@@ -137,7 +131,7 @@ class AlbumScrollPagingTest {
 
         List<Long> collected = walkAll(null, 3);
 
-        // 기본 정렬 createdAt DESC + id DESC tiebreaker → 삽입 역순. 순서까지 단언.
+        // 기본 정렬 createdAt DESC + id DESC tiebreaker → 삽입 역순. 순서까지 단언
         List<Long> expectedDesc = new ArrayList<>(expected);
         Collections.reverse(expectedDesc);
         assertThat(collected).containsExactlyElementsOf(expectedDesc);
@@ -158,11 +152,10 @@ class AlbumScrollPagingTest {
         persistAlbum("B", 30000L);
         persistAlbum("C", 30000L);
 
-        // 1페이지를 createdAt 정렬로 받아 nextCursor 확보(키={createdAt,id}).
+        // 1페이지를 createdAt 정렬로 받아 nextCursor 확보
         String cursor = scroll(null, 2, "createdAt,desc").get("nextCursor").asString();
 
-        // 같은 커서를 price 정렬로 재요청 → 커서 키와 활성 정렬 키 불일치. 검증 없으면 Spring Data 가
-        // keyset 술어 생성 시 IllegalStateException(→500)을 던지므로, 400 으로 막혀야 한다.
+        // 같은 커서를 price 정렬로 재요청 → 커서 키와 활성 정렬 키 불일치로 400
         mockMvc.perform(get("/api/v1/albums/scroll")
                         .param("cursor", cursor)
                         .param("size", "2")
@@ -187,7 +180,7 @@ class AlbumScrollPagingTest {
                 .andExpect(jsonPath("$.code").value("VALID_001"));
     }
 
-    /** nextCursor 가 없을 때까지 페이지를 이어 받아 id 를 순서대로 수집한다(무한 루프 가드 포함). */
+    // nextCursor 가 없을 때까지 페이지를 이어 받아 id 를 순서대로 수집한다(무한 루프 가드 포함).
     private List<Long> walkAll(String sort, int size) throws Exception {
         List<Long> collected = new ArrayList<>();
         String cursor = null;

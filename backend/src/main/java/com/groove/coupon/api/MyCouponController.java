@@ -27,14 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 회원 본인 보유 쿠폰 목록 (API.md §3.9 — GET /members/me/coupons).
+ * 회원 본인 보유 쿠폰 목록 (GET /members/me/coupons).
  *
- * <p>{@link CouponController}(공개 {@code /coupons}) 와 분리한 이유는 항상 인증된 회원에게만 노출되기
- * 때문이다 — 본인 리소스 경로({@code /members/me/coupons})로 {@code MemberController}·
- * {@code MemberOrderController} 와 prefix 를 통일했다. SecurityConfig 의
- * {@code anyRequest().authenticated()} 기본 정책을 그대로 따라간다.
- *
- * <p>정렬 화이트리스트: {@code issuedAt} 만 허용.
+ * <p>정렬 화이트리스트: issuedAt 만 허용.
  */
 @Tag(name = "내 쿠폰", description = "로그인한 회원 본인이 보유한 쿠폰 목록 조회")
 @RestController

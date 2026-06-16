@@ -13,10 +13,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * ClaimStatus 전이 매트릭스 전수 검증 (6×6 = 36 케이스).
- *
- * <p>합법 전이는 #239 역물류 상태머신 기준 6종이며, 매트릭스의 나머지 셀(자기 전이 포함)은 모두 불법이다.
- * {@code OrderStatusTest}/{@code PaymentStatusTest} 와 동일한 SSOT 2단 구조를 따른다.
+ * ClaimStatus 전이 매트릭스 전수 검증 (6×6 = 36 케이스). 합법 전이 6종 외 나머지 셀은 모두 불법.
  */
 @DisplayName("ClaimStatus — 전이 매트릭스 전수")
 class ClaimStatusTest {

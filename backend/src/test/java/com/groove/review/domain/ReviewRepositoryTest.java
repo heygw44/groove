@@ -62,8 +62,7 @@ class ReviewRepositoryTest {
     @Autowired
     private EntityManager em;
 
-    // review 는 member/album/order FK 가 모두 선행 존재해야 한다. 각 테스트는 자기 앨범을 새로 만들어
-    // findByAlbumId(albumId) 를 그 앨범으로 스코프한다 — album 단위 조회라 공유 Testcontainers 에서도 격리된다.
+    // 각 테스트는 자기 앨범을 새로 만들어 findByAlbumId 를 그 앨범으로 스코프한다.
     private Member member;
     private Album album;
     private int orderSeq;
@@ -73,8 +72,7 @@ class ReviewRepositoryTest {
         member = memberRepository.saveAndFlush(
                 MemberFixtures.register("review-repo-test@example.com", "$2a$12$hash", "리뷰어", "01012345678"));
 
-        // genre.name 등은 UNIQUE 라, 공유 Testcontainers 에 다른 @SpringBootTest 가 커밋한 'Rock' 등과 충돌하지 않도록
-        // 테스트마다 유니크한 이름을 쓴다(자기 id 로 스코프하는 격리 규칙의 셋업 버전).
+        // genre.name 등이 UNIQUE 라 충돌하지 않도록 테스트마다 유니크한 이름을 쓴다.
         String uniq = "-" + System.nanoTime();
         Artist artist = artistRepository.saveAndFlush(Artist.create("The Beatles" + uniq, "desc"));
         Genre genre = genreRepository.saveAndFlush(Genre.create("Rock" + uniq));
@@ -85,7 +83,7 @@ class ReviewRepositoryTest {
                         AlbumStatus.SELLING, false, "https://img", "원본 테이프 마스터링"));
     }
 
-    // 앨범에 리뷰 1건을 심는다. uk_review_order_album(order_id, album_id) 때문에 리뷰마다 별도 주문이 필요하다.
+    // 앨범에 리뷰 1건을 심는다. uk_review_order_album 때문에 리뷰마다 별도 주문이 필요하다.
     private Review persistReview(int rating) {
         Order order = Order.placeForMember(
                 "ORD-IDX-" + (++orderSeq) + "-" + System.nanoTime(), member.getId(), OrderFixtures.sampleShippingInfo());
@@ -109,15 +107,14 @@ class ReviewRepositoryTest {
                 .containsExactlyInAnyOrder(r1.getId(), r2.getId(), r3.getId());
         assertThat(page.getContent())
                 .isSortedAccordingTo(Comparator.comparing(Review::getCreatedAt).reversed());
-        // @EntityGraph(member) 로 작성자가 함께 로드된다 — 마스킹용 이름 접근이 LAZY 추가 조회 없이 가능.
+        // @EntityGraph(member) 로 작성자가 함께 로드돼 이름 접근이 LAZY 추가 조회 없이 가능.
         assertThat(page.getContent()).allSatisfy(r -> assertThat(r.getMember().getName()).isNotBlank());
     }
 
     @Test
     @DisplayName("[#225] 리뷰 목록 복합 인덱스가 V22 에서 도입됨 — (album_id, created_at)")
     void albumReviewIndex_isAdded() {
-        // V13 헤더의 [W10] 의도적 누락 인덱스를 V22 에서 도입했다(filesort Before→After 시연 완료).
-        // 가드가 깨지면(인덱스 누락) 리뷰 목록 정렬 개선 회귀 신호다 — AlbumRepositoryTest.searchIndexes_areAdded 와 동일 의도.
+        // review 테이블에 (album_id, created_at) 복합 인덱스가 존재하는지 확인한다.
         @SuppressWarnings("unchecked")
         List<String> indexNames = (List<String>) em.createNativeQuery(
                 "SELECT INDEX_NAME FROM information_schema.STATISTICS " +

@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
 /**
- * 장르 응답 DTO (API §3.9).
+ * 장르 응답 DTO.
  */
 public record GenreResponse(
         @Schema(description = "장르 ID", example = "3") Long id,

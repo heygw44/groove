@@ -33,17 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Refresh Token Rotation 통합 테스트 (#22 DoD 검증).
- *
- * <p>실제 MySQL(Testcontainers) + Spring Boot 컨텍스트로 다음을 검증한다:
- * <ul>
- *   <li>정상 회전: 새 access·refresh 페어 발급, 기존 refresh 는 revoke + replaced_by 연결</li>
- *   <li>회전된 (revoked) refresh 재사용 → 401 + 같은 사용자 활성 토큰 전체 무효화</li>
- *   <li>잘못된 형식 토큰 → 401</li>
- *   <li>로그아웃 후 동일 refresh 재사용 → 401 (재사용 감지로 전체 무효화)</li>
- * </ul>
- */
+/** Refresh Token Rotation 통합 테스트 — 회전·재사용 감지·전체 무효화를 MySQL(Testcontainers)로 검증한다. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -53,7 +43,7 @@ class AuthControllerRefreshTest {
 
     private static final String EMAIL = "rotate-user@example.com";
     private static final String RAW_PASSWORD = "P@ssw0rd!2024";
-    /** #163 — refresh 토큰은 HttpOnly 쿠키로 수수된다. 이름은 production 단일 출처를 참조한다. */
+    /** refresh 토큰 HttpOnly 쿠키 이름. */
     private static final String REFRESH_COOKIE = RefreshTokenCookieFactory.COOKIE_NAME;
 
     @Autowired
@@ -89,7 +79,7 @@ class AuthControllerRefreshTest {
                         .cookie(refreshCookie(oldRefresh)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
-                // 회전된 refresh 는 body 가 아닌 HttpOnly 쿠키로 내려간다 (#163)
+                // 회전된 refresh 는 body 가 아닌 HttpOnly 쿠키로 내려간다
                 .andExpect(jsonPath("$.refreshToken").doesNotExist())
                 .andExpect(cookie().exists(REFRESH_COOKIE))
                 .andExpect(cookie().httpOnly(REFRESH_COOKIE, true))
@@ -116,7 +106,7 @@ class AuthControllerRefreshTest {
     @DisplayName("revoked refresh 재사용 → 401 + 같은 사용자의 다른 활성 refresh 도 모두 무효화")
     void refresh_reusedRevokedToken_revokesAllUserSessions() throws Exception {
         String firstRefresh = login();
-        // 세션 2 — 다른 디바이스에서 별도 로그인
+        // 세션 2 — 별도 로그인
         String secondRefresh = login();
 
         // 세션 1 회전 → firstRefresh 가 revoked 상태가 됨
@@ -124,14 +114,14 @@ class AuthControllerRefreshTest {
                         .cookie(refreshCookie(firstRefresh)))
                 .andExpect(status().isOk());
 
-        // 공격자가 가로챈 firstRefresh 를 다시 사용 시도 → 재사용 감지
+        // revoked 된 firstRefresh 를 재사용 시도 → 재사용 감지
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(refreshCookie(firstRefresh)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.code").value("AUTH_003"));
 
-        // DoD §2: 같은 member 의 다른 활성 refresh(secondRefresh) 도 무효화되어야 함
+        // 같은 member 의 다른 활성 refresh(secondRefresh) 도 무효화되어야 함
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(refreshCookie(secondRefresh)))
                 .andExpect(status().isUnauthorized())
@@ -160,7 +150,7 @@ class AuthControllerRefreshTest {
     @Test
     @DisplayName("refresh 쿠키 누락 → 401 AUTH_INVALID_TOKEN (#163)")
     void refresh_missingCookie_returns401() throws Exception {
-        // 쿠키 미존재는 무효 토큰과 동일하게 취급한다 (#163).
+        // 쿠키 미존재는 무효 토큰과 동일하게 취급한다.
         mockMvc.perform(post("/api/v1/auth/refresh"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -171,7 +161,7 @@ class AuthControllerRefreshTest {
     @DisplayName("로그아웃 후 동일 토큰 refresh → 재사용 감지로 401 + 다른 활성 세션도 모두 무효화")
     void logout_thenRefresh_triggersReuseDetectionAndRevokesAllSessions() throws Exception {
         String loggedOutRefresh = login();
-        // 로그아웃되지 않은 다른 디바이스 세션. 재사용 감지로 함께 무효화되어야 함.
+        // 로그아웃되지 않은 다른 활성 세션.
         String otherActiveRefresh = login();
 
         mockMvc.perform(post("/api/v1/auth/logout")
@@ -182,13 +172,13 @@ class AuthControllerRefreshTest {
                 .findByTokenHash(TokenHasher.sha256Hex(loggedOutRefresh)).orElseThrow();
         assertThat(loggedOutRow.isRevoked()).isTrue();
 
-        // 폐기된 토큰을 도난당한 공격자가 재사용 시도 → 재사용 감지 분기
+        // 폐기된 토큰 재사용 시도 → 재사용 감지 분기
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .cookie(refreshCookie(loggedOutRefresh)))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_003"));
 
-        // DoD §2: 같은 사용자의 다른 활성 세션(otherActiveRefresh)도 무효화되어야 함
+        // 같은 사용자의 다른 활성 세션(otherActiveRefresh)도 무효화되어야 함
         RefreshToken otherRow = refreshTokenRepository
                 .findByTokenHash(TokenHasher.sha256Hex(otherActiveRefresh)).orElseThrow();
         assertThat(otherRow.isRevoked())
@@ -217,7 +207,7 @@ class AuthControllerRefreshTest {
                 .andExpect(status().isOk());
     }
 
-    /** 로그인 후 발급된 refresh 토큰을 Set-Cookie 에서 추출한다 (#163). */
+    /** 로그인 후 발급된 refresh 토큰을 Set-Cookie 에서 추출한다. */
     private String login() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

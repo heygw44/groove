@@ -7,9 +7,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * 게스트 주문자 정보 (API.md §3.5).
- *
- * <p>phone 정규식은 {@code SignupRequest} 와 동일 — 숫자만 10~11자.
+ * 게스트 주문자 정보. phone 은 숫자만 10~11자.
  */
 public record GuestInfoRequest(
         @Schema(description = "게스트 이메일 (주문 조회 시 본인 확인에 사용)", example = "guest@example.com",

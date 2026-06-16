@@ -83,8 +83,8 @@ class ShippingReconciliationSchedulerTest {
 
         assertThatCode(() -> scheduler.reconcileOrphanedOrders()).doesNotThrowAnyException();
 
-        verify(provisioner).provisionForOrder(1L, "ORD-BAD");   // 실패 건도 실제로 시도됨
-        verify(provisioner).provisionForOrder(2L, "ORD-GOOD");  // 실패 후에도 다음 건 계속 진행
+        verify(provisioner).provisionForOrder(1L, "ORD-BAD");   // 실패 건도 시도됨
+        verify(provisioner).provisionForOrder(2L, "ORD-GOOD");  // 다음 건 계속 진행
     }
 
     @Test

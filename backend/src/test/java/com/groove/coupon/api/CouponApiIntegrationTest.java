@@ -41,10 +41,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 쿠폰 API 통합 테스트 (#90, API.md §3.9).
+ * 쿠폰 API 통합 테스트.
  *
  * <p>Testcontainers MySQL 위 MockMvc 로 실 필터(@Idempotent 인터셉터)·서비스·DB 를 모두 거친다.
- * 발급 동시성(초과발급 없음) 자체는 {@code CouponIssuanceConcurrencyTest} 가 검증하고, 본 테스트는
  * 발급/조회의 HTTP 계약(상태코드·에러코드·멱등 replay·인증)을 검증한다.
  */
 @SpringBootTest
@@ -83,8 +82,6 @@ class CouponApiIntegrationTest {
     @BeforeEach
     void setUp() {
         // FK 삭제 순서: member_coupon → coupon(RESTRICT)·member(CASCADE)·orders(SET NULL).
-        // member_coupon 을 먼저 비워야 coupon 의 RESTRICT 가 풀리고, orders 의 자식
-        // (order_item/payment/shipping/review)은 ON DELETE CASCADE 로 함께 정리된다.
         refreshTokenRepository.deleteAllInBatch();
         memberCouponRepository.deleteAllInBatch();
         couponRepository.deleteAllInBatch();
@@ -100,7 +97,7 @@ class CouponApiIntegrationTest {
         otherBearer = "Bearer " + jwtProvider.issueAccessToken(otherMemberId, MemberRole.USER);
     }
 
-    /** 멱등성 키 — Testcontainers 재사용으로 idempotency_record 가 빌드 간 살아남으므로 매 요청 고유 UUID 를 쓴다. */
+    /** 멱등성 키 — 매 요청 고유 UUID. */
     private static String newKey() {
         return UUID.randomUUID().toString();
     }
@@ -310,7 +307,7 @@ class CouponApiIntegrationTest {
         JsonNode usedRow = contentByStatus(content, "USED");
         JsonNode issuedRow = contentByStatus(content, "ISSUED");
 
-        // USED 행에만 주문번호가 붙고(일괄 적용이 아니라 orderId 별 매핑), ISSUED 행은 키는 있되 명시적 null.
+        // USED 행에만 주문번호가 붙고, ISSUED 행은 키는 있되 명시적 null.
         assertThat(usedRow.get("orderNumber").asString()).isEqualTo(order.getOrderNumber());
         assertThat(issuedRow.has("orderNumber")).isTrue();
         assertThat(issuedRow.get("orderNumber").isNull()).isTrue();

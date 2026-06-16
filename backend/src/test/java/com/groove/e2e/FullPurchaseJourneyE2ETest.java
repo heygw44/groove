@@ -63,31 +63,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 핵심 구매 여정 E2E 통합 테스트 (#60) — 회원가입부터 리뷰까지 도메인 경계를 가로지르는 한 흐름을
- * 부팅된 애플리케이션 컨텍스트(실 필터·서비스·이벤트·스케줄러·Testcontainers MySQL) 위에서 검증한다.
+ * 회원가입부터 리뷰까지 도메인 경계를 가로지르는 구매 여정을 부팅된 컨텍스트(실 필터·서비스·이벤트·스케줄러·Testcontainers MySQL) 위에서 검증한다.
  *
- * <p>도메인별 E2E 테스트({@code AuthFlowE2ETest}, {@code CartOrderE2EIntegrationTest},
- * {@code PaymentWebhookIntegrationTest}, {@code ShippingIntegrationTest}, {@code ReviewApiIntegrationTest})
- * 와 중복되지 않도록, 본 테스트는 단일 도메인 분기 케이스가 아니라 <strong>도메인 간 결합 지점(seam)</strong>과
- * G2 게이트 시나리오만 다룬다:
+ * <p>다루는 시나리오:
  * <ul>
- *   <li>회원 풀 여정 — 회원가입 → 로그인 → 장바구니 → 주문 → 결제 → PAID 웹훅 → (이벤트) 배송 생성
+ *   <li>회원 풀 여정 — 회원가입 → 로그인 → 장바구니 → 주문 → 결제 → PAID 웹훅 → 배송 생성
  *       → 자동 진행 DELIVERED → 리뷰 작성 → 앨범 평점 반영</li>
- *   <li>게스트 여정 — 게스트 주문 → 결제 → 웹훅 → 배송 생성 + {@code guest-lookup} 본인 조회,
- *       게스트 주문은 리뷰 불가(403)</li>
- *   <li>결제 실패 보상 트랜잭션 — FAILED 웹훅 → 주문 PAYMENT_FAILED + 재고 복원 + 배송 미생성</li>
- *   <li>멱등성 — 동일 {@code Idempotency-Key} 동시 결제 요청 → 단일 {@code Payment}</li>
+ *   <li>게스트 여정 — 게스트 주문 → 결제 → 웹훅 → 배송 생성 + guest-lookup 본인 조회, 리뷰 불가(403)</li>
+ *   <li>결제 실패 보상 — FAILED 웹훅 → 주문 PAYMENT_FAILED + 재고 복원 + 배송 미생성</li>
+ *   <li>멱등성 — 동일 Idempotency-Key 동시 결제 요청 → 단일 Payment</li>
  * </ul>
  *
- * <p><strong>주문↔배송 상태 동기화(이슈 #161):</strong> 배송 자동 진행({@code ShippingProgressScheduler})이
- * {@code Shipping} 을 PREPARING→SHIPPED→DELIVERED 로 밀 때, {@code ShippingCreationListener}/{@code ShippingService}
- * 가 같은 트랜잭션에서 {@code Order} 도 락스텝으로 전진시킨다(배송 생성=PREPARING, SHIPPED, DELIVERED 1:1 대응).
- * 따라서 배송이 DELIVERED 에 도달하면 주문도 자동으로 DELIVERED 가 되어 리뷰 작성 사전조건
- * ({@code order.status ∈ {DELIVERED, COMPLETED}})을 만족한다 — 별도의 수동 브리지가 필요 없다.
- *
- * <p>결제 확정은 {@code payment.mock.auto-webhook=false} 로 인프로세스 자동 웹훅을 꺼 결정적으로 검증한다 —
- * {@code POST /api/v1/payments/webhook} 를 직접 호출하고({@code PaymentWebhookIntegrationTest} 와 동일 패턴),
- * 결제 완료 이벤트({@code OrderPaidEvent}, AFTER_COMMIT)로 비동기 생성되는 배송은 Awaitility 로 폴링 검증한다.
+ * <p>배송이 PREPARING→SHIPPED→DELIVERED 로 진행될 때 주문도 같은 트랜잭션에서 락스텝으로 전진한다.
+ * 결제 확정은 payment.mock.auto-webhook=false 로 자동 웹훅을 끄고 POST /api/v1/payments/webhook 을 직접 호출하며,
+ * 비동기 생성되는 배송은 Awaitility 로 폴링한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -99,19 +88,19 @@ class FullPurchaseJourneyE2ETest {
 
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
     private static final String SIGNATURE_HEADER = "X-Mock-Signature";
-    private static final String WEBHOOK_SECRET = "test-mock-webhook-secret"; // application-test.yaml
+    private static final String WEBHOOK_SECRET = "test-mock-webhook-secret";
     private static final String DUMMY_PASSWORD_HASH = "$2a$10$dummyhashvalueforintegrationtest...";
     private static final long ALBUM1_PRICE = 35_000L;
     private static final long ALBUM2_PRICE = 30_000L;
     private static final int INITIAL_STOCK = 100;
 
-    /** AFTER_COMMIT 이벤트로 배송이 비동기 생성되는 데 허용하는 최대 대기 시간 (테스트 프로파일은 사실상 즉시). */
+    /** 비동기 배송 생성을 기다리는 최대 대기 시간. */
     private static final int SHIPPING_EVENT_TIMEOUT_SECONDS = 5;
-    /** 멱등 동시성 검증에서 동일 키로 동시 발사할 요청 수. */
+    /** 동일 키로 동시 발사할 결제 요청 수. */
     private static final int CONCURRENT_PAYMENT_THREADS = 4;
-    /** 동시 요청 워커가 모두 종료되기를 기다리는 최대 시간. */
+    /** 동시 요청 워커 종료를 기다리는 최대 시간. */
     private static final int CONCURRENT_LATCH_TIMEOUT_SECONDS = 15;
-    /** 서버 오류(5xx) 경계 — 멱등 동시 요청은 접수(202) 또는 처리 중 충돌(409) 중 하나여야 하고 5xx 는 없어야 한다. */
+    /** 서버 오류(5xx) 경계 값. */
     private static final int SERVER_ERROR_THRESHOLD = 500;
 
     @Autowired private MockMvc mockMvc;
@@ -156,21 +145,14 @@ class FullPurchaseJourneyE2ETest {
                         AlbumStatus.SELLING, false, null, null)).getId();
     }
 
-    /**
-     * 본 테스트는 로그인 API 로 {@code refresh_token} 행을, PAID 흐름으로 {@code payment}/{@code shipping}/{@code review}
-     * 행을 만든다. {@code refresh_token → member} FK 는 {@code ON DELETE CASCADE} 가 아니므로, 정리하지 않으면
-     * 이후 테스트 클래스의 {@code member.deleteAllInBatch()} 가 깨진다 — {@code @AfterEach} 로도 한 번 더 비워
-     * 다운스트림 오염을 막는다. ({@code payment}/{@code shipping}/{@code review} 는 {@code orders} 삭제 시 동반 삭제되지만,
-     * {@code refresh_token} 은 그렇지 않다.)
-     */
+    /** 테스트가 만든 행을 모두 비운다. */
     @AfterEach
     void tearDown() {
         cleanAll();
     }
 
     private void cleanAll() {
-        // FK 의존 순서대로 부모 repository 를 비운다 — review_*, payment, shipping, cart_item, order_item 자식 행은
-        // 부모 삭제와 함께 정리된다. refresh_token 은 member 에 비-CASCADE FK 를 가지므로 member 보다 먼저 비운다.
+        // FK 의존 순서대로 repository 를 비운다 (refresh_token 은 member 보다 먼저).
         refreshTokenRepository.deleteAllInBatch();
         reviewRepository.deleteAllInBatch();
         outboxEventRepository.deleteAllInBatch();
@@ -192,7 +174,7 @@ class FullPurchaseJourneyE2ETest {
         signup("buyer@example.com", "P@ssw0rd!2024", "김민수", "01000000001");
         String bearer = "Bearer " + login("buyer@example.com", "P@ssw0rd!2024");
 
-        // 2) 장바구니 — 추가는 재고를 차감하지 않는다 (W6 정책)
+        // 2) 장바구니 — 추가는 재고를 차감하지 않는다
         addToCart(bearer, album1Id, 2);
         addToCart(bearer, album2Id, 1);
         assertThat(stockOf(album1Id)).isEqualTo(INITIAL_STOCK);
@@ -207,21 +189,21 @@ class FullPurchaseJourneyE2ETest {
         String pgTransactionId = requestPayment(bearer, orderNumber, "idem-" + orderNumber);
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.PENDING);
 
-        // 5) PAID 웹훅 → 결제 확정 + 아웃박스 릴레이가 후속 배송 생성을 발행해 주문은 PREPARING 으로 락스텝 전진 (#161, #237)
+        // 5) PAID 웹훅 → 결제 확정 + 주문 PREPARING 으로 락스텝 전진
         confirmPaymentPaid(pgTransactionId);
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PREPARING);
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.PAID);
 
-        // 6) OrderPaid 아웃박스 이벤트 → 릴레이가 배송 자동 생성 — 배송지 스냅샷·운송장 발급
+        // 6) 배송 자동 생성 — 배송지 스냅샷·운송장 발급
         Shipping shipping = awaitShippingCreated();
         assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.PREPARING);
-        assertThat(shipping.getRecipientName()).isEqualTo("김철수"); // 주문 생성 시 보낸 배송지 스냅샷
+        assertThat(shipping.getRecipientName()).isEqualTo("김철수"); // 배송지 스냅샷
         String trackingNumber = shipping.getTrackingNumber();
         getShipping(trackingNumber)
                 .andExpect(jsonPath("$.trackingNumber").value(trackingNumber))
                 .andExpect(jsonPath("$.status").value("PREPARING"));
 
-        // 6-1) 주문 상세 응답이 운송장 번호·금액 3종을 노출한다(이슈 #116) — 프론트가 별도 매핑 없이 배송 추적을 연결.
+        // 6-1) 주문 상세 응답이 운송장 번호·금액 3종을 노출한다
         mockMvc.perform(get("/api/v1/orders/" + orderNumber).header("Authorization", bearer))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trackingNumber").value(trackingNumber))
@@ -229,13 +211,13 @@ class FullPurchaseJourneyE2ETest {
                 .andExpect(jsonPath("$.discountAmount").value(0))
                 .andExpect(jsonPath("$.payableAmount").value((int) expectedTotal));
 
-        // 7) 자동 진행 스케줄러 — 배송·주문이 락스텝으로 PREPARING → SHIPPED → DELIVERED (테스트 프로파일은 단계 지연 0)
+        // 7) 자동 진행 스케줄러 — 배송·주문이 락스텝으로 PREPARING → SHIPPED → DELIVERED
         progressShippingToDelivered();
         getShipping(trackingNumber)
                 .andExpect(jsonPath("$.status").value("DELIVERED"))
                 .andExpect(jsonPath("$.deliveredAt").exists());
 
-        // 8) 배송 완료에 맞춰 주문도 자동으로 DELIVERED — 리뷰 사전조건 충족, 수동 브리지 불필요 (이슈 #161)
+        // 8) 배송 완료에 맞춰 주문도 자동으로 DELIVERED
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.DELIVERED);
 
         // 9) 리뷰 작성 (실 API)
@@ -266,14 +248,14 @@ class FullPurchaseJourneyE2ETest {
         String guestEmail = "guest@example.com";
         String orderNumber = placeGuestOrder(List.of(item(album1Id, 1)), guestEmail, "01099998888");
 
-        // 게스트도 결제 시작 가능 (POST /payments permitAll)
+        // 게스트도 결제 시작 가능
         String pgTransactionId = requestPayment(null, orderNumber, "idem-" + orderNumber);
         confirmPaymentPaid(pgTransactionId);
-        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PREPARING); // 배송 생성에 맞춰 락스텝 전진 (이슈 #161)
+        assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PREPARING); // 배송 생성에 맞춰 락스텝 전진
 
         Shipping shipping = awaitShippingCreated();
 
-        // guest-lookup — 맞는 email 은 200, 틀린 email 은 404 (존재 노출 회피)
+        // guest-lookup — 맞는 email 은 200, 틀린 email 은 404
         mockMvc.perform(post("/api/v1/orders/" + orderNumber + "/guest-lookup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("email", guestEmail))))
@@ -286,7 +268,7 @@ class FullPurchaseJourneyE2ETest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
 
-        // 배송을 DELIVERED 까지 민 뒤(주문도 자동 DELIVERED)에도, 게스트 주문(memberId 부재)은 리뷰 작성 단계에서 403 으로 막힌다.
+        // 배송을 DELIVERED 까지 민 뒤에도 게스트 주문은 리뷰 작성 단계에서 403 으로 막힌다.
         progressShippingToDelivered();
         getShipping(shipping.getTrackingNumber()).andExpect(jsonPath("$.status").value("DELIVERED"));
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.DELIVERED);
@@ -316,7 +298,7 @@ class FullPurchaseJourneyE2ETest {
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.FAILED);
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(stockOf(album1Id)).as("실패 보상 — 차감했던 재고 복원").isEqualTo(INITIAL_STOCK);
-        // 결제 실패 시 ORDER_PAID 아웃박스 이벤트가 기록되지 않으므로(FAILED 분기) 릴레이 후에도 배송은 생성되지 않는다.
+        // 릴레이 후에도 배송은 생성되지 않는다.
         outboxRelayScheduler.relayPendingEvents();
         assertThat(shippingRepository.findAll()).as("실패 결제에는 배송이 생기지 않는다").isEmpty();
     }
@@ -429,7 +411,7 @@ class FullPurchaseJourneyE2ETest {
         return requireField(result, "orderNumber");
     }
 
-    /** PENDING 주문에 대해 {@code POST /payments} 로 결제를 접수하고(202) PG 거래 식별자를 돌려준다. */
+    /** POST /payments 로 결제를 접수하고(202) PG 거래 식별자를 돌려준다. */
     private String requestPayment(String bearerOrNull, String orderNumber, String idempotencyKey) throws Exception {
         MockHttpServletRequestBuilder request = post("/api/v1/payments")
                 .header(IDEMPOTENCY_HEADER, idempotencyKey)
@@ -443,11 +425,7 @@ class FullPurchaseJourneyE2ETest {
         return paymentRepository.findByOrderId(orderId).orElseThrow().getPgTransactionId();
     }
 
-    /**
-     * PG PAID 웹훅을 직접 호출해 결제·주문을 확정하고, 아웃박스 릴레이를 한 번 돌려 후속 배송 생성을 트리거한다 (#237).
-     * 실 흐름에선 applyResult 가 PAID 와 같은 트랜잭션에서 아웃박스에 기록하고 OutboxRelayScheduler 가 주기적으로 발행하지만,
-     * 테스트 프로파일은 릴레이 자동 실행을 끄므로(interval PT1H) 여기서 직접 한 틱을 돌린다.
-     */
+    /** PG PAID 웹훅을 직접 호출해 결제·주문을 확정하고, 아웃박스 릴레이를 한 번 돌려 배송 생성을 트리거한다. */
     private void confirmPaymentPaid(String pgTransactionId) throws Exception {
         postWebhook(pgTransactionId, PaymentStatus.PAID, null)
                 .andExpect(status().isOk())
@@ -501,7 +479,7 @@ class FullPurchaseJourneyE2ETest {
         return shippingRepository.findAll().get(0);
     }
 
-    /** 자동 진행 스케줄러를 두 번 돌려 단일 배송을 PREPARING → SHIPPED → DELIVERED 로 민다 (테스트 프로파일은 단계 지연 0). */
+    /** 자동 진행 스케줄러를 두 번 돌려 단일 배송을 PREPARING → SHIPPED → DELIVERED 로 민다. */
     private void progressShippingToDelivered() {
         shippingProgressScheduler.progressShipments();
         assertThat(singleShipping().getStatus()).isEqualTo(ShippingStatus.SHIPPED);

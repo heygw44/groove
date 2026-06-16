@@ -35,8 +35,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 결제 요청 오케스트레이터 단위 테스트 (#237) — prepare → PG 호출(트랜잭션 밖) → persist 흐름과 PG/충돌 처리.
- * 검증·영속화 단계 자체는 {@link PaymentRequestStepsTest} 가 다룬다. findForMember 는 그대로 PaymentService 책임.
+ * 결제 요청 오케스트레이터 단위 테스트 — prepare → PG 호출 → persist 흐름과 PG/충돌 처리.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("PaymentService")
@@ -138,7 +137,7 @@ class PaymentServiceTest {
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
-    // --- findForMember (PaymentService 책임 그대로) ---
+    // --- findForMember ---
 
     private Order order(boolean guest, Long memberId) {
         Order order = Mockito.mock(Order.class, Mockito.withSettings().strictness(Strictness.LENIENT));

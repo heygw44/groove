@@ -24,10 +24,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link V20__email_hash_hmac_backfill} 동작 검증 (#186).
- *
- * <p>재사용 Testcontainer 는 부팅 시 Flyway 가 V19(SQL 컬럼 확장)·V20(빈 테이블 백필 no-op)을 이미 적용했으므로,
- * Flyway 를 재실행하는 대신 마이그레이션의 {@code backfill(Connection)} 을 직접 호출해 재해시 로직만 검증한다.
+ * V20__email_hash_hmac_backfill 동작 검증. Flyway 재실행 대신 backfill(Connection) 을 직접 호출해 재해시 로직을
+ * 검증한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -52,12 +50,12 @@ class V20EmailHashBackfillTest {
 
     @BeforeEach
     void seedLegacyRows() {
-        // 마이그레이션 이전 상태 모사 — email_hash 가 prefix 없는 legacy SHA-256.
+        // email_hash 가 prefix 없는 legacy SHA-256 인 회원.
         Member active = memberRepository.saveAndFlush(Member.register(
                 ACTIVE_EMAIL, MemberFixtures.legacyHash(ACTIVE_EMAIL), "$2a$12$h", "활성", "01000000001"));
         Member withdrawn = memberRepository.saveAndFlush(Member.register(
                 WITHDRAWN_EMAIL, MemberFixtures.legacyHash(WITHDRAWN_EMAIL), "$2a$12$h", "탈퇴", "01000000002"));
-        withdrawn.withdraw(Instant.now()); // deleted_at 설정 — 평문 파기로 재계산 불가한 탈퇴 회원
+        withdrawn.withdraw(Instant.now()); // deleted_at 설정
         withdrawn.anonymize();
         memberRepository.saveAndFlush(withdrawn);
 

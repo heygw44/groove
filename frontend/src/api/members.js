@@ -14,10 +14,7 @@ export async function updateProfile(payload) {
   return res.data
 }
 
-/**
- * 비밀번호 변경(204). 성공 시 서버가 모든 refresh 토큰을 폐기하므로
- * 호출부는 로컬 로그아웃 후 재로그인을 유도해야 한다.
- */
+/** 비밀번호 변경(204). 성공 시 서버가 모든 refresh 토큰을 폐기한다. */
 export async function changePassword(payload) {
   await client.patch('/members/me/password', payload)
 }

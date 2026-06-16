@@ -1,4 +1,4 @@
-// 공용 포매터 — 카탈로그/상세/장바구니/주문 뷰(#114~)가 공유한다.
+// 공용 포매터.
 
 const WON = new Intl.NumberFormat('ko-KR')
 const DATE = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })

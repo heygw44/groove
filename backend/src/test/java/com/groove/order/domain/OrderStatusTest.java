@@ -14,9 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * OrderStatus 상태 전이 매트릭스 전수 검증 (8×8 = 64 케이스).
- *
- * <p>합법 전이는 ARCHITECTURE.md §8 다이어그램 기준 9종이다. 본 테스트는
- * "합법 전이 표 + 종착 상태" 두 단으로 SSOT 를 두고 — 매트릭스의 나머지 셀은 모두 불법 (false) 이다.
+ * 합법 전이 표 + 종착 상태로 SSOT 를 두고, 나머지 셀은 모두 불법(false)이다.
  */
 @DisplayName("OrderStatus — 전이 매트릭스 전수")
 class OrderStatusTest {

@@ -62,29 +62,29 @@ class MemberRepositoryTest {
     void existsByEmailHash_blocksReSignupAfterAnonymization_caseInsensitive() {
         Member member = MemberFixtures.register("foo@x.com", "$2a$12$hash", "원회원", "01012345678");
         member.withdraw(Instant.now());
-        member.anonymize(); // email 평문 → withdrawn-{id}@deleted.local, email_hash 는 보존
+        member.anonymize(); // email 평문 → withdrawn-{id}@deleted.local, email_hash 보존
         memberRepository.saveAndFlush(member);
 
-        // 평문은 치환됐어도 해시 점유가 남아 재가입을 막는다.
+        // 평문 치환 후에도 해시 점유로 재가입 차단.
         assertThat(member.getEmail()).doesNotContain("foo@x.com");
         assertThat(memberRepository.existsByEmailHash(MemberFixtures.hash("foo@x.com"))).isTrue();
-        // 대소문자 변형도 정규화 후 같은 해시 → 차단 (collation ci 차단 시맨틱 유지).
+        // 대소문자 변형도 정규화 후 같은 해시 → 차단.
         assertThat(memberRepository.existsByEmailHash(MemberFixtures.hash("FOO@x.com"))).isTrue();
     }
 
     @Test
     @DisplayName("existsByEmailHashIn → 마이그레이션 이전 탈퇴 회원(legacy SHA-256 보존)도 v1·legacy 양방향으로 차단 (#186)")
     void existsByEmailHashIn_blocksLegacyHashedMember() {
-        // 마이그레이션 이전 탈퇴 회원을 모사 — email_hash 가 prefix 없는 legacy SHA-256 으로 남아 있다.
+        // legacy SHA-256 email_hash 를 가진 탈퇴 회원.
         Member legacy = Member.register("legacy@x.com", MemberFixtures.legacyHash("legacy@x.com"),
                 "$2a$12$hash", "구회원", "01099998888");
         legacy.withdraw(Instant.now());
         legacy.anonymize();
         memberRepository.saveAndFlush(legacy);
 
-        // v1 단독 조회로는 못 잡지만,
+        // v1 단독 조회로는 못 잡음.
         assertThat(memberRepository.existsByEmailHash(MemberFixtures.hash("legacy@x.com"))).isFalse();
-        // v1·legacy 양방향(가입 경로) 조회는 legacy 인자로 점유를 잡아 재가입을 차단한다.
+        // v1·legacy 양방향 조회는 legacy 인자로 점유를 잡는다.
         assertThat(memberRepository.existsByEmailHashIn(
                 List.of(MemberFixtures.hash("legacy@x.com"), MemberFixtures.legacyHash("legacy@x.com")))).isTrue();
     }
@@ -111,7 +111,7 @@ class MemberRepositoryTest {
         memberRepository.saveAndFlush(deleted);
 
         assertThat(memberRepository.findByEmailAndDeletedAtIsNull("gone@example.com")).isEmpty();
-        // 패턴 A: existsByEmailHash 는 탈퇴자도 점유한 것으로 본다 (재가입 차단).
+        // existsByEmailHash 는 탈퇴자도 점유한 것으로 본다.
         assertThat(memberRepository.existsByEmailHash(MemberFixtures.hash("gone@example.com"))).isTrue();
     }
 

@@ -1,2 +1,2 @@
-/** cart 도메인 — 엔티티/Repository (ERD §4.7, §4.8). */
+/** cart 도메인 — 엔티티/Repository. */
 package com.groove.cart.domain;

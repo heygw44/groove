@@ -158,7 +158,7 @@ class RefreshTokenRepositoryTest {
     }
 
     private static String hash(String suffix) {
-        // 64자 hex 더미 — 테스트마다 고유 값을 만들기 위해 suffix 만 다르게.
+        // 64자 hex 더미 — suffix 만 다르게.
         String base = "0".repeat(64 - suffix.length());
         String hex = (base + suffix).toLowerCase();
         // hex 만 허용

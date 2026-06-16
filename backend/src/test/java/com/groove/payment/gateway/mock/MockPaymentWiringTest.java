@@ -25,11 +25,6 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Mock PG 구성 빈 와이어링 + 비동기 웹훅 발사 통합 검증.
- *
- * <p>{@code @SpringBootTest(classes=...)} 로 자동 구성 없이 결제 게이트웨이 구성만 띄운다
- * (DB·Flyway·웹 미기동). {@code test} 프로파일에서 {@code @Profile} 격리 빈들이 실제로 로드되고
- * {@code payment.mock.*} 가 바인딩되는지, 그리고 {@code request()} → 비동기 웹훅 콜백 경로가
- * 실제 {@code TaskScheduler} 위에서 동작하는지 확인한다 (#W7-1 DoD).
  */
 @SpringBootTest(
         classes = {
@@ -69,13 +64,13 @@ class MockPaymentWiringTest {
 
         var response = paymentGateway.request(new PaymentRequest("ORD-20260512-WIRE01", 42_000L));
 
-        // 테스트 프로파일은 지연 0ms 라 사실상 즉시 발사되지만, CI 부하 시 스케줄링 지터에 여유를 둔다.
+        // 비동기 웹훅 발사를 최대 10초까지 폴링한다.
         await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
             WebhookNotification n = dispatcher.last();
             assertThat(n).isNotNull();
             assertThat(n.pgTransactionId()).isEqualTo(response.pgTransactionId());
             assertThat(n.orderNumber()).isEqualTo("ORD-20260512-WIRE01");
-            assertThat(n.status().name()).isEqualTo("PAID"); // application-test.yaml: success-rate=1.0
+            assertThat(n.status().name()).isEqualTo("PAID");
             assertThat(n.signature()).isEqualTo("test-mock-webhook-secret");
         });
     }

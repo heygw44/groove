@@ -5,11 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 /**
- * 장르 영속성.
- *
- * <p>{@link #existsByName} 은 생성 시 빠른 409 응답을 위한 선검사이고,
- * {@link #existsByNameAndIdNot} 는 자기 자신 행을 제외한 충돌 검사 (이름 변경 시 사용).
- * 동시 INSERT 에 대한 최종 방어선은 DB UNIQUE (uk_genre_name) 다.
+ * 장르 영속성. existsByName 은 생성 시 중복 선검사, existsByNameAndIdNot 은
+ * 자기 행을 제외한 이름 충돌 검사. 최종 방어선은 DB UNIQUE.
  */
 public interface GenreRepository extends JpaRepository<Genre, Long> {
 

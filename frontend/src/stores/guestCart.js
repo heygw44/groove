@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia'
 
-// 게스트(비회원) 장바구니 — localStorage 영속. 서버 카트 API 가 회원 전용이라 게스트는 클라에 담는다.
-// 서버 카트 응답이 없으므로 렌더에 필요한 표시 스냅샷(제목·가격·커버)을 담을 때 함께 저장한다.
-// 로그인 시 TheHeader 가 이 항목들을 서버 카트로 병합(cart.add)한 뒤 clear() 한다.
+// 게스트(비회원) 장바구니 — localStorage 영속. 표시 스냅샷(제목·가격·커버)을 함께 저장.
+// 로그인 시 TheHeader 가 서버 카트로 병합(cart.add)한 뒤 clear() 한다.
 
 const KEY = 'groove.guestCart'
-const MAX_QTY = 99 // 백엔드 CartItemAddRequest @Max 와 동일
+const MAX_QTY = 99
 
 function loadItems() {
   try {
@@ -52,7 +51,7 @@ export const useGuestCartStore = defineStore('guestCart', {
       this.items = this.items.filter((i) => i.albumId !== albumId)
       this.persist()
     },
-    /** 항목 목록 통째 교체 — 로그인 시 병합 후 실패분만 남길 때 쓴다(TheHeader). */
+    /** 항목 목록 통째 교체. */
     replaceAll(items) {
       this.items = items
       this.persist()

@@ -7,8 +7,7 @@ import java.time.Duration;
 /**
  * 인증 엔드포인트 Rate Limit 정책 설정.
  *
- * <p>{@code application.yaml} 의 {@code groove.auth.rate-limit.*} 키와 매핑된다.
- * 정책 수치는 운영 측정 결과에 따라 환경별 yaml 또는 환경 변수에서 override 한다.
+ * <p>application.yaml 의 groove.auth.rate-limit.* 키와 매핑된다.
  */
 @ConfigurationProperties(prefix = "groove.auth.rate-limit")
 public record AuthRateLimitProperties(Policy login, Policy signup, Policy passwordChange) {

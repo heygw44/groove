@@ -77,7 +77,7 @@ class AlbumAdminControllerTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: album → artist/genre/label (album 먼저 비워야 부모 삭제 가능)
+        // album 먼저 비운 뒤 artist/genre/label 정리
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
         genreRepository.deleteAllInBatch();
@@ -136,8 +136,7 @@ class AlbumAdminControllerTest {
         Map<String, Object> body = validCreateBody();
         body.remove("labelId");
 
-        // label 은 nullable 필드. Jackson 의 null record 직렬화 동작 (null vs omit) 에 의존하지 않도록
-        // 중첩 id/name 이 보이지 않음을 직접 확인한다 — 어느 쪽이든 클라이언트가 의미 있는 값을 못 받는 것이 계약.
+        // 응답에 중첩 label.id/name 이 보이지 않음을 확인
         mockMvc.perform(post("/api/v1/admin/albums")
                         .header(HttpHeaders.AUTHORIZATION, adminBearer)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -357,7 +356,7 @@ class AlbumAdminControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, userBearer))
                 .andExpect(status().isForbidden());
 
-        // SecurityFilter 우회로 실제 삭제까지 도달하는 회귀를 잡기 위한 DB 가드.
+        // 실제 삭제까지 도달하지 않았는지 DB 로 확인
         assertThat(albumRepository.findById(saved.getId())).isPresent();
     }
 
@@ -445,7 +444,7 @@ class AlbumAdminControllerTest {
         persistedAlbum("Selling One", 5, AlbumStatus.SELLING);
         persistedAlbum("Hidden One", 0, AlbumStatus.HIDDEN);
 
-        // 카운트만이 아니라 content 에 HIDDEN 행이 실제로 들어있는지 단언 — 이 이슈(#119)의 핵심 계약.
+        // content 에 HIDDEN 행이 실제로 들어있는지 단언
         mockMvc.perform(get("/api/v1/admin/albums")
                         .header(HttpHeaders.AUTHORIZATION, adminBearer))
                 .andExpect(status().isOk())

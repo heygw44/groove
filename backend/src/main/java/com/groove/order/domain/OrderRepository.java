@@ -17,118 +17,55 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@link JpaSpecificationExecutor} 확장: 관리자 주문 목록의 동적 필터(상태/회원/기간 조합) 를
- * {@link OrderSpecifications} 조각으로 표현하기 위함이다 (이슈 #69). 회원/게스트 측 조회는 기존 derived
- * method 를 그대로 쓴다 — Specification 은 admin 경로 전용.
+ * JpaSpecificationExecutor 확장 — 관리자 주문 목록의 동적 필터(상태/회원/기간)를
+ * OrderSpecifications 조각으로 표현한다. Specification 은 admin 경로 전용.
  */
 public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecificationExecutor<Order> {
 
-    /**
-     * 단건 조회 (회원 GET / 게스트 lookup) — items 까지 fetch 한다.
-     *
-     * <p>{@code OrderItemResponse} 는 album LAZY 프록시의 {@code id} (DB hit 없음) 와
-     * {@code albumTitleSnapshot} (OrderItem 자체 컬럼) 만 사용하므로 album 행 join 은 불필요.
-     * 취소 흐름처럼 album 본체를 변경해야 할 때는 {@link #findWithAlbumsByOrderNumber} 를 쓴다.
-     */
+    /** 단건 조회 (회원 GET / 게스트 lookup) — items 까지 fetch 한다. */
     @EntityGraph(attributePaths = "items")
     Optional<Order> findByOrderNumber(String orderNumber);
 
-    /**
-     * 취소 흐름 전용 — items + items.album 까지 한 번에 fetch 한다.
-     *
-     * <p>{@link com.groove.order.application.OrderService#cancel} 는 OrderItem 마다
-     * {@code album.adjustStock(+qty)} 를 호출하므로 album 본체가 영속 컨텍스트에 미리
-     * 로드돼야 N+1 회피가 가능하다.
-     */
+    /** 취소 흐름 전용 — items + items.album 까지 한 번에 fetch 한다. */
     @EntityGraph(attributePaths = {"items", "items.album"})
     Optional<Order> findWithAlbumsByOrderNumber(String orderNumber);
 
-    /**
-     * 반품 접수 직렬화용 (#239) — 주문 행을 {@code PESSIMISTIC_WRITE} 로 잠가, 같은 주문에 동시 들어온 두 반품
-     * 접수가 잔여 수량 가드를 함께 통과해 과다 반품되는 것을 막는다. 락 획득 후 읽는 잔여 수량 집계가 직전 커밋된
-     * 다른 접수를 반영하도록 직렬화한다. {@code items} 는 호출 측이 트랜잭션 안에서 지연 로드한다.
-     */
+    /** 반품 접수 직렬화용 — 주문 행을 PESSIMISTIC_WRITE 로 잠근다. items 는 호출 측이 지연 로드. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.orderNumber = :orderNumber")
     Optional<Order> findByOrderNumberForUpdate(@Param("orderNumber") String orderNumber);
 
     boolean existsByOrderNumber(String orderNumber);
 
-    /**
-     * 회원 주문 목록 (페이징).
-     *
-     * <p>{@code @EntityGraph(items)} 를 두지 않는 이유: 컬렉션 fetch join + {@code Pageable} 조합은
-     * Hibernate 가 SQL LIMIT 을 적용하지 못해 모든 행을 메모리에 적재한 뒤 자바 레벨에서 페이지네이션을
-     * 수행한다 (HHH90003004 경고). {@link Order#getItems items} 컬렉션의 {@code @BatchSize} 가
-     * Order 페이지 후 IN 쿼리로 일괄 로드해 N+1 과 인메모리 페이지네이션을 동시에 회피한다.
-     */
+    /** 회원 주문 목록 (페이징). items 는 @BatchSize IN 쿼리로 일괄 로드된다. */
     Page<Order> findByMemberId(Long memberId, Pageable pageable);
 
     Page<Order> findByMemberIdAndStatus(Long memberId, OrderStatus status, Pageable pageable);
 
-    /**
-     * 회원 본인 주문 수 — 공유 DB(Testcontainers 재사용) 환경에서 동시성 테스트가 자신이 만든 주문만
-     * 집계하도록 member 스코프로 좁힌 카운트다 (전역 {@code count()} 는 타 테스트 데이터에 오염될 수 있음).
-     */
+    /** 회원 본인 주문 수 — member 스코프 카운트. */
     long countByMemberId(Long memberId);
 
-    /**
-     * 회원 탈퇴 차단 검사 (#78) — 주어진 상태 집합에 해당하는 회원 주문의 존재 여부.
-     *
-     * <p>{@code MemberService.withdraw} 가 "진행 중" 으로 보는 {@code {PAID, PREPARING, SHIPPED}} 으로
-     * 호출한다. 하나라도 있으면 탈퇴를 막아({@code MEMBER_WITHDRAWAL_BLOCKED} 409) 배송·환불 책임
-     * 주체가 사라지는 것을 방지한다. PENDING(미결제)·종착 상태(DELIVERED/COMPLETED/CANCELLED/PAYMENT_FAILED)
-     * 는 차단 대상이 아니다.
-     */
+    /** 회원 탈퇴 차단 검사 — 주어진 상태 집합에 해당하는 회원 주문의 존재 여부. */
     boolean existsByMemberIdAndStatusIn(Long memberId, Collection<OrderStatus> statuses);
 
     /**
-     * 배송 reconciliation 안전망(#169) 전용 — PAID 가 된 지 일정 시간 지났는데 아직 배송이 없는 고아 주문을
-     * {@code paid_at} 오름차순(오래된 것 먼저)으로 찾는다. 보충에는 {@code (id, orderNumber)} 만 필요하므로 경량
-     * {@link OrderNumberView} 프로젝션으로 받아 full 엔티티 적재를 피한다 — 실제 배송 생성은
-     * {@code ShippingProvisioner} 가 id 로 관리 상태 주문을 재로딩해 수행한다.
-     *
-     * <p>{@code paid_at} 은 {@link Order#changeStatus} 가 PAID 진입 시 찍는 시각이라 "결제 완료 후 경과"를 정확히
-     * 잰다 — {@code cutoff = now - min-age} 로 갓 결제돼 리스너가 곧 처리할 건은 제외한다. 정상 흐름에선 배송 생성과
-     * 함께 주문이 PREPARING 으로 전진하므로 PAID 잔류 집합은 과도 상태로 항상 소량이다(orders 상태 인덱스는
-     * 슬로우 쿼리 측정 후 W10 으로 연기). 오름차순 정렬로 적체 시 오래된 고아부터 공정하게 보충하고, {@code limit}
-     * 으로 한 주기 처리량을 제한한다.
+     * 배송 reconciliation 안전망 전용 — PAID 된 지 일정 시간 지났는데 배송이 없는 주문을 paid_at 오름차순으로 찾는다.
+     * 경량 OrderNumberView 프로젝션으로 받고, limit 으로 한 주기 처리량을 제한한다.
      */
     List<OrderNumberView> findByStatusAndPaidAtBeforeOrderByPaidAtAsc(OrderStatus status, Instant cutoff, Limit limit);
 
     /**
-     * 비배송 종착 주문 PII 익명화 배치(#188, #170 후속) 대상 — 배송이 생성되지 않는 종착 주문
-     * (미결제 {@code PENDING} / {@code PAYMENT_FAILED} / 배송 생성 전 {@code CANCELLED}) 중 마지막 변경
-     * ({@code updated_at}) 후 보존기간이 지났고 아직 익명화되지 않은({@code anonymized_at IS NULL}) 건을
-     * {@code updated_at} 오름차순(오래된 것 먼저)으로 찾는다. 회원/게스트 주문 모두 대상이다.
-     *
-     * <p>종착 비배송 주문은 종착 후 추가 쓰기가 없어 {@code updated_at == 종착 시각}이라 세 상태에 통일된 cutoff
-     * 기준으로 쓴다 — 결제 시도 후 실패해 PENDING 에 잔류하는 등 최근 활동 건은 {@code updated_at} 갱신으로
-     * 자동 제외된다. 익명화에는 식별자만 필요하므로 경량 {@link OrderNumberView} 프로젝션으로 받아 full 엔티티
-     * 적재를 피한다 — 실제 마스킹은 {@code OrderPiiAnonymizer} 가 id 로 주문(+배송)을 재로딩해 수행한다.
-     * {@code limit} 으로 한 주기 처리량을 제한한다(메모리 바운드).
-     *
-     * <p>{@code updated_at} 인덱스는 기존 {@code delivered_at}/{@code paid_at} 배치와 동일하게 슬로우 쿼리 측정
-     * 후 W10 으로 연기한다 — 다만 장기 미결제 PENDING 이 누적되면 풀스캔 비용이 커질 수 있어 모니터링이 필요하다.
+     * 비배송 종착 주문 PII 익명화 배치 대상 — 주어진 상태 집합 중 updated_at 후 보존기간이 지났고
+     * anonymized_at IS NULL 인 건을 updated_at 오름차순으로 찾는다. 경량 OrderNumberView 프로젝션, limit 으로 처리량 제한.
      */
     List<OrderNumberView> findByStatusInAndAnonymizedAtIsNullAndUpdatedAtBeforeOrderByUpdatedAtAsc(
             Collection<OrderStatus> statuses, Instant cutoff, Limit limit);
 
-    /**
-     * 앨범 삭제 차단 검사 (#159) — 해당 album 을 참조하는 order_item 존재 여부.
-     *
-     * <p>{@code order_item.album_id} 는 ON DELETE RESTRICT FK 다. {@code AlbumService.delete} 가
-     * 사전 검사로 호출해 {@code ALBUM_IN_USE}(409) 를 반환하고, 동시 INSERT race 는 DB FK 가 최종 방어한다.
-     */
+    /** 앨범 삭제 차단 검사 — 해당 album 을 참조하는 order_item 존재 여부. */
     @Query("SELECT CASE WHEN COUNT(oi) > 0 THEN true ELSE false END FROM OrderItem oi WHERE oi.album.id = :albumId")
     boolean existsByAlbumId(@Param("albumId") Long albumId);
 
-    /**
-     * 내 쿠폰함(#137) 의 사용 완료 쿠폰 → 주문번호 일괄 resolve 전용 경량 프로젝션.
-     *
-     * <p>{@code MemberCoupon.orderId} 집합으로 {@code (id, orderNumber)} 두 컬럼만 IN 조회해
-     * N+1 과 {@link Order#getItems items} 그래프 적재를 동시에 회피한다.
-     */
+    /** id 집합으로 (id, orderNumber) 두 컬럼만 IN 조회하는 경량 프로젝션. */
     List<OrderNumberView> findByIdIn(Collection<Long> ids);
 
     interface OrderNumberView {

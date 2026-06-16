@@ -14,10 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * ShippingStatus 상태 전이 매트릭스 전수 검증 (4×4 = 16 케이스).
- *
- * <p>OrderStatus(8×8)·PaymentStatus(4×4) 와 동일한 패턴으로 통일한다 (#142) —
- * "합법 전이 표 + 종착 상태" 두 단을 SSOT 로 두고, 매트릭스의 나머지 셀은 모두 불법(false).
- * 합법 전이는 4종(PREPARING→SHIPPED, PREPARING→CANCELLED, SHIPPED→DELIVERED, SHIPPED→CANCELLED) — #233 에서 CANCELLED 추가.
+ * "합법 전이 표 + 종착 상태" 두 단을 SSOT 로 두고, 나머지 셀은 모두 불법(false).
+ * 합법 전이는 4종(PREPARING→SHIPPED, PREPARING→CANCELLED, SHIPPED→DELIVERED, SHIPPED→CANCELLED).
  */
 @DisplayName("ShippingStatus — 전이 매트릭스 전수")
 class ShippingStatusTest {

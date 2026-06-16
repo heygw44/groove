@@ -25,23 +25,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 
 /**
- * 관리자 쿠폰 CRUD · 직접지급 트랜잭션 경계 (API.md §3.10, #92).
+ * 관리자 쿠폰 CRUD · 직접지급 트랜잭션 경계.
  *
- * 단일 Aggregate(Coupon/MemberCoupon)만 조작하므로 coupon 모듈에 둔다 — 주문·결제를 함께 조율하는
- * AdminOrderService 가 admin 모듈에 있는 것과 대조된다.
- *
- * 입력 검증: 형식·필수값은 DTO Bean Validation 으로 1차 차단되고, 정률 1~100·validUntil>validFrom·정률 상한
- * 필수 같은 의미 검증은 Coupon.Builder.build() 가 처리한다 — 도메인이 던진 IllegalArgumentException 을
- * ValidationException 으로 매핑해 400 으로 응답한다.
+ * 입력 검증: 형식·필수값은 DTO Bean Validation, 정률 1~100·validUntil>validFrom·정률 상한 필수 같은 의미 검증은
+ * Coupon.Builder.build() 가 처리한다 — 도메인이 던진 IllegalArgumentException 을 ValidationException 으로 매핑해
+ * 400 으로 응답한다.
  *
  * 상태 변경: changeStatus 는 행 락(findByIdForUpdate)으로 동시 변경 race 를 직렬화하고, canTransitionTo 위반은
- * 409(IllegalCouponStateTransitionException). 멱등 PATCH 관용에 따라 self-transition(from == target)은 거부하지
- * 않고 현재 상태를 그대로 반환한다.
+ * 409(IllegalCouponStateTransitionException). self-transition(from == target)은 현재 상태를 그대로 반환한다.
  *
  * 직접지급: grant 는 선착순 한정수량(total_quantity)과 독립적으로 member_coupon 1행을 INSERT 한다 —
- * incrementIssuedCount 를 호출하지 않으므로 issuedCount 는 변하지 않는다. 정책이 isIssuable 인지 가드해
- * SUSPENDED/ENDED/만료 쿠폰을 즉시-만료 회원 쿠폰으로 발급하는 운영 사고를 차단한다. 활성 회원만 허용하고, 이미
- * 보유한 회원은 409 — 동시 발급 race 의 UNIQUE 충돌 시에도 같은 409 로 응답한다.
+ * issuedCount 는 변하지 않는다. isIssuable 가드로 SUSPENDED/ENDED/만료 쿠폰 발급을 차단한다. 활성 회원만
+ * 허용하고, 이미 보유한 회원은 409 — UNIQUE 충돌 race 시에도 같은 409 로 응답한다.
  */
 @Service
 public class AdminCouponService {
@@ -63,9 +58,7 @@ public class AdminCouponService {
         this.clock = clock;
     }
 
-    /**
-     * 쿠폰 정책 생성. 도메인 빌더 검증 실패는 400 VALIDATION_FAILED 로 매핑한다.
-     */
+    /** 쿠폰 정책 생성. 도메인 빌더 검증 실패는 400 VALIDATION_FAILED 로 매핑한다. */
     @Transactional
     public Coupon create(AdminCouponCreateRequest request) {
         Coupon.Builder builder = Coupon.builder(
@@ -86,9 +79,7 @@ public class AdminCouponService {
         return saved;
     }
 
-    /**
-     * 쿠폰 정책 목록 — status 가 주어지면 필터, 없으면 전체.
-     */
+    /** 쿠폰 정책 목록 — status 가 주어지면 필터, 없으면 전체. */
     @Transactional(readOnly = true)
     public Page<Coupon> list(CouponStatus status, Pageable pageable) {
         return status == null
@@ -98,7 +89,7 @@ public class AdminCouponService {
 
     /**
      * 쿠폰 정책 상태 변경. 행 락으로 동시 변경 race 를 직렬화한다.
-     * self-transition(from == target)은 멱등 처리해 현재 상태 그대로 반환(200), canTransitionTo 위반은 409(IllegalCouponStateTransitionException).
+     * self-transition(from == target)은 현재 상태 그대로 반환(200), canTransitionTo 위반은 409(IllegalCouponStateTransitionException).
      */
     @Transactional
     public Coupon changeStatus(Long couponId, CouponStatus target) {
@@ -118,19 +109,15 @@ public class AdminCouponService {
 
     /**
      * 특정 회원에게 쿠폰 직접지급. 선착순 한정수량과 독립 — issuedCount 비증가.
-     *
-     * @throws CouponNotFoundException      쿠폰 미존재 (404)
-     * @throws CouponNotIssuableException   쿠폰이 ACTIVE 가 아니거나 발급 기간 밖 (422)
-     * @throws MemberNotFoundException      활성 회원 미존재 / 탈퇴자 (404)
-     * @throws CouponAlreadyIssuedException 회원이 이미 해당 쿠폰을 보유 (409, UNIQUE 충돌 race 포함)
+     * 쿠폰 미존재 404, ACTIVE 아님·발급 기간 밖 422, 활성 회원 미존재 404, 이미 보유 409(UNIQUE 충돌 race 포함).
      */
     @Transactional
     public MemberCoupon grant(Long couponId, Long memberId) {
-        // 행 락으로 changeStatus 와 동일 경계에 맞춰 상태 전이와 발급 가능성 검사를 직렬화한다 (#92 리뷰).
+        // 행 락으로 상태 전이와 발급 가능성 검사를 직렬화한다.
         Coupon coupon = couponRepository.findByIdForUpdate(couponId)
                 .orElseThrow(() -> new CouponNotFoundException(couponId));
         if (!coupon.isIssuable(clock.instant())) {
-            // SUSPENDED/ENDED 또는 validUntil 경과 — 즉시-만료 회원쿠폰 생성 차단 (#92 리뷰).
+            // SUSPENDED/ENDED 또는 validUntil 경과.
             throw new CouponNotIssuableException(couponId);
         }
         memberRepository.findByIdAndDeletedAtIsNull(memberId)
@@ -142,8 +129,7 @@ public class AdminCouponService {
         try {
             granted = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
         } catch (DataIntegrityViolationException uniqueRace) {
-            // 사전 검사 통과 후 다른 트랜잭션이 먼저 INSERT 한 UNIQUE 충돌일 때만 같은 의미 코드로 응답하고,
-            // 그 외 무결성 오류는 원인 은폐를 막기 위해 원예외를 재던진다 (#92 리뷰).
+            // UNIQUE 충돌이면 409, 그 외 무결성 오류는 원예외를 재던진다.
             if (memberCouponRepository.existsByCoupon_IdAndMemberId(couponId, memberId)) {
                 throw new CouponAlreadyIssuedException(couponId, memberId);
             }

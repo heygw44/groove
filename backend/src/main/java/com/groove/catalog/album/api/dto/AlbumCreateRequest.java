@@ -10,13 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
-/**
- * 앨범 생성 요청 (API §3.9 admin 카탈로그).
- *
- * <p>title 길이는 ERD §4.6 기준 300, label 은 nullable. release_year 는 ERD 표기상
- * SMALLINT — 1900 ~ 2100 으로 합리적 범위 캡 (LP 시장 시연 데이터 기준).
- * description/cover_image_url 은 nullable, 길이 상한은 DB 컬럼과 동일하게 cap.
- */
+/** 앨범 생성 요청. label/coverImageUrl/description 은 nullable. */
 public record AlbumCreateRequest(
         @Schema(description = "앨범 제목", example = "Kind of Blue", maxLength = 300)
         @NotBlank

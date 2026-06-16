@@ -14,7 +14,7 @@ const ui = useUiStore()
 
 const loading = ref(true)
 const error = ref('')
-const busy = ref(false) // 수량변경/삭제 in-flight 가드(연타 경합 방지)
+const busy = ref(false) // 수량변경/삭제 in-flight 가드
 
 onMounted(async () => {
   try {

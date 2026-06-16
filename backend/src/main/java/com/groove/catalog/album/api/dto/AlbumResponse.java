@@ -10,12 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/**
- * 앨범 응답 DTO (API §3.3 / §3.9).
- *
- * <p>API §3.3 의 AlbumDetail 형태에서 averageRating/reviewCount 는 W7 (리뷰 도메인) 도입 후 추가한다.
- * artist/genre/label 은 중첩 요약 객체. label 은 nullable.
- */
+/** 앨범 응답 DTO. artist/genre/label 은 중첩 요약 객체, label 은 nullable. */
 public record AlbumResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,
         @Schema(description = "앨범 제목", example = "Kind of Blue") String title,

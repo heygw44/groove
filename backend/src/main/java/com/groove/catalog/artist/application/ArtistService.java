@@ -12,17 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 아티스트 CRUD 트랜잭션 경계.
- *
- * <p>Genre/Label 과 달리 name UNIQUE 가 없어 중복 검증 단계가 존재하지 않는다 — 동명이인을
- * 의도적으로 허용한다 (ERD §4.3). 목록은 호출 측에서 전달한 {@link Pageable} 로 페이징된다.
- *
- * <p>동시 PUT 정책: {@code @Version} 미적용 — 두 PUT 이 겹치면 last-write-wins 로 처리된다.
- * Genre/Label 과 동일 정책이며 W10 운영 부하 측정 후 카탈로그 전반에 걸쳐 재평가한다.
- *
- * <p>delete 시 album 참조 검사: W5-3 (Album) 도입으로 ON DELETE RESTRICT FK 가 활성화되었다.
- * {@link AlbumRepository#existsByArtist_Id} 사전 검사 + {@link DataIntegrityViolationException}
- * fallback 변환으로 항상 409 {@link ArtistInUseException} 응답을 보장한다 (race-safe).
+ * 아티스트 CRUD 트랜잭션 경계. name UNIQUE 가 없어 중복 검증은 없다.
+ * delete 는 existsByArtist_Id 사전 검사 + DataIntegrityViolationException fallback 변환으로 409 ArtistInUseException 을 보장한다.
  */
 @Service
 public class ArtistService {
@@ -47,8 +38,7 @@ public class ArtistService {
         boolean nameChanged = !artist.getName().equals(command.name());
         artist.update(command.name(), command.description());
         if (nameChanged) {
-            // album.artist_name 비정규화(#204) 동기화 — FULLTEXT 검색용 복제본을 일괄 갱신.
-            // 이름이 실제 바뀐 경우에만 호출해 불필요한 벌크 UPDATE 를 피한다.
+            // album.artist_name 비정규화 복제본 일괄 동기화 (이름이 바뀐 경우에만).
             albumRepository.updateArtistNameByArtistId(id, command.name());
         }
         return artist;

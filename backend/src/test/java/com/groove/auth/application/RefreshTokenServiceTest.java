@@ -37,9 +37,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * RefreshTokenService 단위 테스트.
- *
- * <p>의존 컴포넌트는 모두 모킹. 시간은 {@link Clock#fixed} 로 고정한다.
+ * RefreshTokenService 단위 테스트. 의존 컴포넌트는 모두 모킹, 시간은 Clock.fixed 로 고정한다.
  */
 @ExtendWith(MockitoExtension.class)
 class RefreshTokenServiceTest {
@@ -235,8 +233,7 @@ class RefreshTokenServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AUTH_INVALID_TOKEN);
 
-        // 정상 사용자의 동시 요청 가능성을 고려해 race 패배는 전체 무효화하지 않는다.
-        // (실제 도난된 토큰의 재사용은 isRevoked()=true 분기로 잡힌다)
+        // race 패배는 전체 무효화하지 않는다.
         verify(refreshTokenAdmin, never()).forceRevokeAllActiveSessions(anyLong(), any());
     }
 

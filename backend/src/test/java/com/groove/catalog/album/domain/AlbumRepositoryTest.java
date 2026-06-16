@@ -49,11 +49,7 @@ class AlbumRepositoryTest {
     private Genre genre;
     private Label label;
 
-    /**
-     * FK 의존 순서 — album 을 먼저 비워야 부모(artist/genre/label) 의 deleteAllInBatch 가
-     * ON DELETE RESTRICT 에 걸리지 않는다. @DataJpaTest 의 트랜잭션 롤백이 외부 행을 다시 살리지
-     * 않으므로, 다른 @SpringBootTest 가 커밋한 잔여 행이 있어도 이 순서로 안전하게 정리된다.
-     */
+    // album 을 먼저 비운 뒤 부모(artist/genre/label) 를 정리한다.
     @BeforeEach
     void setUp() {
         albumRepository.deleteAllInBatch();
@@ -98,8 +94,7 @@ class AlbumRepositoryTest {
     @Test
     @DisplayName("[#204] album 검색 인덱스가 V21 에서 도입됨 — FULLTEXT + 필터/정렬 복합 인덱스")
     void searchIndexes_areAdded() {
-        // W10-2(#204): V6 헤더의 [W10] 의도적 누락 인덱스를 V21 에서 도입했다. 풀스캔 Before/After 시연 완료.
-        // 이 가드가 깨지면(인덱스 누락) 검색 성능 개선이 회귀했다는 신호다 — #203 의 N+1 가드 전환과 동일 의도.
+        // album 테이블의 인덱스 목록을 조회해 검색 인덱스가 존재하는지 확인한다.
         @SuppressWarnings("unchecked")
         List<String> indexNames = (List<String>) em.createNativeQuery(
                 "SELECT INDEX_NAME FROM information_schema.STATISTICS " +
@@ -112,17 +107,15 @@ class AlbumRepositoryTest {
                 "idx_album_artist",
                 "idx_album_genre",
                 "idx_album_label",
-                // V21 도입 (#204)
                 "ft_album_keyword",
                 "idx_album_status_created",
                 "idx_album_search",
                 "idx_album_year",
                 "idx_album_limited",
-                // V25 도입 (#244) — price/release_year 정렬 keyset 의 filesort 제거
                 "idx_album_status_price",
                 "idx_album_status_year"
         );
-        // 키워드는 단일 B-Tree(idx_album_title)가 아니라 FULLTEXT 로 해소했으므로 plain title 인덱스는 두지 않는다.
+        // 키워드는 FULLTEXT 로 해소하므로 plain title 인덱스는 두지 않는다.
         assertThat(indexNames).doesNotContain("idx_album_title");
     }
 

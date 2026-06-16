@@ -27,7 +27,7 @@ onMounted(async () => {
   }
 })
 
-// 빈 값은 페이로드에서 제외 — 서버는 미전송 필드를 미변경으로 처리한다(빈 문자열은 검증 대상).
+// 빈 값은 페이로드에서 제외
 function buildPayload() {
   const payload = {}
   if (form.name.trim()) payload.name = form.name.trim()
@@ -40,7 +40,7 @@ const { errors, formError, submitting, submit, clearError } = useForm(() =>
 )
 
 async function onSubmit() {
-  // 변경 필드가 없으면 no-op PATCH 로 "수정됨" 오인 토스트가 뜨지 않도록 막는다.
+  // 변경 필드가 없으면 PATCH 생략
   if (Object.keys(buildPayload()).length === 0) {
     ui.notify('변경할 내용이 없습니다.', 'info')
     return

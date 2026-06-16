@@ -26,13 +26,13 @@ const guestCart = useGuestCartStore()
 const ui = useUiStore()
 const { isAuthenticated } = storeToRefs(auth)
 
-// 아이템 출처 모드: 바로구매(query.albumId) / 회원 서버카트 / 게스트 로컬카트.
+// 아이템 출처 모드: 바로구매 / 회원 서버카트 / 게스트 로컬카트
 const buyNow = computed(() => route.query.albumId != null && route.query.albumId !== '')
 const mode = computed(() =>
   buyNow.value ? 'buy-now' : isAuthenticated.value ? 'member-cart' : 'guest-cart',
 )
 
-const lines = ref([]) // 정규화된 주문 라인 [{albumId, title, artistName, coverImageUrl, unitPrice, quantity, subtotal}]
+const lines = ref([]) // 정규화된 주문 라인
 const loading = ref(true)
 const loadError = ref('')
 
@@ -47,11 +47,11 @@ function fromCartItem(i) {
     unitPrice: i.unitPrice,
     quantity: i.quantity,
     subtotal: i.subtotal ?? i.unitPrice * i.quantity,
-    available: i.available !== false, // 게스트 카트 항목엔 available 가 없음 → 가용으로 간주(서버가 최종 검증)
+    available: i.available !== false, // 값이 없으면 가용으로 간주
   }
 }
 
-// 회원 카트에 품절·판매중지 항목이 있으면 주문을 막는다(무음 누락 대신 명시적 차단 — CartView 와 동일 정책).
+// 품절·판매중지 항목이 있으면 주문 차단
 const hasUnavailableLine = computed(() => lines.value.some((l) => !l.available))
 
 onMounted(async () => {
@@ -69,12 +69,12 @@ onMounted(async () => {
           unitPrice: album.price,
           quantity: qty,
           subtotal: album.price * qty,
-          available: true, // 바로구매는 SELLING 앨범에서만 진입(AlbumDetailView 가드)
+          available: true,
         },
       ]
     } else if (isAuthenticated.value) {
       await cart.load()
-      lines.value = cart.items.map(fromCartItem) // 품절 항목도 표시하되 주문은 차단(아래 hasUnavailableLine)
+      lines.value = cart.items.map(fromCartItem) // 품절 항목도 표시하되 주문은 차단
     } else {
       lines.value = guestCart.items.map(fromCartItem)
     }
@@ -101,16 +101,15 @@ async function loadCoupons() {
     const page = await myCoupons({ status: 'ISSUED', size: 100 })
     coupons.value = page.content ?? []
   } catch {
-    coupons.value = [] // 쿠폰 로드 실패는 무시 — 쿠폰 없이 주문 가능
+    coupons.value = [] // 쿠폰 로드 실패는 무시
   }
 }
 
 function couponLabel(c) {
-  // 할인 표기는 couponDiscountLabel 단일 출처를 재사용한다(정률 상한 maxDiscountAmount 포함).
   return `${c.name} (${couponDiscountLabel(c)})`
 }
 
-// BaseSelect 옵션 — '쿠폰 미적용' + 보유 쿠폰(최소주문금액 미달은 disabled). 단일 출처로 관리.
+// BaseSelect 옵션 — '쿠폰 미적용' + 보유 쿠폰(최소주문금액 미달은 disabled)
 const couponOptions = computed(() => [
   { value: '', label: '쿠폰 미적용' },
   ...coupons.value.map((c) => ({
@@ -155,7 +154,7 @@ async function onSubmit() {
   }
   if (!(await submit())) return
   const order = createdOrder.value
-  // 주문 성공 후 카트 정리(best-effort — 주문은 이미 생성됨).
+  // 주문 성공 후 카트 정리
   if (mode.value === 'member-cart') {
     try {
       await cart.clear()

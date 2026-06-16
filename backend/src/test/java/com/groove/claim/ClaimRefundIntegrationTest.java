@@ -51,10 +51,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 반품 환불 전 과정 통합 테스트 (#239) — 부분→전량 누적 정합 + claim 별 PG 멱등(실호출 1회).
- *
- * <p>회수·검수 자동 진행은 시간 의존이라, 스케줄러 대신 {@link ClaimService} 의 단계 위임 메서드를 직접 호출해
- * 결정적으로 INSPECTING 까지 민 뒤 환불을 검증한다(스케줄러 자체는 {@code ClaimProgressSchedulerTest} 가 단위 검증).
+ * 반품 환불 전 과정 통합 테스트 — 부분→전량 누적 정합 + claim 별 PG 멱등(실호출 1회). 스케줄러 대신
+ * ClaimService 단계 위임 메서드를 직접 호출해 INSPECTING 까지 민 뒤 환불을 검증한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -114,8 +112,7 @@ class ClaimRefundIntegrationTest {
     }
 
     private void clearAll() {
-        // 자식(FK 참조)부터 정리 — refresh_token/claim/shipping/payment → orders/member 순. orders 삭제는
-        // order_item/claim/shipping/review 등 ON DELETE CASCADE 를 타지만, 명시적으로 먼저 비워 의존을 끊는다.
+        // 자식(FK 참조)부터 정리 — refresh_token/claim/shipping/payment → orders/member 순.
         refreshTokenRepository.deleteAllInBatch();
         claimRepository.deleteAllInBatch();
         shippingRepository.deleteAllInBatch();
@@ -147,7 +144,7 @@ class ClaimRefundIntegrationTest {
 
         Shipping shipping = Shipping.prepare(saved, saved.getShippingInfo(), "trk-" + seq + "-" + System.nanoTime());
         shipping.markShipped();
-        shipping.markDelivered(); // delivered_at = now → 반품 기한 이내
+        shipping.markDelivered(); // delivered_at = now
         shippingRepository.saveAndFlush(shipping);
         return saved;
     }
@@ -224,7 +221,7 @@ class ClaimRefundIntegrationTest {
         MockPaymentGateway mock = (MockPaymentGateway) paymentGateway;
         int callsBefore = mock.refundCallCount();
 
-        // 재입고 시 오버플로를 유발하도록 재고를 Integer.MAX_VALUE 로 — adjustStock(+2)가 IllegalStockAdjustmentException.
+        // 재고를 Integer.MAX_VALUE 로 — 재입고 adjustStock(+2)가 오버플로로 실패.
         Album album = albumRepository.findById(albumId).orElseThrow();
         ReflectionTestUtils.setField(album, "stock", Integer.MAX_VALUE);
         albumRepository.saveAndFlush(album);
@@ -232,11 +229,11 @@ class ClaimRefundIntegrationTest {
         // 1차 환불 — PG 호출 후 재입고 실패 → 트랜잭션 롤백.
         assertThatThrownBy(() -> claimService.completeRefund(claimId)).isInstanceOf(RuntimeException.class);
 
-        // 롤백되어 claim INSPECTING / payment PAID 유지, 단 PG 측엔 1건 기록.
+        // claim INSPECTING / payment PAID 유지, PG 측엔 1건 기록.
         assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(mock.refundCallCount()).isEqualTo(callsBefore + 1);
 
-        // 재고를 정상값으로 낮춰 재시도가 성공하도록.
+        // 재고를 정상값으로 낮춤.
         Album fixed = albumRepository.findById(albumId).orElseThrow();
         ReflectionTestUtils.setField(fixed, "stock", 10);
         albumRepository.saveAndFlush(fixed);
@@ -295,19 +292,19 @@ class ClaimRefundIntegrationTest {
                 List.of(new ClaimCreateCommand.Line(orderItemId, 1))));
         assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getRefundedAmount()).isEqualTo(UNIT_PRICE);
 
-        // 2) 잔여 1개를 배송 진행 후 배송완료로 — 반품 자격(DELIVERED) 확보(기한 anchor 는 order.updatedAt 폴백).
+        // 2) 잔여 1개를 배송 진행 후 배송완료로 — 반품 자격(DELIVERED) 확보.
         Order live = orderRepository.findById(orderId).orElseThrow();
         live.changeStatus(OrderStatus.PREPARING, null);
         live.changeStatus(OrderStatus.SHIPPED, null);
         live.changeStatus(OrderStatus.DELIVERED, null);
         orderRepository.saveAndFlush(live);
 
-        // 3) 잔여 1개 반품(RETURN) — 이미 클레임된 취소 1개를 차감해 반품가능 수량 1 (교차 타입 회계).
+        // 3) 잔여 1개 반품(RETURN) — 클레임된 취소 1개 차감해 반품가능 수량 1.
         Long returnClaimId = requestClaim(order.getOrderNumber(), orderItemId, 1);
         driveToInspecting(returnClaimId);
         Claim refunded = claimService.completeRefund(returnClaimId);
 
-        // 반품 환불은 정가 15000(무쿠폰), 결제는 전액(30000) REFUNDED — 취소가 곡선을 흔들지 않음.
+        // 반품 환불은 정가 15000(무쿠폰), 결제는 전액(30000) REFUNDED.
         assertThat(refunded.getRefundAmount()).isEqualTo(UNIT_PRICE);
         Payment payment = paymentRepository.findByOrderId(orderId).orElseThrow();
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);

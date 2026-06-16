@@ -8,8 +8,7 @@ const keyword = ref('')
 
 function onSubmit() {
   const q = keyword.value.trim()
-  // 이미 카탈로그면 적용된 필터/정렬을 보존하고 keyword 만 갱신(페이지는 초기화).
-  // 다른 화면에서 검색하면 새 카탈로그 조회로 시작한다.
+  // 카탈로그면 기존 쿼리 보존하고 keyword 갱신, 그 외엔 새 카탈로그 조회로 시작
   const base = route.name === 'catalog' ? route.query : {}
   router.push({ name: 'catalog', query: { ...base, keyword: q || undefined, page: undefined } })
 }

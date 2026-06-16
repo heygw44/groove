@@ -6,21 +6,20 @@ import { formatDate } from '@/lib/format'
 import { usePolling } from '@/composables/usePolling'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
-// 운송장 번호로 배송 상태를 조회·폴링해 진행 단계를 보여준다. 공개 엔드포인트라 회원/게스트 공용.
-// trackingNumber 가 빈 값이면(배송 미생성/추적 불가) 안내만 표시하고 폴링하지 않는다.
+// 운송장 번호로 배송 상태를 조회·폴링해 진행 단계를 표시. 빈 값이면 안내만 표시하고 폴링 안 함
 const props = defineProps({ trackingNumber: { type: String, default: '' } })
 
 const shipping = ref(null)
 const error = ref('')
 const POLL_MS = 2000
-const MAX_ATTEMPTS = 30 // ~60s. 로컬 스케줄러는 PREPARING→DELIVERED ~12s.
-const TERMINAL_STATUSES = ['DELIVERED', 'CANCELLED'] // 더 이상 진행 없음 — 폴링 종료
+const MAX_ATTEMPTS = 30
+const TERMINAL_STATUSES = ['DELIVERED', 'CANCELLED'] // 종착 — 폴링 종료
 const poller = usePolling()
 
 async function pollOnce() {
   shipping.value = await trackShipping(props.trackingNumber)
   error.value = ''
-  return TERMINAL_STATUSES.includes(shipping.value.status) // 종착(완료·취소) — 폴링 종료
+  return TERMINAL_STATUSES.includes(shipping.value.status) // 종착이면 폴링 종료
 }
 
 function start() {
@@ -33,7 +32,7 @@ function start() {
       maxAttempts: MAX_ATTEMPTS,
       immediate: true,
       onExhausted: () => {
-        // 한도까지 한 번도 못 받았으면(배송 생성 직후 404 지속 등) 에러 표시.
+        // 한도까지 한 번도 못 받았으면 에러 표시
         if (!shipping.value) error.value = '배송 정보를 불러오지 못했습니다.'
       },
     })
@@ -42,7 +41,7 @@ function start() {
 
 watch(() => props.trackingNumber, start, { immediate: true })
 
-// 발송 전 취소·환불된 배송은 진행 단계 바 대신 취소 안내를 보여준다 (#233).
+// 취소된 배송은 진행 단계 바 대신 취소 안내 표시
 const isCancelled = computed(() => shipping.value?.status === 'CANCELLED')
 const reached = (idx) => SHIPPING_STEPS.indexOf(shipping.value?.status) >= idx
 const passed = (idx) => SHIPPING_STEPS.indexOf(shipping.value?.status) > idx

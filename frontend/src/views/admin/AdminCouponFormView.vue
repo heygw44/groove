@@ -13,7 +13,7 @@ import BaseButton from '@/components/base/BaseButton.vue'
 const router = useRouter()
 const ui = useUiStore()
 
-// datetime-local 입력 문자열("YYYY-MM-DDTHH:mm") 포맷터 — 기본값(지금 ~ +30일) 채우기용.
+// datetime-local 입력 문자열("YYYY-MM-DDTHH:mm") 포맷터
 function toLocalInput(d) {
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -24,17 +24,16 @@ const form = reactive({
   name: '',
   discountType: 'FIXED_AMOUNT',
   discountValue: '',
-  maxDiscountAmount: '', // PERCENTAGE 일 때만 의미. 빈값 = 상한 없음.
+  maxDiscountAmount: '', // PERCENTAGE 일 때만 의미, 빈값 = 상한 없음
   minOrderAmount: 0,
-  totalQuantity: '', // 빈값 = 무제한(직접지급 전용).
+  totalQuantity: '', // 빈값 = 무제한
   perMemberLimit: 1,
   validFrom: toLocalInput(now),
   validUntil: toLocalInput(new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)),
 })
 
 const { errors, formError, submitting, submit, clearError } = useForm(async () => {
-  // 필수값 클라이언트 검증 — 빈 숫자 필드('')는 서버에서 violation 없는 일반 400 으로 떨어지고,
-  // 빈/잘못된 날짜는 new Date('').toISOString() 가 RangeError 를 던진다. 사전에 막아 필드 에러로 보여준다.
+  // 필수값 클라이언트 검증 — violations 를 만들어 필드 에러로 표시
   const v = []
   if (!form.name.trim()) v.push({ field: 'name', message: '쿠폰 이름을 입력해 주세요.' })
   if (form.discountValue === '') v.push({ field: 'discountValue', message: '할인값을 입력해 주세요.' })

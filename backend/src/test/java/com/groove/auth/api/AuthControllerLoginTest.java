@@ -56,7 +56,7 @@ class AuthControllerLoginTest {
 
     @BeforeEach
     void setUp() {
-        // refresh_token 이 member 에 FK 를 가지므로 자식부터 삭제한다.
+        // 자식(refresh_token)부터 삭제한다.
         refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAll();
         Member member = MemberFixtures.register(
@@ -80,13 +80,13 @@ class AuthControllerLoginTest {
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").isNumber())
-                // refresh 토큰은 body 에 노출하지 않고 HttpOnly 쿠키로만 내려간다 (#163)
+                // refresh 토큰은 body 에 없고 HttpOnly 쿠키로만 내려간다
                 .andExpect(jsonPath("$.refreshToken").doesNotExist())
                 .andExpect(cookie().exists(REFRESH_COOKIE))
                 .andExpect(cookie().value(REFRESH_COOKIE, org.hamcrest.Matchers.not(org.hamcrest.Matchers.emptyOrNullString())))
-                // 보안 속성 회귀 방지: HttpOnly·Secure·SameSite=Strict·Path 스코프를 모두 단언 (#163)
+                // HttpOnly·Secure·SameSite=Strict·Path 스코프를 모두 단언
                 .andExpect(cookie().httpOnly(REFRESH_COOKIE, true))
-                .andExpect(cookie().secure(REFRESH_COOKIE, true)) // test 프로파일은 secure 기본값 true 상속
+                .andExpect(cookie().secure(REFRESH_COOKIE, true)) // test 프로파일 secure 기본값 true
                 .andExpect(cookie().sameSite(REFRESH_COOKIE, "Strict"))
                 .andExpect(cookie().path(REFRESH_COOKIE, "/api/v1/auth"));
     }
@@ -150,7 +150,7 @@ class AuthControllerLoginTest {
     @Test
     @DisplayName("로그아웃 refresh 쿠키 없음 → 200 + 삭제 쿠키도 함께 내려감 (멱등, #163)")
     void logout_missingCookie_returns200() throws Exception {
-        // 쿠키가 없어도 clear() 삭제 쿠키(Max-Age=0)는 항상 응답에 실린다 — 브라우저 잔존 쿠키 제거 보장.
+        // 쿠키가 없어도 삭제 쿠키(Max-Age=0)는 항상 응답에 실린다.
         mockMvc.perform(post("/api/v1/auth/logout"))
                 .andExpect(status().isOk())
                 .andExpect(cookie().maxAge(REFRESH_COOKIE, 0));

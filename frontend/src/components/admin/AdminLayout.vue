@@ -1,5 +1,5 @@
 <script setup>
-// 관리자 콘솔 레이아웃(#119) — 좌측 사이드바 + <router-view/>. App.vue 의 max-w-6xl main 안에서 렌더된다.
+// 관리자 콘솔 레이아웃 — 좌측 사이드바 + <router-view/>
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -11,7 +11,7 @@ const NAV = [
   { to: '/admin/coupons', label: '쿠폰' },
 ]
 
-// 대시보드(/admin)는 정확 매칭, 나머지는 접두 매칭(하위 상세/폼에서도 활성 유지).
+// 대시보드는 정확 매칭, 나머지는 접두 매칭
 function isActive(item) {
   return item.exact ? route.path === item.to : route.path.startsWith(item.to)
 }

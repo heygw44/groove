@@ -12,9 +12,8 @@ const router = useRouter()
 const ui = useUiStore()
 
 const form = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
-const confirmError = ref('') // 새 비밀번호 확인 불일치(클라이언트 검증)
-// "새 비밀번호 == 현재" 는 서버가 입력 필드에 매핑되지 않는 이름(newPasswordDistinct)으로 내려주므로
-// 클라이언트에서 즉시 newPassword 필드 에러로 표시한다(현재/새 값을 모두 보유하므로 사전 검증 가능).
+const confirmError = ref('') // 새 비밀번호 확인 불일치
+// "새 비밀번호 == 현재" 를 newPassword 필드 에러로 표시
 const sameError = ref('')
 
 const { errors, formError, submitting, submit, clearError, reset } = useForm(() =>
@@ -28,11 +27,11 @@ function onNewPasswordInput() {
 
 function onCurrentPasswordInput() {
   clearError('currentPassword')
-  sameError.value = '' // 현재 비번을 고쳐 "새==현재"를 해소해도 메시지가 남지 않도록 함께 지운다.
+  sameError.value = '' // "새==현재" 에러 메시지도 함께 제거
 }
 
 async function onSubmit() {
-  // 클라이언트 사전 검증 — 서버 호출 전에 직전 서버 에러를 초기화해 stale 메시지가 남지 않게 한다.
+  // 서버 호출 전 직전 에러 초기화
   reset()
   confirmError.value = ''
   sameError.value = ''
@@ -45,7 +44,7 @@ async function onSubmit() {
     return
   }
   if (!(await submit())) return
-  // 서버가 모든 refresh 토큰을 폐기했으므로 로컬 로그아웃 후 재로그인을 유도한다.
+  // 로컬 로그아웃 후 재로그인 유도
   await logoutFlow()
   ui.notify('비밀번호가 변경되었습니다. 다시 로그인해 주세요.', 'success')
   router.replace({ name: 'login' })

@@ -128,7 +128,7 @@ class ClaimRepositoryTest {
         List<Claim> result = claimRepository.findByStatusAndApprovedAtBeforeOrderByApprovedAtAscIdAsc(
                 ClaimStatus.APPROVED, Instant.parse("2021-01-01T00:00:00Z"), Limit.of(1000));
 
-        // 공유 DB라 타 테스트 데이터가 섞일 수 있어 자기 id 기준으로만 단언한다.
+        // 자기 id 기준으로만 단언.
         assertThat(result).extracting(Claim::getId)
                 .contains(oldApproved.getId())
                 .doesNotContain(recentApproved.getId());

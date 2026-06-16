@@ -2,7 +2,7 @@
 import { formatWon, formatDate } from '@/lib/format'
 import { orderStatusLabel } from '@/lib/order-enums'
 
-// 주문 응답(OrderResponse)을 읽기 전용으로 렌더하는 표시 컴포넌트 — OrderDetailView·GuestLookupView 공유.
+// 주문 응답을 읽기 전용으로 렌더하는 표시 컴포넌트
 defineProps({ order: { type: Object, required: true } })
 </script>
 
@@ -26,7 +26,7 @@ defineProps({ order: { type: Object, required: true } })
           </span>
           <span class="ml-3 font-medium text-vinyl-black">{{ formatWon(it.subtotal) }}</span>
         </div>
-        <!-- 항목별 액션(예: 리뷰 작성). 슬롯 미전달 시(게스트 조회 등) 아무것도 렌더하지 않는다. -->
+        <!-- 항목별 액션 슬롯. 미전달 시 아무것도 렌더하지 않음 -->
         <slot name="item-action" :item="it" />
       </li>
     </ul>

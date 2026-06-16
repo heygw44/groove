@@ -1,5 +1,4 @@
 // route.query 값 헬퍼 — 중복 키(string[])·undefined 를 안전하게 정규화한다.
-// (?keyword=a&keyword=b 처럼 같은 키가 중복되면 vue-router 가 배열을 준다)
 
 /** route.query 값을 단일 문자열로 정규화. 배열이면 첫 값, 없으면 ''. */
 export function firstStr(v) {

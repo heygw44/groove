@@ -61,7 +61,7 @@ class MemberServiceTest {
 
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
-    // 실제 EmailHasher(테스트 시크릿) — signup 이 v1/legacy 해시를 계산하므로 mock 대신 실물을 쓴다.
+    // 실제 EmailHasher(테스트 시크릿).
     private final EmailHasher emailHasher =
             new EmailHasher(new EmailHashProperties(MemberFixtures.TEST_EMAIL_HASH_SECRET));
 
@@ -73,7 +73,7 @@ class MemberServiceTest {
                 memberRepository, passwordEncoder, orderRepository, eventPublisher, emailHasher, clock);
     }
 
-    /** signup 의 양방향 점유 검사 인자 — v1(HMAC)·legacy(SHA-256) 순서. */
+    /** signup 의 점유 검사 인자 — v1(HMAC)·legacy(SHA-256). */
     private List<String> occupancyHashes(String email) {
         return List.of(emailHasher.hash(email), emailHasher.legacyHash(email));
     }
@@ -218,7 +218,7 @@ class MemberServiceTest {
 
         assertThat(member.isWithdrawn()).isTrue();
         assertThat(member.getDeletedAt()).isEqualTo(NOW);
-        // PII 익명화 (#170): 평문 제거, email_hash 는 보존(재가입 차단 유지).
+        // PII 익명화: 평문 제거, email_hash 보존.
         assertThat(member.getEmail()).startsWith("withdrawn-").endsWith("@deleted.local");
         assertThat(member.getName()).isEqualTo("탈퇴회원");
         assertThat(member.getPhone()).isNull();
@@ -288,7 +288,7 @@ class MemberServiceTest {
         memberService.withdraw(1L, "P@ssw0rd!2024");
 
         assertThat(member.getDeletedAt()).isEqualTo(Instant.parse("2026-05-01T00:00:00Z"));
-        // 재탈퇴여도 비밀번호 재확인 계약은 유지된다 — no-op 분기 전에 검증되는지 명시적으로 확인.
+        // 재탈퇴여도 비밀번호 재확인은 수행된다.
         verify(passwordEncoder).matches("P@ssw0rd!2024", "$2a$12$hash");
         verifyNoInteractions(orderRepository);
         verifyNoInteractions(eventPublisher);

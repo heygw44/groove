@@ -50,7 +50,7 @@ class RequestPathsTest {
 
     @Test
     void preservesQueryDelimiterIsNotInRequestUri() {
-        // getRequestURI 는 query string 을 포함하지 않으므로 별도 처리는 불필요하다.
+        // getRequestURI 는 query string 을 포함하지 않는다
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRequestURI("/api/v1/auth/login");
         request.setQueryString("foo=bar");

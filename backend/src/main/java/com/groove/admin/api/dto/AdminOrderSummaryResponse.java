@@ -7,10 +7,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
 /**
- * 관리자 주문 목록(요약) 응답 (이슈 #69).
- *
- * <p>회원용 {@code OrderSummaryResponse} 의 "대표 앨범 제목" 대신 운영에 필요한 소유자 식별 정보
- * ({@code memberId}/{@code guestEmail}) 를 노출한다. 라인 단위 정보는 상세({@link AdminOrderResponse}) 에서.
+ * 관리자 주문 목록(요약) 응답. 소유자 식별 정보(memberId/guestEmail)를 노출한다.
+ * 라인 단위 정보는 상세(AdminOrderResponse)에서.
  */
 public record AdminOrderSummaryResponse(
         @Schema(description = "주문 번호 (ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260606-A1B2C3")

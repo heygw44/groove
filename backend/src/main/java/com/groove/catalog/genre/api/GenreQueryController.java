@@ -13,10 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 장르 공개 조회 (API §3.4).
- *
- * <p>비로그인 사용자도 GET 으로 전체 목록을 조회할 수 있다.
- * 인증 경계는 {@code SecurityConfig} 의 {@code PUBLIC_GET_PATTERNS} 에 등록된다.
+ * 장르 공개 조회 (비로그인 GET 전체 목록).
  */
 @Tag(name = "장르", description = "장르 공개 조회 (비로그인 — 전체 목록)")
 @RestController

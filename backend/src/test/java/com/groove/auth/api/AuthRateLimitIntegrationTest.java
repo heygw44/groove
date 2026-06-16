@@ -26,13 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * #23 · #81 — 로그인/회원가입/비밀번호 변경 IP 기반 Rate Limit 통합 테스트.
- *
- * <p>운영 기본값 대신 작은 한도를 주입해 한도 초과 직후 429 응답을 검증한다.
- * 각 테스트는 IP 를 다르게 사용해 정책 캐시가 다른 케이스에 영향을 주지 않게 한다.
- *
- * <p>비밀번호 변경(#81)은 인증 엔드포인트지만 RateLimitFilter 가 Spring Security 보다 먼저
- * 실행되므로, 미인증 요청도 한도까지는 401(인증 거부)·초과 시 429 로 처리되어 정책을 검증할 수 있다.
+ * 로그인/회원가입/비밀번호 변경 IP 기반 Rate Limit 통합 테스트 — 작은 한도를 주입해
+ * 한도 초과 직후 429 응답을 검증한다. 각 테스트는 IP 를 다르게 써서 버킷을 분리한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -124,7 +119,7 @@ class AuthRateLimitIntegrationTest {
         mockMvc.perform(loginRequest(hot, json))
                 .andExpect(status().isTooManyRequests());
 
-        // 다른 IP 는 영향 없음 — 인증 실패(401) 가 정상 흐름
+        // 다른 IP 는 영향 없음 — 인증 실패(401)
         mockMvc.perform(loginRequest(cool, json))
                 .andExpect(status().isUnauthorized());
     }
@@ -137,7 +132,7 @@ class AuthRateLimitIntegrationTest {
                 "currentPassword", "P@ssw0rd!2024",
                 "newPassword", "NewP@ss!98765"));
 
-        // 미인증 요청 — RateLimitFilter 가 Security 보다 먼저 토큰을 소비하고, 통과분은 401 로 끝난다.
+        // 미인증 요청 — RateLimitFilter 가 먼저 토큰을 소비하고, 통과분은 401 로 끝난다.
         for (int i = 0; i < 2; i++) {
             mockMvc.perform(passwordChangeRequest(ip, body))
                     .andExpect(status().isUnauthorized());

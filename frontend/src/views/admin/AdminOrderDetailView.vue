@@ -11,8 +11,7 @@ import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
 const route = useRoute()
 const ui = useUiStore()
-// 라우트 파라미터를 반응형으로 읽는다 — 같은 인스턴스가 다른 주문 URL 로 재사용돼도 stale 한 주문번호로
-// 잘못된 주문을 조회/전환/환불하지 않게 한다(아래 watch 가 재로드).
+// 라우트 파라미터의 주문번호를 반응형으로 읽음
 const orderNumber = computed(() => route.params.orderNumber)
 
 const order = ref(null)

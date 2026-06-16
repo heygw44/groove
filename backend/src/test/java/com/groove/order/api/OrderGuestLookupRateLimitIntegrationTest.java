@@ -17,11 +17,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 게스트 주문 조회 Rate Limit 통합 테스트 (#208) — IP당 한도 초과 시 429, IP 간 버킷 독립.
- *
- * <p>{@code capacity=3} 으로 override 한다. 미존재 주문번호로 호출하면 RateLimitFilter(컨트롤러 이전)는
- * 토큰을 통과시키고 컨트롤러가 404(ORDER_NOT_FOUND, 이메일 불일치/주문 없음 모두 404)를 내므로, 토큰
- * 소진 전까지는 404·소진 후 429 로 한도를 관찰한다. 게스트 조회는 비인증 공개 엔드포인트라 IP 로 키잉한다.
+ * 게스트 주문 조회 Rate Limit 통합 테스트 — IP당 한도 초과 시 429, IP 간 버킷 독립.
+ * capacity=3 으로 override 하고, 미존재 주문번호로 호출해 토큰 소진 전 404·소진 후 429 를 관찰한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

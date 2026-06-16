@@ -14,16 +14,11 @@ import org.springframework.stereotype.Component;
 import java.util.function.Supplier;
 
 /**
- * PATCH /api/v1/members/me/password 에 대한 회원 단위 Rate Limit 정책 (#81, #167).
+ * PATCH /api/v1/members/me/password 에 대한 회원 단위 Rate Limit 정책.
  *
- * 인증된 엔드포인트이므로 "회원당 N회" 를 키로 쓴다. 단, RateLimitFilter 는 Spring Security 필터보다
- * 먼저 실행되어 SecurityContext 가 아직 비어 있으므로 — principal 대신 Authorization 헤더의 Bearer
- * 토큰을 JwtProvider 로 직접 디코드해 memberId 를 키로 삼는다(CouponIssueRateLimitPolicy 와 동일 패턴).
- * 토큰이 없거나 위조면(곧 Security 가 401 처리) IP 로 폴백해 키가 항상 결정된다.
- *
- * IP 만 키로 쓰면 (1) NAT/CGNAT 뒤 정상 사용자들이 한도를 서로 소진하고, (2) 탈취한 access 토큰으로
- * "현재 비밀번호" 를 브루트포스할 때 프록시 로테이션으로 IP 만 바꾸면 계정 단위 누적 제한이 사라진다.
- * memberId 키잉으로 두 문제를 모두 차단한다.
+ * RateLimitFilter 는 Spring Security 필터보다 먼저 실행되어 SecurityContext 가 비어 있으므로,
+ * Authorization 헤더의 Bearer 토큰을 JwtProvider 로 직접 디코드해 memberId 를 키로 삼는다.
+ * 토큰이 없거나 위조면 IP 로 폴백한다.
  *
  * 한도/리필 주기는 AuthRateLimitProperties 에서 주입받는다. 한도 초과 시 RateLimitFilter 가 429 +
  * Retry-After 응답을 작성한다.
@@ -68,8 +63,7 @@ public class PasswordChangeRateLimitPolicy implements RateLimitPolicy {
     }
 
     /**
-     * 비밀번호 변경 요청자의 memberId 를 키로 반환한다. 토큰 부재/위조 시 IP 폴백 — 그 요청들은
-     * 어차피 Security 에서 401 이지만, 키가 null 이 되지 않도록 결정적 폴백을 둔다.
+     * 비밀번호 변경 요청자의 memberId 를 키로 반환한다. 토큰 부재/위조 시 IP 로 폴백한다.
      */
     private String resolveMemberKey(HttpServletRequest request) {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
@@ -83,9 +77,6 @@ public class PasswordChangeRateLimitPolicy implements RateLimitPolicy {
                 }
             }
         }
-        // 프록시 뒤 운영 시 getRemoteAddr() 가 실제 클라이언트 IP 가 되려면 컨테이너의
-        // server.forward-headers-strategy 설정이 필요하다 (RateLimitKeyResolver.clientIp() 와 동일 전제).
-        // 이 폴백은 어차피 곧 401 이 될 무/위조 토큰 요청에만 닿으므로 실질 영향은 작다.
         return "ip:" + request.getRemoteAddr();
     }
 }

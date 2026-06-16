@@ -33,14 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 회원 본인 주문 목록 (#44, API.md §3.5 — GET /members/me/orders).
- *
- * <p>{@link OrderController} 와 분리한 이유: URL prefix 가 {@code /members/me/orders} 로 다르고,
- * 본 컨트롤러는 항상 인증된 회원에게만 노출된다 — SecurityConfig 의 {@code anyRequest().authenticated()}
- * 기본 정책을 그대로 따라간다.
- *
- * <p>정렬 화이트리스트: {@code createdAt} 만 허용 — Album 검색과 동일한 보안 패턴 (인덱스 없는
- * 컬럼 정렬 차단).
+ * 회원 본인 주문 목록 (GET /members/me/orders) — 항상 인증된 회원에게만 노출.
+ * 정렬 화이트리스트: createdAt 만 허용.
  */
 @Tag(name = "내 주문", description = "로그인한 회원 본인의 주문 목록 조회 (인증 필요)")
 @SecurityRequirement(name = "bearerAuth")
@@ -50,7 +44,7 @@ public class MemberOrderController {
 
     private static final Set<String> ALLOWED_SORT_PROPERTIES = Set.of("createdAt");
 
-    /** 커서 페이징 윈도우 상한 — offset 의 {@code spring.data.web.pageable.max-page-size} 와 동일. */
+    /** 커서 페이징 윈도우 상한. */
     private static final int MAX_SCROLL_SIZE = 100;
 
     private final OrderService orderService;
@@ -97,8 +91,7 @@ public class MemberOrderController {
             @RequestParam(required = false) String cursor,
             @Parameter(description = "페이지 크기 (1~100, 기본 20)", example = "20")
             @RequestParam(defaultValue = "20") int size) {
-        // 정렬은 서버 고정(createdAt DESC) + id tiebreaker — offset 화이트리스트(createdAt)와 동일 정책이라
-        // 클라이언트 sort 입력을 받지 않아 SortValidator 가 불필요하다.
+        // 정렬은 서버 고정(createdAt DESC) + id tiebreaker. 클라이언트 sort 입력을 받지 않는다.
         Sort sort = KeysetSort.withIdTiebreaker(Sort.by(Sort.Direction.DESC, "createdAt"));
         ScrollPosition position = cursorCodec.resolve(cursor, sort);
         int limit = Math.clamp(size, 1, MAX_SCROLL_SIZE);

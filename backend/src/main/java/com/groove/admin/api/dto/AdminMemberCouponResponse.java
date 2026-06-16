@@ -7,10 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
 /**
- * 관리자 직접지급 응답 (API.md §3.10 POST /admin/coupons/{id}/grant).
- *
- * <p>발급된 {@code member_coupon} 의 식별자와 만료 시각을 노출해, 호출자가 후속 추적(취소·문의
- * 응답·UI 갱신) 시 추가 조회 없이 결과를 사용할 수 있게 한다. 정책 요약은 별도 GET 으로 충분.
+ * 관리자 직접지급 응답 (POST /admin/coupons/{id}/grant). 발급된 member_coupon 의 식별자와 만료 시각을 노출한다.
  */
 public record AdminMemberCouponResponse(
         @Schema(description = "발급된 회원 쿠폰 ID", example = "501")

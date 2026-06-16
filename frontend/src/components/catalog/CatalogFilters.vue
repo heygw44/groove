@@ -8,21 +8,21 @@ import { FORMAT_OPTIONS, SORT_OPTIONS } from '@/lib/enums'
 
 const { route, patchQuery } = useRouteQuery()
 
-// 필터 키 — 정렬/페이지 같은 비필터 쿼리와 구분(초기화·활성 판정에 사용).
+// 필터 키 목록
 const FILTER_KEYS = ['keyword', 'genreId', 'labelId', 'artistId', 'format', 'isLimited', 'status']
 
 const genres = ref([])
 const labels = ref([])
 const artists = ref([])
 
-// 옵션 데이터는 거의 불변이라 모듈 레벨 캐시로 1회만 받아 카탈로그 재진입 시 재사용한다.
+// 옵션 데이터는 모듈 레벨 캐시로 1회만 로드
 let optionsCache = null
 async function loadOptions() {
   if (!optionsCache) {
     const [g, l, a] = await Promise.all([
       taxonomyApi.genres(),
       taxonomyApi.labels(),
-      // 아티스트 옵션은 백엔드 max-page-size(=100)까지. 현재 카탈로그 규모엔 충분.
+      // 아티스트 옵션은 최대 100개
       artistsApi.list({ size: 100, sort: 'name,asc' }),
     ])
     optionsCache = { genres: g, labels: l, artists: a.content }
@@ -37,16 +37,16 @@ onMounted(async () => {
     labels.value = opts.labels
     artists.value = opts.artists
   } catch {
-    // 옵션 로드 실패는 무시 — 필터 없이도 목록 탐색 가능.
+    // 옵션 로드 실패는 무시
   }
 })
 
-// 단일 필터 키 변경 → page 초기화하며 push(빈 값은 patchQuery 가 키 제거).
+// 단일 필터 키 변경 → page 초기화하며 push
 function setParam(key, value) {
   patchQuery({ [key]: value, page: undefined })
 }
 
-// select 양방향 바인딩 헬퍼 — getter 는 현재 쿼리값(문자열), setter 는 push.
+// select 양방향 바인딩 헬퍼
 function model(key) {
   return computed({
     get: () => firstStr(route.query[key]),
@@ -60,7 +60,7 @@ const artistId = model('artistId')
 const format = model('format')
 const status = model('status')
 
-// 정렬 기본값(createdAt,desc)은 URL 에 노출하지 않아 깔끔하게 유지.
+// 정렬 기본값(createdAt,desc)은 URL 에 노출 안 함
 const sort = computed({
   get: () => firstStr(route.query.sort) || 'createdAt,desc',
   set: (v) => setParam('sort', v === 'createdAt,desc' ? undefined : v),
@@ -71,7 +71,7 @@ const isLimited = computed({
   set: (v) => setParam('isLimited', v ? 'true' : undefined),
 })
 
-// keyword 는 입력 중 history 오염을 막기 위해 로컬 ref → 제출(Enter) 시 적용.
+// keyword 는 로컬 ref 로 두고 제출 시 적용
 const keyword = ref(firstStr(route.query.keyword))
 watch(
   () => route.query.keyword,
@@ -83,9 +83,9 @@ function applyKeyword() {
   setParam('keyword', keyword.value.trim())
 }
 
-// 활성 '필터'가 있을 때만 초기화 노출(정렬·페이지만으로는 노출 안 함).
+// 활성 필터가 있을 때만 초기화 노출
 const hasActiveFilter = computed(() => FILTER_KEYS.some((k) => firstStr(route.query[k]) !== ''))
-// 초기화는 필터 키와 page 만 제거하고 정렬은 보존한다.
+// 초기화는 필터 키와 page 만 제거, 정렬은 보존
 function reset() {
   keyword.value = ''
   const cleared = Object.fromEntries(FILTER_KEYS.map((k) => [k, undefined]))

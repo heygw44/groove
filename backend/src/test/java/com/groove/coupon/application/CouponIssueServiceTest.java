@@ -38,10 +38,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * CouponIssueService 단위 테스트 — 프로덕션 발급 경로({@link CouponIssueService#issue})의 검증 분기.
- *
- * <p>동시성 정확성(원자적 UPDATE·UNIQUE 롤백)은 실제 DB 가 필요하므로
- * {@code CouponIssuanceConcurrencyTest}(Testcontainers)에서 검증한다.
+ * CouponIssueService 단위 테스트 — 발급 경로(issue)의 검증 분기.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CouponIssueService — 발급 검증 분기 (mocked repository)")
@@ -68,7 +65,7 @@ class CouponIssueServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         service = new CouponIssueService(couponRepository, memberCouponRepository, memberRepository, clock);
-        // 활성 회원 기본값 — 가드(#187)는 모든 issue() 진입부에서 호출된다. 탈퇴 시나리오만 false 로 override 한다.
+        // 활성 회원 기본값. 탈퇴 시나리오만 false 로 override 한다.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(MEMBER_ID)).thenReturn(true);
         coupon = Coupon.builder("정액 3천원", CouponDiscountType.FIXED_AMOUNT, 3_000,
                         NOW.minus(1, ChronoUnit.DAYS), NOW.plus(10, ChronoUnit.DAYS))

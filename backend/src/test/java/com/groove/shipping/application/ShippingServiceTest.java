@@ -44,7 +44,7 @@ class ShippingServiceTest {
         return shippingWithOrderAt(OrderStatus.PENDING);
     }
 
-    /** 연관 주문을 지정한 상태까지 전진시킨 PREPARING 배송을 만든다 — 락스텝 연동 검증용. */
+    /** 연관 주문을 지정한 상태까지 전진시킨 PREPARING 배송을 만든다. */
     private Shipping shippingWithOrderAt(OrderStatus orderStatus) {
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         pathTo(orderStatus).forEach(s -> order.changeStatus(s, null));
@@ -99,7 +99,7 @@ class ShippingServiceTest {
     @Test
     @DisplayName("advanceToShipped — 이미 SHIPPED 면 무시 (멱등) — 주문 전이는 배송 가드 안에서만 일어나 주문도 불변")
     void advanceToShipped_alreadyShipped_noop() {
-        // 배송은 이미 SHIPPED, 주문은 PREPARING(전진 가능). 배송 가드에서 단락돼 advanceTo 가 호출되지 않아야 주문이 PREPARING 으로 남는다.
+        // 배송 SHIPPED, 주문 PREPARING — 배송 가드에서 단락돼 주문이 PREPARING 으로 남는다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
         shipping.markShipped();
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
@@ -116,7 +116,6 @@ class ShippingServiceTest {
         given(shippingRepository.findWithOrderById(99L)).willReturn(Optional.empty());
 
         shippingService.advanceToShipped(99L);
-        // 예외 없이 통과
     }
 
     @Test
@@ -135,7 +134,7 @@ class ShippingServiceTest {
     @Test
     @DisplayName("advanceToDelivered — 배송이 PREPARING 이면 무시 (멱등) — 주문도 배송 가드 안에서만 전이돼 불변")
     void advanceToDelivered_fromPreparing_noop() {
-        // 배송은 PREPARING, 주문은 SHIPPED(DELIVERED 로 전진 가능). 배송 가드에서 단락돼 주문이 SHIPPED 로 남아야 한다.
+        // 배송 PREPARING, 주문 SHIPPED — 배송 가드에서 단락돼 주문이 SHIPPED 로 남는다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.SHIPPED);
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
 
@@ -148,7 +147,7 @@ class ShippingServiceTest {
     @Test
     @DisplayName("advanceToDelivered — 주문이 한 단계 뒤처져(PREPARING) 있으면 불법 점프 대신 무해 무시 (가드가 예외 차단)")
     void advanceToDelivered_orderBehind_guardSkipsWithoutThrowing() {
-        // 배송은 SHIPPED 인데 주문은 PREPARING. PREPARING→DELIVERED 는 불법이므로 가드 없이는 changeStatus 가 예외를 던진다.
+        // 배송 SHIPPED, 주문 PREPARING — PREPARING→DELIVERED 는 불법이라 가드가 예외를 막는다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
         shipping.markShipped();
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
@@ -162,7 +161,7 @@ class ShippingServiceTest {
     @Test
     @DisplayName("advanceToShipped — 주문이 취소(종착)면 배송을 전진시키지 않는다 (#233) — 배송 PREPARING 유지")
     void advanceToShipped_orderTerminal_skipsAdvance() {
-        // 발송 전 환불로 주문은 CANCELLED, 배송은 아직 PREPARING(취소 동기화 전 잔여 윈도우). 스케줄러가 밀면 안 된다.
+        // 주문 CANCELLED, 배송 PREPARING — 스케줄러가 밀면 안 된다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.CANCELLED);
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
 

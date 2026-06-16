@@ -1,2 +1,2 @@
-/** Bucket4j 기반 Rate Limit 골격. 도메인은 RateLimitPolicy 빈을 등록해 사용한다. */
+/** Bucket4j 기반 Rate Limit. RateLimitPolicy 빈으로 정책을 등록한다. */
 package com.groove.common.ratelimit;

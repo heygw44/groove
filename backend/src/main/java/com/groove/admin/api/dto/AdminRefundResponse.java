@@ -8,13 +8,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
 /**
- * 관리자 환불 응답 (이슈 #69).
- *
- * @param orderNumber     주문 번호
- * @param orderStatus     환불 후 주문 상태 — 신규 환불이면 CANCELLED, 멱등 재요청이면 변경 전 상태 그대로
- * @param paymentStatus   결제 상태 — 항상 REFUNDED
- * @param refundedAt      PG 환불 완료 시각 — 멱등 재요청 시 {@code null} ({@code Payment} 가 환불 시각을 영속하지 않음)
- * @param alreadyRefunded 이미 환불된 결제에 재요청해 부수효과 없이 응답한 경우 true
+ * 관리자 환불 응답.
  */
 public record AdminRefundResponse(
         @Schema(description = "주문 번호 (ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260606-A1B2C3")

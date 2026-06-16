@@ -30,8 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * MemberCouponRepository 통합 테스트 (Testcontainers MySQL).
  *
- * <p>핵심: 회원당 1장을 보증하는 {@code UNIQUE(coupon_id, member_id)} 가 DB 레벨에서 강제되는지
- * (도메인으로는 검증 불가) 를 중복 INSERT 로 검증한다.
+ * <p>회원당 1장을 보증하는 UNIQUE(coupon_id, member_id) 가 DB 레벨에서 강제되는지를 중복 INSERT 로 검증한다.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = Replace.NONE)
@@ -61,7 +60,7 @@ class MemberCouponRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        // member_coupon.member_id → member.id, coupon_id → coupon.id FK 때문에 둘 다 선행 존재해야 한다.
+        // member_coupon 의 FK 때문에 member·coupon 이 선행 존재해야 한다.
         Member member = memberRepository.saveAndFlush(
                 MemberFixtures.register("coupon-repo-test@example.com", "$2a$12$hash", "쿠폰사용자", "01012345678"));
         memberId = member.getId();
@@ -125,7 +124,7 @@ class MemberCouponRepositoryTest {
         assertThat(page.getTotalElements()).isEqualTo(2);
         PersistenceUnitUtil pu = em.getEntityManagerFactory().getPersistenceUnitUtil();
         assertThat(page.getContent()).allSatisfy(mc -> {
-            // EntityGraph 가 실제로 coupon 을 선로딩했는지(세션 내 lazy 초기화로 우연히 통과하는 게 아님) 검증.
+            // EntityGraph 가 실제로 coupon 을 선로딩했는지 검증.
             assertThat(pu.isLoaded(mc, "coupon")).as("coupon 선로딩").isTrue();
             assertThat(mc.getCoupon().getName()).isNotBlank();
         });

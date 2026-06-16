@@ -10,21 +10,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * 반품 상세 응답 (#239) — 회원 조회·관리자 조회·승인/거부/환불 결과 공용.
- *
- * @param claimId         반품 식별자
- * @param orderNumber     반품 대상 주문 번호
- * @param claimType       클레임 종류 — CANCEL(부분 취소)/RETURN(반품)
- * @param status          반품 상태
- * @param reason          반품 사유
- * @param rejectionReason 거부 사유 — REJECTED 가 아니면 {@code null}
- * @param refundAmount    확정 환불액 — REFUNDED 전이 전에는 0
- * @param items           반품 항목
- * @param requestedAt     접수 시각 (= createdAt)
- * @param approvedAt      승인 시각 — 미승인이면 {@code null}
- * @param inTransitAt     회수 시작 시각 — {@code null} 가능
- * @param inspectingAt    검수 시작 시각 — {@code null} 가능
- * @param completedAt     종착(환불/거부) 시각 — {@code null} 가능
+ * 반품 상세 응답 — 회원 조회·관리자 조회·승인/거부/환불 결과 공용.
  */
 public record ClaimResponse(
         @Schema(description = "반품 식별자", example = "5")
@@ -55,15 +41,7 @@ public record ClaimResponse(
         Instant completedAt
 ) {
 
-    /**
-     * 반품 항목 응답.
-     *
-     * @param orderItemId        주문 항목 식별자
-     * @param albumTitleSnapshot 주문 시점 앨범 제목
-     * @param quantity           반품 수량
-     * @param unitPriceSnapshot  주문 시점 단가
-     * @param gross              정가 합 (단가 × 수량, 할인 미반영)
-     */
+    /** 반품 항목 응답. */
     public record Item(
             @Schema(description = "주문 항목 식별자", example = "10")
             Long orderItemId,

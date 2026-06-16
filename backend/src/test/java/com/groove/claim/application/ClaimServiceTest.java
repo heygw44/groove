@@ -106,7 +106,7 @@ class ClaimServiceTest {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, MEMBER_ID);
         order.addItem(OrderItem.create(album(unitPrice), qty));
         if (discount > 0) {
-            order.applyDiscount(discount); // PENDING 상태에서만 가능 — 상태 세팅 전에 호출
+            order.applyDiscount(discount); // 상태 세팅 전에 호출
         }
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
@@ -141,7 +141,7 @@ class ClaimServiceTest {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, MEMBER_ID);
         order.addItem(OrderItem.create(album(unitPrice), qty));
         if (discount > 0) {
-            order.applyDiscount(discount); // PENDING 상태에서만 가능 — 상태 세팅 전에 호출
+            order.applyDiscount(discount); // 상태 세팅 전에 호출
         }
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
@@ -270,7 +270,7 @@ class ClaimServiceTest {
         Payment payment = paidPayment(order);
         given(claimRepository.findByIdForUpdate(7L)).willReturn(Optional.of(claim));
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
-        // 무쿠폰 — 반품 품목 정가만 환불(누적 비례 조회 미발생).
+        // 무쿠폰 — 반품 품목 정가만 환불.
         given(couponApplicationService.appliedCouponMinOrderAmount(ORDER_ID)).willReturn(OptionalLong.empty());
 
         Claim result = claimService.completeRefund(7L);
@@ -293,7 +293,7 @@ class ClaimServiceTest {
         Payment payment = paidPayment(order); // amount = payable = 24000
         given(claimRepository.findByIdForUpdate(7L)).willReturn(Optional.of(claim));
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
-        // 쿠폰 적용(할인 6000) — 비례 배분 경로. 반품은 무효화하지 않으므로 minOrder 값은 결과에 무관.
+        // 쿠폰 적용(할인 6000) — 비례 배분 경로.
         given(couponApplicationService.appliedCouponMinOrderAmount(ORDER_ID)).willReturn(OptionalLong.of(20_000L));
         given(claimRepository.findByOrder_IdAndStatus(ORDER_ID, ClaimStatus.REFUNDED)).willReturn(List.of());
 
@@ -374,7 +374,7 @@ class ClaimServiceTest {
         assertThat(ClaimService.proportionalRefund(1L, 100L, 200L, 1L)).isZero();
     }
 
-    // --- cancelPartially (발송 전 부분 취소, #238) ----------------------------
+    // --- cancelPartially (발송 전 부분 취소) ----------------------------
 
     private void stubCancelLookups(Order order, Payment payment, OptionalLong couponMinOrder) {
         given(orderRepository.findByOrderNumberForUpdate(ORDER_NUMBER)).willReturn(Optional.of(order));
@@ -382,11 +382,11 @@ class ClaimServiceTest {
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
         given(claimRepository.save(any(Claim.class))).willAnswer(inv -> {
             Claim saved = inv.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", 7L); // 실 DB IDENTITY 부여 모사 — refundIdempotencyKey(claimId) 용
+            ReflectionTestUtils.setField(saved, "id", 7L); // DB IDENTITY 부여 모사
             return saved;
         });
         given(couponApplicationService.appliedCouponMinOrderAmount(ORDER_ID)).willReturn(couponMinOrder);
-        // 누적 REFUNDED 정가 조회는 쿠폰 적용 시에만 일어난다(미적용이면 품목 정가 환불) — 쿠폰 present 테스트에서만 스텁한다.
+        // 누적 REFUNDED 정가 조회는 쿠폰 적용 시에만 발생 — 쿠폰 present 테스트에서만 스텁한다.
         if (couponMinOrder.isPresent()) {
             given(claimRepository.findByOrder_IdAndStatus(ORDER_ID, ClaimStatus.REFUNDED)).willReturn(List.of());
         }
@@ -503,7 +503,7 @@ class ClaimServiceTest {
         verify(claimRepository, never()).save(any());
     }
 
-    // --- refundIncrement (쿠폰 인지 환불 계산, 취소/반품 공용, #238/#239) -------
+    // --- refundIncrement (쿠폰 인지 환불 계산, 취소/반품 공용) -------
 
     @Test
     @DisplayName("refundIncrement: 쿠폰 미적용은 이번 클레임 정가만 환불(voidCoupon=false)")
@@ -544,8 +544,8 @@ class ClaimServiceTest {
     @Test
     @DisplayName("refundIncrement: 적용 할인 > 취소 정가(클로백 필요)면 무효화 않고 비례 폴백")
     void refundIncrement_clawbackFallsBackToProportional() {
-        // total 30000, payable 24000(할인 6000), 취소 정가 5000, 잔여 25000 < 최소 27000 → 무효 진입하나
-        // voidTarget = 5000 − 6000 = −1000 < 기환불 0 → 클로백 불가 → 비례 폴백.
+        // total 30000, payable 24000(할인 6000), 취소 정가 5000, 잔여 25000 < 최소 27000 → 무효 진입,
+        // voidTarget = 5000 − 6000 = −1000 < 0 → 비례 폴백.
         ClaimService.RefundComputation r = ClaimService.refundIncrement(
                 24_000L, 30_000L, 5_000L, 5_000L, 0L, OptionalLong.of(27_000L), true);
         assertThat(r.amount()).isEqualTo(4_000L); // 24000 × 5000/30000
@@ -555,8 +555,7 @@ class ClaimServiceTest {
     @Test
     @DisplayName("refundIncrement: 무효화 후 후속 환불은 정가 기준(누적 비례 곡선 이탈 불일치 회피, #238 리뷰)")
     void refundIncrement_afterVoid_usesFullGross() {
-        // 직전 취소가 쿠폰을 무효화·복원해 couponMinOrder 가 empty 가 된 상태 — 누적 비례(곡선 이탈)에 기대지 않고
-        // 이번 클레임 정가(10000)만 환불한다. 기환불 4000 → 잔여 20000 한도 내.
+        // couponMinOrder empty(쿠폰 무효·복원 후) — 이번 클레임 정가(10000)만 환불. 기환불 4000 → 잔여 20000 한도 내.
         ClaimService.RefundComputation r = ClaimService.refundIncrement(
                 24_000L, 30_000L, 10_000L, 20_000L, 4_000L, OptionalLong.empty(), true);
         assertThat(r.amount()).isEqualTo(10_000L);

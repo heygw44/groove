@@ -1,5 +1,5 @@
 <script setup>
-// 공통 select — BaseButton/BaseInput 과 동일한 스타일 토큰을 한 곳으로 모은다(쿠폰·결제수단·주문상태 필터 공유).
+// 공통 select 컴포넌트
 const props = defineProps({
   modelValue: { type: [String, Number], default: '' },
   options: { type: Array, default: () => [] }, // [{ value, label, disabled? }]
@@ -10,8 +10,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 function onChange(e) {
-  // 네이티브 select 의 value 는 항상 문자열이므로, 선택된 옵션의 원본 값을 그대로 방출해
-  // 타입(예: 숫자 memberCouponId)을 보존한다. 옵션은 v-for 순서와 1:1 이라 selectedIndex 로 매핑된다.
+  // 선택된 옵션의 원본 값(타입 보존)을 emit, selectedIndex 로 매핑
   const opt = props.options[e.target.selectedIndex]
   emit('update:modelValue', opt ? opt.value : e.target.value)
 }

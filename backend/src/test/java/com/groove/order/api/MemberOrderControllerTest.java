@@ -85,7 +85,7 @@ class MemberOrderControllerTest {
 
     @BeforeEach
     void setUp() {
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        // FK 의존 순서대로 부모 repository 를 비운다.
         refreshTokenRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

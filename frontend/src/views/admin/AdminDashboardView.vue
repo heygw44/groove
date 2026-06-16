@@ -6,7 +6,7 @@ import { orderStatusLabel } from '@/lib/order-enums'
 import { formatWon, formatDate } from '@/lib/format'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
-// 전용 요약 API 가 없으므로 상태별 카운트는 GET /admin/orders?status=X&size=1 의 totalElements 로 집계한다.
+// 상태별 카운트는 주문 목록의 totalElements 로 집계
 const STATUS_CARDS = [
   { status: 'PAID', label: '결제 완료' },
   { status: 'PREPARING', label: '배송 준비' },
@@ -51,7 +51,7 @@ onMounted(load)
   <section>
     <h1 class="mb-6 font-display text-2xl font-bold text-vinyl-black">대시보드</h1>
 
-    <!-- 운영 안내: 결제 완료 주문은 PAID 에 머문다 → 관리자가 DELIVERED 까지 전환해야 구매자 리뷰 작성 가능. -->
+    <!-- 주문 처리 안내 -->
     <div class="mb-6 rounded-lg border border-gold-400/40 bg-gold-400/10 px-4 py-3 text-sm text-vinyl-800">
       <p class="font-medium text-vinyl-black">주문 처리 안내</p>
       <p class="mt-1">

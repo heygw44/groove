@@ -21,14 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 회원 본인 정보 조회·수정 (#76, API.md §3.2 — GET/PATCH /members/me).
- *
- * <p>{@link com.groove.order.api.MemberOrderController} 와 동일 패턴 — 항상 인증된 회원에게만
- * 노출되며 SecurityConfig 의 {@code anyRequest().authenticated()} 기본 정책으로 보호된다.
- * 본인 식별은 {@code @AuthenticationPrincipal AuthPrincipal} 로만 수행한다 (경로에 memberId 미노출).
- *
- * <p>{@code DELETE} 는 회원 탈퇴(soft delete, #78) — 본인 비밀번호 재확인 후 {@code MemberService.withdraw}
- * 에 위임하고, 성공 시 본문 없이 204 를 응답한다.
+ * 회원 본인 정보 조회·수정·탈퇴 (GET/PATCH/DELETE /members/me). 본인 식별은 @AuthenticationPrincipal AuthPrincipal
+ * 로만 수행한다(경로에 memberId 미노출). DELETE 는 비밀번호 재확인 후 soft delete, 성공 시 204.
  */
 @Tag(name = "회원", description = "로그인한 본인의 정보 조회·수정·탈퇴 (모두 인증 필요 — 경로에 memberId 미노출)")
 @SecurityRequirement(name = "bearerAuth")

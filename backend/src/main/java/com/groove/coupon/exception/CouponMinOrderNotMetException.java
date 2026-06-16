@@ -4,10 +4,9 @@ import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 
 /**
- * 쿠폰 최소 주문금액 미충족 (docs/plans/coupon-system.md §3.2). HTTP 422.
+ * 쿠폰 최소 주문금액 미충족. HTTP 422.
  *
- * <p>{@link com.groove.coupon.domain.Coupon#calculateDiscount(long)} 가 주문 소계
- * (subtotal) 가 쿠폰의 {@code minOrderAmount} 미만일 때 던진다.
+ * <p>Coupon.calculateDiscount(long) 가 주문 소계(subtotal)가 쿠폰의 minOrderAmount 미만일 때 던진다.
  */
 public class CouponMinOrderNotMetException extends DomainException {
 

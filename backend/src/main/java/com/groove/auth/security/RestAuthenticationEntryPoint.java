@@ -15,14 +15,8 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 
 /**
- * 인증되지 않은 요청에 대해 ProblemDetail(JSON) 형식으로 401 응답을 반환한다.
- *
- * <p>Spring Security 의 {@code ExceptionTranslationFilter} 가 인증 실패 시
- * {@link AuthenticationEntryPoint} 에 위임하므로, {@code @ExceptionHandler} 와는
- * 별도로 응답 본문 일관성을 위해 직접 ProblemDetail 을 작성한다.
- *
- * <p>brute-force / 토큰 위변조 시도 추적을 위해 WARN 로그를 남긴다. 메시지/스택은
- * 정보 누설 위험이 있어 클래스명과 요청 경로만 기록한다.
+ * 인증되지 않은 요청에 ProblemDetail(JSON) 형식으로 401 응답을 반환하고, 클래스명과
+ * 요청 경로만 WARN 로그로 남긴다.
  */
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 

@@ -19,7 +19,7 @@ const ui = useUiStore()
 
 const order = ref(null)
 const trackingNumber = ref('')
-const trackingPending = ref(false) // 운송장 발급(배송 비동기 생성) 대기 중
+const trackingPending = ref(false) // 운송장 발급 대기 중
 const loading = ref(true)
 const error = ref('')
 const cancelling = ref(false)
@@ -27,12 +27,10 @@ const cancelling = ref(false)
 const cancellable = computed(() => order.value && isCancellableStatus(order.value.status))
 const paid = computed(() => order.value && isPaidStatus(order.value.status))
 
-// ── 리뷰 작성·삭제 (배송완료 주문 한정). 한 번에 한 항목만 인라인 폼을 펼친다. ──────────────────
-// 백엔드 계약은 orderNumber + albumId. ReviewResponse/OrderResponse 모두 작성여부·소유권 플래그가
-// 없어, 작성 직후 받은 reviewId 로만 같은 세션에서 삭제를 노출한다(새로고침 시 작성됨 표시는 사라짐).
+// 리뷰 작성·삭제 (배송완료 주문 한정, 한 번에 한 항목만 인라인 폼)
 const reviewable = computed(() => order.value && isReviewableStatus(order.value.status))
 const reviewedMap = reactive({}) // { [albumId]: reviewId } — 이 세션에서 작성한 리뷰
-const activeAlbumId = ref(null) // 현재 폼이 펼쳐진 항목(앨범 id)
+const activeAlbumId = ref(null) // 현재 폼이 펼쳐진 앨범 id
 const rating = ref(0)
 const content = ref('')
 const ratingError = ref('')
@@ -53,7 +51,7 @@ function clearReviewFields() {
   rating.value = 0
   content.value = ''
   ratingError.value = ''
-  reset() // useForm 의 errors/formError 정리
+  reset() // errors/formError 정리
 }
 
 function resetReviewForm() {
@@ -69,7 +67,7 @@ function openForm(albumId) {
 async function onSubmitReview() {
   ratingError.value = ''
   if (!rating.value) {
-    // 평점은 클라에서 즉시 가드(별점 미선택). 내용 길이는 textarea maxlength + 서버 검증에 맡긴다.
+    // 평점 미선택 가드
     ratingError.value = '평점을 선택해 주세요.'
     return
   }
@@ -96,7 +94,7 @@ async function onDeleteReview(albumId) {
 }
 
 const TRACK_POLL_MS = 2000
-const TRACK_MAX = 15 // 운송장 발급 대기 ~30s. 도달해도 없으면(시드/관리자 전진 등 배송행 없는 주문) "없음" 처리.
+const TRACK_MAX = 15 // 운송장 발급 폴링 최대 횟수
 const trackingPoller = usePolling()
 
 let reqSeq = 0
@@ -108,7 +106,7 @@ async function fetchOrder(orderNumber) {
   trackingPoller.stop()
   trackingNumber.value = ''
   trackingPending.value = false
-  // 다른 주문으로 이동 시 리뷰 폼·세션 작성 상태를 초기화(앨범 id 가 겹쳐도 섞이지 않게).
+  // 다른 주문으로 이동 시 리뷰 폼·세션 작성 상태 초기화
   resetReviewForm()
   for (const k of Object.keys(reviewedMap)) delete reviewedMap[k]
   try {
@@ -118,8 +116,7 @@ async function fetchOrder(orderNumber) {
     if (o.trackingNumber) {
       trackingNumber.value = o.trackingNumber
     } else if (isPaidStatus(o.status)) {
-      // 결제 완료인데 아직 운송장 미발급이면 주문을 재폴링해 번호를 확보 → ShippingTracker 가 이어받음.
-      // 끝까지 안 나오면(배송행 없는 주문) trackingPending 을 풀어 "배송 정보 없음" 으로 마무리한다.
+      // 결제 완료·운송장 미발급 시 재폴링으로 번호 확보
       startTrackingWait(orderNumber, seq)
     }
   } catch (e) {
@@ -135,8 +132,7 @@ function startTrackingWait(orderNumber, seq) {
   trackingPoller.start(
     async () => {
       const o = await getOrder(orderNumber)
-      // usePolling.stop() 은 다음 tick 만 막고 진행 중 콜백은 못 멈추므로, await 직후 시퀀스를 재확인한다.
-      // 라우트 변경(다른 주문) 후 늦게 resolve 된 응답이 새 주문 상태를 덮어쓰는 것을 막고 폴링을 종료한다.
+      // await 직후 시퀀스 재확인 — stale 응답 무시 후 폴링 종료
       if (seq !== reqSeq) return true
       order.value = o
       if (o.trackingNumber) {
@@ -159,7 +155,7 @@ function startTrackingWait(orderNumber, seq) {
 async function onCancel() {
   if (!window.confirm('주문을 취소하시겠습니까?')) return
   cancelling.value = true
-  // 진행 중 배송폴링을 멈춰, 취소 결과가 stale getOrder 응답으로 덮이지 않게 한다(취소→PAID 복귀 레이스 방지).
+  // 진행 중 배송 폴링 중단 — stale 응답이 취소 결과를 덮어쓰지 않게
   trackingPoller.stop()
   trackingPending.value = false
   try {

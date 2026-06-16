@@ -34,9 +34,7 @@ class PaymentRepositoryTest {
     private OrderRepository orderRepository;
 
     /**
-     * 다른 통합 테스트(@SpringBootTest)가 커밋한 잔여 행을 제거하고 시작한다.
-     * FK 의존 순서대로 payment 를 먼저, 그 다음 orders 를 비운다.
-     * 본 클래스의 @DataJpaTest 는 트랜잭션 자동 롤백이라 외부에 영향을 주지 않는다.
+     * 잔여 행을 제거하고 시작한다. FK 의존 순서대로 payment 를 먼저, 그 다음 orders 를 비운다.
      */
     @BeforeEach
     void cleanUp() {

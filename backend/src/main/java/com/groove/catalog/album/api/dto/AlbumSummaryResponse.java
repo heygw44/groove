@@ -10,15 +10,8 @@ import com.groove.catalog.label.domain.Label;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 앨범 목록 응답 DTO (API §3.3 AlbumSummary).
- *
- * <p>{@code averageRating} / {@code reviewCount} 는 리뷰 도메인(#59) 의 집계 결과({@link AlbumRating})로 채운다 —
- * 호출 측({@code AlbumService.search})이 페이지 단위로 1회 집계 쿼리를 돌려 N+1 없이 주입한다. 리뷰가 없는 앨범은
- * {@code averageRating=null}, {@code reviewCount=0}. 인자 없는 {@link #from(Album)} 은 {@link AlbumRating#NONE}
- * 으로 위임하는 편의 메서드다.
- *
- * <p>관리자용 {@link AlbumResponse} 와 분리한 이유: Public 응답은 createdAt/updatedAt 을
- * 노출하지 않고 평점·리뷰 수를 포함하므로 응집도 위해 별도 record 로 둔다.
+ * 앨범 목록 응답 DTO. averageRating/reviewCount 는 AlbumRating 으로 채우고, 리뷰가 없으면
+ * averageRating=null, reviewCount=0. 인자 없는 from(Album) 은 AlbumRating.NONE 으로 위임한다.
  */
 public record AlbumSummaryResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,

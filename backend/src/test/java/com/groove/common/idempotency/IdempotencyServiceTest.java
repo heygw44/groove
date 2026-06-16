@@ -31,9 +31,7 @@ import static org.assertj.core.api.Assertions.fail;
 
 /**
  * IdempotencyService 통합 테스트 (Testcontainers MySQL).
- *
- * <p>마커 INSERT 의 UNIQUE 제약과 {@code REQUIRES_NEW} 트랜잭션 가시성이 핵심이라 실 DB 에서 검증한다.
- * 동시성 강검증(완전한 단일 처리 보장)은 #W11-1 에서 추가하며, 여기서는 기본 동작만 다룬다.
+ * 마커 INSERT 의 UNIQUE 제약과 REQUIRES_NEW 트랜잭션 가시성을 실 DB 에서 검증한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -246,7 +244,7 @@ class IdempotencyServiceTest {
                 .isEqualTo(IdempotencyStatus.COMPLETED);
     }
 
-    /** TTL 이 이미 지난 COMPLETED 캐시 행을 직접 심는다 — replay 만료 검사용. */
+    /** TTL 이 이미 지난 COMPLETED 캐시 행을 직접 심는다. */
     private void saveExpiredCompleted(String key, String fingerprint, String responseBody) {
         IdempotencyRecord record = IdempotencyRecord.start(key, fingerprint, Duration.ofHours(1), Instant.now());
         record.complete(SampleResult.class.getName(), responseBody);

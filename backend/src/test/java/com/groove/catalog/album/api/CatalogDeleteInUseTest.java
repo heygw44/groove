@@ -36,13 +36,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * 카탈로그 DELETE 의 IN_USE(409) 경로 통합 검증.
- *
- * <p>부모 도메인: Artist/Genre/Label 삭제가 album 참조 시 409 로 거절되는지 (사전검사 {@code existsByXxx_Id}).
- * <p>Album: cart_item/order_item 이 참조 중이면 409 ALBUM_IN_USE 로 거절되는지 (#159) — 실제 @Query JPQL 실행과
- * FK→예외 변환 경로를 end-to-end 로 확인한다.
- */
+// 카탈로그 DELETE 의 IN_USE(409) 경로 통합 검증.
+// Artist/Genre/Label 삭제가 album 참조 시 409 로 거절되는지, Album 삭제가 cart_item/order_item 참조 시 409 ALBUM_IN_USE 로 거절되는지 확인한다.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -81,8 +76,7 @@ class CatalogDeleteInUseTest {
 
     @BeforeEach
     void setUp() {
-        // album 의 RESTRICT 참조(cart_item/order_item) 를 먼저 비워야 album deleteAllInBatch 가 FK 에 막히지 않는다.
-        // orders 를 참조하는 FK 는 모두 CASCADE/SET NULL 이라 deleteAllInBatch 가 안전하다.
+        // album 을 참조하는 order/cart 를 먼저 비운 뒤 album 정리
         orderRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

@@ -16,15 +16,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 비밀번호 변경 (#77, API.md §3.2 — PATCH /members/me/password).
+ * 비밀번호 변경 (PATCH /members/me/password).
  *
- * <p>URL 은 {@code /members/me} 하위지만 컨트롤러는 {@code auth} 패키지에 둔다 — 비밀번호는 인증
- * 크리덴셜이라 소유 도메인이 {@code auth} 이고, 변경 시 세션 무효화를 동기로 처리해야 하기 때문이다
- * ({@code member → auth} 패키지 결합 회피). URL ≠ 패키지.
- *
- * <p>{@code anyRequest().authenticated()} 기본 정책으로 보호되며 본인 식별은
- * {@code @AuthenticationPrincipal AuthPrincipal} 로만 한다 (경로에 memberId 미노출).
- * 성공 시 반환 본문이 없으므로 204 No Content.
+ * <p>인증 기본 정책으로 보호되며 본인 식별은 AuthPrincipal 로만 한다 (경로에 memberId 미노출).
+ * 성공 시 본문 없이 204 No Content.
  */
 @Tag(name = "비밀번호", description = "로그인한 본인의 비밀번호 변경 (인증 필요 — 변경 시 모든 활성 세션 무효화)")
 @SecurityRequirement(name = "bearerAuth")

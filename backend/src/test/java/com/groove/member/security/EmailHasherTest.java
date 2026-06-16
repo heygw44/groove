@@ -15,9 +15,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("EmailHasher 단위 테스트 (#186)")
 class EmailHasherTest {
 
-    // 시크릿 리터럴을 Java 에 두지 않도록 단일 출처(application-test.yaml)에서 로드한다.
+    // 시크릿을 단일 출처(application-test.yaml)에서 로드.
     private static final String SECRET = MemberFixtures.TEST_EMAIL_HASH_SECRET;
-    // 키 의존성 검증용 — SECRET 과 다르기만 하면 되고 ≥32바이트면 된다.
+    // 키 의존성 검증용 — SECRET 과 다른 ≥32바이트 값.
     private static final String OTHER_SECRET = SECRET + "-variant";
 
     private final EmailHasher hasher = new EmailHasher(new EmailHashProperties(SECRET));
@@ -62,7 +62,7 @@ class EmailHasherTest {
         mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
         String expected = HexFormat.of().formatHex(mac.doFinal("user@example.com".getBytes(StandardCharsets.UTF_8)));
 
-        // 입력은 대문자지만 정규화 후 같은 결과여야 한다 — 알고리즘·정규화·prefix 회귀 고정.
+        // 대문자 입력도 정규화 후 같은 결과.
         assertThat(hasher.hash("USER@example.com")).isEqualTo("v1:" + expected);
     }
 
@@ -73,7 +73,7 @@ class EmailHasherTest {
 
         assertThat(legacy).hasSize(64).matches("[0-9a-f]{64}").doesNotStartWith("v1:");
         assertThat(hasher.legacyHash("USER@example.com")).isEqualTo(legacy);
-        // legacy 는 결정적 SHA-256 이라 시크릿과 무관 — 다른 시크릿 EmailHasher 도 동일 (V18 백필과 동치).
+        // legacy 는 SHA-256 이라 시크릿과 무관 — 다른 시크릿 EmailHasher 도 동일.
         assertThat(new EmailHasher(new EmailHashProperties(OTHER_SECRET)).legacyHash("user@example.com"))
                 .isEqualTo(legacy);
     }

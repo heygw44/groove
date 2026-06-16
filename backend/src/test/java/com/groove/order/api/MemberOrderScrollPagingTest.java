@@ -46,10 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * GET /api/v1/members/me/orders/scroll (keyset 커서 페이징) MockMvc 통합 테스트 (#235).
- *
- * <p>회원 스코프·인증 경계는 offset 과 동일하게 적용되어야 하며(타 회원 격리·401), 커서 walk 가 본인 주문
- * 전체를 누락·중복 없이 커버해야 한다. 기존 offset 회귀는 {@code MemberOrderControllerTest} 가 담당.
+ * GET /api/v1/members/me/orders/scroll (keyset 커서 페이징) MockMvc 통합 테스트.
+ * 회원 스코프·인증 경계(타 회원 격리·401)와 커서 walk 의 누락·중복 없는 커버를 검증한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

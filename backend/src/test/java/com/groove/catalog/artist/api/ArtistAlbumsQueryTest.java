@@ -25,9 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * GET /api/v1/artists/{id}/albums (#34) MockMvc 통합 테스트.
- */
+// GET /api/v1/artists/{id}/albums MockMvc 통합 테스트.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

@@ -427,7 +427,7 @@ class AdminCouponControllerTest {
         MemberCoupon mc = memberCouponRepository.findAll().get(0);
         assertThat(mc.getMemberId()).isEqualTo(activeMemberId);
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
-        // 직접지급은 정책 카운터를 증가시키지 않는다 — totalQuantity=1 인 쿠폰에 1번 grant 했어도 issuedCount=0.
+        // 직접지급은 정책 카운터를 증가시키지 않는다.
         assertThat(couponRepository.findById(c.getId()).orElseThrow().getIssuedCount()).isZero();
     }
 

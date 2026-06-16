@@ -197,7 +197,7 @@ class PaymentTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
         assertThat(payment.getRefundedAmount()).isEqualTo(10_000L);
 
-        // 추가 부분 환불 — 아직 전액 미달이라 PARTIALLY_REFUNDED 유지(자기 전이 없이 누적만).
+        // 추가 부분 환불 — 전액 미달이라 PARTIALLY_REFUNDED 유지, 누적만.
         payment.refund(5_000L, now);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
         assertThat(payment.getRefundedAmount()).isEqualTo(15_000L);

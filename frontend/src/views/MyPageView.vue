@@ -27,9 +27,9 @@ onMounted(async () => {
   }
 })
 
-// 위험 구역 — 회원 탈퇴. 비밀번호로 본인 확인. 진행 중 주문이 있으면 서버가 409 로 차단한다.
+// 회원 탈퇴 — 비밀번호로 본인 확인
 const password = ref('')
-const requiredError = ref('') // 비번 미입력(클라이언트 검증)
+const requiredError = ref('') // 비번 미입력
 const {
   errors: withdrawErrors,
   formError: withdrawError,
@@ -44,14 +44,14 @@ function onPasswordInput() {
 }
 
 async function onWithdraw() {
-  // 비번 미입력은 서버 왕복 없이 막는다(비가역 액션이라 더 신중히).
+  // 비번 미입력 시 서버 호출 없이 차단
   if (!password.value) {
     requiredError.value = '비밀번호를 입력해 주세요.'
     return
   }
   if (!window.confirm('정말 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
   if (!(await submitWithdraw())) return
-  auth.logout() // 서버가 토큰을 폐기했으므로 로컬 상태만 비운다.
+  auth.logout() // 로컬 인증 상태 비움
   ui.notify('탈퇴가 완료되었습니다.', 'success')
   router.replace('/')
 }

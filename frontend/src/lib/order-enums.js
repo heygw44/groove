@@ -1,5 +1,4 @@
-// 구매 여정(주문·결제·배송·쿠폰) enum ↔ 한글 라벨/헬퍼 — 백엔드 enum 과 1:1. (#116)
-// lib/enums.js(카탈로그)와 동일하게 단일 출처로 둔다.
+// 구매 여정(주문·결제·배송·쿠폰) enum ↔ 한글 라벨/헬퍼 — 백엔드 enum 과 1:1.
 
 import { formatWon } from '@/lib/format'
 
@@ -62,7 +61,7 @@ export function shippingStatusLabel(status) {
   return SHIPPING_STATUS_LABEL[status] || status || ''
 }
 
-/** 취소 가능 상태 — 클라 버튼 노출 가드(최종 판정은 서버, 불가 시 409). */
+/** 취소 가능 상태 — 클라 버튼 노출 가드. */
 export function isCancellableStatus(status) {
   return status === 'PENDING' || status === 'PAID'
 }
@@ -72,17 +71,12 @@ export function isPaidStatus(status) {
   return ['PAID', 'PREPARING', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(status)
 }
 
-/** 리뷰 작성 가능 상태 — 클라 노출 가드(백엔드 REVIEWABLE_ORDER_STATUSES 미러, 최종 판정은 서버). */
+/** 리뷰 작성 가능 상태 — 클라 노출 가드. */
 export function isReviewableStatus(status) {
   return status === 'DELIVERED' || status === 'COMPLETED'
 }
 
-/**
- * 쿠폰 할인액 미리보기(표시용) — 최종 금액은 서버 OrderResponse.payableAmount 가 권위.
- * @param {{discountType:string, discountValue:number, maxDiscountAmount:number|null, minOrderAmount:number}} coupon
- * @param {number} orderAmount 상품 합계(할인 전)
- * @returns {number} 0 이상의 할인액(주문액 초과 안 함)
- */
+/** 쿠폰 할인액 미리보기(표시용). 0 이상, 주문액 초과 안 함. */
 export function previewDiscount(coupon, orderAmount) {
   if (!coupon || orderAmount < (coupon.minOrderAmount ?? 0)) return 0
   let discount
@@ -116,11 +110,7 @@ export function couponStatusLabel(status) {
   return COUPON_STATUS_LABEL[status] || status || ''
 }
 
-/**
- * 쿠폰 할인 표시 라벨 — 쿠폰 목록 카드·내 쿠폰 공유. CouponResponse/MemberCouponResponse 공통 필드로 동작.
- * 예) "5,000원 할인", "10% 할인 (최대 3,000원)", "10% 할인 · 20,000원 이상".
- * @param {{discountType:string, discountValue:number, maxDiscountAmount:number|null, minOrderAmount:number}} coupon
- */
+/** 쿠폰 할인 표시 라벨. 예) "5,000원 할인", "10% 할인 (최대 3,000원)", "10% 할인 · 20,000원 이상". */
 export function couponDiscountLabel(coupon) {
   if (!coupon) return ''
   let value
@@ -134,11 +124,7 @@ export function couponDiscountLabel(coupon) {
   return value + min
 }
 
-/**
- * 쿠폰 발급 ApiError → 분류 키 — 쿠폰 목록(CouponListView) 발급의 단일 출처.
- * 429(wire code SYSTEM_002)=rate-limit, 409 소진/중복, 422 발급불가, 그 외 오류.
- * @returns {'SOLD_OUT'|'ALREADY'|'RATE_LIMIT'|'NOT_ISSUABLE'|'ERROR'}
- */
+/** 쿠폰 발급 ApiError → 분류 키('SOLD_OUT'|'ALREADY'|'RATE_LIMIT'|'NOT_ISSUABLE'|'ERROR'). */
 export function classifyCouponIssueError(e) {
   if (e?.status === 429 || e?.code === 'SYSTEM_002') return 'RATE_LIMIT'
   if (e?.code === 'COUPON_SOLD_OUT') return 'SOLD_OUT'
@@ -147,7 +133,7 @@ export function classifyCouponIssueError(e) {
   return 'ERROR'
 }
 
-/** 쿠폰 발급 실패 분류 → 사용자 안내 메시지(토스트용). ERROR 는 호출부에서 errorMessage 로 폴백. */
+/** 쿠폰 발급 실패 분류 → 사용자 안내 메시지(토스트용). */
 export const COUPON_ISSUE_ERROR_MESSAGE = {
   SOLD_OUT: '이미 소진된 쿠폰입니다.',
   ALREADY: '이미 발급받은 쿠폰입니다.',

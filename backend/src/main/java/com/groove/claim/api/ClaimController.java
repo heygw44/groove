@@ -23,11 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 반품 접수·조회 API (#239 — 회원 전용).
- *
- * <p>두 엔드포인트 모두 인증 회원 전용 — {@code SecurityConfig} 의 {@code anyRequest().authenticated()} 가 보호하며,
- * 본인 주문/반품 여부는 {@link ClaimService} 가 검증한다(타인/게스트는 404 로 통일해 존재 노출 방지). 반품은
- * 배송완료(DELIVERED/COMPLETED) 주문에만 접수할 수 있고, 발송 전 환불은 관리자 환불 API 가 담당한다.
+ * 반품 접수·조회 API (회원 전용). 본인 주문/반품 여부는 ClaimService 가 검증한다.
  */
 @Tag(name = "반품", description = "반품 접수 · 조회 (인증 회원 전용, 본인 주문/반품만 가능)")
 @RestController

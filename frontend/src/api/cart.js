@@ -1,10 +1,8 @@
 import client from './client'
 
 // 장바구니 API (회원 전용). Bearer 토큰은 client 인터셉터가 자동 첨부한다.
-// add/update 는 갱신된 CartResponse 를 반환하므로 스토어가 그대로 상태로 반영한다.
-// remove/clear 는 204(본문 없음) → client 인터셉터가 null 로 정규화한다.
 
-/** 장바구니 조회 → CartResponse{cartId, items[], totalAmount, totalItemCount}. available 은 조회 시 재계산. */
+/** 장바구니 조회 → CartResponse{cartId, items[], totalAmount, totalItemCount}. */
 export function getCart() {
   return client.get('/cart').then((res) => res.data)
 }

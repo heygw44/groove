@@ -20,18 +20,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 결제 폴링 동기화 스케줄러 (#W7-4 DoD) — 웹훅 유실에 대비해 일정 시간 이상 {@link PaymentStatus#PENDING}
- * 으로 머문 결제를 주기적으로 PG {@code query()} 로 조회해 결과를 동기화한다.
- *
- * <p>대상은 {@code created_at} 이 {@code now - groove.payment.reconciliation.min-age} 이전인 PENDING 결제다 —
- * 갓 접수된 결제는 정상 웹훅이 곧 도착하므로 제외한다. 동기화는 웹훅 경로와 동일한 {@link PaymentCallbackService}
- * 를 동일한 {@code IdempotencyService} 키로 호출하므로, 웹훅과 경쟁해도 상태 전이는 1회다. 한 건의 실패가 배치
- * 전체를 막지 않도록 건별로 격리하고(다음 주기에 재시도), 스케줄러 스레드 밖으로 예외를 흘리지 않는다.
- * 한 주기 처리량은 {@code .batch-size} 로 제한해(메모리 바운드) 적체 시에도 나머지는 다음 주기에 처리한다.
- *
- * <p>실행 주기/초기 지연은 {@code groove.payment.reconciliation.{interval,initial-delay}}, 대상 최소 경과
- * 시간은 {@code .min-age}, 주기당 처리 상한은 {@code .batch-size}. 전역 {@code @EnableScheduling} 은
- * {@code common.scheduling.SchedulingConfig} 에 있다 — 자체 {@code @EnableScheduling} 을 두지 않는다.
+ * 결제 폴링 동기화 스케줄러 — min-age 이상 PENDING 으로 머문 결제를 PG query() 로 조회해 결과를 동기화한다.
+ * 동기화는 PaymentCallbackService 를 동일 IdempotencyService 키로 호출한다. 건별로 격리하고 batch-size 로 처리량을 제한한다.
+ * 주기/초기지연/최소경과시간/처리상한은 groove.payment.reconciliation.{interval,initial-delay,min-age,batch-size}.
  */
 @Component
 public class PaymentReconciliationScheduler {

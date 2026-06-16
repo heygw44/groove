@@ -6,12 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.nio.charset.StandardCharsets;
 
 /**
- * JWT 발급/검증에 필요한 비밀 키와 TTL 설정.
- *
- * <p>{@code application.yaml}의 {@code jwt.*} 키와 1:1 매핑된다. compact constructor 에서
- * 검증하므로 잘못된 운영 설정은 빈 생성 시점에 즉시 실패한다.
- * {@link #secret} 은 HS256 서명에 사용되므로 최소 32바이트(256bit) 이상이어야 하며,
- * {@code .env.example} 의 플레이스홀더 값이면 {@link SecretPlaceholderGuard} 가 기동을 거부한다(이슈 #165).
+ * JWT 발급/검증에 필요한 비밀 키와 TTL 설정. application.yaml 의 jwt.* 키와 1:1 매핑된다.
+ * compact constructor 에서 검증하므로 잘못된 설정은 빈 생성 시점에 실패한다. secret 은
+ * 최소 32바이트(256bit) 이상이어야 하며, 플레이스홀더 값이면 SecretPlaceholderGuard 가 기동을 거부한다.
  */
 @ConfigurationProperties(prefix = "jwt")
 public record JwtProperties(

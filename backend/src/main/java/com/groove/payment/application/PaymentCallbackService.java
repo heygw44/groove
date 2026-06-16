@@ -20,25 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.stream.Collectors;
 
 /**
- * 결제 결과 콜백 적용 트랜잭션 경계 (#W7-4) — 웹훅 수신(PaymentWebhookController / PaymentWebhookHandler)과
- * 폴링 동기화(PaymentReconciliationScheduler)의 공통 처리 경로.
- *
- * 멱등 실행 규약: applyResult 는 IdempotencyService.execute 의 action 으로 호출되는 것을 전제로 자기
- * 트랜잭션(@Transactional)을 관리하고 반환 전에 커밋한다 — 호출자(컨트롤러/디스패처/스케줄러)는 비트랜잭션이어야
- * 한다. 이중 안전선: PG 거래 식별자 단위 멱등성(IdempotencyService 같은 키 공유) + 결제 상태 재확인(PENDING 아니면 무시).
- *
- * 처리:
- * - PAID — Payment PENDING→PAID(paidAt 기록), Order PENDING→PAID, OrderPaidEvent 를 같은 트랜잭션에서 아웃박스에
- *   기록(#237) — 릴레이가 후속 배송 생성을 at-least-once 로 발행. PAID 와 원자 커밋돼 유실되지 않는다.
- * - FAILED — 보상 트랜잭션: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 각 OrderItem 의 album 재고
- *   복원 + 적용 쿠폰 USED→ISSUED. 어느 단계든 실패하면 트랜잭션 전체가 롤백돼 다음 콜백/폴링에 재시도된다
- *   (OrderService.cancel 의 보상과 같은 패턴 — Aggregate 조율은 ApplicationService 책임). PAYMENT_FAILED 는
- *   종착 상태라 cancel/refund 로 들어올 수 없으므로, 쿠폰 복원은 여기서 하지 않으면 영영 못 한다.
- * - 알 수 없는 거래 / 이미 종착 상태 — 무해하게 무시(상태 전이 0회).
- *
- * 주의: 결제 PENDING 중 주문이 다른 경로로 CANCELLED 된 경우(현재 OrderService.cancel 은 PENDING 주문만
- * 취소하므로 결제는 PENDING 으로 남는다) 콜백 적용 시 주문 상태 전이가 거부돼 트랜잭션이 롤백된다 — 이
- * "결제 중 취소" 정합성은 결제 취소/환불 흐름과 함께 별도 이슈에서 다룬다.
+ * 웹훅·폴링 공통 결제 콜백 적용 트랜잭션 경계.
+ * - PAID: Payment PENDING→PAID(paidAt 기록), Order PENDING→PAID, OrderPaidEvent 아웃박스 기록.
+ * - FAILED: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 재고 복원, 쿠폰 USED→ISSUED.
+ * - 알 수 없는 거래/이미 종착 상태: 무시.
  */
 @Service
 public class PaymentCallbackService {
@@ -62,24 +47,15 @@ public class PaymentCallbackService {
         this.albumRepository = albumRepository;
     }
 
-    /**
-     * pgTransactionId 에 대한 IdempotencyService 키. 웹훅(HTTP/인프로세스) 경로와 폴링 경로가 같은 키를 써 서로의
-     * 중복까지 한 곳에서 차단한다 — 어느 조합으로 중복 수신해도 상태 전이는 1회다.
-     */
+    /** pgTransactionId 에 대한 IdempotencyService 키. */
     public static String idempotencyKeyFor(String pgTransactionId) {
         return "payment-callback:" + pgTransactionId;
     }
 
-    /**
-     * @param pgTransactionId PG 거래 식별자
-     * @param result          PG 가 통보한 최종 결과 — PaymentStatus.PAID 또는 PaymentStatus.FAILED
-     * @param failureReason   실패 사유 (FAILED 일 때만 의미, null 이면 기본 사유 기록)
-     */
+    /** PG 콜백 결과(PAID/FAILED)를 적용한다. failureReason 은 FAILED 일 때만 의미, null 이면 기본 사유 기록. */
     @Transactional
     public PaymentCallbackResult applyResult(String pgTransactionId, PaymentStatus result, String failureReason) {
-        // 방어선 — 호출 측이 이미 보장한다(웹훅 본문 검증/WebhookNotification 생성자가 클라이언트엔 400 으로,
-        // 폴링은 query() 결과 가드로). 여기 걸리면 클라이언트 오류가 아니라 호출 코드 버그이므로 비즈니스 예외(4xx)
-        // 가 아닌 IllegalArgumentException(→ 500) 이 맞다.
+        // 결과는 PAID 또는 FAILED 만 허용.
         if (result != PaymentStatus.PAID && result != PaymentStatus.FAILED) {
             throw new IllegalArgumentException("결제 콜백 결과는 PAID 또는 FAILED 여야 합니다: " + result);
         }
@@ -97,21 +73,17 @@ public class PaymentCallbackService {
         if (result == PaymentStatus.PAID) {
             payment.markPaid();
             order.changeStatus(OrderStatus.PAID, null);
-            // 후속 배송 생성 트리거를 아웃박스에 기록한다(#237) — 이 트랜잭션(PAID)과 원자 커밋돼 프로세스 다운에도
-            // 유실되지 않고, OutboxRelayScheduler 가 멱등 컨슈머에 at-least-once 로 발행한다.
+            // 후속 배송 생성 트리거를 아웃박스에 기록한다.
             outboxEventPublisher.publish(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE, order.getId(), OrderPaidEvent.OUTBOX_EVENT_TYPE,
                     new OrderPaidEvent(order.getId(), order.getOrderNumber(), order.getMemberId(), payment.getId()));
             log.info("결제 확정(PAID): paymentId={}, order={}", payment.getId(), order.getOrderNumber());
         } else {
             payment.markFailed(failureReason != null ? failureReason : DEFAULT_FAILURE_REASON);
             order.changeStatus(OrderStatus.PAYMENT_FAILED, null);
-            // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순)로 place(FOR UPDATE)·동시 복원과의 lost-update·데드락을 없앤다 (#234).
+            // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순).
             int restored = StockRestorer.restore(albumRepository, order.getItems().stream()
                     .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
-            // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (cancel/refund 와 같은 보상 패턴, 재고 복원 직후).
-            // 미적용 주문은 no-op 이라 분기 없이 안전. PAYMENT_FAILED 는 종착 상태라 cancel/refund 로
-            // 들어올 수 없으므로 여기서 복원하지 않으면 쿠폰이 영구 USED 로 고착된다(이슈 #158).
-            // 복원 결과(스킵/이상)는 restoreForOrder 가 자체 WARN 으로 남긴다 — cancel/refund 와 동일하게 여기선 재고만 로깅.
+            // 적용 쿠폰 USED→ISSUED 복원(미적용 주문은 no-op).
             couponApplicationService.restoreForOrder(order.getId());
             log.info("결제 실패(FAILED) 보상 트랜잭션: paymentId={}, order={}, 재고복원 {}건",
                     payment.getId(), order.getOrderNumber(), restored);

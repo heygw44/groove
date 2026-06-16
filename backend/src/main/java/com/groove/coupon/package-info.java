@@ -1,2 +1,2 @@
-/** coupon 도메인 (M13 확장) */
+/** coupon 도메인 */
 package com.groove.coupon;

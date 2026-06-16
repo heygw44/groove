@@ -18,14 +18,10 @@ import java.util.Date;
 import java.util.UUID;
 
 /**
- * JWT 발급·파싱·검증을 담당하는 도메인 컴포넌트.
- *
- * <p>HMAC-SHA256(HS256) 으로 서명하고, {@code typ} 클레임으로 access/refresh 를 구분한다.
- * 파싱 실패는 외부 응답에서 토큰 종류를 노출하지 않기 위해 {@link AuthException} 으로 일원화한다
- * (만료만 {@code AUTH_EXPIRED_TOKEN}, 그 외 형식/위조/typ 불일치는 {@code AUTH_INVALID_TOKEN}).
- *
- * <p>{@link Clock} 을 주입받아 테스트에서 시간을 고정할 수 있게 했다.
- * 운영에서는 {@code Clock.systemUTC()} 빈을 주입한다.
+ * JWT 발급·파싱·검증을 담당하는 컴포넌트. HMAC-SHA256(HS256) 으로 서명하고,
+ * typ 클레임으로 access/refresh 를 구분한다. 파싱 실패는 AuthException 으로 일원화한다
+ * (만료는 AUTH_EXPIRED_TOKEN, 그 외 형식/위조/typ 불일치는 AUTH_INVALID_TOKEN).
+ * Clock 을 주입받아 시간을 기준으로 발급·검증한다.
  */
 @Component
 public class JwtProvider {

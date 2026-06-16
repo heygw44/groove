@@ -49,7 +49,7 @@ class CartServiceTest {
     @BeforeEach
     void setUp() {
         cartService = new CartService(cartRepository, albumRepository, memberRepository);
-        // 활성 회원 기본값 — 가드(#187)는 쓰기 진입점 getOrCreate 에서 호출된다. 탈퇴 시나리오만 false 로 override 한다.
+        // 활성 회원 기본값 — 탈퇴 시나리오만 false 로 override 한다.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
     }
 

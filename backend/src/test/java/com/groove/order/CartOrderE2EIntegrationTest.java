@@ -47,21 +47,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 장바구니 → 주문 통합 E2E (#45).
- *
- * <p>cart / order 단일 도메인 컨트롤러 테스트({@code CartControllerTest},
- * {@code OrderControllerTest}, {@code MemberOrderControllerTest})와 중복되지 않도록,
- * 본 테스트는 두 도메인을 가로지르는 사용자 흐름과 회귀 위험이 큰 결합 지점만 다룬다:
+ * 장바구니 → 주문 통합 E2E. 두 도메인을 가로지르는 사용자 흐름을 다룬다:
  * <ul>
- *   <li>회원 cart → order 생성 → 단건 + 목록 조회의 결합 동작</li>
+ *   <li>회원 cart → order 생성 → 단건 + 목록 조회</li>
  *   <li>게스트 직접 주문 생성 → guest-lookup 본인 조회</li>
- *   <li>PENDING 주문 취소 → album 재고 복원 (서비스 단위로 검증되지만 실 DB 끝점에서 회귀 방지)</li>
- *   <li>타인 주문 cancel 차단 시 재고가 복원되지 않는 invariant</li>
+ *   <li>PENDING 주문 취소 → album 재고 복원</li>
+ *   <li>타인 주문 cancel 차단 시 재고 미복원</li>
  *   <li>한 요청에 SELLING+HIDDEN 라인 혼재 시 트랜잭션 롤백으로 SELLING 재고 미차감</li>
  *   <li>SOLD_OUT album 의 cart 추가 거부</li>
  * </ul>
- *
- * <p>Testcontainers MySQL 위에서 동작하며 부팅된 MockMvc 로 실 필터·서비스·DB 를 모두 거친다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -117,9 +111,7 @@ class CartOrderE2EIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서대로 부모 repository 를 비운다 — cart_item / order_item 자식 행은
-        // DB FK ON DELETE CASCADE / JPA 설정에 의해 부모 삭제와 함께 정리된다.
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        // FK 의존 순서대로 부모 repository 를 비운다.
         refreshTokenRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -167,7 +159,7 @@ class CartOrderE2EIntegrationTest {
     @Test
     @DisplayName("회원: cart 에 담기 → 주문 생성 → 단건/목록 조회 (cart 항목과 일치)")
     void memberFlow_cartToOrder_listsAndFetches() throws Exception {
-        // 1) cart 에 두 album 담기 — cart 추가는 album 재고를 차감하지 않음 (예약 없음, W6 정책)
+        // 1) cart 에 두 album 담기 — cart 추가는 album 재고를 차감하지 않음
         addToCart(memberABearer, sellingAlbumId, 2);
         addToCart(memberABearer, anotherSellingAlbumId, 3);
 
@@ -206,8 +198,7 @@ class CartOrderE2EIntegrationTest {
                 .andExpect(jsonPath("$.content[0].status").value(OrderStatus.PENDING.name()))
                 .andExpect(jsonPath("$.content[0].totalAmount").value(expectedTotal));
 
-        // 6) 현재 정책: 주문 생성 후 cart 는 자동 비워지지 않는다 (W7+ 결제 흐름에서 결정).
-        //    회귀 신호용 — 정책이 바뀌면 본 단언으로 즉시 드러난다.
+        // 6) 주문 생성 후 cart 는 자동 비워지지 않는다.
         assertThat(cartRepository.findByMemberId(memberAId)).isPresent();
     }
 

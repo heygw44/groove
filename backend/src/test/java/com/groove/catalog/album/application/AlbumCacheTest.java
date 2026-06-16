@@ -37,33 +37,23 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-/**
- * <b>카탈로그 조회 캐시 동작 가드</b> (#236).
- *
- * <p>기본 프로파일은 캐시를 끄지만(application-test.yaml {@code spring.cache.type=none}, 공유 DB 교차오염
- * 방지), 본 테스트만 {@code spring.cache.type=caffeine} 으로 켜서 Caffeine 캐시 동작을 검증한다 —
- * application.yaml 의 cache-names/spec 은 그대로 적용된다.
- *
- * <p>검증: ① {@code findDetail} 두 번째 호출이 캐시 서빙(스탬피드 방지 {@code sync=true} 포함) ②
- * admin 쓰기(update/adjustStock/delete)가 상세 캐시 즉시 evict ③ 공개 기본 랜딩 목록 캐시 + 등록 시 clear
- * ④ 필터가 있는 검색은 랜딩 캐시를 우회(가드).
- *
- * <p>공유 Testcontainers DB([[project_test_shared_db_isolation]])를 의식해 전역 wipe·절대 카운트 대신
- * 자기 id·상대 카운트로만 단언한다 — 다른 @SpringBootTest 가 남긴 SELLING 앨범이 있어도 흔들리지 않는다.
- */
+// 카탈로그 조회 캐시 동작 가드.
+// spring.cache.type=caffeine 으로 켜서 Caffeine 캐시 동작을 검증한다.
+// ① findDetail 두 번째 호출이 캐시 서빙 ② admin 쓰기(update/adjustStock/delete)가 상세 캐시 즉시 evict
+// ③ 공개 기본 랜딩 목록 캐시 + 등록 시 clear ④ 필터가 있는 검색은 랜딩 캐시를 우회.
 @SpringBootTest(properties = "spring.cache.type=caffeine")
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
 @DisplayName("AlbumService — 카탈로그 조회 캐시 (#236)")
 class AlbumCacheTest {
 
-    /** 컨트롤러 기본값과 동일한 공개 랜딩 요청 — AlbumCaches.isLandingRequest 가드와 일치해야 캐시된다. */
+    // 컨트롤러 기본값과 동일한 공개 랜딩 요청
     private static final AlbumSearchCondition LANDING = new AlbumSearchCondition(
             null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
     private static final Pageable LANDING_PAGE =
             PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-    /** artist/genre/label 의 unique name 충돌을 피하기 위한 시드 시퀀스. */
+    // artist/genre/label 의 unique name 충돌을 피하기 위한 시드 시퀀스
     private static final AtomicInteger SEQ = new AtomicInteger();
 
     @Autowired
@@ -86,7 +76,7 @@ class AlbumCacheTest {
 
     @BeforeEach
     void clearCaches() {
-        // 캐시는 컨텍스트 수명 동안 메서드 간 공유되므로 매 테스트 시작 시 비운다(교차오염 방지).
+        // 매 테스트 시작 시 캐시를 비운다
         cacheManager.getCacheNames()
                 .forEach(name -> Objects.requireNonNull(cacheManager.getCache(name)).clear());
         clearInvocations(albumRepository);
@@ -102,7 +92,7 @@ class AlbumCacheTest {
         AlbumDetailResponse second = albumService.findDetail(id);
 
         assertThat(second).isEqualTo(first);
-        // 2회 호출했지만 캐시 적중으로 본 쿼리(findById)는 1회만 — sync=true 로딩 후 캐시 서빙.
+        // 2회 호출했지만 캐시 적중으로 본 쿼리(findById)는 1회만
         verify(albumRepository, times(1)).findById(id);
     }
 
@@ -182,11 +172,11 @@ class AlbumCacheTest {
         albumService.search(filtered, LANDING_PAGE);
         albumService.search(filtered, LANDING_PAGE);
 
-        // isPublicLanding=false → 캐시 가드 불일치 → 매 호출 DB 조회.
+        // 필터가 있으면 랜딩 캐시 우회 → 매 호출 DB 조회
         verify(albumRepository, times(2)).findAll(any(Specification.class), any(Pageable.class));
     }
 
-    /** unique artist/genre/label 을 새로 만들고 그 위에 SELLING 앨범 1건을 적재한다. */
+    // unique artist/genre/label 을 새로 만들고 그 위에 SELLING 앨범 1건을 적재한다.
     private Album seedSellingAlbum(String title, int stock) {
         int n = SEQ.incrementAndGet();
         Artist artist = artistRepository.saveAndFlush(Artist.create("Artist " + title + " " + n, null));
@@ -198,7 +188,7 @@ class AlbumCacheTest {
                 AlbumStatus.SELLING, false, null, null));
     }
 
-    /** 시드 앨범의 연관(artist/genre/label)을 재사용해 새 title 의 커맨드를 만든다. */
+    // 시드 앨범의 연관(artist/genre/label)을 재사용해 새 title 의 커맨드를 만든다.
     private AlbumCommand commandFrom(Album album, String title) {
         return new AlbumCommand(
                 title,

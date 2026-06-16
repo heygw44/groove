@@ -25,21 +25,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 결제 API (API.md §3.6).
+ * 결제 API.
  *
- * <p>{@code POST /payments} 는 {@code @Idempotent} — {@link IdempotencyKeyInterceptor} 가
- * {@code Idempotency-Key} 헤더를 검증(없으면 400)하고, 처리 본체는 {@link IdempotencyService#execute}
- * 를 통해 같은 키당 한 번만 실행된다. 같은 키 재요청은 캐시된 응답을 그대로 받는다(replay 시에도 202).
- * 컨트롤러는 비트랜잭션이어야 한다 — {@code PaymentService.requestPayment} 가 자기 트랜잭션을 커밋한 뒤
- * 멱등성 마커가 COMPLETED 로 갱신되도록 ({@code IdempotencyService} 호출 규약).
- *
- * <p>회원/게스트 분기: {@code @AuthenticationPrincipal(required = false)} 로 토큰 유무를 받는다.
- * {@code POST /payments} 는 SecurityConfig 에서 permitAll — 회원 주문 결제는 서비스 레이어가 본인
- * 여부를 검증하고, 게스트 주문은 익명 호출자도 결제를 시작할 수 있다. {@code GET /payments/{id}} 는
- * {@code anyRequest().authenticated()} 기본 정책으로 보호되는 회원 전용 엔드포인트다.
- *
- * <p>{@code POST /payments} 는 {@link com.groove.payment.api.ratelimit.PaymentRateLimitPolicy} 가
- * 회원당 분당 5회 Rate Limit 을 적용한다 (#208, API.md §1.6 — 회원은 JWT memberId, 게스트·토큰 부재 시 IP 폴백).
+ * <p>POST /payments 는 Idempotency-Key 헤더를 검증(없으면 400)하고 같은 키당 한 번만 실행하며, 재요청은 캐시된 응답을 replay 한다(202).
+ * POST /payments 는 회원/게스트 공통 permitAll, GET /payments/{id} 는 회원 전용이다.
+ * POST /payments 는 회원당 분당 5회 Rate Limit 을 적용한다(회원은 JWT memberId, 게스트·토큰 부재 시 IP 폴백).
  */
 @Tag(name = "결제", description = "결제 요청(회원/게스트, 멱등) · 본인 결제 단건 조회")
 @RestController

@@ -13,12 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * OrderShippingInfo compact 생성자 불변식 전수 검증 (#142 갭 보강).
- *
- * <p>그동안 {@code OrderShippingInfo} 는 Order 생성의 정상 경로로만 간접 실행돼,
- * blank·길이초과 거부 / {@code strip()} 정규화 / 선택 필드(addressDetail) null 정규화 분기가
- * 직접 검증되지 않았다. API 레이어(ShippingInfoRequest Bean Validation)와 별개의
- * 도메인 이중 방어선이므로 도메인 단독으로 한 번 더 확인한다.
+ * OrderShippingInfo compact 생성자 불변식 전수 검증 —
+ * blank·길이초과 거부, strip() 정규화, addressDetail null 정규화.
  */
 @DisplayName("OrderShippingInfo — 배송지 스냅샷 불변식")
 class OrderShippingInfoTest {

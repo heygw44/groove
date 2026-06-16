@@ -25,12 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 상품별 리뷰 목록 API (API.md §3.8 — GET /albums/{id}/reviews).
- *
- * <p>공개 엔드포인트 — {@code SecurityConfig#PUBLIC_GET_PATTERNS} 의 {@code /api/v1/albums/**} 가 인증 경계를 담당한다.
- * 작성/삭제는 인증 전용이라 URL prefix({@code /reviews})가 달라 {@link ReviewController} 로 분리돼 있다.
- *
- * <p>정렬 화이트리스트: {@code createdAt} 만 허용 — Album 검색·회원 주문 목록과 같은 보안 패턴 (인덱스 없는 컬럼 정렬 차단).
+ * 상품별 리뷰 목록 API (GET /albums/{id}/reviews). 공개 엔드포인트. 정렬은 createdAt 만 허용한다.
  */
 @Tag(name = "앨범 리뷰", description = "앨범별 리뷰 목록 조회 (비로그인 공개)")
 @RestController

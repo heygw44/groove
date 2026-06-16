@@ -12,12 +12,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
 /**
- * 앨범 상세 응답 DTO (API §3.3 AlbumDetail).
- *
- * <p>Summary + description / createdAt 추가. artist 는 description 까지 노출 (API §3.3 예시).
- * {@code averageRating}/{@code reviewCount} 는 리뷰 도메인(#59) 의 집계 결과({@link AlbumRating})로 채운다 —
- * 단건 조회라 {@code AlbumService.findDetail} 이 집계 쿼리를 1회 돌려 주입한다. 인자 없는 {@link #from(Album)} 은
- * {@link AlbumRating#NONE} 으로 위임하는 편의 메서드다.
+ * 앨범 상세 응답 DTO. averageRating/reviewCount 는 AlbumRating 으로 채운다.
+ * 인자 없는 from(Album) 은 AlbumRating.NONE 으로 위임한다.
  */
 public record AlbumDetailResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,

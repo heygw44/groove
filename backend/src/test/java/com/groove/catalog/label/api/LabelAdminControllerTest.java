@@ -58,7 +58,7 @@ class LabelAdminControllerTest {
 
     @BeforeEach
     void cleanup() {
-        // Album → Label FK 때문에 album 을 먼저 비운다 (W5-3 도입).
+        // Album → Label FK 때문에 album 을 먼저 비운다.
         albumRepository.deleteAllInBatch();
         labelRepository.deleteAllInBatch();
         adminBearer = "Bearer " + jwtProvider.issueAccessToken(1L, MemberRole.ADMIN);
@@ -241,7 +241,7 @@ class LabelAdminControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, userBearer))
                 .andExpect(status().isForbidden());
 
-        // SecurityFilter 우회로 실제 삭제까지 도달하는 회귀를 잡기 위한 DB 가드.
+        // 삭제되지 않고 보존됐는지 DB 확인
         assertThat(labelRepository.findById(saved.getId())).isPresent();
     }
 }

@@ -29,19 +29,10 @@ import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * <b>N+1 제거 회귀 가드</b> (#203, ERD §4.6 [W10]).
- *
- * <p>{@code GET /albums} 목록 응답이 artist/genre/label({@code @ManyToOne(LAZY)})을
- * {@link AlbumRepository#findAll} 의 {@code @EntityGraph} 로 동반 페치해 N+1 SELECT 를 제거했음을
- * Hibernate {@link Statistics} 로 고정한다. W9 베이스라인(#196)에서는 5행 조회 시 본 쿼리 1 +
- * 평점집계 1 + lazy resolve 15 = {@code prepareStatementCount 17}, {@code entityFetchCount 15}
- * (행 P개로 일반화 시 {@code 1 + 1 + 3P})였다.
- *
- * <p>개선 후 판정 기준: 페치 조인으로 {@code entityFetchCount == 0}, {@code prepareStatementCount}
- * 는 본 쿼리 1 + 평점집계 1 = <b>2 로 행수 무관 상수</b>. 누군가 {@code @EntityGraph} 를 제거해
- * N+1 을 재유발하면 본 테스트가 즉시 실패한다.
- */
+// N+1 제거 회귀 가드.
+// GET /albums 목록 응답이 artist/genre/label 을 findAll 의 @EntityGraph 로 동반 페치해 N+1 SELECT 가
+// 없음을 Hibernate Statistics 로 고정한다.
+// 판정 기준: entityFetchCount == 0, prepareStatementCount 는 본 쿼리 1 + 평점집계 1 = 2 로 행수 무관 상수.
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
@@ -49,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("AlbumService.search — N+1 제거 회귀 가드 (#203)")
 class AlbumQueryN1Test {
 
-    /** 평점집계 IN 쿼리는 빈 페이지가 아니면 항상 실행되므로, 본 쿼리(1) + 평점집계(1) = 상수. */
+    // 본 쿼리(1) + 평점집계(1) = 상수.
     private static final long EXPECTED_QUERY_COUNT = 2L;
 
     @Autowired
@@ -94,7 +85,7 @@ class AlbumQueryN1Test {
 
         assertThat(page.getTotalElements()).isEqualTo(5);
 
-        // artist/genre/label 이 본 쿼리에 OUTER JOIN 으로 인라인 → 행마다 풀리는 lazy fetch 가 0.
+        // artist/genre/label 이 본 쿼리에 OUTER JOIN 으로 인라인 → lazy fetch 0
         assertThat(statistics.getEntityFetchCount())
                 .as("@EntityGraph 동반 페치로 추가 lazy resolve 가 없어야 한다 (W9 베이스라인 15 → 0)")
                 .isZero();
@@ -103,7 +94,7 @@ class AlbumQueryN1Test {
                 .as("@EntityGraph 를 제거하면 lazy resolve 가 살아나 이 어서션이 깨진다 — N+1 재발 가드")
                 .isEqualTo(EXPECTED_QUERY_COUNT);
 
-        // 페치가 실제로 됐는지(프록시 null 아님) — 연관 값이 DTO 에 채워졌는지 확인.
+        // 연관 값이 DTO 에 채워졌는지 확인
         AlbumSummaryResponse first = page.getContent().getFirst();
         assertThat(first.artist()).isNotNull();
         assertThat(first.artist().name()).isNotNull();
@@ -113,10 +104,7 @@ class AlbumQueryN1Test {
         assertThat(first.label().name()).isNotNull();
     }
 
-    /**
-     * <b>행수 무관 상수화 증명</b> — 베이스라인의 {@code 1 + 1 + 3P} 선형 증가가 제거됐음을 직접 보인다.
-     * 행 수를 3건과 7건으로 달리해도 {@code prepareStatementCount} 가 동일(2)함을 단언한다.
-     */
+    // 행 수를 3건과 7건으로 달리해도 prepareStatementCount 가 동일(2)함을 단언한다.
     @Test
     @DisplayName("[#203] 행수가 달라도 쿼리 수 상수 — 3건·7건 모두 2개")
     void search_keepsQueryCountConstant_regardlessOfRowCount() {
@@ -134,12 +122,8 @@ class AlbumQueryN1Test {
                 .isEqualTo(EXPECTED_QUERY_COUNT);
     }
 
-    /**
-     * <b>keyword 경로 + label=null 회귀 가드</b> — {@code AlbumSpecs.keyword} 가 FULLTEXT
-     * {@code MATCH(title, artist_name) AGAINST(...)}(#204) 로 검색하는 경로에서도 {@code @EntityGraph}
-     * 동반 페치(#203)가 유지돼 N+1 이 없고, {@code label=null} 앨범이 OUTER JOIN 으로 결과에서
-     * 누락되지 않음을 함께 고정한다. SELLING_ALL 경로만 보면 이 조합이 한 번도 실행되지 않아 생기는 갭을 메운다.
-     */
+    // keyword(FULLTEXT) 검색 경로에서도 @EntityGraph 동반 페치로 N+1 이 없고, label=null 앨범이
+    // OUTER JOIN 으로 결과에서 누락되지 않음을 검증한다.
     @Test
     @DisplayName("[#203·#204] keyword(FULLTEXT) 검색 + label=null 혼합 — N+1 없음, null 행 누락 없음")
     void search_withKeywordAndNullLabel_noN1() {
@@ -149,13 +133,13 @@ class AlbumQueryN1Test {
                 "Groove", null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
         Page<AlbumSummaryResponse> page = albumService.search(cond, PageRequest.of(0, 20));
 
-        // keyword(FULLTEXT) 경로에서도 @EntityGraph 동반 페치로 lazy resolve 0.
+        // keyword(FULLTEXT) 경로에서도 @EntityGraph 동반 페치로 lazy resolve 0
         assertThat(statistics.getEntityFetchCount())
                 .as("keyword 경로에서도 artist/genre/label 이 본 쿼리에 동반 페치돼야 한다")
                 .isZero();
         assertThat(statistics.getPrepareStatementCount()).isEqualTo(EXPECTED_QUERY_COUNT);
 
-        // label=null 앨범이 LEFT OUTER JOIN 으로 결과에 포함(누락 없음) — 3건 중 1건은 label 없음.
+        // label=null 앨범이 LEFT OUTER JOIN 으로 결과에 포함 — 3건 중 1건은 label 없음
         assertThat(page.getTotalElements()).isEqualTo(3);
         assertThat(page.getContent())
                 .as("label=null 앨범도 결과에 포함돼야 한다 (INNER JOIN 이면 누락)")
@@ -163,7 +147,7 @@ class AlbumQueryN1Test {
                 .allMatch(a -> a.artist() != null && a.genre() != null);
     }
 
-    /** 주어진 행 수로 재적재 후 search 1회의 prepareStatementCount 를 측정한다. */
+    // 주어진 행 수로 재적재 후 search 1회의 prepareStatementCount 를 측정한다.
     private long measureQueryCountForRows(int rows) {
         seedAlbums(rows);
 
@@ -174,12 +158,8 @@ class AlbumQueryN1Test {
         return statistics.getPrepareStatementCount();
     }
 
-    /**
-     * 공유 Testcontainers DB 격리: 전체 wipe 후 정확히 {@code count} 건 적재한다. 각 album 이 unique
-     * artist/genre/label 을 참조하도록 해 1차 캐시 hit 으로 측정이 흐려지는 것을 막고, 적재 후
-     * {@link EntityManager#clear()} 로 영속성 컨텍스트를 비운 뒤 {@link Statistics#clear()} 로
-     * 측정을 0 에서 시작한다 — search 호출만 통계에 잡히도록.
-     */
+    // 전체 wipe 후 정확히 count 건 적재한다. 각 album 이 unique artist/genre/label 을 참조하도록 하고,
+    // 적재 후 영속성 컨텍스트와 통계를 비워 search 호출만 통계에 잡히도록 한다.
     private void seedAlbums(int count) {
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
@@ -200,12 +180,7 @@ class AlbumQueryN1Test {
         statistics.clear();
     }
 
-    /**
-     * keyword("Groove") 로 전부 매칭되는 3건을 unique artist/genre 로 적재하되, 첫 행은
-     * {@code label=null} 로 둔다 — keyword 의 FULLTEXT 매칭(#204) + {@code @EntityGraph} 페치 조인
-     * 경로와 nullable label 의 OUTER JOIN 동작을 한 번에 커버하기 위함. title 에 "Groove" 토큰이
-     * 들어가 ngram FULLTEXT 로 매칭된다.
-     */
+    // keyword("Groove") 로 전부 매칭되는 3건을 unique artist/genre 로 적재하되, 첫 행은 label=null 로 둔다.
     private void seedKeywordAlbums() {
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();

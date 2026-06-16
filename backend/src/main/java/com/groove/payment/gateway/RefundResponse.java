@@ -7,9 +7,7 @@ import java.time.Instant;
 /**
  * PG 환불 요청에 대한 응답.
  *
- * @param pgTransactionId 환불 처리된 거래 식별자
- * @param status          환불 후 상태 — 정상 처리 시 {@link PaymentStatus#REFUNDED}
- * @param refundedAt      환불 완료 시각
+ * <p>pgTransactionId: 환불 처리된 거래 식별자. status: 환불 후 상태. refundedAt: 환불 완료 시각.
  */
 public record RefundResponse(String pgTransactionId, PaymentStatus status, Instant refundedAt) {
 

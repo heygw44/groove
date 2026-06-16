@@ -58,7 +58,7 @@ class GenreAdminControllerTest {
 
     @BeforeEach
     void cleanup() {
-        // Album → Genre FK 때문에 album 을 먼저 비운다 (W5-3 도입).
+        // Album → Genre FK 때문에 album 을 먼저 비운다.
         albumRepository.deleteAllInBatch();
         genreRepository.deleteAllInBatch();
         adminBearer = "Bearer " + jwtProvider.issueAccessToken(1L, MemberRole.ADMIN);
@@ -210,7 +210,7 @@ class GenreAdminControllerTest {
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("GENRE_NAME_DUPLICATED"));
-        // assert no change persisted
+        // 변경이 저장되지 않았는지 확인
         assertThat(genreRepository.findById(rock.getId()).orElseThrow().getName()).isEqualTo("Rock");
         assertThat(genreRepository.findById(jazz.getId()).orElseThrow().getName()).isEqualTo("Jazz");
     }
@@ -272,7 +272,7 @@ class GenreAdminControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, userBearer))
                 .andExpect(status().isForbidden());
 
-        // SecurityFilter 우회로 실제 삭제까지 도달하는 회귀를 잡기 위한 DB 가드.
+        // 삭제되지 않고 보존됐는지 DB 확인
         assertThat(genreRepository.findById(saved.getId())).isPresent();
     }
 }

@@ -69,7 +69,7 @@ class OrderServiceTest {
     void setUp() {
         orderService = new OrderService(orderRepository, albumRepository, orderNumberGenerator,
                 couponApplicationService, memberRepository);
-        // 활성 회원 기본값 — 가드(#187)는 회원 주문(memberId != null)일 때만 호출된다. 탈퇴 시나리오만 false 로 override 한다.
+        // 활성 회원 기본값 — 탈퇴 시나리오만 false 로 override 한다.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
     }
 
@@ -147,7 +147,7 @@ class OrderServiceTest {
         assertThat(order.getGuestEmail()).isEqualTo("guest@example.com");
         assertThat(order.getGuestPhone()).isEqualTo("01012345678");
         assertThat(order.getMemberId()).isNull();
-        // 게스트 주문은 탈퇴 회원 가드(#187)를 거치지 않는다 — memberId == null 이라 회원 검사를 호출하지 않음.
+        // 게스트 주문(memberId == null)은 회원 검사를 호출하지 않는다.
         verify(memberRepository, never()).existsByIdAndDeletedAtIsNull(any());
     }
 
@@ -470,7 +470,7 @@ class OrderServiceTest {
         assertThat(order.getOrderNumber()).isEqualTo("ORD-20260508-BBBBBB");
     }
 
-    // -- 쿠폰 통합 (#91) ------------------------------------------------------
+    // -- 쿠폰 통합 ------------------------------------------------------
 
     @Test
     @DisplayName("게스트 + memberCouponId → CouponNotApplicableException, 재고/저장 미실행")

@@ -28,13 +28,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 
 /**
- * 주문 API (API.md §3.5).
- *
- * <p>이슈 #43 에서 생성, 이슈 #44 에서 단건 조회 + 취소 + 게스트 lookup 추가.
- *
- * <p>회원/게스트 분기: {@code @AuthenticationPrincipal(required = false)} 로 토큰 유무를 받는다.
- * SecurityConfig 가 POST {@code /api/v1/orders} 와 게스트 lookup 경로를 permitAll 로 풀어 두며,
- * 단건 GET 과 cancel 은 {@code authenticated()} 로 보호된다.
+ * 주문 API — 생성, 단건 조회, 취소, 게스트 lookup.
+ * 회원/게스트 분기는 @AuthenticationPrincipal(required = false) 로 토큰 유무를 받는다.
  */
 @Tag(name = "주문", description = "주문 생성(회원/게스트) · 본인 주문 단건 조회 · 취소 · 게스트 본인 조회")
 @RestController
@@ -102,13 +97,7 @@ public class OrderController {
         return ResponseEntity.ok(OrderResponse.from(order));
     }
 
-    /**
-     * 게스트 본인 주문 조회 — orderNumber 와 email 매칭.
-     *
-     * <p>orderNumber+email 페어 무차별 대입 방지를 위해
-     * {@link com.groove.order.api.ratelimit.OrderGuestLookupRateLimitPolicy} 가 IP 단위 Rate Limit 을
-     * 적용한다 (#208, API.md §3.5).
-     */
+    /** 게스트 본인 주문 조회 — orderNumber 와 email 매칭. IP 단위 Rate Limit 적용. */
     @Operation(summary = "게스트 본인 주문 조회",
             description = "비로그인 게스트가 주문번호와 주문 시 입력한 이메일을 함께 제시해 자신의 주문을 조회한다. "
                     + "이메일이 일치하지 않으면 404 로 응답한다(정보 노출 회피). (공개 엔드포인트)")

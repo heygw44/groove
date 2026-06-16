@@ -52,11 +52,11 @@ async function fetchCoupons(q) {
 }
 
 function onStatusChange(value) {
-  // 상태 변경 시 페이지는 처음으로 되돌린다.
+  // 상태 변경 시 페이지를 처음으로 되돌림
   patchQuery({ status: value, page: undefined })
 }
 
-// status 뱃지 — ISSUED 만 강조, 사용/만료/취소는 흐리게.
+// status 뱃지 — ISSUED 만 강조, 나머지는 흐리게
 function statusClass(status) {
   return status === 'ISSUED' ? 'bg-vinyl-black text-cream-50' : 'bg-vinyl-800/10 text-vinyl-800/60'
 }

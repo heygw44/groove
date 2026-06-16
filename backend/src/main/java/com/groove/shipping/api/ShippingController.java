@@ -15,11 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 배송 API (API.md §3.7).
- *
- * <p>{@code GET /shippings/{trackingNumber}} 는 SecurityConfig 에서 permitAll — 운송장 번호를 아는
- * 사람(주문자)이면 누구나 조회할 수 있다. 운송장 번호는 {@code UuidTrackingNumberGenerator} 가 발급하는
- * UUID 형식(hex + 하이픈)이며, 그 외 형식의 path 는 컨트롤러 진입 단계에서 400 으로 거른다.
+ * 배송 API. GET /shippings/{trackingNumber} 는 permitAll(공개). 운송장 번호는 UUID 형식(hex + 하이픈)이며
+ * 그 외 형식의 path 는 400 으로 거른다.
  */
 @Tag(name = "배송", description = "운송장 번호로 배송 진행 상태 조회 (운송장 번호를 아는 사람이면 누구나 — 공개)")
 @RestController

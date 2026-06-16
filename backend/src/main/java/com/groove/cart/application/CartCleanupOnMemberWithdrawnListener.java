@@ -10,15 +10,9 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * 회원 탈퇴 시 장바구니를 정리하는 리스너 (#78) — MemberWithdrawnEvent 를 AFTER_COMMIT 으로 받아 해당 회원의 cart 를 삭제한다.
- *
- * AFTER_COMMIT + REQUIRES_NEW 인 이유: 커밋 후 부수효과 격리의 표준 패턴이다. 이벤트는 탈퇴(soft delete)
- * 트랜잭션 안에서 발행되며, AFTER_COMMIT 바인딩이면 그 트랜잭션 커밋 뒤에만 실행되므로 "확정되지 않은 탈퇴"에 장바구니가
- * 지워지는 일이 없다. 단 AFTER_COMMIT 시점에는 활성 트랜잭션이 없으므로 DB 쓰기를 하려면 자체 트랜잭션(REQUIRES_NEW)이
- * 필요하다.
- *
- * 실패 격리: 장바구니 정리 실패가 이미 커밋된 탈퇴를 되돌려서는 안 되므로 예외는 여기서 로그로 흡수한다. 남은 빈 cart 는
- * 보안·정합성에 영향이 없는 best-effort 정리 대상(조용히 삼키지 않고 ERROR 로 남김).
+ * MemberWithdrawnEvent 를 AFTER_COMMIT 으로 받아 해당 회원의 cart 를 삭제하는 리스너.
+ * AFTER_COMMIT 시점에는 활성 트랜잭션이 없으므로 DB 쓰기는 REQUIRES_NEW 자체 트랜잭션으로 수행한다.
+ * 정리 실패 시 예외는 ERROR 로그로 흡수한다.
  */
 @Component
 public class CartCleanupOnMemberWithdrawnListener {
