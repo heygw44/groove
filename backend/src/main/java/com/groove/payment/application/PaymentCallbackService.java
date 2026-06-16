@@ -2,6 +2,7 @@ package com.groove.payment.application;
 
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.StockRestorer;
+import com.groove.common.outbox.OutboxEventPublisher;
 import com.groove.coupon.application.CouponApplicationService;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
@@ -13,7 +14,6 @@ import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +28,8 @@ import java.util.stream.Collectors;
  * 한다. 이중 안전선: PG 거래 식별자 단위 멱등성(IdempotencyService 같은 키 공유) + 결제 상태 재확인(PENDING 아니면 무시).
  *
  * 처리:
- * - PAID — Payment PENDING→PAID(paidAt 기록), Order PENDING→PAID, OrderPaidEvent 발행(후속 배송 생성 구독은 #W7-5).
+ * - PAID — Payment PENDING→PAID(paidAt 기록), Order PENDING→PAID, OrderPaidEvent 를 같은 트랜잭션에서 아웃박스에
+ *   기록(#237) — 릴레이가 후속 배송 생성을 at-least-once 로 발행. PAID 와 원자 커밋돼 유실되지 않는다.
  * - FAILED — 보상 트랜잭션: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 각 OrderItem 의 album 재고
  *   복원 + 적용 쿠폰 USED→ISSUED. 어느 단계든 실패하면 트랜잭션 전체가 롤백돼 다음 콜백/폴링에 재시도된다
  *   (OrderService.cancel 의 보상과 같은 패턴 — Aggregate 조율은 ApplicationService 책임). PAYMENT_FAILED 는
@@ -48,15 +49,15 @@ public class PaymentCallbackService {
     private static final String DEFAULT_FAILURE_REASON = "PG 결제 실패 통보";
 
     private final PaymentRepository paymentRepository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final OutboxEventPublisher outboxEventPublisher;
     private final CouponApplicationService couponApplicationService;
     private final AlbumRepository albumRepository;
 
-    public PaymentCallbackService(PaymentRepository paymentRepository, ApplicationEventPublisher eventPublisher,
+    public PaymentCallbackService(PaymentRepository paymentRepository, OutboxEventPublisher outboxEventPublisher,
                                   CouponApplicationService couponApplicationService,
                                   AlbumRepository albumRepository) {
         this.paymentRepository = paymentRepository;
-        this.eventPublisher = eventPublisher;
+        this.outboxEventPublisher = outboxEventPublisher;
         this.couponApplicationService = couponApplicationService;
         this.albumRepository = albumRepository;
     }
@@ -96,7 +97,9 @@ public class PaymentCallbackService {
         if (result == PaymentStatus.PAID) {
             payment.markPaid();
             order.changeStatus(OrderStatus.PAID, null);
-            eventPublisher.publishEvent(
+            // 후속 배송 생성 트리거를 아웃박스에 기록한다(#237) — 이 트랜잭션(PAID)과 원자 커밋돼 프로세스 다운에도
+            // 유실되지 않고, OutboxRelayScheduler 가 멱등 컨슈머에 at-least-once 로 발행한다.
+            outboxEventPublisher.publish(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE, order.getId(), OrderPaidEvent.OUTBOX_EVENT_TYPE,
                     new OrderPaidEvent(order.getId(), order.getOrderNumber(), order.getMemberId(), payment.getId()));
             log.info("결제 확정(PAID): paymentId={}, order={}", payment.getId(), order.getOrderNumber());
         } else {

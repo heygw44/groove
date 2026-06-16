@@ -1,15 +1,10 @@
 package com.groove.payment.application;
 
-import com.groove.common.exception.DomainException;
-import com.groove.member.domain.MemberRepository;
-import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
-import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
-import com.groove.order.exception.IllegalStateTransitionException;
-import com.groove.order.exception.OrderNotFoundException;
 import com.groove.payment.api.dto.PaymentApiResponse;
 import com.groove.payment.api.dto.PaymentCreateRequest;
+import com.groove.payment.application.PaymentRequestSteps.PaymentRequestPrep;
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
@@ -17,6 +12,7 @@ import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentGatewayException;
 import com.groove.payment.exception.PaymentNotFoundException;
 import com.groove.payment.gateway.PaymentGateway;
+import com.groove.payment.gateway.PaymentRequest;
 import com.groove.payment.gateway.PaymentResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,11 +30,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 결제 요청 오케스트레이터 단위 테스트 (#237) — prepare → PG 호출(트랜잭션 밖) → persist 흐름과 PG/충돌 처리.
+ * 검증·영속화 단계 자체는 {@link PaymentRequestStepsTest} 가 다룬다. findForMember 는 그대로 PaymentService 책임.
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("PaymentService")
 class PaymentServiceTest {
@@ -48,212 +47,112 @@ class PaymentServiceTest {
     private static final long ORDER_ID = 10L;
 
     @Mock
-    private PaymentRepository paymentRepository;
-    @Mock
-    private OrderRepository orderRepository;
+    private PaymentRequestSteps steps;
     @Mock
     private PaymentGateway paymentGateway;
     @Mock
-    private MemberRepository memberRepository;
+    private PaymentRepository paymentRepository;
 
     private PaymentService paymentService;
 
     @BeforeEach
     void setUp() {
-        paymentService = new PaymentService(paymentRepository, orderRepository, paymentGateway, memberRepository);
-        // 활성 회원 기본값 — 가드(#187)는 회원 결제(callerMemberId != null)일 때만 호출된다. 탈퇴 시나리오만 false 로 override 한다.
-        lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
-    }
-
-    /** lenient 모드 Order 목 — 테스트마다 사용하는 getter 가 달라 strict 모드면 UnnecessaryStubbing 으로 깨진다. */
-    private Order order(boolean guest, Long memberId, OrderStatus status) {
-        Order order = Mockito.mock(Order.class, Mockito.withSettings().strictness(Strictness.LENIENT));
-        when(order.getId()).thenReturn(ORDER_ID);
-        when(order.getOrderNumber()).thenReturn(ORDER_NUMBER);
-        when(order.getStatus()).thenReturn(status);
-        when(order.getTotalAmount()).thenReturn(ORDER_AMOUNT);
-        // #91: PaymentService 는 청구액으로 payable 을 쓴다. 쿠폰 미적용 주문은 payable == totalAmount.
-        when(order.getPayableAmount()).thenReturn(ORDER_AMOUNT);
-        when(order.isGuestOrder()).thenReturn(guest);
-        when(order.getMemberId()).thenReturn(memberId);
-        return order;
+        paymentService = new PaymentService(steps, paymentGateway, paymentRepository);
     }
 
     private PaymentCreateRequest request() {
         return new PaymentCreateRequest(ORDER_NUMBER, PaymentMethod.CARD);
     }
 
+    private PaymentApiResponse pendingResponse() {
+        return new PaymentApiResponse(1L, ORDER_NUMBER, ORDER_AMOUNT, PaymentStatus.PENDING, PaymentMethod.CARD, "MOCK", null, null);
+    }
+
     @Test
-    @DisplayName("requestPayment: 회원 본인 PENDING 주문 → PENDING 결제 저장 후 응답")
-    void requestPayment_member_success() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
-        when(paymentGateway.request(any())).thenReturn(new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK"));
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    @DisplayName("requestPayment: proceed → PG 를 (orderNumber, payable) 로 호출하고 persist 결과 반환")
+    void requestPayment_proceed_callsGatewayThenPersist() {
+        when(steps.prepare(1L, request())).thenReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, ORDER_AMOUNT));
+        PaymentResponse pg = new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK");
+        when(paymentGateway.request(any())).thenReturn(pg);
+        PaymentApiResponse persisted = pendingResponse();
+        when(steps.persist(any(), any(), any())).thenReturn(persisted);
 
         PaymentApiResponse response = paymentService.requestPayment(1L, request());
 
-        assertThat(response.orderNumber()).isEqualTo(ORDER_NUMBER);
-        assertThat(response.amount()).isEqualTo(ORDER_AMOUNT);
-        assertThat(response.status()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(response.method()).isEqualTo(PaymentMethod.CARD);
-        assertThat(response.pgProvider()).isEqualTo("MOCK");
-        assertThat(response.paidAt()).isNull();
-
-        ArgumentCaptor<Payment> saved = ArgumentCaptor.forClass(Payment.class);
-        verify(paymentRepository).save(saved.capture());
-        assertThat(saved.getValue().getStatus()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(saved.getValue().getPgTransactionId()).isEqualTo("mock-tx-1");
+        assertThat(response).isSameAs(persisted);
+        ArgumentCaptor<PaymentRequest> pgReq = ArgumentCaptor.forClass(PaymentRequest.class);
+        verify(paymentGateway).request(pgReq.capture());
+        assertThat(pgReq.getValue().orderNumber()).isEqualTo(ORDER_NUMBER);
+        assertThat(pgReq.getValue().amount()).isEqualTo(ORDER_AMOUNT);
+        verify(steps).persist(any(PaymentRequestPrep.class), any(), any());
     }
 
     @Test
-    @DisplayName("requestPayment: 게스트 주문 → 익명 호출자도 결제 접수")
-    void requestPayment_guestOrder_anonymousCaller_success() {
-        Order order = order(true, null, OrderStatus.PENDING);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
-        when(paymentGateway.request(any())).thenReturn(new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK"));
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        PaymentApiResponse response = paymentService.requestPayment(null, new PaymentCreateRequest(ORDER_NUMBER, PaymentMethod.MOCK));
-
-        assertThat(response.status()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(response.method()).isEqualTo(PaymentMethod.MOCK);
-        verify(paymentRepository).save(any());
-    }
-
-    @Test
-    @DisplayName("requestPayment: 타 회원 주문 → 404, PG·저장 미호출")
-    void requestPayment_memberOrder_otherCaller_throwsNotFound() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-
-        assertThatThrownBy(() -> paymentService.requestPayment(2L, request()))
-                .isInstanceOf(OrderNotFoundException.class);
-
-        verify(paymentGateway, never()).request(any());
-        verify(paymentRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("requestPayment: 회원 주문에 익명 접근 → 404")
-    void requestPayment_memberOrder_anonymousCaller_throwsNotFound() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-
-        assertThatThrownBy(() -> paymentService.requestPayment(null, request()))
-                .isInstanceOf(OrderNotFoundException.class);
-    }
-
-    @Test
-    @DisplayName("requestPayment: 미존재 주문 → 404")
-    void requestPayment_unknownOrder_throwsNotFound() {
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> paymentService.requestPayment(1L, request()))
-                .isInstanceOf(OrderNotFoundException.class);
-    }
-
-    @Test
-    @DisplayName("requestPayment: 주문에 이미 결제가 있으면 기존 건 반환 (PG·저장 미호출)")
-    void requestPayment_existingPayment_returnsExisting() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        Payment existing = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.BANK_TRANSFER, "MOCK", "mock-tx-existing");
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(existing));
+    @DisplayName("requestPayment: 기존 결제(existing) → PG·persist 미호출, 기존 응답 반환")
+    void requestPayment_existing_returnsWithoutGateway() {
+        PaymentApiResponse existing = pendingResponse();
+        when(steps.prepare(1L, request())).thenReturn(PaymentRequestPrep.existing(existing));
 
         PaymentApiResponse response = paymentService.requestPayment(1L, request());
 
-        assertThat(response.method()).isEqualTo(PaymentMethod.BANK_TRANSFER);
-        assertThat(response.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(response).isSameAs(existing);
         verify(paymentGateway, never()).request(any());
-        verify(paymentRepository, never()).save(any());
+        verify(steps, never()).persist(any(), any(), any());
     }
 
     @Test
-    @DisplayName("requestPayment: PENDING 아닌 주문 → 409, PG·저장 미호출")
-    void requestPayment_orderNotPending_throwsConflict() {
-        Order order = order(false, 1L, OrderStatus.PAID);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> paymentService.requestPayment(1L, request()))
-                .isInstanceOf(IllegalStateTransitionException.class);
-
-        verify(paymentGateway, never()).request(any());
-        verify(paymentRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("requestPayment: payable<=0 주문 → 422 DomainException, PG·저장 미호출 (#91 전액할인 v1 미지원)")
-    void requestPayment_zeroPayableOrder_throwsDomainException() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
-        when(order.getPayableAmount()).thenReturn(0L);   // 쿠폰 전액할인 → payable=0
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> paymentService.requestPayment(1L, request()))
-                .isInstanceOf(DomainException.class);
-
-        verify(paymentGateway, never()).request(any());
-        verify(paymentRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("requestPayment: 쿠폰 적용 주문 → PG·Payment 모두 payable 로 청구 (#91)")
-    void requestPayment_withCoupon_chargesPayable() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
-        when(order.getTotalAmount()).thenReturn(50_000L);
-        when(order.getPayableAmount()).thenReturn(30_000L);   // 20,000 할인
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
-        when(paymentGateway.request(any())).thenAnswer(inv -> {
-            com.groove.payment.gateway.PaymentRequest pgReq = inv.getArgument(0);
-            assertThat(pgReq.amount()).isEqualTo(30_000L);   // PG 청구액은 payable
-            return new PaymentResponse("mock-tx-coupon", PaymentStatus.PENDING, "MOCK");
-        });
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        PaymentApiResponse response = paymentService.requestPayment(1L, request());
-
-        assertThat(response.amount()).isEqualTo(30_000L);   // 저장된 Payment.amount 도 payable
-    }
-
-    @Test
-    @DisplayName("requestPayment: PG 호출 실패 → PaymentGatewayException 으로 정규화, 저장 미호출")
-    void requestPayment_gatewayThrows_wrappedAsPaymentGatewayException() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
+    @DisplayName("requestPayment: PG 호출 실패 → PaymentGatewayException 으로 정규화, persist 미호출")
+    void requestPayment_gatewayThrows_wrappedAndNoPersist() {
+        when(steps.prepare(1L, request())).thenReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, ORDER_AMOUNT));
         when(paymentGateway.request(any())).thenThrow(new RuntimeException("PG down"));
 
         assertThatThrownBy(() -> paymentService.requestPayment(1L, request()))
                 .isInstanceOf(PaymentGatewayException.class);
 
-        verify(paymentRepository, never()).save(any());
+        verify(steps, never()).persist(any(), any(), any());
     }
 
     @Test
-    @DisplayName("requestPayment: 탈퇴(soft delete) 회원이 본인 PENDING 주문 결제 → 404, PG·저장 미호출 (#187)")
-    void requestPayment_memberWithdrawn_throwsNotFound() {
-        long withdrawnMemberId = 7L;
-        Order order = order(false, withdrawnMemberId, OrderStatus.PENDING);
-        when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
-        when(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).thenReturn(false);
+    @DisplayName("requestPayment: persist 가 uk_payment_order 충돌 → 기존 결제 재조회로 멱등 복원")
+    void requestPayment_persistConflict_recoversExisting() {
+        when(steps.prepare(1L, request())).thenReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, ORDER_AMOUNT));
+        when(paymentGateway.request(any())).thenReturn(new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK"));
+        when(steps.persist(any(), any(), any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk"));
+        PaymentApiResponse recovered = pendingResponse();
+        when(steps.findExistingForOrder(ORDER_ID)).thenReturn(Optional.of(recovered));
 
-        assertThatThrownBy(() -> paymentService.requestPayment(withdrawnMemberId, request()))
-                .isInstanceOf(MemberNotFoundException.class);
+        PaymentApiResponse response = paymentService.requestPayment(1L, request());
 
-        verify(paymentRepository, never()).findByOrderId(any());
-        verify(paymentGateway, never()).request(any());
-        verify(paymentRepository, never()).save(any());
+        assertThat(response).isSameAs(recovered);
+    }
+
+    @Test
+    @DisplayName("requestPayment: persist 충돌인데 기존 결제도 없으면(이론상) 충돌 예외 전파")
+    void requestPayment_persistConflict_noExisting_rethrows() {
+        when(steps.prepare(1L, request())).thenReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, ORDER_AMOUNT));
+        when(paymentGateway.request(any())).thenReturn(new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK"));
+        when(steps.persist(any(), any(), any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk"));
+        when(steps.findExistingForOrder(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> paymentService.requestPayment(1L, request()))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // --- findForMember (PaymentService 책임 그대로) ---
+
+    private Order order(boolean guest, Long memberId) {
+        Order order = Mockito.mock(Order.class, Mockito.withSettings().strictness(Strictness.LENIENT));
+        when(order.getOrderNumber()).thenReturn(ORDER_NUMBER);
+        when(order.getStatus()).thenReturn(OrderStatus.PENDING);
+        when(order.isGuestOrder()).thenReturn(guest);
+        when(order.getMemberId()).thenReturn(memberId);
+        return order;
     }
 
     @Test
     @DisplayName("findForMember: 본인 주문 결제 → 응답 반환")
     void findForMember_owned_returnsResponse() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
+        Order order = order(false, 1L);
         Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.CARD, "MOCK", "mock-tx-1");
         when(paymentRepository.findById(99L)).thenReturn(Optional.of(payment));
 
@@ -275,7 +174,7 @@ class PaymentServiceTest {
     @Test
     @DisplayName("findForMember: 타 회원 주문 결제 → 404")
     void findForMember_otherMember_throwsNotFound() {
-        Order order = order(false, 1L, OrderStatus.PENDING);
+        Order order = order(false, 1L);
         Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.CARD, "MOCK", "mock-tx-1");
         when(paymentRepository.findById(99L)).thenReturn(Optional.of(payment));
 
@@ -286,7 +185,7 @@ class PaymentServiceTest {
     @Test
     @DisplayName("findForMember: 게스트 주문 결제는 회원이 조회할 수 없음 → 404")
     void findForMember_guestOrderPayment_throwsNotFound() {
-        Order order = order(true, null, OrderStatus.PENDING);
+        Order order = order(true, null);
         Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.MOCK, "MOCK", "mock-tx-1");
         when(paymentRepository.findById(99L)).thenReturn(Optional.of(payment));
 

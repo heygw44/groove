@@ -1,5 +1,7 @@
 package com.groove.shipping;
 
+import com.groove.common.outbox.OutboxEventPublisher;
+import com.groove.common.outbox.OutboxRelayScheduler;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
@@ -18,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,8 +37,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 배송 E2E 통합 테스트 (#W7-6) — Testcontainers MySQL 위에서 실제 이벤트/트랜잭션/스케줄러를 돌린다.
  *
  * <ul>
- *   <li>{@code OrderPaidEvent} 가 커밋되면 {@code ShippingCreationListener} 가 PREPARING 배송을 만들고 운송장을 발급한다.</li>
- *   <li>같은 이벤트가 다시 와도 배송은 1건 (uk_shipping_order + existsByOrderId 가드).</li>
+ *   <li>{@code OrderPaidEvent} 가 아웃박스에 기록·커밋되면 릴레이({@code OutboxRelayScheduler})가
+ *       {@code OrderPaidOutboxHandler} 로 디스패치해 PREPARING 배송을 만들고 운송장을 발급한다 (#237).</li>
+ *   <li>같은 이벤트가 다시 발행돼도 배송은 1건 (uk_shipping_order + existsByOrderId 가드 — 멱등 컨슈머).</li>
  *   <li>자동 진행 스케줄러가 PREPARING → SHIPPED → DELIVERED 로 한 단계씩 민다 (테스트 프로파일은 delay 0).</li>
  *   <li>{@code GET /api/v1/shippings/{trackingNumber}} 가 배송을 조회하고, 미존재/형식 위반은 404/400.</li>
  * </ul>
@@ -56,7 +58,11 @@ class ShippingIntegrationTest {
     @Autowired
     private ShippingRepository shippingRepository;
     @Autowired
-    private ApplicationEventPublisher publisher;
+    private OutboxEventPublisher outboxEventPublisher;
+    @Autowired
+    private OutboxRelayScheduler outboxRelayScheduler;
+    @Autowired
+    private com.groove.common.outbox.OutboxEventRepository outboxEventRepository;
     @Autowired
     private PlatformTransactionManager txManager;
     @Autowired
@@ -71,6 +77,7 @@ class ShippingIntegrationTest {
     @BeforeEach
     void setUp() {
         tx = new TransactionTemplate(txManager);
+        outboxEventRepository.deleteAllInBatch();
         shippingRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
     }
@@ -82,9 +89,10 @@ class ShippingIntegrationTest {
     }
 
     /**
-     * 결제 콜백을 재현한다 — 같은 트랜잭션에서 주문을 PAID 로 전이시키고 {@code OrderPaidEvent} 를 발행한다
-     * ({@code PaymentCallbackService.applyResult} 와 동일). AFTER_COMMIT 으로 배송이 생성되며 주문은 PREPARING 으로
-     * 락스텝 전진한다. 멱등 호출(같은 이벤트 재전달)에 대비해 이미 PENDING 이 아니면 전이를 건너뛴다.
+     * 결제 콜백을 재현한다 — 같은 트랜잭션에서 주문을 PAID 로 전이시키고 {@code OrderPaidEvent} 를 아웃박스에 기록한다
+     * ({@code PaymentCallbackService.applyResult} 와 동일, #237). 이어 릴레이를 직접 돌려 미발행 이벤트를 컨슈머
+     * ({@code OrderPaidOutboxHandler})에 디스패치하면 배송이 생성되고 주문이 PREPARING 으로 락스텝 전진한다. 멱등
+     * 호출(같은 이벤트 재발행)에 대비해 이미 PENDING 이 아니면 전이를 건너뛴다.
      */
     private void publishOrderPaid(Order order) {
         tx.executeWithoutResult(s -> {
@@ -92,9 +100,11 @@ class ShippingIntegrationTest {
             if (managed.getStatus() == OrderStatus.PENDING) {
                 managed.changeStatus(OrderStatus.PAID, null);
             }
-            publisher.publishEvent(
+            outboxEventPublisher.publish(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE, managed.getId(),
+                    OrderPaidEvent.OUTBOX_EVENT_TYPE,
                     new OrderPaidEvent(managed.getId(), managed.getOrderNumber(), managed.getMemberId(), 1L));
         });
+        outboxRelayScheduler.relayPendingEvents();
     }
 
     private OrderStatus orderStatus(Long orderId) {
@@ -270,14 +280,16 @@ class ShippingIntegrationTest {
     }
 
     @Test
-    @DisplayName("이미 CANCELLED 된 주문에 OrderPaidEvent 가 와도 배송을 만들지 않는다 (#233 AFTER_COMMIT 가드)")
+    @DisplayName("이미 CANCELLED 된 주문에 OrderPaid 이벤트가 와도 배송을 만들지 않는다 (#233 프로비저닝 가드)")
     void cancelledOrder_noShippingProvisioned() {
         Order order = persistGuestOrder();
-        // 발송 전 환불로 주문이 먼저 CANCELLED 가 된 뒤, 늦게 도착한 OrderPaidEvent 의 AFTER_COMMIT 리스너가 도는 race
+        // 발송 전 환불로 주문이 먼저 CANCELLED 가 된 뒤, 늦게 도착한 OrderPaid 아웃박스 이벤트가 릴레이되는 race
         cancelOrder(order);
 
-        tx.executeWithoutResult(s -> publisher.publishEvent(
+        tx.executeWithoutResult(s -> outboxEventPublisher.publish(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE, order.getId(),
+                OrderPaidEvent.OUTBOX_EVENT_TYPE,
                 new OrderPaidEvent(order.getId(), order.getOrderNumber(), order.getMemberId(), 1L)));
+        outboxRelayScheduler.relayPendingEvents();
 
         // 프로비저닝 가드가 종착 주문에 배송을 만들지 않는다
         assertThat(shippingRepository.findByOrderId(order.getId())).isEmpty();

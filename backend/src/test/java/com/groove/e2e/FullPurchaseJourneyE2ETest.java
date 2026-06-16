@@ -129,6 +129,8 @@ class FullPurchaseJourneyE2ETest {
     @Autowired private ShippingRepository shippingRepository;
     @Autowired private ReviewRepository reviewRepository;
     @Autowired private ShippingProgressScheduler shippingProgressScheduler;
+    @Autowired private com.groove.common.outbox.OutboxRelayScheduler outboxRelayScheduler;
+    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository;
 
     private Long album1Id;
     private Long album2Id;
@@ -171,6 +173,7 @@ class FullPurchaseJourneyE2ETest {
         // 부모 삭제와 함께 정리된다. refresh_token 은 member 에 비-CASCADE FK 를 가지므로 member 보다 먼저 비운다.
         refreshTokenRepository.deleteAllInBatch();
         reviewRepository.deleteAllInBatch();
+        outboxEventRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         shippingRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
@@ -204,12 +207,12 @@ class FullPurchaseJourneyE2ETest {
         String pgTransactionId = requestPayment(bearer, orderNumber, "idem-" + orderNumber);
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.PENDING);
 
-        // 5) PAID 웹훅 → 결제 확정 + (AFTER_COMMIT) 배송 생성에 맞춰 주문은 PREPARING 으로 락스텝 전진 (이슈 #161)
+        // 5) PAID 웹훅 → 결제 확정 + 아웃박스 릴레이가 후속 배송 생성을 발행해 주문은 PREPARING 으로 락스텝 전진 (#161, #237)
         confirmPaymentPaid(pgTransactionId);
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PREPARING);
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.PAID);
 
-        // 6) OrderPaidEvent(AFTER_COMMIT) → 배송 자동 생성 (비동기) — 배송지 스냅샷·운송장 발급
+        // 6) OrderPaid 아웃박스 이벤트 → 릴레이가 배송 자동 생성 — 배송지 스냅샷·운송장 발급
         Shipping shipping = awaitShippingCreated();
         assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.PREPARING);
         assertThat(shipping.getRecipientName()).isEqualTo("김철수"); // 주문 생성 시 보낸 배송지 스냅샷
@@ -313,7 +316,8 @@ class FullPurchaseJourneyE2ETest {
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.FAILED);
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(stockOf(album1Id)).as("실패 보상 — 차감했던 재고 복원").isEqualTo(INITIAL_STOCK);
-        // 결제 실패 시 OrderPaidEvent 가 발행되지 않으므로 배송도 생성되지 않는다 (웹훅 처리는 동기 — 반환 시점에 확정).
+        // 결제 실패 시 ORDER_PAID 아웃박스 이벤트가 기록되지 않으므로(FAILED 분기) 릴레이 후에도 배송은 생성되지 않는다.
+        outboxRelayScheduler.relayPendingEvents();
         assertThat(shippingRepository.findAll()).as("실패 결제에는 배송이 생기지 않는다").isEmpty();
     }
 
@@ -439,12 +443,17 @@ class FullPurchaseJourneyE2ETest {
         return paymentRepository.findByOrderId(orderId).orElseThrow().getPgTransactionId();
     }
 
-    /** PG PAID 웹훅을 직접 호출해 결제·주문을 확정한다. */
+    /**
+     * PG PAID 웹훅을 직접 호출해 결제·주문을 확정하고, 아웃박스 릴레이를 한 번 돌려 후속 배송 생성을 트리거한다 (#237).
+     * 실 흐름에선 applyResult 가 PAID 와 같은 트랜잭션에서 아웃박스에 기록하고 OutboxRelayScheduler 가 주기적으로 발행하지만,
+     * 테스트 프로파일은 릴레이 자동 실행을 끄므로(interval PT1H) 여기서 직접 한 틱을 돌린다.
+     */
     private void confirmPaymentPaid(String pgTransactionId) throws Exception {
         postWebhook(pgTransactionId, PaymentStatus.PAID, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.outcome").value("APPLIED"))
                 .andExpect(jsonPath("$.paymentStatus").value("PAID"));
+        outboxRelayScheduler.relayPendingEvents();
     }
 
     /** PG FAILED 웹훅을 직접 호출해 보상 트랜잭션(재고 복원 + 주문 PAYMENT_FAILED)을 트리거한다. */
@@ -485,7 +494,7 @@ class FullPurchaseJourneyE2ETest {
 
     // ---------- 비동기/스케줄러/상태 헬퍼 ----------
 
-    /** {@code OrderPaidEvent}(AFTER_COMMIT)로 비동기 생성되는 배송 1건이 나타날 때까지 폴링하고 그 엔티티를 돌려준다. */
+    /** 아웃박스 릴레이(confirmPaymentPaid 가 트리거)로 생성되는 배송 1건이 나타날 때까지 폴링하고 그 엔티티를 돌려준다. */
     private Shipping awaitShippingCreated() {
         await().atMost(SHIPPING_EVENT_TIMEOUT_SECONDS, SECONDS)
                 .untilAsserted(() -> assertThat(shippingRepository.findAll()).hasSize(1));

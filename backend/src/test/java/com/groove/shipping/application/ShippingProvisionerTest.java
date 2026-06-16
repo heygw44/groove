@@ -70,9 +70,9 @@ class ShippingProvisionerTest {
     }
 
     @Test
-    @DisplayName("주문이 종착(취소·환불)이면 배송을 만들지 않고 false 반환 — AFTER_COMMIT race 가드 (#233)")
+    @DisplayName("주문이 종착(취소·환불)이면 배송을 만들지 않고 false 반환 — 프로비저닝 race 가드 (#233)")
     void skipsWhenOrderTerminal() {
-        // OrderPaidEvent 의 AFTER_COMMIT 리스너가 도는 사이 별도 트랜잭션의 환불로 주문이 이미 CANCELLED 가 된 race 재현.
+        // OrderPaid 아웃박스 이벤트가 릴레이되는 사이 별도 트랜잭션의 환불로 주문이 이미 CANCELLED 가 된 race 재현.
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
         order.changeStatus(OrderStatus.CANCELLED, "환불");
         given(shippingRepository.existsByOrderId(ORDER_ID)).willReturn(false);

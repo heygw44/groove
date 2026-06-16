@@ -92,7 +92,7 @@ public class Order extends BaseTimeEntity {
     private long discountAmount;
 
     /**
-     * 발급된 운송장 번호 (이슈 #116). 결제 완료 후 shipping 모듈의 ShippingCreationListener 가 배송 생성 직후
+     * 발급된 운송장 번호 (이슈 #116). 결제 완료 후 shipping 모듈의 OrderPaidOutboxHandler 가 배송 생성 직후
      * 기록하며, 결제 전(배송 미생성)에는 null. OrderResponse 가 그대로 노출해 프론트가 별도 매핑 없이
      * GET /shippings/{trackingNumber} 로 배송 추적하게 한다 (라이브 배송 상태는 그 엔드포인트가 담당).
      */
@@ -262,7 +262,7 @@ public class Order extends BaseTimeEntity {
     }
 
     /**
-     * 배송 생성 시 발급된 운송장 번호를 주문에 기록한다 (이슈 #116). shipping 모듈의 ShippingCreationListener 가
+     * 배송 생성 시 발급된 운송장 번호를 주문에 기록한다 (이슈 #116). shipping 모듈의 OrderPaidOutboxHandler 가
      * 결제 완료 후 배송 생성 직후 호출한다 — 쓰기 방향이 shipping→order 라 모듈 의존(shipping 이 order 를 안다)을 깨지
      * 않으며, 주문 상세 응답이 운송장 번호를 노출해 프론트가 별도 매핑 없이 배송 추적을 연결할 수 있게 한다.
      * 멱등 — 이미 기록돼 있으면 무시한다(중복 이벤트·경합 시 첫 값 보존).

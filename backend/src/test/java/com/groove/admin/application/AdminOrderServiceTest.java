@@ -85,8 +85,11 @@ class AdminOrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminOrderService(orderRepository, paymentRepository, paymentGateway,
+        // #237: PG 환불을 트랜잭션 밖으로 분리 — 검증/잠금(prepare)·보상(apply) 트랜잭션 단계는 RefundSteps 가 맡는다.
+        // 실제 RefundSteps 를 mock 리포지토리로 조립해 주입하면 오케스트레이터(prepare→PG→apply) 전 구간을 단위로 검증한다.
+        RefundSteps refundSteps = new RefundSteps(orderRepository, paymentRepository,
                 couponApplicationService, shippingService, albumRepository);
+        service = new AdminOrderService(orderRepository, paymentGateway, refundSteps);
     }
 
     private Album album(int initialStock) {
@@ -345,6 +348,31 @@ class AdminOrderServiceTest {
             assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
             verifyNoInteractions(albumRepository);
+        }
+
+        @Test
+        @DisplayName("동시 환불: prepare 통과 후 apply 시점에 이미 REFUNDED → 보상 없이 멱등 (이중 보상 방지, #237)")
+        void concurrentRefund_applySeesRefunded_noDoubleCompensation() {
+            Album album = album(0);
+            Order order = orderAt(OrderStatus.PAID, album);
+            // prepare 는 PAID 를 보고 PG 를 호출하지만, apply 가 락을 재획득했을 땐 다른 환불이 먼저 적용돼 REFUNDED 다.
+            Payment paid = paidPaymentFor(order);
+            Payment alreadyRefunded = paidPaymentFor(order);
+            alreadyRefunded.markRefunded();
+            when(orderRepository.findWithAlbumsByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
+            when(paymentRepository.findByOrderIdForUpdate(any()))
+                    .thenReturn(Optional.of(paid), Optional.of(alreadyRefunded));
+            when(paymentGateway.refund(any()))
+                    .thenReturn(new RefundResponse(PG_TX, PaymentStatus.REFUNDED, Instant.parse("2026-05-13T10:00:00Z")));
+
+            RefundResult result = service.refund(ORDER_NUMBER, "동시 환불");
+
+            // PG 는 멱등 키로 1회 호출되지만(첫 건과 dedup), 보상(재고/쿠폰/배송)은 apply 의 status==PAID 가드에 막혀 0회.
+            assertThat(result.alreadyRefunded()).isTrue();
+            verify(paymentGateway).refund(any());
+            verifyNoInteractions(albumRepository);
+            verifyNoInteractions(couponApplicationService);
+            verifyNoInteractions(shippingService);
         }
     }
 }
