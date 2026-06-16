@@ -1,16 +1,9 @@
 package com.groove.payment.application;
 
-import com.groove.common.exception.DomainException;
-import com.groove.common.exception.ErrorCode;
-import com.groove.member.domain.MemberRepository;
-import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
-import com.groove.order.domain.OrderRepository;
-import com.groove.order.domain.OrderStatus;
-import com.groove.order.exception.IllegalStateTransitionException;
-import com.groove.order.exception.OrderNotFoundException;
 import com.groove.payment.api.dto.PaymentApiResponse;
 import com.groove.payment.api.dto.PaymentCreateRequest;
+import com.groove.payment.application.PaymentRequestSteps.PaymentRequestPrep;
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.exception.PaymentGatewayException;
@@ -18,92 +11,59 @@ import com.groove.payment.exception.PaymentNotFoundException;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.PaymentRequest;
 import com.groove.payment.gateway.PaymentResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 결제 요청 접수 트랜잭션 경계 (#W7-3, API.md §3.6).
+ * 결제 요청 접수 오케스트레이터 (#W7-3, API.md §3.6 / #237).
  *
- * requestPayment 는 IdempotencyService.execute 의 action 으로 호출되는 것을 전제로 자기 트랜잭션(@Transactional)을
- * 관리하고 반환 전에 커밋한다. 호출자(컨트롤러)는 비트랜잭션이어야 "action 커밋 → 멱등성 마커 COMPLETED 커밋" 순서가
- * 보장된다(IdempotencyService 의 호출 규약).
+ * <p>{@code requestPayment} 는 IdempotencyService.execute 의 action 으로 호출되는 것을 전제로 한다 —
+ * 컨트롤러는 비트랜잭션이어야 "action 커밋 → 멱등성 마커 COMPLETED 커밋" 순서가 보장된다. 이 메서드 자체는
+ * 트랜잭션을 열지 않고, 트랜잭션 경계를 갖는 두 단계({@link PaymentRequestSteps#prepare 검증},
+ * {@link PaymentRequestSteps#persist 영속화})를 협력 빈에 위임한다. 각 단계가 반환 전 커밋하므로 멱등 실행
+ * 규약은 그대로 유지된다.
  *
- * 처리 순서: 주문 로딩 + 회원 주문이면 호출자 소유 검증(불일치/익명 → OrderNotFoundException 404) → 이미 접수된 결제가
- * 있으면 그대로 반환(주문 레벨 멱등, uk_payment_order 충돌 사전 회피) → 상태가 PENDING 아니면 409
- * (IllegalStateTransitionException, ORDER_INVALID_STATE_TRANSITION) → 금액 0 이하면 422
- * (DomainException, DOMAIN_RULE_VIOLATION) → PG request() 호출(실패 시 PaymentGatewayException 502) →
- * Payment(PENDING) 저장 후 응답.
+ * <p><b>PG 호출의 트랜잭션 분리 (#237)</b>: 상태 검증(readOnly tx) → PG {@code request()}(트랜잭션 밖) →
+ * Payment(PENDING) 영속화(tx) 로 나눠 PG 호출 동안 DB 커넥션을 점유하지 않는다. 기존 한계(PG request() 가
+ * {@code @Transactional} 안에서 Mock 처리 지연 동안 커넥션 점유)를 제거한다 — 실 PG 전환 시 커넥션 풀 고갈 방지.
+ * PG 호출 실패 시점에는 아직 Payment 가 영속화되지 않았으므로 보상이 필요 없고 {@link PaymentGatewayException}(502)
+ * 만 전파한다.
  *
- * 결제 확정(PAID/FAILED 전이, paidAt 기록, 주문 상태 전이)은 #W7-4 웹훅/폴링 범위이며 본 서비스는 주문 상태를 바꾸지
- * 않는다.
- *
- * 알려진 한계: PG request() 호출이 @Transactional 안에서 일어나 (Mock 처리 지연 동안) DB 커넥션을 점유한다 —
- * v1 Mock 지연은 짧아 허용. 실 PG 도입 시 PG 호출과 영속화 분리를 재검토.
+ * <p>결제 확정(PAID/FAILED 전이, paidAt 기록, 주문 상태 전이)은 #W7-4 웹훅/폴링 범위
+ * ({@code PaymentCallbackService})이며 본 서비스는 주문 상태를 바꾸지 않는다.
  */
 @Service
 public class PaymentService {
 
-    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
-
-    private final PaymentRepository paymentRepository;
-    private final OrderRepository orderRepository;
+    private final PaymentRequestSteps steps;
     private final PaymentGateway paymentGateway;
-    private final MemberRepository memberRepository;
+    private final PaymentRepository paymentRepository;
 
-    public PaymentService(PaymentRepository paymentRepository,
-                          OrderRepository orderRepository,
+    public PaymentService(PaymentRequestSteps steps,
                           PaymentGateway paymentGateway,
-                          MemberRepository memberRepository) {
-        this.paymentRepository = paymentRepository;
-        this.orderRepository = orderRepository;
+                          PaymentRepository paymentRepository) {
+        this.steps = steps;
         this.paymentGateway = paymentGateway;
-        this.memberRepository = memberRepository;
+        this.paymentRepository = paymentRepository;
     }
 
     /** 결제 요청 접수. callerMemberId 는 인증 회원의 id (게스트/익명이면 null). */
-    @Transactional
     public PaymentApiResponse requestPayment(Long callerMemberId, PaymentCreateRequest request) {
-        Order order = orderRepository.findByOrderNumber(request.orderNumber())
-                .orElseThrow(OrderNotFoundException::new);
-        if (!canRequestPaymentFor(order, callerMemberId)) {
-            // 타 회원 주문 또는 회원 주문에 익명 접근 — 존재 노출 회피를 위해 404 로 통일.
-            throw new OrderNotFoundException();
+        PaymentRequestPrep prep = steps.prepare(callerMemberId, request);
+        if (prep.isExisting()) {
+            return prep.existingResponse();
         }
-        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이 자신의 PENDING 주문을 결제하는 윈도우를 차단한다
-        // (#187, #171·주문 생성과 일관) — 게스트 결제(callerMemberId == null)는 제외.
-        if (callerMemberId != null && !memberRepository.existsByIdAndDeletedAtIsNull(callerMemberId)) {
-            throw new MemberNotFoundException();
+        // PG 호출은 트랜잭션 밖 — prepare 의 readOnly 트랜잭션이 이미 커밋(커넥션 해제)됐고, persist 가 새 트랜잭션을 연다.
+        PaymentResponse pgResponse = callGateway(prep.orderNumber(), prep.payable());
+        try {
+            return steps.persist(prep, request.method(), pgResponse);
+        } catch (DataIntegrityViolationException duplicate) {
+            // prepare/persist 사이에 동시 다른 멱등 키로 같은 주문 결제가 접수돼 uk_payment_order 충돌 —
+            // 새 트랜잭션에서 기존 결제를 재조회해 주문 레벨 멱등으로 응답한다(충돌 트랜잭션은 rollback-only 라 분리 필수).
+            return steps.findExistingForOrder(prep.orderId())
+                    .orElseThrow(() -> duplicate);
         }
-
-        Payment existing = paymentRepository.findByOrderId(order.getId()).orElse(null);
-        if (existing != null) {
-            // 같은 주문에 이미 접수된 결제가 있으면 그대로 반환한다(주문 레벨 멱등). 본 이슈에선 결제가 항상
-            // PENDING 이라 무해하지만, #W7-4 이후 PAID/FAILED 로 확정된 결제에 재요청이 와도 상태와 무관하게
-            // 그 결제를 돌려준다 — 그 시점에 "이미 처리된 결제" 분기를 따로 둘지 재검토할 것.
-            return PaymentApiResponse.from(existing);
-        }
-
-        if (order.getStatus() != OrderStatus.PENDING) {
-            throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.PAID);
-        }
-        // 청구액은 payable = totalAmount − discountAmount (#91). 쿠폰 미적용 주문은 payable == totalAmount.
-        // payable <= 0 가드는 v1 전액할인 미지원 정책의 결제 도메인 표현이다 (docs/plans/coupon-system.md §결정).
-        // V15 의 CHECK 가 음수는 사전 차단하지만, payable==0 은 DB CHECK 를 통과하므로 여기서 거부한다.
-        long payable = order.getPayableAmount();
-        if (payable <= 0) {
-            throw new DomainException(ErrorCode.DOMAIN_RULE_VIOLATION,
-                    "결제할 금액이 없는 주문입니다: " + order.getOrderNumber());
-        }
-
-        PaymentResponse pgResponse = callGateway(order, payable);
-        Payment payment = paymentRepository.save(Payment.initiate(
-                order, payable, request.method(), pgResponse.provider(), pgResponse.pgTransactionId()));
-        log.info("결제 접수: paymentId={}, order={}, amount={}, method={}, pgTx={}",
-                payment.getId(), order.getOrderNumber(), payment.getAmount(), payment.getMethod(),
-                payment.getPgTransactionId());
-        return PaymentApiResponse.from(payment);
     }
 
     /**
@@ -120,22 +80,14 @@ public class PaymentService {
         return PaymentApiResponse.from(payment);
     }
 
-    /** 게스트 주문은 익명 호출자도 결제 시작 가능 (API.md — POST /payments 는 Public). 회원 주문은 본인만. */
-    private boolean canRequestPaymentFor(Order order, Long callerMemberId) {
-        if (order.isGuestOrder()) {
-            return true;
-        }
-        return order.getMemberId().equals(callerMemberId);
-    }
-
     /** GET /payments/{id} 는 회원 전용 — 회원 본인이 소유한 주문의 결제만 노출한다. */
     private boolean isOwnedByMember(Order order, Long memberId) {
         return !order.isGuestOrder() && order.getMemberId().equals(memberId);
     }
 
-    private PaymentResponse callGateway(Order order, long payableAmount) {
+    private PaymentResponse callGateway(String orderNumber, long payableAmount) {
         // PG 청구액은 payable (#91) — 쿠폰 할인 반영 후의 실제 결제 금액.
-        PaymentRequest pgRequest = new PaymentRequest(order.getOrderNumber(), payableAmount);
+        PaymentRequest pgRequest = new PaymentRequest(orderNumber, payableAmount);
         try {
             return paymentGateway.request(pgRequest);
         } catch (RuntimeException gatewayFailure) {

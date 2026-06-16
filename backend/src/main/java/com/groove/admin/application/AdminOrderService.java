@@ -1,28 +1,18 @@
 package com.groove.admin.application;
 
-import com.groove.catalog.album.domain.AlbumRepository;
-import com.groove.catalog.album.domain.StockRestorer;
+import com.groove.admin.application.RefundSteps.RefundPrep;
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
-import com.groove.coupon.application.CouponApplicationService;
 import com.groove.order.domain.Order;
-import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderSpecifications;
 import com.groove.order.domain.OrderStatus;
 import com.groove.order.exception.IllegalStateTransitionException;
 import com.groove.order.exception.OrderNotFoundException;
-import com.groove.payment.domain.Payment;
-import com.groove.payment.domain.PaymentRepository;
-import com.groove.payment.domain.PaymentStatus;
-import com.groove.payment.exception.PaymentGatewayException;
-import com.groove.payment.exception.PaymentNotFoundException;
-import com.groove.payment.exception.PaymentNotRefundableException;
 import com.groove.payment.gateway.GatewayRefunds;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.RefundRequest;
 import com.groove.payment.gateway.RefundResponse;
-import com.groove.shipping.application.ShippingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -35,10 +25,9 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
- * 관리자 주문 조회 / 상태 강제 전환 / 환불 트랜잭션 경계 (이슈 #69, PRD §5.3·§6.9, G2 게이트).
+ * 관리자 주문 조회 / 상태 강제 전환 / 환불 오케스트레이션 (이슈 #69, PRD §5.3·§6.9, G2 게이트).
  *
  * 주문(order)·결제(payment) 두 도메인을 조율하므로 어느 한쪽 모듈이 아닌 admin 모듈에 둔다 — Aggregate 간 조율은
  * 도메인이 아닌 ApplicationService 책임이라는 기존 패턴(PaymentCallbackService, OrderService.cancel 의 재고 복원)과
@@ -49,17 +38,14 @@ import java.util.stream.Collectors;
  * 처리하지 않는다 — 취소·환불은 refund, 결제 확정은 웹훅/폴링 경로(PaymentCallbackService)가 담당한다. 허용 대상이라도
  * 실제 전이가 OrderStatus.canTransitionTo 위반이면 409(IllegalStateTransitionException).
  *
- * 환불: refund 는 단일 트랜잭션에서 PG refund() 호출 + Payment REFUNDED 전이 + Order CANCELLED 전이 + 발송 전 배송
- * CANCELLED 동기화(#233) + 각 라인 재고 복원 + 쿠폰 USED→ISSUED 복원을 수행한다(PaymentCallbackService 의 FAILED
- * 보상 트랜잭션과 같은 패턴). 어느 단계든
- * 실패하면 트랜잭션 전체가 롤백된다. PG 호출이 트랜잭션 안에서 일어나 DB 커넥션을 점유하는 한계는 PaymentService 와
- * 동일하게 v1 Mock 지연이 짧아 허용한다. 쿠폰 복원은 OrderService.cancel 과 대칭으로 호출되어야 하며 누락 시 환불된
- * 주문의 쿠폰이 USED 인 채로 남는다 (이슈 #91 HIGH 리스크).
+ * 환불(#237): PG 환불 호출을 트랜잭션 밖으로 분리한다 — {@code refund} 는 비트랜잭션 오케스트레이터로서
+ * {@link RefundSteps#prepare 검증+잠금(tx)} → PG {@code refund()}(트랜잭션 밖, 멱등 키) →
+ * {@link RefundSteps#apply 상태 반영+보상(tx)} 순으로 호출한다. PG 호출 동안 DB 커넥션/비관적 락을 점유하지 않는다
+ * (기존 한계 제거). 이중 보상 방지·prepare/apply 윈도우 근거는 {@link RefundSteps} Javadoc 참조. 쿠폰 복원은
+ * OrderService.cancel 과 대칭으로 호출되어야 하며 누락 시 환불된 주문의 쿠폰이 USED 인 채로 남는다 (이슈 #91 HIGH 리스크).
  *
  * 멱등: 이미 REFUNDED 인 결제에 재요청하면 PG 호출/상태 전이/재고 복원 없이 현재 상태로 응답한다 (이슈 #69 DoD
- * "중복 환불 요청 무해"). 동시 이중 제출 race 는 OrderService.place 의 재고 차감과 동일하게 v1 에서 노출된 채로 둔다 —
- * 관리자 단건 조작이라 충돌 확률이 무시 가능하며, 만에 하나 두 번째가 Payment.markRefunded() 의 방어선에 걸려도
- * 트랜잭션 롤백으로 끝난다.
+ * "중복 환불 요청 무해").
  */
 @Service
 public class AdminOrderService {
@@ -74,24 +60,15 @@ public class AdminOrderService {
             EnumSet.of(OrderStatus.PREPARING, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.COMPLETED);
 
     private final OrderRepository orderRepository;
-    private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
-    private final CouponApplicationService couponApplicationService;
-    private final ShippingService shippingService;
-    private final AlbumRepository albumRepository;
+    private final RefundSteps refundSteps;
 
     public AdminOrderService(OrderRepository orderRepository,
-                             PaymentRepository paymentRepository,
                              PaymentGateway paymentGateway,
-                             CouponApplicationService couponApplicationService,
-                             ShippingService shippingService,
-                             AlbumRepository albumRepository) {
+                             RefundSteps refundSteps) {
         this.orderRepository = orderRepository;
-        this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
-        this.couponApplicationService = couponApplicationService;
-        this.shippingService = shippingService;
-        this.albumRepository = albumRepository;
+        this.refundSteps = refundSteps;
     }
 
     /**
@@ -155,7 +132,7 @@ public class AdminOrderService {
 
     /**
      * 환불 처리 — PG 환불 + Payment REFUNDED + Order CANCELLED + 발송 전 배송 CANCELLED(#233) + 재고 복원.
-     * 멱등(이미 환불됨이면 부수효과 없음).
+     * 멱등(이미 환불됨이면 부수효과 없음). PG 호출은 트랜잭션 밖에서 멱등 키로 수행한다 (#237).
      *
      * @throws OrderNotFoundException          주문 미존재 (404)
      * @throws PaymentNotFoundException        해당 주문에 결제 없음 (404)
@@ -163,52 +140,20 @@ public class AdminOrderService {
      * @throws IllegalStateTransitionException 주문이 CANCELLED 로 전이 불가 (SHIPPED 이후 등, 409)
      * @throws PaymentGatewayException         PG 환불 호출 실패 (502)
      */
-    @Transactional
     public RefundResult refund(String orderNumber, String reason) {
-        Order order = orderRepository.findWithAlbumsByOrderNumber(orderNumber)
-                .orElseThrow(OrderNotFoundException::new);
-        // Payment 를 PESSIMISTIC_WRITE 로 잠가 동시 환불 요청 두 건이 상태 확인 → PG refund() 호출까지
-        // 동시에 통과해 PG 가 이중 환불을 받는 race 를 차단한다 (CodeRabbit 리뷰 반영). 락은 트랜잭션 종료 시
-        // 해제되고, order_id UNIQUE 라 정확히 한 row 만 잠그므로 데드락 가능성 없음. PG 측 멱등 키는 #72 도입
-        // (Payment.refundIdempotencyKey()) — 보상 트랜잭션 부분 실패 후 재시도에도 PG 실호출 1회 보장.
-        Payment payment = paymentRepository.findByOrderIdForUpdate(order.getId())
-                .orElseThrow(PaymentNotFoundException::new);
-
-        if (payment.getStatus() == PaymentStatus.REFUNDED) {
-            log.info("관리자 환불: 이미 환불됨 order={}, paymentId={} — 멱등 응답", orderNumber, payment.getId());
-            return RefundResult.alreadyRefunded(order, payment);
+        RefundPrep prep = refundSteps.prepare(orderNumber);
+        if (prep.isAlreadyRefunded()) {
+            log.info("관리자 환불: 이미 환불됨 order={} — 멱등 응답", orderNumber);
+            return prep.alreadyRefundedResult();
         }
-        if (payment.getStatus() != PaymentStatus.PAID) {
-            throw new PaymentNotRefundableException(payment.getStatus());
-        }
-        if (!order.getStatus().canTransitionTo(OrderStatus.CANCELLED)) {
-            // 배송 시작(SHIPPED) 이후 등 — 환불해도 주문을 취소 상태로 둘 수 없으므로 차단 (DoD: 합법 전이만 허용).
-            throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.CANCELLED);
-        }
-
-        RefundResponse pgResponse = callGatewayRefund(payment, reason);
-        payment.markRefunded();
-        order.changeStatus(OrderStatus.CANCELLED, reason);
-        // 발송 전(PREPARING) 배송이 있으면 같은 트랜잭션에서 CANCELLED 로 동기화한다 (이슈 #233). 없거나 종착이면 no-op.
-        // 이게 없으면 자동 진행 스케줄러가 환불된 주문의 배송을 DELIVERED 까지 밀어버린다. canTransitionTo(CANCELLED) 가
-        // 참인 경로(SHIPPED 이후 불가)만 도달하므로 배송은 미생성이거나 PREPARING 이다.
-        shippingService.cancelForOrder(order.getId());
-        // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순)로 place(FOR UPDATE)·동시 복원과의 lost-update·데드락을 없앤다 (#234).
-        int restored = StockRestorer.restore(albumRepository, order.getItems().stream()
-                .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
-        // 쿠폰 적용된 주문이면 USED→ISSUED 복원 (이슈 #91 DoD HIGH 리스크: cancel + refund 양 경로 복원).
-        // 미적용 주문은 no-op. REFUNDED 멱등 분기에서는 호출되지 않으므로 중복 복원 우려 없음.
-        couponApplicationService.restoreForOrder(order.getId());
-        log.info("관리자 환불 완료: order={}, paymentId={}, amount={}, 재고복원 {}건",
-                orderNumber, payment.getId(), payment.getAmount(), restored);
-        return RefundResult.refunded(order, payment, pgResponse.refundedAt());
+        // PG 환불은 트랜잭션 밖 — prepare 가 비관적 락을 해제하고 커밋한 뒤 호출한다. 같은 멱등 키로 PG 가 dedup 한다.
+        RefundResponse pgResponse = callGatewayRefund(prep, reason);
+        return refundSteps.apply(orderNumber, reason, pgResponse.refundedAt());
     }
 
-    private RefundResponse callGatewayRefund(Payment payment, String reason) {
-        // 결정적 멱등 키(#72) — 같은 결제에 환불을 재시도해도 PG 가 첫 응답을 캐시 재사용하므로 보상 트랜잭션
-        // 중간 단계 실패 후 재시도가 와도 PG 실호출은 1회로 정상화된다.
+    private RefundResponse callGatewayRefund(RefundPrep prep, String reason) {
         RefundRequest request = new RefundRequest(
-                payment.getPgTransactionId(), payment.getAmount(), reason, payment.refundIdempotencyKey());
+                prep.pgTransactionId(), prep.amount(), reason, prep.refundIdempotencyKey());
         return GatewayRefunds.refund(paymentGateway, request);
     }
 }
