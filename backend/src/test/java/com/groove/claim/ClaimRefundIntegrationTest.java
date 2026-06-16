@@ -13,9 +13,11 @@ import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.claim.application.ClaimCreateCommand;
 import com.groove.claim.application.ClaimService;
+import com.groove.claim.application.OrderPartialCancelCommand;
 import com.groove.claim.domain.Claim;
 import com.groove.claim.domain.ClaimRepository;
 import com.groove.claim.domain.ClaimStatus;
+import com.groove.claim.domain.ClaimType;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.order.domain.Order;
@@ -150,6 +152,21 @@ class ClaimRefundIntegrationTest {
         return saved;
     }
 
+    /** 발송 전(PAID) 주문 + PAID 결제 (배송행 없음) — 부분 취소(CANCEL) 대상. */
+    private Order persistPaidOrder(int qty) {
+        Album album = albumRepository.findById(albumId).orElseThrow();
+        Order order = OrderFixtures.memberOrder("ORD-CLM-" + (++seq) + "-" + System.nanoTime(), memberId);
+        order.addItem(OrderItem.create(album, qty));
+        order.changeStatus(OrderStatus.PAID, null);
+        Order saved = orderRepository.saveAndFlush(order);
+
+        Payment payment = Payment.initiate(saved, saved.getPayableAmount(), PaymentMethod.CARD, "MOCK",
+                "mock-tx-" + seq + "-" + System.nanoTime());
+        payment.markPaid();
+        paymentRepository.saveAndFlush(payment);
+        return saved;
+    }
+
     private Long requestClaim(String orderNumber, Long orderItemId, int quantity) {
         ClaimCreateCommand command = new ClaimCreateCommand(memberId, orderNumber, "단순 변심",
                 List.of(new ClaimCreateCommand.Line(orderItemId, quantity)));
@@ -231,5 +248,38 @@ class ClaimRefundIntegrationTest {
         assertThat(mock.refundCallCount()).as("같은 claim 재시도 → PG 실호출 추가 없음").isEqualTo(callsBefore + 1);
         assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getStatus()).isEqualTo(PaymentStatus.REFUNDED);
         assertThat(albumRepository.findById(albumId).orElseThrow().getStock()).isEqualTo(10 + 2);
+    }
+
+    @Test
+    @DisplayName("부분 취소 후 전량 취소 — 결제 PARTIALLY_REFUNDED→REFUNDED, 재고 누적 복원, 전량 시 주문 CANCELLED (#238)")
+    void cancelPartially_thenFull() {
+        Order order = persistPaidOrder(2); // total/payable = 30000
+        Long orderItemId = order.getItems().get(0).getId();
+        Long orderId = order.getId();
+        int stockBefore = albumRepository.findById(albumId).orElseThrow().getStock();
+
+        // 1) 부분 취소 (1/2) — 발송 전 CANCEL 클레임, 즉시 환불.
+        Claim partial = claimService.cancelPartially(new OrderPartialCancelCommand(order.getOrderNumber(), "부분 취소",
+                List.of(new ClaimCreateCommand.Line(orderItemId, 1))));
+        assertThat(partial.getClaimType()).isEqualTo(ClaimType.CANCEL);
+        assertThat(partial.getStatus()).isEqualTo(ClaimStatus.REFUNDED);
+        assertThat(partial.getRefundAmount()).isEqualTo(UNIT_PRICE);
+
+        Payment afterPartial = paymentRepository.findByOrderId(orderId).orElseThrow();
+        assertThat(afterPartial.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
+        assertThat(afterPartial.getRefundedAmount()).isEqualTo(UNIT_PRICE);
+        assertThat(albumRepository.findById(albumId).orElseThrow().getStock()).isEqualTo(stockBefore + 1);
+        assertThat(orderRepository.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.PAID);
+
+        // 2) 잔여 전량 취소 (1/1) → 누적이 전량에 도달.
+        Claim full = claimService.cancelPartially(new OrderPartialCancelCommand(order.getOrderNumber(), "잔여 취소",
+                List.of(new ClaimCreateCommand.Line(orderItemId, 1))));
+        assertThat(full.getStatus()).isEqualTo(ClaimStatus.REFUNDED);
+
+        Payment afterFull = paymentRepository.findByOrderId(orderId).orElseThrow();
+        assertThat(afterFull.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(afterFull.getRefundedAmount()).isEqualTo(2 * UNIT_PRICE);
+        assertThat(albumRepository.findById(albumId).orElseThrow().getStock()).isEqualTo(stockBefore + 2);
+        assertThat(orderRepository.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 }

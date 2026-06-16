@@ -2,6 +2,7 @@ package com.groove.claim.api.dto;
 
 import com.groove.claim.domain.Claim;
 import com.groove.claim.domain.ClaimStatus;
+import com.groove.claim.domain.ClaimType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
@@ -14,6 +15,7 @@ import java.time.Instant;
  *
  * @param claimId      반품 식별자
  * @param orderNumber  반품 대상 주문 번호
+ * @param claimType    클레임 종류 — CANCEL(부분 취소)/RETURN(반품)
  * @param status       반품 상태
  * @param refundAmount 확정 환불액 — REFUNDED 전에는 0
  * @param createdAt    접수 시각
@@ -23,6 +25,8 @@ public record AdminClaimSummaryResponse(
         Long claimId,
         @Schema(description = "반품 대상 주문 번호", example = "ORD-20260606-A1B2C3")
         String orderNumber,
+        @Schema(description = "클레임 종류 — CANCEL(부분 취소)/RETURN(반품)", example = "RETURN")
+        ClaimType claimType,
         @Schema(description = "반품 상태", example = "REQUESTED")
         ClaimStatus status,
         @Schema(description = "확정 환불액 — REFUNDED 전에는 0", example = "0")
@@ -35,6 +39,7 @@ public record AdminClaimSummaryResponse(
         return new AdminClaimSummaryResponse(
                 claim.getId(),
                 claim.getOrder().getOrderNumber(),
+                claim.getClaimType(),
                 claim.getStatus(),
                 claim.getRefundAmount(),
                 claim.getCreatedAt());

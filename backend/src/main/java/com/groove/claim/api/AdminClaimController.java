@@ -3,6 +3,7 @@ package com.groove.claim.api;
 import com.groove.claim.api.dto.AdminClaimSummaryResponse;
 import com.groove.claim.api.dto.ClaimRejectRequest;
 import com.groove.claim.api.dto.ClaimResponse;
+import com.groove.claim.api.dto.OrderPartialCancelRequest;
 import com.groove.claim.application.ClaimService;
 import com.groove.claim.domain.Claim;
 import com.groove.claim.domain.ClaimStatus;
@@ -131,5 +132,22 @@ public class AdminClaimController {
     public ResponseEntity<ClaimResponse> complete(
             @Parameter(description = "반품 식별자") @PathVariable @Positive Long claimId) {
         return ResponseEntity.ok(ClaimResponse.from(claimService.completeRefund(claimId)));
+    }
+
+    @Operation(summary = "부분 취소(발송 전)",
+            description = "발송 전(PAID/PREPARING) 주문의 일부 품목/수량을 즉시 취소·환불한다(회수·검수 없는 CANCEL 클레임). "
+                    + "부분 환불·재고 복원·쿠폰 최소주문금액 재계산을 수행하고, 전량 취소 시 주문을 CANCELLED 로 전이한다. "
+                    + "ADMIN 권한 필요.")
+    @ApiResponse(responseCode = "200", description = "부분 취소 성공 — 생성된 CANCEL 클레임 상세")
+    @ApiResponse(responseCode = "400", description = "요청 형식 오류")
+    @ApiResponse(responseCode = "401", description = "미인증")
+    @ApiResponse(responseCode = "403", description = "권한 부족")
+    @ApiResponse(responseCode = "404", description = "주문 또는 결제를 찾을 수 없음")
+    @ApiResponse(responseCode = "409", description = "취소 가능 수량 초과 또는 환불 불가 결제 상태 (PAID/PARTIALLY_REFUNDED 아님)")
+    @ApiResponse(responseCode = "422", description = "발송 전 주문이 아님 (CLAIM_ORDER_NOT_CANCELLABLE) 또는 취소 항목 없음")
+    @ApiResponse(responseCode = "502", description = "PG 환불 호출 실패 (PAYMENT_GATEWAY_FAILURE)")
+    @PostMapping("/cancel")
+    public ResponseEntity<ClaimResponse> cancel(@Valid @RequestBody OrderPartialCancelRequest request) {
+        return ResponseEntity.ok(ClaimResponse.from(claimService.cancelPartially(request.toCommand())));
     }
 }

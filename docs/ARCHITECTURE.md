@@ -410,6 +410,8 @@ stateDiagram-v2
 - 전이 위반 시 `IllegalStateTransitionException` 발생 (BusinessException 상속)
 - 모든 상태 변경은 `Order.changeStatus(next)`를 통해 일원화
 
+> **클레임(Claim) — 취소/반품 통합 모델 (#238/#239).** 취소·반품은 `OrderStatus`에 섞지 않고 주문/품목을 참조하는 별도 `Claim` aggregate(`claim_type` = CANCEL/RETURN)로 분리한다(상태 폭발 회피, 네이버 커머스의 통합 클레임 모델과 동일). **RETURN**(#239, 발송 후 DELIVERED/COMPLETED)은 회수·검수 역물류 상태머신을, **CANCEL**(#238, 발송 전 PAID/PREPARING 관리자 부분취소)은 회수·검수 없이 `REQUESTED→REFUNDED` 1-스텝 즉시 환불을 갖는다. **부분 취소는 주문 상태를 유지하고, 모든 품목이 취소돼 전량에 도달할 때만 `PAID/PREPARING → CANCELLED`로 전이**한다(위 다이어그램의 "관리자 취소" 전이). 부분 환불액은 할인 안분(`payable × 취소정가/총정가`)으로 계산하며, 부분취소 후 잔여 정가가 쿠폰 최소주문금액 미만이면 쿠폰을 무효화(할인분 차감 + 복원)한다 — `ClaimService.cancelPartially` / `cancellationRefund`.
+
 ---
 
 ## 9. 데이터 흐름 — 주문 생성 시퀀스
