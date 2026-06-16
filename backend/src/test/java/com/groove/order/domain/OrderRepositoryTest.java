@@ -243,9 +243,10 @@ class OrderRepositoryTest {
     }
 
     @Test
-    @DisplayName("[#225] 주문 목록 복합 인덱스가 V22 에서 도입됨 — (member_id|status, created_at)")
+    @DisplayName("[#225][#244] 주문 목록 복합 인덱스 — V22(member_id|status, created_at) + V25(member_id, status, created_at)")
     void listIndexes_areAdded() {
         // V8 헤더의 [W10] 의도적 누락 인덱스를 V22 에서 도입했다(filesort/풀스캔 Before→After 시연 완료).
+        // V25(#244): 회원 주문 status 필터 keyset 의 잉여 스캔 제거용 (member_id, status, created_at) 추가.
         // 가드가 깨지면(인덱스 누락) 목록 쿼리 성능 개선 회귀 신호다 — AlbumRepositoryTest.searchIndexes_areAdded 와 동일 의도.
         @SuppressWarnings("unchecked")
         List<String> indexNames = (List<String>) em.createNativeQuery(
@@ -254,6 +255,9 @@ class OrderRepositoryTest {
                         "GROUP BY INDEX_NAME")
                 .getResultList();
 
-        assertThat(indexNames).contains("idx_orders_member_created", "idx_orders_status_created");
+        assertThat(indexNames).contains(
+                "idx_orders_member_created",         // V22
+                "idx_orders_status_created",         // V22
+                "idx_orders_member_status_created"); // V25 (#244)
     }
 }
