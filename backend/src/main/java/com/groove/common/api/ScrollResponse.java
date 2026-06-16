@@ -1,6 +1,7 @@
 package com.groove.common.api;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Window;
 
 import java.util.List;
@@ -31,16 +32,16 @@ public record ScrollResponse<T>(
      * 마지막 요소의 keyset 위치를 인코딩해 {@code nextCursor} 로 내려준다. positions 는 {@code map}
      * 변환 후에도 인덱스 기준으로 보존되므로, 호출 측이 이미 변환을 마친 윈도우에도 적용된다.
      */
-    public static <S, T> ScrollResponse<T> from(Window<S> window, Function<S, T> mapper, CursorCodec codec) {
+    public static <S, T> ScrollResponse<T> from(Window<S> window, Function<S, T> mapper, CursorCodec codec, Sort sort) {
         List<T> content = window.getContent().stream().map(mapper).toList();
         String nextCursor = (window.hasNext() && !window.isEmpty())
-                ? codec.encode(window.positionAt(window.size() - 1))
+                ? codec.encode(window.positionAt(window.size() - 1), sort)
                 : null;
         return new ScrollResponse<>(content, content.size(), window.hasNext(), nextCursor);
     }
 
     /** 호출 측이 트랜잭션 안에서 이미 DTO 로 변환한 {@link Window} 를 그대로 감싼다(항등 매퍼 강요 회피). */
-    public static <T> ScrollResponse<T> from(Window<T> window, CursorCodec codec) {
-        return from(window, Function.identity(), codec);
+    public static <T> ScrollResponse<T> from(Window<T> window, CursorCodec codec, Sort sort) {
+        return from(window, Function.identity(), codec, sort);
     }
 }

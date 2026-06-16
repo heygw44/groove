@@ -19,9 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * 본 기능의 가장 중요한 정합성 지점인 <b>커서 타입 충실도</b> 가드 (#235). 디코딩된 값이 인코딩 전과
  * <b>동일 런타임 클래스·순서</b> 임을 직접 단언한다 — String 으로 뭉개진 Instant 나 Integer 로 좁혀진 Long
- * 은 keyset 술어를 조용히 깨뜨리기 때문이다.
+ * 은 keyset 술어를 조용히 깨뜨리기 때문이다. resolve 의 정렬 시그니처 일치 검증(속성·방향·순서)도 함께 검증.
  */
-@DisplayName("CursorCodec — 타입 충실도 round-trip + 위조 커서 방어")
+@DisplayName("CursorCodec — 타입 충실도 round-trip + 정렬 시그니처 검증 + 위조 커서 방어")
 class CursorCodecTest {
 
     private final CursorCodec codec = new CursorCodec(new ObjectMapper());
@@ -34,7 +34,7 @@ class CursorCodecTest {
         keys.put("createdAt", now);
         keys.put("id", 42L);
 
-        ScrollPosition decoded = codec.decode(codec.encode(ScrollPosition.forward(keys)));
+        ScrollPosition decoded = codec.decode(codec.encode(ScrollPosition.forward(keys), Sort.by("createdAt", "id")));
 
         Map<String, Object> restored = ((KeysetScrollPosition) decoded).getKeys();
         assertThat(restored.get("createdAt")).isInstanceOf(Instant.class).isEqualTo(now);
@@ -50,8 +50,8 @@ class CursorCodecTest {
         keys.put("releaseYear", (short) 2013);
         keys.put("id", 7L);
 
-        Map<String, Object> restored =
-                ((KeysetScrollPosition) codec.decode(codec.encode(ScrollPosition.forward(keys)))).getKeys();
+        Map<String, Object> restored = ((KeysetScrollPosition) codec.decode(
+                codec.encode(ScrollPosition.forward(keys), Sort.by("price", "releaseYear", "id")))).getKeys();
 
         assertThat(restored.get("price")).isInstanceOf(Long.class).isEqualTo(39000L);
         assertThat(restored.get("releaseYear")).isInstanceOf(Short.class).isEqualTo((short) 2013);
@@ -64,7 +64,7 @@ class CursorCodecTest {
         Map<String, Object> keys = new LinkedHashMap<>();
         keys.put("id", 1L);
 
-        ScrollPosition decoded = codec.decode(codec.encode(ScrollPosition.forward(keys)));
+        ScrollPosition decoded = codec.decode(codec.encode(ScrollPosition.forward(keys), Sort.by("id")));
 
         assertThat(decoded).isInstanceOf(KeysetScrollPosition.class);
         assertThat(((KeysetScrollPosition) decoded).scrollsForward()).isTrue();
@@ -90,8 +90,7 @@ class CursorCodecTest {
     @Test
     @DisplayName("알 수 없는 버전 → ValidationException")
     void unknownVersion_throwsValidation() {
-        String forged = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString("{\"v\":99,\"k\":[{\"n\":\"id\",\"t\":\"long\",\"val\":\"1\"}]}".getBytes());
+        String forged = forge("{\"v\":99,\"s\":[\"id:ASC\"],\"k\":[{\"n\":\"id\",\"t\":\"long\",\"val\":\"1\"}]}");
 
         assertThatThrownBy(() -> codec.decode(forged))
                 .isInstanceOf(ValidationException.class);
@@ -100,8 +99,16 @@ class CursorCodecTest {
     @Test
     @DisplayName("알 수 없는 타입 태그 → ValidationException")
     void unknownTypeTag_throwsValidation() {
-        String forged = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString("{\"v\":1,\"k\":[{\"n\":\"id\",\"t\":\"uuid\",\"val\":\"x\"}]}".getBytes());
+        String forged = forge("{\"v\":1,\"s\":[\"id:ASC\"],\"k\":[{\"n\":\"id\",\"t\":\"uuid\",\"val\":\"x\"}]}");
+
+        assertThatThrownBy(() -> codec.decode(forged))
+                .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    @DisplayName("불리언 값 위조('garbage') → 엄격 파싱으로 ValidationException (CodeRabbit)")
+    void forgedBoolean_strictParse_throwsValidation() {
+        String forged = forge("{\"v\":1,\"s\":[\"flag:ASC\"],\"k\":[{\"n\":\"flag\",\"t\":\"boolean\",\"val\":\"garbage\"}]}");
 
         assertThatThrownBy(() -> codec.decode(forged))
                 .isInstanceOf(ValidationException.class);
@@ -116,26 +123,42 @@ class CursorCodecTest {
     }
 
     @Test
-    @DisplayName("resolve: 커서 키가 활성 정렬 키와 일치 → 디코딩된 위치 반환")
+    @DisplayName("resolve: 커서 시그니처가 활성 정렬과 일치 → 디코딩된 위치 반환")
     void resolve_matchingSort_returnsPosition() {
-        String cursor = codec.encode(ScrollPosition.forward(keysOf("createdAt", "id")));
+        Sort sort = Sort.by("createdAt", "id");
+        String cursor = codec.encode(ScrollPosition.forward(keysOf("createdAt", "id")), sort);
 
-        ScrollPosition position = codec.resolve(cursor, Sort.by("createdAt", "id"));
+        ScrollPosition position = codec.resolve(cursor, sort);
 
         assertThat(((KeysetScrollPosition) position).getKeys()).containsOnlyKeys("createdAt", "id");
     }
 
     @Test
-    @DisplayName("resolve: 커서 키가 활성 정렬과 불일치 → ValidationException(500 누수 차단)")
-    void resolve_mismatchedSort_throws() {
-        String cursor = codec.encode(ScrollPosition.forward(keysOf("createdAt", "id")));
+    @DisplayName("resolve: 다른 정렬 속성으로 재사용 → ValidationException(500 누수 차단)")
+    void resolve_mismatchedProperty_throws() {
+        String cursor = codec.encode(ScrollPosition.forward(keysOf("createdAt", "id")), Sort.by("createdAt", "id"));
 
         assertThatThrownBy(() -> codec.resolve(cursor, Sort.by("price", "id")))
                 .isInstanceOf(ValidationException.class);
     }
 
-    private static java.util.Map<String, Object> keysOf(String dateKey, String idKey) {
-        java.util.Map<String, Object> keys = new LinkedHashMap<>();
+    @Test
+    @DisplayName("resolve: 같은 키지만 정렬 방향이 다름 → ValidationException (CodeRabbit)")
+    void resolve_mismatchedDirection_throws() {
+        Sort desc = Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"));
+        String cursor = codec.encode(ScrollPosition.forward(keysOf("createdAt", "id")), desc);
+
+        Sort asc = Sort.by(Sort.Direction.ASC, "createdAt").and(Sort.by(Sort.Direction.ASC, "id"));
+        assertThatThrownBy(() -> codec.resolve(cursor, asc))
+                .isInstanceOf(ValidationException.class);
+    }
+
+    private static String forge(String json) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(json.getBytes());
+    }
+
+    private static Map<String, Object> keysOf(String dateKey, String idKey) {
+        Map<String, Object> keys = new LinkedHashMap<>();
         keys.put(dateKey, Instant.parse("2026-06-15T00:00:00Z"));
         keys.put(idKey, 9L);
         return keys;

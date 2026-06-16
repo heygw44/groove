@@ -119,7 +119,7 @@ public class AlbumQueryController {
 
         Window<AlbumSummaryResponse> window =
                 albumService.searchKeyset(request.toPublicCondition(), limit, keysetSort, position);
-        return ResponseEntity.ok(ScrollResponse.from(window, cursorCodec));
+        return ResponseEntity.ok(ScrollResponse.from(window, cursorCodec, keysetSort));
     }
 
     @Operation(summary = "앨범 단건 상세 조회",

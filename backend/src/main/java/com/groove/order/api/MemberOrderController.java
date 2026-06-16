@@ -104,6 +104,6 @@ public class MemberOrderController {
         int limit = Math.clamp(size, 1, MAX_SCROLL_SIZE);
 
         Window<Order> window = orderService.listForMemberKeyset(principal.memberId(), status, limit, sort, position);
-        return ResponseEntity.ok(ScrollResponse.from(window, OrderSummaryResponse::from, cursorCodec));
+        return ResponseEntity.ok(ScrollResponse.from(window, OrderSummaryResponse::from, cursorCodec, sort));
     }
 }
