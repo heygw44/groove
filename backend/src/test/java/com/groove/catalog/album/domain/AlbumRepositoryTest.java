@@ -112,12 +112,15 @@ class AlbumRepositoryTest {
                 "idx_album_artist",
                 "idx_album_genre",
                 "idx_album_label",
-                // V20 도입 (#204)
+                // V21 도입 (#204)
                 "ft_album_keyword",
                 "idx_album_status_created",
                 "idx_album_search",
                 "idx_album_year",
-                "idx_album_limited"
+                "idx_album_limited",
+                // V25 도입 (#244) — price/release_year 정렬 keyset 의 filesort 제거
+                "idx_album_status_price",
+                "idx_album_status_year"
         );
         // 키워드는 단일 B-Tree(idx_album_title)가 아니라 FULLTEXT 로 해소했으므로 plain title 인덱스는 두지 않는다.
         assertThat(indexNames).doesNotContain("idx_album_title");

@@ -1,0 +1,42 @@
+-- V25: keyset(커서) 페이징 커버링 인덱스 (#244) — #235 keyset 본체 + #243 리뷰에서 도출.
+--
+-- #235 keyset 의 핵심은 깊은 페이지에서 정렬 인덱스를 타고 깊이와 무관한 상수 비용으로
+-- 전진하는 것이다. 기본 정렬 경로는 이미 인덱스를 탄다(InnoDB 보조 인덱스가 PK(id)를
+-- 자동 부착 → id tiebreaker 는 별도 컬럼 없이 커버):
+--   - album 기본/createdAt : idx_album_status_created(status, created_at) → (status, created_at, id) 커버.
+--   - 회원 주문(무필터)     : idx_orders_member_created(member_id, created_at) → (member_id, created_at, id) 커버.
+--
+-- 하지만 코드 리뷰(#243)에서 인덱스가 없어 filesort/잉여 스캔이 끼는 두 경로가 확인됐다:
+--   (1) album price/release_year 정렬 스크롤 — 공개 스크롤은 단일 status 동등 필터가 고정인데
+--       (미지정→SELLING 강제, HIDDEN 차단, SELLING/SOLD_OUT 허용 — toPublicCondition/rejectHiddenStatusFromPublic),
+--       WHERE status=? ORDER BY price(또는 release_year) 를 커버하는 인덱스가 없다.
+--       (status,price)·(status,release_year) 는 어떤 단일 status 값이든 커버한다.
+--       idx_album_search(genre_id, status, price) 는 genre_id 선두라 genreId 필터 없이는 못 타고,
+--       idx_album_year(release_year) 엔 status 가 없다 → filesort. 정렬 화이트리스트
+--       (AlbumQueryController.ALLOWED_SORT_PROPERTIES)가 price/releaseYear 를 허용하므로 호출 가능한 경로다.
+--   (2) 회원 주문 status 필터 스크롤 — idx_orders_member_created 가 created_at 정렬은 커버해
+--       filesort 는 없지만, status 가 인덱스 밖 residual 필터라 매칭 안 되는 행까지 읽는다
+--       (deep page 에서 잉여 스캔). (member_id, status, created_at) 복합이면 매칭 행만 정렬 순으로
+--       시크해 잉여 스캔이 제거된다.
+--
+-- 끝의 명시적 id 는 InnoDB 보조 인덱스가 PK 를 자동 부착하므로 불필요하다
+-- → (status, price) 는 사실상 (status, price, id) 로 id tiebreaker 까지 커버한다.
+-- 정렬 방향은 무관하다 — KeysetSort.withIdTiebreaker 가 id 를 주정렬 방향에 맞춰 붙이므로
+-- 정렬 튜플이 항상 단일 방향(예: price DESC, id DESC)이라, 오름차 인덱스 1개로
+-- forward/backward index scan 이 ASC/DESC 를 모두 커버한다(별도 descending 인덱스 불필요).
+--
+-- 근거 (context7 — MySQL 8.0 Reference Manual 확인): WHERE key_part1 = constant ORDER BY key_part2 는
+-- (key_part1, key_part2) 인덱스로 filesort 를 회피하고(order-by-optimization), InnoDB 보조 인덱스는
+-- PK 컬럼을 포함한다(innodb-index-types) → 끝에 id 를 명시하지 않아도 tiebreaker 가 커버된다.
+--
+-- 온라인 DDL(ALGORITHM=INPLACE, LOCK=NONE) — V11/V16/V21/V22 컨벤션. 엔진 미지원이면 즉시 실패.
+--
+-- 인덱스 토폴로지 / 트레이드오프 (docs/improvements/keyset-index-coverage.md §트레이드오프):
+--   - album : idx_album_status_price·idx_album_status_year 는 FK 인덱스를 흡수하지 않는 순증 +2.
+--             album 은 catalog 라 쓰기 저빈도 → 추가 인덱스 유지 비용 수용 가능.
+--   - orders: idx_orders_member_status_created 는 순증 +1. idx_orders_member_created 는 무필터 경로
+--             (member_id ORDER BY created_at) 정렬 커버에 여전히 필요하므로 유지 → 둘 다 존재.
+--             orders 는 주문마다 쓰기가 발생해 B-Tree 1개 추가 유지 비용이 album 보다 크다(문서에 기록).
+ALTER TABLE album  ADD INDEX idx_album_status_price (status, price),        ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE album  ADD INDEX idx_album_status_year  (status, release_year), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE orders ADD INDEX idx_orders_member_status_created (member_id, status, created_at), ALGORITHM=INPLACE, LOCK=NONE;
