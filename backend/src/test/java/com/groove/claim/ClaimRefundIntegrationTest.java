@@ -282,4 +282,35 @@ class ClaimRefundIntegrationTest {
         assertThat(albumRepository.findById(albumId).orElseThrow().getStock()).isEqualTo(stockBefore + 2);
         assertThat(orderRepository.findById(orderId).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
+
+    @Test
+    @DisplayName("발송 전 부분취소 → 배송완료 후 잔여 반품(교차 타입) — 반품 환불이 정가로 정확, 누적 결제 전액 (#238 리뷰)")
+    void cancelPreShip_thenReturnRemaining_crossType() {
+        Order order = persistPaidOrder(2); // total/payable 30000, 무쿠폰
+        Long orderItemId = order.getItems().get(0).getId();
+        Long orderId = order.getId();
+
+        // 1) 발송 전 1개 부분취소(CANCEL) → 결제 PARTIALLY_REFUNDED 15000.
+        claimService.cancelPartially(new OrderPartialCancelCommand(order.getOrderNumber(), "부분 취소",
+                List.of(new ClaimCreateCommand.Line(orderItemId, 1))));
+        assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getRefundedAmount()).isEqualTo(UNIT_PRICE);
+
+        // 2) 잔여 1개를 배송 진행 후 배송완료로 — 반품 자격(DELIVERED) 확보(기한 anchor 는 order.updatedAt 폴백).
+        Order live = orderRepository.findById(orderId).orElseThrow();
+        live.changeStatus(OrderStatus.PREPARING, null);
+        live.changeStatus(OrderStatus.SHIPPED, null);
+        live.changeStatus(OrderStatus.DELIVERED, null);
+        orderRepository.saveAndFlush(live);
+
+        // 3) 잔여 1개 반품(RETURN) — 이미 클레임된 취소 1개를 차감해 반품가능 수량 1 (교차 타입 회계).
+        Long returnClaimId = requestClaim(order.getOrderNumber(), orderItemId, 1);
+        driveToInspecting(returnClaimId);
+        Claim refunded = claimService.completeRefund(returnClaimId);
+
+        // 반품 환불은 정가 15000(무쿠폰), 결제는 전액(30000) REFUNDED — 취소가 곡선을 흔들지 않음.
+        assertThat(refunded.getRefundAmount()).isEqualTo(UNIT_PRICE);
+        Payment payment = paymentRepository.findByOrderId(orderId).orElseThrow();
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualTo(2 * UNIT_PRICE);
+    }
 }

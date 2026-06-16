@@ -270,7 +270,8 @@ class ClaimServiceTest {
         Payment payment = paidPayment(order);
         given(claimRepository.findByIdForUpdate(7L)).willReturn(Optional.of(claim));
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
-        given(claimRepository.findByOrder_IdAndStatus(ORDER_ID, ClaimStatus.REFUNDED)).willReturn(List.of());
+        // 무쿠폰 — 반품 품목 정가만 환불(누적 비례 조회 미발생).
+        given(couponApplicationService.appliedCouponMinOrderAmount(ORDER_ID)).willReturn(OptionalLong.empty());
 
         Claim result = claimService.completeRefund(7L);
 
@@ -292,6 +293,8 @@ class ClaimServiceTest {
         Payment payment = paidPayment(order); // amount = payable = 24000
         given(claimRepository.findByIdForUpdate(7L)).willReturn(Optional.of(claim));
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
+        // 쿠폰 적용(할인 6000) — 비례 배분 경로. 반품은 무효화하지 않으므로 minOrder 값은 결과에 무관.
+        given(couponApplicationService.appliedCouponMinOrderAmount(ORDER_ID)).willReturn(OptionalLong.of(20_000L));
         given(claimRepository.findByOrder_IdAndStatus(ORDER_ID, ClaimStatus.REFUNDED)).willReturn(List.of());
 
         Claim result = claimService.completeRefund(7L);
@@ -382,8 +385,11 @@ class ClaimServiceTest {
             ReflectionTestUtils.setField(saved, "id", 7L); // 실 DB IDENTITY 부여 모사 — refundIdempotencyKey(claimId) 용
             return saved;
         });
-        given(claimRepository.findByOrder_IdAndStatus(ORDER_ID, ClaimStatus.REFUNDED)).willReturn(List.of());
         given(couponApplicationService.appliedCouponMinOrderAmount(ORDER_ID)).willReturn(couponMinOrder);
+        // 누적 REFUNDED 정가 조회는 쿠폰 적용 시에만 일어난다(미적용이면 품목 정가 환불) — 쿠폰 present 테스트에서만 스텁한다.
+        if (couponMinOrder.isPresent()) {
+            given(claimRepository.findByOrder_IdAndStatus(ORDER_ID, ClaimStatus.REFUNDED)).willReturn(List.of());
+        }
     }
 
     @Test
@@ -497,52 +503,72 @@ class ClaimServiceTest {
         verify(claimRepository, never()).save(any());
     }
 
-    // --- cancellationRefund (쿠폰 인지 2분기 단위, #238) ----------------------
+    // --- refundIncrement (쿠폰 인지 환불 계산, 취소/반품 공용, #238/#239) -------
 
     @Test
-    @DisplayName("cancellationRefund: 쿠폰 미적용은 비례 배분(voidCoupon=false)")
-    void cancellationRefund_noCoupon() {
-        ClaimService.CancellationRefund r =
-                ClaimService.cancellationRefund(30_000L, 30_000L, 15_000L, 0L, OptionalLong.empty());
+    @DisplayName("refundIncrement: 쿠폰 미적용은 이번 클레임 정가만 환불(voidCoupon=false)")
+    void refundIncrement_noCoupon() {
+        ClaimService.RefundComputation r = ClaimService.refundIncrement(
+                30_000L, 30_000L, 15_000L, 15_000L, 0L, OptionalLong.empty(), true);
         assertThat(r.amount()).isEqualTo(15_000L);
         assertThat(r.voidCoupon()).isFalse();
     }
 
     @Test
-    @DisplayName("cancellationRefund: 잔여≥최소주문금액이면 안분(voidCoupon=false)")
-    void cancellationRefund_couponValid() {
-        ClaimService.CancellationRefund r =
-                ClaimService.cancellationRefund(24_000L, 30_000L, 15_000L, 0L, OptionalLong.of(10_000L));
+    @DisplayName("refundIncrement: 쿠폰 적용 + 잔여≥최소주문금액이면 안분(voidCoupon=false)")
+    void refundIncrement_couponValid() {
+        ClaimService.RefundComputation r = ClaimService.refundIncrement(
+                24_000L, 30_000L, 15_000L, 15_000L, 0L, OptionalLong.of(10_000L), true);
         assertThat(r.amount()).isEqualTo(12_000L);
         assertThat(r.voidCoupon()).isFalse();
     }
 
     @Test
-    @DisplayName("cancellationRefund: 잔여<최소주문금액이면 무효(C̄−D, voidCoupon=true)")
-    void cancellationRefund_couponVoided() {
-        ClaimService.CancellationRefund r =
-                ClaimService.cancellationRefund(24_000L, 30_000L, 15_000L, 0L, OptionalLong.of(20_000L));
+    @DisplayName("refundIncrement: 취소 + 잔여<최소주문금액이면 무효(C̄−D, voidCoupon=true)")
+    void refundIncrement_couponVoided() {
+        ClaimService.RefundComputation r = ClaimService.refundIncrement(
+                24_000L, 30_000L, 15_000L, 15_000L, 0L, OptionalLong.of(20_000L), true);
         assertThat(r.amount()).isEqualTo(9_000L); // 15000 − 6000
         assertThat(r.voidCoupon()).isTrue();
     }
 
     @Test
-    @DisplayName("cancellationRefund: 전량 무효는 payable 전액 환불")
-    void cancellationRefund_voidedFull() {
-        ClaimService.CancellationRefund r =
-                ClaimService.cancellationRefund(24_000L, 30_000L, 30_000L, 0L, OptionalLong.of(20_000L));
+    @DisplayName("refundIncrement: 전량 무효는 payable 전액 환불")
+    void refundIncrement_voidedFull() {
+        ClaimService.RefundComputation r = ClaimService.refundIncrement(
+                24_000L, 30_000L, 30_000L, 30_000L, 0L, OptionalLong.of(20_000L), true);
         assertThat(r.amount()).isEqualTo(24_000L); // 30000 − 6000
         assertThat(r.voidCoupon()).isTrue();
     }
 
     @Test
-    @DisplayName("cancellationRefund: 적용 할인 > 취소 정가(클로백 필요)면 무효화 않고 비례 폴백")
-    void cancellationRefund_clawbackFallsBackToProportional() {
+    @DisplayName("refundIncrement: 적용 할인 > 취소 정가(클로백 필요)면 무효화 않고 비례 폴백")
+    void refundIncrement_clawbackFallsBackToProportional() {
         // total 30000, payable 24000(할인 6000), 취소 정가 5000, 잔여 25000 < 최소 27000 → 무효 진입하나
         // voidTarget = 5000 − 6000 = −1000 < 기환불 0 → 클로백 불가 → 비례 폴백.
-        ClaimService.CancellationRefund r =
-                ClaimService.cancellationRefund(24_000L, 30_000L, 5_000L, 0L, OptionalLong.of(27_000L));
+        ClaimService.RefundComputation r = ClaimService.refundIncrement(
+                24_000L, 30_000L, 5_000L, 5_000L, 0L, OptionalLong.of(27_000L), true);
         assertThat(r.amount()).isEqualTo(4_000L); // 24000 × 5000/30000
+        assertThat(r.voidCoupon()).isFalse();
+    }
+
+    @Test
+    @DisplayName("refundIncrement: 무효화 후 후속 환불은 정가 기준(누적 비례 곡선 이탈 불일치 회피, #238 리뷰)")
+    void refundIncrement_afterVoid_usesFullGross() {
+        // 직전 취소가 쿠폰을 무효화·복원해 couponMinOrder 가 empty 가 된 상태 — 누적 비례(곡선 이탈)에 기대지 않고
+        // 이번 클레임 정가(10000)만 환불한다. 기환불 4000 → 잔여 20000 한도 내.
+        ClaimService.RefundComputation r = ClaimService.refundIncrement(
+                24_000L, 30_000L, 10_000L, 20_000L, 4_000L, OptionalLong.empty(), true);
+        assertThat(r.amount()).isEqualTo(10_000L);
+        assertThat(r.voidCoupon()).isFalse();
+    }
+
+    @Test
+    @DisplayName("refundIncrement: 반품(allowCouponVoid=false)은 잔여<최소주문금액이어도 무효화하지 않고 안분")
+    void refundIncrement_returnNeverVoids() {
+        ClaimService.RefundComputation r = ClaimService.refundIncrement(
+                24_000L, 30_000L, 15_000L, 15_000L, 0L, OptionalLong.of(20_000L), false);
+        assertThat(r.amount()).isEqualTo(12_000L); // 안분 — 무효 분기 미진입
         assertThat(r.voidCoupon()).isFalse();
     }
 }
