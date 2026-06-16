@@ -3,11 +3,7 @@ package com.groove.claim.exception;
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 
-/**
- * 반품 요청 항목이 대상 주문에 포함돼 있지 않은 경우. HTTP 422.
- *
- * <p>요청한 {@code orderItemId} 가 해당 주문의 OrderItem 이 아닐 때 던진다 (#239).
- */
+/** 반품 요청 항목이 대상 주문에 포함돼 있지 않은 경우. HTTP 422. */
 public class ClaimItemNotInOrderException extends DomainException {
 
     public ClaimItemNotInOrderException(Long orderItemId) {

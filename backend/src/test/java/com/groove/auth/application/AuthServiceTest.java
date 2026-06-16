@@ -1,6 +1,5 @@
 package com.groove.auth.application;
 
-import com.groove.auth.domain.RefreshTokenRepository;
 import com.groove.common.exception.AuthException;
 import com.groove.common.exception.ErrorCode;
 import com.groove.member.domain.Member;
@@ -30,10 +29,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * AuthService 단위 테스트.
- *
- * <p>로그인 성공·실패·사용자 열거 방지 동작을 검증한다.
- * 토큰 발급 책임은 {@link RefreshTokenService} 가 가지므로 모킹 후 호출만 확인한다.
+ * AuthService 단위 테스트. 로그인 성공·실패·사용자 열거 방지를 검증하고, 토큰 발급은 모킹해 호출만 확인한다.
  */
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {

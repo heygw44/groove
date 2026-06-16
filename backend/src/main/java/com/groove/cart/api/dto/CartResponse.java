@@ -6,14 +6,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 /**
- * 장바구니 전체 응답 (API §3.4).
- *
- * <p>합계({@code totalAmount}, {@code totalItemCount}) 는 항목별 응답을 그대로 합산한다 —
- * available=false 항목도 합계에 포함되어 클라이언트가 그 차이를 그대로 노출하게 한다.
- * 결제 진입 시점 검증은 주문 도메인(W6-3) 의 책임이다.
- *
- * <p>cartId 는 비영속 (자동 생성 전) 일 수 있어 nullable 이다 — find 진입에서 GET 만으로 cart
- * 를 영속화하지 않는 정책 (관찰 부수효과 방지) 의 결과.
+ * 장바구니 전체 응답. 합계(totalAmount, totalItemCount)는 항목별 응답을 그대로 합산하며,
+ * available=false 항목도 포함한다. cartId 는 비영속 시 nullable 이다.
  */
 public record CartResponse(
         @Schema(description = "장바구니 ID (미영속 시 null 일 수 있음)", example = "1", nullable = true)

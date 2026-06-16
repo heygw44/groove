@@ -8,13 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 
 /**
- * 결제 요청 본문 (API.md §3.6 — POST /payments).
- *
- * <p>{@code orderNumber} 는 {@link OrderNumberFormat#PATTERN} 만 허용한다 — 형식 위반은 컨트롤러 진입
- * 단계에서 400 으로 거른다.
- *
- * @param orderNumber 결제 대상 주문의 외부 식별자
- * @param method      결제 수단
+ * 결제 요청 본문. orderNumber 는 OrderNumberFormat.PATTERN 만 허용하고 위반은 400.
  */
 public record PaymentCreateRequest(
         @Schema(description = "결제 대상 주문번호 (형식: ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260101-AB12CD",

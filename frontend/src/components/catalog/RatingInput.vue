@@ -1,8 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 
-// 별점 입력 — 표시용 RatingStars 와 시각 일관(★, gold-500/vinyl-800/20). 입력은 좀 더 크게(text-2xl).
-// v-model 규약은 BaseInput 과 동일하게 modelValue prop + update:modelValue emit 을 쓴다.
+// 별점 입력 컴포넌트
 const props = defineProps({
   modelValue: { type: Number, default: 0 }, // 0 = 미선택, 1~5
 })
@@ -16,8 +15,7 @@ function select(n) {
   emit('update:modelValue', n)
 }
 
-// radiogroup roving — 좌우/상하 화살표로 선택 이동 후 해당 별에 포커스.
-// 이동 기준은 현재 포커스(=roving tabindex)가 놓인 별: 미선택이면 1번 별로 통일(양방향 대칭).
+// 좌우/상하 화살표로 선택 이동 후 해당 별에 포커스
 function onKey(e) {
   const cur = props.modelValue || 1
   let next = null

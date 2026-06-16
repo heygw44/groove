@@ -25,7 +25,7 @@ const { isAuthenticated } = storeToRefs(auth)
 const page = ref(null)
 const loading = ref(true)
 const error = ref('')
-const issuingId = ref(null) // 발급 중인 쿠폰 — 카드별 버튼 로딩 가드.
+const issuingId = ref(null) // 발급 중인 쿠폰 id
 
 const PAGE_SIZE = 12
 let reqSeq = 0
@@ -39,7 +39,7 @@ function buildParams(q) {
 
 async function fetchCoupons(q, { silent = false } = {}) {
   const seq = ++reqSeq
-  if (!silent) loading.value = true // 발급 후 조용한 갱신(silent)은 그리드를 스피너로 가리지 않는다.
+  if (!silent) loading.value = true
   error.value = ''
   try {
     const res = await listCoupons(buildParams(q))
@@ -59,11 +59,11 @@ async function onIssue(coupon) {
   try {
     await issueCoupon(coupon.couponId)
     ui.notify('쿠폰이 발급되었습니다. 내 쿠폰함에서 확인하세요.', 'success')
-    fetchCoupons(route.query, { silent: true }) // 잔여 수량만 조용히 갱신(그리드 깜빡임 방지).
+    fetchCoupons(route.query, { silent: true }) // 잔여 수량 갱신
   } catch (e) {
     const kind = classifyCouponIssueError(e)
     ui.notify(COUPON_ISSUE_ERROR_MESSAGE[kind] ?? errorMessage(e, '쿠폰 발급에 실패했습니다.'), 'error')
-    if (kind === 'SOLD_OUT') fetchCoupons(route.query, { silent: true }) // 소진이면 잔여 갱신.
+    if (kind === 'SOLD_OUT') fetchCoupons(route.query, { silent: true }) // 소진 시 잔여 갱신
   } finally {
     issuingId.value = null
   }

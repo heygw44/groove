@@ -56,7 +56,7 @@ class MemberControllerTest {
 
     @BeforeEach
     void setUp() {
-        // refresh_token 이 member 에 FK(비-cascade)를 가지므로 자식부터 삭제한다.
+        // 자식(refresh_token)부터 삭제.
         refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAllInBatch();
 
@@ -221,7 +221,7 @@ class MemberControllerTest {
                 .andExpect(status().isNoContent());
         var firstDeletedAt = memberRepository.findById(memberId).orElseThrow().getDeletedAt();
 
-        // access token 은 stateless 라 탈퇴 직후에도 만료 전까지 유효 — 같은 토큰으로 재요청
+        // 같은 토큰으로 재요청
         mockMvc.perform(delete("/api/v1/members/me")
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)

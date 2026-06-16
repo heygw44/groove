@@ -10,11 +10,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * 관리자 주문 상세 / 상태 변경 응답 (이슈 #69).
- *
- * <p>회원용 {@code OrderResponse} 와 달리 소유자 식별 정보({@code memberId}/{@code guestEmail}) 와
- * 결제·취소 추적 시각/사유를 함께 노출한다 — 운영자가 한 화면에서 판단할 수 있도록. 라인/배송지 블록은
- * 회원용 DTO({@link OrderItemResponse}, {@link OrderShippingResponse}) 를 재사용한다.
+ * 관리자 주문 상세 / 상태 변경 응답. 소유자 식별 정보(memberId/guestEmail)와 결제·취소 추적 시각/사유를
+ * 함께 노출한다. 라인/배송지 블록은 OrderItemResponse, OrderShippingResponse 를 재사용한다.
  */
 public record AdminOrderResponse(
         @Schema(description = "주문 번호 (ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260606-A1B2C3")

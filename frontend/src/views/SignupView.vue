@@ -11,7 +11,7 @@ const router = useRouter()
 const ui = useUiStore()
 
 const form = reactive({ name: '', email: '', password: '', phone: '' })
-// signupFlow 는 가입 성공 후 곧바로 로그인까지 수행한다.
+// signupFlow 는 가입 후 로그인까지 수행
 const { errors, formError, submitting, submit, clearError } = useForm(() => signupFlow({ ...form }))
 
 async function onSubmit() {

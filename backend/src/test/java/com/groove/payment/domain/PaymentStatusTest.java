@@ -15,10 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * PaymentStatus 전이 매트릭스 전수 검증 (5×5 = 25 케이스).
  *
- * <p>합법 전이는 ERD §6 / glossary §3.5 + 부분 반품(#239) 기준 5종(PENDING→PAID, PENDING→FAILED,
- * PAID→PARTIALLY_REFUNDED, PAID→REFUNDED, PARTIALLY_REFUNDED→REFUNDED)이며, 매트릭스의 나머지 셀은 모두
- * 불법이다(자기 전이 포함 — 추가 부분 환불은 {@code Payment.refund} 가 전이를 건너뛰므로 자기 루프가 불필요).
- * {@code OrderStatusTest} 와 동일한 SSOT 2단 구조를 따른다.
+ * <p>합법 전이는 5종(PENDING→PAID, PENDING→FAILED, PAID→PARTIALLY_REFUNDED, PAID→REFUNDED,
+ * PARTIALLY_REFUNDED→REFUNDED)이며, 나머지 셀은 모두 불법(자기 전이 포함)이다.
  */
 @DisplayName("PaymentStatus — 전이 매트릭스 전수")
 class PaymentStatusTest {

@@ -59,25 +59,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 결제 웹훅 수신 + 보상 트랜잭션 + 폴링 동기화 통합 테스트 (#W7-4).
+ * 결제 웹훅 수신 + 보상 트랜잭션 + 폴링 동기화 통합 테스트.
  *
- * <p>Testcontainers MySQL 위 MockMvc. {@code payment.mock.auto-webhook=false} 로 인프로세스 자동 웹훅을 꺼
- * 결정적으로 검증한다 — 웹훅은 {@code POST /api/v1/payments/webhook} 를 직접 호출하고, 폴링은
- * {@link PaymentReconciliationScheduler#reconcilePendingPayments()} 를 직접 호출한다. {@code test} 프로파일은
- * {@code success-rate=1.0}, {@code webhook-delay=0}, {@code reconciliation.min-age=PT0S} 이라
- * {@code MockPaymentGateway.query()} 가 (request() 가 거래를 등록한 직후라면) 즉시 PAID 를 반환한다.
+ * <p>Testcontainers MySQL 위 MockMvc. auto-webhook=false. 웹훅은 POST /api/v1/payments/webhook 를,
+ * 폴링은 reconcilePendingPayments() 를 직접 호출한다. test 프로파일에선 MockPaymentGateway.query() 가 즉시 PAID 를 반환한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @TestPropertySource(properties = "payment.mock.auto-webhook=false")
 @Import(TestcontainersConfig.class)
-@DisplayName("/api/v1/payments/webhook 결제 웹훅 + 보상 + 폴링 (#W7-4)")
+@DisplayName("/api/v1/payments/webhook 결제 웹훅 + 보상 + 폴링")
 class PaymentWebhookIntegrationTest {
 
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
     private static final String SIGNATURE_HEADER = "X-Mock-Signature";
-    private static final String WEBHOOK_SECRET = "test-mock-webhook-secret"; // application-test.yaml
+    private static final String WEBHOOK_SECRET = "test-mock-webhook-secret";
     private static final int INITIAL_STOCK = 100;
     private static final AtomicInteger ORDER_SEQ = new AtomicInteger();
 
@@ -95,8 +92,8 @@ class PaymentWebhookIntegrationTest {
     @Autowired private JwtProvider jwtProvider;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private PaymentReconciliationScheduler reconciliationScheduler;
-    @Autowired private WebhookDispatcher webhookDispatcher; // 인프로세스 경로 = PaymentWebhookHandler (LoggingWebhookDispatcher 대체)
-    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행 정리(#237)
+    @Autowired private WebhookDispatcher webhookDispatcher; // 인프로세스 경로 = PaymentWebhookHandler
+    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행 정리
 
     private Long memberId;
     private Long albumId;
@@ -105,10 +102,9 @@ class PaymentWebhookIntegrationTest {
     @BeforeEach
     void setUp() {
         // FK 의존 순서: payment → orders → album → artist/genre/label, member.
-        // member_coupon 은 order_id·member_id·coupon_id DB FK 를 가지므로 orders/coupon/member 보다 먼저 정리.
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        // member_coupon 은 order_id·member_id·coupon_id FK 를 가져 먼저 정리. refresh_token → member 도 먼저 정리.
         refreshTokenRepository.deleteAllInBatch();
-        outboxEventRepository.deleteAllInBatch(); // PAID 웹훅이 PAID 와 같은 tx 로 커밋한 ORDER_PAID 행(orders FK 없음) 정리
+        outboxEventRepository.deleteAllInBatch(); // ORDER_PAID 행 정리
         paymentRepository.deleteAllInBatch();
         memberCouponRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -135,10 +131,10 @@ class PaymentWebhookIntegrationTest {
     private record Created(Long paymentId, Long orderId, String orderNumber, String pgTransactionId) {
     }
 
-    /** PENDING 주문 생성 → POST /payments 로 결제 접수 (auto-webhook 꺼져 있어 PENDING 유지) → 식별자 묶음 반환. */
+    /** PENDING 주문 생성 → POST /payments 로 결제 접수(PENDING 유지) → 식별자 묶음 반환. */
     private Created createPendingPayment(int quantity) throws Exception {
         Album album = albumRepository.findById(albumId).orElseThrow();
-        album.adjustStock(-quantity);            // OrderService.place 의 재고 차감을 모사한다 (테스트는 Order 를 직접 영속화).
+        album.adjustStock(-quantity);            // 재고 차감
         albumRepository.saveAndFlush(album);
 
         String orderNumber = String.format("ORD-20260512-W%05d", ORDER_SEQ.incrementAndGet());
@@ -160,7 +156,7 @@ class PaymentWebhookIntegrationTest {
         return new Created(payment.getId(), orderId, orderNumber, payment.getPgTransactionId());
     }
 
-    /** 쿠폰을 발급해 주문에 사용(USED) 상태로 만든다 — OrderService.place 의 쿠폰 적용을 모사. */
+    /** 쿠폰을 발급해 주문에 사용(USED) 상태로 만든다. */
     private MemberCoupon issueAndUseCoupon(Long orderId, long discount) {
         Coupon coupon = couponRepository.saveAndFlush(
                 Coupon.builder("정액-" + discount, CouponDiscountType.FIXED_AMOUNT, discount,
@@ -208,8 +204,7 @@ class PaymentWebhookIntegrationTest {
                 .andExpect(jsonPath("$.paymentStatus").value("PAID"));
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        // 결제 확정 직후 주문은 PAID — 후속 배송 생성/PREPARING 전진은 아웃박스 릴레이가 비동기로 한다 (#237).
-        // 릴레이→PREPARING 전 구간은 OutboxIntegrationTest/FullPurchaseJourneyE2ETest 가 검증한다.
+        // 결제 확정 직후 주문은 PAID.
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getPaidAt()).isNotNull();
     }
@@ -234,7 +229,7 @@ class PaymentWebhookIntegrationTest {
     }
 
     @Test
-    @DisplayName("쿠폰 적용 주문 실패 웹훅 → 결제 FAILED·재고 복원·쿠폰 USED→ISSUED 복원 (이슈 #158)")
+    @DisplayName("쿠폰 적용 주문 실패 웹훅 → 결제 FAILED·재고 복원·쿠폰 USED→ISSUED 복원")
     void webhook_failed_restoresAppliedCoupon() throws Exception {
         Created c = createPendingPayment(2); // 100 → 98
         MemberCoupon applied = issueAndUseCoupon(c.orderId(), 5_000L);
@@ -342,8 +337,8 @@ class PaymentWebhookIntegrationTest {
 
         reconciliationScheduler.reconcilePendingPayments();
 
-        assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID); // mock query() → PAID (success-rate=1.0)
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID); // 배송 생성/PREPARING 전진은 아웃박스 릴레이 (#237)
+        assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID); // mock query() → PAID
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
     }
 
     @Test
@@ -356,7 +351,7 @@ class PaymentWebhookIntegrationTest {
         webhookDispatcher.dispatch(notification);
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID); // 배송 생성/PREPARING 전진은 아웃박스 릴레이 (#237)
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
     }
 
     @Test

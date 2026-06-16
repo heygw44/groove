@@ -15,9 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * MemberCouponStatus 상태 전이 매트릭스 전수 검증 (4×4 = 16 케이스).
  *
- * <p>합법 전이는 docs/plans/coupon-system.md §3.3 기준 5종이다:
- * ISSUED→{USED,EXPIRED,CANCELLED}, USED→{ISSUED,EXPIRED}(주문 취소/환불 복원 — 이미 만료됐으면 EXPIRED).
- * EXPIRED·CANCELLED 는 종착이다.
+ * <p>합법 전이는 5종: ISSUED→{USED,EXPIRED,CANCELLED}, USED→{ISSUED,EXPIRED}. EXPIRED·CANCELLED 는 종착이다.
  */
 @DisplayName("MemberCouponStatus — 전이 매트릭스 전수")
 class MemberCouponStatusTest {
@@ -93,10 +91,7 @@ class MemberCouponStatusTest {
         }
     }
 
-    /**
-     * 만료 배치(#92) 의 네이티브 SQL 이 'ISSUED'/'EXPIRED' 문자열 리터럴을 박아 비교한다 —
-     * enum 리네이밍이 silent 하게 SQL 매칭을 깨지 않도록 본 단언이 회귀 알람 역할을 한다.
-     */
+    /** 만료 배치 네이티브 SQL 의 'ISSUED'/'EXPIRED' 리터럴과 enum 이름이 정합한지 검증한다. */
     @Test
     @DisplayName("ISSUED/EXPIRED 이름 가정 보호 — 만료 배치 네이티브 SQL 의 리터럴과 정합")
     void enumNames_pinnedForExpirationQuery() {

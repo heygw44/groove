@@ -46,27 +46,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 로컬 데모 자동 시드 (이슈 #103).
+ * 로컬 데모 자동 시드. local 프로파일 기동 시 샘플 카탈로그·데모 계정·유저 풀·한정 쿠폰·DELIVERED 주문을 자동 생성한다.
  *
- * local 프로파일 기동 시 데모 프론트(M14, #102~#110)가 빈 화면이 되지 않도록 샘플 카탈로그·데모 계정·쿠폰 동시성 데모용
- * 유저 풀·한정 쿠폰·리뷰 데모용 DELIVERED 주문을 자동 생성한다.
- *
- * 프로파일 격리: @Profile("local") 이라 docker·test 프로파일에서는 빈 자체가 등록되지 않아 동작하지 않는다(테스트는 전부
- * @ActiveProfiles("test")). 운영/도커 경로 무영향 보장.
- *
- * 주의: 활성 프로파일은 외부에서 주입한다(application.yaml 에 기본값 폴백 없음 — 이슈 #128). 미설정 시 Spring 은 default
- * 프로파일만 활성화하므로 이 시더(@Profile("local"))는 등록되지 않는다(로컬 개발은 build.gradle.kts 의 bootRun 이 local 을
- * 자동 주입). 추가로 run 진입 시 활성 프로파일에 local 이 실제로 포함되는지 한 번 더 확인하는 런타임 안전망을 두고,
- * 운영(비-local) 경로는 ProductionSeedGuard 가 데모 계정 유입을 fail-fast 로 차단한다.
- *
- * 멱등성: 앨범이 한 장이라도 있으면(=이미 시드됨) 전체를 건너뛴다(이슈 DoD: 재기동 시 중복 생성 없음). 시드 본체는 단일
- * 트랜잭션(txTemplate)으로 감싸 all-or-nothing 으로 커밋한다 — 중간 단계가 실패하면 앨범을 포함해 전부 롤백되어 앨범 카운트
- * 가드가 다음 기동에서 깨끗한 재시드를 보장한다(부분 시드 잔존 방지).
- *
- * 생성 경로: 유효성·BCrypt 해싱을 보장하기 위해 가능한 한 기존 application service 를 경유한다. 서비스가 노출하지 않는 두
- * 가지만 도메인/리포지터리를 직접 사용한다: (1) 관리자 role 지정(Member.registerAdmin), (2) 주문 상태
- * 전진(PENDING→…→DELIVERED) — 결제/배송 행 없이 리뷰 전제조건(주문 DELIVERED)만 만족시키면 되므로 Mock PG·스케줄러를
- * 우회한다.
+ * <p>@Profile("local") 로만 등록되며 run 진입 시 활성 프로파일에 local 포함 여부를 한 번 더 확인한다. 앨범이 한 장이라도
+ * 있으면 전체를 건너뛰고, 시드 본체는 단일 트랜잭션(txTemplate)으로 커밋한다. 생성은 가능한 한 application service 를
+ * 경유하고, 관리자 role 지정과 주문 상태 전진만 도메인/리포지터리를 직접 사용한다.
  */
 @Component
 @Profile("local")
@@ -74,11 +58,10 @@ public class LocalDataSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(LocalDataSeeder.class);
 
-    // 데모 계정 식별자(이메일·유저 풀)는 DemoAccounts 단일 출처를 참조한다(ProductionSeedGuard 와 공유 — 이슈 #128).
-    // 비밀번호는 시드 생성 전용이라 여기 둔다.
+    // 계정 식별자는 DemoAccounts, 비밀번호는 시드 생성 전용으로 여기 둔다.
     private static final String DEMO_USER_PASSWORD = "demo1234";
     private static final String ADMIN_PASSWORD = "admin1234";
-    /** 한정 쿠폰 발급 수량 — 유저 풀(DemoAccounts.USER_POOL_SIZE)보다 작게 두어 #110 에서 선착순 경합/실패가 드러나게 한다. */
+    /** 한정 쿠폰 발급 수량. */
     private static final int COUPON_TOTAL_QUANTITY = 20;
 
     private final AlbumRepository albumRepository;
@@ -126,9 +109,7 @@ public class LocalDataSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        // 런타임 안전망 (CodeRabbit 리뷰): @Profile("local") 로 빈 등록은 이미 막히지만, 활성 프로파일을
-        // 진입 시점에 한 번 더 확인한다. 알려진 비밀번호의 ADMIN 계정을 시드하므로, 향후 와이어링 변경·
-        // 다중 프로파일 구성 등으로 'local' 이 아닌데 실행되는 경로가 생기면 즉시 차단(skip)한다.
+        // 활성 프로파일에 'local' 이 없으면 시드를 건너뛴다.
         if (!environment.matchesProfiles("local")) {
             log.warn("[seed] 활성 프로파일에 'local' 이 없어 데모 시드를 건너뜁니다 (active={})",
                     String.join(",", environment.getActiveProfiles()));
@@ -144,7 +125,7 @@ public class LocalDataSeeder implements ApplicationRunner {
                 DemoAccounts.USER_POOL_SIZE);
     }
 
-    /** 시드 본체 — 단일 트랜잭션 안에서 호출된다. 어느 단계든 예외 시 전체 롤백. */
+    /** 시드 본체 — 단일 트랜잭션 안에서 호출된다. */
     private void seedAll() {
         List<Album> albums = seedCatalog();
         Member demoUser = seedDemoAccounts();
@@ -153,7 +134,7 @@ public class LocalDataSeeder implements ApplicationRunner {
         seedDeliveredOrder(demoUser, albums);
     }
 
-    /** 장르·레이블·아티스트 + LP 12장. 가격·재고·한정 여부를 섞어 데모 다양성을 확보한다. */
+    /** 장르·레이블·아티스트 + LP 12장 생성. */
     private List<Album> seedCatalog() {
         Long rock = genreService.create(new GenreCommand("Rock")).getId();
         Long jazz = genreService.create(new GenreCommand("Jazz")).getId();
@@ -207,7 +188,7 @@ public class LocalDataSeeder implements ApplicationRunner {
     private Member seedDemoAccounts() {
         Member demoUser = memberService.signup(
                 new SignupCommand(DemoAccounts.DEMO_USER_EMAIL, DEMO_USER_PASSWORD, "데모유저", "01000000000"));
-        // 점유 해시는 서버 비밀키 HMAC 이라 도메인 팩토리 직접 경로에서도 EmailHasher 로 계산해 주입한다 (#186).
+        // 점유 해시는 EmailHasher 로 계산해 주입한다.
         Member admin = Member.registerAdmin(
                 DemoAccounts.ADMIN_EMAIL, emailHasher.hash(DemoAccounts.ADMIN_EMAIL),
                 passwordEncoder.encode(ADMIN_PASSWORD), "데모관리자", "01000000001");
@@ -215,43 +196,40 @@ public class LocalDataSeeder implements ApplicationRunner {
         return demoUser;
     }
 
-    /** 쿠폰 동시성 데모용 유저 풀 (demo01@ … demo30@, 공통 비번). */
+    /** 유저 풀 (demo01@ … demo30@, 공통 비번). */
     private void seedUserPool() {
         for (int i = 1; i <= DemoAccounts.USER_POOL_SIZE; i++) {
             String email = DemoAccounts.poolEmail(i);
-            String phone = String.format("0102%07d", i); // 11자리 숫자, 데모/관리자 번호와 미충돌
+            String phone = String.format("0102%07d", i); // 11자리 숫자
             memberService.signup(new SignupCommand(
                     email, DEMO_USER_PASSWORD, String.format("데모회원%02d", i), phone));
         }
     }
 
-    /** 한정 수량 선착순 쿠폰 1장 — #110 동시성 데모의 표적 정책. */
+    /** 한정 수량 선착순 쿠폰 1장. */
     private void seedLimitedCoupon() {
         Instant now = Instant.now();
         adminCouponService.create(new AdminCouponCreateRequest(
                 "데모 선착순 쿠폰 (5,000원)",
                 CouponDiscountType.FIXED_AMOUNT,
                 5_000L,
-                null,                       // maxDiscountAmount — 정액은 불필요
+                null,                       // maxDiscountAmount
                 0L,                         // minOrderAmount
-                COUPON_TOTAL_QUANTITY,      // totalQuantity (한정)
+                COUPON_TOTAL_QUANTITY,      // totalQuantity
                 1,                          // perMemberLimit
                 now.minus(Duration.ofHours(1)),
                 now.plus(Duration.ofDays(30))));
     }
 
     /**
-     * 데모 USER 의 DELIVERED 주문 1건 — 리뷰 데모(#108)가 즉시 동작하도록.
-     *
-     * place 로 PENDING 주문을 만든 뒤 같은 트랜잭션의 managed 엔티티를 직접
-     * 전진시킨다(PENDING→PAID→PREPARING→SHIPPED→DELIVERED, 전부 합법 전이). 결제/배송 행은 만들지 않는다 — 리뷰
-     * 전제조건은 주문 상태(DELIVERED/COMPLETED)·소유자·주문 라인뿐이라 자기완결적이다.
+     * 데모 USER 의 DELIVERED 주문 1건. place 로 PENDING 주문을 만든 뒤 managed 엔티티를
+     * PENDING→PAID→PREPARING→SHIPPED→DELIVERED 로 직접 전진시킨다(결제/배송 행은 만들지 않음).
      */
     private void seedDeliveredOrder(Member demoUser, List<Album> albums) {
         Album target = albums.get(0);
         OrderCreateRequest request = new OrderCreateRequest(
                 List.of(new OrderItemRequest(target.getId(), 1)),
-                null, // 회원 주문 — guest 없음
+                null, // 회원 주문
                 new ShippingInfoRequest("데모유저", "01000000000",
                         "서울특별시 강남구 데모로 123", "그루브빌딩 4층", "06000", false),
                 null); // 쿠폰 미적용

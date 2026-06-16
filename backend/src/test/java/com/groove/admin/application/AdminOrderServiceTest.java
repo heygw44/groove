@@ -63,7 +63,7 @@ class AdminOrderServiceTest {
     private static final long ORDER_AMOUNT = UNIT_PRICE * QTY;
     private static final String PG_TX = "mock-tx-1";
     private static final long PAYMENT_ID = 100L;
-    /** {@link Payment#refundIdempotencyKey()} 결정성에 의존하는 검증용 — 같은 paymentId/PG_TX 면 항상 동일. */
+    /** Payment.refundIdempotencyKey() 의 예상값 — 같은 paymentId/PG_TX 면 항상 동일. */
     private static final String EXPECTED_IDEM_KEY = "refund:" + PAYMENT_ID + ":" + PG_TX;
 
     @Mock
@@ -85,7 +85,6 @@ class AdminOrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        // #237: PG 환불을 트랜잭션 밖으로 분리 — 검증/잠금(prepare)·보상(apply) 트랜잭션 단계는 RefundSteps 가 맡는다.
         // 실제 RefundSteps 를 mock 리포지토리로 조립해 주입하면 오케스트레이터(prepare→PG→apply) 전 구간을 단위로 검증한다.
         RefundSteps refundSteps = new RefundSteps(orderRepository, paymentRepository,
                 couponApplicationService, shippingService, albumRepository);
@@ -99,7 +98,7 @@ class AdminOrderServiceTest {
         return album;
     }
 
-    /** orderNumber/배송지를 끼운 PENDING 회원 주문 + 라인 1개(qty=2). place() 의 재고 차감은 흉내 내지 않는다. */
+    /** PENDING 회원 주문 + 라인 1개(qty=2). 재고 차감은 흉내 내지 않는다. */
     private Order pendingOrder(Album album) {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
         order.addItem(OrderItem.create(album, QTY));
@@ -124,7 +123,7 @@ class AdminOrderServiceTest {
     private Payment paidPaymentFor(Order order) {
         Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.CARD, "MOCK", PG_TX);
         payment.markPaid();
-        // refundIdempotencyKey() 는 영속화된 id 를 요구하므로 단위 테스트에서 강제 주입한다 (#72).
+        // refundIdempotencyKey() 는 영속화된 id 를 요구하므로 강제 주입한다.
         ReflectionTestUtils.setField(payment, "id", PAYMENT_ID);
         return payment;
     }
@@ -233,11 +232,11 @@ class AdminOrderServiceTest {
             assertThat(captor.getValue().pgTransactionId()).isEqualTo(PG_TX);
             assertThat(captor.getValue().amount()).isEqualTo(ORDER_AMOUNT);
             assertThat(captor.getValue().reason()).isEqualTo("운영 환불");
-            // #72: 결정적 멱등 키 전달 — 보상 트랜잭션 재시도 시 PG 캐시 응답 보장.
+            // 멱등 키 전달
             assertThat(captor.getValue().idempotencyKey()).isEqualTo(EXPECTED_IDEM_KEY);
-            // #91: 쿠폰 복원 호출 (적용 여부 무관 — 서비스 내부에서 미적용 주문은 no-op).
+            // 쿠폰 복원 호출 (미적용 주문은 서비스 내부에서 no-op)
             verify(couponApplicationService).restoreForOrder(order.getId());
-            // #233: 발송 전 배송 취소 동기화 호출 (배송 없거나 종착이면 서비스 내부에서 no-op).
+            // 발송 전 배송 취소 동기화 호출 (배송 없거나 종착이면 no-op)
             verify(shippingService).cancelForOrder(order.getId());
         }
 
@@ -258,9 +257,9 @@ class AdminOrderServiceTest {
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
             verifyNoInteractions(albumRepository);
             verifyNoInteractions(paymentGateway);
-            // #91: 멱등 분기에서는 쿠폰 복원도 호출되지 않음 (이미 환불·복원 완료된 상태).
+            // 멱등 분기에서는 쿠폰 복원도 호출되지 않음
             verifyNoInteractions(couponApplicationService);
-            // #233: 멱등 분기에서는 배송 취소 동기화도 호출되지 않음.
+            // 멱등 분기에서는 배송 취소 동기화도 호출되지 않음
             verifyNoInteractions(shippingService);
         }
 
@@ -355,7 +354,7 @@ class AdminOrderServiceTest {
         void concurrentRefund_applySeesRefunded_noDoubleCompensation() {
             Album album = album(0);
             Order order = orderAt(OrderStatus.PAID, album);
-            // prepare 는 PAID 를 보고 PG 를 호출하지만, apply 가 락을 재획득했을 땐 다른 환불이 먼저 적용돼 REFUNDED 다.
+            // prepare 는 PAID 를 보지만 apply 시점엔 다른 환불이 먼저 적용돼 REFUNDED 다.
             Payment paid = paidPaymentFor(order);
             Payment alreadyRefunded = paidPaymentFor(order);
             alreadyRefunded.markRefunded();
@@ -367,7 +366,7 @@ class AdminOrderServiceTest {
 
             RefundResult result = service.refund(ORDER_NUMBER, "동시 환불");
 
-            // PG 는 멱등 키로 1회 호출되지만(첫 건과 dedup), 보상(재고/쿠폰/배송)은 apply 의 status==PAID 가드에 막혀 0회.
+            // PG 는 멱등 키로 1회 호출되지만, 보상(재고/쿠폰/배송)은 apply 의 status==PAID 가드에 막혀 0회.
             assertThat(result.alreadyRefunded()).isTrue();
             verify(paymentGateway).refund(any());
             verifyNoInteractions(albumRepository);

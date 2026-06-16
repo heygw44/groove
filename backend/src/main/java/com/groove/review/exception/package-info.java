@@ -1,6 +1,6 @@
 /**
- * 리뷰 도메인 예외 — {@code DomainException} 계열로 {@code GlobalExceptionHandler} 가 ProblemDetail 로 변환한다.
- * 404({@code ReviewNotFoundException}), 403({@code ReviewNotOwnedException}), 422({@code ReviewOrderNotDeliveredException},
- * {@code AlbumNotInOrderException}), 409({@code DuplicateReviewException}).
+ * 리뷰 도메인 예외 — DomainException 계열로 GlobalExceptionHandler 가 ProblemDetail 로 변환한다.
+ * 404(ReviewNotFoundException), 403(ReviewNotOwnedException), 422(ReviewOrderNotDeliveredException,
+ * AlbumNotInOrderException), 409(DuplicateReviewException).
  */
 package com.groove.review.exception;

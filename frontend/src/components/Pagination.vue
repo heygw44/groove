@@ -3,13 +3,13 @@ import { useRouteQuery } from '@/composables/useRouteQuery'
 import { usePagination } from '@/composables/usePagination'
 
 const props = defineProps({
-  page: { type: Object, required: true }, // PageResponse
+  page: { type: Object, required: true },
 })
 
 const { patchQuery } = useRouteQuery()
 const { current, isFirst, isLast, hasPages, pages, totalPages } = usePagination(() => props.page)
 
-// URL 쿼리 구동 — page 만 갱신하고 나머지 필터 쿼리는 patchQuery 가 보존한다. 0 페이지는 키 제거.
+// page 쿼리만 갱신(0이면 키 제거), 나머지 쿼리는 보존
 function goTo(p) {
   if (p < 0 || p > totalPages.value - 1 || p === current.value) return
   patchQuery({ page: p === 0 ? undefined : p })

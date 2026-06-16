@@ -20,19 +20,17 @@ import java.time.Clock;
 import java.util.Locale;
 
 /**
- * 선착순 쿠폰 발급 — 동시성 헤드라인 (#90, decisions/coupon-concurrency.md).
+ * 선착순 쿠폰 발급.
  *
- * 초과발급 없는 선착순 발급을 3단계로 제공한다. 프로덕션은 issue(원자적 조건부 UPDATE)만 쓰고, 나머지 둘은
- * 단계적 시연·동시성 테스트 전용이다 — issueWithoutLock(락 없음, lost-update 로 초과발급 재현),
- * issueWithPessimisticLock(SELECT ... FOR UPDATE 행 락, 정확하나 직렬화), issue(원자적 조건부 UPDATE 로 한
- * 문장에 소진 검사+증가, 행 락이 짧다).
+ * 발급을 3가지로 제공한다 — issue(원자적 조건부 UPDATE 로 한 문장에 소진 검사+증가),
+ * issueWithoutLock(락 없음, lost-update 로 초과발급 재현), issueWithPessimisticLock(SELECT ... FOR UPDATE 행 락).
  *
- * 회원당 1장 보증: 사전 검사(existsByCoupon_IdAndMemberId)로 흔한 경우를 거르고, 사전 검사를 통과한 동시 중복은
- * uk_member_coupon_coupon_member UNIQUE 가 잡는다 — INSERT 충돌 시 트랜잭션이 롤백되며 이미 증가시킨 카운터도
- * 함께 되돌아가(같은 트랜잭션) 슬롯 누수가 없다(DoD "정확히 1장").
+ * 회원당 1장 보증: 사전 검사(existsByCoupon_IdAndMemberId)로 거르고, 통과한 동시 중복은
+ * uk_member_coupon_coupon_member UNIQUE 가 잡는다 — INSERT 충돌 시 트랜잭션이 롤백되며 증가시킨 카운터도
+ * 함께 되돌아간다.
  *
  * 트랜잭션 경계: issue 는 @Transactional 자기완결 메서드다 — @Idempotent 컨트롤러가 비트랜잭션으로 호출하고 이
- * 메서드가 커밋한 뒤 멱등성 마커가 COMPLETED 로 갱신된다(IdempotencyService 호출 규약, PaymentController 와 동일).
+ * 메서드가 커밋한 뒤 멱등성 마커가 COMPLETED 로 갱신된다.
  */
 @Service
 public class CouponIssueService {
@@ -56,18 +54,15 @@ public class CouponIssueService {
     }
 
     /**
-     * 프로덕션 발급 경로 — 원자적 조건부 UPDATE.
+     * 발급 경로 — 원자적 조건부 UPDATE.
      *
-     * status + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로 원자 처리하므로 핫 카운터 경합에도
-     * 초과발급이 없다(affected=1 성공 / 0 발급불가 → 재조회로 소진·비ACTIVE 판별). 발급 기간(validFrom·validUntil)은
-     * UPDATE 가 검사하지 않으므로 validateIssuable 사전 검사가 게이트한다 — 기간 경계는 고정 시각이라 관리자
-     * 트리거 경합이 없어 사전 검사로 충분하다.
+     * status + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로 원자 처리한다(affected=1 성공 / 0
+     * 발급불가 → 재조회로 소진·비ACTIVE 판별). 발급 기간(validFrom·validUntil)은 UPDATE 가 검사하지 않으므로
+     * validateIssuable 사전 검사가 게이트한다.
      */
     @Transactional
     public MemberCouponResponse issue(Long memberId, Long couponId) {
-        // 토큰 유효기간 내 탈퇴(soft delete)한 회원이면 404 로 차단한다 (#187, #171 과 일관) — 익명화된
-        // 탈퇴회원에 신규 쿠폰이 귀속되는 비정합을 막는다. 데모/테스트 전용 issueWithoutLock·
-        // issueWithPessimisticLock 은 프로덕션 경로가 아니므로 가드를 두지 않는다.
+        // soft delete 된 회원이면 404.
         if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
             throw new MemberNotFoundException();
         }
@@ -75,12 +70,10 @@ public class CouponIssueService {
         requireNotYetIssued(couponId, memberId);
 
         if (couponRepository.incrementIssuedCount(couponId) == 0) {
-            // UPDATE 가 status+수량을 원자적으로 검사하므로 0행은 소진 또는 사전 검사 후 SUSPENDED 로 전환된
-            // 경합이다. clearAutomatically 로 컨텍스트가 비었으니 재조회(fresh SELECT)로 사유를 가린다.
+            // 0행은 소진 또는 SUSPENDED 전환. clearAutomatically 로 컨텍스트가 비었으니 재조회로 사유를 가린다.
             throw resolveIssueFailure(couponId);
         }
-        // incrementIssuedCount 의 clearAutomatically 가 영속성 컨텍스트를 비우므로 — 연관용 managed 참조를
-        // 다시 얻는다 (validUntil 스냅샷은 프록시 초기화로 로딩).
+        // clearAutomatically 가 영속성 컨텍스트를 비우므로 managed 참조를 다시 얻는다.
         Coupon managed = couponRepository.getReferenceById(couponId);
         return persistIssuance(managed, memberId, couponId);
     }
@@ -94,9 +87,7 @@ public class CouponIssueService {
                 .orElseGet(() -> new CouponNotFoundException(couponId));
     }
 
-    /**
-     * 비관적 락 단계 — coupon 행을 FOR UPDATE 로 잠그고 read-check-increment 한다 (시연·테스트 전용).
-     */
+    /** 비관적 락 — coupon 행을 FOR UPDATE 로 잠그고 read-check-increment 한다. */
     @Transactional
     public MemberCouponResponse issueWithPessimisticLock(Long memberId, Long couponId) {
         Coupon coupon = couponRepository.findByIdForUpdate(couponId)
@@ -111,11 +102,7 @@ public class CouponIssueService {
     }
 
     /**
-     * 베이스라인 — 락 없는 read-check-increment. 동시 발급 시 lost-update 로 초과발급을 재현한다
-     * (decisions/coupon-concurrency.md "Before"). 일반 빌드에선 호출되지 않으며 동시성 테스트만 호출한다.
-     *
-     * 회원당 1장 사전 검사를 의도적으로 생략한다 — 초과발급 노출 테스트가 서로 다른 회원으로 글로벌 카운터를
-     * 때리므로 사전 검사는 무의미하고, "순진한 구현"의 결함을 그대로 드러내기 위함이다.
+     * 락 없는 read-check-increment. 동시 발급 시 lost-update 로 초과발급을 재현한다. 회원당 1장 사전 검사를 생략한다.
      */
     @Transactional
     public MemberCouponResponse issueWithoutLock(Long memberId, Long couponId) {
@@ -153,9 +140,7 @@ public class CouponIssueService {
             MemberCoupon issued = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
             return MemberCouponResponse.from(issued);
         } catch (DataIntegrityViolationException violation) {
-            // 회원당 1장 UNIQUE 충돌(사전 검사를 통과한 동시 중복)만 ALREADY_ISSUED 로 매핑한다 —
-            // 트랜잭션 롤백으로 카운터 증가도 되돌아간다. 그 외 제약 위반(FK·CHECK 등)은 의미가 다르므로
-            // 원본 예외를 그대로 전파해 오분류를 막는다.
+            // 회원당 1장 UNIQUE 충돌만 ALREADY_ISSUED 로 매핑하고, 그 외 제약 위반은 원본 예외를 전파한다.
             if (isMemberCouponUniqueViolation(violation)) {
                 throw new CouponAlreadyIssuedException(couponId, memberId);
             }
@@ -164,9 +149,8 @@ public class CouponIssueService {
     }
 
     /**
-     * 예외 cause 체인에서 uk_member_coupon_coupon_member(회원당 1장) UNIQUE 위반인지 판별한다.
-     * Hibernate ConstraintViolationException.getConstraintName() 을 우선 보고, 드라이버/방언별로 null 일 수
-     * 있어 메시지 substring 도 폴백으로 확인한다.
+     * 예외 cause 체인에서 uk_member_coupon_coupon_member UNIQUE 위반인지 판별한다.
+     * ConstraintViolationException.getConstraintName() 을 우선 보고, null 이면 메시지 substring 으로 폴백한다.
      */
     private boolean isMemberCouponUniqueViolation(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {

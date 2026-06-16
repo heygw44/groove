@@ -1,5 +1,4 @@
 // ProblemDetail(RFC 7807) → ApiError 구조화.
-// (M14 src/main/resources/static/js/api.js 의 ApiError 를 axios 기반으로 이식)
 
 /** 서버 ProblemDetail(code/title/detail/violations)을 담는 구조화된 에러. */
 export class ApiError extends Error {
@@ -14,7 +13,7 @@ export class ApiError extends Error {
     this.traceId = traceId
   }
 
-  /** 필드별 검증 메시지 맵 {field: message} — 폼 검증 표시용(#115 useForm 에서 활용). */
+  /** 필드별 검증 메시지 맵 {field: message} — 폼 검증 표시용. */
   fieldErrors() {
     const map = {}
     for (const v of this.violations) {
@@ -41,10 +40,7 @@ export function toApiError(error) {
   })
 }
 
-/**
- * 사용자 표시용 에러 메시지 추출 — ApiError 면 detail→title 우선, 그 외(또는 둘 다 빈 값)면 fallback.
- * 뷰들이 동일한 폴백 규칙을 공유하도록 단일 헬퍼로 제공한다.
- */
+/** 사용자 표시용 에러 메시지 추출 — ApiError 면 detail→title 우선, 그 외엔 fallback. */
 export function errorMessage(error, fallback) {
   return (error instanceof ApiError && (error.detail || error.title)) || fallback
 }

@@ -42,15 +42,11 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link LocalDataSeeder} 통합 테스트.
+ * LocalDataSeeder 통합 테스트.
  *
- * <p>시더는 {@code @Profile("local")} 이라 {@code test} 프로파일에서는 빈으로 등록되지 않는다.
- * 따라서 협력자를 주입받아 시더를 직접 생성하고 {@code run(null)} 을 호출해 실제 코드 경로
- * (서비스·BCrypt·Flyway 스키마·실 트랜잭션)를 그대로 검증한다.
+ * <p>시더는 @Profile("local") 이라 test 프로파일에선 빈으로 등록되지 않아, 협력자를 주입받아 직접 생성하고 run(null) 을 호출해 검증한다.
  *
- * <p>시더는 {@code REQUIRES_NEW} 단일 트랜잭션으로 <b>커밋</b>하므로 테스트의 @Transactional 롤백으로는
- * 되돌릴 수 없다 — 공유 컨테이너 오염을 막기 위해 {@code FullPurchaseJourneyE2ETest} 와 동일하게
- * FK 안전 순서로 직접 정리한다.
+ * <p>시더는 REQUIRES_NEW 단일 트랜잭션으로 커밋하므로 FK 안전 순서로 직접 정리한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -85,9 +81,7 @@ class LocalDataSeederIntegrationTest {
     @BeforeEach
     void setUp() {
         cleanAll();
-        // 시더의 런타임 프로파일 가드(local 필수)를 통과시키기 위해 local 활성 환경을 주입한다.
-        // 테스트 컨텍스트 자체는 test 프로파일이라 실제 빈은 등록되지 않으며, 여기서는 협력자를 모아
-        // 시더를 직접 생성해 시드 로직만 검증한다.
+        // 시더의 프로파일 가드(local 필수)를 통과시키기 위해 local 활성 환경을 주입한다
         MockEnvironment seedEnv = new MockEnvironment();
         seedEnv.setActiveProfiles("local");
         seeder = new LocalDataSeeder(albumRepository, artistService, genreService, labelService,
@@ -101,9 +95,7 @@ class LocalDataSeederIntegrationTest {
     }
 
     private void cleanAll() {
-        // FK 안전 순서: order_items→orders(DB CASCADE) → albums → artist/genre/label → member_coupon → coupon → member.
-        // member_coupon 은 본 시더가 만들지 않지만, 형제 쿠폰 테스트(@AfterEach 없음)가 남긴 행이
-        // coupon(ON DELETE RESTRICT, V14)을 가리켜 couponRepository 삭제를 막을 수 있으므로 먼저 비운다.
+        // FK 안전 순서: order_items→orders(DB CASCADE) → albums → artist/genre/label → member_coupon → coupon → member
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
@@ -144,7 +136,7 @@ class LocalDataSeederIntegrationTest {
         assertThat(couponRepository.findIssuable(java.time.Instant.now(), PageRequest.of(0, 10)))
                 .isNotEmpty();
 
-        // 데모 USER 의 주문 1건이 DELIVERED (리뷰 데모 #108 즉시 동작)
+        // 데모 USER 의 주문 1건이 DELIVERED
         List<Order> orders = orderRepository.findByMemberId(demoUser.getId(), PageRequest.of(0, 10)).getContent();
         assertThat(orders).hasSize(1);
         assertThat(orders.get(0).getStatus()).isEqualTo(OrderStatus.DELIVERED);

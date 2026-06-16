@@ -27,11 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 회원 장바구니 API (API §3.4).
- *
- * <p>인가 경계는 {@code SecurityConfig} 의 기본 정책 ({@code anyRequest().authenticated()}) 이
- * 담당한다 — {@code /api/v1/cart/**} 는 USER 토큰만 통과한다. 게스트 장바구니는 본 이슈 범위 외
- * (게스트 주문은 W6-3 에서 직접 처리).
+ * 회원 장바구니 API. /api/v1/cart/** 는 인증된 USER 토큰만 통과한다.
  */
 @Tag(name = "장바구니", description = "로그인한 회원의 장바구니 조회·항목 추가/수정/삭제·비우기 (모두 인증 필요)")
 @SecurityRequirement(name = "bearerAuth")

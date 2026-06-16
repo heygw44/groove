@@ -21,9 +21,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 쿠폰 조회 — 발급 가능 목록({@code GET /coupons})과 내 보유 쿠폰({@code GET /members/me/coupons}) (API.md §3.9).
- *
- * <p>발급/동시성은 {@link CouponIssueService} 가 담당하고, 본 서비스는 읽기 전용 조회만 다룬다.
+ * 쿠폰 조회 — 발급 가능 목록(GET /coupons)과 내 보유 쿠폰(GET /members/me/coupons).
  */
 @Service
 public class CouponQueryService {
@@ -43,18 +41,17 @@ public class CouponQueryService {
         this.clock = clock;
     }
 
-    /** 발급 가능한 쿠폰(ACTIVE + 발급 기간 내) 페이지. 소진 여부는 {@code remainingQuantity} 로 노출한다. */
+    /** 발급 가능한 쿠폰(ACTIVE + 발급 기간 내) 페이지. 소진 여부는 remainingQuantity 로 노출한다. */
     @Transactional(readOnly = true)
     public Page<CouponResponse> listIssuable(Pageable pageable) {
         return couponRepository.findIssuable(clock.instant(), pageable).map(CouponResponse::from);
     }
 
     /**
-     * 회원 보유 쿠폰 페이지 — {@code status} 가 null 이면 전체, 아니면 해당 상태만.
+     * 회원 보유 쿠폰 페이지 — status 가 null 이면 전체, 아니면 해당 상태만.
      *
-     * <p>USED 쿠폰의 사용 주문번호({@code orderNumber})는 페이지의 {@code orderId} 집합을 모아
-     * {@link OrderRepository#findByIdIn} 으로 한 번에 resolve 한다 (N+1 회피, #137). 복원된 쿠폰은
-     * {@code orderId} 가 비어 있어 자연히 {@code null} 로 매핑된다.
+     * <p>USED 쿠폰의 사용 주문번호(orderNumber)는 페이지의 orderId 집합을 모아 OrderRepository.findByIdIn 으로
+     * 한 번에 resolve 한다. 복원된 쿠폰은 orderId 가 비어 있어 null 로 매핑된다.
      */
     @Transactional(readOnly = true)
     public Page<MemberCouponResponse> listForMember(Long memberId, MemberCouponStatus status, Pageable pageable) {

@@ -35,19 +35,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 선착순 쿠폰 발급 동시성 테스트 (#90, decisions/coupon-concurrency.md).
+ * 선착순 쿠폰 발급 동시성 테스트.
  *
- * <p>오버셀 baseline(#46)과 같은 서사의 쿠폰판이다 — 베이스라인(락 없음)은 초과발급을 재현({@code @Disabled}
- * 로 보존)하고, 비관적 락·프로덕션 경로(원자적 조건부 UPDATE)는 초과발급 0 을 증명한다. ([OversellingBaselineTest]
- * 포맷 재사용)
+ * <p>베이스라인(락 없음)은 초과발급을 재현(@Disabled 로 보존)하고, 비관적 락·원자적 조건부 UPDATE 경로는
+ * 초과발급 0 을 증명한다.
  *
- * <p>회원당 1장 UNIQUE 때문에 초과발급 노출은 <b>서로 다른 member_id</b> 로 글로벌 카운터를 때려야 한다
- * (이슈 #90 비고). 멱등 재시도 부수효과 1회는 엔드포인트 레벨에서 {@code CouponApiIntegrationTest}
- * (Idempotency-Key replay)가 검증한다.
+ * <p>회원당 1장 UNIQUE 때문에 초과발급 노출은 서로 다른 member_id 로 글로벌 카운터를 때려야 한다.
  *
- * <p><b>실측(#93)</b>: 공용 {@link ConcurrencyHarness} 가 wall-clock(elapsedMs)·요청별 지연을 수집해 TPS·p95 를
- * 콘솔에 박제한다 — 3종 전략(베이스라인/비관적/원자적)의 정확성·처리량 비교표
- * (docs/troubleshooting/coupon-issuance-concurrency.md §3·§6) 근거다.
+ * <p>ConcurrencyHarness 가 wall-clock(elapsedMs)·요청별 지연을 수집해 TPS·p95 를 콘솔에 기록한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -210,9 +205,8 @@ class CouponIssuanceConcurrencyTest {
             } catch (CouponSoldOutException ex) {
                 soldOut.incrementAndGet();
             } catch (RuntimeException ex) {
-                // 락 없는 동시 쓰기는 같은 coupon 행을 두고 락 경합/데드락을 일으켜 다수가
-                // CannotAcquireLockException 으로 롤백된다 (#93 실측 other=252/300). 커밋된 소수에서
-                // lost-update 가 누적돼 issued_count < persisted 로 드러난다.
+                // 락 없는 동시 쓰기는 락 경합/데드락으로 다수가 CannotAcquireLockException 으로 롤백되고,
+                // 커밋된 소수에서 lost-update 가 누적돼 issued_count < persisted 로 드러난다.
                 other.incrementAndGet();
             }
         });
@@ -221,9 +215,9 @@ class CouponIssuanceConcurrencyTest {
         long persisted = memberCouponRepository.count();
         logMeasurement("baseline", success, soldOut, other, issuedCount, persisted, result);
 
-        // 통과 조건 = "초과발급 증거". lost-update 시 다음 중 하나 이상이 성립한다:
-        //   (1) persisted > LIMIT          — 한정수량보다 많이 발급 (오버이슈)
-        //   (2) persisted > issuedCount    — 영속 발급 수가 카운터를 초과 (lost-update 직접 증거)
+        // 초과발급 증거 — 다음 중 하나 이상:
+        //   (1) persisted > LIMIT          — 한정수량보다 많이 발급
+        //   (2) persisted > issuedCount    — 영속 발급 수가 카운터를 초과
         //   (3) success > LIMIT            — 한정수량 초과 성공
         boolean overIssued = persisted > LIMIT || persisted > issuedCount || success.get() > LIMIT;
         assertThat(overIssued)
@@ -252,7 +246,7 @@ class CouponIssuanceConcurrencyTest {
         return memberRepository.saveAll(members).stream().map(Member::getId).toList();
     }
 
-    /** 콘솔 박제용 측정 로그 — 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 한 줄. (overselling-baseline.md §3.1 포맷) */
+    /** 측정 로그 — 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 한 줄. */
     private void logMeasurement(String label, AtomicInteger success, AtomicInteger soldOut, AtomicInteger other,
                                 int issuedCount, long persisted, LoadResult result) {
         log.info("[#93 {}] success={}, soldOut={}, other={}, issuedCount={}, persisted={} (limit={})"

@@ -6,9 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/**
- * 내 정보 응답 (API §3.2). {@code password} 는 절대 노출하지 않는다.
- */
+/** 내 정보 응답. password 는 절대 노출하지 않는다. */
 public record MemberResponse(
         @Schema(description = "회원 ID", example = "1")
         Long memberId,

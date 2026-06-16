@@ -43,10 +43,9 @@ class OutboxEventRepositoryTest {
     @Test
     @DisplayName("findByPublishedAtIsNullOrderByIdAsc: 미발행 행만 id 오름차순(FIFO)으로, 발행 완료는 제외")
     void findsOnlyUnpublishedInFifoOrder() {
-        // 싱글턴 Testcontainers 공유 DB 라 다른 테스트가 커밋한 행이 섞일 수 있다 — 전역 단언 대신 내 id 로 단언한다
-        // ([[project_test_shared_db_isolation]]).
+        // 공유 DB 라 내 id 로 단언한다
         OutboxEvent first = unpublished();
-        OutboxEvent published = publishedAt(T0); // 발행 완료 — 제외 대상
+        OutboxEvent published = publishedAt(T0); // 발행 완료
         OutboxEvent third = unpublished();
 
         var ids = repository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(1000)).stream()
@@ -72,7 +71,7 @@ class OutboxEventRepositoryTest {
         OutboxEvent event = unpublished();
 
         assertThat(repository.markPublished(event.getId(), T0)).isEqualTo(1);
-        // 이미 발행됨 — published_at IS NULL 가드로 두 번째는 0행 (중복 발행 표시 방지).
+        // 이미 발행됨 — 두 번째는 0행
         assertThat(repository.markPublished(event.getId(), T0.plusSeconds(60))).isZero();
 
         em.clear();
@@ -88,7 +87,7 @@ class OutboxEventRepositoryTest {
 
         int deleted = repository.deletePublishedBefore(T0.minusSeconds(60), 100);
 
-        // 공유 DB 라 다른 테스트의 오래된 발행 행도 셀 수 있으므로 정확값 대신 "내 old 포함 1건 이상" + id 단언으로 검증.
+        // 공유 DB 라 1건 이상 + id 로 단언한다
         assertThat(deleted).isGreaterThanOrEqualTo(1);
         em.clear();
         assertThat(repository.findById(old.getId())).isEmpty();

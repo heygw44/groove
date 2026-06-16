@@ -5,7 +5,7 @@ import com.groove.member.domain.Member;
 import java.time.Instant;
 
 /**
- * 회원가입 응답 (API §3.1, 201).
+ * 회원가입 응답.
  */
 public record SignupResponse(
         Long memberId,

@@ -93,8 +93,7 @@ class OrderControllerTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: order_item → orders → album → artist/genre/label, member.
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        // FK 의존 순서대로 부모 repository 를 비운다.
         refreshTokenRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
@@ -341,7 +340,7 @@ class OrderControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // ========== 이슈 #44: 단건 조회 / 취소 / 게스트 lookup ==========
+    // ========== 단건 조회 / 취소 / 게스트 lookup ==========
 
     @Test
     @DisplayName("GET /orders/{orderNumber} — 회원 본인 주문 조회 → 200")

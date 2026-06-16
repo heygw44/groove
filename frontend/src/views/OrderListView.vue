@@ -48,7 +48,7 @@ async function fetchOrders(q) {
 }
 
 function onStatusChange(value) {
-  // 상태 변경 시 페이지는 처음으로 되돌린다.
+  // 상태 변경 시 페이지를 처음으로 되돌림
   patchQuery({ status: value, page: undefined })
 }
 

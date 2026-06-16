@@ -42,7 +42,7 @@ class OrderPiiAnonymizerTest {
         anonymizer = new OrderPiiAnonymizer(shippingRepository, orderRepository);
     }
 
-    /** 배송완료(DELIVERED) 상태의 배송을 주문과 함께 구성한다. */
+    /** DELIVERED 상태의 배송을 구성한다. */
     private static Shipping deliveredShipping(Order order) {
         Shipping shipping = Shipping.prepare(order, order.getShippingInfo(), "track-1");
         shipping.markShipped();
@@ -60,7 +60,7 @@ class OrderPiiAnonymizerTest {
         boolean done = anonymizer.anonymizeForShipping(SHIPPING_ID, NOW);
 
         assertThat(done).isTrue();
-        // 주문 PII (배송지 스냅샷은 getShippingInfo 로 노출)
+        // 주문 PII
         assertThat(order.getShippingInfo().recipientName()).isEqualTo("익명");
         assertThat(order.getShippingInfo().recipientPhone()).isEqualTo("익명");
         assertThat(order.getShippingInfo().address()).isEqualTo("익명");
@@ -108,7 +108,7 @@ class OrderPiiAnonymizerTest {
     @Test
     @DisplayName("anonymizeOrder — 배송 없는 게스트 종착 주문(PENDING)의 PII 를 마스킹한다 (배송 조회 안 함, true 반환)")
     void anonymizeOrder_guestNoShipping_masksOrder() {
-        // 게스트 주문은 PENDING — 배송이 없는 종착 후보라 배송 조회를 건너뛴다.
+        // PENDING 게스트 주문 — 배송이 없어 배송 조회를 건너뛴다.
         Order order = OrderFixtures.guestOrder("ORD-PII-3", "guest@example.com", "01099998888");
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
 
@@ -170,7 +170,7 @@ class OrderPiiAnonymizerTest {
     @Test
     @DisplayName("anonymizeOrder — 배치 조회 후 PAID 로 전진한 주문(TOCTOU 경합)은 익명화하지 않고 false (배송 조회 안 함)")
     void anonymizeOrder_statusAdvancedToPaid_skips() {
-        // 배치가 PENDING 으로 조회했지만 그 사이 결제 콜백으로 PAID 가 된 상황 — 트랜잭션 내 재검증으로 걸러져야 한다.
+        // 조회 후 PAID 로 전진한 주문 — 트랜잭션 내 재검증으로 걸러진다.
         Order order = OrderFixtures.memberOrder("ORD-PII-6", 1L);
         order.changeStatus(OrderStatus.PAID, null);
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));

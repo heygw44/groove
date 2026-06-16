@@ -27,15 +27,8 @@ import org.springframework.test.context.ActiveProfiles;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 회원 탈퇴 장바구니 정리의 cascade 검증 (#78, code-review M1).
- *
- * <p>{@code CartService.deleteForMember} 가 <em>아이템이 담긴</em> cart 를 삭제할 때 {@code cart_item} 까지
- * 함께 제거되는지({@code orphanRemoval=true + CascadeType.ALL}, DB {@code fk_cart_item_cart ON DELETE
- * CASCADE} 이중 방어선) 실 DB 로 확인한다. 단위 테스트({@code CartServiceTest})는 위임만 검증하므로
- * 실제 cascade 경로는 본 통합 테스트가 책임진다.
- *
- * <p>비트랜잭션 — {@code addItem}/{@code deleteForMember} 각각이 커밋되도록 두고, {@code @BeforeEach} 에서
- * 자식부터 정리한다(공유 Testcontainers DB 교차오염 방지).
+ * 회원 탈퇴 장바구니 정리의 cascade 검증. CartService.deleteForMember 가 아이템이 담긴 cart 를 삭제할 때
+ * cart_item 까지 함께 제거되는지 실 DB 로 확인한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -75,8 +68,7 @@ class CartWithdrawalCleanupIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 정리 순서: refresh_token → member, cart(CASCADE → cart_item) → album → artist/genre/label.
-        // cart 를 지우면 fk_cart_item_cart(ON DELETE CASCADE) 로 cart_item 이 함께 정리된다.
+        // FK 정리 순서: refresh_token, cart(CASCADE → cart_item) → album → artist/genre/label → member.
         refreshTokenRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();

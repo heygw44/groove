@@ -23,18 +23,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 결제 요청 Rate Limit 통합 테스트 (#208) — 회원당 한도 초과 시 429, 회원 간 버킷 독립.
+ * 결제 요청 Rate Limit 통합 테스트 — 회원당 한도 초과 시 429, 회원 간 버킷 독립.
  *
- * <p>{@code capacity=3} 으로 override 한다. 미존재 주문번호로 호출하면 RateLimitFilter(Security·멱등성
- * 인터셉터 이전)는 토큰을 통과시키고 컨트롤러가 404(ORDER_NOT_FOUND)를 내므로, 토큰 소진 전까지는 404·
- * 소진 후 429 로 한도를 관찰한다. Idempotency-Key 는 요청마다 고유해 매번 실제 실행된다.
+ * <p>capacity=3 으로 override. 미존재 주문번호로 호출해 토큰 소진 전까지는 404·소진 후 429 로 한도를 관찰한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
 @TestPropertySource(properties = "groove.payment.rate-limit.post.capacity=3")
-@DisplayName("POST /payments Rate Limit (#208)")
+@DisplayName("POST /payments Rate Limit")
 class PaymentRateLimitIntegrationTest {
 
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
@@ -84,7 +82,7 @@ class PaymentRateLimitIntegrationTest {
                         .content(BODY))
                 .andExpect(status().isTooManyRequests());
 
-        // 다른 회원은 자신의 버킷을 가지므로 한도와 무관하게 통과(404).
+        // 다른 회원은 자신의 버킷을 가져 통과(404).
         mockMvc.perform(post("/api/v1/payments")
                         .header(HttpHeaders.AUTHORIZATION, otherBearer)
                         .header(IDEMPOTENCY_HEADER, java.util.UUID.randomUUID().toString())

@@ -18,17 +18,15 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * 배송 자동 진행 스케줄러 (#W7-6 DoD) — 실제 택배사 연동이 없는 시연 환경에서 배송 상태를
- * {@code PREPARING → SHIPPED → DELIVERED} 로 한 단계씩 자동 진행시킨다.
+ * 배송 자동 진행 스케줄러 — 배송 상태를 PREPARING → SHIPPED → DELIVERED 로 한 단계씩 자동 진행시킨다.
  *
- * <p>틱마다 한 단계만 민다 — {@code PREPARING} 으로 {@code prepare-delay} 이상 머문 배송을 {@code SHIPPED} 로,
- * {@code SHIPPED} 로 {@code ship-delay} 이상 머문 배송을 {@code DELIVERED} 로. 상태 전이는 식별자 단위로
- * {@link ShippingService} 의 트랜잭션 메서드에 위임하고, 한 건의 실패가 배치 전체를 막지 않도록 건별로 격리한다
- * (다음 주기에 재시도). 한 주기 처리량은 {@code .batch-size} 로 제한해(메모리 바운드) 적체 시에도 나머지는 다음 주기에 처리한다.
+ * <p>틱마다 한 단계만 민다 — PREPARING 으로 prepare-delay 이상 머문 배송을 SHIPPED 로,
+ * SHIPPED 로 ship-delay 이상 머문 배송을 DELIVERED 로. 상태 전이는 식별자 단위로
+ * ShippingService 의 트랜잭션 메서드에 위임하고, 건별 try/catch 로 격리한다(다음 주기 재시도).
+ * 한 주기 처리량은 .batch-size 로 제한한다.
  *
- * <p>실행 주기/초기 지연은 {@code groove.shipping.progress.{interval,initial-delay}}, 각 단계 체류 최소 시간은
- * {@code .prepare-delay}/{@code .ship-delay}, 주기당 처리 상한은 {@code .batch-size} (시연 시 수 초 단위로 조절).
- * 전역 {@code @EnableScheduling} 은 {@code common.scheduling.SchedulingConfig} 에 있다 — 자체 {@code @EnableScheduling} 을 두지 않는다.
+ * <p>실행 주기/초기 지연은 groove.shipping.progress.{interval,initial-delay}, 각 단계 체류 최소 시간은
+ * .prepare-delay/.ship-delay, 주기당 처리 상한은 .batch-size.
  */
 @Component
 public class ShippingProgressScheduler {

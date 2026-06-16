@@ -51,7 +51,7 @@ class ShippingProvisionerTest {
     @DisplayName("정상 — PREPARING 배송 생성 + 운송장 발급 + 주문도 PAID→PREPARING 락스텝 전이, true 반환")
     void createsPreparingShipping() {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
-        order.changeStatus(OrderStatus.PAID, null); // 결제 직후 상태를 재현
+        order.changeStatus(OrderStatus.PAID, null); // 결제 직후 상태
         given(shippingRepository.existsByOrderId(ORDER_ID)).willReturn(false);
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
         given(trackingNumberGenerator.generate()).willReturn(TRACKING);
@@ -72,7 +72,7 @@ class ShippingProvisionerTest {
     @Test
     @DisplayName("주문이 종착(취소·환불)이면 배송을 만들지 않고 false 반환 — 프로비저닝 race 가드 (#233)")
     void skipsWhenOrderTerminal() {
-        // OrderPaid 아웃박스 이벤트가 릴레이되는 사이 별도 트랜잭션의 환불로 주문이 이미 CANCELLED 가 된 race 재현.
+        // 배송 생성 전에 환불로 주문이 이미 CANCELLED 가 된 상황.
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
         order.changeStatus(OrderStatus.CANCELLED, "환불");
         given(shippingRepository.existsByOrderId(ORDER_ID)).willReturn(false);

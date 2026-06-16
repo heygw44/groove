@@ -24,18 +24,18 @@ const ui = useUiStore()
 const { isAuthenticated } = storeToRefs(auth)
 const adding = ref(false)
 const album = ref(null)
-const reviewsPage = ref(null) // PageResponse — 페이징 표시용(단일 출처)
-const reviews = computed(() => reviewsPage.value?.content ?? []) // 목록은 현재 페이지에서 파생
+const reviewsPage = ref(null)
+const reviews = computed(() => reviewsPage.value?.content ?? []) // 현재 페이지의 리뷰 목록
 const reviewsError = ref(false)
-const reviewsLoading = ref(false) // 페이지 이동 중
+const reviewsLoading = ref(false)
 const loading = ref(true)
 const error = ref('')
 
 const REVIEW_PAGE_SIZE = 10
-let reqSeq = 0 // 앨범 단위 응답 순서 가드 — 빠른 앨범 전환 시 stale 응답 폐기.
-let reviewSeq = 0 // 리뷰 목록(페이지 이동) 단위 가드.
+let reqSeq = 0 // 앨범 응답 순서 가드
+let reviewSeq = 0 // 리뷰 목록 응답 순서 가드
 
-// 리뷰 목록 로드 — 자체 가드(reviewSeq)로 페이지 이동/앨범 전환 stale 응답을 폐기한다.
+// 리뷰 목록 로드
 async function loadReviews(id, pageNo) {
   const seq = ++reviewSeq
   reviewsLoading.value = true
@@ -64,7 +64,6 @@ async function fetchAll(id) {
     const detail = await albumsApi.detail(id)
     if (seq !== reqSeq) return
     album.value = detail
-    // 리뷰는 부가 정보 — 실패해도 상세는 보여준다(loadReviews 가 자체적으로 에러를 흡수).
     await loadReviews(id, 0)
   } catch (e) {
     if (seq !== reqSeq) return
@@ -74,7 +73,6 @@ async function fetchAll(id) {
   }
 }
 
-// 리뷰 페이지는 URL 이 아니라 콜백(goToReviewPage)으로 이동하므로 reviewsPage(ref)를 직접 넘긴다.
 const { current, isFirst, isLast, hasPages, pages, totalPages } = usePagination(reviewsPage)
 
 function goToReviewPage(p) {
@@ -85,10 +83,10 @@ function goToReviewPage(p) {
 const pageBtn =
   'min-w-9 rounded-md px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-40'
 
-// 동일 컴포넌트 재사용(다른 id 로 이동) 시에도 재조회되도록 params.id 를 watch.
+// id 변경 시 재조회
 watch(() => route.params.id, fetchAll, { immediate: true })
 
-// 담기 — 회원은 서버 카트(POST /cart/items), 게스트는 로컬 카트(렌더용 스냅샷 저장).
+// 게스트 로컬 카트용 앨범 스냅샷 생성
 function snapshotOf(a) {
   return {
     albumId: a.id,
@@ -114,7 +112,7 @@ async function addToCart() {
   }
 }
 
-// 바로 구매 — 회원/게스트 공통. 체크아웃에 단일 항목을 쿼리로 전달(서버/로컬 카트와 분리).
+// 바로 구매 — 단일 항목을 체크아웃으로 전달
 function buyNow() {
   const a = album.value
   if (!a) return

@@ -89,7 +89,7 @@ class MdcFilterTest {
         try {
             filter.doFilter(request, response, chain);
         } catch (Exception ignored) {
-            // expected
+            // 예외 무시
         }
 
         assertThat(MDC.get(MdcKeys.REQUEST_ID)).isNull();

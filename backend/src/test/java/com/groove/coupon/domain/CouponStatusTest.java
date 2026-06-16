@@ -15,8 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * CouponStatus 상태 전이 매트릭스 전수 검증 (3×3 = 9 케이스).
  *
- * <p>합법 전이는 docs/plans/coupon-system.md §3.3 기준 4종이다 (ACTIVE↔SUSPENDED, 둘 다 →ENDED).
- * "합법 전이 표 + 종착 상태" 두 단을 SSOT 로 두고 — 매트릭스의 나머지 셀은 모두 불법이다.
+ * <p>합법 전이는 4종(ACTIVE↔SUSPENDED, 둘 다 →ENDED)이며, 매트릭스의 나머지 셀은 모두 불법이다.
  */
 @DisplayName("CouponStatus — 전이 매트릭스 전수")
 class CouponStatusTest {

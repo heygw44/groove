@@ -15,14 +15,13 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 발행 완료 아웃박스 레코드 정리 (#237) — {@code IdempotencyRecordCleanupTask} 와 동일 골격.
+ * 발행 완료 아웃박스 레코드 정리.
  *
- * <p>{@code groove.outbox.cleanup.cron} cron 으로 주기 실행되며(기본 매시 정각), 발행 완료 후
- * {@code groove.outbox.cleanup.retention} 이 지난 행을 {@code .batch-size} 개씩 독립 트랜잭션으로 삭제한다 —
- * 한 번에 잡는 락 범위를 제한하기 위함이다. cron 을 {@code "-"} 로 두면 비활성화된다(테스트 프로파일에서 사용).
+ * <p>groove.outbox.cleanup.cron cron 으로 주기 실행되며(기본 매시 정각), 발행 완료 후
+ * groove.outbox.cleanup.retention 이 지난 행을 .batch-size 개씩 독립 트랜잭션으로 삭제한다. cron 을 "-" 로 두면
+ * 비활성화된다.
  *
- * <p>미발행 행은 삭제하지 않는다(릴레이가 발행해야 하므로). 정리 실패는 스케줄러 스레드 밖으로 흘리지 않고 로깅만
- * 한다 — 다음 주기에 재시도된다.
+ * <p>미발행 행은 삭제하지 않는다. 정리 실패는 로깅만 하고 다음 주기에 재시도한다.
  */
 @Component
 public class OutboxEventCleanupTask {
@@ -65,12 +64,7 @@ public class OutboxEventCleanupTask {
         }
     }
 
-    /**
-     * {@code published_at < cutoff} 인 발행 완료 행을 모두 삭제한다. {@code cutoff} 고정값 기준이라 대상 집합은
-     * 유한하며, 배치 단위로 0 이 반환될 때까지 반복한다.
-     *
-     * @return 삭제된 총 행 수
-     */
+    /** published_at < cutoff 인 발행 완료 행을 배치 단위로 0 이 반환될 때까지 삭제하고 삭제된 총 행 수를 반환한다. */
     int deletePublished(Instant cutoff) {
         int total = 0;
         int deleted;

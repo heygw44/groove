@@ -53,12 +53,12 @@ class OrderPiiAnonymizationSchedulerTest {
                 shippingRepository, orderRepository, anonymizer, Clock.fixed(NOW, ZoneOffset.UTC), RETENTION, BATCH_SIZE);
     }
 
-    /** ShippingIdView 는 단일 메서드 인터페이스라 람다로 구성한다. */
+    /** ShippingIdView 를 람다로 구성한다. */
     private static ShippingRepository.ShippingIdView view(long id) {
         return () -> id;
     }
 
-    /** OrderNumberView 는 2-메서드 인터페이스라 익명 클래스로 구성한다. */
+    /** OrderNumberView 를 익명 클래스로 구성한다. */
     private static OrderRepository.OrderNumberView orderView(long id) {
         return new OrderRepository.OrderNumberView() {
             @Override

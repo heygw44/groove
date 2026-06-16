@@ -4,9 +4,7 @@ import com.groove.order.domain.OrderItem;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 주문 항목 응답 (API.md §3.5).
- *
- * <p>가격 / 앨범명은 OrderItem 의 스냅샷을 그대로 노출한다 — Album 의 사후 변경과 무관.
+ * 주문 항목 응답 — 가격/앨범명은 OrderItem 의 스냅샷을 그대로 노출한다.
  */
 public record OrderItemResponse(
         @Schema(description = "앨범 ID", example = "1")

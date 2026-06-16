@@ -18,19 +18,12 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
- * 반품 자동 진행 스케줄러 (#239) — 실제 택배사 연동이 없는 시연 환경에서 회수·검수를 시뮬레이션하고 검수 통과 시
- * 환불까지 자동 진행한다 ({@code ShippingProgressScheduler} 패턴 미러).
+ * 반품 자동 진행 스케줄러.
  *
- * <p>틱마다 한 단계만 민다 — {@code APPROVED} 로 {@code approve-delay} 이상 머문 반품을 {@code IN_TRANSIT}(회수
- * 시작)으로, {@code IN_TRANSIT} 로 {@code transit-delay} 이상 머문 반품을 {@code INSPECTING}(검수)으로,
- * {@code INSPECTING} 으로 {@code inspect-delay} 이상 머문 반품을 검수 자동통과 처리해 {@code REFUNDED}(PG 환불 +
- * 재입고 + 전량 시 쿠폰 복원)로 보낸다. 검수 불합격({@code INSPECTING → REJECTED})만 관리자 수동 판단이라 자동
- * 진행 대상이 아니다.
- *
- * <p>상태 전이는 식별자 단위로 {@link ClaimService} 의 트랜잭션 메서드에 위임하고(상태 재확인 후 전이 → 재전달
- * 멱등), 한 건의 실패가 배치 전체를 막지 않도록 건별로 격리한다(다음 주기 재시도). 한 주기 처리량은
- * {@code .batch-size} 로 제한한다. 전역 {@code @EnableScheduling} 은 {@code common.scheduling.SchedulingConfig}
- * 에 있다 — 자체 {@code @EnableScheduling} 을 두지 않는다.
+ * <p>틱마다 한 단계만 민다 — APPROVED 로 approve-delay 이상 머문 반품을 IN_TRANSIT 으로, IN_TRANSIT 로
+ * transit-delay 이상 머문 반품을 INSPECTING 으로, INSPECTING 으로 inspect-delay 이상 머문 반품을 검수 통과 처리해
+ * REFUNDED(PG 환불 + 재입고 + 전량 시 쿠폰 복원)로 보낸다. 상태 전이는 ClaimService 트랜잭션 메서드에 위임하고
+ * 건별로 격리한다. 한 주기 처리량은 batch-size 로 제한한다.
  */
 @Component
 public class ClaimProgressScheduler {

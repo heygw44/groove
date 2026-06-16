@@ -5,8 +5,7 @@ import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderShippingInfo;
 
 /**
- * 테스트용 주문 픽스처 — 배송지 캡처(#W7-6) 도입 후 {@code Order} 정적 팩토리와 {@code OrderCreateRequest}
- * 가 배송지를 요구하므로, 검증을 통과하는 표준 배송지 스냅샷/요청 DTO 와 그걸 끼운 {@code Order} 생성 헬퍼를 모아 둔다.
+ * 테스트용 주문 픽스처 — 표준 배송지 스냅샷/요청 DTO 와 그걸 끼운 Order 생성 헬퍼를 모은다.
  */
 public final class OrderFixtures {
 

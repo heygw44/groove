@@ -38,8 +38,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * {@code @Validated} + {@code @Positive} 등 메서드 파라미터 제약 위반.
-     * RFC 7807 확장 필드 {@code violations} 에 위반 필드 경로/메시지 배열을 담아 클라이언트가 원인을 식별할 수 있게 한다.
+     * 메서드 파라미터 제약 위반(@Validated)을 처리한다.
+     * RFC 7807 확장 필드 violations 에 위반 필드 경로/메시지 배열을 담는다.
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ProblemDetail> handleConstraintViolation(ConstraintViolationException ex) {
@@ -58,11 +58,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * {@code @RequestBody @Valid} 본문 검증 위반(form DTO). {@link #handleConstraintViolation}와 동일하게
-     * RFC 7807 확장 필드 {@code violations}(필드 경로/메시지)를 담아 클라이언트가 필드별로 표시할 수 있게 한다.
-     * 필드 단위 위반은 {@link FieldError} 로 {@code field}=프로퍼티 경로다(getter 기반 {@code @AssertTrue},
-     * 예: {@code isNewPasswordDistinct()} → {@code newPasswordDistinct} 도 여기로 온다). 진짜 타입(클래스)
-     * 레벨 제약은 {@link ObjectError} 로 잡되 매핑할 입력이 없으므로 {@code field} 를 비워 폼 레벨 에러로 내려보낸다.
+     * 본문 검증 위반(@RequestBody @Valid)을 처리한다. RFC 7807 확장 필드 violations(필드 경로/메시지)를 담는다.
+     * 필드 단위 위반은 FieldError 로 field=프로퍼티 경로, 클래스 레벨 제약은 ObjectError 로 field 를 비운다.
      */
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
@@ -91,7 +88,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(errorCode.getStatus()).body(pd);
     }
 
-    /** 검증 메시지가 비어 있을 때의 안전한 기본값 — 빈 문자열 대신 사용자에게 보일 메시지를 제공한다. */
+    /** 검증 메시지가 null 이면 기본 메시지를 반환한다. */
     private static String messageOrDefault(String message) {
         return message != null ? message : "유효하지 않은 값입니다";
     }
@@ -103,8 +100,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * Spring 내장 예외 + BusinessException(ErrorResponseException) 모두 이 지점을 통과.
-     * code/timestamp/traceId 확장 필드를 일괄 주입한다.
+     * Spring 내장 예외와 BusinessException 의 ProblemDetail 에 code/timestamp/traceId 확장 필드를 일괄 주입한다.
      */
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(

@@ -11,9 +11,8 @@ import java.security.MessageDigest;
 import java.util.Objects;
 
 /**
- * Mock 웹훅 서명 검증 — 수신 서명이 공유 시크릿({@code payment.mock.webhook-secret})과 정확히 일치하는지
- * 확인한다. 타이밍 공격 회피를 위해 상수 시간 비교({@link MessageDigest#isEqual})를 쓴다 — Mock 이라 실익은
- * 작지만 실 PG 서명 검증 코드의 형태를 맞춰 둔다. {@code @Profile} 로 Mock 구성에 한정된다.
+ * Mock 웹훅 서명 검증 — 수신 서명이 공유 시크릿(payment.mock.webhook-secret)과 일치하는지
+ * 상수 시간 비교(MessageDigest.isEqual)로 확인한다.
  */
 @Component
 @Profile({"local", "dev", "test", "docker"})

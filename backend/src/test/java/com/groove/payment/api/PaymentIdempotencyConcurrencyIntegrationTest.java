@@ -54,47 +54,35 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 결제 멱등성 — 실 HTTP 동시성 통합 테스트 (#207 / W11-1).
+ * 결제 멱등성 — 실 HTTP 동시성 통합 테스트.
  *
- * <p>baseline(#196 {@code baseline.md} §1)이 k6 payment 시나리오에서 박제한 불변식 {@code payment_duplicated=0}
- * 을 회귀로 고정한다. 동시 동일 {@code Idempotency-Key} 결제 요청과 동시 중복 웹훅이 각각 <b>단일 결제 생성</b>·
- * <b>상태 전이 1회</b>로 수렴함을 검증한다.
+ * <p>동시 동일 Idempotency-Key 결제 요청과 동시 중복 웹훅이 각각 단일 결제 생성·상태 전이 1회로 수렴함을 검증한다.
  *
- * <p>MockMvc 는 running server 가 없어 멀티스레드 {@code perform()} 에 thread-safe 하지 않으므로(Spring
- * Framework reference), {@code @SpringBootTest(RANDOM_PORT)} 로 임베디드 서버를 띄우고 JDK {@link HttpClient}
- * 로 <b>진짜 동시 HTTP</b> 를 발사한다 — 인터셉터({@code @Idempotent})·컨트롤러·{@code IdempotencyService}·서비스·DB
- * 전 스택을 거친다. (이 앱은 클라이언트측 {@code spring-boot-restclient} 를 두지 않으므로 {@code TestRestTemplate}
- * 대신 의존성 없는 JDK {@code HttpClient} 를 쓴다 — {@code HttpClient} 는 thread-safe 해 단일 인스턴스를 공유한다.)
- * 동시 출발/완료 집계는 공용 {@link ConcurrencyHarness}(#205) 를 재사용한다.
- *
- * <p>이 클래스는 {@code @Transactional} 이 아니므로 셋업 repo save 가 커밋돼 서버 요청 스레드에서 보인다.
- * {@code payment.mock.auto-webhook=false} 로 인프로세스 자동 웹훅을 꺼 결제를 PENDING 으로 안정 관찰하고,
- * 웹훅은 {@code POST /api/v1/payments/webhook} 를 직접 동시 호출한다.
+ * <p>@SpringBootTest(RANDOM_PORT) 로 임베디드 서버를 띄우고 JDK HttpClient 로 동시 HTTP 를 발사한다.
+ * 동시 출발/완료 집계는 ConcurrencyHarness 를 쓴다. @Transactional 이 아니라 셋업 save 가 커밋돼 서버 스레드에서 보인다.
+ * auto-webhook=false 로 결제를 PENDING 으로 관찰하고, 웹훅은 POST /api/v1/payments/webhook 를 직접 동시 호출한다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
         "payment.mock.auto-webhook=false",
-        // 16 동시 요청(+PAID 경로의 콜백 REQUIRED·배송 REQUIRES_NEW 중첩)이 Hikari 기본 풀(10)을 넘겨
-        // connection-timeout 5xx 로 플레이키해지지 않도록 풀을 동시성 한도의 2배로 명시한다.
+        // Hikari 풀을 동시성 한도의 2배로 명시한다.
         "spring.datasource.hikari.maximum-pool-size=32",
-        // 이 테스트는 멱등성 수렴(직교 관심사)을 검증한다 — 같은 회원이 16 동시 요청을 쏘므로 운영 기본
-        // capacity(5/분)면 PaymentRateLimitPolicy 가 일부를 429 로 막아 불변식(accepted+conflict=16)이 깨진다.
-        // rate limit 자체는 PaymentRateLimitIntegrationTest 가 검증하므로 여기선 한도를 동시성보다 크게 둔다.
+        // rate limit 한도를 동시성보다 크게 둔다.
         "groove.payment.rate-limit.post.capacity=100"
 })
 @Import(TestcontainersConfig.class)
-@DisplayName("결제 멱등성 동시성 통합 테스트 (#207)")
+@DisplayName("결제 멱등성 동시성 통합 테스트")
 class PaymentIdempotencyConcurrencyIntegrationTest {
 
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
     private static final String SIGNATURE_HEADER = "X-Mock-Signature";
-    private static final String WEBHOOK_SECRET = "test-mock-webhook-secret"; // application-test.yaml payment.mock.webhook-secret
+    private static final String WEBHOOK_SECRET = "test-mock-webhook-secret";
     private static final int INITIAL_STOCK = 100;
     private static final int CONCURRENT_REQUESTS = 16;
     private static final int THREAD_POOL_SIZE = 16;
 
-    private static final HttpClient HTTP = HttpClient.newHttpClient(); // thread-safe — 동시 요청에 공유
+    private static final HttpClient HTTP = HttpClient.newHttpClient(); // 동시 요청에 공유
 
     @LocalServerPort private int port;
 
@@ -109,7 +97,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
     @Autowired private IdempotencyRecordRepository idempotencyRecordRepository;
     @Autowired private JwtProvider jwtProvider;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
-    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행 정리(#237)
+    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행 정리
 
     private int orderSeq;
     private Long memberId;
@@ -124,7 +112,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         // FK 의존 순서: payment → orders → album → artist/genre/label, member. (refresh_token → member 도 먼저)
         idempotencyRecordRepository.deleteAllInBatch();
         refreshTokenRepository.deleteAllInBatch();
-        outboxEventRepository.deleteAllInBatch(); // PAID 웹훅이 PAID 와 같은 tx 로 커밋한 ORDER_PAID 행(orders FK 없음) 정리
+        outboxEventRepository.deleteAllInBatch(); // ORDER_PAID 행 정리
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
@@ -162,14 +150,14 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
                     builder.header(IDEMPOTENCY_HEADER, key);
                 })));
 
-        // 핵심 불변식: 동시 요청이 몰려도 결제는 정확히 1건만 생성된다 (payment_duplicated=0).
+        // 동시 요청이 몰려도 결제는 정확히 1건만 생성된다.
         assertThat(paymentRepository.count()).isEqualTo(1);
 
         long accepted = statuses.stream().filter(s -> s == 202).count();   // 생성 또는 캐시 replay
         long conflict = statuses.stream().filter(s -> s == 409).count();   // IDEMPOTENCY_IN_PROGRESS
         assertThat(statuses).hasSize(CONCURRENT_REQUESTS);
         assertThat(accepted).isGreaterThanOrEqualTo(1);                    // 최소 한 요청은 처리/replay 성공
-        assertThat(accepted + conflict).isEqualTo(CONCURRENT_REQUESTS);    // 그 외(특히 5xx)는 없다
+        assertThat(accepted + conflict).isEqualTo(CONCURRENT_REQUESTS);    // 그 외(5xx)는 없다
         assertThat(statuses.stream().noneMatch(s -> s >= 500)).isTrue();
 
         IdempotencyRecord record = idempotencyRecordRepository.findByIdempotencyKey(key).orElseThrow();
@@ -186,7 +174,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
 
         ConcurrentLinkedQueue<Integer> statuses = fireConcurrentWebhooks(body);
 
-        // 상태 전이·보상은 정확히 1회: 재고가 N배 복원되지 않고 INITIAL 로만 돌아온다.
+        // 상태 전이·보상은 정확히 1회: 재고가 INITIAL 로만 돌아온다.
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.FAILED);
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(currentStock()).isEqualTo(INITIAL_STOCK);
@@ -203,7 +191,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         ConcurrentLinkedQueue<Integer> statuses = fireConcurrentWebhooks(body);
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        // 결제 확정 직후 주문은 PAID — 후속 배송 생성/PREPARING 전진은 아웃박스 릴레이가 비동기로 한다 (#237).
+        // 결제 확정 직후 주문은 PAID.
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getPaidAt()).isNotNull();
 
@@ -218,7 +206,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         return statuses;
     }
 
-    /** 동시 중복 웹훅 공통 단언: 응답은 200(APPLIED/replay)·409(IN_PROGRESS) 뿐이며 멱등 마커는 단일 COMPLETED. */
+    /** 동시 중복 웹훅 공통 단언: 응답은 200·409 뿐이며 멱등 마커는 단일 COMPLETED. */
     private void assertSingleTransitionResponses(ConcurrentLinkedQueue<Integer> statuses, String pgTransactionId) {
         long ok = statuses.stream().filter(s -> s == 200).count();
         long conflict = statuses.stream().filter(s -> s == 409).count();
@@ -234,7 +222,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
 
     // ---- HTTP ----
 
-    /** {@code path} 로 JSON POST. 응답 status code 반환 (4xx/5xx 도 예외 없이 그대로 반환). */
+    /** path 로 JSON POST 하고 응답 status code 를 반환한다. */
     private int post(String path, String body, Consumer<HttpRequest.Builder> headers) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
@@ -267,7 +255,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         return orderRepository.saveAndFlush(order);
     }
 
-    /** PENDING 주문 + HTTP 결제 접수(auto-webhook 꺼져 PENDING 유지). 재고는 OrderService.place 를 모사해 직접 차감. */
+    /** PENDING 주문 + HTTP 결제 접수(PENDING 유지). 재고는 직접 차감. */
     private Created createPendingPayment(int quantity) {
         Album album = albumRepository.findById(albumId).orElseThrow();
         album.adjustStock(-quantity);

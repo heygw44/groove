@@ -37,8 +37,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 결제 요청 트랜잭션 단계 단위 테스트 (#237) — prepare 검증 분기와 persist 영속화. PG 호출은 트랜잭션 밖
- * (PaymentService 오케스트레이터)이므로 여기서는 다루지 않는다.
+ * 결제 요청 트랜잭션 단계 단위 테스트 — prepare 검증 분기와 persist 영속화.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("PaymentRequestSteps")
@@ -108,7 +107,7 @@ class PaymentRequestStepsTest {
     }
 
     @Test
-    @DisplayName("prepare: 쿠폰 적용 주문 → payable 로 진행 (#91)")
+    @DisplayName("prepare: 쿠폰 적용 주문 → payable 로 진행")
     void prepare_withCoupon_payable() {
         Order order = order(false, 1L, OrderStatus.PENDING);
         when(order.getTotalAmount()).thenReturn(50_000L);
@@ -177,7 +176,7 @@ class PaymentRequestStepsTest {
     }
 
     @Test
-    @DisplayName("prepare: payable<=0 주문 → 422 DomainException (#91 전액할인 v1 미지원)")
+    @DisplayName("prepare: payable<=0 주문 → 422 DomainException")
     void prepare_zeroPayableOrder_throwsDomainException() {
         Order order = order(false, 1L, OrderStatus.PENDING);
         when(order.getPayableAmount()).thenReturn(0L);
@@ -189,7 +188,7 @@ class PaymentRequestStepsTest {
     }
 
     @Test
-    @DisplayName("prepare: 탈퇴(soft delete) 회원이 본인 PENDING 주문 결제 → 404, findByOrderId 미호출 (#187)")
+    @DisplayName("prepare: 탈퇴(soft delete) 회원이 본인 PENDING 주문 결제 → 404, findByOrderId 미호출")
     void prepare_memberWithdrawn_throwsNotFound() {
         long withdrawnMemberId = 7L;
         Order order = order(false, withdrawnMemberId, OrderStatus.PENDING);
@@ -225,7 +224,7 @@ class PaymentRequestStepsTest {
     }
 
     @Test
-    @DisplayName("persist: prepare/persist 사이 주문이 PENDING 이 아니게 바뀌면 저장 거부 → 409 (#237 TOCTOU 차단)")
+    @DisplayName("persist: prepare/persist 사이 주문이 PENDING 이 아니게 바뀌면 저장 거부 → 409")
     void persist_orderNoLongerPending_rejects() {
         Order order = order(false, 1L, OrderStatus.PAID); // PG 호출 동안 다른 경로로 전이됨
         when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));

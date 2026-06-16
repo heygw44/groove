@@ -26,12 +26,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * /api/v1/albums (Public 목록·검색·상세) MockMvc 통합 테스트 (#34).
- *
- * <p>의도적 N+1 보존 검증은 별도 Hibernate Statistics 테스트(
- * {@code AlbumQueryN1Test})에서 수행한다. 본 테스트는 응답 envelope·필터·정렬·페이징·검증 위주.
- */
+// GET /api/v1/albums (Public 목록·검색·상세) MockMvc 통합 테스트.
+// 응답 envelope·필터·정렬·페이징·검증을 다룬다.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -226,7 +222,7 @@ class AlbumQueryControllerTest {
             persistAlbum("Some Stones Album", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
             persistAlbum("Aftermath", stones, rock, apple, (short) 1966, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
 
-            // title("Some Stones Album") + 비정규화 artist_name("The Rolling Stones") 양쪽에서 매칭 → 2건.
+            // title + artist_name 양쪽에서 매칭 → 2건
             mockMvc.perform(get("/api/v1/albums").param("keyword", "stones"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content.length()").value(2));
@@ -238,8 +234,7 @@ class AlbumQueryControllerTest {
             persistAlbum("Abbey Road", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
             persistAlbum("Some Stones Album", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
 
-            // "+stones*" 의 FT 연산자(+, *)가 그대로 해석되면 문법 오류/의도치 않은 매칭이 된다.
-            // sanitize 후 phrase "stones" 로 매칭되어 "Some Stones Album" 1건만 나와야 한다.
+            // "+stones*" 의 FT 연산자가 sanitize 되어 "Some Stones Album" 1건만 매칭
             mockMvc.perform(get("/api/v1/albums").param("keyword", "+stones*"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content.length()").value(1))

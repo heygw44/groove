@@ -18,17 +18,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 /**
- * LP 상품 엔티티 (ERD §4.6 ★).
- *
- * <p>Artist/Genre 는 NOT NULL FK, Label 은 NULL 허용. 모든 연관은 {@link FetchType#LAZY} 다 —
- * W6 베이스라인에서 DTO 변환 시 N+1 을 의도적으로 노출했던 지점이다(W10 시연). 이후 offset 목록
- * 경로는 {@code @EntityGraph}(#203)로, keyset(스크롤) 목록 경로는 대상 엔티티(Artist/Genre/Label)의
- * 클래스 레벨 {@code @BatchSize}(#235)로 to-one 프록시를 일괄 페치해 N+1 을 제거했다 — LAZY 자체는
- * 유지하되 두 목록 경로 모두 상수 쿼리로 동작한다.
- *
- * <p>재고/가격 비음수 보증은 DB CHECK + 도메인 메서드 이중 방어선이다.
- * {@link #adjustStock(int)} 은 결과가 음수면 {@link IllegalStockAdjustmentException} 으로
- * 거절해 DB CHECK 는 최종 방어선으로만 동작한다.
+ * LP 상품 엔티티. Artist/Genre 는 NOT NULL FK, Label 은 NULL 허용. 모든 연관은 LAZY.
  */
 @Entity
 @Table(name = "album")
@@ -41,13 +31,7 @@ public class Album extends BaseTimeEntity {
     @Column(name = "title", nullable = false, length = 300)
     private String title;
 
-    /**
-     * artist.name 의 비정규화 복제본 (#204). 키워드 검색을 단일 테이블 {@code FULLTEXT(title,
-     * artist_name)} 로 구동하기 위한 것 — title 과 artist.name 이 다른 테이블이라 cross-table OR
-     * 가 FULLTEXT 인덱스를 무력화하는 문제를 회피한다(ES 의 flattened 검색 문서 패턴). API 응답엔
-     * 노출하지 않으며(검색 전용), 동기화는 {@link #create}/{@link #update}(artist 로부터 파생) 와
-     * artist 이름 변경 시 벌크 UPDATE(ArtistService) 가 담당한다.
-     */
+    /** artist.name 의 비정규화 복제본 (FULLTEXT 검색 전용, API 미노출). */
     @Column(name = "artist_name", nullable = false, length = 200)
     private String artistName;
 
@@ -110,9 +94,7 @@ public class Album extends BaseTimeEntity {
         this.description = description;
     }
 
-    /**
-     * 정적 팩토리. price/stock 비음수와 입력 검증은 호출 측 (Bean Validation + 서비스) 에서 끝낸 상태로 전달된다고 가정한다.
-     */
+    /** 정적 팩토리. */
     public static Album create(String title, Artist artist, Genre genre, Label label,
                                short releaseYear, AlbumFormat format, long price, int stock,
                                AlbumStatus status, boolean limited, String coverImageUrl, String description) {
@@ -120,10 +102,7 @@ public class Album extends BaseTimeEntity {
                 status, limited, coverImageUrl, description);
     }
 
-    /**
-     * PUT 전체 교체 정책. 재고는 {@link #adjustStock(int)} 으로만 변경하므로 본 메서드의 인자에서 제외한다 —
-     * stock 만 별도 변경 경로를 두어 PATCH /stock 과 PUT 의 책임을 분리한다.
-     */
+    /** PUT 전체 교체. 재고는 adjustStock 으로만 변경하므로 인자에서 제외. */
     public void update(String title, Artist artist, Genre genre, Label label,
                        short releaseYear, AlbumFormat format, long price,
                        AlbumStatus status, boolean limited, String coverImageUrl, String description) {
@@ -141,12 +120,7 @@ public class Album extends BaseTimeEntity {
         this.description = description;
     }
 
-    /**
-     * 재고 변화량 적용. 결과가 {@code [0, Integer.MAX_VALUE]} 범위를 벗어나면
-     * {@link IllegalStockAdjustmentException} 으로 거절된다 — int 오버플로 시 캐스트가
-     * 음수로 wrap 되어 DB CHECK 가 500 으로 노출되는 경로를 막는다.
-     * 0 delta 는 비즈니스적으로 무의미하지만 컨트롤러 레벨에서 막을 필요는 없어 그대로 통과시킨다.
-     */
+    /** 재고 변화량 적용. 결과가 [0, Integer.MAX_VALUE] 범위를 벗어나면 IllegalStockAdjustmentException. */
     public void adjustStock(int delta) {
         long next = (long) this.stock + delta;
         if (next < 0 || next > Integer.MAX_VALUE) {
@@ -163,7 +137,7 @@ public class Album extends BaseTimeEntity {
         return title;
     }
 
-    /** artist.name 의 비정규화 복제본 (#204, FULLTEXT 검색 전용 — API 미노출). */
+    /** artist.name 의 비정규화 복제본 (FULLTEXT 검색 전용, API 미노출). */
     public String getArtistName() {
         return artistName;
     }

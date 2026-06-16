@@ -19,7 +19,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 /**
- * OrderPaid 아웃박스 컨슈머 단위 테스트 (#237) — payload 역직렬화 → ShippingProvisioner 위임, 멱등(중복 흡수) 검증.
+ * OrderPaid 아웃박스 컨슈머 단위 테스트 — payload 역직렬화 → ShippingProvisioner 위임, 멱등(중복 흡수) 검증.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("OrderPaidOutboxHandler — ORDER_PAID 아웃박스 이벤트 → 배송 생성 위임")

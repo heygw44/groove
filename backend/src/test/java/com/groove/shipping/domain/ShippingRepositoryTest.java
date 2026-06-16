@@ -60,8 +60,7 @@ class ShippingRepositoryTest {
     @DisplayName("cutoff 가 delivered_at 이하이면 (보존기간 미경과) 제외된다")
     void excludesWhenDeliveredAtNotBeforeCutoff() {
         Shipping shipping = persistDeliveredShipping("ORD-ANON-2");
-        // delivered_at < cutoff 가 false 여야 한다. DB 는 DATETIME(6)(마이크로초)라 인메모리 Instant(나노초)를
-        // 그대로 cutoff 로 쓰면 절단된 DB 값 < 나노초 cutoff 가 참이 돼 플레이크가 난다 → 마이크로초로 절단해 맞춘다.
+        // DB DATETIME(6)(마이크로초)에 맞춰 cutoff 를 마이크로초로 절단한다.
         Instant cutoff = shipping.getDeliveredAt().truncatedTo(ChronoUnit.MICROS);
 
         List<ShippingRepository.ShippingIdView> found =

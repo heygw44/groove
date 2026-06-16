@@ -14,9 +14,9 @@ const loading = ref(true)
 const error = ref('')
 
 const PAGE_SIZE = 12
-let reqSeq = 0 // 응답 순서 가드 — 느린 이전 요청이 최신 결과를 덮어쓰지 않도록.
+let reqSeq = 0 // 응답 순서 가드
 
-// route.query → 백엔드 검색 params. 빈 값은 제외해 깔끔한 쿼리만 전달.
+// route.query 를 검색 params 로 변환 (빈 값 제외)
 function buildParams(q) {
   const params = { size: PAGE_SIZE }
   const keys = ['keyword', 'genreId', 'labelId', 'artistId', 'format', 'isLimited', 'status', 'sort']
@@ -35,7 +35,7 @@ async function fetchAlbums(q) {
   error.value = ''
   try {
     const res = await albumsApi.list(buildParams(q))
-    if (seq !== reqSeq) return // stale 응답 폐기
+    if (seq !== reqSeq) return
     page.value = res
   } catch (e) {
     if (seq !== reqSeq) return
@@ -46,7 +46,7 @@ async function fetchAlbums(q) {
   }
 }
 
-// URL 쿼리 구동 — 필터·정렬·페이지 변경은 router.push 로 query 만 바꾸고, 이 watch 가 재조회한다.
+// 쿼리 변경 시 앨범 재조회
 watch(() => route.query, fetchAlbums, { immediate: true })
 </script>
 

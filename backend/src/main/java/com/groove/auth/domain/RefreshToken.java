@@ -12,18 +12,14 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Refresh Token 영속 엔티티 (이슈 #22).
+ * Refresh Token 영속 엔티티.
  *
- * <p>토큰 본문은 절대 저장하지 않는다. 클라이언트가 보낸 토큰을 SHA-256 해시한 값을
- * {@link #tokenHash} (CHAR(64)) 로 저장하고, 그 컬럼에 UNIQUE 제약을 걸어 lookup 한다.
+ * <p>토큰 본문은 저장하지 않고 SHA-256 해시 값을 tokenHash (CHAR(64), UNIQUE) 로 저장해 lookup 한다.
  *
- * <p>회전 체인은 {@link #replacedByTokenId} 로 추적한다 — 회전 시 기존 행을 revoke 하면서
- * 새로 발급된 행 id 를 채워 넣는다. 로그아웃이나 재사용 감지로 인한 강제 무효화는
- * {@code replacedByTokenId} 가 null 인 채로 {@link #revokedAt} 만 설정된다.
+ * <p>회전 체인은 replacedByTokenId 로 추적한다 — 회전 시 기존 행을 revoke 하면서 새 행 id 를 채운다.
+ * 강제 무효화는 replacedByTokenId 가 null 인 채로 revokedAt 만 설정된다.
  *
- * <p>{@code revokedAt}/{@code replacedByTokenId} 는 엔티티 메서드가 아니라 Repository 의
- * {@code @Modifying} JPQL 로만 변경된다 (CAS 경쟁 방어 + 일괄 무효화 효율). 따라서
- * 본 엔티티는 의도적으로 변경자 메서드를 노출하지 않는다.
+ * <p>revokedAt/replacedByTokenId 는 Repository 의 @Modifying JPQL 로만 변경되며, 변경자 메서드를 노출하지 않는다.
  */
 @Entity
 @Table(
@@ -67,7 +63,7 @@ public class RefreshToken extends BaseTimeEntity {
     }
 
     /**
-     * 신규 발급 행 생성. 평문 토큰은 호출자가 미리 SHA-256 해시해서 넘긴다.
+     * 신규 발급 행 생성. tokenHash 는 호출자가 미리 SHA-256 해시해서 넘긴다.
      */
     public static RefreshToken issue(Long memberId, String tokenHash, Instant issuedAt, Instant expiresAt) {
         return new RefreshToken(memberId, tokenHash, issuedAt, expiresAt);

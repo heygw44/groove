@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("CorsProperties — host 와일드카드+자격증명 가드 (이슈 #166)")
 class CorsPropertiesTest {
 
-    /** 가드와 무관한 필드(methods/headers/exposed/maxAge)는 null 로 두고 compact constructor 가 defaulting 하게 한다. */
+    /** 가드와 무관한 필드(methods/headers/exposed/maxAge)는 null 로 둔다. */
     private static CorsProperties cors(List<String> patterns, List<String> origins, Boolean allowCredentials) {
         return new CorsProperties(patterns, origins, null, null, null, allowCredentials, null);
     }

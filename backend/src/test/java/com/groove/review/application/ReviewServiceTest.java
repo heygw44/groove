@@ -88,7 +88,7 @@ class ReviewServiceTest {
             order.addItem(OrderItem.create(item, 1));
         }
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
-        // PENDING → ... → status 까지 합법 전이로 끌어올린다.
+        // PENDING → status 까지 합법 전이로 끌어올린다.
         for (OrderStatus next : pathTo(status)) {
             order.changeStatus(next, null);
         }

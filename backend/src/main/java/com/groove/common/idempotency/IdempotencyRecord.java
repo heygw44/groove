@@ -16,17 +16,11 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 멱등성 레코드 (#W7-2, ERD §7).
+ * 멱등성 레코드 엔티티. 한 행이 처리 소유권 마커(IN_PROGRESS)와 결과 캐시(COMPLETED + responseBody)를 겸한다.
  *
- * <p>두 역할을 한 행에서 겸한다 — (1) 처리 소유권 마커({@link IdempotencyStatus#IN_PROGRESS}),
- * (2) 처리 완료 후 결과 캐시({@link IdempotencyStatus#COMPLETED} + {@code responseBody}).
- *
- * <p>생성은 {@link #start(String, String, Duration)} 정적 팩토리만 허용한다 — 항상 {@code IN_PROGRESS}
- * 로 시작하고 {@code expiresAt = now + ttl} 이다. 완료 전이는 {@link #complete(String, String)} 단일
- * 진입점이며, 이미 {@code COMPLETED} 인 행에 다시 호출하면 {@link IllegalStateException}.
- *
- * <p>{@code idempotencyKey} 에 DB UNIQUE 제약이 걸려 있어, 두 호출자가 거의 동시에 같은 키로
- * INSERT 하면 한 쪽만 성공한다 — 이게 단일 처리 보장의 1차 방어선이다.
+ * <p>생성은 start 정적 팩토리만 허용하며 IN_PROGRESS·expiresAt = now + ttl 로 시작한다. 완료 전이는
+ * complete 단일 진입점이고, 이미 COMPLETED 인 행에 다시 호출하면 IllegalStateException. idempotencyKey 에
+ * DB UNIQUE 제약이 걸려 있다.
  */
 @Entity
 @Table(
@@ -48,15 +42,15 @@ public class IdempotencyRecord extends BaseTimeEntity {
     @Column(name = "status", nullable = false, length = 20)
     private IdempotencyStatus status;
 
-    /** 요청 페이로드 지문(호출자 정의, 권장 SHA-256 hex). 미제공 시 null — 그 경우 replay 일치 검증을 건너뛴다. */
+    /** 요청 페이로드 지문(호출자 정의). null 이면 replay 일치 검증을 건너뛴다. */
     @Column(name = "request_fingerprint", length = 255)
     private String requestFingerprint;
 
-    /** 캐시된 결과의 타입 FQN — 디버깅/관측용 메타. 역직렬화는 호출자가 넘긴 {@code resultType} 을 기준으로 한다. */
+    /** 캐시된 결과의 타입 FQN. */
     @Column(name = "response_type", length = 255)
     private String responseType;
 
-    /** 캐시된 결과의 JSON 직렬화. 결과가 {@code null} 이면 null. */
+    /** 캐시된 결과의 JSON 직렬화. 결과가 null 이면 null. */
     @Column(name = "response_body", columnDefinition = "TEXT")
     private String responseBody;
 
@@ -73,14 +67,7 @@ public class IdempotencyRecord extends BaseTimeEntity {
         this.status = IdempotencyStatus.IN_PROGRESS;
     }
 
-    /**
-     * 마커 행 생성. 상태 {@code IN_PROGRESS}, {@code expiresAt = now + ttl}.
-     *
-     * @param idempotencyKey     클라이언트 제공 키 (blank 불가)
-     * @param requestFingerprint 요청 지문 (nullable)
-     * @param ttl                보관 기간 (양수)
-     * @param now                기준 시각 — 호출자가 주입한 {@code Clock} 에서 읽은 값 (만료 판정·정리와 시간소스 일치)
-     */
+    /** 마커 행 생성. 상태 IN_PROGRESS, expiresAt = now + ttl. */
     public static IdempotencyRecord start(String idempotencyKey, String requestFingerprint, Duration ttl, Instant now) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("idempotencyKey must not be blank");
@@ -92,12 +79,7 @@ public class IdempotencyRecord extends BaseTimeEntity {
         return new IdempotencyRecord(idempotencyKey, requestFingerprint, now.plus(ttl));
     }
 
-    /**
-     * 처리 완료 + 결과 캐싱. {@code IN_PROGRESS} → {@code COMPLETED} 전이만 허용.
-     *
-     * @param responseType 결과 타입 FQN (결과가 null 이면 null 가능)
-     * @param responseBody 결과 JSON (결과가 null 이면 null)
-     */
+    /** 처리 완료 + 결과 캐싱. IN_PROGRESS → COMPLETED 전이만 허용. */
     public void complete(String responseType, String responseBody) {
         if (status != IdempotencyStatus.IN_PROGRESS) {
             throw new IllegalStateException("이미 완료된 멱등성 레코드입니다: " + idempotencyKey);
@@ -115,7 +97,7 @@ public class IdempotencyRecord extends BaseTimeEntity {
         return !Objects.requireNonNull(now).isBefore(expiresAt);
     }
 
-    /** 저장된 지문이 주어진 지문과 양립 불가한지 — 둘 다 non-null 이고 다르면 true. 한 쪽이 null 이면 false(검증 생략). */
+    /** 저장된 지문과 주어진 지문이 둘 다 non-null 이고 다르면 true. 한 쪽이 null 이면 false. */
     public boolean fingerprintMismatch(String otherFingerprint) {
         return requestFingerprint != null
                 && otherFingerprint != null

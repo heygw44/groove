@@ -22,10 +22,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 선착순 발급 Rate Limit 통합 테스트 (#90) — 회원당 한도 초과 시 429, 회원 간 버킷 독립.
+ * 선착순 발급 Rate Limit 통합 테스트 — 회원당 한도 초과 시 429, 회원 간 버킷 독립.
  *
- * <p>{@code capacity=3} 으로 override 한다. 미존재 쿠폰 id 로 호출하면 RateLimitFilter(Security 이전)는
- * 토큰을 통과시키고 컨트롤러가 404 를 내므로, 토큰 소진 전까지는 404·소진 후 429 로 한도를 관찰한다.
+ * <p>capacity=3 으로 override 한다. 미존재 쿠폰 id 로 호출하면 토큰 소진 전까지는 404·소진 후 429 다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

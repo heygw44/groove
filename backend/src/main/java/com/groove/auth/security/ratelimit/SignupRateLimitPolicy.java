@@ -11,10 +11,10 @@ import org.springframework.stereotype.Component;
 import java.util.function.Supplier;
 
 /**
- * {@code POST /api/v1/auth/signup} 에 대한 IP 기반 Rate Limit 정책.
+ * POST /api/v1/auth/signup 에 대한 IP 기반 Rate Limit 정책.
  *
- * <p>한도/리필 주기는 {@link AuthRateLimitProperties} 에서 주입받는다.
- * 한도 초과 시 {@link com.groove.common.ratelimit.RateLimitFilter} 가 429 + {@code Retry-After} 응답을 작성한다.
+ * <p>한도/리필 주기는 AuthRateLimitProperties 에서 주입받는다.
+ * 한도 초과 시 RateLimitFilter 가 429 + Retry-After 응답을 작성한다.
  */
 @Component
 public class SignupRateLimitPolicy implements RateLimitPolicy {

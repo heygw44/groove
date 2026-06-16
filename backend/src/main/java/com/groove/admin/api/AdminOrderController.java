@@ -42,13 +42,8 @@ import java.time.Instant;
 import java.util.Set;
 
 /**
- * 관리자 주문 조회 / 상태 강제 전환 / 환불 API (이슈 #69, PRD §5.3·§6.9, G2 게이트 "관리자 상품·주문 조작").
- *
- * <p>인가 경계는 {@code SecurityConfig} 의 {@code /api/v1/admin/**} → {@code hasRole("ADMIN")} 가 담당하므로
- * 컨트롤러에 별도 권한 어노테이션을 두지 않는다 ({@code AlbumAdminController} 와 동일 패턴) — 비관리자 토큰은
- * 403, 미인증은 401.
- *
- * <p>정렬 화이트리스트: {@code createdAt} 만 허용 — 인덱스 없는 컬럼 정렬 차단 (회원 주문 목록과 동일한 보안 패턴).
+ * 관리자 주문 조회 / 상태 강제 전환 / 환불 API. 인가 경계는 SecurityConfig 의 관리자 경로 → ROLE_ADMIN 이
+ * 담당한다(비관리자 403, 미인증 401). 정렬 화이트리스트: createdAt 만 허용.
  */
 @Tag(name = "주문 (관리자)", description = "주문 조회·상태 강제 전환·환불 (모두 ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")

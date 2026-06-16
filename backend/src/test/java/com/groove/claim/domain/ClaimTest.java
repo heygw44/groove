@@ -150,7 +150,7 @@ class ClaimTest {
                 .isInstanceOf(ClaimInvalidStateTransitionException.class);
     }
 
-    // --- CANCEL 타입 (#238) ---------------------------------------------------
+    // --- CANCEL 타입 ---------------------------------------------------
 
     @Test
     @DisplayName("request: 기본 타입은 RETURN (반품)")

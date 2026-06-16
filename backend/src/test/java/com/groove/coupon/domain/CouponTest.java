@@ -41,7 +41,7 @@ class CouponTest {
     class CalculateDiscount {
 
         static Stream<Arguments> discountCases() {
-            // 정률 정책은 maxDiscountAmount 필수 (#92 리뷰). 충분히 큰 캡으로 두면 raw 결과가 그대로 살아남는다.
+            // 정률 정책은 maxDiscountAmount 필수. 충분히 큰 캡으로 두면 raw 결과가 그대로 살아남는다.
             long uncapped = Long.MAX_VALUE;
             return Stream.of(
                     // 정액: 소계보다 작은 정액은 그대로

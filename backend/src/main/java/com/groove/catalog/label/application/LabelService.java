@@ -14,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * 레이블 CRUD 트랜잭션 경계. 중복 검사 + delete 시 album 참조 검사 모두
- * {@link com.groove.catalog.genre.application.GenreService} 와 동일 이중 방어선 정책을 따른다.
+ * 레이블 CRUD 트랜잭션 경계. 중복 검사와 delete 시 album 참조 검사 모두
+ * 선검사 + DB UNIQUE/FK 이중 방어선을 따른다.
  */
 @Service
 public class LabelService {

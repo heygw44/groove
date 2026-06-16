@@ -39,12 +39,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 관리자 쿠폰 CRUD · 직접지급 API (이슈 #92, API.md §3.10).
- *
- * <p>인가 경계는 {@code SecurityConfig} 의 {@code /api/v1/admin/**} → {@code hasRole("ADMIN")} 가
- * 담당하므로 컨트롤러에 별도 권한 어노테이션을 두지 않는다 — {@code AdminOrderController} 와 동일 패턴.
- *
- * <p>정렬 화이트리스트: {@code id}, {@code validUntil} 만 허용 — 인덱스 없는 컬럼 정렬 차단.
+ * 관리자 쿠폰 CRUD · 직접지급 API. 인가 경계는 SecurityConfig 의 관리자 경로 → ROLE_ADMIN 이 담당한다.
+ * 정렬 화이트리스트: id, validUntil 만 허용.
  */
 @Tag(name = "쿠폰 (관리자)", description = "쿠폰 정책 생성·조회·상태변경·직접지급 (모두 ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")

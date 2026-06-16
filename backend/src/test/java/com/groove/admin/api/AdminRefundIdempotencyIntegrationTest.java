@@ -46,23 +46,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 보상 트랜잭션 부분 실패 시 PG 환불 멱등 키(#72) 의 효과를 검증하는 통합 테스트.
+ * 보상 트랜잭션 부분 실패 시 PG 환불 멱등 키의 효과를 검증하는 통합 테스트.
  *
  * <h2>시나리오</h2>
  * <ol>
- *   <li>앨범 재고를 {@code Integer.MAX_VALUE} 로 세팅 + PAID 주문(qty=2) + PAID 결제.</li>
- *   <li><b>1차 환불 호출</b>: {@code paymentGateway.refund()} 성공 → {@code payment.markRefunded()} 성공 →
- *       {@code order.changeStatus(CANCELLED)} 성공 → {@code AlbumRepository.restoreStock(+2)}(원자적 가산
- *       UPDATE, #234)가 INT 오버플로로 {@code DataIntegrityViolationException}(DB out-of-range) → 트랜잭션 전체
- *       롤백. 이 시점 PG 측엔 첫 환불 응답이 캐시되어 있다 (실세계 PG 라면 환불이 확정되어 있을 것).</li>
- *   <li>재고를 정상 범위로 조정해 보상 트랜잭션 재시도가 성공할 수 있도록 만든다.</li>
- *   <li><b>2차 환불 호출 (재시도)</b>: 같은 결제 → 같은 멱등 키 →
- *       {@code MockPaymentGateway} 가 캐시 응답을 그대로 반환 ({@code refundCallCount()} 증가 없음).
- *       DB 작업은 정상 완료.</li>
+ *   <li>앨범 재고를 Integer.MAX_VALUE 로 세팅 + PAID 주문(qty=2) + PAID 결제.</li>
+ *   <li>1차 환불 호출: PG refund 성공 → markRefunded → CANCELLED 전이 후, restoreStock(+2)가 INT 오버플로로
+ *       DataIntegrityViolationException → 트랜잭션 롤백. PG 측엔 첫 환불 응답이 캐시된다.</li>
+ *   <li>재고를 정상 범위로 조정한다.</li>
+ *   <li>2차 환불 호출(재시도): 같은 멱등 키 → MockPaymentGateway 가 캐시 응답을 반환(실호출 없음), DB 작업은 정상 완료.</li>
  *   <li>검증: PG 실호출 카운터 == 1, payment REFUNDED, order CANCELLED, 재고 복원 정상 반영.</li>
  * </ol>
- *
- * <p>본 테스트가 깨지면 PG 가 같은 결제에 두 번 환불 요청을 받는다는 뜻이다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -110,7 +104,7 @@ class AdminRefundIdempotencyIntegrationTest {
         Artist artist = artistRepository.saveAndFlush(Artist.create("Artist", null));
         Genre genre = genreRepository.saveAndFlush(Genre.create("Rock"));
         Label label = labelRepository.saveAndFlush(Label.create("Label"));
-        // 1차 환불에서 restoreStock(+2) 가 INT 오버플로 → DataIntegrityViolation(DB out-of-range)으로 롤백을 유도하기 위한 초기치 (#234).
+        // restoreStock(+2) 가 INT 오버플로로 롤백되도록 재고를 Integer.MAX_VALUE 로 둔다.
         Album album = albumRepository.saveAndFlush(Album.create("Album", artist, genre, label,
                 (short) 2020, AlbumFormat.LP_12, UNIT_PRICE, Integer.MAX_VALUE,
                 AlbumStatus.SELLING, false, null, null));
@@ -125,7 +119,7 @@ class AdminRefundIdempotencyIntegrationTest {
     }
 
     private void clearAll() {
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        // refresh_token → member FK 를 먼저 정리한다.
         refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -158,35 +152,33 @@ class AdminRefundIdempotencyIntegrationTest {
         MockPaymentGateway mockGateway = (MockPaymentGateway) paymentGateway;
         int callsBefore = mockGateway.refundCallCount();
 
-        // 1차 환불 — restoreStock(+2) 가 INT 오버플로로 DataIntegrityViolation(DB out-of-range) → 트랜잭션 롤백 → 500 응답 (#234).
-        // 원자적 가산 UPDATE 는 도메인 가드(adjustStock)를 우회하므로 오버플로가 DB 레벨에서 거절된다 — 현실 불가능한
-        // 경계(refund qty ≤ ordered qty, stock ≪ INT_MAX)지만 보상 트랜잭션 부분 실패→롤백 경로를 결정적으로 유발한다.
+        // 1차 환불 — restoreStock(+2) 가 INT 오버플로로 DataIntegrityViolation → 트랜잭션 롤백 → 500 응답.
         mockMvc.perform(post("/api/v1/admin/orders/{n}/refund", orderNumber)
                         .header(HttpHeaders.AUTHORIZATION, adminBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"오버플로 유발\"}"))
                 .andExpect(status().is5xxServerError());
 
-        // 1차 호출로 PG 측엔 환불이 1건 기록되었지만 DB 는 롤백되어 PAID/PAID 가 유지된다.
+        // DB 는 롤백되어 PAID/PAID 가 유지된다.
         Order rolledBack = orderRepository.findByOrderNumber(orderNumber).orElseThrow();
         assertThat(rolledBack.getStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(paymentRepository.findByOrderId(rolledBack.getId()).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.PAID);
         assertThat(mockGateway.refundCallCount()).isEqualTo(callsBefore + 1);
 
-        // 재시도 전 — 재고 복원이 정상 범위가 되도록 앨범 재고를 합리적인 값으로 낮춘다.
+        // 재시도 전 — 앨범 재고를 정상 범위로 낮춘다.
         Album album = albumRepository.findById(albumId).orElseThrow();
         org.springframework.test.util.ReflectionTestUtils.setField(album, "stock", 10);
         albumRepository.saveAndFlush(album);
 
-        // 2차 환불 (재시도) — 같은 결제 → 같은 멱등 키 → MockPaymentGateway 가 캐시 응답 반환 (실호출 X).
+        // 2차 환불 (재시도) — 같은 멱등 키 → MockPaymentGateway 가 캐시 응답 반환 (실호출 X).
         mockMvc.perform(post("/api/v1/admin/orders/{n}/refund", orderNumber)
                         .header(HttpHeaders.AUTHORIZATION, adminBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"재시도\"}"))
                 .andExpect(status().isOk());
 
-        // 검증 — PG 실호출 카운터는 1차 호출에서만 증가했고 (총 +1), DB 는 정상 완료 상태.
+        // 검증 — PG 실호출 카운터는 1차에서만 증가, DB 는 정상 완료 상태.
         assertThat(mockGateway.refundCallCount())
                 .as("같은 멱등 키 재호출 → PG 실호출 추가 없음")
                 .isEqualTo(callsBefore + 1);
@@ -196,6 +188,6 @@ class AdminRefundIdempotencyIntegrationTest {
         assertThat(paymentRepository.findByOrderId(finalOrder.getId()).orElseThrow().getStatus())
                 .isEqualTo(PaymentStatus.REFUNDED);
         assertThat(albumRepository.findById(albumId).orElseThrow().getStock())
-                .isEqualTo(10 + QTY); // 재시도 트랜잭션의 재고 복원만 반영 (1차는 롤백되어 없음)
+                .isEqualTo(10 + QTY); // 재시도 트랜잭션의 재고 복원만 반영
     }
 }

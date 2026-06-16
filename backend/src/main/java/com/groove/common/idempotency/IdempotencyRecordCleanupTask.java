@@ -13,18 +13,12 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * TTL 경과 멱등성 레코드 정리 (#W7-2 DoD).
+ * TTL 경과 멱등성 레코드 정리.
  *
- * <p>{@code groove.idempotency.cleanup-cron} cron 으로 주기 실행되며(기본 매시 정각), TTL 경과 행을
- * {@code groove.idempotency.cleanup-batch-size} 개씩 독립 트랜잭션으로 삭제한다 — 한 번에 잡는 락 범위를
- * 제한하기 위함이다. cron 을 {@code "-"} 로 두면 비활성화된다(테스트 프로파일에서 사용).
- *
- * <p>{@code COMPLETED} 는 {@code expiresAt} 경과 시, {@code IN_PROGRESS} 는 거기에
- * {@code groove.idempotency.in-progress-grace} 를 더 기다린 뒤 회수한다 — 처리 중인 느린 action 의 마커가
- * TTL 경과만으로 삭제돼 action 이 이중 실행되는 것을 막기 위함이다({@link IdempotencyRecordRepository#deleteExpiredBatch}).
- *
- * <p>스케줄러 스레드에서 예외가 새어 나가면 다음 실행에 영향을 주므로, 정리 실패는 잡아서 로깅만 한다 —
- * 다음 주기에 재시도된다.
+ * <p>groove.idempotency.cleanup-cron cron 으로 주기 실행되며(기본 매시 정각), TTL 경과 행을
+ * cleanup-batch-size 개씩 독립 트랜잭션으로 삭제한다. cron 을 "-" 로 두면 비활성화된다.
+ * COMPLETED 는 expiresAt 경과 시, IN_PROGRESS 는 거기에 in-progress-grace 를 더 기다린 뒤 회수한다.
+ * 정리 실패는 잡아서 로깅만 한다.
  */
 @Component
 public class IdempotencyRecordCleanupTask {
@@ -61,11 +55,8 @@ public class IdempotencyRecordCleanupTask {
     }
 
     /**
-     * TTL 경과 레코드를 모두 삭제한다 — {@code COMPLETED} 는 {@code expiresAt < cutoff}, {@code IN_PROGRESS}
-     * 는 {@code expiresAt < cutoff - inProgressGrace} 기준. {@code cutoff} 고정값 기준이라 대상 집합은
-     * 유한하며, 배치 단위로 0 이 반환될 때까지 반복한다.
-     *
-     * @return 삭제된 총 행 수
+     * TTL 경과 레코드를 모두 삭제한다 — COMPLETED 는 expiresAt < cutoff, IN_PROGRESS 는
+     * expiresAt < cutoff - inProgressGrace 기준. 배치 단위로 0 이 반환될 때까지 반복한다.
      */
     int deleteExpired(Instant cutoff) {
         Instant inProgressCutoff = cutoff.minus(inProgressGrace);

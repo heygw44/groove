@@ -18,19 +18,19 @@ const auth = useAuthStore()
 const { isAuthenticated } = storeToRefs(auth)
 
 const orderNumber = route.params.orderNumber
-// 체크아웃이 전달한 결제 예정액(표시용). 0(전액 할인)도 유효하므로 falsy 가 아닌 NaN 으로만 null 처리한다.
+// 체크아웃이 전달한 결제 예정액(표시용) — NaN 만 null 처리
 const queryAmount = Number(route.query.amount)
 const displayAmount = Number.isFinite(queryAmount) ? queryAmount : null
 
 const method = ref('CARD') // 기본 결제 수단
-const idempotencyKey = ref(null) // 결제 시도당 1회 생성 → 더블클릭/재시도에도 재사용
+const idempotencyKey = ref(null) // 결제 시도당 1회 생성, 재시도에도 재사용
 const payment = ref(null)
 const phase = ref('idle') // idle | requesting | polling | done | failed | timeout | submitted-guest
-const failureKind = ref('') // 'request'(요청 자체 실패, 재시도 가능) | 'status'(결제 FAILED 확정, 종결)
+const failureKind = ref('') // 'request'(요청 실패, 재시도 가능) | 'status'(결제 FAILED 확정)
 const formError = ref('')
 
 const POLL_MS = 1500
-const MAX_ATTEMPTS = 20 // ~30s 폴링. 결제 승인은 보통 1~5s 내 PAID/FAILED 전이.
+const MAX_ATTEMPTS = 20 // 폴링 최대 횟수
 const poller = usePolling()
 
 const busy = computed(() => phase.value === 'requesting' || phase.value === 'polling')
@@ -55,7 +55,7 @@ async function pollOnce() {
     return true
   }
   if (p.status === 'FAILED') {
-    // 종결 상태 — 같은 주문은 재결제 불가. 안내는 전용 실패 블록이 표시한다(formError 중복 방지).
+    // 종결 상태 — 재결제 불가
     failureKind.value = 'status'
     phase.value = 'failed'
     return true
@@ -64,8 +64,8 @@ async function pollOnce() {
 }
 
 async function pay() {
-  if (busy.value) return // 더블클릭 가드 — phase 를 동기적으로 바꿔 2번째 클릭을 즉시 차단(버튼 disabled 와 이중 방어).
-  // ★ 멱등 키는 최초 1회만 생성하고 ref 에 보관 → 재시도/더블클릭에도 동일 키를 명시 헤더로 전달해 중복 결제를 막는다.
+  if (busy.value) return // 더블클릭 가드
+  // 멱등 키는 최초 1회만 생성, 재시도에도 동일 키 사용
   if (!idempotencyKey.value) idempotencyKey.value = randomUuid()
   formError.value = ''
   failureKind.value = ''
@@ -73,14 +73,14 @@ async function pay() {
   try {
     payment.value = await requestPayment(orderNumber, method.value, idempotencyKey.value) // 202 PENDING
   } catch (e) {
-    // 요청 자체 실패(네트워크/PG/멱등충돌) — 결제 행이 안 생겼을 수 있으니 같은 키로 재시도 가능(멱등).
+    // 요청 자체 실패 — 같은 키로 재시도 가능
     failureKind.value = 'request'
     phase.value = 'failed'
     formError.value = errorMessage(e, '결제 요청에 실패했습니다.')
     return
   }
   if (!isAuthenticated.value) {
-    // 게스트는 GET /payments/{id} 권한이 없어 폴링 불가 — 접수만 알리고 주문조회로 결과를 확인하게 한다.
+    // 게스트는 폴링 불가 — 접수만 알리고 주문조회로 결과 확인
     phase.value = 'submitted-guest'
     return
   }
@@ -107,7 +107,7 @@ async function pay() {
       {{ formError }}
     </p>
 
-    <!-- 결제 수단 + 결제 버튼 (idle / 요청 중 / 요청실패 재시도) -->
+    <!-- 결제 수단 + 결제 버튼 -->
     <template v-if="phase === 'idle' || phase === 'requesting' || (phase === 'failed' && failureKind === 'request')">
       <div class="mt-6">
         <BaseSelect v-model="method" label="결제 수단" :options="PAYMENT_METHOD_OPTIONS" :disabled="busy" />
@@ -155,7 +155,7 @@ async function pay() {
       <BaseButton class="mt-4" variant="ghost" @click="beginPolling">계속 확인하기</BaseButton>
     </div>
 
-    <!-- 결제 실패(확정) — 같은 주문은 재결제 불가하므로 재주문을 안내한다 -->
+    <!-- 결제 실패(확정) — 재주문 안내 -->
     <div v-else-if="phase === 'failed'" class="mt-8 rounded-lg bg-rust-500/10 px-4 py-6 text-center">
       <p class="font-medium text-rust-600">결제가 실패했습니다.</p>
       <p class="mt-1 text-sm text-vinyl-800/70">이 주문은 다시 결제할 수 없습니다. 장바구니에서 새로 주문해 주세요.</p>

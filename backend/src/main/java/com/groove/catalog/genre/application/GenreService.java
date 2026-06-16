@@ -14,14 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * 장르 CRUD 트랜잭션 경계.
- *
- * <p>중복 검증은 선검사({@code existsByName} / {@code existsByNameAndIdNot}) + DB UNIQUE 이중 방어선이며,
- * 두 검사 사이에 끼어든 동시 INSERT 는 {@link DataIntegrityViolationException} 을
- * {@link GenreNameDuplicatedException} 으로 변환해 항상 409 로 응답된다.
- *
- * <p>delete 시 album 참조 검사 (W5-3 도입): {@link AlbumRepository#existsByGenre_Id} 사전 검사 +
- * FK 위반 fallback 으로 {@link GenreInUseException} (409) 응답을 보장한다.
+ * 장르 CRUD 트랜잭션 경계. 중복은 existsByName 선검사 + DB UNIQUE 이중 방어선
+ * (DataIntegrityViolationException 을 GenreNameDuplicatedException 으로 변환).
+ * delete 시 existsByGenre_Id 사전 검사 + FK 위반 fallback 으로 GenreInUseException 보장.
  */
 @Service
 public class GenreService {

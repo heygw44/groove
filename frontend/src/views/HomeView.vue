@@ -22,7 +22,7 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-10">
-    <!-- 쿠폰 배너 (시드 쿠폰 홍보 — 발급 플로우는 후속 이슈) -->
+    <!-- 쿠폰 배너 -->
     <section
       class="flex flex-col items-start gap-3 rounded-2xl bg-vinyl-black px-6 py-8 text-cream-50 sm:flex-row sm:items-center sm:justify-between"
     >

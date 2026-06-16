@@ -30,7 +30,7 @@ function createDefaults() {
     releaseYear: new Date().getFullYear(),
     format: 'LP_12',
     price: 0,
-    stock: 0, // 생성에만 사용 — 수정 시 재고는 목록의 재고 조정 전용.
+    stock: 0, // 생성에만 사용
     status: 'SELLING',
     isLimited: false,
     coverImageUrl: '',
@@ -47,7 +47,7 @@ const labelOptions = ref([{ value: '', label: '없음' }])
 const loading = ref(true)
 const loadError = ref('')
 
-// 드롭다운 옵션은 인스턴스 수명당 한 번만 로드한다(라우트 재사용 시 중복 호출 방지).
+// 드롭다운 옵션은 인스턴스당 한 번만 로드
 let taxonomyLoaded = false
 let artistList = []
 let genreList = []
@@ -82,15 +82,14 @@ async function loadAlbum() {
       description: a.description ?? '',
     })
   } else {
-    // 생성: 폼을 기본값으로 리셋(인스턴스 재사용 시 직전 수정값 잔류 방지) + 첫 아티스트/장르 자동 선택.
+    // 생성: 폼을 기본값으로 리셋하고 첫 아티스트/장르 자동 선택
     Object.assign(form, createDefaults())
     if (artistList.length) form.artistId = artistList[0].id
     if (genreList.length) form.genreId = genreList[0].id
   }
 }
 
-// id(라우트 파라미터)에 반응해 재로드 — 같은 컴포넌트 인스턴스가 new↔edit·edit/1↔edit/2 로 재사용돼도
-// 항상 현재 URL 의 앨범을 로드/저장한다(stale 폼으로 다른 앨범을 덮어쓰지 않게).
+// 라우트 id 에 반응해 재로드 — 항상 현재 URL 의 앨범을 로드/저장
 watch(
   id,
   async () => {
@@ -111,8 +110,7 @@ watch(
   { immediate: true },
 )
 
-// 필수값 클라이언트 검증 — 빈 숫자 필드('')나 미선택(null)이 서버에 그대로 가면 violation 없는 일반 400 으로
-// 떨어져 폼이 필드별 에러를 못 띄운다. 사전에 violations 를 만들어 useForm 의 필드 에러 매핑에 위임한다.
+// 필수값 클라이언트 검증 — violations 를 만들어 useForm 의 필드 에러 매핑에 위임
 function clientViolations() {
   const v = []
   if (!form.title.trim()) v.push({ field: 'title', message: '제목을 입력해 주세요.' })

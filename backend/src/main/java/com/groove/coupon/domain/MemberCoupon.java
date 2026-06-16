@@ -19,19 +19,15 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 회원 보유 쿠폰 — 정책({@link Coupon}) 의 발급 인스턴스 (ERD §4.16, docs/plans/coupon-system.md §3).
+ * 회원 보유 쿠폰 — 정책(Coupon) 의 발급 인스턴스.
  *
- * <p>{@code UNIQUE(coupon_id, member_id)} 로 회원당 동일 쿠폰 1장을 DB 가 강제한다 (설계 §7).
- * 사용 주문은 {@code orderId} 단방향 역참조로 추적한다 — {@code orders} 에 쿠폰 FK 를 두지 않아
- * 순환 FK 와 삽입 순서 의존성을 피한다 (설계 §7).
+ * <p>UNIQUE(coupon_id, member_id) 로 회원당 동일 쿠폰 1장을 DB 가 강제한다. 사용 주문은 orderId 단방향
+ * 역참조로 추적한다.
  *
- * <p>{@code memberId}·{@code orderId} 는 {@link com.groove.order.domain.Order} 와 동일하게 연관
- * 매핑 없이 식별자 컬럼으로만 둔다 (FK 는 DB 레벨). {@code coupon} 만 할인 규칙 접근을 위해
- * {@link ManyToOne} 으로 매핑한다.
+ * <p>memberId·orderId 는 연관 매핑 없이 식별자 컬럼으로만 둔다. coupon 만 ManyToOne 으로 매핑한다.
  *
- * <p>상태 전이는 {@link #use}/{@link #restore}/{@link #expire}/{@link #cancel} 가드 메서드만
- * 허용한다 — {@link MemberCouponStatus#canTransitionTo} 위반 시
- * {@link IllegalCouponStateTransitionException}. 발급 오케스트레이션(선착순 동시성)은 #90.
+ * <p>상태 전이는 use/restore/expire/cancel 가드 메서드만 허용한다 — MemberCouponStatus.canTransitionTo
+ * 위반 시 IllegalCouponStateTransitionException.
  */
 @Entity
 @Table(name = "member_coupon", uniqueConstraints = {
@@ -79,8 +75,7 @@ public class MemberCoupon extends BaseTimeEntity {
     }
 
     /**
-     * 발급. 초기 상태 ISSUED, {@code expiresAt} 은 발급 시점 {@code coupon.validUntil} 스냅샷이다
-     * (설계: 발급 시 valid_until 스냅샷). 발급 가능 여부(소진·중복·정책상태) 검증은 서비스(#90)가 한다.
+     * 발급. 초기 상태 ISSUED, expiresAt 은 발급 시점 coupon.validUntil 스냅샷이다.
      */
     public static MemberCoupon issue(Coupon coupon, Long memberId) {
         Objects.requireNonNull(coupon, "coupon must not be null");
@@ -88,9 +83,7 @@ public class MemberCoupon extends BaseTimeEntity {
         return new MemberCoupon(coupon, memberId, Instant.now(), coupon.getValidUntil());
     }
 
-    /**
-     * 사용 (ISSUED → USED). 사용 주문 식별자와 사용 시각을 기록한다.
-     */
+    /** 사용 (ISSUED → USED). 사용 주문 식별자와 사용 시각을 기록한다. */
     public void use(Long orderId) {
         Objects.requireNonNull(orderId, "orderId must not be null");
         transitionTo(MemberCouponStatus.USED);
@@ -100,9 +93,7 @@ public class MemberCoupon extends BaseTimeEntity {
 
     /**
      * 복원 (USED → ISSUED, 이미 만료됐으면 USED → EXPIRED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을
-     * 비운다. 만료 판정은 적용 경로({@code CouponApplicationService.applyToOrder})·만료 배치와 동일한 strict
-     * 비교({@code expiresAt < now})로 통일한다 — 취소/환불 시점이 만료 이후면 ISSUED 로 부활시키지 않고
-     * 곧장 EXPIRED 로 복원해 "내 쿠폰 목록" 표시 정합성을 지킨다.
+     * 비운다. 만료 판정은 strict 비교(expiresAt < now).
      */
     public void restore(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
@@ -114,10 +105,8 @@ public class MemberCoupon extends BaseTimeEntity {
     /**
      * 만료 (ISSUED → EXPIRED).
      *
-     * <p>운영 만료 배치는 성능을 위해 {@code MemberCouponRepository.expireOverdueBatch} 벌크
-     * UPDATE 로 본 메서드를 우회한다 — 도메인 규칙({@code canTransitionTo} 의 ISSUED→EXPIRED 허용)
-     * 과 SQL WHERE 가 정합하지만, 향후 도메인 규칙이 바뀌면 벌크 SQL 도 같이 손봐야 한다는 점에
-     * 유의. 본 메서드는 단건 만료 경로(향후 회원 탈퇴 시 보유 쿠폰 정리 등) 용 진입점으로 남는다.
+     * <p>운영 만료 배치는 MemberCouponRepository.expireOverdueBatch 벌크 UPDATE 로 본 메서드를 우회한다.
+     * 본 메서드는 단건 만료 경로용 진입점이다.
      */
     public void expire() {
         transitionTo(MemberCouponStatus.EXPIRED);

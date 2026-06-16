@@ -33,13 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 아티스트 공개 조회 (API §3.3).
- *
- * <p>비로그인 사용자도 GET 으로 페이징 목록과 단건을 조회할 수 있다.
- * 인증 경계는 {@code SecurityConfig} 의 {@code PUBLIC_GET_PATTERNS} 에 등록된다.
- *
- * <p>{@code /artists/{id}/albums} 는 album 검색을 artistId 로 고정 위임한다 (#34) —
- * status=SELLING 강제, N+1 보존 정책은 {@code GET /albums} 와 동일.
+ * 아티스트 공개 조회 (비로그인 GET 페이징 목록·단건).
+ * /artists/{id}/albums 는 album 검색을 artistId 로 고정 위임한다.
  */
 @Tag(name = "아티스트", description = "아티스트 공개 조회 (비로그인 — 목록·단건 및 아티스트별 앨범 검색)")
 @RestController
@@ -47,11 +42,7 @@ import java.util.Set;
 @Validated
 public class ArtistQueryController {
 
-    /**
-     * Album 정렬 화이트리스트. {@code AlbumQueryController} 와 동일 정책 (별도 이유: 동일한 album
-     * 응답을 반환하므로 동일 키만 허용해야 함). 중복 정의는 의도적이다 — 한쪽에서만 추가/제거 시
-     * 정책 드리프트가 일어나는 것을 즉각 알 수 있게 하기 위함.
-     */
+    /** Album 정렬 화이트리스트. */
     private static final Set<String> ALLOWED_ALBUM_SORT_PROPERTIES = Set.of(
             "id", "createdAt", "price", "releaseYear");
 
@@ -116,10 +107,7 @@ public class ArtistQueryController {
         }
     }
 
-    /**
-     * path 의 {@code id} 와 query 의 {@code artistId} 가 모두 지정되었는데 다르면 400.
-     * 동일하거나 query 가 비어있으면 path 가 우선 적용된다 — silent override 방지.
-     */
+    /** path id 와 query artistId 가 모두 지정됐는데 다르면 400. 같거나 query 가 비면 path 우선. */
     private void rejectArtistIdConflict(Long pathArtistId, Long queryArtistId) {
         if (queryArtistId != null && !queryArtistId.equals(pathArtistId)) {
             throw new ValidationException(

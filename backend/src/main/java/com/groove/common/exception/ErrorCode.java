@@ -69,7 +69,7 @@ public enum ErrorCode {
     REVIEW_ALBUM_NOT_IN_ORDER(HttpStatus.UNPROCESSABLE_ENTITY, "REVIEW_ALBUM_NOT_IN_ORDER", "해당 주문에 포함되지 않은 앨범입니다"),
     REVIEW_DUPLICATED(HttpStatus.CONFLICT, "REVIEW_DUPLICATED", "이미 작성한 리뷰입니다"),
 
-    // COUPON (M13 — docs/plans/coupon-system.md §5)
+    // COUPON
     COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "COUPON_NOT_FOUND", "쿠폰을 찾을 수 없습니다"),
     COUPON_SOLD_OUT(HttpStatus.CONFLICT, "COUPON_SOLD_OUT", "쿠폰이 모두 소진되었습니다"),
     COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "COUPON_ALREADY_ISSUED", "이미 발급받은 쿠폰입니다"),
@@ -81,7 +81,7 @@ public enum ErrorCode {
     COUPON_NOT_APPLICABLE(HttpStatus.UNPROCESSABLE_ENTITY, "COUPON_NOT_APPLICABLE", "주문에 적용할 수 없는 쿠폰입니다"),
     COUPON_INVALID_STATE_TRANSITION(HttpStatus.CONFLICT, "COUPON_INVALID_STATE_TRANSITION", "쿠폰 상태를 변경할 수 없습니다"),
 
-    // CLAIM (M16 #239 — 반품 역물류)
+    // CLAIM
     CLAIM_NOT_FOUND(HttpStatus.NOT_FOUND, "CLAIM_NOT_FOUND", "반품 정보를 찾을 수 없습니다"),
     CLAIM_ORDER_NOT_RETURNABLE(HttpStatus.UNPROCESSABLE_ENTITY, "CLAIM_ORDER_NOT_RETURNABLE", "배송이 완료된 주문만 반품할 수 있습니다"),
     CLAIM_ORDER_NOT_CANCELLABLE(HttpStatus.UNPROCESSABLE_ENTITY, "CLAIM_ORDER_NOT_CANCELLABLE", "발송 전 주문만 부분 취소할 수 있습니다"),

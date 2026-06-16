@@ -7,11 +7,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 회원 보유 쿠폰 상태 (glossary §3.11, docs/plans/coupon-system.md §3.3).
+ * 회원 보유 쿠폰 상태.
  *
- * <p>전이 규칙은 {@link #canTransitionTo(MemberCouponStatus)} 단일 메서드에서 판정한다.
- * 위반 시 {@link MemberCoupon} 의 가드 전이 메서드가
- * {@link com.groove.coupon.exception.IllegalCouponStateTransitionException} 을 던진다.
+ * <p>전이 규칙은 canTransitionTo(MemberCouponStatus) 단일 메서드에서 판정한다. 위반 시 MemberCoupon 의 가드
+ * 전이 메서드가 IllegalCouponStateTransitionException 을 던진다.
  *
  * <p>합법 전이 (4종, 그 외는 모두 불법):
  * <pre>

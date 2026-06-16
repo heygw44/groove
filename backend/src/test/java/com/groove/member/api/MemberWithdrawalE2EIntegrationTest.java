@@ -35,20 +35,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 회원 탈퇴 크로스 도메인 E2E (#78).
- *
- * <p>{@code MemberControllerTest}(단일 도메인 컨트롤러 검증)와 중복되지 않도록, 본 테스트는 탈퇴가
- * 트리거하는 모듈 간 정리(이벤트 기반)와 사후 인증 상태만 다룬다:
+ * 회원 탈퇴 크로스 도메인 E2E. 탈퇴가 트리거하는 모듈 간 정리(이벤트 기반)와 사후 인증 상태를 다룬다:
  * <ul>
  *   <li>정상 탈퇴 → 장바구니 삭제(cart) + 리프레시/로그인 차단(auth)</li>
  *   <li>진행 중 주문(PAID) 존재 시 409 차단 + 미탈퇴 유지</li>
- *   <li>탈퇴 회원 이메일 재가입 차단(패턴 A)</li>
+ *   <li>탈퇴 회원 이메일 재가입 차단</li>
  * </ul>
  *
- * <p><b>비트랜잭션</b>: cart·token 정리는 {@code MemberWithdrawnEvent} 의 {@code @TransactionalEventListener
- * (AFTER_COMMIT)} 로 수행되므로, 테스트가 {@code @Transactional} 이면 커밋이 일어나지 않아 리스너가
- * 발화하지 않는다. 실제 커밋 경로를 쓰고 {@code @BeforeEach} 에서 자식 테이블부터 정리한다(#82 교훈 —
- * 공유 DB 교차오염 방지).
+ * <p>cart·token 정리는 AFTER_COMMIT 리스너로 수행되므로 실제 커밋 경로를 쓰고, @BeforeEach 에서 자식 테이블부터
+ * 정리한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -108,7 +103,7 @@ class MemberWithdrawalE2EIntegrationTest {
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + RAW_PASSWORD + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
-        // refresh 토큰은 body 가 아닌 HttpOnly 쿠키로 내려간다 (#163)
+        // refresh 토큰은 HttpOnly 쿠키로 내려간다
         return result.getResponse().getCookie(RefreshTokenCookieFactory.COOKIE_NAME).getValue();
     }
 
@@ -129,7 +124,7 @@ class MemberWithdrawalE2EIntegrationTest {
                         .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
                 .andExpect(status().isNoContent());
 
-        // soft delete + PII 익명화 (#170): 평문 제거, email_hash 보존
+        // soft delete + PII 익명화: 평문 제거, email_hash 보존
         Member withdrawn = memberRepository.findById(memberId).orElseThrow();
         assertThat(withdrawn.isWithdrawn()).isTrue();
         assertThat(withdrawn.getEmail()).startsWith("withdrawn-").endsWith("@deleted.local");
@@ -183,10 +178,10 @@ class MemberWithdrawalE2EIntegrationTest {
                         .content("{\"password\":\"" + RAW_PASSWORD + "\"}"))
                 .andExpect(status().isNoContent());
 
-        // 평문 이메일은 익명화로 제거됐지만(점유는 해시로 유지)...
+        // 평문 이메일은 익명화로 제거됨
         assertThat(memberRepository.findById(memberId).orElseThrow().getEmail()).isNotEqualTo(EMAIL);
 
-        // ...같은 평문 이메일 재가입은 여전히 409 로 차단된다 (email_hash 점유).
+        // 같은 평문 이메일 재가입은 409 로 차단 (email_hash 점유)
         mockMvc.perform(post("/api/v1/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"" + EMAIL + "\",\"password\":\"" + RAW_PASSWORD

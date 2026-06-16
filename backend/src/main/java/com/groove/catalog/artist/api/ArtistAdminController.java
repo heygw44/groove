@@ -32,12 +32,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 
-/**
- * 아티스트 관리자 CRUD (API §3.9, ADMIN 전용).
- *
- * <p>인가 경계는 {@code SecurityConfig} 의 {@code /api/v1/admin/**} 패턴이 ROLE_ADMIN 으로 제약하므로
- * 컨트롤러는 추가 권한 어노테이션 없이 비즈니스 로직만 담당한다. 목록은 페이징 envelope 으로 응답한다.
- */
+/** 아티스트 관리자 CRUD. 목록은 페이징 envelope 으로 응답한다. */
 @Tag(name = "아티스트 (관리자)", description = "아티스트 등록·조회·수정·삭제 (ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")
 @RestController

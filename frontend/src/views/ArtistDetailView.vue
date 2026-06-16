@@ -16,7 +16,7 @@ const albumsLoading = ref(true)
 const error = ref('')
 
 const PAGE_SIZE = 12
-let albumSeq = 0 // 앨범 조회 응답 순서 가드.
+let albumSeq = 0 // 앨범 조회 응답 순서 가드
 
 function buildParams(q) {
   const params = { size: PAGE_SIZE }
@@ -45,7 +45,7 @@ async function fetchAlbums(id, q) {
   albumsLoading.value = true
   try {
     const res = await artistsApi.albums(id, buildParams(q))
-    if (seq !== albumSeq) return // stale 응답 폐기
+    if (seq !== albumSeq) return
     page.value = res
   } catch {
     if (seq !== albumSeq) return
@@ -55,8 +55,7 @@ async function fetchAlbums(id, q) {
   }
 }
 
-// 단일 watcher 로 묶어, id 가 바뀐 경우에만 fetchArtist 하고 앨범은 매 변경마다 1회만 조회한다
-// (params.id watch + query watch 를 따로 두면 아티스트 전환 시 fetchAlbums 가 중복 호출됨).
+// id 변경 시 아티스트 재조회, 변경 시마다 앨범 조회
 watch(
   () => [route.params.id, route.query],
   (curr, prev) => {

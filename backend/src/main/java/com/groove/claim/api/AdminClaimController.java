@@ -35,14 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 관리자 반품 관리 API (#239).
- *
- * <p>인가 경계는 {@code SecurityConfig} 의 {@code /api/v1/admin/**} → {@code hasRole("ADMIN")} 가 담당하므로
- * 컨트롤러에 별도 권한 어노테이션을 두지 않는다({@code AdminOrderController} 동일 패턴). 승인(approve)·거부(reject)·
- * 수동 환불(complete)은 관리자 판단이며, 회수·검수·검수통과+환불은 {@code ClaimProgressScheduler} 가 자동 진행한다 —
- * complete 는 자동 환불 전에 운영자가 즉시 환불하려는 오버라이드다(INSPECTING 이 아니면 멱등 no-op).
- *
- * <p>정렬 화이트리스트: {@code createdAt} 만 허용.
+ * 관리자 반품 관리 API. 조회·승인·거부·수동 환불을 노출한다. 정렬은 createdAt 만 허용.
  */
 @Tag(name = "반품 (관리자)", description = "반품 조회·승인·거부·수동 환불 (모두 ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")

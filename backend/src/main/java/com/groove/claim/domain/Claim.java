@@ -25,24 +25,17 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 반품(claim) — 배송완료 후 변심 환불의 역물류 aggregate root (#239).
+ * 반품(claim) — 배송완료 후 변심 환불의 역물류 aggregate root.
  *
- * <p>주문/품목을 참조하되 {@code OrderStatus} 와 분리된 별도 상태머신({@link ClaimStatus})을 가진다 — 반품 상태를
- * 주문 상태에 섞으면 상태 폭발이 일어나기 때문이다. 발송 전 즉시 취소({@code AdminOrderService.refund})와 달리
- * 회수·검수 비용을 동반하는 별도 유스케이스이므로 경로를 분리한다.
- *
- * <p>상태 전이는 {@code approve}/{@code startTransit}/{@code startInspecting}/{@code markRefunded}/{@code reject}
- * 단일 진입점만 허용하고, 합법 전이는 {@link ClaimStatus#canTransitionTo} 가 판정한다 — 위반 시
- * {@link ClaimInvalidStateTransitionException}(409). 한 주문에 여러 반품이 있을 수 있어 order_id 는 UNIQUE 가
- * 아니며(거부 후 재요청 허용), 활성 반품 중복은 {@code ClaimService} 가 잔여 수량 회계로 가드한다.
- *
- * <p>{@link ClaimItem} 은 aggregate child — cascade=ALL + orphanRemoval=true 로 Claim 을 통해서만 변경된다.
+ * <p>주문/품목을 참조하되 ClaimStatus 별도 상태머신을 가진다. 상태 전이는 approve/startTransit/startInspecting/
+ * markRefunded/reject 단일 진입점만 허용하고, 합법 전이는 ClaimStatus.canTransitionTo 가 판정한다 — 위반 시
+ * ClaimInvalidStateTransitionException(409). ClaimItem 은 aggregate child(cascade=ALL + orphanRemoval=true).
  */
 @Entity
 @Table(name = "claim")
 public class Claim extends BaseTimeEntity {
 
-    /** DB {@code reason}/{@code rejection_reason} 컬럼 길이 — 정적 팩토리/거부 메서드가 선검증한다. */
+    /** DB reason/rejection_reason 컬럼 길이. */
     static final int MAX_REASON_LENGTH = 500;
 
     @Id
@@ -53,7 +46,7 @@ public class Claim extends BaseTimeEntity {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    /** 클레임 종류 — 취소(발송 전)/반품(발송 후). V27 이전 행은 RETURN 으로 백필 (#238). */
+    /** 클레임 종류 — 취소(발송 전)/반품(발송 후). */
     @Enumerated(EnumType.STRING)
     @Column(name = "claim_type", nullable = false, length = 20)
     private ClaimType claimType;
@@ -68,7 +61,7 @@ public class Claim extends BaseTimeEntity {
     @Column(name = "rejection_reason", length = MAX_REASON_LENGTH)
     private String rejectionReason;
 
-    /** 확정 환불액 (#239) — REFUNDED 전이 시 {@code ClaimService} 가 비례 배분으로 계산해 기록한다. 그 전엔 0. */
+    /** 확정 환불액 — REFUNDED 전이 시 기록, 그 전엔 0. */
     @Column(name = "refund_amount", nullable = false)
     private long refundAmount;
 
@@ -100,20 +93,12 @@ public class Claim extends BaseTimeEntity {
         this.refundAmount = 0L;
     }
 
-    /**
-     * 반품(RETURN) 접수 — 초기 상태 REQUESTED. 접수 자격(주문 상태/소유/기한)·항목 잔여 수량 검증은 호출 측
-     * ({@code ClaimService}) 이 끝낸 상태로 호출한다. 항목은 {@link #addItem} 으로 붙인다. 접수 시각은
-     * {@code BaseTimeEntity.createdAt} 으로 대체한다(별도 컬럼 불필요).
-     */
+    /** 반품(RETURN) 접수 — 초기 상태 REQUESTED. 항목은 addItem 으로 붙인다. */
     public static Claim request(Order order, String reason) {
         return create(order, ClaimType.RETURN, reason);
     }
 
-    /**
-     * 취소(CANCEL) 접수 (#238) — 발송 전 부분 취소. 초기 상태 REQUESTED 로 만들고, 호출 측
-     * ({@code ClaimService.cancelPartially}) 이 같은 트랜잭션에서 {@link #markCancelRefunded} 로 즉시 환불 확정한다
-     * (회수·검수 없음). 자격(주문 PAID/PREPARING)·잔여 수량 검증은 호출 측이 끝낸 상태로 호출한다.
-     */
+    /** 취소(CANCEL) 접수 — 발송 전 부분 취소. 초기 상태 REQUESTED. */
     public static Claim requestCancellation(Order order, String reason) {
         return create(order, ClaimType.CANCEL, reason);
     }
@@ -168,10 +153,8 @@ public class Claim extends BaseTimeEntity {
     }
 
     /**
-     * 취소 환불 확정 (#238) — CANCEL 클레임의 1-스텝 상태머신 {@code REQUESTED → REFUNDED}. 회수·검수가 없는
-     * 발송 전 취소이므로 RETURN 의 전이 규칙({@link ClaimStatus#canTransitionTo})을 거치지 않고 타입·상태를 직접
-     * 가드한다 — RETURN 전이 맵을 건드리지 않으면서 CANCEL 만의 즉시 환불 경로를 둔다. 위반 시
-     * {@link ClaimInvalidStateTransitionException}(409). 확정 환불액과 종착 시각을 기록한다.
+     * 취소 환불 확정 — CANCEL 클레임의 REQUESTED → REFUNDED. 타입·상태를 직접 가드한다(위반 시
+     * ClaimInvalidStateTransitionException(409)). 확정 환불액과 종착 시각을 기록한다.
      */
     public void markCancelRefunded(long refundAmount, Instant now) {
         if (claimType != ClaimType.CANCEL || status != ClaimStatus.REQUESTED) {
@@ -202,7 +185,7 @@ public class Claim extends BaseTimeEntity {
         this.status = next;
     }
 
-    /** 이 반품의 정가 합 — 항목별 {@code getGross()} 합. claim 환불액 비례 배분의 분자. */
+    /** 이 반품의 정가 합 — 항목별 getGross() 합. */
     public long getGross() {
         return items.stream().mapToLong(ClaimItem::getGross).sum();
     }

@@ -83,7 +83,7 @@ async function onGrant(coupon) {
   busyId.value = coupon.couponId
   try {
     await grantCoupon(coupon.couponId, memberId)
-    // 직접지급은 선착순 issuedCount 를 증가시키지 않으므로(백엔드 정책) 목록 갱신 불필요 — 토스트만.
+    // 직접지급은 목록 갱신 없이 토스트만
     ui.notify(`회원 #${memberId}에게 쿠폰을 지급했습니다.`, 'success')
   } catch (e) {
     ui.notify(adminErrorMessage(e, '쿠폰 지급에 실패했습니다.'), 'error')
@@ -92,8 +92,7 @@ async function onGrant(coupon) {
   }
 }
 
-// 명시 래핑 — watch 는 콜백을 (new, old)로 호출하므로 fetchCoupons 에 직접 넘기면 oldValue 가
-// options 자리에 들어간다(?silent= 쿼리 등으로 의도치 않게 silent 전환될 수 있음).
+// 쿼리 변경 시 쿠폰 목록 재조회
 watch(() => route.query, (q) => fetchCoupons(q), { immediate: true })
 </script>
 

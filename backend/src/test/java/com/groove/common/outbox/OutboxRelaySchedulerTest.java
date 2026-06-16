@@ -25,7 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 아웃박스 릴레이 스케줄러 단위 테스트 (#237) — 디스패치 + 발행 완료 표시 + 실패 시 미표시(재시도) + 미등록 핸들러 보류.
+ * 아웃박스 릴레이 스케줄러 단위 테스트 — 디스패치 + 발행 완료 표시 + 실패 시 미표시(재시도) + 미등록 핸들러 보류.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("OutboxRelayScheduler")
@@ -46,8 +46,7 @@ class OutboxRelaySchedulerTest {
     @BeforeEach
     void setUp() {
         when(handler.eventType()).thenReturn(EVENT_TYPE);
-        // 실제 TransactionTemplate + mock TM 으로 executeWithoutResult 콜백(markPublished)이 실제로 실행되게 한다.
-        // markPublished 에 도달하지 않는 케이스(핸들러 실패/미등록/빈 배치)도 있어 lenient 로 둔다.
+        // 실제 TransactionTemplate + mock TM 으로 executeWithoutResult 콜백(markPublished)이 실행되게 한다 (도달 안 하는 케이스가 있어 lenient)
         lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);

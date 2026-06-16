@@ -33,10 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * /api/v1/members/me/password 비밀번호 변경 API 통합 테스트 (#77).
- *
- * <p>실 필터·서비스·DB(Testcontainers)를 거쳐 DoD 를 검증한다 — 정상 변경 후 새 비번 로그인 가능·기존
- * 비번 거부, 현재 비번 불일치, {@code new == current}, 약한 비번, 세션 무효화, 미인증.
+ * /api/v1/members/me/password 비밀번호 변경 API 통합 테스트 — 실 필터·서비스·DB(Testcontainers)로
+ * 정상 변경·현재 비번 불일치·new == current·약한 비번·세션 무효화·미인증을 검증한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -72,7 +70,7 @@ class MemberPasswordControllerTest {
 
     @BeforeEach
     void setUp() {
-        // refresh_token 이 member 에 FK(비-cascade)를 가지므로 자식부터 삭제한다.
+        // 자식(refresh_token)부터 삭제한다.
         refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAllInBatch();
 
@@ -127,7 +125,7 @@ class MemberPasswordControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(changeBody(OLD_PASSWORD, OLD_PASSWORD)))
                 .andExpect(status().isBadRequest())
-                // 본문 검증(@AssertTrue) 거부는 code=VALID_001 + violations — 서비스의 MEMBER_PASSWORD_MISMATCH 와 구분된다.
+                // 본문 검증(@AssertTrue) 거부는 code=VALID_001 + violations
                 .andExpect(jsonPath("$.code").value("VALID_001"))
                 .andExpect(jsonPath("$.violations").isArray());
     }
@@ -147,13 +145,13 @@ class MemberPasswordControllerTest {
     @Test
     @DisplayName("변경 후 기존 refresh 토큰 무효화 → 회전 시 401")
     void changePassword_revokesExistingRefreshTokens() throws Exception {
-        // 로그인으로 실제 refresh 토큰을 DB 에 발급
+        // 로그인으로 refresh 토큰을 DB 에 발급
         MvcResult login = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody(OLD_PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn();
-        // refresh 토큰은 body 가 아닌 HttpOnly 쿠키로 내려간다 (#163)
+        // refresh 토큰은 body 가 아닌 HttpOnly 쿠키로 내려간다
         String refreshToken = login.getResponse()
                 .getCookie(RefreshTokenCookieFactory.COOKIE_NAME).getValue();
         JsonNode tokens = objectMapper.readTree(login.getResponse().getContentAsString());

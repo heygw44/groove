@@ -10,14 +10,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * 장르 엔티티 (ERD §4.4).
+ * 장르 엔티티. 이름만 가진 카탈로그 메타이며 UNIQUE 는 DB 제약에 위임한다.
  *
- * <p>이름만 가진 가장 단순한 카탈로그 메타. UNIQUE 는 DB 제약에 위임하고 도메인 레이어는
- * 이름 정규화 / 변경만 책임진다. Album 이 FK 로 참조하지만 본 이슈 범위에서는 Album 이 없다.
- *
- * <p>클래스 레벨 {@code @BatchSize}(#235): Album keyset 스크롤(fluent {@code scroll}) 경로의 genre
- * LAZY 프록시 N+1 을 IN 쿼리 1회로 흡수한다(offset 의 {@code @EntityGraph} 경로는 무영향).
- * 자세한 배경은 {@link com.groove.catalog.artist.domain.Artist} Javadoc 참조.
+ * <p>클래스 레벨 @BatchSize: genre LAZY 프록시 N+1 을 IN 쿼리 1회로 흡수한다.
  */
 @Entity
 @Table(name = "genre")
@@ -39,14 +34,14 @@ public class Genre extends BaseTimeEntity {
     }
 
     /**
-     * 정적 팩토리. 이름 검증 (공백·길이) 은 호출 측 (Bean Validation) 에서 끝낸 상태로 전달된다고 가정한다.
+     * 정적 팩토리.
      */
     public static Genre create(String name) {
         return new Genre(name);
     }
 
     /**
-     * 이름 변경. 동일 이름 충돌 검증은 서비스 레이어에서 {@code existsByNameAndIdNot} 으로 처리한다.
+     * 이름 변경.
      */
     public void rename(String newName) {
         this.name = newName;

@@ -28,8 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * MemberCouponExpirationTask 통합 테스트 (Testcontainers MySQL).
  *
- * <p>{@code expiration.batch-size=2} 로 띄워 배치 루프(여러 반복)와 만료 조건(ISSUED + 시각 경과)을 함께 검증한다.
- * 스케줄러 자동 실행은 test 프로파일에서 {@code expiration.cron: "-"} 로 꺼져 있으므로 태스크를 직접 호출한다.
+ * <p>expiration.batch-size=2 로 띄워 배치 루프와 만료 조건(ISSUED + 시각 경과)을 검증한다. 스케줄러 자동
+ * 실행은 test 프로파일에서 꺼져 있으므로 태스크를 직접 호출한다.
  */
 @SpringBootTest(properties = "groove.coupon.expiration.batch-size=2")
 @ActiveProfiles("test")
@@ -56,7 +56,7 @@ class MemberCouponExpirationTaskTest {
         memberRepository.deleteAllInBatch();
         memberIds.clear();
         coupon = couponRepository.saveAndFlush(CouponFixtures.fixedAmount(null));
-        // 회원당 1장 UNIQUE 제약 때문에 케이스마다 별도 회원이 필요하다 — 충분히 만들어 둔다.
+        // 회원당 1장 UNIQUE 제약 때문에 케이스마다 별도 회원이 필요하다.
         for (int i = 0; i < 10; i++) {
             Member m = memberRepository.saveAndFlush(
                     MemberFixtures.register("m" + i + "@example.com", "$2a$10$dummy", "M" + i, "0100000000" + i));
@@ -87,7 +87,7 @@ class MemberCouponExpirationTaskTest {
     @Test
     @DisplayName("USED 는 만료 시각이 지났어도 전환되지 않음 — WHERE status=ISSUED 가 종착 상태를 보호")
     void usedStatus_isNotExpired() {
-        // FK fk_member_coupon_order 가 실 주문을 요구하므로 orderId 는 null 로 두고 상태만 USED 로 강제.
+        // orderId 는 null 로 두고 상태만 USED 로 강제.
         MemberCoupon used = persist(CouponFixtures.issuedWithExpiry(coupon, memberIds.get(0), CouponFixtures.hoursAgo(1)));
         ReflectionTestUtils.setField(used, "status", MemberCouponStatus.USED);
         memberCouponRepository.saveAndFlush(used);

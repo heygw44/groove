@@ -21,7 +21,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CouponRepository 통합 테스트 (Testcontainers MySQL). V14 스키마 ↔ 엔티티 매핑을 실제 INSERT/SELECT 로 검증한다.
+ * CouponRepository 통합 테스트 (Testcontainers MySQL). 스키마 ↔ 엔티티 매핑을 실제 INSERT/SELECT 로 검증한다.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = Replace.NONE)

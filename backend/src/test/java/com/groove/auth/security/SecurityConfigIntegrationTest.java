@@ -105,8 +105,7 @@ class SecurityConfigIntegrationTest {
     @Test
     @DisplayName("정적 SPA 셸(GET /, /index.html) 공개 → 200 서빙 (#113 Vite 빌드 산출물)")
     void staticSpaShell_isPublic() throws Exception {
-        // "/" 는 welcome-page 로 index.html(Vite 빌드 산출물)이 서빙되어 200. 200 을 단언해야
-        // 404 회귀(index.html 누락·frontendBuild 미실행)까지 잡는다 — isNotIn(401,403)은 404 를 놓친다.
+        // "/" 는 welcome-page 로 index.html 이 서빙되어 200.
         mockMvc.perform(get("/")).andExpect(status().isOk());
         mockMvc.perform(get("/index.html")).andExpect(status().isOk());
     }
@@ -121,8 +120,7 @@ class SecurityConfigIntegrationTest {
     @Test
     @DisplayName("SPA clean-route(GET /cart) → index.html 로 forward (#113 history fallback)")
     void spaCleanRoute_forwardsToIndexHtml() throws Exception {
-        // History 라우팅: /cart 직접 진입·새로고침 시 SpaForwardConfig 가 index.html 로 forward 하고
-        // SecurityConfig 가 GET permitAll 로 열어 401/404 없이 SPA 셸이 로드된다.
+        // /cart 진입 시 SpaForwardConfig 가 index.html 로 forward 하고 GET permitAll 로 SPA 셸이 로드된다.
         mockMvc.perform(get("/cart"))
                 .andExpect(status().isOk())
                 .andExpect(forwardedUrl("/index.html"));
@@ -146,7 +144,7 @@ class SecurityConfigIntegrationTest {
     @Test
     @DisplayName("존재하지 않는 /api/v1/** 는 SPA forward 대상 아님 → HTML 셸이 아닌 401 (API/SPA 격리)")
     void unknownApiPath_isNotForwardedToSpa() throws Exception {
-        // /api 는 SpaRoutes.PATTERNS 에 없어 forward 되지 않는다 → index.html 이 아니라 인증 정책(401)을 탄다.
+        // /api 는 SpaRoutes.PATTERNS 에 없어 forward 되지 않고 인증 정책(401)을 탄다.
         mockMvc.perform(get("/api/v1/does-not-exist"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(forwardedUrl(null));
@@ -156,9 +154,7 @@ class SecurityConfigIntegrationTest {
     @DisplayName("SpaRoutes.PATTERNS 와 충돌하는 GET 컨트롤러 매핑이 없어야 한다 (SPA permitAll 회귀 가드)")
     void noGetControllerCollidesWithSpaRoutes(
             @Autowired @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping) {
-        // SpaRoutes.PATTERNS 는 forward 이자 GET permitAll 표면을 겸한다(코드래빗 지적). 향후 bare 경로
-        // (예: GET /me, /albums/{id})에 컨트롤러가 추가되면 SPA permitAll 이 실데이터 GET 을 의도치 않게
-        // 공개하므로, 그런 매핑이 생기면 빌드를 깨뜨려 회귀를 잡는다. 현재 모든 컨트롤러는 /api/v1 prefix 다.
+        // SpaRoutes.PATTERNS 와 충돌하는 bare GET 컨트롤러 매핑이 생기면 빌드를 깨뜨린다.
         for (Map.Entry<RequestMappingInfo, ?> entry : handlerMapping.getHandlerMethods().entrySet()) {
             RequestMappingInfo info = entry.getKey();
             var methods = info.getMethodsCondition().getMethods();
@@ -172,7 +168,7 @@ class SecurityConfigIntegrationTest {
             }
             for (PathPattern controllerPattern : patternsCondition.getPatterns()) {
                 for (String spaRoute : SpaRoutes.PATTERNS) {
-                    // SpaRoutes 패턴의 대표 경로(base + 하위) 둘 다로 컨트롤러 매칭을 시도한다.
+                    // base 경로와 하위 경로 둘 다로 컨트롤러 매칭을 시도한다.
                     for (String probe : List.of(
                             spaRoute.replace("/**", "").replace("/*", ""),
                             spaRoute.replace("/**", "/probe").replace("/*", "/probe"))) {

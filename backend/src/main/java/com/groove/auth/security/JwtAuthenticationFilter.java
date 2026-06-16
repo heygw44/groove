@@ -19,14 +19,9 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * 매 요청마다 Authorization 헤더의 Bearer 토큰을 검증해 {@link SecurityContextHolder} 를 채운다.
- *
- * <p>토큰이 없거나 검증에 실패하면 {@code SecurityContext} 를 비워두고 다음 필터로 진행한다.
- * 401 응답은 {@code ExceptionTranslationFilter} 가 {@link RestAuthenticationEntryPoint} 에 위임해
- * 일관된 ProblemDetail 형식으로 처리된다.
- *
- * <p>Bearer prefix 매칭은 RFC 7235 §2.1 에 따라 case-insensitive 로 처리한다.
- * 인증 실패 사유는 토큰 값을 노출하지 않고 reason 만 WARN 으로 기록한다.
+ * 매 요청마다 Authorization 헤더의 Bearer 토큰을 검증해 SecurityContextHolder 를 채운다.
+ * 토큰이 없거나 검증에 실패하면 SecurityContext 를 비워두고 다음 필터로 진행한다.
+ * Bearer prefix 매칭은 case-insensitive 이며, 인증 실패 사유는 reason 만 WARN 으로 기록한다.
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {

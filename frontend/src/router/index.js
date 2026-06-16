@@ -2,8 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { safeRedirect } from '@/lib/redirect'
 
-// History(clean URL) 라우팅. 서버는 SpaForwardConfig 가 등록된 SPA 경로를 index.html 로
-// forward 하므로 /cart 등 직접 진입·새로고침에도 SPA 셸이 로드된다.
+// History(clean URL) 라우팅.
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -57,8 +56,7 @@ const router = createRouter({
       component: () => import('@/views/PasswordChangeView.vue'),
       meta: { requiresAuth: true },
     },
-    // 구매 여정(#116). 결제/체크아웃/게스트조회는 게스트도 써야 하므로 requiresAuth 를 걸지 않는다.
-    // 모든 경로는 SpaRoutes(/cart·/checkout·/orders/**)에 매칭돼 새로고침·딥링크가 동작한다(백엔드 무수정).
+    // 구매 여정. 결제/체크아웃/게스트조회는 requiresAuth 없음(게스트 허용).
     {
       path: '/cart',
       name: 'cart',
@@ -77,7 +75,7 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      // '/orders/:orderNumber' 보다 먼저 선언 — "lookup" 이 orderNumber 로 매칭되지 않게 한다.
+      // '/orders/:orderNumber' 보다 먼저 선언.
       path: '/orders/lookup',
       name: 'guest-lookup',
       component: () => import('@/views/GuestLookupView.vue'),
@@ -93,7 +91,7 @@ const router = createRouter({
       component: () => import('@/views/OrderDetailView.vue'),
       meta: { requiresAuth: true },
     },
-    // 쿠폰(#118). 목록은 public(GET /coupons), 내 쿠폰은 회원 전용.
+    // 쿠폰. 목록은 public, 내 쿠폰은 회원 전용.
     {
       path: '/coupons',
       name: 'coupons',
@@ -105,10 +103,7 @@ const router = createRouter({
       component: () => import('@/views/MyCouponsView.vue'),
       meta: { requiresAuth: true },
     },
-    // 관리자 콘솔(#119). 중첩 라우트 — AdminLayout(사이드바 + <router-view/>) 아래 자식 뷰.
-    // meta 는 부모에 두면 Vue Router 4 가 자식 to.meta 로 머지하므로 모든 하위가 보호된다.
-    // 이중 방어: 클라 requiresAdmin 가드(UI) + 서버 hasRole("ADMIN")(진짜 인가, 비관리자 API 호출 시 403).
-    // 모든 경로가 /admin/** 아래라 백엔드 SpaRoutes(이미 /admin·/admin/** 등록) 동기화가 불필요하다.
+    // 관리자 콘솔. 중첩 라우트 — AdminLayout 아래 자식 뷰. 부모 meta 가 자식으로 머지돼 모든 하위 보호.
     {
       path: '/admin',
       component: () => import('@/components/admin/AdminLayout.vue'),
@@ -133,7 +128,7 @@ const router = createRouter({
       ],
     },
     {
-      // 클라이언트 라우팅 중 매칭 실패한 경로용 catch-all.
+      // 매칭 실패 경로용 catch-all.
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),
@@ -144,12 +139,11 @@ const router = createRouter({
   },
 })
 
-// 인증 가드 — 라우트 meta 기반. 클라 UI 보호일 뿐이며 실제 권한 검증은 서버가 한다.
-// Pinia store 는 반드시 가드 함수 내부에서 호출한다(모듈 최상단 호출은 설치 순서 의존으로 실패).
+// 인증 가드 — 라우트 meta 기반.
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
-  // 로그인 필수 라우트에 미인증 접근 → 로그인으로, 복귀 경로(redirect) 보존.
+  // 로그인 필수 라우트에 미인증 접근 → 로그인으로, redirect 보존.
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
@@ -157,7 +151,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAdmin && !auth.isAdmin) {
     return { name: 'home' }
   }
-  // 게스트 전용(로그인/회원가입)에 인증 상태 접근 → 안전한 복귀 경로 또는 홈.
+  // 게스트 전용에 인증 상태 접근 → 복귀 경로 또는 홈.
   if (to.meta.guestOnly && auth.isAuthenticated) {
     return safeRedirect(to.query.redirect) || { name: 'home' }
   }

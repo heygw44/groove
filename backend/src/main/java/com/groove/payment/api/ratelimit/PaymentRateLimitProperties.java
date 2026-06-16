@@ -5,10 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * 결제 엔드포인트 Rate Limit 정책 설정 (#208).
- *
- * <p>{@code application.yaml} 의 {@code groove.payment.rate-limit.*} 키와 매핑된다.
- * 정책 수치는 운영 측정 결과에 따라 환경별 yaml 또는 환경 변수에서 override 한다.
+ * 결제 엔드포인트 Rate Limit 정책 설정. groove.payment.rate-limit.* 키와 매핑된다.
  */
 @ConfigurationProperties(prefix = "groove.payment.rate-limit")
 public record PaymentRateLimitProperties(Policy post) {

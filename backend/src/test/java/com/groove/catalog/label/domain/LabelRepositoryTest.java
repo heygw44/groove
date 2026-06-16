@@ -32,11 +32,7 @@ class LabelRepositoryTest {
     @Autowired
     private AlbumRepository albumRepository;
 
-    /**
-     * 다른 통합 테스트(@SpringBootTest)가 커밋한 잔여 행을 제거하고 시작한다.
-     * 본 클래스의 @DataJpaTest 는 트랜잭션 자동 롤백이라 외부에 영향을 주지 않는다.
-     * Album → Label FK (ON DELETE RESTRICT) 때문에 album 을 먼저 비워야 label 삭제가 가능하다.
-     */
+    // Album → Label FK 때문에 album 을 먼저 비운다.
     @BeforeEach
     void cleanup() {
         albumRepository.deleteAllInBatch();

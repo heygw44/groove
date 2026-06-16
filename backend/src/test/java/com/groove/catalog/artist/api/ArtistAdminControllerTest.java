@@ -59,7 +59,7 @@ class ArtistAdminControllerTest {
 
     @BeforeEach
     void cleanup() {
-        // Album → Artist FK 때문에 album 을 먼저 비운다 (W5-3 도입).
+        // Album → Artist FK 때문에 album 을 먼저 비운다.
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
         adminBearer = "Bearer " + jwtProvider.issueAccessToken(1L, MemberRole.ADMIN);
@@ -89,7 +89,7 @@ class ArtistAdminControllerTest {
     @Test
     @DisplayName("POST description 생략 → 201 + description 필드 null 응답")
     void create_withoutDescription_returns201() throws Exception {
-        // null 값을 전송하기 위해 HashMap 사용 (Map.of 는 null 미허용)
+        // null 값 전송을 위해 HashMap 사용
         Map<String, Object> body = new HashMap<>();
         body.put("name", "Anonymous");
         body.put("description", null);
@@ -297,7 +297,7 @@ class ArtistAdminControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, userBearer))
                 .andExpect(status().isForbidden());
 
-        // SecurityFilter 우회로 실제 삭제까지 도달하는 회귀를 잡기 위한 DB 가드.
+        // 삭제되지 않고 보존됐는지 DB 확인
         assertThat(artistRepository.findById(saved.getId())).isPresent();
     }
 }

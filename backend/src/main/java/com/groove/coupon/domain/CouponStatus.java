@@ -7,11 +7,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 쿠폰 정책 상태 (glossary §3.10, docs/plans/coupon-system.md §3.3).
+ * 쿠폰 정책 상태.
  *
- * <p>전이 규칙은 {@link #canTransitionTo(CouponStatus)} 단일 메서드에서 판정한다 —
- * {@link com.groove.order.domain.OrderStatus} 와 동일하게 DB 트리거 없이 애플리케이션
- * 레벨 단일 진입점({@link Coupon#changeStatus})에 일원화한다.
+ * <p>전이 규칙은 canTransitionTo(CouponStatus) 단일 메서드에서 판정한다.
  *
  * <p>합법 전이 (4종, 그 외는 모두 불법):
  * <pre>

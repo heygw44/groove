@@ -7,12 +7,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 주문 상태 (glossary §3.4, ARCHITECTURE.md §8 상태 다이어그램).
+ * 주문 상태. 전이 규칙은 canTransitionTo 단일 메서드에서 판정한다.
  *
- * <p>전이 규칙은 {@link #canTransitionTo(OrderStatus)} 단일 메서드에서 판정한다.
- * DB 트리거를 두지 않고 애플리케이션 레벨 단일 진입점({@link Order#changeStatus})에 일원화한다.
- *
- * <p>합법 전이 (9종, 그 외는 모두 불법):
+ * <p>합법 전이 (그 외는 모두 불법):
  * <pre>
  *   PENDING        → PAID, PAYMENT_FAILED, CANCELLED   (3)
  *   PAID           → PREPARING, CANCELLED              (2)
@@ -34,10 +31,7 @@ public enum OrderStatus {
     CANCELLED,
     PAYMENT_FAILED;
 
-    /**
-     * "배송완료 이상" 주문 상태 집합 — 리뷰 작성 자격(#59)과 반품 접수 자격(#239)이 공유하는 경계다.
-     * {@code DELIVERED} 또는 {@code COMPLETED} 면 상품이 고객에게 도달했다고 본다.
-     */
+    /** "배송완료 이상" 주문 상태 집합 — DELIVERED 또는 COMPLETED. */
     public static final Set<OrderStatus> DELIVERED_OR_COMPLETED = Collections.unmodifiableSet(
             EnumSet.of(DELIVERED, COMPLETED));
 

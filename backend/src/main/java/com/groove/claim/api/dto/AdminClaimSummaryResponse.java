@@ -8,17 +8,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
 /**
- * 관리자 반품 목록 요약 응답 (#239).
- *
- * <p>목록은 항목을 펼치지 않아(N+1 회피) 항목 수량은 노출하지 않는다 — 상세는 {@code GET /admin/claims/{id}} 가
- * {@link ClaimResponse} 로 제공한다. {@code orderNumber} 는 목록 쿼리가 {@code order} 를 fetch 해 노출한다.
- *
- * @param claimId      반품 식별자
- * @param orderNumber  반품 대상 주문 번호
- * @param claimType    클레임 종류 — CANCEL(부분 취소)/RETURN(반품)
- * @param status       반품 상태
- * @param refundAmount 확정 환불액 — REFUNDED 전에는 0
- * @param createdAt    접수 시각
+ * 관리자 반품 목록 요약 응답. 항목은 펼치지 않는다.
  */
 public record AdminClaimSummaryResponse(
         @Schema(description = "반품 식별자", example = "5")

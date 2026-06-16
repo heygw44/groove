@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * 회원가입 요청 (API §3.1).
+ * 회원가입 요청.
  *
  * <p>비밀번호: 최소 10자 + 영·숫·특수 각 1자 이상.
  * 전화번호: 필수, 숫자만 10~11자.

@@ -5,10 +5,8 @@ import com.groove.auth.application.TokenPair;
 /**
  * 로그인 응답.
  *
- * <p>{@code tokenType} 은 RFC 6750 의 Bearer 고정. {@code expiresIn} 은 access 토큰의
- * 상대 TTL(초) 로, 클라이언트가 만료 직전 갱신을 트리거하는 데 사용한다.
- *
- * <p>refresh 토큰은 본 응답 body 에 싣지 않는다 — JS 접근 차단을 위해 HttpOnly 쿠키로 내려간다(#163).
+ * <p>tokenType 은 Bearer 고정. expiresIn 은 access 토큰의 상대 TTL(초).
+ * refresh 토큰은 body 가 아닌 HttpOnly 쿠키로 내려간다.
  */
 public record LoginResponse(
         String accessToken,

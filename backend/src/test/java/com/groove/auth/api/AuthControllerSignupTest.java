@@ -51,7 +51,7 @@ class AuthControllerSignupTest {
 
     @BeforeEach
     void cleanup() {
-        // refresh_token FK 때문에 자식부터 삭제 (다른 테스트가 남긴 데이터 대비)
+        // 자식(refresh_token)부터 삭제
         refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAll();
     }

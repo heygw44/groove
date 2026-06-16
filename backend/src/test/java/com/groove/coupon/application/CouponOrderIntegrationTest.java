@@ -55,17 +55,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 쿠폰을 적용한 주문 → 결제 → 취소·환불 복원의 통합 E2E (#91).
+ * 쿠폰을 적용한 주문 → 결제 → 취소·환불 복원의 통합 E2E.
  *
- * <p>이슈 #91 DoD 의 두 HIGH 리스크를 실 DB(Testcontainers MySQL) 위에서 직접 검증한다:
+ * <p>실 DB(Testcontainers MySQL) 위에서 검증한다:
  * <ul>
- *   <li>{@code payment.amount == order.payableAmount} — PG 청구액이 할인 반영된 금액인지</li>
- *   <li>{@code cancel} 과 {@code refund} <b>두 경로 모두</b> 쿠폰을 ISSUED 로 복원하는지</li>
+ *   <li>payment.amount == order.payableAmount — PG 청구액이 할인 반영된 금액인지</li>
+ *   <li>cancel 과 refund 두 경로 모두 쿠폰을 ISSUED 로 복원하는지</li>
  * </ul>
  *
- * <p>컨트롤러 계층은 단일 도메인 테스트({@code CouponApiIntegrationTest}, {@code PaymentApiIntegrationTest},
- * {@code AdminOrderControllerTest})가 다루므로 본 테스트는 서비스 빈을 직접 호출해 두 도메인을 가로지르는
- * 결합 동작에 집중한다.
+ * <p>서비스 빈을 직접 호출해 두 도메인을 가로지르는 결합 동작에 집중한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -98,8 +96,7 @@ class CouponOrderIntegrationTest {
     @Autowired
     private PaymentRepository paymentRepository;
 
-    // 픽스처 사전 커밋용. REQUIRES_NEW 변형(쿠폰 만료 #92, 멱등 정리 #W7-2) 등 같은 타입 빈이 여럿이라
-    // 트랜잭션 매니저로부터 직접 만든다 — 의도는 기본 REQUIRED 로 짧은 트랜잭션을 끊어 두는 것.
+    // 픽스처 사전 커밋용. 같은 타입 빈이 여럿이라 트랜잭션 매니저로부터 직접 만든다(기본 REQUIRED).
     private TransactionTemplate txTemplate;
 
     @Autowired
@@ -112,8 +109,7 @@ class CouponOrderIntegrationTest {
     private Fixtures setupFixtures(long unitPrice, int stock,
                                     CouponDiscountType type, long discountValue, long minOrder,
                                     Long maxDiscount) {
-        // @SpringBootTest 는 트랜잭션 롤백을 안 해서 테스트 간 데이터가 누적된다 — UNIQUE 충돌 회피를 위해
-        // 카탈로그/회원 이름을 nanoTime 으로 유니크화한다 (실 운영 코드 영향 없음, 테스트 격리 보조).
+        // 카탈로그/회원 이름을 nanoTime 으로 유니크화해 UNIQUE 충돌을 회피한다.
         String tag = String.valueOf(System.nanoTime());
         return txTemplate.execute(s -> {
             Artist artist = artistRepository.save(Artist.create("Artist-" + tag, null));
@@ -159,12 +155,12 @@ class CouponOrderIntegrationTest {
         assertThat(order.getDiscountAmount()).isEqualTo(5_000L);
         assertThat(order.getPayableAmount()).isEqualTo(55_000L);
 
-        // 회원쿠폰이 USED 로 전이됐고 order_id 가 연결됐는지 — 다른 트랜잭션에서 다시 읽어 확인.
+        // 회원쿠폰이 USED 로 전이됐고 order_id 가 연결됐는지 다른 트랜잭션에서 다시 읽어 확인.
         MemberCoupon afterApply = memberCouponRepository.findById(f.memberCoupon.getId()).orElseThrow();
         assertThat(afterApply.getStatus()).isEqualTo(MemberCouponStatus.USED);
         assertThat(afterApply.getOrderId()).isEqualTo(order.getId());
 
-        // 결제 요청 — Payment.amount 와 PG 청구액 모두 payable 이어야 한다.
+        // 결제 요청 — Payment.amount 와 PG 청구액 모두 payable.
         PaymentApiResponse payment = txTemplate.execute(s ->
                 paymentService.requestPayment(f.member.getId(),
                         new PaymentCreateRequest(order.getOrderNumber(), PaymentMethod.CARD)));
@@ -228,8 +224,7 @@ class CouponOrderIntegrationTest {
         Album restoredAlbum = albumRepository.findById(f.album.getId()).orElseThrow();
         assertThat(restoredAlbum.getStock()).isEqualTo(10);
 
-        // 결제 금액 == payable (즉, 쿠폰 할인 반영된 금액) 임이 환불 후에도 보존됨 — PG 환불액도 같은 값이었어야 한다.
-        // 60000 - 5000 = 55000 (FIXED_AMOUNT 5000원 쿠폰).
+        // 결제 금액 == payable (쿠폰 할인 반영된 금액) 이 환불 후에도 보존됨. 60000 - 5000 = 55000.
         Payment refunded = paymentRepository.findByOrderId(order.getId()).orElseThrow();
         assertThat(refunded.getAmount()).isEqualTo(55_000L);
         assertThat(refunded.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
@@ -248,7 +243,7 @@ class CouponOrderIntegrationTest {
                         f.memberCoupon.getId()))))
                 .isInstanceOf(CouponNotApplicableException.class);
 
-        // 게스트+쿠폰 검증이 stock 차감 루프 이전에 일어나므로 재고가 차감되지 않았어야 한다 (트랜잭션 롤백 보조 검증).
+        // 게스트+쿠폰 검증이 stock 차감 이전에 일어나므로 재고가 차감되지 않았어야 한다.
         Album album = albumRepository.findById(f.album.getId()).orElseThrow();
         assertThat(album.getStock()).isEqualTo(10);
     }

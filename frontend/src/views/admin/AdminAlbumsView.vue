@@ -19,7 +19,7 @@ const { patchQuery } = useRouteQuery()
 const page = ref(null)
 const loading = ref(true)
 const error = ref('')
-const deltas = reactive({}) // { [albumId]: number } 인라인 재고 조정 입력
+const deltas = reactive({}) // 인라인 재고 조정 입력
 const busyId = ref(null) // 재고 조정/삭제 중인 앨범 — 행별 버튼 가드
 
 const PAGE_SIZE = 10
@@ -57,13 +57,13 @@ function onStatusChange(value) {
 
 async function onAdjustStock(album) {
   const delta = deltas[album.id]
-  if (!delta) return // 0/빈값은 무시
+  if (!delta) return // 0/빈값 무시
   busyId.value = album.id
   try {
     await adjustStock(album.id, delta)
     ui.notify(`재고를 ${delta > 0 ? '+' : ''}${delta} 조정했습니다.`, 'success')
     deltas[album.id] = ''
-    fetchAlbums(route.query, { silent: true }) // 재고/상태(SOLD_OUT) 갱신.
+    fetchAlbums(route.query, { silent: true }) // 재고/상태 갱신
   } catch (e) {
     ui.notify(adminErrorMessage(e, '재고 조정에 실패했습니다.'), 'error')
   } finally {
@@ -85,7 +85,7 @@ async function onDelete(album) {
   }
 }
 
-// 명시 래핑 — watch 의 oldValue 가 fetchAlbums 의 options 자리에 새지 않게 한다(AdminCouponsView 와 동일).
+// 명시 래핑 — watch 의 oldValue 가 fetchAlbums 의 options 자리에 새지 않게 함
 watch(() => route.query, (q) => fetchAlbums(q), { immediate: true })
 </script>
 

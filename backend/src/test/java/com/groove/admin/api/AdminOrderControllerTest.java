@@ -110,18 +110,14 @@ class AdminOrderControllerTest {
         userBearer = "Bearer " + jwtProvider.issueAccessToken(memberA, MemberRole.USER);
     }
 
-    /**
-     * 알파벳 순서상 본 클래스가 가장 먼저 실행돼 데이터가 잔류하면, 이어지는 카탈로그 테스트
-     * ({@code AlbumQueryControllerTest} 등) 의 {@code albumRepository.deleteAllInBatch()} 가
-     * {@code fk_order_item_album} RESTRICT 에 걸린다 — 시작/종료 양쪽에서 청소해 격리한다.
-     */
+    /** 시작/종료 양쪽에서 데이터를 청소해 다른 테스트와 격리한다. */
     @AfterEach
     void tearDown() {
         clearAll();
     }
 
     private void clearAll() {
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
+        // refresh_token → member FK 를 먼저 정리한다.
         refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();

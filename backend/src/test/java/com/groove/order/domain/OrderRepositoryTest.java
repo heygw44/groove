@@ -150,10 +150,8 @@ class OrderRepositoryTest {
         assertThat(orderRepository.existsByMemberIdAndStatusIn(OTHER_MEMBER_ID, WITHDRAWAL_BLOCKING)).isFalse();
     }
 
-    // 이 쿼리는 member 필터가 없어 DB 전체의 종착 주문을 조회한다. 공유 Testcontainers 에 다른 테스트가
-    // 커밋한 주문이 섞일 수 있으므로, 전역 개수(containsExactly/isEmpty)가 아니라 이 테스트가 저장한 id 기준으로
-    // contains/doesNotContain 만 단언한다. ORDER BY updated_at ASC + LIMIT 에 내가 만든 최신 행이 잘리지 않도록
-    // limit 은 넉넉히 둔다.
+    // member 필터 없는 전역 쿼리라 이 테스트가 저장한 id 기준으로 contains/doesNotContain 만 단언한다.
+    // limit 은 내가 만든 행이 잘리지 않도록 넉넉히 둔다.
     private static final Limit GENEROUS_LIMIT = Limit.of(10_000);
 
     @Test
@@ -210,8 +208,7 @@ class OrderRepositoryTest {
                 .doesNotContain(cancelled.getId());
     }
 
-    // ── 회원 주문 목록 핫 경로 (#225, idx_orders_member_created / idx_orders_status_created) ──
-    // member_id 스코프 쿼리라 setUp 의 고유 회원으로 격리된다(공유 Testcontainers 안전).
+    // ── 회원 주문 목록 핫 경로 — member_id 스코프 쿼리. ──
 
     @Test
     @DisplayName("findByMemberId(#225) — 내 주문을 created_at DESC 페이지로 반환 (정렬 보존)")
@@ -245,9 +242,7 @@ class OrderRepositoryTest {
     @Test
     @DisplayName("[#225][#244] 주문 목록 복합 인덱스 — V22(member_id|status, created_at) + V25(member_id, status, created_at)")
     void listIndexes_areAdded() {
-        // V8 헤더의 [W10] 의도적 누락 인덱스를 V22 에서 도입했다(filesort/풀스캔 Before→After 시연 완료).
-        // V25(#244): 회원 주문 status 필터 keyset 의 잉여 스캔 제거용 (member_id, status, created_at) 추가.
-        // 가드가 깨지면(인덱스 누락) 목록 쿼리 성능 개선 회귀 신호다 — AlbumRepositoryTest.searchIndexes_areAdded 와 동일 의도.
+        // orders 테이블에 V22(member_id|status, created_at)·V25(member_id, status, created_at) 인덱스 존재 검증.
         @SuppressWarnings("unchecked")
         List<String> indexNames = (List<String>) em.createNativeQuery(
                 "SELECT INDEX_NAME FROM information_schema.STATISTICS " +
@@ -258,6 +253,6 @@ class OrderRepositoryTest {
         assertThat(indexNames).contains(
                 "idx_orders_member_created",         // V22
                 "idx_orders_status_created",         // V22
-                "idx_orders_member_status_created"); // V25 (#244)
+                "idx_orders_member_status_created"); // V25
     }
 }

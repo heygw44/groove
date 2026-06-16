@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 레이블 공개 조회. {@link com.groove.catalog.genre.api.GenreQueryController} 와 동일 패턴 (PUBLIC GET).
+ * 레이블 공개 조회 (비로그인 GET 전체 목록).
  */
 @Tag(name = "레이블", description = "레이블 공개 조회 (비로그인 — 전체 목록)")
 @RestController

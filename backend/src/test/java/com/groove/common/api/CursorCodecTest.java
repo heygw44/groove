@@ -17,9 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 본 기능의 가장 중요한 정합성 지점인 <b>커서 타입 충실도</b> 가드 (#235). 디코딩된 값이 인코딩 전과
- * <b>동일 런타임 클래스·순서</b> 임을 직접 단언한다 — String 으로 뭉개진 Instant 나 Integer 로 좁혀진 Long
- * 은 keyset 술어를 조용히 깨뜨리기 때문이다. resolve 의 정렬 시그니처 일치 검증(속성·방향·순서)도 함께 검증.
+ * 디코딩된 값이 인코딩 전과 동일 런타임 클래스·순서임을 단언하고, resolve 의 정렬 시그니처 일치(속성·방향·순서)를 검증한다.
  */
 @DisplayName("CursorCodec — 타입 충실도 round-trip + 정렬 시그니처 검증 + 위조 커서 방어")
 class CursorCodecTest {

@@ -57,20 +57,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 결제 요청·조회 API 통합 테스트 (#55).
+ * 결제 요청·조회 API 통합 테스트.
  *
- * <p>Testcontainers MySQL 위에서 부팅된 MockMvc 로 실 필터({@code @Idempotent} 인터셉터 포함)·서비스·DB
- * 를 모두 거친다. {@code test} 프로파일이라 {@code MockPaymentGateway} 가 활성이며 — {@code request()} 시
- * 즉시 PENDING 으로 응답한다. {@code payment.mock.auto-webhook=false} 로 인프로세스 자동 웹훅을 꺼,
- * 본 테스트의 모든 결제는 PENDING 으로 안정적으로 관찰된다 (PAID/FAILED 확정·웹훅 처리는 #W7-4 범위 —
- * {@code PaymentWebhookIntegrationTest} 가 검증).
+ * <p>Testcontainers MySQL 위 MockMvc 로 필터·서비스·DB 를 거친다. auto-webhook=false 라 결제는 PENDING 으로 관찰된다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @TestPropertySource(properties = "payment.mock.auto-webhook=false")
 @Import(TestcontainersConfig.class)
-@DisplayName("/api/v1/payments 결제 요청·조회 API (#55)")
+@DisplayName("/api/v1/payments 결제 요청·조회 API")
 class PaymentApiIntegrationTest {
 
     private static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
@@ -109,9 +105,8 @@ class PaymentApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // FK 의존 순서: payment → orders → album → artist/genre/label, member.
-        // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
-        idempotencyRecordRepository.deleteAllInBatch(); // 멱등 마커(FK 무관) — 만료 재사용 테스트 격리
+        // FK 의존 순서: payment → orders → album → artist/genre/label, member. refresh_token → member 도 먼저 정리.
+        idempotencyRecordRepository.deleteAllInBatch(); // 멱등 마커 정리
         refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -333,17 +328,13 @@ class PaymentApiIntegrationTest {
                 .andReturn();
         long firstPaymentId = objectMapper.readTree(firstResult.getResponse().getContentAsString()).get("paymentId").asLong();
 
-        // 2) 해당 키의 멱등 레코드 TTL 을 과거로 강제 — 정리 스케줄러를 기다리지 않고 만료를 모사
-        //    (IdempotencyServiceTest.saveExpiredCompleted 와 동일 기법). 만료 회수 분기는
-        //    isCompleted() && isExpired() 가 전제이므로, setField 전에 마커가 COMPLETED 임을 먼저 고정한다.
+        // 2) 멱등 레코드 TTL 을 과거로 강제해 만료를 모사. setField 전에 마커가 COMPLETED 임을 먼저 고정한다.
         IdempotencyRecord record = idempotencyRecordRepository.findByIdempotencyKey(key).orElseThrow();
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         ReflectionTestUtils.setField(record, "expiresAt", Instant.now().minus(Duration.ofMinutes(1)));
         idempotencyRecordRepository.saveAndFlush(record);
 
-        // 3) 같은 키 K 를 다른 주문(다른 fingerprint)으로 재사용 — 만료 전이면
-        //    request_keyReuseWithDifferentBody_returns409 처럼 409 REUSE_MISMATCH 였겠지만,
-        //    TTL 만료가 키 잠금을 해제해 새로 처리된다("TTL 후엔 새 처리", IdempotencyService).
+        // 3) 같은 키 K 를 다른 주문(다른 fingerprint)으로 재사용 — TTL 만료가 키 잠금을 해제해 새로 처리된다.
         MvcResult secondResult = mockMvc.perform(post("/api/v1/payments")
                         .header(HttpHeaders.AUTHORIZATION, ownerBearer)
                         .header(IDEMPOTENCY_HEADER, key)

@@ -33,9 +33,7 @@ class GenreRepositoryTest {
     @Autowired
     private AlbumRepository albumRepository;
 
-    /**
-     * Album → Genre FK 때문에 album 을 먼저 비운다 (W5-3 도입).
-     */
+    // Album → Genre FK 때문에 album 을 먼저 비운다.
     @BeforeEach
     void cleanup() {
         albumRepository.deleteAllInBatch();

@@ -29,31 +29,28 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 리뷰 작성/조회/삭제 트랜잭션 경계 (#59, API.md §3.8).
+ * 리뷰 작성/조회/삭제 트랜잭션 경계.
  *
  * 작성(create) 검증 순서:
  * - 주문 존재 — 없으면 OrderNotFoundException (404)
- * - 본인 주문 — order.memberId == 인증 memberId 아니면 ReviewNotOwnedException (403). 게스트 주문은 memberId 가
- *   null 이라 여기서 걸린다
+ * - 본인 주문 — order.memberId == 인증 memberId 아니면 ReviewNotOwnedException (403)
  * - 배송 완료 — order.status ∈ {DELIVERED, COMPLETED} 아니면 ReviewOrderNotDeliveredException (422)
  * - 항목 포함 — order.items 중 albumId 가 없으면 AlbumNotInOrderException (422)
- * - 중복 없음 — (orderId, albumId) 리뷰가 이미 있으면 DuplicateReviewException (409). 최종 방어선은
- *   uk_review_order_album — saveAndFlush 의 DataIntegrityViolationException 도 같은 예외로 흡수
- * - 회원 활성 — 토큰 유효기간 내 탈퇴(soft delete)·삭제된 회원이면 MemberNotFoundException (404). 프록시만 잡으면
- *   saveAndFlush 의 FK 위반이 500 으로 전파되므로 여기서 명시적으로 막는다 (#171)
+ * - 중복 없음 — (orderId, albumId) 리뷰가 이미 있으면 DuplicateReviewException (409). saveAndFlush 의
+ *   uk_review_order_album 위반(DataIntegrityViolationException)도 같은 예외로 흡수
+ * - 회원 활성 — 탈퇴(soft delete)·삭제된 회원이면 MemberNotFoundException (404)
  *
- * 조회(listByAlbum): 공개 엔드포인트 — 작성자명을 마스킹해 응답. 앨범이 없어도 빈 페이지를 돌려준다(공개 조회라
- * 404 로 ID 존재 여부를 흘릴 필요 없음).
+ * 조회(listByAlbum): 작성자명을 마스킹해 응답. 앨범이 없어도 빈 페이지를 돌려준다.
  *
  * 삭제(delete): 리뷰 미존재 시 ReviewNotFoundException (404), 작성자 ≠ 인증 회원이면 ReviewNotOwnedException (403).
  */
 @Service
 public class ReviewService {
 
-    /** 리뷰 작성이 허용되는 주문 상태 — "DELIVERED 이상" (glossary §2.10, API.md §3.8). 반품 자격(#239)과 공유. */
+    /** 리뷰 작성이 허용되는 주문 상태 — DELIVERED 이상. */
     private static final Set<OrderStatus> REVIEWABLE_ORDER_STATUSES = OrderStatus.DELIVERED_OR_COMPLETED;
 
-    /** 1주문-1상품-1리뷰 UNIQUE 제약 이름 (V13__init_review.sql) — 경합 시 이 제약 위반만 409 로 흡수한다. */
+    /** 1주문-1상품-1리뷰 UNIQUE 제약 이름 — 이 제약 위반만 409 로 흡수한다. */
     private static final String UK_REVIEW_ORDER_ALBUM = "uk_review_order_album";
 
     private final ReviewRepository reviewRepository;
@@ -77,7 +74,7 @@ public class ReviewService {
                 .orElseThrow(OrderNotFoundException::new);
 
         if (command.memberId() == null || !Objects.equals(order.getMemberId(), command.memberId())) {
-            // memberId 가 null 이면 게스트 주문(member_id 부재)과 매칭돼 통과될 수 있으므로 명시적으로 막는다.
+            // memberId 가 null 이면 게스트 주문과 매칭돼 통과될 수 있으므로 명시적으로 막는다.
             throw new ReviewNotOwnedException();
         }
         if (!REVIEWABLE_ORDER_STATUSES.contains(order.getStatus())) {
@@ -99,7 +96,7 @@ public class ReviewService {
         try {
             reviewRepository.saveAndFlush(review);
         } catch (DataIntegrityViolationException e) {
-            // 동시 작성 경합으로 uk_review_order_album 이 깨진 경우만 409 로 흡수하고, 그 외 무결성 위반(FK/NOT NULL 등)은 전파한다.
+            // uk_review_order_album 위반만 409 로 흡수하고, 그 외 무결성 위반은 전파한다.
             Throwable cause = e.getMostSpecificCause();
             String message = cause != null ? cause.getMessage() : e.getMessage();
             if (message != null && message.contains(UK_REVIEW_ORDER_ALBUM)) {

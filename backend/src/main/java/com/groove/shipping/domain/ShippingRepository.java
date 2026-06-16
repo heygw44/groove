@@ -11,49 +11,40 @@ import java.util.Optional;
 public interface ShippingRepository extends JpaRepository<Shipping, Long> {
 
     /**
-     * 운송장 번호로 배송 조회 ({@code GET /shippings/{trackingNumber}}) — {@code uk_shipping_tracking} UNIQUE
-     * 이므로 최대 1건. 응답 DTO 는 {@code order} 를 참조하지 않으므로 join 은 두지 않는다.
+     * 운송장 번호로 배송 조회 — uk_shipping_tracking UNIQUE 이므로 최대 1건.
      */
     Optional<Shipping> findByTrackingNumber(String trackingNumber);
 
     /**
-     * 주문에 이미 생성된 배송이 있는지 — 결제 완료 이벤트가 중복 전달돼도 배송이 1건만 생기도록 하는 가드.
-     * {@code order_id} 는 UNIQUE 이므로 최종 방어선은 {@code uk_shipping_order} 이지만, 흔한 순차 재전달은 이 조회로 미리 거른다.
+     * 주문에 이미 생성된 배송이 있는지 — 결제 완료 이벤트 중복 전달 시 배송이 1건만 생기도록 하는 가드. 최종 방어선은 uk_shipping_order.
      */
     boolean existsByOrderId(Long orderId);
 
     /**
-     * 주문 식별자로 배송을 조회한다 ({@code order_id} UNIQUE → 최대 1건). 비배송 종착 주문 PII 익명화(#188)에서
-     * 환불로 취소된 주문처럼 배송 행이 함께 있으면 배송 PII 도 마스킹하기 위해, {@code OrderPiiAnonymizer} 가
-     * orderId 로 배송 존재 여부를 확인할 때 쓴다.
+     * 주문 식별자로 배송을 조회한다 (order_id UNIQUE → 최대 1건).
      */
     Optional<Shipping> findByOrderId(Long orderId);
 
     /**
-     * 식별자로 배송을 조회하되 {@code order} 를 함께 로드한다 — 자동 진행이 주문을 락스텝 전진(이슈 #161)시키려면
-     * order 가 필요하므로, 스케줄러가 배치 건별로 호출할 때 LAZY 추가 SELECT(N+1)를 없애려 fetch 해 둔다.
+     * 식별자로 배송을 조회하되 order 를 함께 로드한다 — 자동 진행이 주문을 락스텝 전진시킬 때 N+1 을 없애려 fetch 한다.
      */
     @EntityGraph(attributePaths = "order")
     Optional<Shipping> findWithOrderById(Long id);
 
     /**
-     * 자동 진행 스케줄러의 PREPARING → SHIPPED 대상 — {@code createdAtBefore} 이전에 생성돼 아직 준비 중인 배송.
-     * {@code limit} 으로 한 주기 처리량을 제한해(메모리 바운드) 적체 시에도 다음 주기에 나머지를 처리한다.
-     * {@code idx_shipping_status} (status, created_at) 인덱스가 이 액세스 패턴을 받친다.
+     * 자동 진행 스케줄러의 PREPARING → SHIPPED 대상 — createdAtBefore 이전에 생성돼 아직 준비 중인 배송.
+     * limit 으로 한 주기 처리량을 제한한다. idx_shipping_status (status, created_at) 인덱스가 받친다.
      */
     List<Shipping> findByStatusAndCreatedAtBefore(ShippingStatus status, Instant createdAtBefore, Limit limit);
 
     /**
-     * 자동 진행 스케줄러의 SHIPPED → DELIVERED 대상 — {@code shippedAtBefore} 이전에 발송된 배송. 대상 집합이
-     * 작은 과도 상태이므로 {@code idx_shipping_status} 의 status 프리픽스 스캔 + {@code shipped_at} 인메모리 필터로 충분하다.
+     * 자동 진행 스케줄러의 SHIPPED → DELIVERED 대상 — shippedAtBefore 이전에 발송된 배송.
      */
     List<Shipping> findByStatusAndShippedAtBefore(ShippingStatus status, Instant shippedAtBefore, Limit limit);
 
     /**
-     * PII 익명화 배치(#170 Part B) 대상 — 배송완료({@code DELIVERED})된 지 보존기간이 지났고 아직 익명화되지
-     * 않은 배송을 {@code delivered_at} 오름차순(오래된 것 먼저)으로 찾는다. 보충에는 식별자만 필요하므로 경량
-     * {@link ShippingIdView} 프로젝션으로 받아 full 엔티티 적재를 피한다 — 실제 마스킹은 {@code OrderPiiAnonymizer}
-     * 가 id 로 배송(+주문)을 재로딩해 수행한다. {@code limit} 으로 한 주기 처리량을 제한한다(메모리 바운드).
+     * PII 익명화 배치 대상 — 배송완료(DELIVERED)된 지 보존기간이 지났고 아직 익명화되지 않은 배송을
+     * delivered_at 오름차순으로 찾는다. 식별자만 담은 경량 ShippingIdView 프로젝션으로 받고, limit 으로 처리량을 제한한다.
      */
     List<ShippingIdView> findByStatusAndDeliveredAtBeforeAndAnonymizedAtIsNullOrderByDeliveredAtAsc(
             ShippingStatus status, Instant cutoff, Limit limit);

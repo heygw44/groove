@@ -25,38 +25,27 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 실 PG 없이 결제 라이프사이클을 재현하는 Mock 게이트웨이 (ARCHITECTURE.md §7).
+ * 결제 라이프사이클을 재현하는 Mock 게이트웨이.
  *
- * <p>동작:
  * <ul>
- *   <li>{@code request()} — 처리 지연({@code payment.mock.delay-*})을 흉내 낸 뒤 거래 식별자를 발급하고,
- *       성공률({@code payment.mock.success-rate})로 최종 결과(PAID/FAILED)를 미리 결정한 다음
- *       웹훅 발사 시각({@code now + webhook-delay})을 정해 ({@code payment.mock.auto-webhook} 이 true 면)
- *       {@link MockWebhookSimulator} 에 예약하고 {@link PaymentStatus#PENDING} 으로 즉시 응답.
- *       {@code auto-webhook=false} 면 거래는 기록하되 자동 웹훅을 발사하지 않는다 — 통합 테스트에서 HTTP
- *       웹훅 엔드포인트/폴링을 직접 호출해 결정적으로 검증하기 위함이다.</li>
- *   <li>{@code query()} — 웹훅 발사 예정 시각 전이면 PENDING, 이후면 결정된 최종 상태(또는 환불 시 REFUNDED).</li>
- *   <li>{@code refund()} — 같은 {@code idempotencyKey} 에 대해 첫 응답을 그대로 재반환하여 PG 실호출
- *       (transactions 의 REFUNDED 전이 포함) 이 정확히 1회만 일어나도록 보장한다 (#72, Stripe
- *       {@code Idempotency-Key} 와 동일 계약). 다른 키는 별개 호출로 처리하고 {@link PaymentStatus#REFUNDED}
- *       응답을 새로 만든다.</li>
+ *   <li>request() — 처리 지연 후 거래 식별자를 발급하고 성공률로 최종 결과(PAID/FAILED)를 결정한 뒤
+ *       웹훅 발사 시각을 정해 (auto-webhook 이 true 면) MockWebhookSimulator 에 예약하고 PENDING 으로 응답.</li>
+ *   <li>query() — 웹훅 발사 시각 전이면 PENDING, 이후면 결정된 최종 상태(또는 환불 시 REFUNDED).</li>
+ *   <li>refund() — 같은 idempotencyKey 는 첫 응답을 그대로 재반환하고, 다른 키는 REFUNDED 응답을 새로 만든다.</li>
  * </ul>
  *
- * <p>거래 상태는 프로세스 메모리(JVM 재시작 시 소실)에만 보관한다 — Mock 시연 용도로 충분하다.
- * 무한 증가를 막기 위해 {@link #MAX_TRACKED_TRANSACTIONS} 도달 시 발사된 지 충분히 지난 항목을
- * 정리한다(재조회 가능성이 사실상 없는 시점). 환불 캐시({@link #refundCache}) 도 동일 상한 정책으로
- * 오래된 항목부터 축출한다. {@code @Profile} 로 격리되어 실 PG 프로파일에서는 로드되지 않는다.
+ * <p>거래 상태는 프로세스 메모리에만 보관하며, MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목을 정리한다.
  */
 @Component
 @Profile({"local", "dev", "test", "docker"})
 public class MockPaymentGateway implements PaymentGateway {
 
-    /** {@link PaymentResponse#provider()} 식별자. */
+    /** provider 식별자. */
     public static final String PROVIDER = "MOCK";
 
-    /** 추적 거래 수 상한 — 초과 시 {@link #PRUNE_AGE} 보다 오래된 항목을 정리한다. */
+    /** 추적 거래 수 상한 — 초과 시 PRUNE_AGE 보다 오래된 항목을 정리한다. */
     static final int MAX_TRACKED_TRANSACTIONS = 10_000;
-    /** 발사 후 이 시간이 지난 거래는 재조회 가능성이 없다고 보고 정리 대상으로 삼는다. */
+    /** 발사 후 이 시간이 지난 거래는 정리 대상으로 삼는다. */
     static final Duration PRUNE_AGE = Duration.ofMinutes(10);
 
     private static final Logger log = LoggerFactory.getLogger(MockPaymentGateway.class);
@@ -66,9 +55,9 @@ public class MockPaymentGateway implements PaymentGateway {
     private final Clock clock;
     private final boolean autoWebhook;
     private final Map<String, Transaction> transactions = new ConcurrentHashMap<>();
-    /** {@code idempotencyKey → 첫 환불 응답} 캐시 (#72). 같은 키 재호출 시 첫 응답을 그대로 반환한다. */
+    /** idempotencyKey → 첫 환불 응답 캐시. 같은 키 재호출 시 첫 응답을 그대로 반환한다. */
     private final Map<String, RefundResponse> refundCache = new ConcurrentHashMap<>();
-    /** 캐시 미스로 실제 환불 처리를 수행한 횟수 — 테스트의 멱등성 검증용. */
+    /** 캐시 미스로 실제 환불 처리를 수행한 횟수. */
     private final AtomicInteger refundCallCount = new AtomicInteger();
 
     public MockPaymentGateway(PaymentMockProperties properties, MockWebhookSimulator webhookSimulator, Clock clock,
@@ -121,18 +110,14 @@ public class MockPaymentGateway implements PaymentGateway {
     public RefundResponse refund(RefundRequest request) {
         Objects.requireNonNull(request, "request");
 
-        // 캐시 정리는 computeIfAbsent 진입 전에 끝낸다 — ConcurrentHashMap 의 mappingFunction 안에서 같은 맵의
-        // 다른 키를 수정하는 건 Javadoc("computation should be short and simple") 권고 위반이며 bin lock 보유
-        // 중 추가 lock 요청 경로가 생긴다.
+        // 캐시 정리는 computeIfAbsent 진입 전에 끝낸다.
         pruneRefundCacheIfFull();
 
-        // 같은 idempotencyKey 는 첫 응답을 그대로 재사용한다 (#72) — 보상 트랜잭션 부분 실패 후 재시도가
-        // 와도 PG 측 환불은 1회로 정상화된다. 캐시 미스인 경우에만 transactions 의 REFUNDED 전이와
-        // 처리 지연 시뮬레이션을 수행한다.
+        // 같은 idempotencyKey 는 첫 응답을 그대로 재사용하고, 캐시 미스에서만 REFUNDED 전이와 지연 시뮬레이션을 수행한다.
         return refundCache.computeIfAbsent(request.idempotencyKey(), key -> {
             simulateProcessingLatency();
 
-            // Mock 은 환불을 항상 즉시 성공 처리한다. 알려진 거래면 상태를 REFUNDED 로 갱신해 이후 query() 와 정합을 맞춘다.
+            // 환불을 즉시 성공 처리하고, 알려진 거래면 상태를 REFUNDED 로 갱신한다.
             transactions.computeIfPresent(request.pgTransactionId(),
                     (id, tx) -> new Transaction(PaymentStatus.REFUNDED, tx.fireAt()));
             refundCallCount.incrementAndGet();
@@ -142,12 +127,7 @@ public class MockPaymentGateway implements PaymentGateway {
         });
     }
 
-    /**
-     * 테스트 전용 — 실제로 환불을 처리한(캐시 미스) 횟수. 멱등 키 재호출은 카운트되지 않는다.
-     * 운영 로직에선 호출하지 않는다. {@code @Profile} 가드로 운영 빈에는 본 클래스 자체가 로드되지 않으므로
-     * 가시성보다 명시적 Javadoc 으로 호출 컨텍스트를 좁히고, 다른 패키지의 통합 테스트
-     * ({@code AdminRefundIdempotencyIntegrationTest}) 가 접근할 수 있도록 {@code public} 으로 둔다.
-     */
+    /** 실제로 환불을 처리한(캐시 미스) 횟수. 멱등 키 재호출은 카운트되지 않는다. */
     public int refundCallCount() {
         return refundCallCount.get();
     }
@@ -170,11 +150,7 @@ public class MockPaymentGateway implements PaymentGateway {
         }
     }
 
-    /**
-     * 환불 캐시가 상한에 도달하면 첫 항목부터(=가장 오래된 시점 — 삽입 순으로 들어옴) 절반을 정리한다.
-     * {@code ConcurrentHashMap} 은 강한 삽입 순서를 보장하진 않지만 (entry set iterator 가 약한 일관성),
-     * Mock 데모 용도라 정확한 LRU 가 아니어도 상한만 지키면 충분하다.
-     */
+    /** 환불 캐시가 상한에 도달하면 첫 항목부터 절반을 정리한다. */
     private void pruneRefundCacheIfFull() {
         if (refundCache.size() < MAX_TRACKED_TRANSACTIONS) {
             return;
@@ -193,8 +169,7 @@ public class MockPaymentGateway implements PaymentGateway {
         Instant cutoff = now.minus(PRUNE_AGE);
         transactions.entrySet().removeIf(e -> e.getValue().fireAt().isBefore(cutoff));
 
-        // stale 항목만으로 상한을 못 맞추는 경우(신선한 거래가 계속 유입) — 발사 시각이 오래된 순으로 강제 축출해
-        // 상한을 실질적으로 보장한다. 다음 put 이 1건 추가하므로 (size - MAX + 1) 만큼 비워 두면 충분하다.
+        // stale 항목만으로 상한을 못 맞추면 발사 시각이 오래된 순으로 (size - MAX + 1) 만큼 강제 축출한다.
         int overflow = transactions.size() - MAX_TRACKED_TRANSACTIONS + 1;
         if (overflow > 0) {
             transactions.entrySet().stream()
@@ -218,8 +193,7 @@ public class MockPaymentGateway implements PaymentGateway {
     /**
      * 거래 상태 스냅샷.
      *
-     * @param currentStatus 현재 상태 (요청 시점에 결정된 최종 결과, 또는 환불 후 REFUNDED)
-     * @param fireAt        웹훅 콜백 발사 시각 — 이 시각 이전 조회는 PENDING 으로 응답한다
+     * <p>currentStatus: 현재 상태. fireAt: 웹훅 콜백 발사 시각(이 시각 이전 조회는 PENDING).
      */
     private record Transaction(PaymentStatus currentStatus, Instant fireAt) {
     }
