@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.OptionalLong;
 
 /**
  * 회원 쿠폰을 주문에 적용/복원하는 조율 서비스 (#91, docs/plans/coupon-system.md §5).
@@ -115,6 +116,23 @@ public class CouponApplicationService {
                         orderId, memberCoupon.getId(), memberCoupon.getStatus());
             }
         });
+    }
+
+    /**
+     * 주문에 적용된 쿠폰의 최소주문금액 (#238) — 부분 취소 시 쿠폰 유효성 재검증용. 쿠폰 미적용 주문은 빈 값.
+     *
+     * 호출 시점: {@code ClaimService.cancelPartially} 의 환불액 계산 직전. "부분 취소 후 잔여금액 < 최소주문금액"이면
+     * 호출 측이 쿠폰을 무효(할인분 차감 환불) 처리하고 {@link #restoreForOrder} 로 복원한다. coupon 은 LAZY 이지만
+     * 호출자의 트랜잭션 안에서 초기화되므로(MANDATORY) 추가 SELECT 1회로 안전하다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public OptionalLong appliedCouponMinOrderAmount(Long orderId) {
+        if (orderId == null) {
+            return OptionalLong.empty();
+        }
+        return memberCouponRepository.findByOrderId(orderId)
+                .map(memberCoupon -> OptionalLong.of(memberCoupon.getCoupon().getMinOrderAmount()))
+                .orElseGet(OptionalLong::empty);
     }
 
     private RuntimeException mapNonIssuableState(Long memberCouponId, MemberCoupon memberCoupon,

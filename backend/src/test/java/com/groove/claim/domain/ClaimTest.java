@@ -149,4 +149,62 @@ class ClaimTest {
         assertThatThrownBy(() -> claim.reject("x", NOW))
                 .isInstanceOf(ClaimInvalidStateTransitionException.class);
     }
+
+    // --- CANCEL 타입 (#238) ---------------------------------------------------
+
+    @Test
+    @DisplayName("request: 기본 타입은 RETURN (반품)")
+    void request_defaultsToReturnType() {
+        assertThat(requestedClaim().getClaimType()).isEqualTo(ClaimType.RETURN);
+    }
+
+    @Test
+    @DisplayName("requestCancellation: CANCEL 타입·REQUESTED 로 생성한다")
+    void requestCancellation_createsCancelRequested() {
+        Claim claim = Claim.requestCancellation(OrderFixtures.memberOrder("ORD-20260612-DDDDDD", 1L), "부분 취소");
+
+        assertThat(claim.getClaimType()).isEqualTo(ClaimType.CANCEL);
+        assertThat(claim.getStatus()).isEqualTo(ClaimStatus.REQUESTED);
+        assertThat(claim.getReason()).isEqualTo("부분 취소");
+    }
+
+    @Test
+    @DisplayName("markCancelRefunded: CANCEL 은 REQUESTED→REFUNDED 1-스텝으로 환불 확정")
+    void markCancelRefunded_requestedToRefunded() {
+        Claim claim = Claim.requestCancellation(OrderFixtures.memberOrder("ORD-20260612-EEEEEE", 1L), "부분 취소");
+
+        claim.markCancelRefunded(9_000L, NOW);
+
+        assertThat(claim.getStatus()).isEqualTo(ClaimStatus.REFUNDED);
+        assertThat(claim.getRefundAmount()).isEqualTo(9_000L);
+        assertThat(claim.getCompletedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("markCancelRefunded: RETURN 타입에 호출하면 ClaimInvalidStateTransitionException")
+    void markCancelRefunded_rejectsReturnType() {
+        Claim claim = requestedClaim(); // RETURN
+
+        assertThatThrownBy(() -> claim.markCancelRefunded(1_000L, NOW))
+                .isInstanceOf(ClaimInvalidStateTransitionException.class);
+    }
+
+    @Test
+    @DisplayName("markCancelRefunded: 이미 REFUNDED 면(REQUESTED 아님) 거부 — 중복 환불 방지")
+    void markCancelRefunded_rejectsWhenNotRequested() {
+        Claim claim = Claim.requestCancellation(OrderFixtures.memberOrder("ORD-20260612-FFFFFF", 1L), "부분 취소");
+        claim.markCancelRefunded(1_000L, NOW);
+
+        assertThatThrownBy(() -> claim.markCancelRefunded(1_000L, NOW))
+                .isInstanceOf(ClaimInvalidStateTransitionException.class);
+    }
+
+    @Test
+    @DisplayName("markCancelRefunded: 음수 환불액은 IllegalArgumentException")
+    void markCancelRefunded_rejectsNegative() {
+        Claim claim = Claim.requestCancellation(OrderFixtures.memberOrder("ORD-20260612-GGGGGG", 1L), "부분 취소");
+
+        assertThatThrownBy(() -> claim.markCancelRefunded(-1L, NOW))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

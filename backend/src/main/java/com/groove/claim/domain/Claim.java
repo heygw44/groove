@@ -53,6 +53,11 @@ public class Claim extends BaseTimeEntity {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
+    /** 클레임 종류 — 취소(발송 전)/반품(발송 후). V27 이전 행은 RETURN 으로 백필 (#238). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "claim_type", nullable = false, length = 20)
+    private ClaimType claimType;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private ClaimStatus status;
@@ -87,27 +92,42 @@ public class Claim extends BaseTimeEntity {
     protected Claim() {
     }
 
-    private Claim(Order order, String reason) {
+    private Claim(Order order, ClaimType claimType, String reason) {
         this.order = order;
+        this.claimType = claimType;
         this.reason = reason;
         this.status = ClaimStatus.REQUESTED;
         this.refundAmount = 0L;
     }
 
     /**
-     * 반품 접수 — 초기 상태 REQUESTED. 접수 자격(주문 상태/소유/기한)·항목 잔여 수량 검증은 호출 측
+     * 반품(RETURN) 접수 — 초기 상태 REQUESTED. 접수 자격(주문 상태/소유/기한)·항목 잔여 수량 검증은 호출 측
      * ({@code ClaimService}) 이 끝낸 상태로 호출한다. 항목은 {@link #addItem} 으로 붙인다. 접수 시각은
      * {@code BaseTimeEntity.createdAt} 으로 대체한다(별도 컬럼 불필요).
      */
     public static Claim request(Order order, String reason) {
+        return create(order, ClaimType.RETURN, reason);
+    }
+
+    /**
+     * 취소(CANCEL) 접수 (#238) — 발송 전 부분 취소. 초기 상태 REQUESTED 로 만들고, 호출 측
+     * ({@code ClaimService.cancelPartially}) 이 같은 트랜잭션에서 {@link #markCancelRefunded} 로 즉시 환불 확정한다
+     * (회수·검수 없음). 자격(주문 PAID/PREPARING)·잔여 수량 검증은 호출 측이 끝낸 상태로 호출한다.
+     */
+    public static Claim requestCancellation(Order order, String reason) {
+        return create(order, ClaimType.CANCEL, reason);
+    }
+
+    private static Claim create(Order order, ClaimType claimType, String reason) {
         Objects.requireNonNull(order, "order must not be null");
+        Objects.requireNonNull(claimType, "claimType must not be null");
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("reason must not be blank");
         }
         if (reason.length() > MAX_REASON_LENGTH) {
             throw new IllegalArgumentException("reason length must be <= " + MAX_REASON_LENGTH);
         }
-        return new Claim(order, reason);
+        return new Claim(order, claimType, reason);
     }
 
     /** 반품 항목 추가 (접수 시점에만 호출). */
@@ -147,6 +167,24 @@ public class Claim extends BaseTimeEntity {
         this.completedAt = now;
     }
 
+    /**
+     * 취소 환불 확정 (#238) — CANCEL 클레임의 1-스텝 상태머신 {@code REQUESTED → REFUNDED}. 회수·검수가 없는
+     * 발송 전 취소이므로 RETURN 의 전이 규칙({@link ClaimStatus#canTransitionTo})을 거치지 않고 타입·상태를 직접
+     * 가드한다 — RETURN 전이 맵을 건드리지 않으면서 CANCEL 만의 즉시 환불 경로를 둔다. 위반 시
+     * {@link ClaimInvalidStateTransitionException}(409). 확정 환불액과 종착 시각을 기록한다.
+     */
+    public void markCancelRefunded(long refundAmount, Instant now) {
+        if (claimType != ClaimType.CANCEL || status != ClaimStatus.REQUESTED) {
+            throw new ClaimInvalidStateTransitionException(status, ClaimStatus.REFUNDED);
+        }
+        if (refundAmount < 0) {
+            throw new IllegalArgumentException("refundAmount must be non-negative: " + refundAmount);
+        }
+        this.status = ClaimStatus.REFUNDED;
+        this.refundAmount = refundAmount;
+        this.completedAt = now;
+    }
+
     /** 반품 거부 (관리자) — REQUESTED 또는 INSPECTING(검수 불합격) → REJECTED. 사유와 종착 시각을 기록한다. */
     public void reject(String reason, Instant now) {
         if (reason != null && reason.length() > MAX_REASON_LENGTH) {
@@ -175,6 +213,10 @@ public class Claim extends BaseTimeEntity {
 
     public Order getOrder() {
         return order;
+    }
+
+    public ClaimType getClaimType() {
+        return claimType;
     }
 
     public ClaimStatus getStatus() {
