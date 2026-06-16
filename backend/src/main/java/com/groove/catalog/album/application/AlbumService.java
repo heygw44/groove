@@ -23,6 +23,9 @@ import com.groove.review.domain.ReviewRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.ScrollPosition;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Window;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -178,21 +181,46 @@ public class AlbumService {
      */
     @Transactional(readOnly = true)
     public Page<AlbumSummaryResponse> search(AlbumSearchCondition condition, Pageable pageable) {
-        Specification<Album> spec = Specification
-                .allOf(
-                        AlbumSpecs.keyword(condition.keyword()),
-                        AlbumSpecs.hasArtistId(condition.artistId()),
-                        AlbumSpecs.hasGenreId(condition.genreId()),
-                        AlbumSpecs.hasLabelId(condition.labelId()),
-                        AlbumSpecs.priceBetween(condition.minPrice(), condition.maxPrice()),
-                        AlbumSpecs.yearBetween(condition.minYear(), condition.maxYear()),
-                        AlbumSpecs.hasFormat(condition.format()),
-                        AlbumSpecs.isLimited(condition.limited()),
-                        AlbumSpecs.hasStatus(condition.status())
-                );
-        Page<Album> page = albumRepository.findAll(spec, pageable);
+        Page<Album> page = albumRepository.findAll(buildSpec(condition), pageable);
         Map<Long, AlbumRating> ratings = ratingsByAlbumId(page.getContent().stream().map(Album::getId).toList());
         return page.map(album -> AlbumSummaryResponse.from(album, ratings.getOrDefault(album.getId(), AlbumRating.NONE)));
+    }
+
+    /**
+     * 공개 검색/목록 — keyset(커서) 페이징 변형 (#235, GET /albums/scroll).
+     *
+     * <p>offset {@link #search} 와 동일한 {@link AlbumSpecs} 동적 조건을 쓰되, Spring Data Scroll API
+     * ({@code findBy(...).scroll(position)})로 {@link Window} 를 반환한다. 깊은 페이지에서 {@code OFFSET N}
+     * 스캔 비용 없이 정렬 인덱스(V21)를 타고 keyset 으로 전진한다. 정렬은 호출 측이 {@code id} tiebreaker
+     * 까지 포함해 전달한다(전순서 보장).
+     *
+     * <p>fluent {@code findBy} 경로는 {@code @EntityGraph} 가 적용되지 않으므로, artist/genre/label
+     * to-one 연관은 {@link Album} 의 {@code @BatchSize} 로 일괄 페치된다(N+1 회피). 평점은 offset 경로와
+     * 동일하게 윈도우의 album id 묶음으로 1회 집계해 주입한다. 응답 DTO 변환은 트랜잭션 안에서 수행해
+     * {@code open-in-view=false} 환경의 LazyInitializationException 을 피한다 — {@code Window.map} 은
+     * 인덱스 기준 position 을 보존하므로 변환 후에도 다음 커서를 만들 수 있다.
+     */
+    @Transactional(readOnly = true)
+    public Window<AlbumSummaryResponse> searchKeyset(AlbumSearchCondition condition, int size, Sort sort, ScrollPosition position) {
+        Specification<Album> spec = buildSpec(condition);
+        Window<Album> window = albumRepository.findBy(spec, query -> query.sortBy(sort).limit(size).scroll(position));
+        Map<Long, AlbumRating> ratings = ratingsByAlbumId(window.getContent().stream().map(Album::getId).toList());
+        return window.map(album -> AlbumSummaryResponse.from(album, ratings.getOrDefault(album.getId(), AlbumRating.NONE)));
+    }
+
+    /** 공개 검색 동적 조건 조립 — offset({@link #search})·keyset({@link #searchKeyset}) 양 경로 공용. */
+    private Specification<Album> buildSpec(AlbumSearchCondition condition) {
+        return Specification.allOf(
+                AlbumSpecs.keyword(condition.keyword()),
+                AlbumSpecs.hasArtistId(condition.artistId()),
+                AlbumSpecs.hasGenreId(condition.genreId()),
+                AlbumSpecs.hasLabelId(condition.labelId()),
+                AlbumSpecs.priceBetween(condition.minPrice(), condition.maxPrice()),
+                AlbumSpecs.yearBetween(condition.minYear(), condition.maxYear()),
+                AlbumSpecs.hasFormat(condition.format()),
+                AlbumSpecs.isLimited(condition.limited()),
+                AlbumSpecs.hasStatus(condition.status())
+        );
     }
 
     /**

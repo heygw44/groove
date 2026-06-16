@@ -1,6 +1,7 @@
 package com.groove.catalog.artist.domain;
 
 import com.groove.common.persistence.BaseTimeEntity;
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -14,9 +15,15 @@ import jakarta.persistence.Table;
  * <p>Genre/Label 과 달리 {@code name} 에 UNIQUE 를 두지 않는다 — 동명이인이 실제로 존재할 수 있어
  * ID 로만 식별한다 (ERD §4.3 비즈니스 룰). {@code description} 은 자유 텍스트(NULL 허용).
  * Album (W5-3) 이 후속 이슈에서 {@code artist_id} 를 FK 로 참조한다.
+ *
+ * <p>클래스 레벨 {@code @BatchSize}(#235): Album keyset 스크롤은 fluent {@code findBy(...).scroll(...)}
+ * 경로라 {@code @EntityGraph} 가 적용되지 않아, Album 윈도우의 artist LAZY 프록시가 DTO 변환 시 N+1
+ * 로 풀린다. 대상 엔티티에 BatchSize 를 두면 대기 중 프록시를 IN 쿼리 1회로 일괄 초기화한다. offset
+ * 경로는 {@code @EntityGraph} eager join 이라 프록시가 없어 무영향.
  */
 @Entity
 @Table(name = "artist")
+@BatchSize(size = 100)
 public class Artist extends BaseTimeEntity {
 
     @Id

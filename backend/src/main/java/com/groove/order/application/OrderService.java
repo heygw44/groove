@@ -18,6 +18,7 @@ import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderShippingInfo;
+import com.groove.order.domain.OrderSpecifications;
 import com.groove.order.domain.OrderStatus;
 import com.groove.order.exception.IllegalStateTransitionException;
 import com.groove.order.exception.InsufficientStockException;
@@ -27,6 +28,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.ScrollPosition;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Window;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -122,6 +127,30 @@ public class OrderService {
                 : orderRepository.findByMemberIdAndStatus(memberId, status, pageable);
         page.forEach(order -> order.getItems().size());
         return page;
+    }
+
+    /**
+     * 회원 주문 목록 — keyset(커서) 페이징 변형 (#235, GET /members/me/orders/scroll).
+     *
+     * <p>offset {@link #listForMember} 와 동일하게 회원 본인 주문만 조회하되, Spring Data Scroll API
+     * ({@code findBy(...).scroll(position)})로 {@link Window} 를 반환한다 — 깊은 페이지에서 {@code OFFSET N}
+     * 스캔 없이 {@code idx_orders_member_created (member_id, created_at)}(V22)를 타고 keyset 으로 전진한다.
+     * {@code member_id} 는 인증 주체에서 받은 값으로만 스코프하고, 정렬은 호출 측이 {@code id} tiebreaker
+     * 까지 포함해 넘긴다(전순서 보장).
+     *
+     * <p>status 는 있을 때만 조건에 더해 {@code IS NULL OR} 없이 단순 인덱스 스캔을 유도한다(offset 의
+     * derived method 2종 분기와 동일 의도). items 컬렉션은 offset 경로와 동일하게 트랜잭션 안에서
+     * {@code @BatchSize(50)} 일괄 로드로 강제 초기화해, 컨트롤러 DTO 매핑 시 LazyInitializationException 을 피한다.
+     */
+    @Transactional(readOnly = true)
+    public Window<Order> listForMemberKeyset(Long memberId, OrderStatus status, int size, Sort sort, ScrollPosition position) {
+        Specification<Order> spec = OrderSpecifications.hasMemberId(memberId);
+        if (status != null) {
+            spec = spec.and(OrderSpecifications.hasStatus(status));
+        }
+        Window<Order> window = orderRepository.findBy(spec, query -> query.sortBy(sort).limit(size).scroll(position));
+        window.forEach(order -> order.getItems().size());
+        return window;
     }
 
     /**
