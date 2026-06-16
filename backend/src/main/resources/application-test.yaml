@@ -33,6 +33,11 @@ spring:
     web:
       pageable:
         max-page-size: 100
+  # 캐시는 기본 비활성(NoOpCacheManager) — 싱글턴 Testcontainers 공유 DB 에서 @SpringBootTest 컨텍스트들이
+  # 커밋한 데이터를 캐시가 가로채 교차오염을 일으키는 것을 막는다(#236, [[project_test_shared_db_isolation]]).
+  # 캐시 동작 검증(AlbumCacheTest)만 @SpringBootTest(properties="spring.cache.type=caffeine") 로 켠다.
+  cache:
+    type: none
 
 # 테스트 전용 JWT 시크릿 — 256bit 이상 필요 (JwtProperties 검증).
 jwt:

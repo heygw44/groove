@@ -37,6 +37,17 @@ spring:
         default-page-size: 20
         max-page-size: 100
 
+  # 카탈로그 조회 캐시 (#236). Caffeine in-process 캐시 — Redis 는 #210 컷, 단일 인스턴스라 충분.
+  # 캐시 대상: albumDetail(상세 단건, key=id) / albumLandingList(공개 기본 랜딩 첫 페이지 단일 엔트리).
+  # spec: maximumSize=2000(카탈로그 ~1k~3k 커버), expireAfterWrite=60s(주문 결제·리뷰가 바꾸는 stock·평점의
+  #       staleness 백스톱 — admin 쓰기는 @CacheEvict 로 즉시 무효화), recordStats(적중률 메트릭 노출).
+  # 테스트(application-test.yaml)는 type=none 으로 끄고, 캐시 통합 테스트만 caffeine 으로 override 한다.
+  cache:
+    type: caffeine
+    cache-names: albumDetail,albumLandingList
+    caffeine:
+      spec: ${CACHE_ALBUM_CAFFEINE_SPEC:maximumSize=2000,expireAfterWrite=60s,recordStats}
+
   security:
     user:
       password: disabled
