@@ -20,8 +20,11 @@ import jakarta.persistence.Table;
 /**
  * LP 상품 엔티티 (ERD §4.6 ★).
  *
- * <p>Artist/Genre 는 NOT NULL FK, Label 은 NULL 허용. 모든 연관은 {@link FetchType#LAZY} 로
- * 잡아 N+1 노출은 의도적으로 후속 검색/조회 컨트롤러(W6) 에서 발생시킨다 (W10 시연).
+ * <p>Artist/Genre 는 NOT NULL FK, Label 은 NULL 허용. 모든 연관은 {@link FetchType#LAZY} 다 —
+ * W6 베이스라인에서 DTO 변환 시 N+1 을 의도적으로 노출했던 지점이다(W10 시연). 이후 offset 목록
+ * 경로는 {@code @EntityGraph}(#203)로, keyset(스크롤) 목록 경로는 대상 엔티티(Artist/Genre/Label)의
+ * 클래스 레벨 {@code @BatchSize}(#235)로 to-one 프록시를 일괄 페치해 N+1 을 제거했다 — LAZY 자체는
+ * 유지하되 두 목록 경로 모두 상수 쿼리로 동작한다.
  *
  * <p>재고/가격 비음수 보증은 DB CHECK + 도메인 메서드 이중 방어선이다.
  * {@link #adjustStock(int)} 은 결과가 음수면 {@link IllegalStockAdjustmentException} 으로
