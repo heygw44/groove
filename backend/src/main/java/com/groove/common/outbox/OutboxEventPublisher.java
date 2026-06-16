@@ -1,6 +1,7 @@
 package com.groove.common.outbox;
 
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -34,6 +35,11 @@ public class OutboxEventPublisher {
      * @param payload       이벤트 본문 — JSON 으로 직렬화돼 저장된다
      */
     public void publish(String aggregateType, long aggregateId, String eventType, Object payload) {
+        // 원자성 계약을 런타임에서 강제한다 — 활성 트랜잭션 밖에서 호출되면 상태 변경과 이벤트 기록이 따로 커밋돼
+        // 유실/불일치 창이 생기므로 즉시 차단한다(Javadoc 계약에만 의존하지 않음).
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("아웃박스 발행은 활성 트랜잭션 안에서 호출해야 합니다 (상태 변경과 원자 커밋)");
+        }
         String json = objectMapper.writeValueAsString(payload);
         repository.save(OutboxEvent.of(aggregateType, aggregateId, eventType, json));
     }

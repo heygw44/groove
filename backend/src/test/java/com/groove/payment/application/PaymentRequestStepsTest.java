@@ -225,6 +225,20 @@ class PaymentRequestStepsTest {
     }
 
     @Test
+    @DisplayName("persist: prepare/persist 사이 주문이 PENDING 이 아니게 바뀌면 저장 거부 → 409 (#237 TOCTOU 차단)")
+    void persist_orderNoLongerPending_rejects() {
+        Order order = order(false, 1L, OrderStatus.PAID); // PG 호출 동안 다른 경로로 전이됨
+        when(orderRepository.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        PaymentRequestPrep prep = PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, ORDER_AMOUNT);
+        PaymentResponse pg = new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK");
+
+        assertThatThrownBy(() -> steps.persist(prep, PaymentMethod.CARD, pg))
+                .isInstanceOf(IllegalStateTransitionException.class);
+
+        verify(paymentRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     @DisplayName("findExistingForOrder: 기존 결제가 있으면 응답 매핑, 없으면 empty")
     void findExistingForOrder() {
         Order order = order(false, 1L, OrderStatus.PENDING);

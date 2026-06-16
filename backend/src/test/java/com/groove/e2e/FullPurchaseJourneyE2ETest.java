@@ -316,7 +316,8 @@ class FullPurchaseJourneyE2ETest {
         assertThat(paymentStatusForOrder(orderNumber)).isEqualTo(PaymentStatus.FAILED);
         assertThat(orderStatusOf(orderNumber)).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(stockOf(album1Id)).as("실패 보상 — 차감했던 재고 복원").isEqualTo(INITIAL_STOCK);
-        // 결제 실패 시 ORDER_PAID 아웃박스 이벤트가 기록되지 않으므로(FAILED 분기) 릴레이가 돌아도 배송은 생성되지 않는다.
+        // 결제 실패 시 ORDER_PAID 아웃박스 이벤트가 기록되지 않으므로(FAILED 분기) 릴레이 후에도 배송은 생성되지 않는다.
+        outboxRelayScheduler.relayPendingEvents();
         assertThat(shippingRepository.findAll()).as("실패 결제에는 배송이 생기지 않는다").isEmpty();
     }
 

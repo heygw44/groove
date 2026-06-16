@@ -2,6 +2,7 @@ package com.groove.shipping.application;
 
 import com.groove.common.outbox.OutboxEvent;
 import com.groove.order.event.OrderPaidEvent;
+import com.groove.shipping.domain.ShippingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,12 +31,14 @@ class OrderPaidOutboxHandlerTest {
 
     @Mock
     private ShippingProvisioner provisioner;
+    @Mock
+    private ShippingRepository shippingRepository;
 
     private OrderPaidOutboxHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new OrderPaidOutboxHandler(provisioner, objectMapper);
+        handler = new OrderPaidOutboxHandler(provisioner, shippingRepository, objectMapper);
     }
 
     private OutboxEvent outboxEvent() {
@@ -58,12 +61,24 @@ class OrderPaidOutboxHandlerTest {
     }
 
     @Test
-    @DisplayName("UNIQUE 충돌(DataIntegrityViolationException) 은 흡수한다 — 중복 이벤트/경합 (멱등, 발행 완료 처리)")
-    void swallowsUniqueViolation() {
+    @DisplayName("충돌 후 해당 주문 배송이 이미 존재하면 흡수한다 — 중복 이벤트/경합 (멱등, 발행 완료 처리)")
+    void swallowsViolation_whenShippingAlreadyExists() {
         given(provisioner.provisionForOrder(EVENT.orderId(), EVENT.orderNumber()))
                 .willThrow(new DataIntegrityViolationException("uk_shipping_order"));
+        given(shippingRepository.existsByOrderId(EVENT.orderId())).willReturn(true);
 
         assertThatCode(() -> handler.handle(outboxEvent())).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("충돌인데 해당 주문 배송이 없으면(운송장 중복 등 다른 제약 위반) 전파한다 — 미생성 유실 방지, 재시도")
+    void rethrowsViolation_whenShippingNotCreated() {
+        given(provisioner.provisionForOrder(EVENT.orderId(), EVENT.orderNumber()))
+                .willThrow(new DataIntegrityViolationException("uk_shipping_tracking"));
+        given(shippingRepository.existsByOrderId(EVENT.orderId())).willReturn(false);
+
+        assertThatThrownBy(() -> handler.handle(outboxEvent()))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

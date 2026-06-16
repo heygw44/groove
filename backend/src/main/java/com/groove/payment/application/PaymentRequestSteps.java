@@ -97,6 +97,11 @@ class PaymentRequestSteps {
     @Transactional
     PaymentApiResponse persist(PaymentRequestPrep prep, PaymentMethod method, PaymentResponse pgResponse) {
         Order order = orderRepository.findById(prep.orderId()).orElseThrow(OrderNotFoundException::new);
+        // PG 호출은 트랜잭션 밖이라 prepare 와 persist 사이에 주문이 다른 경로로 전이(취소/결제실패 등)됐을 수 있다.
+        // PENDING 이 아니면 결제를 만들지 않는다 — 종착/비-PENDING 주문에 PENDING 결제가 붙는 정합성 깨짐을 차단(#237).
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.PAID);
+        }
         Payment payment = paymentRepository.saveAndFlush(Payment.initiate(
                 order, prep.payable(), method, pgResponse.provider(), pgResponse.pgTransactionId()));
         log.info("결제 접수: paymentId={}, order={}, amount={}, method={}, pgTx={}",
