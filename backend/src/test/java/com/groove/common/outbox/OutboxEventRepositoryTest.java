@@ -1,0 +1,98 @@
+package com.groove.common.outbox;
+
+import com.groove.common.persistence.JpaAuditingConfig;
+import com.groove.support.TestcontainersConfig;
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase.Replace;
+import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Limit;
+
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = Replace.NONE)
+@Import({TestcontainersConfig.class, JpaAuditingConfig.class})
+@org.springframework.test.context.ActiveProfiles("test")
+@DisplayName("OutboxEventRepository 통합 테스트 (Testcontainers MySQL)")
+class OutboxEventRepositoryTest {
+
+    private static final Instant T0 = Instant.parse("2026-06-16T00:00:00Z");
+
+    @Autowired
+    private OutboxEventRepository repository;
+    @Autowired
+    private EntityManager em;
+
+    private OutboxEvent unpublished() {
+        return repository.saveAndFlush(OutboxEvent.of("ORDER", 1L, "ORDER_PAID", "{\"orderId\":1}"));
+    }
+
+    private OutboxEvent publishedAt(Instant at) {
+        OutboxEvent event = OutboxEvent.of("ORDER", 2L, "ORDER_PAID", "{\"orderId\":2}");
+        event.markPublished(at);
+        return repository.saveAndFlush(event);
+    }
+
+    @Test
+    @DisplayName("findByPublishedAtIsNullOrderByIdAsc: 미발행 행만 id 오름차순(FIFO)으로, 발행 완료는 제외")
+    void findsOnlyUnpublishedInFifoOrder() {
+        // 싱글턴 Testcontainers 공유 DB 라 다른 테스트가 커밋한 행이 섞일 수 있다 — 전역 단언 대신 내 id 로 단언한다
+        // ([[project_test_shared_db_isolation]]).
+        OutboxEvent first = unpublished();
+        OutboxEvent published = publishedAt(T0); // 발행 완료 — 제외 대상
+        OutboxEvent third = unpublished();
+
+        var ids = repository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(1000)).stream()
+                .map(OutboxEvent::getId).toList();
+
+        assertThat(ids).containsSubsequence(first.getId(), third.getId()); // FIFO 상대 순서 보존
+        assertThat(ids).doesNotContain(published.getId());                 // 발행 완료는 제외
+    }
+
+    @Test
+    @DisplayName("findByPublishedAtIsNullOrderByIdAsc: Limit 으로 배치 크기를 제한한다")
+    void respectsLimit() {
+        unpublished();
+        unpublished();
+        unpublished();
+
+        assertThat(repository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(2))).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("markPublished: 미발행 행은 1회만 표시(조건부) — 재호출은 0행")
+    void markPublished_isConditional() {
+        OutboxEvent event = unpublished();
+
+        assertThat(repository.markPublished(event.getId(), T0)).isEqualTo(1);
+        // 이미 발행됨 — published_at IS NULL 가드로 두 번째는 0행 (중복 발행 표시 방지).
+        assertThat(repository.markPublished(event.getId(), T0.plusSeconds(60))).isZero();
+
+        em.clear();
+        assertThat(repository.findById(event.getId()).orElseThrow().getPublishedAt()).isEqualTo(T0);
+    }
+
+    @Test
+    @DisplayName("deletePublishedBefore: 보관 기간이 지난 발행 완료 행만 삭제(미발행·최근 발행은 보존)")
+    void deletePublishedBefore_removesOldPublishedOnly() {
+        OutboxEvent old = publishedAt(T0.minusSeconds(3600));      // 정리 대상
+        OutboxEvent recent = publishedAt(T0.minusSeconds(10));     // 보존(cutoff 이후)
+        OutboxEvent pending = unpublished();                       // 보존(미발행)
+
+        int deleted = repository.deletePublishedBefore(T0.minusSeconds(60), 100);
+
+        // 공유 DB 라 다른 테스트의 오래된 발행 행도 셀 수 있으므로 정확값 대신 "내 old 포함 1건 이상" + id 단언으로 검증.
+        assertThat(deleted).isGreaterThanOrEqualTo(1);
+        em.clear();
+        assertThat(repository.findById(old.getId())).isEmpty();
+        assertThat(repository.findById(recent.getId())).isPresent();
+        assertThat(repository.findById(pending.getId())).isPresent();
+    }
+}

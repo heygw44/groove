@@ -10,6 +10,7 @@ import com.groove.catalog.label.domain.Label;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderStatus;
+import com.groove.common.outbox.OutboxEventPublisher;
 import com.groove.order.event.OrderPaidEvent;
 import com.groove.payment.api.dto.PaymentCallbackResult;
 import com.groove.payment.domain.Payment;
@@ -23,7 +24,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
@@ -31,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,7 +47,7 @@ class PaymentCallbackServiceTest {
     @Mock
     private PaymentRepository paymentRepository;
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private OutboxEventPublisher outboxEventPublisher;
     @Mock
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
     @Mock
@@ -55,10 +56,11 @@ class PaymentCallbackServiceTest {
     private PaymentCallbackService service;
 
     private static final long ALBUM_ID = 50L;
+    private static final long ORDER_ID = 7L;
 
     @BeforeEach
     void setUp() {
-        service = new PaymentCallbackService(paymentRepository, eventPublisher, couponApplicationService,
+        service = new PaymentCallbackService(paymentRepository, outboxEventPublisher, couponApplicationService,
                 albumRepository);
     }
 
@@ -77,11 +79,12 @@ class PaymentCallbackServiceTest {
     }
 
     @Test
-    @DisplayName("PAID: 결제·주문을 확정하고 OrderPaidEvent 를 발행한다 (재고 불변)")
+    @DisplayName("PAID: 결제·주문을 확정하고 OrderPaidEvent 를 아웃박스에 발행한다 (재고 불변, #237)")
     void applyResult_paid_confirmsAndPublishesEvent() {
         Album album = album(99);
         Payment payment = pendingPayment(album, 1);
         ReflectionTestUtils.setField(payment, "id", 42L); // 단위 테스트라 미영속 — paymentId 단언이 공허해지지 않게 고정값 주입
+        ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID); // 아웃박스 aggregateId(long) — 실 흐름은 영속 주문이라 non-null
         given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.PAID, null);
@@ -93,8 +96,10 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAID);
         verifyNoInteractions(albumRepository); // 성공 결제는 재고 미복원
 
+        // 아웃박스에 ORDER_PAID 이벤트가 PAID 와 같은 트랜잭션에서 기록된다 (릴레이가 후속 배송 생성을 발행).
         ArgumentCaptor<OrderPaidEvent> event = ArgumentCaptor.forClass(OrderPaidEvent.class);
-        verify(eventPublisher).publishEvent(event.capture());
+        verify(outboxEventPublisher).publish(eq(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE), eq(ORDER_ID),
+                eq(OrderPaidEvent.OUTBOX_EVENT_TYPE), event.capture());
         assertThat(event.getValue().orderNumber()).isEqualTo(ORDER_NUMBER);
         assertThat(event.getValue().memberId()).isEqualTo(1L);
         assertThat(event.getValue().paymentId()).isEqualTo(42L);
@@ -117,7 +122,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
         verify(albumRepository).restoreStock(ALBUM_ID, 2); // 2 복원
         verify(couponApplicationService).restoreForOrder(7L); // 적용 쿠폰 복원 — 이슈 #158
-        verifyNoInteractions(eventPublisher);
+        verifyNoInteractions(outboxEventPublisher);
     }
 
     @Test
@@ -140,7 +145,7 @@ class PaymentCallbackServiceTest {
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.IGNORED);
         assertThat(result.paymentId()).isNull();
-        verifyNoInteractions(eventPublisher, couponApplicationService);
+        verifyNoInteractions(outboxEventPublisher, couponApplicationService);
     }
 
     @Test
@@ -155,7 +160,7 @@ class PaymentCallbackServiceTest {
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
-        verifyNoInteractions(eventPublisher, couponApplicationService, albumRepository);
+        verifyNoInteractions(outboxEventPublisher, couponApplicationService, albumRepository);
     }
 
     @Test
@@ -165,6 +170,6 @@ class PaymentCallbackServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.applyResult(PG_TX, PaymentStatus.REFUNDED, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(paymentRepository, eventPublisher, couponApplicationService, albumRepository);
+        verifyNoInteractions(paymentRepository, outboxEventPublisher, couponApplicationService, albumRepository);
     }
 }

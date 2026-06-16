@@ -96,6 +96,7 @@ class PaymentWebhookIntegrationTest {
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private PaymentReconciliationScheduler reconciliationScheduler;
     @Autowired private WebhookDispatcher webhookDispatcher; // 인프로세스 경로 = PaymentWebhookHandler (LoggingWebhookDispatcher 대체)
+    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행 정리(#237)
 
     private Long memberId;
     private Long albumId;
@@ -107,6 +108,7 @@ class PaymentWebhookIntegrationTest {
         // member_coupon 은 order_id·member_id·coupon_id DB FK 를 가지므로 orders/coupon/member 보다 먼저 정리.
         // refresh_token → member FK 도 먼저 정리 — 다른 테스트가 남긴 토큰이 member 삭제를 막지 않도록.
         refreshTokenRepository.deleteAllInBatch();
+        outboxEventRepository.deleteAllInBatch(); // PAID 웹훅이 PAID 와 같은 tx 로 커밋한 ORDER_PAID 행(orders FK 없음) 정리
         paymentRepository.deleteAllInBatch();
         memberCouponRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -192,7 +194,7 @@ class PaymentWebhookIntegrationTest {
     }
 
     @Test
-    @DisplayName("정상 PAID 웹훅 → 200, 결제 PAID·주문 PREPARING(배송 생성 락스텝)·paidAt 기록")
+    @DisplayName("정상 PAID 웹훅 → 200, 결제 PAID·주문 PAID·paidAt 기록 (배송 생성은 아웃박스 릴레이가 후속 처리)")
     void webhook_paid_confirmsPaymentAndOrder() throws Exception {
         Created c = createPendingPayment(1);
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PENDING);
@@ -206,8 +208,9 @@ class PaymentWebhookIntegrationTest {
                 .andExpect(jsonPath("$.paymentStatus").value("PAID"));
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        // 결제 확정 + AFTER_COMMIT 배송 생성 → 주문은 PAID 를 거쳐 PREPARING 으로 락스텝 전진 (이슈 #161)
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PREPARING);
+        // 결제 확정 직후 주문은 PAID — 후속 배송 생성/PREPARING 전진은 아웃박스 릴레이가 비동기로 한다 (#237).
+        // 릴레이→PREPARING 전 구간은 OutboxIntegrationTest/FullPurchaseJourneyE2ETest 가 검증한다.
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getPaidAt()).isNotNull();
     }
 
@@ -340,7 +343,7 @@ class PaymentWebhookIntegrationTest {
         reconciliationScheduler.reconcilePendingPayments();
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID); // mock query() → PAID (success-rate=1.0)
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PREPARING); // 배송 생성 락스텝 (이슈 #161)
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID); // 배송 생성/PREPARING 전진은 아웃박스 릴레이 (#237)
     }
 
     @Test
@@ -353,7 +356,7 @@ class PaymentWebhookIntegrationTest {
         webhookDispatcher.dispatch(notification);
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PREPARING); // 배송 생성 락스텝 (이슈 #161)
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID); // 배송 생성/PREPARING 전진은 아웃박스 릴레이 (#237)
     }
 
     @Test

@@ -109,6 +109,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
     @Autowired private IdempotencyRecordRepository idempotencyRecordRepository;
     @Autowired private JwtProvider jwtProvider;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
+    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행 정리(#237)
 
     private int orderSeq;
     private Long memberId;
@@ -123,6 +124,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         // FK 의존 순서: payment → orders → album → artist/genre/label, member. (refresh_token → member 도 먼저)
         idempotencyRecordRepository.deleteAllInBatch();
         refreshTokenRepository.deleteAllInBatch();
+        outboxEventRepository.deleteAllInBatch(); // PAID 웹훅이 PAID 와 같은 tx 로 커밋한 ORDER_PAID 행(orders FK 없음) 정리
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
@@ -193,7 +195,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
     }
 
     @Test
-    @DisplayName("동시 중복 PAID 웹훅 16건 → 결제 PAID 1회·주문 PREPARING(배송 락스텝) (5xx 0)")
+    @DisplayName("동시 중복 PAID 웹훅 16건 → 결제 PAID 1회·주문 PAID (5xx 0)")
     void concurrentDuplicatePaidWebhook_transitionsOnce() throws Exception {
         Created c = createPendingPayment(1);
         String body = webhookBody(c.pgTransactionId(), PaymentStatus.PAID, null);
@@ -201,8 +203,8 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         ConcurrentLinkedQueue<Integer> statuses = fireConcurrentWebhooks(body);
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        // 결제 확정 + AFTER_COMMIT 배송 생성으로 주문은 PAID 거쳐 PREPARING 까지 락스텝 전진 (이슈 #161)
-        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PREPARING);
+        // 결제 확정 직후 주문은 PAID — 후속 배송 생성/PREPARING 전진은 아웃박스 릴레이가 비동기로 한다 (#237).
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getPaidAt()).isNotNull();
 
         assertSingleTransitionResponses(statuses, c.pgTransactionId());

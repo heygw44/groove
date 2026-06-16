@@ -12,11 +12,11 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 결제 완료 주문에 배송을 생성(프로비저닝)하는 단일 진입점 — 정상 경로인 ShippingCreationListener(AFTER_COMMIT)와 안전망인
- * ShippingReconciliationScheduler(주기 보충, 이슈 #169)가 같은 로직을 공유한다.
+ * 결제 완료 주문에 배송을 생성(프로비저닝)하는 단일 진입점 — 1차 경로인 아웃박스 컨슈머 OrderPaidOutboxHandler(#237)와
+ * 2차 안전망인 ShippingReconciliationScheduler(주기 보충, 이슈 #169)가 같은 로직을 공유한다.
  *
- * 독립 트랜잭션(REQUIRES_NEW): 리스너는 AFTER_COMMIT 시점이라 활성 트랜잭션이 없고, 스케줄러는 주문마다 격리된 커밋 경계가
- * 필요해 둘 다 이 메서드의 REQUIRES_NEW 로 충족한다.
+ * 독립 트랜잭션(REQUIRES_NEW): 아웃박스 릴레이/스케줄러 모두 비트랜잭션 호출 컨텍스트라 주문마다 격리된 커밋 경계가
+ * 필요해 이 메서드의 REQUIRES_NEW 로 충족한다.
  *
  * 한 주문당 배송 1건: existsByOrderId 로 흔한 재시도/중복을 미리 거르고, 최종 방어선은 uk_shipping_order UNIQUE 다 —
  * saveAndFlush 로 동기 flush 해 충돌을 즉시 드러낸다.
