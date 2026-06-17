@@ -12,9 +12,7 @@
 
 ## Context
 
-Groove(LP 전문 이커머스 백엔드)는 W8에 **5~10만 건 규모의 시드 데이터**를 투입해야 한다.
-
-필요한 엔터티(ERD 기준):
+Groove(LP 전문 이커머스 백엔드)는 W8 에 5~10만 건 규모의 시드 데이터를 채워 넣어야 한다. ERD 기준으로 필요한 엔터티와 목표 건수는 다음과 같다.
 
 | 엔터티 | 목표 건수 | 성격 |
 |---|---|---|
@@ -28,14 +26,13 @@ Groove(LP 전문 이커머스 백엔드)는 W8에 **5~10만 건 규모의 시드
 | `payment` / `shipping` | 주문 수와 1:1 | 트랜잭션 |
 | `review` | ~10,000 | 트랜잭션 |
 
-카탈로그 데이터(album, artist, genre, label)는 **현실성이 있는 LP 메타데이터**가 필요하다.
-트랜잭션 데이터(member, orders, review 등)는 도메인 규칙을 따르는 **합성 데이터**면 충분하다.
+두 부류는 요구가 다르다. 카탈로그(album·artist·genre·label)는 현실성 있는 LP 메타데이터가 있어야 데모가 설득력을 갖는다. 반면 트랜잭션(member·orders·review 등)은 도메인 규칙만 지키는 합성 데이터로도 충분하다.
 
 ---
 
 ## Decision
 
-**하이브리드 방식**: Discogs 공개 데이터 덤프 + Python(Faker) 자체 생성 스크립트 조합을 채택한다.
+두 부류를 각각에 맞는 방법으로 채우는 하이브리드 방식을 택한다.
 
 - **카탈로그 레이어 (album, artist, genre, label)**: Discogs Data Dump 파싱
 - **트랜잭션 레이어 (member, orders, cart, payment, shipping, review)**: Python + Faker 스크립트 자체 생성
@@ -46,39 +43,33 @@ Groove(LP 전문 이커머스 백엔드)는 W8에 **5~10만 건 규모의 시드
 
 ### Option A — MusicBrainz
 
+PostgreSQL 덤프나 Web API 로 받는 음악 메타데이터 DB 다. 음악 전반을 폭넓게 다루지만 LP 만 쓰려면 `medium.format = 'Vinyl'` 로 걸러야 하고, 포트폴리오 도메인(바이닐)과의 직관적 연결은 약하다. 덤프 스키마가 복잡한 데다 크기가 수십 GB 라 전체 파싱 부담이 크고, 한글 메타데이터는 거의 없다.
+
 | 항목 | 내용 |
 |---|---|
 | 수급 방법 | PostgreSQL 덤프 다운로드 또는 Web API |
 | 라이선스 | 핵심 메타데이터 CC0, 일부 보조 데이터 CC-BY-NC-SA |
-| 규모 | 음악 전반 (LP 한정 필터 필요) |
-| LP 적합도 | 중간 — `medium.format = 'Vinyl'` 필터 가능하나 포트폴리오 도메인과 직관성 낮음 |
-| 덤프 크기 | 수십 GB (전체 파싱 오버헤드 큼) |
-| 단점 | 덤프 스키마 복잡, 한글 메타데이터 거의 없음 |
+| LP 적합도 | 중간 — `format='Vinyl'` 필터 가능하나 도메인 직관성 낮음 |
+| 단점 | 덤프 스키마 복잡, 수십 GB, 한글 메타데이터 거의 없음 |
 
 ### Option B — Discogs Data Dump ✅ (채택)
 
+Discogs 는 바이닐 중심 DB 라 LP 도메인에 가장 잘 맞는다. 월별 XML 덤프(artists·releases·labels·masters)를 공개하고, 라이선스가 **CC0 1.0 Universal** 이어서 출처 표기 없이 상업·학술·포트폴리오 어디에나 쓸 수 있다. `format = Vinyl` 로 거르면 수백만 건의 releases 에서 목표인 2 만 건을 어렵지 않게 확보한다. 한국 아티스트도 수록돼 있지만 라틴 표기 위주라, 한글 보강은 Faker 쪽에서 처리하면 된다. 다만 덤프가 수 GB 라 파싱 스크립트가 필요한데, 이건 W8-3 범위로 잡는다.
+
 | 항목 | 내용 |
 |---|---|
-| 수급 방법 | 월별 XML 덤프 공개 (artists.xml, releases.xml, labels.xml, masters.xml) |
-| 라이선스 | **CC0 1.0 Universal** — 출처 표기 불요, 상업적·학술적·포트폴리오 모두 허용 |
-| URL | https://discogs-data-dumps.s3-us-west-2.amazonaws.com/index.html |
-| LP 적합도 | **최고** — Discogs는 바이닐 중심 DB, `format = Vinyl` 필터로 LP만 추출 |
-| 규모 | releases 수백만 건 → 필터 후 20,000건 확보 용이 |
-| 한글 지원 | 한국 아티스트 수록되나 라틴 표기 위주. 보강은 Faker로 처리 |
-| 단점 | XML 덤프 파일 수 GB → 파싱 스크립트 필요 (W8-3 범위) |
+| 수급 방법 | 월별 XML 덤프 (artists.xml, releases.xml, labels.xml, masters.xml) |
+| 라이선스 | **CC0 1.0 Universal** — 출처 표기 불요 |
+| LP 적합도 | **최고** — 바이닐 중심 DB, `format=Vinyl` 필터 |
+| 단점 | XML 덤프 수 GB → 파싱 스크립트 필요 (W8-3 범위) |
 
 ### Option C — Python + Faker 단독
 
-| 항목 | 내용 |
-|---|---|
-| 라이선스 | 해당 없음 |
-| 구현 난이도 | 낮음 |
-| 현실성 | **낮음** — 실존 아티스트/앨범 매핑 불가, 포트폴리오 데모 설득력 부족 |
-| 결론 | 트랜잭션 레이어 한정으로 사용 |
+전부 Faker 로 생성하는 방식이다. 구현은 가장 쉽지만 실존 아티스트·앨범에 매핑할 수 없어 카탈로그의 현실성이 떨어지고 데모 설득력이 부족하다. 그래서 트랜잭션 레이어에 한해서만 쓴다.
 
 ### Option D — 하이브리드 ✅ (최종 채택)
 
-Discogs(카탈로그 현실성) + Faker(트랜잭션 유연성)의 장점을 결합.
+결국 Discogs 의 카탈로그 현실성과 Faker 의 트랜잭션 유연성을 합치는 게 답이었다. 각자 잘하는 영역만 맡긴다.
 
 ---
 
@@ -133,8 +124,8 @@ Discogs는 가격 정보 미제공 → `price_per_unit` = Faker.random_int(15000
 
 **긍정적**
 - LP 도메인에 최적화된 실데이터로 포트폴리오 설득력 확보
-- CC0 라이선스 → GitHub 공개 저장소 데이터 포함 가능 (attribution 불필요)
-- 카탈로그 현실성 + 트랜잭션 유연성 동시 달성
+- CC0 라이선스 → GitHub 공개 저장소에 데이터 포함 가능 (attribution 불필요)
+- 카탈로그 현실성과 트랜잭션 유연성을 동시에 달성
 
 **부정적 / 트레이드오프**
 - W8-3에 XML 파서 스크립트 구현 비용 추가 (~2~3시간)
