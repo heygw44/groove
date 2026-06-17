@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 2.1 |
+| 버전 | 2.2 |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-12 |
-| 변경 내용 | v2.1 (W12 문서화): §12 "알려진 한계 및 의도적 트레이드오프" 신설 — 코드 주석에 흩어진 의도적 한계 5종(재고 복원 last-write-wins·스케줄러 단일 인스턴스·rate-limit 인메모리·멱등성 409·Redis 미도입)과 각 도입 트리거를 한곳에 정리, 기존 §10.5·§11·§14와 상호 참조로 중복 제거. 이후 섹션 번호 +1(테스트 §13·컨벤션 §14·미해결 §15) (#226). v2.0 (W6~W7 + 확장 M13 쿠폰 + M14/M15 프론트 반영 — 전면 현행화): §4.1 패키지 구조를 현재 구현 기준으로 갱신(cart/order/payment/shipping/review/admin 구현 완료 + `coupon` 모듈 + `web`(SpaForwardConfig)·`common/scheduling` 추가), `backend/`(Spring Boot) + `frontend/`(Vue3) 형제 구조·node-gradle 통합 빌드 명시. ADR-11(쿠폰 선착순=원자적 조건부 UPDATE)·ADR-12(Vue3 SPA + node-gradle)·ADR-13(Caffeine rate-limit 저장) 추가. §5.5 쿠폰 발급 rate-limit·§5.7 쿠폰 발급 동시성 신설, §6.2 실제 이벤트(`OrderPaidEvent`·`MemberWithdrawnEvent`)로 정정, §10 프론트 빌드·프로파일(`.yaml`) 현행화. v1.2 (W5 완료 반영): catalog 4개 서브도메인 구현 완료 표기, AlbumQueryController + AlbumSpecs 동적 검색, 의도적 N+1 보존 정책(W10 시연용) 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain`) 기준으로 정정. |
+| 최종 수정일 | 2026-06-17 |
+| 변경 내용 | v2.2 (M16 확장 반영 — 캐시·아웃박스·클레임): §12 #5 를 "Redis/캐싱 미도입" → **"분산 캐시·Redis 미도입(로컬 캐시는 도입)"** 으로 정정 — 카탈로그 read 는 Caffeine 로컬 캐시(#236)로 도입됐고 분산 캐시·분산락만 부재임을 명확화. ADR-14(Caffeine 카탈로그 캐시)·ADR-15(트랜잭셔널 아웃박스) 추가, §5.8 카탈로그 read 캐시(TTL·무효화·스탬피드) 신설. 결제 후속(배송 생성)이 인프로세스 AFTER_COMMIT 리스너에서 **트랜잭셔널 아웃박스(#237)**로 전환된 것을 §6.2~§6.4 에 반영(`OrderPaidEventListener`·`ShippingCreationListener` 제거, `OrderPaidOutboxHandler`·`OutboxRelayScheduler` 명시). §4.1 패키지에 `claim/`·`common/cache`·`common/outbox` 추가, §11.1/§11.2 트리거를 "도입 완료" 기준으로 갱신. (클레임 본문 §8 보충은 #238/#239 에서 반영됨). v2.1 (W12 문서화): §12 "알려진 한계 및 의도적 트레이드오프" 신설 — 코드 주석에 흩어진 의도적 한계 5종(재고 복원 last-write-wins·스케줄러 단일 인스턴스·rate-limit 인메모리·멱등성 409·Redis 미도입)과 각 도입 트리거를 한곳에 정리, 기존 §10.5·§11·§14와 상호 참조로 중복 제거. 이후 섹션 번호 +1(테스트 §13·컨벤션 §14·미해결 §15) (#226). v2.0 (W6~W7 + 확장 M13 쿠폰 + M14/M15 프론트 반영 — 전면 현행화): §4.1 패키지 구조를 현재 구현 기준으로 갱신(cart/order/payment/shipping/review/admin 구현 완료 + `coupon` 모듈 + `web`(SpaForwardConfig)·`common/scheduling` 추가), `backend/`(Spring Boot) + `frontend/`(Vue3) 형제 구조·node-gradle 통합 빌드 명시. ADR-11(쿠폰 선착순=원자적 조건부 UPDATE)·ADR-12(Vue3 SPA + node-gradle)·ADR-13(Caffeine rate-limit 저장) 추가. §5.5 쿠폰 발급 rate-limit·§5.7 쿠폰 발급 동시성 신설, §6.2 실제 이벤트(`OrderPaidEvent`·`MemberWithdrawnEvent`)로 정정, §10 프론트 빌드·프로파일(`.yaml`) 현행화. v1.2 (W5 완료 반영): catalog 4개 서브도메인 구현 완료 표기, AlbumQueryController + AlbumSpecs 동적 검색, 의도적 N+1 보존 정책(W10 시연용) 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain`) 기준으로 정정. |
 | 관련 문서 | PRD.md, ERD.md, API.md, glossary.md, MILESTONE.md |
 
 ---
@@ -43,6 +43,8 @@
 | ADR-11 | 동시성(쿠폰 발급): 원자적 조건부 UPDATE | 핫 카운터(`issued_count`)를 행 락 길게 잡지 않고 처리 — 비관적 락 대비 처리량 우위. 베이스라인→비관적 락→원자적 UPDATE 단계적 시연 ([decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)) | 비관적 락 / Redis 카운터 (조건부) |
 | ADR-12 | 프론트엔드: Vue3 SPA + node-gradle 통합 빌드 | 백엔드 시연용 단일 산출물(JAR)로 정적 서빙, `backend/`·`frontend/` 형제 구조 | 별도 배포 / 서버사이드 템플릿 |
 | ADR-13 | Rate Limit 저장: Caffeine(in-memory) | 단일 인스턴스에서 외부 의존 없이 버킷 보관·만료 | Redis (멀티 인스턴스 시 전환) |
+| ADR-14 | 카탈로그 read 캐시: Caffeine 로컬(M16 #236) | 앨범 상세/랜딩 목록 read 부하를 외부 의존 없이 흡수 — TTL 60s·`@CacheEvict` 무효화·`sync=true` 스탬피드 방지 ([improvements/catalog-cache.md](./improvements/catalog-cache.md)) | Redis 분산 캐시 (멀티 인스턴스 시) / 무캐시 |
+| ADR-15 | 결제 후속 발행: 트랜잭셔널 아웃박스(M16 #237) | 상태 변경과 같은 트랜잭션에 이벤트를 기록(원자 커밋)하고 릴레이가 at-least-once 발행 — AFTER_COMMIT 인프로세스 리스너의 커밋-후 유실 제거. 컨슈머 멱등 | 인프로세스 `@TransactionalEventListener` (비핵심 이벤트는 유지) / Kafka |
 
 ---
 
@@ -86,9 +88,9 @@ flowchart TB
 ```
 
 **조건부 확장** (측정 후 트리거 발생 시):
-- Redis (캐시 / 분산락 / Refresh Token)
+- Redis (**분산** 캐시·분산락 / Refresh Token — 카탈로그 read 는 로컬 Caffeine 캐시로 이미 도입, ADR-14)
 - Prometheus + Grafana
-- Kafka 또는 Redis Stream
+- Kafka 또는 Redis Stream (결제 후속은 트랜잭셔널 아웃박스로 이미 도입, ADR-15)
 
 ---
 
@@ -128,7 +130,7 @@ backend/src/main/java/com.groove
 ├── order/                      (주문) — 구현 완료
 │   ├── api/                    (OrderController, MemberOrderController)
 │   ├── application/, domain/   (Order, OrderItem, OrderStatus)
-│   └── event/                  (OrderPaidEvent, OrderPaidEventListener)
+│   └── event/                  (OrderPaidEvent — ORDER_PAID 아웃박스 payload)
 │
 ├── payment/                    (결제) — 구현 완료
 │   ├── api/, application/      (PaymentService, Idempotency 연동, PaymentReconciliationScheduler)
@@ -136,7 +138,8 @@ backend/src/main/java/com.groove
 │   └── gateway/                (PaymentGateway 인터페이스 + mock/: MockPaymentGateway)
 │
 ├── shipping/                   (배송) — 구현 완료
-│   └── application/            (ShippingCreationListener(OrderPaidEvent 구독), ShippingProgressScheduler)
+│   └── application/            (OrderPaidOutboxHandler(ORDER_PAID 아웃박스 컨슈머)·ShippingProvisioner(배송·운송장 생성),
+│                                ShippingProgressScheduler·ShippingReconciliationScheduler·OrderPiiAnonymizationScheduler)
 │
 ├── review/                     (리뷰) — 구현 완료
 │
@@ -144,6 +147,12 @@ backend/src/main/java/com.groove
 │   ├── api/                    (CouponController, MyCouponController + dto/, ratelimit/: CouponIssueRateLimitPolicy)
 │   ├── application/            (CouponIssueService(원자적 발급), CouponApplicationService(주문 적용/복원), MemberCouponExpirationTask)
 │   ├── domain/                 (Coupon, MemberCoupon, *Repository, CouponDiscountType·CouponStatus·MemberCouponStatus)
+│   └── exception/
+│
+├── claim/                      (취소/반품 통합 클레임 — 확장 M16) — 구현 완료
+│   ├── api/                    (ClaimController(회원 반품 접수/조회), AdminClaimController(승인·거부·환불·부분취소) + dto/)
+│   ├── application/            (ClaimService(cancelPartially·completeRefund), ClaimProgressScheduler(역물류 자동 진행))
+│   ├── domain/                 (Claim, ClaimItem, ClaimRepository, ClaimType(CANCEL/RETURN)·ClaimStatus)
 │   └── exception/
 │
 ├── admin/                      (관리자 전용 API 묶음) — 구현 완료
@@ -157,7 +166,9 @@ backend/src/main/java/com.groove
     ├── persistence/            (공용 JPA 설정·기반)
     ├── idempotency/            (IdempotencyService, IdempotencyRecord, @Idempotent, web/ 인터셉터)
     ├── scheduling/             (SchedulingConfig — @EnableScheduling 단일 진입)
-    └── ratelimit/              (RateLimitFilter, RateLimitRegistry(Caffeine), 정책 인터페이스)
+    ├── ratelimit/              (RateLimitFilter, RateLimitRegistry(Caffeine), 정책 인터페이스)
+    ├── cache/                  (CacheConfig — @EnableCaching, 카탈로그 read 캐시 활성화, M16 #236)
+    └── outbox/                 (OutboxEvent(Publisher/Relay/Cleanup/Handler) — 트랜잭셔널 아웃박스, M16 #237)
 ```
 
 > 도메인별 layout 은 `api / application / domain` 3-레이어로 통일하되, 횡단 보조(`security`, `exception`, `ratelimit`)가 필요한 도메인은 같은 레벨에 추가한다. 이 명명은 W3~W4 구현 시 합의되었으며, 이전 controller/service/repository 명명에서 디렉토리 이름만 정리한 것으로 책임은 동일하다.
@@ -298,6 +309,20 @@ RuntimeException
 - **발급 rate-limit**: §5.5.
 - k6 부하·3종 Before/After 측정: [troubleshooting/coupon-issuance-concurrency.md](./troubleshooting/coupon-issuance-concurrency.md).
 
+### 5.8 카탈로그 read 캐시 (확장 M16 #236)
+앨범 조회 read 부하를 외부 의존 없이 흡수하기 위해 **Caffeine 로컬 캐시**를 둔다(ADR-14). Spring Cache 추상화(`common.cache.CacheConfig` 의 `@EnableCaching`)로 활성화하고, 캐시 이름·스펙은 `spring.cache` 자동구성으로 주입한다(별도 `CacheManager` 빈 없음).
+
+| 캐시 | 대상 | 키 | 조건 |
+|---|---|---|---|
+| `albumDetail` | `AlbumService.findDetail(id)` | `#id` | 상세 단건 전부 |
+| `albumLandingList` | `AlbumService.search(...)` | 단일 리터럴 키 | **공개 기본 랜딩만**(`AlbumCaches.isLandingRequest` — 필터 전무 + status=SELLING + page 0·size 20·createdAt DESC). 필터/비기본 정렬은 우회 |
+
+- **스펙**: `maximumSize=2000, expireAfterWrite=60s, recordStats`(`CACHE_ALBUM_CAFFEINE_SPEC` 로 오버라이드 가능). TTL 60초로 staleness 상한을 둔다.
+- **무효화**: 관리자 write(`create`/`update`/`adjustStock`/`delete`)에서 `@CacheEvict` — 상세는 `key=#id`, 랜딩은 `allEntries=true` 로 즉시 무효화.
+- **스탬피드 방지**: 두 캐시 모두 `@Cacheable(sync = true)` — 키별 단일 로딩으로 동시 미스 시 thundering herd 차단.
+- **트랜잭션 순서**: `@EnableCaching(order = LOWEST_PRECEDENCE − 1)` 로 캐시 advice 를 `@Transactional` 바깥에 둔다.
+- 측정·설계 상세: [improvements/catalog-cache.md](./improvements/catalog-cache.md).
+
 ---
 
 ## 6. 도메인 간 통신
@@ -306,19 +331,29 @@ RuntimeException
 - **동기 + 즉시 정합성 필요** → Service 직접 호출
 - **비동기 + 결과 정합성 허용** → Application Event
 
-### 6.2 Application Event 사용 케이스
+### 6.2 인프로세스 Application Event
 
 | 이벤트 | 발행자 | 구독자 | 비고 |
 |---|---|---|---|
-| `OrderPaidEvent` | 결제 완료 처리 | `OrderPaidEventListener`(order), `ShippingCreationListener`(shipping — 배송·운송장 생성) | 결제 완료(AFTER_COMMIT) → 배송 엔트리·운송장 생성(`orders.tracking_number` 비정규화) |
 | `MemberWithdrawnEvent` | MemberService(탈퇴) | `RefreshTokenCleanupOnMemberWithdrawnListener`(auth), `CartCleanupOnMemberWithdrawnListener`(cart) | 탈퇴(AFTER_COMMIT) → 리프레시 토큰·장바구니 정리 |
 
-> 주문 취소/환불 시 **재고·쿠폰(MemberCoupon USED→ISSUED) 복원**은 이벤트가 아니라 Service 트랜잭션 내 동기 처리(즉시 정합성). 비동기 이벤트는 결과 정합성을 허용하는 배송 생성·탈퇴 정리에만 쓴다(§6.1).
+> **결제 완료 후속**(배송·운송장 생성)은 인프로세스 이벤트가 아니라 **트랜잭셔널 아웃박스**(§6.4, #237)로 전환됐다 — AFTER_COMMIT 리스너의 커밋-후 유실을 없애기 위함. `OrderPaidEvent` 는 이제 아웃박스 payload(`ORDER_PAID`)로만 쓰인다.
+
+> 주문 취소/환불 시 **재고·쿠폰(MemberCoupon USED→ISSUED) 복원**은 이벤트가 아니라 Service 트랜잭션 내 동기 처리(즉시 정합성). 비동기는 결과 정합성을 허용하는 탈퇴 정리·배송 생성에만 쓴다(§6.1).
 
 ### 6.3 트랜잭션과 이벤트
-- `@TransactionalEventListener(phase = AFTER_COMMIT)` 사용
-- 이유: 주문 트랜잭션 롤백 시 배송이 잘못 생성되는 것 방지
-- **트레이드오프 (README에 기록)**: 이벤트 발행 후 구독자 처리 실패 시 정합성 깨질 수 있음 → v2에서 Outbox 패턴 도입 후보
+- 인프로세스 이벤트는 `@TransactionalEventListener(phase = AFTER_COMMIT)` 사용 — 발행 트랜잭션 롤백 시 정리 작업이 잘못 실행되는 것 방지.
+- **한계와 대응**: AFTER_COMMIT 리스너는 커밋과 리스너 실행 사이 프로세스 종료 시 유실 가능하다. 결제 완료 → 배송 생성처럼 유실이 치명적인 경로는 **트랜잭셔널 아웃박스**(§6.4)로 옮겨 at-least-once 를 보장하고, 유실 허용 가능한 탈퇴 정리는 인프로세스로 유지한다.
+
+### 6.4 트랜잭셔널 아웃박스 (확장 M16 #237)
+상태 변경과 같은 트랜잭션에서 이벤트를 `outbox_event`(ERD §4.19)에 기록(원자 커밋)하고, 릴레이 스케줄러가 미발행 행을 주기 발행(at-least-once)한다. 컨슈머가 멱등이라 중복 발행·재기동에도 정확히 1회 효과다.
+
+| 단계 | 컴포넌트 | 비고 |
+|---|---|---|
+| 발행 | `PaymentCallbackService` → `common.outbox.OutboxEventPublisher` | 결제 PAID 전이 트랜잭션 안에서 `ORDER_PAID` 이벤트 INSERT (원자 커밋) |
+| 릴레이 | `OutboxRelayScheduler` | `published_at IS NULL` 배치 조회 후 핸들러 디스패치, 성공 시 `published_at` 기록 |
+| 컨슈머(멱등) | `OrderPaidOutboxHandler`(shipping) → `ShippingProvisioner` | 배송·운송장 생성. `existsByOrderId` 로 중복 발행에도 정확히 1회 |
+| 정리 | `OutboxEventCleanupTask` | 발행 완료 행을 retention 경과 후 회수 |
 
 ---
 
@@ -516,7 +551,7 @@ volumes:
 | 트리거 (측정 결과) | Redis 적용 영역 |
 |---|---|
 | Refresh Token DB 부하 증가 | `RefreshTokenRepository` → Redis 기반 구현 교체 |
-| 인기 상품 조회 응답 지연 | `CatalogService`에 Cache-Aside 적용 |
+| 카탈로그 캐시 멀티 인스턴스 일관성 필요 | **로컬 Caffeine 캐시(ADR-14, #236)는 도입 완료** — 다중 인스턴스에서 노드 간 무효화/공유가 필요하면 Redis 분산 캐시로 전환 |
 | 한정반 동시성 시연 강화 | `InventoryService`에 Redisson 분산락 |
 | Rate Limit 분산 환경 | Bucket4j-Redis로 전환 |
 
@@ -524,7 +559,7 @@ volumes:
 
 | 트리거 | 적용 영역 |
 |---|---|
-| 배송 생성 비동기 부하 측정 시 | `OrderPaidEvent` → 외부 큐로 이전 |
+| 아웃박스 릴레이 처리량 한계 | **트랜잭셔널 아웃박스(ADR-15, #237)는 도입 완료** — 폴링 릴레이가 병목이면 `ORDER_PAID` 를 Kafka/외부 큐로 이전 |
 | 알림 발송 도입 시 | 별도 Notification 토픽 |
 
 ### 11.3 멀티 인스턴스 도입 시 고려사항
@@ -545,7 +580,7 @@ volumes:
 | 2 | 스케줄러 **단일 인스턴스 가정** — 분산락 없음 | `common.scheduling.SchedulingConfig`(단일 `@EnableScheduling`) + `@Scheduled` 배치 6종 | 단일 인스턴스 배포 전제(§1 비목표). 다중화 시 **ShedLock**(`@EnableSchedulerLock` + `JdbcTemplateLockProvider`)로 각 배치를 노드 간 1회 실행 보장 → §11.3 |
 | 3 | rate-limit **인메모리** Caffeine — 단일 인스턴스 | `common/ratelimit/RateLimitRegistry.java` "수평 확장 제약(#164)" javadoc | 단일 인스턴스면 무해. 다중화 시 실효 한도 N배 → Bucket4j 분산 백엔드 또는 게이트웨이/WAF로 이관 → **상세 §10.5**, 위치 §11.1 |
 | 4 | 멱등성 **재시도 소진 시 409** — 응답 유실 가능 | `common/idempotency/IdempotencyService.java` "알려진 한계" javadoc | action 커밋 후 완료갱신 트랜잭션이 실패하면 키가 `IN_PROGRESS`로 남아 `ttl + in-progress-grace` 동안 409 → `IdempotencyRecordCleanupTask`가 회수. **부수효과는 이미 반영 → 같은 키 재시도 금지(새 키 사용)**. TTL/grace 상수 조정 또는 분산 합의로 강화 |
-| 5 | **Redis/캐싱 미도입** | Redis 의존성·`@Cacheable`/`@EnableCaching` 부재, #210(분산락 비교) 컷(NOT_PLANNED) | 단일 인스턴스 + MySQL 비관락(#205)으로 oversell 0·목표 TPS 달성 → 한계 효용 낮고 운영 복잡도가 범위 초과. 카탈로그 read 부하 실측 시 도입 → **트리거·위치 §11.1** |
+| 5 | **분산 캐시·Redis 미도입** (로컬 캐시는 도입) | 카탈로그 read 는 **Caffeine 로컬 캐시 도입**(ADR-14, #236 — `common/cache/CacheConfig` `@EnableCaching` + `AlbumService` `@Cacheable`). Redis 등 **분산** 캐시·분산락은 부재(#210 분산락 비교 컷, NOT_PLANNED) | 단일 인스턴스 + MySQL 비관락(#205)으로 oversell 0·목표 TPS 달성 → 분산 캐시/락의 한계 효용 낮고 운영 복잡도가 범위 초과. 카탈로그 read 부하는 로컬 캐시(§5.8)로 흡수, 멀티 인스턴스 일관성 필요 시 Redis 전환 → **트리거·위치 §11.1** |
 
 **보충**
 
@@ -601,5 +636,5 @@ volumes:
 ## 15. 미해결 결정 / 향후 검토
 
 - ~~**시드 데이터 출처**~~: **결정됨** — 카탈로그는 Discogs 덤프, 트랜잭션은 Python Faker 하이브리드([decisions/seed-data.md](./decisions/seed-data.md)). 시드 스크립트 적용은 W8.
-- ~~**한정반 시연 시 Redis 도입 여부**~~: **종결** — W9 측정 결과 MySQL 비관락(#205)으로 oversell 0·목표 TPS 달성, Redis 분산락 비교(#210)는 한계 효용 낮아 컷(NOT_PLANNED). 쿠폰 핫 로우는 ADR-11 원자적 UPDATE 로 v1 해소. 상세는 §12 #5(Redis/캐싱 미도입).
+- ~~**한정반 시연 시 Redis 도입 여부**~~: **종결** — W9 측정 결과 MySQL 비관락(#205)으로 oversell 0·목표 TPS 달성, Redis 분산락 비교(#210)는 한계 효용 낮아 컷(NOT_PLANNED). 쿠폰 핫 로우는 ADR-11 원자적 UPDATE 로 v1 해소. 상세는 §12 #5(분산 캐시·Redis 미도입 — 카탈로그 read 로컬 Caffeine 캐시는 #236 도입).
 - **가상 스레드(Virtual Threads) 활성화**: 통합 테스트 안정화 후 옵션으로 시도, 효과 측정 후 채택 여부 결정

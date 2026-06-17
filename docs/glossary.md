@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.2 |
+| 버전 | 1.3 |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-04 (확장 M13 쿠폰 시스템 **구현 완료** 반영 — *계획* 표기 제거) |
+| 최종 수정일 | 2026-06-17 (확장 M16 반영 — 클레임 엔티티·enum 추가, 아웃박스·로컬 캐시 도입 정정) |
 | 관련 문서 | PRD.md, ARCHITECTURE.md, ERD.md, API.md |
 | 정본 우선순위 | ERD > PRD > ARCHITECTURE > API |
 
@@ -149,7 +149,7 @@
 | 테이블 | `shipping` |
 | 정의 | 결제가 완료된 Order에 대해 생성되는 배송 단위. 운송장 번호(UUID 기반)와 수령인 정보를 보유하며, 스케줄러가 상태를 자동 진행한다. |
 | 상태 | `ShippingStatus` 3값 — §3.7 참조 |
-| 생성 시점 | `OrderPaidEvent` `AFTER_COMMIT` 단계에서 별도 트랜잭션으로 생성 |
+| 생성 시점 | 결제 완료 시 `ORDER_PAID` **트랜잭셔널 아웃박스** 이벤트를 통해 별도 트랜잭션으로 생성 (#237, `OrderPaidOutboxHandler`) |
 | 비고 | LP 특성 반영 필드 `safe_packaging_requested`(안전 포장 요청). |
 
 ### 2.10 Review — 리뷰
@@ -184,6 +184,21 @@
 | 정책 상태 | `CouponStatus` 3값 — §3.10 / 보유 상태 `MemberCouponStatus` 4값 — §3.11 |
 | 적용 | 회원 주문에만 적용(게스트 불가). **payable = total_amount − discount_amount**, 결제는 payable 청구. 주문 취소/환불 시 쿠폰 복원(USED→ISSUED). |
 | 비고 | §8 v2 후보였던 `coupon`/`coupon_issue` 를 W7 완료 후 확장 도메인으로 승격. 설계 전문 [plans/coupon-system.md](plans/coupon-system.md), 동시성 결정 [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md). |
+
+---
+
+### 2.13 Claim — 클레임 (취소/반품 통합, 확장 M16)
+
+| 항목 | 값 |
+|---|---|
+| 영문 | Claim |
+| 한글 | 클레임 (취소/반품) |
+| 테이블 | `claim`, `claim_item` |
+| 정의 | 취소·반품을 `OrderStatus` 에 섞지 않고 주문을 참조하는 별도 aggregate 로 통합한 모델. `claimType` 으로 **CANCEL**(발송 전 부분 취소·즉시 환불)과 **RETURN**(발송 후 반품·역물류)을 구분한다(상태 폭발 회피). |
+| 종류 | `ClaimType` 2값 — §3.12 참조 |
+| 상태 | `ClaimStatus` 6값 — §3.13 참조 |
+| 환불 | 부분 환불액은 할인 안분(`payable × 취소·반품정가/총정가`), 누적액은 `payment.refunded_amount`. 전량 도달 시 `PaymentStatus` PARTIALLY_REFUNDED→REFUNDED. |
+| 비고 | 발송 전 부분 취소는 주문 상태 유지, 전량 취소 시에만 CANCELLED. 자동 진행은 `ClaimProgressScheduler`. |
 
 ---
 
@@ -242,7 +257,8 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | `PENDING` | 결제 요청 후 PG 응답 대기 (웹훅 대기 포함) |
 | `PAID` | 결제 성공 (`paid_at` 기록) |
 | `FAILED` | 결제 실패 (`failure_reason` 기록) |
-| `REFUNDED` | 환불 완료 (관리자 처리) |
+| `PARTIALLY_REFUNDED` | 부분 환불 — 누적 환불액(`refunded_amount`)이 전액 미만 (부분 취소·부분 반품, M16) |
+| `REFUNDED` | 전액 환불 완료 (관리자 처리 / 누적 환불액 == amount) |
 
 ### 3.6 PaymentMethod — 결제 수단
 
@@ -292,6 +308,24 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | `EXPIRED` | 만료됨 (`expires_at` 경과) | 만료 스케줄러 |
 | `CANCELLED` | 회수/무효 | 관리자, 또는 사용 후 주문 취소 시 USED→ISSUED 복원(CANCELLED 아님) |
 
+### 3.12 ClaimType — 클레임 종류 (확장 M16)
+
+| 값 | 의미 |
+|---|---|
+| `CANCEL` | 발송 전(PAID/PREPARING) 부분 취소 — 회수·검수 없이 `REQUESTED→REFUNDED` 즉시 환불 (관리자) |
+| `RETURN` | 발송 후(DELIVERED/COMPLETED) 반품 — 역물류 상태머신 (회원 접수 + 관리자 승인) |
+
+### 3.13 ClaimStatus — 클레임 상태 (확장 M16)
+
+| 값 | 의미 | 전이 |
+|---|---|---|
+| `REQUESTED` | 접수됨 (기본값) | 회원 반품 접수 / 관리자 부분취소(즉시 REFUNDED) |
+| `APPROVED` | 승인 — 회수 대기 | 관리자 승인 |
+| `IN_TRANSIT` | 회수 중 | 스케줄러 자동 |
+| `INSPECTING` | 검수 중 | 스케줄러 자동 |
+| `REFUNDED` | 환불 완료 (종착) | 검수 통과 + 환불 |
+| `REJECTED` | 거부 (종착) | 접수 반려 / 검수 불합격 |
+
 ---
 
 ## 4. 자주 쓰는 용어 (도메인·기술)
@@ -329,10 +363,10 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | MDC (Mapped Diagnostic Context) | SLF4J/Logback의 요청 단위 컨텍스트 저장소. `requestId`, `userId` 등을 모든 로그에 자동 포함. |
 | X-Request-Id | 요청 추적 ID. 클라이언트 미설정 시 서버에서 생성하여 응답 헤더로 반환. MDC에 주입. |
 | Idempotency-Key (헤더) | §4.2 멱등성 키와 동일. 결제 등 일부 엔드포인트에서 필수. |
-| Application Event | Spring 내부 이벤트 메커니즘. 도메인 간 비동기 전파(`OrderPaidEvent` 등). v2에서 외부 큐(Kafka/Redis Stream)로 전환 후보. |
+| Application Event | Spring 내부 이벤트 메커니즘. 인프로세스 비동기 전파(현재 `MemberWithdrawnEvent` — 탈퇴 정리). 결제 후속(`OrderPaidEvent`)은 아웃박스로 전환됨. v2에서 외부 큐(Kafka/Redis Stream) 후보. |
 | AFTER_COMMIT | `@TransactionalEventListener`의 phase. 발행 트랜잭션 커밋 이후에만 핸들러 실행 → 롤백 시 부수효과 차단. |
-| Outbox 패턴 | 이벤트 발행과 DB 트랜잭션의 원자성을 보장하는 패턴. v2 후보(이벤트 발행 후 구독자 실패 시 정합성 보강). |
-| Cache-Aside | 읽기 시 캐시 우선 조회 → 미스 시 DB 조회 + 캐시 적재. Redis 도입 시(`CatalogService`) 적용 후보. |
+| Outbox 패턴 | 이벤트 발행과 DB 트랜잭션의 원자성을 보장하는 패턴. 결제 후속(배송 생성)에 **도입 완료**(#237) — `outbox_event` 기록 + 릴레이 at-least-once 발행 + 멱등 컨슈머. |
+| Cache-Aside | 읽기 시 캐시 우선 조회 → 미스 시 DB 조회 + 캐시 적재. 카탈로그 조회에 **Caffeine 로컬 캐시로 적용 완료**(`AlbumService`, #236). 분산(Redis) 캐시는 멀티 인스턴스 시. |
 | Rate Limit | 시간 단위 요청 횟수 제한. v1 Bucket4j(in-memory). 멀티 인스턴스 시 Bucket4j-Redis 전환. |
 | Bucket4j | Token Bucket 알고리즘 기반 자바 Rate Limit 라이브러리. |
 | Strategy 패턴 | PG 결제 모듈 추상화에 사용. `PaymentGateway` 인터페이스 + `MockPaymentGateway` 구현체. |
@@ -363,6 +397,11 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | IdempotencyRecord | 멱등성 레코드 | 엔티티 |
 | Coupon | 쿠폰 (정책) | 엔티티 |
 | MemberCoupon | 회원 보유 쿠폰 | 엔티티 |
+| Claim | 클레임 (취소/반품) | 엔티티 |
+| ClaimItem | 클레임 항목 | 엔티티 |
+| OutboxEvent | 아웃박스 이벤트 | 엔티티 |
+| Partial Cancel / Refund | 부분 취소 / 부분 환불 | 도메인 |
+| Reverse Logistics | 역물류 (회수·검수) | 도메인 |
 | First-Come Issuance | 선착순 발급 | 도메인 |
 | Fixed Amount / Percentage | 정액 / 정률 할인 | 도메인 |
 | Payable Amount | 결제 금액 (할인 후) | 도메인 |
@@ -401,3 +440,4 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | 1.0 | 2026-05-05 | 최초 작성. 9개 핵심 도메인 + 8개 enum + 보조 엔티티 4개 + 자주 쓰는 용어. ERD/PRD/ARCHITECTURE/API 교차 검증. |
 | 1.1 | 2026-05-26 | 확장(쿠폰 시스템, *계획*) 반영: Coupon/MemberCoupon 엔티티(§2.12), enum 3종(§3.9~3.11), 도메인 용어 6종 + 기술 용어 2종, 매핑표 갱신. ERD v1.5 와 동기화. |
 | 1.2 | 2026-06-04 | 확장 M13 쿠폰 시스템 **구현 완료** 반영 — 쿠폰 용어·enum·매핑표의 *계획* 표기 일괄 제거. ERD v1.6 와 동기화. |
+| 1.3 | 2026-06-17 | 확장 M16 반영 — Claim 엔티티(§2.13)·`ClaimType`(§3.12)·`ClaimStatus`(§3.13) 추가, `PaymentStatus` 에 PARTIALLY_REFUNDED 보강, 매핑표에 클레임/아웃박스/부분취소·역물류 용어 추가. stale 정정: 배송 생성·Outbox 패턴을 **트랜잭셔널 아웃박스 도입 완료(#237)**, Cache-Aside 를 **Caffeine 로컬 캐시 도입 완료(#236)** 로 갱신. ERD v1.8 와 동기화. |
