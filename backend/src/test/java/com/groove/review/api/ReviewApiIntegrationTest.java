@@ -37,6 +37,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -132,7 +133,7 @@ class ReviewApiIntegrationTest {
         Order order = Order.placeForMember(nextOrderNumber(), memberId, OrderFixtures.sampleShippingInfo());
         order.addItem(OrderItem.create(album, 1));
         for (OrderStatus next : pathTo(status)) {
-            order.changeStatus(next, null);
+            order.changeStatus(next, null, Instant.now());
         }
         return orderRepository.saveAndFlush(order);
     }

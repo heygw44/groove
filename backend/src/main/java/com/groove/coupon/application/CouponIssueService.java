@@ -113,7 +113,7 @@ public class CouponIssueService {
         if (!coupon.tryIssueOne()) {
             throw new CouponSoldOutException(couponId);
         }
-        MemberCoupon issued = memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
+        MemberCoupon issued = memberCouponRepository.save(MemberCoupon.issue(coupon, memberId, clock.instant()));
         return MemberCouponResponse.from(issued);
     }
 
@@ -137,7 +137,7 @@ public class CouponIssueService {
 
     private MemberCouponResponse persistIssuance(Coupon coupon, Long memberId, Long couponId) {
         try {
-            MemberCoupon issued = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
+            MemberCoupon issued = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId, clock.instant()));
             return MemberCouponResponse.from(issued);
         } catch (DataIntegrityViolationException violation) {
             // 회원당 1장 UNIQUE 충돌만 ALREADY_ISSUED 로 매핑하고, 그 외 제약 위반은 원본 예외를 전파한다.

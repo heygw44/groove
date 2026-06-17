@@ -45,8 +45,8 @@ class OrderPiiAnonymizerTest {
     /** DELIVERED 상태의 배송을 구성한다. */
     private static Shipping deliveredShipping(Order order) {
         Shipping shipping = Shipping.prepare(order, order.getShippingInfo(), "track-1");
-        shipping.markShipped();
-        shipping.markDelivered();
+        shipping.markShipped(NOW);
+        shipping.markDelivered(NOW);
         return shipping;
     }
 
@@ -131,7 +131,7 @@ class OrderPiiAnonymizerTest {
     void anonymizeOrder_cancelledWithShipping_masksOrderAndShipping() {
         Order order = OrderFixtures.memberOrder("ORD-PII-4", 1L);
         Shipping shipping = Shipping.prepare(order, order.getShippingInfo(), "track-4");
-        order.changeStatus(OrderStatus.CANCELLED, "환불");
+        order.changeStatus(OrderStatus.CANCELLED, "환불", NOW);
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
         given(shippingRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(shipping));
 
@@ -172,7 +172,7 @@ class OrderPiiAnonymizerTest {
     void anonymizeOrder_statusAdvancedToPaid_skips() {
         // 조회 후 PAID 로 전진한 주문 — 트랜잭션 내 재검증으로 걸러진다.
         Order order = OrderFixtures.memberOrder("ORD-PII-6", 1L);
-        order.changeStatus(OrderStatus.PAID, null);
+        order.changeStatus(OrderStatus.PAID, null, NOW);
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
 
         boolean done = anonymizer.anonymizeOrder(ORDER_ID, NOW);

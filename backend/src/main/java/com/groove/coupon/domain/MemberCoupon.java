@@ -75,19 +75,21 @@ public class MemberCoupon extends BaseTimeEntity {
     }
 
     /**
-     * 발급. 초기 상태 ISSUED, expiresAt 은 발급 시점 coupon.validUntil 스냅샷이다.
+     * 발급. 초기 상태 ISSUED, issuedAt 은 주입된 now, expiresAt 은 발급 시점 coupon.validUntil 스냅샷이다.
      */
-    public static MemberCoupon issue(Coupon coupon, Long memberId) {
+    public static MemberCoupon issue(Coupon coupon, Long memberId, Instant now) {
         Objects.requireNonNull(coupon, "coupon must not be null");
         Objects.requireNonNull(memberId, "memberId must not be null");
-        return new MemberCoupon(coupon, memberId, Instant.now(), coupon.getValidUntil());
+        Objects.requireNonNull(now, "now must not be null");
+        return new MemberCoupon(coupon, memberId, now, coupon.getValidUntil());
     }
 
-    /** 사용 (ISSUED → USED). 사용 주문 식별자와 사용 시각을 기록한다. */
-    public void use(Long orderId) {
+    /** 사용 (ISSUED → USED). 사용 주문 식별자와 사용 시각(주입된 now)을 기록한다. */
+    public void use(Long orderId, Instant now) {
         Objects.requireNonNull(orderId, "orderId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
         transitionTo(MemberCouponStatus.USED);
-        this.usedAt = Instant.now();
+        this.usedAt = now;
         this.orderId = orderId;
     }
 

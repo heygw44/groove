@@ -129,7 +129,7 @@ class CouponOrderIntegrationTest {
                     .maxDiscountAmount(maxDiscount)
                     .build();
             coupon = couponRepository.save(coupon);
-            MemberCoupon memberCoupon = memberCouponRepository.save(MemberCoupon.issue(coupon, member.getId()));
+            MemberCoupon memberCoupon = memberCouponRepository.save(MemberCoupon.issue(coupon, member.getId(), Instant.now()));
             return new Fixtures(member, album, coupon, memberCoupon);
         });
     }
@@ -208,8 +208,8 @@ class CouponOrderIntegrationTest {
         txTemplate.executeWithoutResult(s -> {
             Order managed = orderRepository.findById(order.getId()).orElseThrow();
             Payment payment = paymentRepository.findByOrderId(managed.getId()).orElseThrow();
-            payment.markPaid();
-            managed.changeStatus(OrderStatus.PAID, null);
+            payment.markPaid(Instant.now());
+            managed.changeStatus(OrderStatus.PAID, null, Instant.now());
         });
 
         RefundResult result = txTemplate.execute(s ->

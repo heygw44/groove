@@ -234,9 +234,10 @@ public class LocalDataSeeder implements ApplicationRunner {
                         "서울특별시 강남구 데모로 123", "그루브빌딩 4층", "06000", false),
                 null); // 쿠폰 미적용
         Order order = orderService.place(demoUser.getId(), request);
-        order.changeStatus(OrderStatus.PAID, "데모 시드");
-        order.changeStatus(OrderStatus.PREPARING, "데모 시드");
-        order.changeStatus(OrderStatus.SHIPPED, "데모 시드");
-        order.changeStatus(OrderStatus.DELIVERED, "데모 시드");
+        Instant now = Instant.now();
+        order.changeStatus(OrderStatus.PAID, "데모 시드", now);
+        order.changeStatus(OrderStatus.PREPARING, "데모 시드", now);
+        order.changeStatus(OrderStatus.SHIPPED, "데모 시드", now);
+        order.changeStatus(OrderStatus.DELIVERED, "데모 시드", now);
     }
 }

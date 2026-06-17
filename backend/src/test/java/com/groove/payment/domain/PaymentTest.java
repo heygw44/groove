@@ -91,7 +91,7 @@ class PaymentTest {
         Payment payment = pending("tx-paid");
         Instant before = Instant.now();
 
-        payment.markPaid();
+        payment.markPaid(Instant.now());
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(payment.getPaidAt()).isNotNull().isAfterOrEqualTo(before);
@@ -135,13 +135,13 @@ class PaymentTest {
     @DisplayName("종착 상태에서 markPaid/markFailed 는 IllegalStateException")
     void terminalState_furtherTransitionsRejected() {
         Payment paid = pending("tx-1");
-        paid.markPaid();
-        assertThatThrownBy(paid::markPaid).isInstanceOf(IllegalStateException.class);
+        paid.markPaid(Instant.now());
+        assertThatThrownBy(() -> paid.markPaid(Instant.now())).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> paid.markFailed("x")).isInstanceOf(IllegalStateException.class);
 
         Payment failed = pending("tx-2");
         failed.markFailed("x");
-        assertThatThrownBy(failed::markPaid).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> failed.markPaid(Instant.now())).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> failed.markFailed("y")).isInstanceOf(IllegalStateException.class);
     }
 
@@ -149,7 +149,7 @@ class PaymentTest {
     @DisplayName("markRefunded: PAID → REFUNDED 로 전이한다 (paidAt/failureReason 은 보존)")
     void markRefunded_transitionsFromPaid() {
         Payment payment = pending("tx-refund");
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         Instant paidAt = payment.getPaidAt();
 
         payment.markRefunded();
@@ -170,7 +170,7 @@ class PaymentTest {
         assertThatThrownBy(failed::markRefunded).isInstanceOf(IllegalStateException.class);
 
         Payment refunded = pending("tx-r");
-        refunded.markPaid();
+        refunded.markPaid(Instant.now());
         refunded.markRefunded();
         assertThatThrownBy(refunded::markRefunded).isInstanceOf(IllegalStateException.class);
     }
@@ -179,7 +179,7 @@ class PaymentTest {
     @DisplayName("markRefunded: 전액 환불이므로 refundedAmount 를 결제액 전액으로 채운다 (#239)")
     void markRefunded_setsRefundedAmountToFull() {
         Payment payment = pending("tx-full");
-        payment.markPaid();
+        payment.markPaid(Instant.now());
 
         payment.markRefunded();
 
@@ -190,7 +190,7 @@ class PaymentTest {
     @DisplayName("refund: 부분 환불은 PARTIALLY_REFUNDED 로 누적, 전액 도달 시 REFUNDED (#239)")
     void refund_partialThenFull() {
         Payment payment = pending("tx-partial");
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         Instant now = Instant.parse("2026-06-12T00:00:00Z");
 
         payment.refund(10_000L, now);
@@ -212,7 +212,7 @@ class PaymentTest {
     @DisplayName("refund: 한 번에 전액이면 곧장 REFUNDED")
     void refund_fullInOneShot() {
         Payment payment = pending("tx-oneshot");
-        payment.markPaid();
+        payment.markPaid(Instant.now());
 
         payment.refund(35_000L, Instant.parse("2026-06-12T00:00:00Z"));
 
@@ -224,7 +224,7 @@ class PaymentTest {
     @DisplayName("refund: 누적 환불액이 결제액을 초과하면 IllegalArgumentException")
     void refund_rejectsExceedingCumulative() {
         Payment payment = pending("tx-exceed");
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         Instant now = Instant.parse("2026-06-12T00:00:00Z");
         payment.refund(30_000L, now);
 
@@ -236,7 +236,7 @@ class PaymentTest {
     @DisplayName("refund: amount 가 0 이하면 IllegalArgumentException")
     void refund_rejectsNonPositiveAmount() {
         Payment payment = pending("tx-zero");
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         Instant now = Instant.parse("2026-06-12T00:00:00Z");
 
         assertThatThrownBy(() -> payment.refund(0L, now)).isInstanceOf(IllegalArgumentException.class);

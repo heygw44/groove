@@ -481,7 +481,7 @@ class AdminCouponControllerTest {
     @DisplayName("POST 직접지급 동일 회원에 중복 지급 → 409 COUPON_ALREADY_ISSUED")
     void grant_duplicate_returns409() throws Exception {
         Coupon c = persistCoupon();
-        memberCouponRepository.saveAndFlush(MemberCoupon.issue(c, activeMemberId));
+        memberCouponRepository.saveAndFlush(MemberCoupon.issue(c, activeMemberId, Instant.now()));
 
         mockMvc.perform(post("/api/v1/admin/coupons/{id}/grant", c.getId())
                         .header(HttpHeaders.AUTHORIZATION, adminBearer)

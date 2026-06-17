@@ -70,26 +70,27 @@ class OrderRepositoryTest {
     private Order saveOrder(Long memberId, OrderStatus target) {
         Order order = Order.placeForMember("ORD-" + System.nanoTime(), memberId, shipping());
         // PENDING → target 으로 단계 전이 (canTransitionTo 규칙 준수)
+        Instant now = Instant.now();
         switch (target) {
             case PENDING -> { /* 이미 PENDING */ }
-            case PAID -> order.changeStatus(OrderStatus.PAID, null);
+            case PAID -> order.changeStatus(OrderStatus.PAID, null, now);
             case PREPARING -> {
-                order.changeStatus(OrderStatus.PAID, null);
-                order.changeStatus(OrderStatus.PREPARING, null);
+                order.changeStatus(OrderStatus.PAID, null, now);
+                order.changeStatus(OrderStatus.PREPARING, null, now);
             }
             case SHIPPED -> {
-                order.changeStatus(OrderStatus.PAID, null);
-                order.changeStatus(OrderStatus.PREPARING, null);
-                order.changeStatus(OrderStatus.SHIPPED, null);
+                order.changeStatus(OrderStatus.PAID, null, now);
+                order.changeStatus(OrderStatus.PREPARING, null, now);
+                order.changeStatus(OrderStatus.SHIPPED, null, now);
             }
             case DELIVERED -> {
-                order.changeStatus(OrderStatus.PAID, null);
-                order.changeStatus(OrderStatus.PREPARING, null);
-                order.changeStatus(OrderStatus.SHIPPED, null);
-                order.changeStatus(OrderStatus.DELIVERED, null);
+                order.changeStatus(OrderStatus.PAID, null, now);
+                order.changeStatus(OrderStatus.PREPARING, null, now);
+                order.changeStatus(OrderStatus.SHIPPED, null, now);
+                order.changeStatus(OrderStatus.DELIVERED, null, now);
             }
-            case CANCELLED -> order.changeStatus(OrderStatus.CANCELLED, "테스트");
-            case PAYMENT_FAILED -> order.changeStatus(OrderStatus.PAYMENT_FAILED, null);
+            case CANCELLED -> order.changeStatus(OrderStatus.CANCELLED, "테스트", now);
+            case PAYMENT_FAILED -> order.changeStatus(OrderStatus.PAYMENT_FAILED, null, now);
             default -> throw new IllegalArgumentException("미지원 상태: " + target);
         }
         return orderRepository.saveAndFlush(order);

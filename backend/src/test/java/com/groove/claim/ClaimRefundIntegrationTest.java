@@ -45,6 +45,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -131,20 +132,20 @@ class ClaimRefundIntegrationTest {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = OrderFixtures.memberOrder("ORD-CLM-" + (++seq) + "-" + System.nanoTime(), memberId);
         order.addItem(OrderItem.create(album, qty));
-        order.changeStatus(OrderStatus.PAID, null);
-        order.changeStatus(OrderStatus.PREPARING, null);
-        order.changeStatus(OrderStatus.SHIPPED, null);
-        order.changeStatus(OrderStatus.DELIVERED, null);
+        order.changeStatus(OrderStatus.PAID, null, Instant.now());
+        order.changeStatus(OrderStatus.PREPARING, null, Instant.now());
+        order.changeStatus(OrderStatus.SHIPPED, null, Instant.now());
+        order.changeStatus(OrderStatus.DELIVERED, null, Instant.now());
         Order saved = orderRepository.saveAndFlush(order);
 
         Payment payment = Payment.initiate(saved, saved.getPayableAmount(), PaymentMethod.CARD, "MOCK",
                 "mock-tx-" + seq + "-" + System.nanoTime());
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         paymentRepository.saveAndFlush(payment);
 
         Shipping shipping = Shipping.prepare(saved, saved.getShippingInfo(), "trk-" + seq + "-" + System.nanoTime());
-        shipping.markShipped();
-        shipping.markDelivered(); // delivered_at = now
+        shipping.markShipped(Instant.now());
+        shipping.markDelivered(Instant.now()); // delivered_at = now
         shippingRepository.saveAndFlush(shipping);
         return saved;
     }
@@ -154,12 +155,12 @@ class ClaimRefundIntegrationTest {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = OrderFixtures.memberOrder("ORD-CLM-" + (++seq) + "-" + System.nanoTime(), memberId);
         order.addItem(OrderItem.create(album, qty));
-        order.changeStatus(OrderStatus.PAID, null);
+        order.changeStatus(OrderStatus.PAID, null, Instant.now());
         Order saved = orderRepository.saveAndFlush(order);
 
         Payment payment = Payment.initiate(saved, saved.getPayableAmount(), PaymentMethod.CARD, "MOCK",
                 "mock-tx-" + seq + "-" + System.nanoTime());
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         paymentRepository.saveAndFlush(payment);
         return saved;
     }
@@ -294,9 +295,9 @@ class ClaimRefundIntegrationTest {
 
         // 2) 잔여 1개를 배송 진행 후 배송완료로 — 반품 자격(DELIVERED) 확보.
         Order live = orderRepository.findById(orderId).orElseThrow();
-        live.changeStatus(OrderStatus.PREPARING, null);
-        live.changeStatus(OrderStatus.SHIPPED, null);
-        live.changeStatus(OrderStatus.DELIVERED, null);
+        live.changeStatus(OrderStatus.PREPARING, null, Instant.now());
+        live.changeStatus(OrderStatus.SHIPPED, null, Instant.now());
+        live.changeStatus(OrderStatus.DELIVERED, null, Instant.now());
         orderRepository.saveAndFlush(live);
 
         // 3) 잔여 1개 반품(RETURN) — 클레임된 취소 1개 차감해 반품가능 수량 1.

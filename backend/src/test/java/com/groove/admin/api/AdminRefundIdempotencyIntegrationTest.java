@@ -28,6 +28,9 @@ import com.groove.payment.gateway.mock.MockPaymentGateway;
 import com.groove.support.OrderFixtures;
 import com.groove.support.MemberFixtures;
 import com.groove.support.TestcontainersConfig;
+
+import java.time.Instant;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -134,12 +137,12 @@ class AdminRefundIdempotencyIntegrationTest {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = OrderFixtures.memberOrder("ORD-20260513-IDEM01", memberId);
         order.addItem(OrderItem.create(album, QTY));
-        order.changeStatus(OrderStatus.PAID, null);
+        order.changeStatus(OrderStatus.PAID, null, Instant.now());
         Order saved = orderRepository.saveAndFlush(order);
 
         Payment payment = Payment.initiate(saved, saved.getTotalAmount(), PaymentMethod.CARD, "MOCK",
                 "mock-tx-IDEM01");
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         paymentRepository.saveAndFlush(payment);
         return saved.getOrderNumber();
     }

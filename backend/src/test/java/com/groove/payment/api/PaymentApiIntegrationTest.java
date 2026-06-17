@@ -147,7 +147,7 @@ class PaymentApiIntegrationTest {
                 : Order.placeForGuest(nextOrderNumber(), "guest@example.com", "01099999999", com.groove.support.OrderFixtures.sampleShippingInfo());
         order.addItem(OrderItem.create(album, 1)); // totalAmount = 35000
         if (status != OrderStatus.PENDING) {
-            order.changeStatus(status, null);
+            order.changeStatus(status, null, Instant.now());
         }
         return orderRepository.saveAndFlush(order);
     }

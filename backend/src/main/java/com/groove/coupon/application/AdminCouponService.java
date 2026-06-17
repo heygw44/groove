@@ -127,7 +127,7 @@ public class AdminCouponService {
         }
         MemberCoupon granted;
         try {
-            granted = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
+            granted = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId, clock.instant()));
         } catch (DataIntegrityViolationException uniqueRace) {
             // UNIQUE 충돌이면 409, 그 외 무결성 오류는 원예외를 재던진다.
             if (memberCouponRepository.existsByCoupon_IdAndMemberId(couponId, memberId)) {

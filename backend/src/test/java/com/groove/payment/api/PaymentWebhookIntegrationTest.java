@@ -162,8 +162,8 @@ class PaymentWebhookIntegrationTest {
                 Coupon.builder("정액-" + discount, CouponDiscountType.FIXED_AMOUNT, discount,
                                 Instant.now().minus(1, ChronoUnit.DAYS), Instant.now().plus(30, ChronoUnit.DAYS))
                         .build());
-        MemberCoupon memberCoupon = MemberCoupon.issue(coupon, memberId);
-        memberCoupon.use(orderId);
+        MemberCoupon memberCoupon = MemberCoupon.issue(coupon, memberId, Instant.now());
+        memberCoupon.use(orderId, Instant.now());
         return memberCouponRepository.saveAndFlush(memberCoupon);
     }
 

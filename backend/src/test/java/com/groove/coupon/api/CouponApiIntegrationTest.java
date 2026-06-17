@@ -256,7 +256,7 @@ class CouponApiIntegrationTest {
     @DisplayName("GET /members/me/coupons (USER) → 200, 본인 보유 쿠폰")
     void listMine_returnsOwnerCoupons() throws Exception {
         Coupon coupon = persistCoupon(100, CouponStatus.ACTIVE);
-        memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, ownerId));
+        memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, ownerId, NOW));
 
         mockMvc.perform(get("/api/v1/members/me/coupons")
                         .header(HttpHeaders.AUTHORIZATION, ownerBearer))
@@ -271,8 +271,8 @@ class CouponApiIntegrationTest {
     void listMine_usedCoupon_resolvesOrderNumber() throws Exception {
         Coupon coupon = persistCoupon(100, CouponStatus.ACTIVE);
         Order order = orderRepository.saveAndFlush(OrderFixtures.memberOrder("ORD-20260604-000137", ownerId));
-        MemberCoupon used = MemberCoupon.issue(coupon, ownerId);
-        used.use(order.getId());
+        MemberCoupon used = MemberCoupon.issue(coupon, ownerId, NOW);
+        used.use(order.getId(), NOW);
         memberCouponRepository.saveAndFlush(used);
 
         mockMvc.perform(get("/api/v1/members/me/coupons")
@@ -290,12 +290,12 @@ class CouponApiIntegrationTest {
         // USED 쿠폰 1장(주문 연결) + 미사용 ISSUED 쿠폰 1장을 같은 페이지에 둔다.
         Coupon usedCoupon = persistCoupon(100, CouponStatus.ACTIVE);
         Order order = orderRepository.saveAndFlush(OrderFixtures.memberOrder("ORD-20260604-000137", ownerId));
-        MemberCoupon used = MemberCoupon.issue(usedCoupon, ownerId);
-        used.use(order.getId());
+        MemberCoupon used = MemberCoupon.issue(usedCoupon, ownerId, NOW);
+        used.use(order.getId(), NOW);
         memberCouponRepository.saveAndFlush(used);
 
         Coupon issuedCoupon = persistCoupon(100, CouponStatus.ACTIVE);
-        memberCouponRepository.saveAndFlush(MemberCoupon.issue(issuedCoupon, ownerId));
+        memberCouponRepository.saveAndFlush(MemberCoupon.issue(issuedCoupon, ownerId, NOW));
 
         MvcResult result = mockMvc.perform(get("/api/v1/members/me/coupons")
                         .header(HttpHeaders.AUTHORIZATION, ownerBearer))

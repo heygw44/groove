@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+
 /**
  * 결제 완료 주문에 배송을 생성(프로비저닝)하는 단일 진입점 — 아웃박스 컨슈머 OrderPaidOutboxHandler 와
  * 보충 스케줄러 ShippingReconciliationScheduler 가 같은 로직을 공유한다.
@@ -29,13 +31,16 @@ public class ShippingProvisioner {
     private final ShippingRepository shippingRepository;
     private final OrderRepository orderRepository;
     private final TrackingNumberGenerator trackingNumberGenerator;
+    private final Clock clock;
 
     public ShippingProvisioner(ShippingRepository shippingRepository,
                                OrderRepository orderRepository,
-                               TrackingNumberGenerator trackingNumberGenerator) {
+                               TrackingNumberGenerator trackingNumberGenerator,
+                               Clock clock) {
         this.shippingRepository = shippingRepository;
         this.orderRepository = orderRepository;
         this.trackingNumberGenerator = trackingNumberGenerator;
+        this.clock = clock;
     }
 
     /**
@@ -67,7 +72,7 @@ public class ShippingProvisioner {
         // 운송장 번호를 주문에 비정규화한다(더티체킹으로 커밋 시 반영).
         order.recordTrackingNumber(shipping.getTrackingNumber());
         // 배송 생성(PREPARING)에 맞춰 주문도 PAID→PREPARING 으로 락스텝 전진시킨다(합법 전이만, 아니면 무해 무시).
-        order.advanceTo(OrderStatus.PREPARING);
+        order.advanceTo(OrderStatus.PREPARING, clock.instant());
         log.info("배송 생성: order={}, tracking={}", orderNumber, shipping.getTrackingNumber());
         return true;
     }

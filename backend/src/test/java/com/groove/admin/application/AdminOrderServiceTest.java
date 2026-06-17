@@ -26,6 +26,7 @@ import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.RefundRequest;
 import com.groove.payment.gateway.RefundResponse;
 import com.groove.support.OrderFixtures;
+import com.groove.support.TestClocks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +42,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -82,13 +84,14 @@ class AdminOrderServiceTest {
     private AdminOrderService service;
 
     private static final long ALBUM_ID = 50L;
+    private static final Clock CLOCK = TestClocks.FIXED;
 
     @BeforeEach
     void setUp() {
         // 실제 RefundSteps 를 mock 리포지토리로 조립해 주입하면 오케스트레이터(prepare→PG→apply) 전 구간을 단위로 검증한다.
         RefundSteps refundSteps = new RefundSteps(orderRepository, paymentRepository,
                 couponApplicationService, shippingService, albumRepository);
-        service = new AdminOrderService(orderRepository, paymentGateway, refundSteps);
+        service = new AdminOrderService(orderRepository, paymentGateway, refundSteps, CLOCK);
     }
 
     private Album album(int initialStock) {
@@ -116,13 +119,13 @@ class AdminOrderServiceTest {
             case DELIVERED -> List.of(OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.SHIPPED, OrderStatus.DELIVERED);
             default -> throw new IllegalArgumentException("지원하지 않는 target: " + target);
         };
-        path.forEach(s -> order.changeStatus(s, null));
+        path.forEach(s -> order.changeStatus(s, null, CLOCK.instant()));
         return order;
     }
 
     private Payment paidPaymentFor(Order order) {
         Payment payment = Payment.initiate(order, ORDER_AMOUNT, PaymentMethod.CARD, "MOCK", PG_TX);
-        payment.markPaid();
+        payment.markPaid(CLOCK.instant());
         // refundIdempotencyKey() 는 영속화된 id 를 요구하므로 강제 주입한다.
         ReflectionTestUtils.setField(payment, "id", PAYMENT_ID);
         return payment;

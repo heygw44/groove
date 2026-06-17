@@ -33,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,7 +91,7 @@ class ReviewServiceTest {
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         // PENDING → status 까지 합법 전이로 끌어올린다.
         for (OrderStatus next : pathTo(status)) {
-            order.changeStatus(next, null);
+            order.changeStatus(next, null, Instant.now());
         }
         return order;
     }
@@ -179,7 +180,7 @@ class ReviewServiceTest {
         order.addItem(OrderItem.create(albumWithId(ALBUM_ID), 1));
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         for (OrderStatus next : pathTo(OrderStatus.DELIVERED)) {
-            order.changeStatus(next, null);
+            order.changeStatus(next, null, Instant.now());
         }
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
 
@@ -195,7 +196,7 @@ class ReviewServiceTest {
         order.addItem(OrderItem.create(albumWithId(ALBUM_ID), 1));
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         for (OrderStatus next : pathTo(OrderStatus.DELIVERED)) {
-            order.changeStatus(next, null);
+            order.changeStatus(next, null, Instant.now());
         }
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
 

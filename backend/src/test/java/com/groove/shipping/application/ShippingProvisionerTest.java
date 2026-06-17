@@ -7,6 +7,7 @@ import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
 import com.groove.support.OrderFixtures;
+import com.groove.support.TestClocks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Clock;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,16 +44,18 @@ class ShippingProvisionerTest {
 
     private ShippingProvisioner provisioner;
 
+    private static final Clock CLOCK = TestClocks.FIXED;
+
     @BeforeEach
     void setUp() {
-        provisioner = new ShippingProvisioner(shippingRepository, orderRepository, trackingNumberGenerator);
+        provisioner = new ShippingProvisioner(shippingRepository, orderRepository, trackingNumberGenerator, CLOCK);
     }
 
     @Test
     @DisplayName("정상 — PREPARING 배송 생성 + 운송장 발급 + 주문도 PAID→PREPARING 락스텝 전이, true 반환")
     void createsPreparingShipping() {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
-        order.changeStatus(OrderStatus.PAID, null); // 결제 직후 상태
+        order.changeStatus(OrderStatus.PAID, null, CLOCK.instant()); // 결제 직후 상태
         given(shippingRepository.existsByOrderId(ORDER_ID)).willReturn(false);
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
         given(trackingNumberGenerator.generate()).willReturn(TRACKING);
@@ -74,7 +78,7 @@ class ShippingProvisionerTest {
     void skipsWhenOrderTerminal() {
         // 배송 생성 전에 환불로 주문이 이미 CANCELLED 가 된 상황.
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, 1L);
-        order.changeStatus(OrderStatus.CANCELLED, "환불");
+        order.changeStatus(OrderStatus.CANCELLED, "환불", CLOCK.instant());
         given(shippingRepository.existsByOrderId(ORDER_ID)).willReturn(false);
         given(orderRepository.findById(ORDER_ID)).willReturn(Optional.of(order));
 
