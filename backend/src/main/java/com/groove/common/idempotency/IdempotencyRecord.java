@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -25,6 +26,9 @@ import java.util.Objects;
 @Entity
 @Table(
         name = "idempotency_record",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_idempotency_key", columnNames = "idempotency_key")
+        },
         indexes = {
                 @Index(name = "idx_idempotency_expires", columnList = "expires_at")
         }
@@ -35,7 +39,7 @@ public class IdempotencyRecord extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "idempotency_key", nullable = false, length = 255, unique = true)
+    @Column(name = "idempotency_key", nullable = false, length = 255)
     private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
