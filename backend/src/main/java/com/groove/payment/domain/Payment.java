@@ -111,6 +111,7 @@ public class Payment extends BaseTimeEntity {
      * 결제 완료 확정 — PAID 로 전이하고 paidAt 을 주입된 now 로 기록한다. 전이 위반 시 IllegalStateException.
      */
     public void markPaid(Instant now) {
+        Objects.requireNonNull(now, "now must not be null");
         transitionTo(PaymentStatus.PAID);
         this.paidAt = now;
     }
