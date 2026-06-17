@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.7 |
+| 버전 | 1.8 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-12 |
-| 변경 내용 | v1.7 (V18~V22 반영): 회원 PII 익명화·재가입 차단 해시를 위한 `member.email_hash`(V18 CHAR(64) → V19 VARCHAR(72), #170/#186)·`uk_member_email_hash` UNIQUE, `phone` NULL 허용(탈퇴 익명화), `orders`/`shipping` 의 `anonymized_at` 마커(V18) 반영. 검색 인덱스(`artist_name` 비정규화 + FULLTEXT, V21/#204)를 §4.6 컬럼 표에 정식 편입하고, 주문/리뷰 목록 복합 인덱스(`idx_orders_member_created`·`idx_orders_status_created`·`idx_review_album_created`, V22/#225)를 "예정/후속"에서 "적용 완료"로 갱신. §7 마이그레이션 표를 V1~V22 로 현행화하고 V20(member HMAC 백필 Java 마이그레이션)을 명시. DB 표기를 실제 이미지(MySQL 8.4)에 맞춤. v1.6 (M13 쿠폰 구현 완료 반영): §4.15 `coupon`·§4.16 `member_coupon` 을 **계획 → 구현 완료**(V14/V16)로 갱신, `orders.discount_amount`(V15)·`tracking_number`(V17, 배송 운송장 비정규화) 반영. 선착순 발급 동시성은 원자적 조건부 UPDATE 로 구현([decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)). §7 마이그레이션 표를 실제 적용분(V1~V17)으로 현행화. 백엔드 소스 경로를 `backend/` 이동에 맞춰 정정. v1.5 (확장: 쿠폰 시스템 — V14/V15 계획 반영): `coupon`·`member_coupon` 2개 테이블 신설(§4.15/§4.16) — §8 v2 후보였던 `coupon`/`coupon_issue` 를 정식 도메인으로 승격. `orders` 에 `discount_amount` 컬럼 추가(주문 총액 대비 할인액, payable = total_amount − discount_amount 파생) — `applied_member_coupon_id` 대신 `member_coupon.order_id` 역참조로 순환 FK 회피. 선착순 발급 동시성은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) ADR(DB 단계적: 베이스라인→비관적 락→원자적 조건부 UPDATE)에 따른다. 설계 전문은 [plans/coupon-system.md](./plans/coupon-system.md). 본 변경은 **계획 단계** — 구현/마이그레이션 적용 시점에 상태 갱신. v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
+| 최종 수정일 | 2026-06-17 |
+| 변경 내용 | v1.8 (V23~V28 반영 — 클레임/아웃박스 확장): 취소(CANCEL)/반품(RETURN) 통합 클레임을 위한 `claim`(§4.17)·`claim_item`(§4.18) 테이블과 `ClaimType`(CANCEL/RETURN)·`ClaimStatus`(REQUESTED→APPROVED→IN_TRANSIT→INSPECTING→REFUNDED/REJECTED) enum 신설. 트랜잭셔널 아웃박스 `outbox_event`(§4.19, V26) 추가. `payment.refunded_amount`(V24)·`orders.returned_at`(V24) 컬럼과 `PaymentStatus.PARTIALLY_REFUNDED` 반영, `payment.pg_transaction_id` 를 `idx_payment_pg_tx` → `uk_payment_pg_tx` UNIQUE 로 승격(V28). §2 테이블 목록 15→18개, §3 ER 다이어그램에 claim 관계 추가, §6 enum·§7 마이그레이션 표를 V28 까지 현행화, §9.1 FK CASCADE·CHECK 제약 보강. v1.7 (V18~V22 반영): 회원 PII 익명화·재가입 차단 해시를 위한 `member.email_hash`(V18 CHAR(64) → V19 VARCHAR(72), #170/#186)·`uk_member_email_hash` UNIQUE, `phone` NULL 허용(탈퇴 익명화), `orders`/`shipping` 의 `anonymized_at` 마커(V18) 반영. 검색 인덱스(`artist_name` 비정규화 + FULLTEXT, V21/#204)를 §4.6 컬럼 표에 정식 편입하고, 주문/리뷰 목록 복합 인덱스(`idx_orders_member_created`·`idx_orders_status_created`·`idx_review_album_created`, V22/#225)를 "예정/후속"에서 "적용 완료"로 갱신. §7 마이그레이션 표를 V1~V22 로 현행화하고 V20(member HMAC 백필 Java 마이그레이션)을 명시. DB 표기를 실제 이미지(MySQL 8.4)에 맞춤. v1.6 (M13 쿠폰 구현 완료 반영): §4.15 `coupon`·§4.16 `member_coupon` 을 **계획 → 구현 완료**(V14/V16)로 갱신, `orders.discount_amount`(V15)·`tracking_number`(V17, 배송 운송장 비정규화) 반영. 선착순 발급 동시성은 원자적 조건부 UPDATE 로 구현([decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)). §7 마이그레이션 표를 실제 적용분(V1~V17)으로 현행화. 백엔드 소스 경로를 `backend/` 이동에 맞춰 정정. v1.5 (확장: 쿠폰 시스템 — V14/V15 계획 반영): `coupon`·`member_coupon` 2개 테이블 신설(§4.15/§4.16) — §8 v2 후보였던 `coupon`/`coupon_issue` 를 정식 도메인으로 승격. `orders` 에 `discount_amount` 컬럼 추가(주문 총액 대비 할인액, payable = total_amount − discount_amount 파생) — `applied_member_coupon_id` 대신 `member_coupon.order_id` 역참조로 순환 FK 회피. 선착순 발급 동시성은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) ADR(DB 단계적: 베이스라인→비관적 락→원자적 조건부 UPDATE)에 따른다. 설계 전문은 [plans/coupon-system.md](./plans/coupon-system.md). 본 변경은 **계획 단계** — 구현/마이그레이션 적용 시점에 상태 갱신. v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
 | DB | MySQL 8.4 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | PRD.md, ARCHITECTURE.md |
@@ -40,9 +40,9 @@
 
 ---
 
-## 2. 테이블 목록 (전체 15개)
+## 2. 테이블 목록 (전체 18개)
 
-> 13개(W1~W7) + 쿠폰 확장 2개(`coupon`, `member_coupon`). 쿠폰 2개는 **구현 완료**(M13 — V14 적용).
+> 13개(W1~W7) + 쿠폰 확장 2개(`coupon`, `member_coupon`, M13 — V14) + 클레임/아웃박스 확장 3개(`claim`, `claim_item`, `outbox_event`, M16 — V23~V27). 확장 5개 모두 **구현 완료**.
 
 | 도메인 | 테이블 | 용도 |
 |---|---|---|
@@ -62,6 +62,9 @@
 | 리뷰 | `review` | 상품 리뷰 |
 | 쿠폰 | `coupon` | 쿠폰 정책/캠페인 (할인 규칙 + 선착순 한정수량) |
 | 쿠폰 | `member_coupon` | 회원 보유 쿠폰 (발급 인스턴스 + 사용 이력) |
+| 클레임 | `claim` | 취소(CANCEL)/반품(RETURN) 통합 클레임 (M16) |
+| 클레임 | `claim_item` | 클레임 항목 (취소·반품 대상 주문 항목 + 수량) |
+| 이벤트 | `outbox_event` | 트랜잭셔널 아웃박스 (결제 후속 처리 at-least-once 발행) |
 
 ---
 
@@ -94,9 +97,15 @@ erDiagram
     coupon ||--o{ member_coupon : issued_as
     member ||--o{ member_coupon : holds
     orders ||--o| member_coupon : discounted_by
+
+    orders ||--o{ claim : claimed_by
+    claim ||--|{ claim_item : contains
+    order_item ||--o{ claim_item : referenced_by
 ```
 
 > 쿠폰 관계: `coupon`(정책) 1건이 다수 `member_coupon`(회원 발급분)으로 발급되고, 각 `member_coupon` 은 한 회원 소유이며 사용 시 한 `orders` 에 1:0..1 로 연결된다. `orders` 가 `coupon` 을 직접 참조하지 않는 이유는 §4.16 비고 참조.
+
+> 클레임 관계: 한 `orders` 는 0개 이상의 `claim`(취소/반품)을 가질 수 있고(거부 후 재요청 허용 — `order_id` 비유니크), 각 `claim` 은 1개 이상의 `claim_item` 으로 구성되며 각 항목은 한 `order_item` 을 참조한다. `outbox_event` 는 특정 테이블과 FK 로 묶이지 않는 독립 발행 로그라 다이어그램에서 생략한다(§4.19).
 
 ---
 
@@ -380,8 +389,9 @@ erDiagram
 | zip_code | VARCHAR(20) | NOT NULL (DEFAULT '') | 배송지 스냅샷 — 우편번호 (V12) |
 | safe_packaging_requested | BOOLEAN | NOT NULL, DEFAULT FALSE | 배송지 스냅샷 — LP 안전 포장 요청 (V12) |
 | discount_amount | BIGINT | NOT NULL, DEFAULT 0, CHECK (0 ≤ discount_amount ≤ total_amount) | 쿠폰 할인액 (V15). 미사용 주문은 0 |
-| tracking_number | VARCHAR(64) | NULL | 배송 운송장번호 비정규화 (V17). 배송 생성 시 `ShippingCreationListener` 가 기록, 결제 전 NULL |
+| tracking_number | VARCHAR(64) | NULL | 배송 운송장번호 비정규화 (V17). 배송 생성 시 `OrderPaidOutboxHandler`(ORDER_PAID 아웃박스 컨슈머, #237) 가 기록, 결제 전 NULL |
 | anonymized_at | DATETIME(6) | NULL | 주문 PII 익명화 마커 (V18, #170). 배송 완료 + 보존기간 경과 주문을 배치가 익명화한 뒤 기록, 멱등 처리용 |
+| returned_at | DATETIME(6) | NULL | 전량 반품 완료 마커 (V24, M16). 모든 `order_item` 이 반품 환불되어 결제 전액이 환불됐을 때만 기록. `OrderStatus` 는 DELIVERED/COMPLETED 로 유지해 "배송된 사실"을 보존하고(상태 폭발 회피) 환불 여부만 표식한다. 부분 반품만 있으면 NULL |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
 
@@ -412,7 +422,9 @@ erDiagram
 | 0 ≤ discount_amount ≤ total_amount (V15) | [DB+APP] | CHECK + `Coupon.calculateDiscount` 결과를 주문총액으로 캡 |
 | 쿠폰은 회원 주문에만 적용 (게스트 불가, V15) | [APP] | OrderService.place — 게스트 주문에 `memberCouponId` 동반 시 거부 |
 | 전액 할인(payable=0)은 v1 범위 외 | [APP] | 결제는 `amount > 0` 계약 — 0원 자동결제(PG 우회)는 후속 과제. [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) §Consequences |
-| tracking_number = 배송 생성 시 운송장 비정규화 (V17) | [APP] | `ShippingCreationListener`(OrderPaidEvent AFTER_COMMIT) 가 기록 — `OrderResponse` 가 별도 매핑 없이 운송장 노출 |
+| tracking_number = 배송 생성 시 운송장 비정규화 (V17) | [APP] | `OrderPaidOutboxHandler`(ORDER_PAID 아웃박스 컨슈머, #237) 가 기록 — `OrderResponse` 가 별도 매핑 없이 운송장 노출 |
+| 발송 전 부분 취소는 주문 상태 유지, 전량 취소 시에만 PAID/PREPARING → CANCELLED (V27, M16) | [APP] | `ClaimService.cancelPartially` — 취소·반품은 `OrderStatus` 에 섞지 않고 `claim` aggregate(§4.17)로 분리 |
+| returned_at: 전량 반품 환불 완료 시에만 기록 (V24, M16) | [APP] | DELIVERED/COMPLETED 유지 + 환불 표식만 (상태 폭발 회피) |
 
 ---
 
@@ -457,10 +469,11 @@ erDiagram
 | id | BIGINT | PK, AUTO_INCREMENT | |
 | order_id | BIGINT | NOT NULL, UNIQUE, FK → orders.id | 주문당 1결제 (재시도는 새 row가 아닌 상태 갱신) |
 | amount | BIGINT | NOT NULL, CHECK (amount > 0) | 0원 결제 불가 — 게이트웨이 계약(PaymentRequest)·도메인(Payment.initiate)과 정합 |
-| status | VARCHAR(20) | NOT NULL | enum: PENDING, PAID, FAILED, REFUNDED |
+| refunded_amount | BIGINT | NOT NULL, DEFAULT 0, CHECK (refunded_amount >= 0) | 누적 환불액 (V24, M16). 부분 반품·부분 취소가 claim 환불액을 누적, `refunded_amount == amount` 가 되면 REFUNDED(종착), 그 전엔 PARTIALLY_REFUNDED |
+| status | VARCHAR(20) | NOT NULL | enum: PENDING, PAID, FAILED, PARTIALLY_REFUNDED, REFUNDED (PARTIALLY_REFUNDED 는 V24, M16 — DDL 없이 기존 컬럼에 저장) |
 | method | VARCHAR(20) | NOT NULL | enum: CARD, BANK_TRANSFER, MOCK |
 | pg_provider | VARCHAR(20) | NOT NULL, DEFAULT 'MOCK' | |
-| pg_transaction_id | VARCHAR(100) | NULL | PG 측 거래 ID |
+| pg_transaction_id | VARCHAR(100) | NULL, UNIQUE (V28) | PG 측 거래 ID. 'PG 거래 1건 = 결제 1건' 을 `uk_payment_pg_tx` UNIQUE 로 강제(V28, #252) — 다중 NULL 은 허용되나 앱은 항상 non-null 주입 |
 | paid_at | DATETIME(6) | NULL | 결제 완료 시각 |
 | failure_reason | VARCHAR(500) | NULL | 실패 사유 |
 | created_at | DATETIME(6) | NOT NULL | |
@@ -470,7 +483,7 @@ erDiagram
 
 [W5]:
 - `uk_payment_order` UNIQUE (order_id)
-- `idx_payment_pg_tx` (pg_transaction_id) — PG 웹훅 검증용
+- ~~`idx_payment_pg_tx` (pg_transaction_id)~~ → **`uk_payment_pg_tx` UNIQUE (pg_transaction_id)** 로 승격 (V28, #252) — PG 거래 1:1 결제 불변식을 DB 레벨에서 강제
 
 [W7-4] (폴링 스케줄러 도입과 함께 추가, V11):
 - `idx_payment_status_created` (status, created_at) — 폴링 스케줄러용 (PENDING 결제 `created_at < cutoff` 조회)
@@ -480,8 +493,10 @@ erDiagram
 | 규칙 | 위치 | 비고 |
 |---|---|---|
 | 주문당 결제 1건 | [DB] | uk_payment_order UNIQUE |
+| PG 거래 1건 = 결제 1건 (V28) | [DB+APP] | uk_payment_pg_tx UNIQUE — 단건 조회 계약(`findByPgTransactionId…`) 보호 |
 | amount > 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + Payment.initiate / PaymentRequest |
-| status 전이 (PENDING→PAID/FAILED, PAID→REFUNDED) | [APP] | PaymentStatus.canTransitionTo() |
+| status 전이 (PENDING→PAID/FAILED, PAID→PARTIALLY_REFUNDED/REFUNDED, PARTIALLY_REFUNDED→REFUNDED) | [APP] | PaymentStatus.canTransitionTo() |
+| refunded_amount 누적, == amount 도달 시 REFUNDED (V24) | [DB+APP] | CHECK (≥0) + Payment 부분환불 메서드 — 부분 취소·반품 공용 |
 | paid_at: PAID 전환 시 기록 | [APP] | status=PAID 전환 메서드 내부 처리 |
 | 멱등성 키 이중 보호 | [DB+APP] | idempotency_record UNIQUE + Service 레이어 |
 
@@ -688,6 +703,110 @@ erDiagram
 
 ---
 
+### 4.17 `claim` — 취소/반품 통합 클레임 ★ (확장 M16, V23/V24/V27)
+
+취소·반품을 `OrderStatus` 에 섞지 않고 주문을 참조하는 별도 aggregate 로 분리한다(상태 폭발 회피, 네이버 커머스의 통합 클레임 모델과 동일). `claim_type` 으로 두 유스케이스를 구분한다.
+
+- **CANCEL** (V27, 발송 전 PAID/PREPARING 관리자 부분취소): 회수·검수 없이 `REQUESTED → REFUNDED` 1-스텝 즉시 환불.
+- **RETURN** (V23, 발송 후 DELIVERED/COMPLETED 반품): `REQUESTED → APPROVED → IN_TRANSIT → INSPECTING → REFUNDED/REJECTED` 역물류 상태머신.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| order_id | BIGINT | NOT NULL, FK → orders.id ON DELETE CASCADE | `order_id` 비유니크 — 거부(REJECTED) 후 재요청 허용 |
+| claim_type | VARCHAR(20) | NOT NULL, DEFAULT 'RETURN' | enum: CANCEL, RETURN (V27). 기존 행은 RETURN 으로 백필 |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'REQUESTED' | enum: REQUESTED, APPROVED, IN_TRANSIT, INSPECTING, REFUNDED, REJECTED |
+| reason | VARCHAR(500) | NOT NULL | 취소/반품 사유 |
+| rejection_reason | VARCHAR(500) | NULL | 거부 사유 (REJECTED 시) |
+| refund_amount | BIGINT | NOT NULL, DEFAULT 0, CHECK (refund_amount >= 0) | 확정 환불액 — 할인 안분(`payable × 취소·반품정가/총정가`)으로 계산 |
+| approved_at | DATETIME(6) | NULL | 승인 시각 (RETURN) |
+| in_transit_at | DATETIME(6) | NULL | 회수 시작 시각 |
+| inspecting_at | DATETIME(6) | NULL | 검수 시작 시각 |
+| completed_at | DATETIME(6) | NULL | 종착(환불/거부) 시각 |
+| created_at | DATETIME(6) | NOT NULL | 접수 시각 |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+**인덱스**
+
+[V23]:
+- `idx_claim_order` (order_id) — 주문별 클레임 조회 + FK 인덱스
+- `idx_claim_status` (status, updated_at) — 자동 진행 스케줄러가 status 기준 시간경과 후보를 주기 조회 (`idx_shipping_status` 패턴)
+
+**비즈니스 룰**
+
+| 규칙 | 위치 | 비고 |
+|---|---|---|
+| status 전이 (위 상태머신) | [APP] | `ClaimStatus.canTransitionTo` + Claim 단일 진입점 |
+| 타입별 자격 윈도우 (CANCEL=PAID/PREPARING, RETURN=DELIVERED/COMPLETED) | [APP] | ClaimService |
+| 반품 기한 (delivered_at + return-window) | [APP] | ClaimService — `Shipping.deliveredAt` anchor |
+| 항목 잔여 수량 가드 (비-REJECTED claim 수량 합) | [APP] | ClaimService |
+| 검수통과 시 부분환불 + 재입고 + 전량 시 쿠폰 복원 | [APP] | `ClaimService.completeRefund` / `cancellationRefund` — AdminOrderService.refund 미러 |
+| refund_amount >= 0 | [DB+APP] | ck_claim_refund_amount CHECK |
+| FK 무결성 (order ON DELETE CASCADE) | [DB] | fk_claim_order — 주문 삭제 시 클레임 동반 삭제 |
+
+---
+
+### 4.18 `claim_item` — 클레임 항목 (확장 M16, V23)
+
+한 클레임에서 취소·반품할 주문 항목과 수량. 단가는 주문 시점 스냅샷을 복사한다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| claim_id | BIGINT | NOT NULL, FK → claim.id ON DELETE CASCADE | |
+| order_item_id | BIGINT | NOT NULL, FK → order_item.id ON DELETE CASCADE | |
+| quantity | INT | NOT NULL, CHECK (quantity > 0) | 취소·반품 수량 |
+| unit_price_snapshot | BIGINT | NOT NULL, CHECK (unit_price_snapshot >= 0) | 주문 시점 단가 스냅샷 |
+| created_at | DATETIME(6) | NOT NULL | |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+**인덱스**
+
+[V23]:
+- `uk_claim_item_order_item` UNIQUE (claim_id, order_item_id) — 한 클레임 안에서 같은 주문 항목 중복 방지 (APP 수량 합산의 DB 방어선)
+- `idx_claim_item_claim` (claim_id) — 클레임 상세 조회 + FK 인덱스
+
+**비즈니스 룰**
+
+| 규칙 | 위치 | 비고 |
+|---|---|---|
+| quantity > 0 | [DB+APP] | ck_claim_item_quantity CHECK + @Min(1) |
+| unit_price_snapshot >= 0 | [DB+APP] | ck_claim_item_unit_price CHECK |
+| 클레임 내 동일 주문 항목 1줄 | [DB+APP] | uk_claim_item_order_item UNIQUE — 요청 라인 수량은 APP 가 합산 |
+
+---
+
+### 4.19 `outbox_event` — 트랜잭셔널 아웃박스 (확장 M16, V26)
+
+결제 완료 후속 처리(배송 생성·알림 등)를 인프로세스 이벤트로 발행하면 커밋과 리스너 실행 사이에 프로세스가 죽을 때 유실된다. 상태 변경과 같은 트랜잭션에서 이벤트를 이 테이블에 기록(원자 커밋)하고, 릴레이 스케줄러(`OutboxRelayScheduler`)가 미발행 행을 주기 발행(at-least-once)한다. 컨슈머는 멱등(예: `ShippingProvisioner.existsByOrderId`)이라 중복 발행·재기동에도 정확히 1회 효과다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| id | BIGINT | PK, AUTO_INCREMENT | |
+| aggregate_type | VARCHAR(50) | NOT NULL | 발행 출처 aggregate (예: ORDER) |
+| aggregate_id | BIGINT | NOT NULL | aggregate 식별자 |
+| event_type | VARCHAR(100) | NOT NULL | 이벤트 종류 |
+| payload | TEXT | NOT NULL | 이벤트 본문 JSON (`idempotency_record.response_body` 선례) |
+| published_at | DATETIME(6) | NULL | NULL = 미발행. 발행 완료 시 기록 |
+| created_at | DATETIME(6) | NOT NULL | |
+| updated_at | DATETIME(6) | NOT NULL | |
+
+**인덱스**
+
+[V26]:
+- `idx_outbox_unpublished` (published_at, id) — 릴레이가 미발행 행을 id FIFO 로 스캔 + 정리 스케줄러가 published_at 범위로 회수, 두 접근을 한 인덱스로 흡수
+
+**비즈니스 룰**
+
+| 규칙 | 위치 | 비고 |
+|---|---|---|
+| 발행 = 상태 변경 트랜잭션 안에서 INSERT | [APP] | `OutboxEventPublisher` |
+| 릴레이 (미발행 → 발행 완료) | [APP] | `OutboxRelayScheduler` — published_at IS NULL 배치 조회 후 디스패치 |
+| 멱등 컨슈머 | [APP] | `OutboxEventHandler` 구현 (배송은 existsByOrderId) |
+| TTL 정리 (발행 완료 행 회수) | [APP] | `OutboxEventCleanupTask` — published_at < now − retention 삭제 |
+
+---
+
 ## 5. 인덱스 전략 요약
 
 ### 5.1 W5 시점 (W10 시연 위해 의도적 최소 인덱스)
@@ -750,19 +869,21 @@ ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at), AL
 | `AlbumStatus` | SELLING, SOLD_OUT, HIDDEN |
 | `AlbumFormat` | LP_12, LP_DOUBLE, EP, SINGLE_7 |
 | `OrderStatus` | PENDING, PAID, PREPARING, SHIPPED, DELIVERED, COMPLETED, CANCELLED, PAYMENT_FAILED |
-| `PaymentStatus` | PENDING, PAID, FAILED, REFUNDED |
+| `PaymentStatus` | PENDING, PAID, FAILED, PARTIALLY_REFUNDED, REFUNDED |
 | `PaymentMethod` | CARD, BANK_TRANSFER, MOCK |
 | `ShippingStatus` | PREPARING, SHIPPED, DELIVERED |
 | `IdempotencyStatus` | PROCESSING, COMPLETED, FAILED |
 | `CouponDiscountType` | FIXED_AMOUNT, PERCENTAGE |
 | `CouponStatus` | ACTIVE, SUSPENDED, ENDED |
 | `MemberCouponStatus` | ISSUED, USED, EXPIRED, CANCELLED |
+| `ClaimType` | CANCEL, RETURN |
+| `ClaimStatus` | REQUESTED, APPROVED, IN_TRANSIT, INSPECTING, REFUNDED, REJECTED |
 
 ---
 
 ## 7. Flyway 마이그레이션 파일
 
-실제 적용 파일은 `backend/src/main/resources/db/migration/`(SQL)과 `backend/src/main/java/com/groove/member/migration/`(Java). 현재 V1~V22 적용 완료.
+실제 적용 파일은 `backend/src/main/resources/db/migration/`(SQL)과 `backend/src/main/java/com/groove/member/migration/`(Java). 현재 V1~V28 적용 완료.
 
 | 버전 | 파일명 | 내용 | 적용 시점 | 상태 |
 |---|---|---|---|---|
@@ -788,6 +909,12 @@ ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at), AL
 | V20 | `V20__email_hash_hmac_backfill.java` (Java 마이그레이션) | 활성 회원 `email_hash` 를 HMAC 으로 재계산·백필 — MySQL 내장 HMAC 부재로 `EmailHasher` DI 사용 (#186) | 보안/익명화 | 적용 완료 |
 | V21 | `V21__add_search_indexes.sql` | album `artist_name` 비정규화 + `ft_album_keyword` FULLTEXT(ngram) + 필터/정렬 복합 인덱스 4종 (#204) | W10 | 적용 완료 |
 | V22 | `V22__add_order_review_list_indexes.sql` | orders/review 목록 복합 인덱스 3종 — V8/V13 의 [W10] 누락분 보완 (#225) | W10 | 적용 완료 |
+| V23 | `V23__init_claim.sql` | claim, claim_item (반품 역물류 상태머신, #239) | 확장 M16 | 적용 완료 |
+| V24 | `V24__claim_refund_support.sql` | payment `refunded_amount` + orders `returned_at` (부분 환불 지원, #239) | 확장 M16 | 적용 완료 |
+| V25 | `V25__keyset_covering_indexes.sql` | album `(status,price)`·`(status,release_year)` + orders `(member_id,status,created_at)` keyset 커버링 인덱스 (#244) | M16 | 적용 완료 |
+| V26 | `V26__init_outbox.sql` | outbox_event (트랜잭셔널 아웃박스, #237) | 확장 M16 | 적용 완료 |
+| V27 | `V27__claim_type.sql` | claim `claim_type` ALTER — 취소(CANCEL)/반품(RETURN) 통합 (#238) | 확장 M16 | 적용 완료 |
+| V28 | `V28__payment_pg_tx_unique.sql` | payment `idx_payment_pg_tx` → `uk_payment_pg_tx` UNIQUE 승격 (#252) | M16 | 적용 완료 |
 
 > **W10 검색·목록 인덱스**: §5의 카탈로그 검색·정렬 인덱스(`idx_album_*`·`ft_album_keyword`)는 슬로우 쿼리 Before/After 시연(W10)을 위해 V6 시점에 의도적으로 누락해 두었다가 V21(#204)에서 도입했고, 주문/리뷰 목록 복합 인덱스는 V8/V13 헤더가 약속했으나 누락돼 있던 것을 V22(#225)에서 보완했다. 한 번 적용된 마이그레이션은 수정 금지 원칙을 유지한다(V8/V13 본문은 손대지 않고 V22 와 본 표에만 기록).
 
@@ -818,9 +945,9 @@ v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재. 단 `cou
 ## 9. 정합성 / 무결성 정책
 
 ### 9.1 DB 레벨
-- 모든 FK는 `ON DELETE RESTRICT` (참조되는 데이터 삭제 방지)
-- UNIQUE 제약은 비즈니스 핵심 룰에 모두 적용 (중복 방지)
-- `CHECK` 제약 (MySQL 8 지원): `quantity > 0`, `rating BETWEEN 1 AND 5`, `stock >= 0`, `price >= 0`, `total_amount >= 0`, `unit_price >= 0`, `amount >= 0`
+- 기본 FK 정책은 `ON DELETE RESTRICT` (참조되는 데이터 삭제 방지). 단 생명주기가 부모에 종속된 경우 CASCADE — `claim → orders`, `claim_item → claim`, `claim_item → order_item`(생명주기 일치), `member_coupon → member`(개인 보유 동반 삭제). `member_coupon → orders` 는 SET NULL.
+- UNIQUE 제약은 비즈니스 핵심 룰에 모두 적용 (중복 방지) — `uk_payment_pg_tx`(V28, PG 거래 1:1), `uk_claim_item_order_item`(클레임 내 항목 중복 방지) 포함
+- `CHECK` 제약 (MySQL 8 지원): `quantity > 0`, `rating BETWEEN 1 AND 5`, `stock >= 0`, `price >= 0`, `total_amount >= 0`, `unit_price >= 0`, `amount >= 0`, `payment.refunded_amount >= 0`(V24), `claim.refund_amount >= 0`·`claim_item.unit_price_snapshot >= 0`(V23)
 - 쿠폰 확장(V14) `CHECK`: `discount_value > 0`, 정률 `discount_value BETWEEN 1 AND 100`, `min_order_amount >= 0`, `issued_count >= 0`, `issued_count <= total_quantity`(한정수량 시), `total_quantity >= 0`, `per_member_limit > 0`, `valid_until > valid_from`, `orders.discount_amount BETWEEN 0 AND total_amount`
 
 ### 9.2 애플리케이션 레벨
@@ -832,7 +959,7 @@ v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재. 단 `cou
 ### 9.3 트랜잭션 경계
 - 주문 생성: 재고 차감 + Order 저장 + OrderItem 저장 → 단일 트랜잭션
 - 결제 완료 처리: Payment 갱신 + Order 상태 변경(paid_at 기록) → 단일 트랜잭션
-- 배송 생성은 `OrderPaidEvent` AFTER_COMMIT으로 별도 트랜잭션 (실패 시 README에 트레이드오프 명시)
+- 배송 생성은 **트랜잭셔널 아웃박스**(#237)로 별도 트랜잭션 — 결제 PAID 전이와 같은 트랜잭션에 `ORDER_PAID` 이벤트를 `outbox_event`(§4.19)에 기록하고, `OutboxRelayScheduler` 가 at-least-once 발행, `OrderPaidOutboxHandler` 가 멱등 소비(`existsByOrderId`)
 
 ---
 
