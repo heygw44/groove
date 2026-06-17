@@ -38,8 +38,8 @@ class ShippingRepositoryTest {
         Order order = orderRepository.saveAndFlush(
                 OrderFixtures.guestOrder(orderNumber, "guest@example.com", "01099998888"));
         Shipping shipping = Shipping.prepare(order, order.getShippingInfo(), "trk-" + orderNumber);
-        shipping.markShipped();
-        shipping.markDelivered();
+        shipping.markShipped(Instant.now());
+        shipping.markDelivered(Instant.now());
         return shippingRepository.saveAndFlush(shipping);
     }
 

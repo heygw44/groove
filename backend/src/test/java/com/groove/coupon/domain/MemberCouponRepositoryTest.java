@@ -73,7 +73,7 @@ class MemberCouponRepositoryTest {
     @Test
     @DisplayName("발급 후 재로딩 — 상태 ISSUED, coupon 연관·expiresAt 매핑")
     void issue_roundTrip() {
-        MemberCoupon saved = memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
+        MemberCoupon saved = memberCouponRepository.save(MemberCoupon.issue(coupon, memberId, Instant.now()));
         Long id = saved.getId();
         em.flush();
         em.clear();
@@ -91,7 +91,7 @@ class MemberCouponRepositoryTest {
     @Test
     @DisplayName("existsByCoupon_IdAndMemberId — 보유 회원 true, 미보유 회원 false")
     void existsByCouponAndMember() {
-        memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
+        memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId, Instant.now()));
 
         assertThat(memberCouponRepository.existsByCoupon_IdAndMemberId(coupon.getId(), memberId)).isTrue();
         assertThat(memberCouponRepository.existsByCoupon_IdAndMemberId(coupon.getId(), OTHER_MEMBER_ID)).isFalse();
@@ -100,10 +100,10 @@ class MemberCouponRepositoryTest {
     @Test
     @DisplayName("회원당 동일 쿠폰 2장 발급 시도 → UNIQUE(coupon_id, member_id) 위반")
     void duplicateIssue_violatesUnique() {
-        memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId));
+        memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId, Instant.now()));
 
         assertThatThrownBy(() ->
-                memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId)))
+                memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId, Instant.now())))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -113,8 +113,8 @@ class MemberCouponRepositoryTest {
         Coupon another = couponRepository.saveAndFlush(Coupon.builder(
                 "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL)
                 .maxDiscountAmount(5_000L).build());
-        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
-        memberCouponRepository.save(MemberCoupon.issue(another, memberId));
+        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId, Instant.now()));
+        memberCouponRepository.save(MemberCoupon.issue(another, memberId, Instant.now()));
         em.flush();
         em.clear();
 
@@ -136,8 +136,8 @@ class MemberCouponRepositoryTest {
         Coupon another = couponRepository.saveAndFlush(Coupon.builder(
                 "정률 10%", CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL)
                 .maxDiscountAmount(5_000L).build());
-        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId));
-        MemberCoupon cancelled = MemberCoupon.issue(another, memberId);
+        memberCouponRepository.save(MemberCoupon.issue(coupon, memberId, Instant.now()));
+        MemberCoupon cancelled = MemberCoupon.issue(another, memberId, Instant.now());
         cancelled.cancel();
         memberCouponRepository.save(cancelled);
         em.flush();

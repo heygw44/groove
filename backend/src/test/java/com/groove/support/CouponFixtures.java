@@ -37,7 +37,7 @@ public final class CouponFixtures {
 
     /** ISSUED 회원쿠폰 — expiresAt 을 강제 설정해 만료 배치 검증에 사용. */
     public static MemberCoupon issuedWithExpiry(Coupon coupon, Long memberId, Instant expiresAt) {
-        MemberCoupon mc = MemberCoupon.issue(coupon, memberId);
+        MemberCoupon mc = MemberCoupon.issue(coupon, memberId, Instant.now());
         ReflectionTestUtils.setField(mc, "expiresAt", expiresAt);
         return mc;
     }

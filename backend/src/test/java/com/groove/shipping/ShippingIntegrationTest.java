@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -96,7 +97,7 @@ class ShippingIntegrationTest {
         tx.executeWithoutResult(s -> {
             Order managed = orderRepository.findById(order.getId()).orElseThrow();
             if (managed.getStatus() == OrderStatus.PENDING) {
-                managed.changeStatus(OrderStatus.PAID, null);
+                managed.changeStatus(OrderStatus.PAID, null, Instant.now());
             }
             outboxEventPublisher.publish(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE, managed.getId(),
                     OrderPaidEvent.OUTBOX_EVENT_TYPE,
@@ -116,7 +117,7 @@ class ShippingIntegrationTest {
     private void markPaidWithoutEvent(Order order) {
         tx.executeWithoutResult(s -> {
             Order managed = orderRepository.findById(order.getId()).orElseThrow();
-            managed.changeStatus(OrderStatus.PAID, null);
+            managed.changeStatus(OrderStatus.PAID, null, Instant.now());
         });
     }
 
@@ -234,7 +235,7 @@ class ShippingIntegrationTest {
     private void cancelOrder(Order order) {
         tx.executeWithoutResult(s -> {
             Order managed = orderRepository.findById(order.getId()).orElseThrow();
-            managed.changeStatus(OrderStatus.CANCELLED, "환불");
+            managed.changeStatus(OrderStatus.CANCELLED, "환불", Instant.now());
         });
     }
 

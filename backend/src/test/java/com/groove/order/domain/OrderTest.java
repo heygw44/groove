@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -215,7 +217,7 @@ class OrderTest {
         void rejectsAfterPaid() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
             order.addItem(OrderItem.create(album(10L, 10000L), 1));
-            order.changeStatus(OrderStatus.PAID, null);
+            order.changeStatus(OrderStatus.PAID, null, Instant.now());
 
             assertThatThrownBy(() -> order.applyDiscount(1000L))
                     .isInstanceOf(IllegalStateTransitionException.class);
@@ -227,7 +229,7 @@ class OrderTest {
         void rejectsAfterCancelled() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
             order.addItem(OrderItem.create(album(10L, 10000L), 1));
-            order.changeStatus(OrderStatus.CANCELLED, "변심");
+            order.changeStatus(OrderStatus.CANCELLED, "변심", Instant.now());
 
             assertThatThrownBy(() -> order.applyDiscount(1000L))
                     .isInstanceOf(IllegalStateTransitionException.class);
@@ -243,7 +245,7 @@ class OrderTest {
         void pendingToPaid_recordsPaidAt() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            order.changeStatus(OrderStatus.PAID, null);
+            order.changeStatus(OrderStatus.PAID, null, Instant.now());
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
             assertThat(order.getPaidAt()).isNotNull();
@@ -255,7 +257,7 @@ class OrderTest {
         void pendingToCancelled_recordsCancelledMeta() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            order.changeStatus(OrderStatus.CANCELLED, "변심");
+            order.changeStatus(OrderStatus.CANCELLED, "변심", Instant.now());
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             assertThat(order.getCancelledAt()).isNotNull();
@@ -268,7 +270,7 @@ class OrderTest {
         void pendingToPaymentFailed_recordsNeitherTimestamp() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            order.changeStatus(OrderStatus.PAYMENT_FAILED, null);
+            order.changeStatus(OrderStatus.PAYMENT_FAILED, null, Instant.now());
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
             assertThat(order.getPaidAt()).isNull();
@@ -280,7 +282,7 @@ class OrderTest {
         void reason_ignoredOnNonCancelTransitions() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            order.changeStatus(OrderStatus.PAID, "ignored-reason");
+            order.changeStatus(OrderStatus.PAID, "ignored-reason", Instant.now());
 
             assertThat(order.getCancelledReason()).isNull();
         }
@@ -290,7 +292,7 @@ class OrderTest {
         void illegal_throws() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            assertThatThrownBy(() -> order.changeStatus(OrderStatus.SHIPPED, null))
+            assertThatThrownBy(() -> order.changeStatus(OrderStatus.SHIPPED, null, Instant.now()))
                     .isInstanceOf(IllegalStateTransitionException.class);
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
         }
@@ -299,10 +301,10 @@ class OrderTest {
         @DisplayName("종착 상태 (CANCELLED) 에서 어떤 전이도 거부")
         void terminal_rejectsAll() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
-            order.changeStatus(OrderStatus.CANCELLED, "초기 취소");
+            order.changeStatus(OrderStatus.CANCELLED, "초기 취소", Instant.now());
 
             for (OrderStatus next : OrderStatus.values()) {
-                assertThatThrownBy(() -> order.changeStatus(next, null))
+                assertThatThrownBy(() -> order.changeStatus(next, null, Instant.now()))
                         .as("CANCELLED -> %s", next)
                         .isInstanceOf(IllegalStateTransitionException.class);
             }
@@ -313,7 +315,7 @@ class OrderTest {
         void selfTransition_rejected() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            assertThatThrownBy(() -> order.changeStatus(OrderStatus.PENDING, null))
+            assertThatThrownBy(() -> order.changeStatus(OrderStatus.PENDING, null, Instant.now()))
                     .isInstanceOf(IllegalStateTransitionException.class);
         }
 
@@ -324,7 +326,7 @@ class OrderTest {
             order.addItem(OrderItem.create(album(10L, 30000L), 2));
             long beforeCancel = order.getTotalAmount();
 
-            order.changeStatus(OrderStatus.CANCELLED, "변심");
+            order.changeStatus(OrderStatus.CANCELLED, "변심", Instant.now());
 
             assertThat(order.getTotalAmount()).isEqualTo(beforeCancel);
             assertThat(order.getTotalAmount()).isEqualTo(60000L);
@@ -335,7 +337,7 @@ class OrderTest {
         void rejectsNullNext() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            assertThatThrownBy(() -> order.changeStatus(null, null))
+            assertThatThrownBy(() -> order.changeStatus(null, null, Instant.now()))
                     .isInstanceOf(NullPointerException.class);
             assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
         }
@@ -345,11 +347,11 @@ class OrderTest {
         void happyPath_walkthrough() {
             Order order = Order.placeForMember("ORD-1", 1L, SHIPPING);
 
-            order.changeStatus(OrderStatus.PAID, null);
-            order.changeStatus(OrderStatus.PREPARING, null);
-            order.changeStatus(OrderStatus.SHIPPED, null);
-            order.changeStatus(OrderStatus.DELIVERED, null);
-            order.changeStatus(OrderStatus.COMPLETED, null);
+            order.changeStatus(OrderStatus.PAID, null, Instant.now());
+            order.changeStatus(OrderStatus.PREPARING, null, Instant.now());
+            order.changeStatus(OrderStatus.SHIPPED, null, Instant.now());
+            order.changeStatus(OrderStatus.DELIVERED, null, Instant.now());
+            order.changeStatus(OrderStatus.COMPLETED, null, Instant.now());
 
             assertThat(order.getStatus()).isEqualTo(OrderStatus.COMPLETED);
             assertThat(order.getPaidAt()).isNotNull();

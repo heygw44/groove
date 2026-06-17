@@ -163,30 +163,32 @@ public class Order extends BaseTimeEntity {
 
     /**
      * 상태 전이 단일 진입점. 불법 전이면 IllegalStateTransitionException.
-     * PAID 진입 시 paidAt, CANCELLED 진입 시 cancelledAt·cancelledReason 기록.
+     * PAID 진입 시 paidAt, CANCELLED 진입 시 cancelledAt·cancelledReason 기록(시각은 주입된 now).
      */
-    public void changeStatus(OrderStatus next, String reason) {
+    public void changeStatus(OrderStatus next, String reason, Instant now) {
         Objects.requireNonNull(next, "next status must not be null");
+        Objects.requireNonNull(now, "now must not be null");
         if (!status.canTransitionTo(next)) {
             throw new IllegalStateTransitionException(status, next);
         }
         this.status = next;
         if (next == OrderStatus.PAID) {
-            this.paidAt = Instant.now();
+            this.paidAt = now;
         } else if (next == OrderStatus.CANCELLED) {
-            this.cancelledAt = Instant.now();
+            this.cancelledAt = now;
             this.cancelledReason = reason;
         }
     }
 
     /**
      * 합법 전이일 때만 상태를 전진시키고 아니면 무시한다. 전이됐으면 true, 건너뛰었으면 false.
+     * now 는 changeStatus 로 위임 — 현재 advanceTo 타깃은 시각을 기록하지 않아 저장되진 않는다.
      */
-    public boolean advanceTo(OrderStatus target) {
+    public boolean advanceTo(OrderStatus target, Instant now) {
         if (!status.canTransitionTo(target)) {
             return false;
         }
-        changeStatus(target, null);
+        changeStatus(target, null, now);
         return true;
     }
 

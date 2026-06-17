@@ -17,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.stream.Collectors;
 
 /**
@@ -37,14 +39,16 @@ public class PaymentCallbackService {
     private final OutboxEventPublisher outboxEventPublisher;
     private final CouponApplicationService couponApplicationService;
     private final AlbumRepository albumRepository;
+    private final Clock clock;
 
     public PaymentCallbackService(PaymentRepository paymentRepository, OutboxEventPublisher outboxEventPublisher,
                                   CouponApplicationService couponApplicationService,
-                                  AlbumRepository albumRepository) {
+                                  AlbumRepository albumRepository, Clock clock) {
         this.paymentRepository = paymentRepository;
         this.outboxEventPublisher = outboxEventPublisher;
         this.couponApplicationService = couponApplicationService;
         this.albumRepository = albumRepository;
+        this.clock = clock;
     }
 
     /** pgTransactionId 에 대한 IdempotencyService 키. */
@@ -69,17 +73,18 @@ public class PaymentCallbackService {
             return PaymentCallbackResult.alreadyProcessed(payment);
         }
 
+        Instant now = clock.instant();
         Order order = payment.getOrder();
         if (result == PaymentStatus.PAID) {
-            payment.markPaid();
-            order.changeStatus(OrderStatus.PAID, null);
+            payment.markPaid(now);
+            order.changeStatus(OrderStatus.PAID, null, now);
             // 후속 배송 생성 트리거를 아웃박스에 기록한다.
             outboxEventPublisher.publish(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE, order.getId(), OrderPaidEvent.OUTBOX_EVENT_TYPE,
                     new OrderPaidEvent(order.getId(), order.getOrderNumber(), order.getMemberId(), payment.getId()));
             log.info("결제 확정(PAID): paymentId={}, order={}", payment.getId(), order.getOrderNumber());
         } else {
             payment.markFailed(failureReason != null ? failureReason : DEFAULT_FAILURE_REASON);
-            order.changeStatus(OrderStatus.PAYMENT_FAILED, null);
+            order.changeStatus(OrderStatus.PAYMENT_FAILED, null, now);
             // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순).
             int restored = StockRestorer.restore(albumRepository, order.getItems().stream()
                     .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));

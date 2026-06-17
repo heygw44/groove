@@ -106,7 +106,7 @@ class RefundSteps {
         }
 
         payment.markRefunded();
-        order.changeStatus(OrderStatus.CANCELLED, reason);
+        order.changeStatus(OrderStatus.CANCELLED, reason, refundedAt);
         // 발송 전(PREPARING) 배송이 있으면 같은 트랜잭션에서 CANCELLED 로 동기화한다. 없거나 종착이면 no-op.
         shippingService.cancelForOrder(order.getId());
         // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순).

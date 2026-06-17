@@ -80,7 +80,7 @@ public class CouponApplicationService {
 
         long discount = memberCoupon.getCoupon().calculateDiscount(order.getTotalAmount());
         order.applyDiscount(discount);
-        memberCoupon.use(order.getId());
+        memberCoupon.use(order.getId(), now);
         return discount;
     }
 

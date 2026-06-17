@@ -40,6 +40,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -148,7 +149,7 @@ class AdminOrderControllerTest {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = OrderFixtures.memberOrder(nextOrderNumber(), memberId);
         order.addItem(OrderItem.create(album, qty));
-        pathTo(targetStatus).forEach(s -> order.changeStatus(s, null));
+        pathTo(targetStatus).forEach(s -> order.changeStatus(s, null, Instant.now()));
         return orderRepository.saveAndFlush(order).getOrderNumber();
     }
 
@@ -165,7 +166,7 @@ class AdminOrderControllerTest {
         Order order = orderRepository.findByOrderNumber(orderNumber).orElseThrow();
         Payment payment = Payment.initiate(order, order.getTotalAmount(), PaymentMethod.CARD, "MOCK",
                 "mock-tx-" + orderNumber);
-        payment.markPaid();
+        payment.markPaid(Instant.now());
         paymentRepository.saveAndFlush(payment);
     }
 

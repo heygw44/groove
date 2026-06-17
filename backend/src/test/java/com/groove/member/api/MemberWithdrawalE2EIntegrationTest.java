@@ -14,6 +14,9 @@ import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderShippingInfo;
 import com.groove.order.domain.OrderStatus;
 import com.groove.support.TestcontainersConfig;
+
+import java.time.Instant;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -152,7 +155,7 @@ class MemberWithdrawalE2EIntegrationTest {
         Member member = persistMember();
         Long memberId = member.getId();
         Order order = Order.placeForMember("ORD-E2E-WITHDRAW-1", memberId, shipping());
-        order.changeStatus(OrderStatus.PAID, null);
+        order.changeStatus(OrderStatus.PAID, null, Instant.now());
         orderRepository.saveAndFlush(order);
         String bearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
 

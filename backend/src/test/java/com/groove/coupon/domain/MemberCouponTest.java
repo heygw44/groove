@@ -28,7 +28,7 @@ class MemberCouponTest {
     }
 
     private static MemberCoupon issued() {
-        return MemberCoupon.issue(coupon(), MEMBER_ID);
+        return MemberCoupon.issue(coupon(), MEMBER_ID, Instant.now());
     }
 
     @Test
@@ -36,7 +36,7 @@ class MemberCouponTest {
     void issue() {
         Coupon coupon = coupon();
 
-        MemberCoupon mc = MemberCoupon.issue(coupon, MEMBER_ID);
+        MemberCoupon mc = MemberCoupon.issue(coupon, MEMBER_ID, Instant.now());
 
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
         assertThat(mc.getMemberId()).isEqualTo(MEMBER_ID);
@@ -50,7 +50,7 @@ class MemberCouponTest {
     void use() {
         MemberCoupon mc = issued();
 
-        mc.use(ORDER_ID);
+        mc.use(ORDER_ID, Instant.now());
 
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.USED);
         assertThat(mc.getOrderId()).isEqualTo(ORDER_ID);
@@ -61,7 +61,7 @@ class MemberCouponTest {
     @DisplayName("restore: 미만료 시 USED → ISSUED, usedAt·orderId 초기화")
     void restore_notExpired() {
         MemberCoupon mc = issued();
-        mc.use(ORDER_ID);
+        mc.use(ORDER_ID, Instant.now());
 
         mc.restore(BEFORE_EXPIRY);
 
@@ -74,7 +74,7 @@ class MemberCouponTest {
     @DisplayName("restore: 이미 만료된 경우 USED → EXPIRED (ISSUED 로 부활 안 함), usedAt·orderId 초기화")
     void restore_expired() {
         MemberCoupon mc = issued();
-        mc.use(ORDER_ID);
+        mc.use(ORDER_ID, Instant.now());
 
         mc.restore(AFTER_EXPIRY);
 
@@ -87,7 +87,7 @@ class MemberCouponTest {
     @DisplayName("restore: 만료 경계(now == expiresAt) — strict 비교라 만료 아님 → USED → ISSUED")
     void restore_atExpiry() {
         MemberCoupon mc = issued();
-        mc.use(ORDER_ID);
+        mc.use(ORDER_ID, Instant.now());
 
         mc.restore(mc.getExpiresAt());   // expiresAt.isBefore(now) == false → ISSUED
 
@@ -120,9 +120,9 @@ class MemberCouponTest {
     @DisplayName("이미 사용한 쿠폰 재사용 시도 → IllegalCouponStateTransitionException")
     void use_whenUsed_throws() {
         MemberCoupon mc = issued();
-        mc.use(ORDER_ID);
+        mc.use(ORDER_ID, Instant.now());
 
-        assertThatThrownBy(() -> mc.use(ORDER_ID))
+        assertThatThrownBy(() -> mc.use(ORDER_ID, Instant.now()))
                 .isInstanceOf(IllegalCouponStateTransitionException.class);
     }
 
@@ -132,7 +132,7 @@ class MemberCouponTest {
         MemberCoupon mc = issued();
         mc.expire();
 
-        assertThatThrownBy(() -> mc.use(ORDER_ID))
+        assertThatThrownBy(() -> mc.use(ORDER_ID, Instant.now()))
                 .isInstanceOf(IllegalCouponStateTransitionException.class);
     }
 

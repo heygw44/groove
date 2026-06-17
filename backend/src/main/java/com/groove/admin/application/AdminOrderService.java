@@ -20,6 +20,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -50,13 +51,16 @@ public class AdminOrderService {
     private final OrderRepository orderRepository;
     private final PaymentGateway paymentGateway;
     private final RefundSteps refundSteps;
+    private final Clock clock;
 
     public AdminOrderService(OrderRepository orderRepository,
                              PaymentGateway paymentGateway,
-                             RefundSteps refundSteps) {
+                             RefundSteps refundSteps,
+                             Clock clock) {
         this.orderRepository = orderRepository;
         this.paymentGateway = paymentGateway;
         this.refundSteps = refundSteps;
+        this.clock = clock;
     }
 
     /**
@@ -104,7 +108,7 @@ public class AdminOrderService {
         Order order = orderRepository.findByOrderNumber(orderNumber)
                 .orElseThrow(OrderNotFoundException::new);
         OrderStatus from = order.getStatus();
-        order.changeStatus(target, reason);
+        order.changeStatus(target, reason, clock.instant());
         log.info("관리자 주문 상태 강제 전환: order={}, {} -> {}, reason='{}'", orderNumber, from, target, reason);
         return order;
     }

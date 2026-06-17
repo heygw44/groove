@@ -145,7 +145,7 @@ class CouponIssueServiceTest {
         when(couponRepository.incrementIssuedCount(COUPON_ID)).thenReturn(1);
         when(couponRepository.getReferenceById(COUPON_ID)).thenReturn(coupon);
         when(memberCouponRepository.saveAndFlush(any()))
-                .thenReturn(MemberCoupon.issue(coupon, MEMBER_ID));
+                .thenReturn(MemberCoupon.issue(coupon, MEMBER_ID, NOW));
 
         MemberCouponResponse response = service.issue(MEMBER_ID, COUPON_ID);
 

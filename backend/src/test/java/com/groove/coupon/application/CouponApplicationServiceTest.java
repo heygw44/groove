@@ -77,7 +77,7 @@ class CouponApplicationServiceTest {
     }
 
     private MemberCoupon issued(Coupon coupon, long memberId) {
-        MemberCoupon mc = MemberCoupon.issue(coupon, memberId);
+        MemberCoupon mc = MemberCoupon.issue(coupon, memberId, NOW);
         ReflectionTestUtils.setField(mc, "id", MEMBER_COUPON_ID);
         return mc;
     }
@@ -151,7 +151,7 @@ class CouponApplicationServiceTest {
     void apply_alreadyUsed() {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
-        mc.use(999L);   // 다른 주문에 이미 사용된 상태
+        mc.use(999L, NOW);   // 다른 주문에 이미 사용된 상태
         Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
@@ -229,7 +229,7 @@ class CouponApplicationServiceTest {
     void restore_happyPath() {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
-        mc.use(ORDER_ID);
+        mc.use(ORDER_ID, NOW);
         when(memberCouponRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(mc));
 
         service.restoreForOrder(ORDER_ID);
@@ -244,7 +244,7 @@ class CouponApplicationServiceTest {
     void restore_expiredAtRestoreTime_becomesExpired() {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
-        mc.use(ORDER_ID);
+        mc.use(ORDER_ID, NOW);
         ReflectionTestUtils.setField(mc, "expiresAt", NOW.minus(1, ChronoUnit.HOURS));
         when(memberCouponRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(mc));
 

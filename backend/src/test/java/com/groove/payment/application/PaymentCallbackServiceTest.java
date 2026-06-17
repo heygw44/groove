@@ -17,6 +17,7 @@ import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.support.TestClocks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,11 +59,12 @@ class PaymentCallbackServiceTest {
 
     private static final long ALBUM_ID = 50L;
     private static final long ORDER_ID = 7L;
+    private static final Clock CLOCK = TestClocks.FIXED;
 
     @BeforeEach
     void setUp() {
         service = new PaymentCallbackService(paymentRepository, outboxEventPublisher, couponApplicationService,
-                albumRepository);
+                albumRepository, CLOCK);
     }
 
     private static Album album(int stock) {
@@ -153,7 +156,7 @@ class PaymentCallbackServiceTest {
     void applyResult_alreadyProcessed_noop() {
         Album album = album(99);
         Payment payment = pendingPayment(album, 1);
-        payment.markPaid(); // 이미 PAID
+        payment.markPaid(CLOCK.instant()); // 이미 PAID
         given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.FAILED, "늦게 도착한 실패 통보");

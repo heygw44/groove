@@ -35,6 +35,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -57,17 +58,20 @@ public class OrderService {
     private final OrderNumberGenerator orderNumberGenerator;
     private final CouponApplicationService couponApplicationService;
     private final MemberRepository memberRepository;
+    private final Clock clock;
 
     public OrderService(OrderRepository orderRepository,
                         AlbumRepository albumRepository,
                         OrderNumberGenerator orderNumberGenerator,
                         CouponApplicationService couponApplicationService,
-                        MemberRepository memberRepository) {
+                        MemberRepository memberRepository,
+                        Clock clock) {
         this.orderRepository = orderRepository;
         this.albumRepository = albumRepository;
         this.orderNumberGenerator = orderNumberGenerator;
         this.couponApplicationService = couponApplicationService;
         this.memberRepository = memberRepository;
+        this.clock = clock;
     }
 
     /** 회원 본인 주문 단건 조회. 타 회원/게스트 주문은 404 통일. */
@@ -141,7 +145,7 @@ public class OrderService {
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.CANCELLED);
         }
-        order.changeStatus(OrderStatus.CANCELLED, reason);
+        order.changeStatus(OrderStatus.CANCELLED, reason, clock.instant());
         // 재고 복원 — 원자적 가산 UPDATE (restoreStock). albumId 오름차순으로 정렬.
         StockRestorer.restore(albumRepository, order.getItems().stream()
                 .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));

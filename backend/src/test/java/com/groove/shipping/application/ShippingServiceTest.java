@@ -8,6 +8,7 @@ import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
 import com.groove.shipping.exception.ShippingNotFoundException;
 import com.groove.support.OrderFixtures;
+import com.groove.support.TestClocks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +32,8 @@ class ShippingServiceTest {
 
     private static final String TRACKING = "8a4f0c2e-1234-4abc-9def-0123456789ab";
 
+    private static final Clock CLOCK = TestClocks.FIXED;
+
     @Mock
     private ShippingRepository shippingRepository;
 
@@ -37,7 +41,7 @@ class ShippingServiceTest {
 
     @BeforeEach
     void setUp() {
-        shippingService = new ShippingService(shippingRepository);
+        shippingService = new ShippingService(shippingRepository, CLOCK);
     }
 
     private Shipping preparingShipping() {
@@ -47,7 +51,7 @@ class ShippingServiceTest {
     /** 연관 주문을 지정한 상태까지 전진시킨 PREPARING 배송을 만든다. */
     private Shipping shippingWithOrderAt(OrderStatus orderStatus) {
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
-        pathTo(orderStatus).forEach(s -> order.changeStatus(s, null));
+        pathTo(orderStatus).forEach(s -> order.changeStatus(s, null, CLOCK.instant()));
         return Shipping.prepare(order, OrderFixtures.sampleShippingInfo(), TRACKING);
     }
 
@@ -101,7 +105,7 @@ class ShippingServiceTest {
     void advanceToShipped_alreadyShipped_noop() {
         // 배송 SHIPPED, 주문 PREPARING — 배송 가드에서 단락돼 주문이 PREPARING 으로 남는다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
-        shipping.markShipped();
+        shipping.markShipped(CLOCK.instant());
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
 
         shippingService.advanceToShipped(1L);
@@ -122,7 +126,7 @@ class ShippingServiceTest {
     @DisplayName("advanceToDelivered — SHIPPED 면 DELIVERED 로 전이하고 주문도 DELIVERED 로 동반 전이")
     void advanceToDelivered_fromShipped() {
         Shipping shipping = shippingWithOrderAt(OrderStatus.SHIPPED);
-        shipping.markShipped();
+        shipping.markShipped(CLOCK.instant());
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
 
         shippingService.advanceToDelivered(1L);
@@ -149,7 +153,7 @@ class ShippingServiceTest {
     void advanceToDelivered_orderBehind_guardSkipsWithoutThrowing() {
         // 배송 SHIPPED, 주문 PREPARING — PREPARING→DELIVERED 는 불법이라 가드가 예외를 막는다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
-        shipping.markShipped();
+        shipping.markShipped(CLOCK.instant());
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
 
         assertThatCode(() -> shippingService.advanceToDelivered(1L)).doesNotThrowAnyException();
@@ -175,7 +179,7 @@ class ShippingServiceTest {
     @DisplayName("advanceToDelivered — 주문이 취소(종착)면 배송을 전진시키지 않는다 (#233) — 배송 SHIPPED 유지, 예외 없음")
     void advanceToDelivered_orderTerminal_skipsAdvance() {
         Shipping shipping = shippingWithOrderAt(OrderStatus.CANCELLED);
-        shipping.markShipped();
+        shipping.markShipped(CLOCK.instant());
         given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
 
         assertThatCode(() -> shippingService.advanceToDelivered(1L)).doesNotThrowAnyException();
@@ -203,7 +207,7 @@ class ShippingServiceTest {
         @DisplayName("SHIPPED 배송도 CANCELLED 로 전이 (#239 대비, 메서드 자체는 종착이 아니면 취소)")
         void cancelsShippedShipping() {
             Shipping shipping = preparingShipping();
-            shipping.markShipped();
+            shipping.markShipped(CLOCK.instant());
             given(shippingRepository.findByOrderId(10L)).willReturn(Optional.of(shipping));
 
             shippingService.cancelForOrder(10L);
@@ -223,8 +227,8 @@ class ShippingServiceTest {
         @DisplayName("이미 종착(DELIVERED)인 배송은 건드리지 않는다")
         void terminalDelivered_noop() {
             Shipping shipping = preparingShipping();
-            shipping.markShipped();
-            shipping.markDelivered();
+            shipping.markShipped(CLOCK.instant());
+            shipping.markDelivered(CLOCK.instant());
             given(shippingRepository.findByOrderId(10L)).willReturn(Optional.of(shipping));
 
             shippingService.cancelForOrder(10L);

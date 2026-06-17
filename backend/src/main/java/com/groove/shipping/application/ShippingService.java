@@ -11,9 +11,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * 배송 조회 + 자동 진행 트랜잭션 경계.
@@ -34,9 +35,11 @@ public class ShippingService {
     private static final Logger log = LoggerFactory.getLogger(ShippingService.class);
 
     private final ShippingRepository shippingRepository;
+    private final Clock clock;
 
-    public ShippingService(ShippingRepository shippingRepository) {
+    public ShippingService(ShippingRepository shippingRepository, Clock clock) {
         this.shippingRepository = shippingRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -83,11 +86,12 @@ public class ShippingService {
      * 자동 진행 한 단계 — 배송이 기대 상태(from)이고 주문이 종착이 아닐 때만 배송을 전이(mark)시키고,
      * 같은 트랜잭션의 주문도 Order.advanceTo 로 락스텝 전진시킨다(합법 전이만). order 는 findWithOrderById 로 동반 로드된다.
      */
-    private void advance(Long shippingId, ShippingStatus from, OrderStatus target, Consumer<Shipping> mark) {
+    private void advance(Long shippingId, ShippingStatus from, OrderStatus target, BiConsumer<Shipping, Instant> mark) {
         shippingRepository.findWithOrderById(shippingId).ifPresent(shipping -> {
             if (shipping.getStatus() == from && !shipping.getOrder().getStatus().isTerminal()) {
-                mark.accept(shipping);
-                shipping.getOrder().advanceTo(target);
+                Instant now = clock.instant();
+                mark.accept(shipping, now);
+                shipping.getOrder().advanceTo(target, now);
             }
         });
     }

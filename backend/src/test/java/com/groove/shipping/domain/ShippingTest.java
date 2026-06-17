@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -73,7 +75,7 @@ class ShippingTest {
         void markShipped_recordsShippedAt() {
             Shipping shipping = shipping();
 
-            shipping.markShipped();
+            shipping.markShipped(Instant.now());
 
             assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.SHIPPED);
             assertThat(shipping.getShippedAt()).isNotNull();
@@ -84,9 +86,9 @@ class ShippingTest {
         @DisplayName("markDelivered — SHIPPED → DELIVERED, deliveredAt 기록")
         void markDelivered_recordsDeliveredAt() {
             Shipping shipping = shipping();
-            shipping.markShipped();
+            shipping.markShipped(Instant.now());
 
-            shipping.markDelivered();
+            shipping.markDelivered(Instant.now());
 
             assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
             assertThat(shipping.getDeliveredAt()).isNotNull();
@@ -97,7 +99,7 @@ class ShippingTest {
         void markDelivered_fromPreparing_throws() {
             Shipping shipping = shipping();
 
-            assertThatThrownBy(shipping::markDelivered)
+            assertThatThrownBy(() -> shipping.markDelivered(Instant.now()))
                     .isInstanceOf(IllegalStateException.class);
             assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.PREPARING);
         }
@@ -106,9 +108,9 @@ class ShippingTest {
         @DisplayName("markShipped 를 두 번 호출 → 두 번째는 IllegalStateException")
         void markShipped_twice_throws() {
             Shipping shipping = shipping();
-            shipping.markShipped();
+            shipping.markShipped(Instant.now());
 
-            assertThatThrownBy(shipping::markShipped)
+            assertThatThrownBy(() -> shipping.markShipped(Instant.now()))
                     .isInstanceOf(IllegalStateException.class);
         }
 
@@ -116,11 +118,11 @@ class ShippingTest {
         @DisplayName("DELIVERED 이후 어떤 전이도 거부")
         void delivered_isTerminal() {
             Shipping shipping = shipping();
-            shipping.markShipped();
-            shipping.markDelivered();
+            shipping.markShipped(Instant.now());
+            shipping.markDelivered(Instant.now());
 
-            assertThatThrownBy(shipping::markShipped).isInstanceOf(IllegalStateException.class);
-            assertThatThrownBy(shipping::markDelivered).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> shipping.markShipped(Instant.now())).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> shipping.markDelivered(Instant.now())).isInstanceOf(IllegalStateException.class);
             assertThatThrownBy(shipping::cancel).isInstanceOf(IllegalStateException.class);
         }
     }
@@ -147,7 +149,7 @@ class ShippingTest {
         @DisplayName("cancel — SHIPPED → CANCELLED")
         void cancel_fromShipped() {
             Shipping shipping = shipping();
-            shipping.markShipped();
+            shipping.markShipped(Instant.now());
 
             shipping.cancel();
 
@@ -158,8 +160,8 @@ class ShippingTest {
         @DisplayName("cancel — DELIVERED 에서는 불법 전이 → IllegalStateException")
         void cancel_fromDelivered_throws() {
             Shipping shipping = shipping();
-            shipping.markShipped();
-            shipping.markDelivered();
+            shipping.markShipped(Instant.now());
+            shipping.markDelivered(Instant.now());
 
             assertThatThrownBy(shipping::cancel).isInstanceOf(IllegalStateException.class);
             assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
@@ -181,8 +183,8 @@ class ShippingTest {
             Shipping shipping = shipping();
             shipping.cancel();
 
-            assertThatThrownBy(shipping::markShipped).isInstanceOf(IllegalStateException.class);
-            assertThatThrownBy(shipping::markDelivered).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> shipping.markShipped(Instant.now())).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> shipping.markDelivered(Instant.now())).isInstanceOf(IllegalStateException.class);
         }
     }
 }

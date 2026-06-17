@@ -15,6 +15,7 @@ import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
 import com.groove.support.OrderFixtures;
+import com.groove.support.TestClocks;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
@@ -35,6 +36,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 
@@ -63,12 +65,14 @@ class OrderServiceTest {
     @Mock
     private MemberRepository memberRepository;
 
+    private static final Clock CLOCK = TestClocks.FIXED;
+
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
         orderService = new OrderService(orderRepository, albumRepository, orderNumberGenerator,
-                couponApplicationService, memberRepository);
+                couponApplicationService, memberRepository, CLOCK);
         // 활성 회원 기본값 — 탈퇴 시나리오만 false 로 override 한다.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
     }
@@ -433,7 +437,7 @@ class OrderServiceTest {
         Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
-        order.changeStatus(OrderStatus.PAID, null);
+        order.changeStatus(OrderStatus.PAID, null, CLOCK.instant());
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-1", null))
@@ -447,7 +451,7 @@ class OrderServiceTest {
         Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
-        order.changeStatus(OrderStatus.CANCELLED, "first");
+        order.changeStatus(OrderStatus.CANCELLED, "first", CLOCK.instant());
         given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-1", null))

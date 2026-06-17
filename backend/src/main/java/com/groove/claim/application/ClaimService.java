@@ -189,7 +189,7 @@ public class ClaimService {
         }
         if (fullyCancelled) {
             // 전량 취소 — 주문 CANCELLED + 발송 전 배송 취소.
-            order.changeStatus(OrderStatus.CANCELLED, command.reason());
+            order.changeStatus(OrderStatus.CANCELLED, command.reason(), now);
             shippingService.cancelForOrder(order.getId());
         }
         saved.markCancelRefunded(refund.amount(), now);

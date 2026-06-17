@@ -116,7 +116,7 @@ class ClaimServiceTest {
 
     private Payment paidPayment(Order order) {
         Payment payment = Payment.initiate(order, order.getPayableAmount(), PaymentMethod.CARD, "MOCK", "mock-tx-1");
-        payment.markPaid();
+        payment.markPaid(CLOCK.instant());
         ReflectionTestUtils.setField(payment, "id", 500L);
         return payment;
     }
