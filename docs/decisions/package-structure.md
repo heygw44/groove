@@ -12,18 +12,15 @@
 
 ## Context
 
-단일 모듈 Spring Boot 애플리케이션(`com.groove`)에 회원·카탈로그·주문·결제·쿠폰·배송·리뷰·클레임 등 다수 도메인이 공존한다. 패키지 최상위를 **기술 레이어로 나눌지(controller/service/repository), 도메인으로 나눌지** 가 코드 응집도·탐색성·도메인 간 결합 통제에 직접 영향을 준다.
+`com.groove` 라는 하나의 모듈 안에 회원·카탈로그·주문·결제·쿠폰·배송·리뷰·클레임이 함께 산다. 이 정도 규모가 되면 패키지 최상위를 무엇으로 가르느냐 — 기술 레이어(controller/service/repository)냐, 도메인이냐 — 가 코드 응집도와 탐색성, 그리고 도메인 간 결합을 통제하는 능력에 곧바로 영향을 준다.
 
-요구:
-- 도메인 경계가 코드에서 드러나, 한 기능 변경이 한 패키지에 모이길 원한다.
-- 도메인 간 의존을 단방향으로 통제해 순환 의존을 막고 싶다.
-- 단일 모듈이라 컴파일러가 모듈 경계를 강제하진 못하므로, **패키지 구조 자체가 규율**이 돼야 한다.
+바라는 바는 세 가지였다. 한 기능을 고칠 때 관련 코드가 한 패키지에 모여 있을 것, 도메인 간 의존이 단방향으로 흘러 순환이 생기지 않을 것, 그리고 단일 모듈이라 컴파일러가 경계를 강제해 주지 못하는 만큼 패키지 구조 자체가 규율 역할을 할 것.
 
 ---
 
 ## Decision
 
-**도메인 기반으로 최상위를 나누고, 각 도메인 안에서 경량 레이어로 분리한다.**
+최상위는 도메인으로 가르고, 각 도메인 안에서 가벼운 레이어로 나눈다.
 
 ### 최상위 = 도메인
 
@@ -38,7 +35,7 @@ com.groove/
 
 ### 도메인 내부 = 경량 레이어
 
-각 도메인은 `api / application / domain / exception` 으로 나누고, 필요 시 `event`·`gateway`·`security`·`migration` 을 둔다.
+각 도메인은 `api / application / domain / exception` 으로 나누고, 필요할 때만 `event`·`gateway`·`security`·`migration` 을 덧붙인다.
 
 | 레이어 | 책임 | 예 |
 |---|---|---|
@@ -51,11 +48,11 @@ com.groove/
 
 ### 의존 규칙
 
-- **단방향 의존**: 코어 흐름(주문·결제)이 주변 도메인을 참조하되 역방향은 금지. 원거리 협력은 **이벤트/Outbox 경유**로 결합을 끊는다(예: 결제→배송은 직접 호출이 아니라 `OrderPaidEvent` 아웃박스). → [domain-events-and-outbox.md](./domain-events-and-outbox.md)
-- **공통화는 `common/`** 으로만. 도메인이 서로의 내부를 꺼내 쓰는 대신 공통 인프라(outbox·idempotency·cache·ratelimit)는 `common` 에 둔다.
-- **`package-info.java`** 로 패키지 의도를 문서화한다(예: `order/application` = "트랜잭션 경계 + orderNumber 발급기"). 커버리지 측정에서도 `package-info`·`dto`·`*Properties` 는 제외된다.
+의존은 단방향으로 흐른다. 주문·결제 같은 코어 흐름이 주변 도메인을 참조하되 그 반대는 막는다. 멀리 떨어진 도메인끼리의 협력은 직접 호출 대신 이벤트나 Outbox 를 거쳐 결합을 끊는다(결제가 배송을 직접 부르지 않고 `OrderPaidEvent` 를 아웃박스에 남기는 식이다 → [domain-events-and-outbox.md](./domain-events-and-outbox.md)).
 
-`OrderService` 의 import 가 규칙을 보여준다 — `catalog.album.domain`(재고), `coupon.application`(쿠폰 적용 위임), `member.domain`(검증)을 단방향으로 참조하고, 역으로 이들이 `order` 를 참조하지 않는다.
+공통화가 필요한 것은 전부 `common/` 으로만 모은다. 도메인이 서로의 내부를 들춰 쓰는 대신, outbox·idempotency·cache·ratelimit 같은 공통 인프라를 한곳에 둔다. 패키지의 의도는 `package-info.java` 로 적어 둔다(예: `order/application` 에는 "트랜잭션 경계 + orderNumber 발급기"라고 명시). 커버리지 측정에서도 `package-info`·`dto`·`*Properties` 는 빠진다.
+
+규칙이 실제로 어떻게 적용되는지는 `OrderService` 의 import 가 잘 보여준다. 재고를 위해 `catalog.album.domain`, 쿠폰 적용을 위임하려고 `coupon.application`, 회원 검증을 위해 `member.domain` 을 단방향으로 참조하지만, 그 도메인들이 거꾸로 `order` 를 끌어다 쓰지는 않는다.
 
 ---
 
@@ -63,27 +60,15 @@ com.groove/
 
 ### Option A — 레이어 우선 (controller/service/repository 최상위) ❌
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | `com.groove.controller.*`, `com.groove.service.*` … |
-| 장점 | 레이어 위치가 한눈에 |
-| 단점 | 한 기능 변경이 여러 최상위 패키지로 흩어짐(응집도↓), 도메인 경계·결합이 코드에 안 드러남 |
+`com.groove.controller.*`, `com.groove.service.*` 처럼 기술 레이어로 최상위를 가르는 전통적인 방식이다. 레이어 위치는 한눈에 들어온다. 하지만 기능 하나를 고치면 컨트롤러·서비스·리포지토리가 서로 다른 최상위 패키지로 흩어져 응집도가 떨어지고, 도메인 경계나 결합 관계가 코드에 드러나지 않는다.
 
 ### Option B — 완전 헥사고날 (port/adapter 전면 적용) ⚠️
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | 도메인마다 inbound/outbound port + adapter 전면 분리 |
-| 장점 | 의존 역전 엄격, 테스트 대체 용이 |
-| 단점 | 단일 모듈·CRUD 다수 도메인엔 **보일러플레이트 과다**(port 인터페이스 양산). 본 프로젝트는 외부 연동이 PG 정도라 효용 대비 비용 큼 |
+도메인마다 inbound/outbound port 와 adapter 를 전면적으로 분리하는 방식이다. 의존 역전이 엄격해지고 테스트 대역을 끼우기 쉽다. 다만 단일 모듈에 CRUD 성격의 도메인이 다수인 이 프로젝트에서는 port 인터페이스를 끝없이 양산하는 보일러플레이트가 따른다. 외부 연동이 사실상 PG 정도라, 들이는 비용 대비 효용이 작다.
 
 ### Option C — 도메인 우선 + 경량 레이어 ✅ (채택)
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | 최상위=도메인, 내부=api/application/domain/exception, 외부 연동만 gateway 로 분리 |
-| 장점 | 도메인 응집·탐색성, 단방향 의존 통제, 보일러플레이트 최소 |
-| 한계 | 컴파일러가 도메인 경계를 강제하진 않음(규율 의존) |
+최상위는 도메인으로, 내부는 api/application/domain/exception 으로 나누고, 외부 연동만 `gateway` 로 떼어 낸다. 도메인 응집도와 탐색성이 좋고 의존도 단방향으로 통제되며 보일러플레이트는 최소다. 단점이라면 컴파일러가 도메인 경계를 강제하지 못해 규율에 기대야 한다는 점이다.
 
 ---
 
@@ -101,13 +86,12 @@ com.groove/
 ## Consequences
 
 **긍정적**
-- 기능 변경이 해당 도메인 패키지에 모여 탐색·수정이 쉽다.
-- 외부 연동만 `gateway` 로 분리(헥사고날의 핵심 이점만 취사) → PG 교체가 어댑터 교체로 끝난다. → [payment-gateway-mock.md](./payment-gateway-mock.md)
-- 원거리 협력을 이벤트/Outbox 로 끊어 순환 의존이 구조적으로 없다.
+
+기능을 고칠 때 손댈 코드가 해당 도메인 패키지에 모여 있어 찾고 바꾸기가 수월하다. 헥사고날의 장점 중 정작 필요한 것 — 외부 연동의 분리 — 만 `gateway` 로 취했기 때문에, PG 를 교체할 때도 어댑터만 갈아끼우면 된다(→ [payment-gateway-mock.md](./payment-gateway-mock.md)). 멀리 떨어진 협력을 이벤트·Outbox 로 끊어 둔 덕에 순환 의존은 구조적으로 생기지 않는다.
 
 **부정적 / 트레이드오프**
-- **규율 의존**: 단일 모듈이라 컴파일러가 도메인 간 잘못된 의존을 막지 못한다 → 코드리뷰·ArchUnit 류 테스트로 보강 여지(현재는 리뷰 규율).
-- **`common` 비대화 위험**: "어디까지 공통인가" 기준이 모호하면 `common` 이 잡동사니가 될 수 있다 → 공통은 "도메인 무관 인프라"로 한정하는 기준 유지.
+
+단일 모듈이라 컴파일러가 잘못된 도메인 간 의존을 막아 주지 못한다. 결국 코드리뷰 규율에 기대게 되는데, 더 단단히 하려면 ArchUnit 류의 의존성 테스트로 보강할 여지가 있다(지금은 리뷰로 통제한다). 또 하나는 "어디까지가 공통인가"가 모호해지면 `common` 이 잡동사니로 비대해질 수 있다는 점이다. 그래서 공통은 "도메인과 무관한 인프라"로만 한정한다는 기준을 유지한다.
 
 ---
 

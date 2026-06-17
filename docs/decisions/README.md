@@ -1,6 +1,6 @@
 # 아키텍처 의사결정 기록 (ADR)
 
-프로젝트 진행 중 누적된 주요 기술 결정을 ADR(Architecture Decision Record) 형식으로 정리한다. 각 문서는 **무엇을 골랐고(Decision), 어떤 대안을 왜 버렸으며(Considered Options), 어떤 트레이드오프를 받아들였는지(Consequences)** 를 기록한다.
+프로젝트를 진행하며 내린 주요 기술 결정을 ADR(Architecture Decision Record)로 모아 둔 곳이다. 코드만 봐서는 잘 드러나지 않는 "무엇을 골랐고(Decision), 어떤 대안을 왜 버렸으며(Considered Options), 그 대신 어떤 트레이드오프를 받아들였는지(Consequences)" 를 각 문서가 기록한다.
 
 ## 공통 형식
 
@@ -27,4 +27,4 @@
 | [jwt-library.md](./jwt-library.md) | JWT 라이브러리 선정 — JJWT(vs Nimbus/OAuth2 Resource Server) | Accepted |
 | [seed-data.md](./seed-data.md) | 시드 데이터 출처 및 수급 — Discogs(vs Faker) | Accepted |
 
-> 성능 개선의 Before/After 측정은 [`../improvements/`](../improvements/), 동시성 결함 재현 베이스라인은 [`../troubleshooting/`](../troubleshooting/) 에 있다. 캐시 선택(Caffeine vs Redis)은 [`../improvements/catalog-cache.md`](../improvements/catalog-cache.md) 참조.
+> 성능 개선의 Before/After 측정은 [`../improvements/`](../improvements/), 동시성 결함 재현 베이스라인은 [`../troubleshooting/`](../troubleshooting/) 에 있다. 캐시 선택(Caffeine vs Redis)은 [`../improvements/catalog-cache.md`](../improvements/catalog-cache.md) 를 참고하면 된다.

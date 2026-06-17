@@ -12,20 +12,15 @@
 
 ## Context
 
-본 프로젝트의 정확성 위험은 대부분 **DB 와 맞닿은 곳**에 있다 — 비관적 락/원자적 UPDATE 의 동시성, JPA 쿼리·인덱스, Flyway 마이그레이션, 결제 콜백의 멱등·보상. 이를 신뢰성 있게 검증하려면 테스트가 **실제 MySQL 의 락·방언과 동일한 환경**에서 돌아야 한다.
+이 프로젝트에서 정확성이 깨질 만한 자리는 거의 다 DB 와 맞닿아 있다. 비관적 락과 원자적 UPDATE 의 동시성, JPA 쿼리와 인덱스, Flyway 마이그레이션, 결제 콜백의 멱등과 보상 — 전부 실제 DB 의 동작에 의존한다. 이런 걸 믿을 만하게 검증하려면 테스트가 운영과 같은 MySQL 의 락·방언 위에서 돌아야 한다. H2 로 초록불을 봐 봐야 운영에서 깨지면 의미가 없다.
 
-요구:
-- 빠른 단위 피드백 + 실 DB 기반 통합 검증을 **둘 다** 확보.
-- 동시성·멱등 같은 비결정 요소를 **결정적으로** 재현.
-- 회귀 방지를 위한 **커버리지 게이트**와 성능 회귀를 잡는 **부하 측정**.
-
-본 ADR 은 테스트 종류 구성·실 DB 전략·결정화 방법·게이트를 기록한다.
+그래서 테스트 전략에 바라는 건 분명했다. 빠른 단위 피드백과 실 DB 기반 통합 검증을 둘 다 갖출 것, 동시성·멱등 같은 비결정적 요소를 결정적으로 재현할 것, 그리고 회귀를 막아 줄 커버리지 게이트와 성능 회귀를 잡아 줄 부하 측정을 둘 것.
 
 ---
 
 ## Decision
 
-**테스트 피라미드 + MySQL Testcontainers 싱글턴 + 결정적 테스트 프로파일 + JaCoCo 게이트 + k6 부하** 로 구성한다.
+테스트 피라미드를 MySQL Testcontainers 위에 올리고, 결정적 테스트 프로파일과 JaCoCo 게이트, k6 부하를 더한다.
 
 ### 1) 피라미드 3종
 
@@ -48,23 +43,19 @@ static { MYSQL.start(); }
 public MySQLContainer<?> mysqlContainer() { return MYSQL; }
 ```
 
-정적 싱글턴 + `.withReuse(true)` 로 **모든 테스트 클래스가 컨테이너 하나를 공유**(부팅 오버헤드 1회). `@ServiceConnection` 이 DataSource·Flyway·JPA 를 자동 연결한다.
+정적 싱글턴에 `.withReuse(true)` 를 더해 모든 테스트 클래스가 컨테이너 하나를 공유한다. 부팅 비용을 한 번만 치르는 셈이다. `@ServiceConnection` 이 DataSource·Flyway·JPA 를 컨테이너에 알아서 연결해 준다.
 
 ### 3) 결정적 테스트 프로파일 (`application-test.yaml`)
 
-- **스케줄러 비활성** — 아웃박스 릴레이/결제 폴링/쿠폰 만료/배송 진행을 `interval: PT1H`·`cron: "-"` 로 자동 실행 차단 후, 테스트에서 스케줄러 메서드를 **직접 호출**해 타이밍 비결정성 제거.
-- **Mock PG 결정화** — `success-rate: 1.0`, `delay: 0ms` → [payment-gateway-mock.md](./payment-gateway-mock.md).
-- **rate-limit 완화** — 다회 호출이 한도에 걸리지 않게 capacity 를 크게.
-- **커넥션 풀 천장 대응** — `hikari.minimum-idle: 0` 으로 캐시된 컨텍스트가 idle 커넥션을 즉시 반납(CI 의 MySQL `max_connections` 근접·OOM-kill 방지).
+비결정성의 원천을 하나씩 제거한다. 아웃박스 릴레이·결제 폴링·쿠폰 만료·배송 진행 같은 스케줄러는 `interval: PT1H`·`cron: "-"` 로 자동 실행을 막아 두고, 테스트에서 필요한 순간에 스케줄러 메서드를 직접 호출한다. Mock PG 는 `success-rate: 1.0`, `delay: 0ms` 로 고정한다(→ [payment-gateway-mock.md](./payment-gateway-mock.md)). rate-limit 은 capacity 를 크게 잡아 다회 호출이 한도에 걸리지 않게 하고, `hikari.minimum-idle: 0` 으로 캐시된 컨텍스트가 idle 커넥션을 곧바로 반납하게 해서 CI 의 MySQL `max_connections` 근접과 OOM-kill 을 피한다.
 
 ### 4) 동시성 하니스
 
-`support/ConcurrencyHarness.runConcurrently(...)` 가 N 스레드를 게이트에서 동시 출발시키고 지연을 수집해 TPS·p95 를 파생 → `CouponIssuanceConcurrencyTest`·`PaymentCallbackConcurrencyTest` 등이 공유.
+`support/ConcurrencyHarness.runConcurrently(...)` 가 N 개의 스레드를 게이트에 모았다가 동시에 출발시키고 각 요청의 지연을 모아 TPS 와 p95 를 뽑아낸다. `CouponIssuanceConcurrencyTest`·`PaymentCallbackConcurrencyTest` 등이 이걸 공유한다.
 
 ### 5) 게이트 + 부하
 
-- **JaCoCo** (`build.gradle.kts`): 핵심 도메인(auth·member·catalog·coupon·order·payment) **라인 80%** + 전체 **라인 60%**. `check` 가 트리거하므로 위반 시 빌드 실패. 부트스트랩·DTO·`package-info`·`*Properties` 만 제외.
-- **k6** (`loadtest/*.js`): 선착순 쿠폰·결제 멱등·재고 복원 등 HTTP 계층 부하 측정(Before/After 자료).
+JaCoCo 게이트(`build.gradle.kts`)는 핵심 도메인(auth·member·catalog·coupon·order·payment)에 라인 80%, 전체에 라인 60% 를 요구한다. `check` 가 이 검증을 끌고 가므로 임계값을 못 넘기면 빌드가 멈춘다. 부트스트랩·DTO·`package-info`·`*Properties` 만 측정에서 빠진다. 여기에 k6(`loadtest/*.js`)로 선착순 쿠폰·결제 멱등·재고 복원 같은 흐름을 HTTP 계층에서 부하 측정해 Before/After 자료로 남긴다.
 
 ---
 
@@ -72,27 +63,15 @@ public MySQLContainer<?> mysqlContainer() { return MYSQL; }
 
 ### Option A — H2 인메모리 DB ❌
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | 테스트만 H2 로 부팅 |
-| 장점 | 빠름, 컨테이너 불필요 |
-| 단점 | **MySQL 방언·락(`FOR UPDATE`)·Flyway 호환 차이** → 동시성/쿼리 검증이 운영과 어긋남(가짜 초록) |
+테스트만 H2 로 띄우는 방식이다. 빠르고 컨테이너도 필요 없다. 그런데 MySQL 의 방언과 `FOR UPDATE` 락, Flyway 호환성이 H2 와 달라서, 정작 검증하고 싶은 동시성과 쿼리가 운영과 어긋난다. 가짜 초록불의 위험이 크다.
 
 ### Option B — 단위 테스트 위주 + DB 모킹 ⚠️
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | 리포지토리를 Mockito 로 스텁 |
-| 장점 | 매우 빠름 |
-| 단점 | 실제 쿼리·인덱스·동시성·트랜잭션 경계 **미검증** — 본 프로젝트 위험의 핵심을 놓침 |
+리포지토리를 Mockito 로 스텁해서 도는 방식이라 더없이 빠르다. 하지만 실제 쿼리·인덱스·동시성·트랜잭션 경계가 전혀 검증되지 않는다. 하필 이 프로젝트 위험의 핵심이 거기 있다.
 
 ### Option C — Testcontainers 피라미드 ✅ (채택)
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | 단위+슬라이스+통합, 실 MySQL 싱글턴 재사용 |
-| 장점 | 운영과 동일 DB 로 락·쿼리·마이그레이션·동시성까지 검증, 컨테이너 1회 부팅 |
-| 한계 | 컨테이너 부팅 비용·CI 커넥션 천장 관리 필요 |
+단위·슬라이스·통합을 갖추되 실 MySQL 을 싱글턴으로 재사용한다. 운영과 같은 DB 위에서 락·쿼리·마이그레이션·동시성까지 검증되고, 컨테이너는 한 번만 부팅한다. 대신 컨테이너 부팅 비용과 CI 커넥션 천장을 관리해야 한다.
 
 ---
 
@@ -110,15 +89,12 @@ public MySQLContainer<?> mysqlContainer() { return MYSQL; }
 ## Consequences
 
 **긍정적**
-- 비관적 락·원자적 UPDATE·멱등·보상 같은 **DB 밀착 로직을 운영과 동일한 MySQL 로 검증**(가짜 초록 회피).
-- 싱글턴 재사용으로 다수 통합 테스트에서도 컨테이너 부팅이 1회.
-- 결정적 프로파일 + `ConcurrencyHarness` 로 동시성 테스트가 CI 에서 재현 가능.
-- JaCoCo 게이트가 회귀를 빌드 단계에서 차단.
+
+비관적 락·원자적 UPDATE·멱등·보상처럼 DB 에 밀착한 로직을 운영과 같은 MySQL 로 검증하니 가짜 초록불을 피할 수 있다. 싱글턴 재사용 덕에 통합 테스트가 많아도 컨테이너 부팅은 한 번뿐이다. 결정적 프로파일과 `ConcurrencyHarness` 가 있어 동시성 테스트도 CI 에서 재현되고, JaCoCo 게이트가 회귀를 빌드 단계에서 끊는다.
 
 **부정적 / 트레이드오프**
-- **컨테이너 부팅 비용**: 첫 실행 시 이미지 pull·부팅 지연(로컬은 `withReuse` 로 완화, Docker 필요).
-- **CI 커넥션 천장**: 캐시된 `@SpringBootTest` 컨텍스트들이 Hikari idle 커넥션을 점유해 MySQL `max_connections` 에 근접할 수 있음 → `hikari.minimum-idle: 0` 으로 대응(러너 특정 이슈, 로컬 미재현).
-- **로컬 Docker 의존**: Docker/OrbStack 미인식 시 대량 실패 → `DOCKER_HOST`·`TESTCONTAINERS_RYUK_DISABLED` 환경 설정 필요.
+
+대가도 있다. 첫 실행에는 이미지를 받고 컨테이너를 띄우는 지연이 붙는다(로컬은 `withReuse` 로 완화하지만 Docker 는 있어야 한다). CI 에서는 캐시된 `@SpringBootTest` 컨텍스트들이 Hikari idle 커넥션을 쥐고 있다가 MySQL `max_connections` 에 근접할 수 있어 `hikari.minimum-idle: 0` 으로 눌렀는데, 이건 러너에서만 나타나고 로컬에서는 재현되지 않는 이슈였다. 로컬에서 Docker 나 OrbStack 이 인식되지 않으면 테스트가 무더기로 깨지므로, `DOCKER_HOST` 와 `TESTCONTAINERS_RYUK_DISABLED` 환경 설정이 필요하다.
 
 ---
 

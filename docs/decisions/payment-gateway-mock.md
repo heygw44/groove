@@ -12,20 +12,22 @@
 
 ## Context
 
-결제 도메인(W7)은 PG(토스·나이스페이 등) 연동을 전제로 설계됐다. 그러나 본 프로젝트는 **학습·포트폴리오 목적의 단일 인스턴스 서비스**이고, 실 PG 계약/심사/정산 계정이 없다. 그럼에도 결제는 다음 비기능 요건을 시연·검증해야 한다.
+결제 도메인(W7)은 처음부터 PG(토스·나이스페이 같은 결제대행사) 연동을 전제로 설계했다. 문제는 이 프로젝트가 학습·포트폴리오 목적의 단일 인스턴스 서비스라는 점이다. 실 PG 를 붙이려면 가맹 심사와 정산 계정이 필요한데, 그만한 비용을 들일 단계가 아니다.
 
-- **비동기 콜백**: 실 PG 는 승인 요청에 즉시 최종 결과를 주지 않는다 — `PENDING` 응답 후 웹훅으로 `PAID`/`FAILED` 가 도착한다.
-- **멱등성**: 같은 결제 요청(Idempotency-Key)·중복 웹훅·환불 재시도가 부수효과를 1회로 수렴해야 한다(이슈 #160 멱등성 결함의 회귀 방지).
-- **실패 보상**: `FAILED` 콜백 시 재고 복원 + 쿠폰 `USED→ISSUED` 복원이 일어나야 한다.
-- **결정적 테스트**: CI/로컬에서 성공률·지연·웹훅 타이밍을 재현 가능하게 통제해야 한다.
+그렇다고 결제를 대충 처리할 수는 없다. 결제는 이 도메인에서 가장 까다로운 부분이고, 적어도 다음 네 가지는 실제처럼 동작하고 검증돼야 한다.
 
-따라서 결정 대상은 "실 PG 를 붙이느냐"가 아니라 **"실 PG 의 비동기·멱등 라이프사이클을 신뢰성 있게 흉내 내면서, 나중에 실 PG 로 교체 가능한 경계를 어떻게 두느냐"** 다.
+- **비동기 콜백.** 실 PG 는 승인 요청에 곧바로 최종 결과를 주지 않는다. 일단 `PENDING` 으로 응답하고, 잠시 뒤 웹훅으로 `PAID` 나 `FAILED` 가 도착한다.
+- **멱등성.** 같은 결제 요청(Idempotency-Key)이 중복으로 들어오거나, 같은 웹훅이 두 번 오거나, 환불을 재시도해도 부수효과는 한 번만 일어나야 한다. 이슈 #160 에서 드러난 멱등성 결함이 다시 생기면 안 된다.
+- **실패 보상.** `FAILED` 콜백이 오면 차감했던 재고를 되돌리고 적용한 쿠폰을 `USED→ISSUED` 로 복원해야 한다.
+- **결정적 테스트.** 성공률·지연·웹훅 타이밍을 통제할 수 있어야 CI 와 로컬에서 같은 결과가 재현된다.
+
+결국 고민은 "실 PG 를 붙이느냐 마느냐"가 아니었다. **실 PG 의 비동기·멱등 라이프사이클을 신뢰성 있게 흉내 내되, 나중에 실 PG 로 갈아끼울 수 있는 경계를 어디에 둘 것인가**가 핵심이었다.
 
 ---
 
 ## Decision
 
-**PG 를 `PaymentGateway` 인터페이스(Strategy 패턴)로 추상화하고, `MockPaymentGateway` 구현으로 비동기 콜백형 라이프사이클을 재현한다.** 신규 인프라(실 PG SDK·외부 큐)는 도입하지 않는다.
+PG 를 `PaymentGateway` 인터페이스로 추상화하고(Strategy 패턴), 그 뒤에 비동기 콜백까지 재현하는 `MockPaymentGateway` 를 둔다. 실 PG SDK 나 외부 큐 같은 새 인프라는 들이지 않는다.
 
 ```java
 // payment/gateway/PaymentGateway.java
@@ -36,27 +38,25 @@ public interface PaymentGateway {
 }
 ```
 
-핵심 동작:
+동작은 실 PG 의 흐름을 그대로 따라간다. `request()` 는 `mock-tx-{UUID}` 거래 식별자를 발급하고, 설정된 성공률(`success-rate`)로 최종 결과를 미리 정한다. 그리고 웹훅을 쏠 시각(`fireAt`)을 잡아 `MockWebhookSimulator` 에 예약한 뒤, 일단 `PENDING` 으로 응답한다.
 
-- **요청 즉시 PENDING**: `MockPaymentGateway.request()` 는 `mock-tx-{UUID}` 거래 식별자를 발급하고 성공률(`success-rate`)로 최종 결과(`PAID`/`FAILED`)를 미리 정한 뒤, **발사 시각(`fireAt`)을 정해 `MockWebhookSimulator` 에 웹훅 콜백을 예약**하고 `PENDING` 으로 응답한다.
+```java
+String pgTransactionId = "mock-tx-" + UUID.randomUUID();
+PaymentStatus result = rollOutcome();                       // success-rate 기반
+Instant fireAt = now.plus(randomDuration(webhookDelayMin, webhookDelayMax));
+if (autoWebhook) {
+    webhookSimulator.scheduleCallback(pgTransactionId, orderNumber, result, fireAt);
+}
+return new PaymentResponse(pgTransactionId, PaymentStatus.PENDING, PROVIDER);
+```
 
-  ```java
-  String pgTransactionId = "mock-tx-" + UUID.randomUUID();
-  PaymentStatus result = rollOutcome();                       // success-rate 기반
-  Instant fireAt = now.plus(randomDuration(webhookDelayMin, webhookDelayMax));
-  if (autoWebhook) {
-      webhookSimulator.scheduleCallback(pgTransactionId, orderNumber, result, fireAt);
-  }
-  return new PaymentResponse(pgTransactionId, PaymentStatus.PENDING, PROVIDER);
-  ```
+예약된 웹훅은 전용 `TaskScheduler`(`paymentTaskScheduler`) 위에서 `fireAt` 에 일회성으로 실행돼 `WebhookDispatcher` 로 결제 결과를 통보한다. 실 PG 의 서버 간 콜백과 같은 모양이다. 환불은 `idempotencyKey → 첫 응답` 캐시(`refundCache.computeIfAbsent`)로 처리해서, 같은 키로 다시 부르면 처음 만든 응답을 그대로 돌려준다.
 
-- **비동기 웹훅**: `MockWebhookSimulator` 가 전용 `TaskScheduler`(`paymentTaskScheduler`) 위에서 `fireAt` 에 일회성 작업을 예약, `WebhookDispatcher` 로 결제 결과를 통보한다 — 실 PG 의 서버→서버 콜백과 동형.
-- **환불 멱등**: `refund()` 는 `idempotencyKey → 첫 응답` 캐시(`refundCache.computeIfAbsent`)로 같은 키 재호출 시 첫 응답을 그대로 반환한다.
-- **프로파일 격리**: `@Profile({"local","dev","test","docker"})` — Mock 은 운영 외 프로파일에서만 활성. 실 PG 어댑터는 `prod` 프로파일에 별도 `@Component` 로 추가하면 된다.
+운영 환경과는 프로파일로 분리한다. Mock 은 `@Profile({"local","dev","test","docker"})` 에서만 올라오므로, 실 PG 어댑터가 필요해지면 `prod` 프로파일용 `@Component` 로 따로 추가하면 된다.
 
-상태·전이는 도메인이 보증한다. `PaymentStatus` 가 합법 전이만 허용하고(`PENDING→{PAID,FAILED}`, `PAID→{PARTIALLY_REFUNDED,REFUNDED}`, 나머지 종착), `payment.pg_transaction_id` 는 **UNIQUE** 로 거래 단위 멱등의 DB 보증선이 된다.
+상태와 전이 규칙은 도메인이 보증한다. `PaymentStatus` 가 합법 전이만 허용하고(`PENDING→{PAID,FAILED}`, `PAID→{PARTIALLY_REFUNDED,REFUNDED}`, 그 외는 종착), `payment.pg_transaction_id` 에 건 **UNIQUE** 제약이 거래 단위 멱등성의 최종 방어선이 된다.
 
-테스트에서는 `application-test.yaml` 로 `success-rate: 1.0`, `delay: 0ms`, `webhook-delay: 0ms` 로 **완전 결정화**하고, 멱등성 통합 테스트는 `auto-webhook=false` 로 웹훅을 끈 뒤 콜백을 직접 호출해 타이밍 비결정성을 제거한다.
+테스트에서는 한발 더 나아가 비결정성을 아예 없앤다. `application-test.yaml` 에서 `success-rate: 1.0`, `delay: 0ms`, `webhook-delay: 0ms` 로 고정하고, 멱등성 통합 테스트는 `auto-webhook=false` 로 자동 웹훅을 끈 다음 콜백을 직접 호출한다. 타이밍에 기대지 않으니 결과가 흔들리지 않는다.
 
 ---
 
@@ -64,32 +64,21 @@ public interface PaymentGateway {
 
 ### Option A — 실 PG(토스/나이스페이) 직접 연동 ❌
 
+테스트망 키로 실제 결제대행사를 붙이는 방안이다. 충실도는 최고여서 실 승인·망취소·부분취소까지 검증할 수 있다. 하지만 테스트망조차 가맹 심사와 정산 계정을 요구하는 외부 의존이고, 응답 지연이나 일시 장애가 CI 를 비결정적으로 만든다. 학습·단일 인스턴스 스코프에는 과한 투자다.
+
 | 항목 | 내용 |
 |---|---|
-| 방식 | 실 PG SDK/REST 연동, 테스트망(test key) 사용 |
-| 충실도 | 최고 (실제 승인·망취소·부분취소 검증) |
-| 비용 | PG 가맹 심사·정산 계정 필요, 테스트망도 외부 의존 |
-| 결정성 | 낮음 — 외부 응답 지연·장애가 CI 를 비결정적으로 만든다 |
-| 결론 | 학습·단일 인스턴스 스코프 대비 과투자, CI 신뢰성 저하 |
+| 충실도 | 최고 (실 승인·망취소·부분취소) |
+| 비용 | 가맹 심사·정산 계정 필요, 테스트망도 외부 의존 |
+| 결정성 | 낮음 — 외부 지연·장애가 CI 를 흔든다 |
 
 ### Option B — 단순 동기 Mock (요청 즉시 PAID 반환) ⚠️
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | `request()` 가 곧바로 `PAID` 를 반환, 웹훅 없음 |
-| 장점 | 구현 최소, 해피패스 빠름 |
-| 단점 | **비동기 콜백·멱등·실패 보상 시연 불가** — 결제의 본질적 난점(중복 웹훅·폴링/웹훅 경합·보상 트랜잭션)을 전혀 검증하지 못함 |
-| 결론 | 결제 도메인의 핵심 학습 가치를 잃음 |
+`request()` 가 곧장 `PAID` 를 돌려주고 웹훅은 없는 방식이다. 구현이 가장 가볍고 해피패스는 빠르게 통과한다. 그런데 이렇게 하면 결제 도메인에서 정작 어려운 부분 — 비동기 콜백, 중복 웹훅, 웹훅과 폴링의 경합, 실패 보상 — 을 하나도 검증하지 못한다. 학습 가치의 핵심이 통째로 빠진다.
 
 ### Option C — 인터페이스 + 콜백형 Mock ✅ (채택)
 
-| 항목 | 내용 |
-|---|---|
-| 방식 | `PaymentGateway` 추상화 + `MockPaymentGateway`(PENDING→웹훅 콜백) + `MockWebhookSimulator`(TaskScheduler 예약) |
-| 충실도 | 비동기 라이프사이클·멱등·실패 보상까지 재현 |
-| 결정성 | 성공률·지연·웹훅 타이밍을 프로퍼티로 통제 → CI 결정적 |
-| 교체성 | 인터페이스 분리로 실 PG 는 어댑터만 추가(`@Profile("prod")`) |
-| 한계 | 망취소·부분취소 등 실 PG 엣지케이스는 미검증 |
+`PaymentGateway` 추상화 위에 `MockPaymentGateway`(PENDING→웹훅 콜백)와 `MockWebhookSimulator`(TaskScheduler 예약)를 얹는다. 비동기 라이프사이클은 물론 멱등성과 실패 보상까지 재현되고, 성공률·지연·웹훅 타이밍을 프로퍼티로 통제하므로 CI 에서 결정적이다. 실 PG 가 필요해지면 인터페이스 뒤에 어댑터만 추가하면 된다. 대신 망취소·부분취소 같은 실 PG 특유의 엣지케이스는 검증 범위 밖이다.
 
 ---
 
@@ -108,13 +97,12 @@ public interface PaymentGateway {
 ## Consequences
 
 **긍정적**
-- 실 PG 계정 없이 결제 라이프사이클(PENDING→웹훅→PAID/FAILED→환불)을 로컬·CI 에서 결정적으로 검증한다.
-- `pg_transaction_id` UNIQUE + 콜백 멱등키 + 환불 캐시로 **멱등 방어선이 3겹**(생성/콜백/환불)이며, 이는 동시 웹훅·폴링 경합 테스트(`PaymentCallbackConcurrencyTest`)의 기반이 된다.
-- `PaymentGateway` 경계 덕에 실 PG 전환 시 도메인·서비스 코드 변경 없이 어댑터만 추가한다.
+
+실 PG 계정 없이도 결제 라이프사이클 전체(PENDING→웹훅→PAID/FAILED→환불)를 로컬과 CI 에서 결정적으로 검증할 수 있다. 멱등성 방어선이 거래 생성·콜백·환불 세 군데에 겹쳐 있어서(`pg_transaction_id` UNIQUE, 콜백 멱등키, 환불 캐시), 동시 웹훅·폴링 경합을 다루는 `PaymentCallbackConcurrencyTest` 같은 테스트가 여기서 출발한다. 무엇보다 `PaymentGateway` 경계 덕분에 실 PG 전환이 도메인·서비스 코드를 건드리지 않고 어댑터 교체로 끝난다.
 
 **부정적 / 트레이드오프**
-- **모킹 충실도 한계**: 실 PG 의 망취소·부분취소·중복 정산·서명 스킴 차이는 Mock 으로 검증되지 않는다 → 실 PG 도입 시 그 어댑터 레벨 통합 테스트가 별도로 필요(그 시점에 본 ADR 을 Superseded 처리).
-- **인메모리 상태**: Mock 거래 상태는 프로세스 메모리(`ConcurrentHashMap`)에만 있어 재기동 시 소실되고 `MAX_TRACKED_TRANSACTIONS`(10k) 상한으로 정리된다 — 테스트·시연 용도라 수용.
+
+모킹인 이상 충실도에는 한계가 있다. 실 PG 의 망취소·부분취소·중복 정산이나 서명 스킴 차이는 Mock 으로 잡히지 않으므로, 실 PG 를 도입하는 시점에 그 어댑터를 대상으로 한 통합 테스트가 따로 필요하다. 그때 이 ADR 은 Superseded 로 넘어간다. 또 Mock 의 거래 상태는 프로세스 메모리(`ConcurrentHashMap`)에만 있어 재기동하면 사라지고 `MAX_TRACKED_TRANSACTIONS`(10k) 상한에서 정리되는데, 테스트·시연 용도라 문제 삼지 않았다.
 
 ---
 
