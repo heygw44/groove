@@ -88,7 +88,7 @@ class PaymentCallbackServiceTest {
         Payment payment = pendingPayment(album, 1);
         ReflectionTestUtils.setField(payment, "id", 42L); // paymentId 고정값 주입
         ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID); // 아웃박스 aggregateId 주입
-        given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
+        given(paymentRepository.findByPgTransactionIdForUpdate(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.PAID, null);
 
@@ -115,7 +115,7 @@ class PaymentCallbackServiceTest {
         Album album = album(98); // 주문이 2개 차감했다고 가정
         Payment payment = pendingPayment(album, 2);
         ReflectionTestUtils.setField(payment.getOrder(), "id", 7L); // restoreForOrder 인자 주입
-        given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
+        given(paymentRepository.findByPgTransactionIdForUpdate(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.FAILED, "카드 한도 초과");
 
@@ -132,7 +132,7 @@ class PaymentCallbackServiceTest {
     @DisplayName("FAILED + 사유 null: 기본 사유를 기록한다")
     void applyResult_failed_nullReason_usesDefault() {
         Payment payment = pendingPayment(album(100), 1);
-        given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
+        given(paymentRepository.findByPgTransactionIdForUpdate(PG_TX)).willReturn(Optional.of(payment));
 
         service.applyResult(PG_TX, PaymentStatus.FAILED, null);
 
@@ -142,7 +142,7 @@ class PaymentCallbackServiceTest {
     @Test
     @DisplayName("알 수 없는 거래: IGNORED, 아무 것도 바꾸지 않는다")
     void applyResult_unknownTransaction_ignored() {
-        given(paymentRepository.findWithOrderAndItemsByPgTransactionId("nope")).willReturn(Optional.empty());
+        given(paymentRepository.findByPgTransactionIdForUpdate("nope")).willReturn(Optional.empty());
 
         PaymentCallbackResult result = service.applyResult("nope", PaymentStatus.PAID, null);
 
@@ -157,7 +157,7 @@ class PaymentCallbackServiceTest {
         Album album = album(99);
         Payment payment = pendingPayment(album, 1);
         payment.markPaid(CLOCK.instant()); // 이미 PAID
-        given(paymentRepository.findWithOrderAndItemsByPgTransactionId(PG_TX)).willReturn(Optional.of(payment));
+        given(paymentRepository.findByPgTransactionIdForUpdate(PG_TX)).willReturn(Optional.of(payment));
 
         PaymentCallbackResult result = service.applyResult(PG_TX, PaymentStatus.FAILED, "늦게 도착한 실패 통보");
 

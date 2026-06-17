@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -22,7 +23,8 @@ import java.util.Objects;
  * 상태 전이 판정은 PaymentStatus.canTransitionTo.
  */
 @Entity
-@Table(name = "payment")
+@Table(name = "payment",
+        uniqueConstraints = @UniqueConstraint(name = "uk_payment_pg_tx", columnNames = "pg_transaction_id"))
 public class Payment extends BaseTimeEntity {
 
     /** pg_provider 컬럼 길이. */

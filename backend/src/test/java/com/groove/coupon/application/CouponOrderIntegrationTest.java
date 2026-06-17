@@ -44,6 +44,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -67,6 +68,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @SpringBootTest
 @ActiveProfiles("test")
+// auto-webhook=false: refundPaidOrder_restoresCoupon 이 결제를 수동으로 markPaid 하므로,
+// 비동기 PAID 웹훅이 같은 결제를 동시에 전이시키며 경합(콜백의 FOR UPDATE 락 ↔ 수동 갱신)하는 것을 막는다.
+@TestPropertySource(properties = "payment.mock.auto-webhook=false")
 @Import(TestcontainersConfig.class)
 @DisplayName("쿠폰 주문/결제/취소/환불 통합 (#91)")
 class CouponOrderIntegrationTest {

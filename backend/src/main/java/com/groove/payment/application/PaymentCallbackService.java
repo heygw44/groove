@@ -63,7 +63,9 @@ public class PaymentCallbackService {
         if (result != PaymentStatus.PAID && result != PaymentStatus.FAILED) {
             throw new IllegalArgumentException("결제 콜백 결과는 PAID 또는 FAILED 여야 합니다: " + result);
         }
-        Payment payment = paymentRepository.findWithOrderAndItemsByPgTransactionId(pgTransactionId).orElse(null);
+        // FOR UPDATE 로 콜백 적용을 직렬화 — 동시 콜백(웹훅/폴링)의 패자는 락 해제 후 종착 상태를 읽어
+        // IllegalStateException 대신 alreadyProcessed 로 흡수된다. order/items 는 같은 트랜잭션에서 lazy 로딩.
+        Payment payment = paymentRepository.findByPgTransactionIdForUpdate(pgTransactionId).orElse(null);
         if (payment == null) {
             log.warn("결제 콜백: 알 수 없는 거래 pgTx={} — 무시", pgTransactionId);
             return PaymentCallbackResult.ignored(pgTransactionId);
