@@ -103,6 +103,11 @@ docker-compose up -d
 # 헬스체크 (외부 접근은 nginx :80 을 통해서만 — app 8080 은 미발행)
 curl http://localhost/actuator/health
 
+# 데모 데이터 시드 — docker 프로파일은 LocalDataSeeder 가 동작하지 않으므로
+# 시연 흐름(상품 탐색 → 주문 → 결제 → 배송)을 재현하려면 카탈로그·계정을 적재한다 (Python3 필요)
+# 규모는 ALBUM_COUNT·MEMBER_COUNT 로 조절 (자세한 내용: db/seed/README.md)
+ALBUM_COUNT=200 MEMBER_COUNT=50 ./scripts/seed.sh --docker --yes
+
 # API 문서 (Swagger UI)
 # docker 프로파일은 기본 비공개 — .env 에 SPRINGDOC_ENABLED=true 설정 시 노출
 open http://localhost/swagger-ui.html

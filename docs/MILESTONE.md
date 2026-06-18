@@ -4,7 +4,7 @@
 |---|---|
 | 버전 | 1.5 (배포 준비 #265/#270/#274 + V30 + 설계문서 버전 동기화) |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-18 (배포 전 문서 점검 — #W12-6 프로덕션 배포 준비 절 신규 추가[nginx #265·TLS/배포 체크리스트 #270·수평 확장 유보 ADR #274], W12-2 ADR 8건→**9건**(`horizontal-scaling` 추가), M16 마이그레이션 V28→**V30**(아웃박스 재시도 상한/DLQ #268), 설계문서 버전 표기 PRD v1.3·ARCHITECTURE v2.3·ERD v1.9 로 현행화) — 이전: 2026-06-18 (코드 대조 동기화 — W1·W2(M1·M2) 산출물 검증 후 전체 체크[LICENSE만 미생성], M13 쿠폰 #C-1~#C-5 체크박스 채움, W12-2(ADR)·W12-3(설계문서 4종 최신화) 완료 체크, G4 "설계문서 최신화" 통과, **확장 M16(분석 기반 흐름 개선, #233~#239 머지) 섹션 신규 추가**, W8-5·W10-4 README 비고 정정[성능 Before/After는 README 간결화로 docs/improvements·portfolio 이전], §1 일정표·§6 진행표 갱신) — 이전: 2026-06-12 (W8~W11 완료 반영 — M8(#69·#139~#143)·M9(#192~#197)·M10(#203~#206)·M11(#207~#211) 이슈 전부 머지/종료. §1 표 W8·W10·W11 ✅, §3 W8-1/2/4/5·W9·W10·W11 체크 갱신, 검색인덱스 V6→**V21** 정정, Redis(#210)·Virtual Threads(#211)는 측정 우선순위 밀려 NOT_PLANNED(컷), §6 진행 바·M8~M11 closed 정책 갱신) — 이전: 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
+| 최종 수정일 | 2026-06-18 (W12-5/G4 최종 점검 #260 — 신규 환경 클린 클론 셋업 실측[nginx/app/mysql healthy·`/actuator/health` 200·Flyway V30·Bruno `Groove Compose` 28/28]·의존성 보안 Dependabot 도입(`.github/dependabot.yml`)·저장소 메타데이터(설명·토픽 16종) 설정 → **G4 ✅ 통과·W12 종료**. Before/After·트러블슈팅·의사결정은 `docs/`+포트폴리오로 충족[README 임베드 descope]) — 이전: 2026-06-18 (배포 전 문서 점검 — #W12-6 프로덕션 배포 준비 절 신규 추가[nginx #265·TLS/배포 체크리스트 #270·수평 확장 유보 ADR #274], W12-2 ADR 8건→**9건**(`horizontal-scaling` 추가), M16 마이그레이션 V28→**V30**(아웃박스 재시도 상한/DLQ #268), 설계문서 버전 표기 PRD v1.3·ARCHITECTURE v2.3·ERD v1.9 로 현행화) — 이전: 2026-06-18 (코드 대조 동기화 — W1·W2(M1·M2) 산출물 검증 후 전체 체크[LICENSE만 미생성], M13 쿠폰 #C-1~#C-5 체크박스 채움, W12-2(ADR)·W12-3(설계문서 4종 최신화) 완료 체크, G4 "설계문서 최신화" 통과, **확장 M16(분석 기반 흐름 개선, #233~#239 머지) 섹션 신규 추가**, W8-5·W10-4 README 비고 정정[성능 Before/After는 README 간결화로 docs/improvements·portfolio 이전], §1 일정표·§6 진행표 갱신) — 이전: 2026-06-12 (W8~W11 완료 반영 — M8(#69·#139~#143)·M9(#192~#197)·M10(#203~#206)·M11(#207~#211) 이슈 전부 머지/종료. §1 표 W8·W10·W11 ✅, §3 W8-1/2/4/5·W9·W10·W11 체크 갱신, 검색인덱스 V6→**V21** 정정, Redis(#210)·Virtual Threads(#211)는 측정 우선순위 밀려 NOT_PLANNED(컷), §6 진행 바·M8~M11 closed 정책 갱신) — 이전: 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
 | 진행 기간 | 12주 (단독, 전업) + 확장(쿠폰·프론트) |
 | 주당 가용 시간 | 35~45시간 |
 | 표기 방식 | 상대 (W1 ~ W12) + 확장 M13~M15 |
@@ -89,13 +89,13 @@
 | 통합/시드 | W8 | 통합 테스트, 시드 데이터, API 컬렉션(Bruno) | — | ✅ 완료 (M8 #69·#139~#143 — 커버리지 게이트·단위 테스트·5만건 시드·Bruno 63/63·README 다이어그램) |
 | 측정 | W9 | k6 시나리오, 베이스라인, 문제 식별 | **G3** | ✅ 통과 (2026-06-10, M9 #192~#197) |
 | CS 개선 | W10~W11 | N+1·인덱스·동시성·멱등성 + Before/After | — | ✅ 완료 (M10 #203~#206 · M11 #207~#209; Redis #210·VT #211 측정 후 컷) |
-| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | ◐ 진행 중 (M12 — ADR·설계문서 최신화 완료, README 최종·시연 자료·G4 잔여) |
+| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | ✅ 통과 (2026-06-18, M12 — ADR·설계문서 최신화 완료, #260 클린 셋업 실측·Dependabot·메타데이터 정리. 데모/Before·After 자료는 docs/+포트폴리오로 충족, README 임베드는 descope) |
 | 확장: 쿠폰 | M13 | 쿠폰 시스템 + 선착순 동시성 + k6 Before/After | — | ✅ 완료 (~2026-06-01) |
 | 확장: 데모 프론트 | M14 | 정적 Bootstrap 시연 UI | — | ✅ 완료 → M15 로 대체 |
 | 확장: Vue 프론트 | M15 | Vue 3 + Vite 전 기능 시연 UI | — | ✅ 완료 (2026-06-03) |
 | 확장: 흐름 개선 | M16 | 취소/반품 클레임·재고 lost-update·keyset 페이징·Caffeine 캐시·아웃박스 | — | ✅ 완료 (2026-06-17, #233~#239 머지) |
 
-> **로드맵 분기**: 본 문서의 W1~W12 로드맵에서 W1~W7(핵심 흐름)을 완료(G2 통과)한 뒤, **확장 도메인으로 쿠폰(M13)과 데모 프론트엔드(M14 바닐라 → M15 Vue 전환)** 를 먼저 진행했다. 이후 통합/시드(W8)·측정(W9, G3)·CS 개선(W10~W11)까지 모두 완료했고, 측정·감사에서 드러난 후속 흐름을 **확장 M16(분석 기반 흐름 개선)** 으로 마무리했다(#233~#239 머지). **남은 로드맵은 문서화/시연(W12, G4) 하나**이며, 그중 ADR·설계문서 최신화는 완료되고 README 최종·시연 자료가 잔여다. 쿠폰 확장이 DoD #4(k6)·#5(Before/After) 일부를 선충족했다.
+> **로드맵 분기**: 본 문서의 W1~W12 로드맵에서 W1~W7(핵심 흐름)을 완료(G2 통과)한 뒤, **확장 도메인으로 쿠폰(M13)과 데모 프론트엔드(M14 바닐라 → M15 Vue 전환)** 를 먼저 진행했다. 이후 통합/시드(W8)·측정(W9, G3)·CS 개선(W10~W11)까지 모두 완료했고, 측정·감사에서 드러난 후속 흐름을 **확장 M16(분석 기반 흐름 개선)** 으로 마무리했다(#233~#239 머지). 마지막 **문서화/시연(W12, G4)** 까지 완료해 **로드맵 전 구간을 종료**했다 — #260 에서 신규 환경 클린 셋업을 실측 검증(Bruno 28/28)하고 Dependabot·저장소 메타데이터를 정리했으며, Before/After·트러블슈팅·의사결정 자료는 `docs/`(improvements·troubleshooting·decisions·measurement)와 포트폴리오 문서로 충족한다(README 본문 임베드는 의도적 descope). 쿠폰 확장이 DoD #4(k6)·#5(Before/After) 일부를 선충족했다.
 >
 > **확장 마일스톤**: M13 상세 이슈는 §3 끝의 「확장 — 쿠폰 시스템」 절([plans/coupon-system.md](plans/coupon-system.md)). M14/M15 프론트엔드는 백엔드 시연용 UI로, M14(정적 Bootstrap)를 폐기하고 M15(Vue 3 + Vite + Pinia + Tailwind, History 라우팅 → `SpaForwardConfig`, node-gradle 통합 빌드)로 재구축했다. M16은 측정·코드 감사에서 식별한 잔여 흐름(취소/반품 클레임, 재고 lost-update, keyset 페이징, 카탈로그 캐시, 트랜잭셔널 아웃박스)을 보강한 절로, 상세는 §3 끝의 「확장 — M16」 절.
 
@@ -128,9 +128,9 @@
 - [x] 발견된 문제 3건 이상 명시 (오버셀·N+1·풀스캔·5xx 4건, §3)
 - [x] W10~W11 개선 작업 계획 확정 (§4)
 
-### G4 — 최종 게이트 (W12 말) ◐ 진행 중
-- [ ] PRD §11 산출물 정의(DoD) 모든 항목 충족
-- [ ] 측정 데이터 기반 Before/After 비교 사례 1건 이상 README 기재 (자료는 `docs/improvements`·`docs/portfolio` 에 있으나 README 본문 임베드는 잔여 — #W12-1)
+### G4 — 최종 게이트 (W12 말) ✅ 통과 (2026-06-18, #260)
+- [x] PRD §11 산출물 정의(DoD) 모든 항목 충족 — #1·#3·#4·#6 직접 충족, #2(시드 후 Bruno 시연)는 클린 클론 28/28 실측(#260). #5(Before/After)·#7(트러블슈팅/의사결정)은 ↓ 참고.
+- [x] 측정 데이터 기반 Before/After 비교 사례 — `docs/improvements`(7건)·`docs/measurement/baseline.md`·`docs/portfolio`(케이스 스터디 5건)로 충족. **README 본문 임베드는 의도적 descope(결정사항)** — 데모/통과 자료는 포트폴리오 문서로 별도 정리. (트러블슈팅/의사결정도 동일: `docs/decisions` 9건·`docs/troubleshooting` 3건)
 - [x] 모든 설계 문서 최신화 완료 (#W12-3 — PRD v1.3·ARCHITECTURE v2.3·ERD v1.9·API v1, 2026-06-18 M16+배포 준비까지 동기화)
 
 ---
@@ -923,7 +923,7 @@
 **라벨**: `type:docs`, `M`
 **선행**: #W8-3, #W8-4
 **상태**: ✅ 완료. `README.md` 에 소개·차별화(성능/동시성 개선 사례)·빠른 시작·기술 스택·문서 링크·진행 현황 + 아키텍처 다이어그램 임베드까지 완료(#143). 시드 적용 안내(`./scripts/seed.sh`)는 #W8-3 에서 반영.
-> **비고(2026-06-18 정정)**: 당시 README 에 성능/동시성 개선 사례를 실었으나 이후 README 를 간결화(소개·스택·기능·구조·실행)하면서 성능 Before/After 는 `docs/improvements`·`docs/portfolio` 로 이전했다. README 본문 재기재는 W12-1/G4 잔여.
+> **비고(2026-06-18 정정)**: 당시 README 에 성능/동시성 개선 사례를 실었으나 이후 README 를 간결화(소개·스택·기능·구조·실행)하면서 성능 Before/After 는 `docs/improvements`·`docs/portfolio` 로 이전했다. README 본문 재기재는 descope(#260) — 포트폴리오 문서로 충족.
 
 **작업 내용**
 - [x] 프로젝트 한 줄 소개 + 차별화 포인트 (성능·동시성 개선 사례 섹션)
@@ -1088,7 +1088,7 @@
 ### #W10-4 (GH #206) [docs] W10 개선 사례 README 정리 ✅
 **라벨**: `type:docs`, `M`
 **선행**: #W10-1 ~ #W10-3
-**비고(2026-06-18 정정)**: 당시 README 에 추가했으나 이후 README 간결화로 성능 Before/After 섹션은 `docs/improvements`(측정)·`docs/portfolio`(케이스 스터디)로 이전. README 본문 재기재는 W12-1/G4 잔여.
+**비고(2026-06-18 정정)**: 당시 README 에 추가했으나 이후 README 간결화로 성능 Before/After 섹션은 `docs/improvements`(측정)·`docs/portfolio`(케이스 스터디)로 이전. README 본문 재기재는 descope(#260) — 포트폴리오 문서로 충족.
 
 **작업 내용**
 - [x] README에 "성능 개선 사례" 섹션 추가
@@ -1185,10 +1185,10 @@
 
 **주차 목표**: 평가자가 30분 안에 가치를 파악할 수 있는 상태
 
-### #W12-1 [docs] README 최종 정리 ◐
+### #W12-1 [docs] README 최종 정리 ✅(descope)
 **라벨**: `type:docs`, `L`
 **선행**: #W11-2
-**상태**: ◐ 진행 중. 현 `README.md` 는 소개·차별화·기술 스택·주요 기능·시스템 구조(Mermaid)·실행 방법으로 간결화돼 있다. 성능 Before/After·기술 결정 트레이드오프·ADR/트러블슈팅 링크는 본문 미포함(자료는 `docs/improvements`·`docs/portfolio`·`docs/decisions` 에 존재).
+**상태**: ✅ 종료(#256 closed). 현 `README.md` 는 소개·차별화·기술 스택·주요 기능·시스템 구조(Mermaid)·실행 방법으로 간결화돼 있다. 성능 Before/After·기술 결정 트레이드오프·ADR/트러블슈팅은 **README 본문에 싣지 않기로 결정(#260)** — 자료는 `docs/improvements`·`docs/portfolio`(케이스 스터디)·`docs/decisions`·`docs/troubleshooting` 에 두고 포트폴리오 문서로 정리한다. 아래 [ ] 항목은 "README 본문 미포함" 사실 기록이며, G4 기준 충족 여부는 §2 G4 참조.
 
 **작업 내용**
 - [x] 프로젝트 소개 + 차별화 포인트 (서두 강력하게)
@@ -1234,10 +1234,10 @@
 
 ---
 
-### #W12-4 [docs] 시연 자료 (영상 또는 GIF)
+### #W12-4 [docs] 시연 자료 (영상 또는 GIF) ✅(descope)
 **라벨**: `type:docs`, `M`
 **선행**: #W12-1
-**상태**: 잔여. Before/After 측정 마크다운(`docs/improvements` 7건·`docs/portfolio` 5건 케이스 스터디)·k6 결과 JSON 은 풍부하나, README 임베드용 영상/GIF/그래프 이미지는 아직 없음.
+**상태**: ✅ 종료(#259 closed). Before/After 측정 마크다운(`docs/improvements` 7건·`docs/portfolio` 5건 케이스 스터디)·k6 결과 JSON 은 풍부하다. **README 상단 영상/GIF 임베드는 descope(#260)** — 시연/시각 자료는 포트폴리오 문서로 별도 정리(저자 담당). 데모 흐름 자체는 #260 클린 셋업에서 Bruno 28/28 로 재현 검증됨.
 
 **작업 내용**
 - [ ] E2E 흐름 시연 영상 또는 GIF 1개 (회원가입 → 결제 → 배송 자동 진행)
@@ -1249,20 +1249,21 @@
 
 ---
 
-### #W12-5 [chore] 최종 점검 + G4 게이트
+### #W12-5 [chore] 최종 점검 + G4 게이트 ✅
 **라벨**: `type:chore`, `M`
 **선행**: #W12-1 ~ #W12-4
+**상태**: ✅ 완료 (#260). 클린 클론에서 전체 스택 기동·데모 흐름 재현을 실측 검증하고, 의존성 보안(Dependabot)·저장소 메타데이터를 정리했다.
 
 **작업 내용**
-- [ ] G4 게이트 체크리스트 전수 점검
-- [ ] 신규 환경에서 `git clone` → `docker-compose up` → 시연 흐름 재현 검증
-- [ ] 의존성 보안 점검 (`./gradlew dependencyCheckAnalyze` 또는 GitHub Dependabot 결과)
-- [ ] GitHub 저장소 상단 설명·태그·README 배지 정리
-- [ ] 포트폴리오용 링크/요약 작성
+- [x] G4 게이트 체크리스트 전수 점검 (아래 §2 G4 갱신)
+- [x] 신규 환경에서 `git clone` → `docker-compose up` → 시연 흐름 재현 검증 — clean clone + `.env` 시크릿 주입(플레이스홀더면 #165 가드로 기동 거부) → `docker compose up -d --build`(frontend 통합 빌드) → nginx/app/mysql 3컨테이너 healthy, `/actuator/health` 200, Flyway 30개 적용 → `scripts/seed.sh --docker`(앨범 200) → Bruno `Groove Compose` happy-path **28/28 통과**(회원가입→로그인→카탈로그→장바구니→주문→결제 202→웹훅 200→주문 PAID→배송). 리뷰는 관리자 DELIVERED 전환 선행(문서화된 동작, 테스트가 422 허용).
+- [x] 의존성 보안 점검 — **GitHub Dependabot** 도입(`.github/dependabot.yml`: gradle/backend·npm/frontend·github-actions, weekly, minor/patch 그룹화). OWASP 플러그인 대신 지속 모니터링 채택.
+- [x] GitHub 저장소 상단 설명·태그 정리 — `gh repo edit` 로 description + topics 16종 설정. (README 배지·LICENSE 는 미변경 — 결정사항)
+- [ ] 포트폴리오용 링크/요약 작성 — **저자 직접 정리(범위 외)**. 케이스 스터디는 `docs/portfolio/`(gitignore)에 5건 존재.
 
 **완료 조건**
-- [ ] G4 게이트 모든 항목 통과 ★
-- [ ] 외부에서 1회 클린 셋업 성공
+- [x] G4 게이트 모든 항목 통과 ★ — DoD #5(Before/After)·#7(트러블슈팅/의사결정)은 README 본문 임베드 대신 `docs/`(decisions 9·improvements 7·troubleshooting 3·measurement) + 포트폴리오로 충족(README 임베드는 의도적 descope, 결정사항). 나머지 항목은 위 클린 셋업 검증으로 확인.
+- [x] 외부에서 1회 클린 셋업 성공 — clean clone E2E 실측 통과(상기).
 
 ---
 
@@ -1462,9 +1463,9 @@
 GitHub README 상단에 진행 상황 표기:
 
 ```
-핵심 로드맵: ▓▓▓▓▓▓▓▓▓▓▓░ W1~W11 완료 (G2·G3 통과, CS 개선 완료)
+핵심 로드맵: ▓▓▓▓▓▓▓▓▓▓▓▓ W1~W12 완료 (G2·G3·G4 통과)
 확장:        쿠폰(M13) · 데모 프론트(M14→M15 Vue) · 흐름 개선(M16) 완료
-남은 로드맵:  W12 문서/시연(G4) — ADR·설계문서 최신화 완료, README 최종·시연 자료 잔여
+남은 로드맵:  없음 — W12 문서/시연(G4) 종료(#260). Before/After·트러블슈팅·의사결정은 docs/+포트폴리오로 충족
 ```
 
 각 마일스톤은 GitHub [Milestones](https://github.com/heygw44/groove/milestones) 에서 자동 진행률 계산되므로 README 갱신 부담이 적다. 완료 마일스톤(**M1~M11, M13~M16**)은 산하 이슈 100% 종료(M16 = #233~#239 머지), 남은 로드맵(**M12** 문서화)만 진행 중으로 유지한다. (M8~M11 은 산하 이슈 100% 종료 시점에 closed 처리.)
