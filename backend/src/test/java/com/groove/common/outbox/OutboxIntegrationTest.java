@@ -40,6 +40,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("아웃박스 E2E — 원자 기록 / at-least-once 릴레이 / 멱등 컨슈머 (#237)")
 class OutboxIntegrationTest {
 
+    // groove.outbox.relay.max-attempts 기본값(application.yaml). poison DLQ 격리 검증에서 사용.
+    private static final int MAX_ATTEMPTS = 5;
+
     @Autowired
     private OrderRepository orderRepository;
     @Autowired
@@ -118,5 +121,38 @@ class OutboxIntegrationTest {
         // 멱등으로 배송은 1건, 행은 다시 발행 완료로 표시된다
         assertThat(shippingRepository.findAll()).hasSize(1);
         assertThat(outboxEventRepository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(10))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("영구 실패(poison) 이벤트는 재시도 상한 후 DLQ 격리되어 정상 이벤트 처리를 막지 않는다 (#268)")
+    void poisonEvent_excludedAfterMaxAttempts_doesNotBlockHealthy() {
+        // poison: payload 가 잘못된 JSON 이라 ORDER_PAID 핸들러 역직렬화가 항상 실패한다(Jackson3 = unchecked)
+        OutboxEvent poison = outboxEventRepository.saveAndFlush(
+                OutboxEvent.of("ORDER", 999L, "ORDER_PAID", "not-json"));
+
+        // healthy: 정상 결제 콜백으로 발행되는 ORDER_PAID 행
+        Payable p = persistPayableOrder();
+        paymentCallbackService.applyResult(p.pgTx(), PaymentStatus.PAID, null);
+
+        // 상한(기본 5)만큼 릴레이를 반복 — healthy 는 1회차에 발행 완료, poison 은 매회 카운터 증가
+        for (int i = 0; i < MAX_ATTEMPTS; i++) {
+            outboxRelayScheduler.relayPendingEvents();
+        }
+
+        // 정상 이벤트는 처리됨 — 배송 1건, 주문 PREPARING
+        assertThat(shippingRepository.findAll()).hasSize(1);
+        assertThat(orderStatusOf(p.orderId())).isEqualTo(OrderStatus.PREPARING);
+
+        // poison 은 상한에 도달해 릴레이 대상에서 제외(DLQ 격리)되지만, 미발행 행으로는 잔존한다
+        OutboxEvent reloaded = outboxEventRepository.findById(poison.getId()).orElseThrow();
+        assertThat(reloaded.getAttemptCount()).isEqualTo(MAX_ATTEMPTS);
+        assertThat(reloaded.getPublishedAt()).isNull();
+        var relayableIds = outboxEventRepository
+                .findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(MAX_ATTEMPTS, Limit.of(100))
+                .stream().map(OutboxEvent::getId).toList();
+        assertThat(relayableIds).doesNotContain(poison.getId());
+        var unpublishedIds = outboxEventRepository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(100))
+                .stream().map(OutboxEvent::getId).toList();
+        assertThat(unpublishedIds).contains(poison.getId());
     }
 }
