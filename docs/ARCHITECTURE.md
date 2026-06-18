@@ -479,8 +479,20 @@ sequenceDiagram
 
 ### 10.1 Docker Compose 구성
 
+앞단에 nginx 리버스 프록시를 두어 TLS 종단·gzip·정적 캐시·`Referrer-Policy` 를 일괄 처리한다(#265).
+`app` 은 호스트 포트를 발행하지 않고 nginx 를 통해서만 노출되며(`expose`), 외부 접근은 nginx :80(운영 443)로 단일화한다.
+
 ```yaml
 services:
+  nginx:
+    image: nginx:1.27-alpine          # 리버스 프록시(TLS·gzip·정적 캐시·Referrer-Policy)
+    depends_on:
+      app: { condition: service_healthy }
+    ports: ["80:80"]                  # 운영: 443:443 (TLS 종단)
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/snippets:/etc/nginx/snippets:ro
+
   app:
     image: groove-app
     depends_on: [mysql]
@@ -488,14 +500,13 @@ services:
       - SPRING_PROFILES_ACTIVE=docker
       - DB_HOST=mysql
       - JWT_SECRET=${JWT_SECRET}
-    ports: ["8080:8080"]
+    expose: ["8080"]                  # 호스트 미발행 — nginx 가 app:8080 으로 프록시
 
   mysql:
     image: mysql:8
     environment:
       - MYSQL_DATABASE=groove
       - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
-    ports: ["3306:3306"]
     volumes: [mysql-data:/var/lib/mysql]
 
 volumes:
