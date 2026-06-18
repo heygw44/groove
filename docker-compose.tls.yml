@@ -1,0 +1,20 @@
+# groove TLS(HTTPS) override (이슈 #270) — 기본 HTTP 데모(docker-compose.yml)를 깨지 않고
+# 443 종단을 별도 실행 경로로 얹는다. 자세한 절차는 docs/ARCHITECTURE.md §10.6.
+#
+#   ./scripts/gen-self-signed-cert.sh                                   # certs/cert.pem · key.pem (gitignore)
+#   NGINX_CONF=nginx-tls.conf docker compose -f docker-compose.yml -f docker-compose.tls.yml up
+#
+# 동작: NGINX_CONF 가 conf 마운트 소스를 nginx-tls.conf 로 바꾸고(base 의 ${NGINX_CONF:-nginx.conf}),
+# 아래 override 가 443 포트 · certs 마운트를 append 하며, app 의 Secure 쿠키를 강제한다.
+services:
+  nginx:
+    ports:
+      - "443:443"                       # base 의 "80:80" 에 append(80→443 리다이렉트용으로 80 도 유지)
+    volumes:
+      - ./certs:/etc/nginx/certs:ro     # 타깃 경로가 달라 base volumes 에 안전하게 append
+
+  app:
+    environment:
+      # env_file(.env) 보다 우선 — TLS 실행 시 .env 수정 없이 Secure refresh 쿠키 발급(#163, #270).
+      # nginx 443 이 X-Forwarded-Proto: https 를 전달하므로 app 이 Secure 쿠키/HSTS 를 발급한다.
+      AUTH_REFRESH_COOKIE_SECURE: "true"

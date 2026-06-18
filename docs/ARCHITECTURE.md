@@ -551,6 +551,60 @@ volumes:
 
 따라서 **수평 확장(예: `docker-compose` `deploy.replicas` 증설) 시에는 분산 버킷(Bucket4j 분산 백엔드 — `Bucket4jLettuce`/`LettuceBasedProxyManager`, CAS 기반)으로 전환하거나 게이트웨이/WAF 계층 rate limit 으로 이관하는 것이 필수**다. 도입 트리거·위치는 §11.1·§11.3 참조. 이 제약은 §12에 정리한 알려진 한계 #3의 상세 다룸이다.
 
+### 10.6 프로덕션 배포 체크리스트 (#270)
+
+코드 레벨 배포 차단(P0/P1) 이슈는 없고, 실제 배포 게이트는 **환경 설정**이다. 8개 항목 중 7개는 **기동 시점에 검증·강제**(아래 ✅ — 잘못된 값이면 기동 자체가 실패)되며, 운영 조치가 필요한 실제 공백은 **TLS 활성화뿐**이다. 각 권장값은 공식 표준/가이드에 근거한다.
+
+| 항목 | 요구값 · 운영 조치 | 기동 시 강제 (코드 근거) | 공식 근거 |
+|---|---|---|---|
+| `JWT_SECRET` · `EMAIL_HASH_SECRET` | 256bit(32byte) 이상 고유값. `.env` 플레이스홀더 교체 | base yaml 폴백 없음 + ≥32byte 검증(`JwtProperties`·`EmailHashProperties`) + `SecretPlaceholderGuard` 플레이스홀더 거부 → ✅ 기동 거부 | [RFC 7518 §3.2](https://www.rfc-editor.org/rfc/rfc7518#section-3.2) — HS256 키는 해시 출력(256bit) 이상 **MUST** |
+| `PAYMENT_MOCK_WEBHOOK_SECRET` | 운영 PG 서명 시크릿으로 교체(현재 Mock) | 폴백 없음 + blank 검증 + Guard(`PaymentMockProperties`) → ✅ | [OWASP Secrets Mgmt](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html) |
+| `DB_PASSWORD` · `MYSQL_ROOT_PASSWORD` | 강력한 고유값 | compose `${VAR:?…}` fail-fast(`docker-compose.yml`) + app `${DB_PASSWORD}` 폴백 없음 → ✅ compose·app 기동 거부 | [Compose interpolation](https://docs.docker.com/reference/compose-file/interpolation/) (`:?err`) · MySQL 이미지 `MYSQL_ROOT_PASSWORD` 필수 |
+| **TLS 인증서 + 443** | **운영 조치 필요** — 인증서 배치 후 443 종단 활성화(아래 절차) | `nginx-tls.conf` + `docker-compose.tls.yml` override ⚠️ **수동 활성화** | [nginx HTTPS](https://nginx.org/en/docs/http/configuring_https_servers.html) — `TLSv1.2 TLSv1.3` · `HIGH:!aNULL:!MD5` · `shared:SSL:10m` |
+| `AUTH_REFRESH_COOKIE_SECURE` | 운영(HTTPS)은 `true` | docker 기본 `true`, SameSite=None 시 secure 강제(`RefreshCookieProperties`), TLS override 가 `true` 주입 → ✅ | [OWASP Session(Secure)](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) · [OWASP HSTS](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html) `max-age=63072000; includeSubDomains` |
+| `CORS_ALLOWED_ORIGINS` · `CORS_ALLOW_CREDENTIALS` | 운영 도메인 화이트리스트(동일 오리진 nginx 서빙이면 빈 값 유지 OK) | 기본 전면차단 + 와일드카드+credentials 조합 기동거부(`CorsProperties`) → ✅ | [MDN CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) — `*` origin + credentials 금지 |
+| `SPRINGDOC_ENABLED` | 운영 비공개 `false`(기본) | docker 기본 `false` → `/swagger-ui`·`/v3/api-docs` 미등록(404) → ✅ | springdoc-openapi — 운영 비공개 권장(#162) |
+| **단일 인스턴스 전제** | 수평 확장 시 Redis + ShedLock — **[#274](https://github.com/heygw44/groove/issues/274) 로 분리** | Caffeine 인메모리 rate-limit + 단일 `@EnableScheduling` ⚠️ 단일 인스턴스면 무해 | [ShedLock](https://github.com/lukas-krecan/ShedLock) · Bucket4j 분산 백엔드 |
+
+**안전 항목 (검수에서 확인 — 조치 불필요):**
+
+| 항목 | 보장 내용 |
+|---|---|
+| `ddl-auto: validate` | 엔티티↔스키마 드리프트 시 기동 실패(런타임 DDL 변경 없음) |
+| `open-in-view: false` | OSIV 비활성 — 뷰 렌더 중 지연 쿼리/커넥션 점유 차단 |
+| 에러 응답 `include-stacktrace: never` / `include-exception: false` | 내부 구현·스택 노출 차단 |
+| `forward-headers-strategy: native` + nginx `X-Forwarded-For $proxy_add_x_forwarded_for` | 신뢰 프록시 경유 클라이언트 IP 복원 + 클라이언트 위조 XFF 방어(rate-limit 키 신뢰성) |
+| `.env` gitignore + `.env.example` 만 추적 | 실 시크릿 미커밋, 템플릿은 가드가 거부하는 플레이스홀더 |
+
+#### TLS(HTTPS :443) 활성화 절차
+
+기본 `docker compose up`(HTTP :80 데모)을 깨지 않도록 TLS 는 **compose override** 로 분리한다(`docker-compose.tls.yml` + `nginx-tls.conf`). nginx 가 443 을 종단하고 `X-Forwarded-Proto: https` 를 전달하면 app(`forward-headers-strategy: native`)이 이를 인식해 **Secure refresh 쿠키와 HSTS 를 자동 발급**한다(하이브리드 원칙상 nginx 는 HSTS 미추가).
+
+```bash
+./scripts/gen-self-signed-cert.sh          # certs/cert.pem · key.pem (self-signed, 데모). 운영은 certbot 발급
+NGINX_CONF=nginx-tls.conf docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+```
+
+- self-signed 데모이므로 검증 시 `curl -k`. 운영은 Let's Encrypt/certbot 인증서를 같은 경로에 둔다.
+- override 가 `443` 포트·certs 마운트를 더하고 app 에 `AUTH_REFRESH_COOKIE_SECURE=true` 를 주입한다(`.env` 수정 불필요).
+- HSTS 는 Spring Security 가 발급(기본 `max-age` 1년) — OWASP 권장(2년·`includeSubDomains`)으로 강화하려면 Security 헤더 설정에서 조정한다.
+
+#### 검증 (운영 프로파일 기동)
+
+```bash
+# HTTP 기본 흐름 회귀
+docker compose up -d && curl -sf http://localhost/actuator/health      # 200
+
+# TLS 흐름
+curl -k https://localhost/actuator/health                              # 200
+curl -kI http://localhost/                                             # 301 → https
+curl -k -i <login> | grep -i 'set-cookie'                              # refreshToken=...; Secure
+curl -k -I https://localhost/ | grep -i strict-transport-security      # HSTS 발급
+
+# fail-fast 회귀: .env 에서 MYSQL_ROOT_PASSWORD 제거 → compose up 즉시 실패
+#                시크릿을 change-this-* 로 되돌림 → SecretPlaceholderGuard 기동 거부
+```
+
 ---
 
 ## 11. 확장 포인트 (조건부 도입)
