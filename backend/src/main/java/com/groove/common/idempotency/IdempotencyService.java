@@ -23,7 +23,7 @@ import java.util.function.Supplier;
  *
  * execute(key, …, action) 은 같은 키에 대해 action 을 정확히 한 번만 실행하고 결과를 캐싱한다 — 후속 요청은
  * 캐시 결과를 받고, 처리 중인 키의 요청은 409. 모든 레코드 접근은 짧은 REQUIRES_NEW 트랜잭션으로 수행한다.
- * action 이 예외를 던지면 마커를 삭제하고 재던진다.
+ * action 또는 결과 캐싱(직렬화·complete())이 예외를 던지면 마커를 삭제하고 재던진다.
  *
  * 호출 규약: execute() 를 열린 트랜잭션 안에서 호출하지 말 것. action 자신이 트랜잭션을 관리하고 반환 전에
  * 커밋해야 한다. action 결과는 JSON 왕복 가능한 단순 DTO 여야 한다.
@@ -120,13 +120,19 @@ public class IdempotencyService {
             throw actionFailure;
         }
 
-        String body = result == null ? null : objectMapper.writeValueAsString(result);
-        String typeName = result == null ? null : result.getClass().getName();
-        requiresNewTx.executeWithoutResult(status -> {
-            IdempotencyRecord record = repository.findByIdempotencyKey(idempotencyKey)
-                    .orElseThrow(() -> new IllegalStateException("멱등성 마커가 사라졌습니다: " + idempotencyKey));
-            record.complete(typeName, body);
-        });
+        try {
+            String body = result == null ? null : objectMapper.writeValueAsString(result);
+            String typeName = result == null ? null : result.getClass().getName();
+            requiresNewTx.executeWithoutResult(status -> {
+                IdempotencyRecord record = repository.findByIdempotencyKey(idempotencyKey)
+                        .orElseThrow(() -> new IllegalStateException("멱등성 마커가 사라졌습니다: " + idempotencyKey));
+                record.complete(typeName, body);
+            });
+        } catch (RuntimeException cacheFailure) {
+            // 결과 직렬화 또는 complete() 트랜잭션 실패 — action 실패 경로와 대칭으로 마커를 정리한다.
+            removeMarkerQuietly(idempotencyKey);
+            throw cacheFailure;
+        }
         return result;
     }
 
