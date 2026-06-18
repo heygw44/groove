@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.3 (W8~W11 완료 동기화) |
+| 버전 | 1.4 (W1·W2 체크 + W12 부분완료 + M16 추가 동기화) |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-12 (W8~W11 완료 반영 — M8(#69·#139~#143)·M9(#192~#197)·M10(#203~#206)·M11(#207~#211) 이슈 전부 머지/종료. §1 표 W8·W10·W11 ✅, §3 W8-1/2/4/5·W9·W10·W11 체크 갱신, 검색인덱스 V6→**V21** 정정, Redis(#210)·Virtual Threads(#211)는 측정 우선순위 밀려 NOT_PLANNED(컷), §6 진행 바·M8~M11 closed 정책 갱신) — 이전: 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
+| 최종 수정일 | 2026-06-18 (코드 대조 동기화 — W1·W2(M1·M2) 산출물 검증 후 전체 체크[LICENSE만 미생성], M13 쿠폰 #C-1~#C-5 체크박스 채움, W12-2(ADR 8건)·W12-3(설계문서 4종 최신화) 완료 체크, G4 "설계문서 최신화" 통과, **확장 M16(분석 기반 흐름 개선, #233~#239 머지) 섹션 신규 추가**, W8-5·W10-4 README 비고 정정[성능 Before/After는 README 간결화로 docs/improvements·portfolio 이전], §1 일정표·§6 진행표 갱신) — 이전: 2026-06-12 (W8~W11 완료 반영 — M8(#69·#139~#143)·M9(#192~#197)·M10(#203~#206)·M11(#207~#211) 이슈 전부 머지/종료. §1 표 W8·W10·W11 ✅, §3 W8-1/2/4/5·W9·W10·W11 체크 갱신, 검색인덱스 V6→**V21** 정정, Redis(#210)·Virtual Threads(#211)는 측정 우선순위 밀려 NOT_PLANNED(컷), §6 진행 바·M8~M11 closed 정책 갱신) — 이전: 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
 | 진행 기간 | 12주 (단독, 전업) + 확장(쿠폰·프론트) |
 | 주당 가용 시간 | 35~45시간 |
 | 표기 방식 | 상대 (W1 ~ W12) + 확장 M13~M15 |
@@ -89,14 +89,15 @@
 | 통합/시드 | W8 | 통합 테스트, 시드 데이터, API 컬렉션(Bruno) | — | ✅ 완료 (M8 #69·#139~#143 — 커버리지 게이트·단위 테스트·5만건 시드·Bruno 63/63·README 다이어그램) |
 | 측정 | W9 | k6 시나리오, 베이스라인, 문제 식별 | **G3** | ✅ 통과 (2026-06-10, M9 #192~#197) |
 | CS 개선 | W10~W11 | N+1·인덱스·동시성·멱등성 + Before/After | — | ✅ 완료 (M10 #203~#206 · M11 #207~#209; Redis #210·VT #211 측정 후 컷) |
-| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | ⏳ 예정 (M12 — 유일한 잔여 로드맵) |
+| 문서화 | W12 | README, 트러블슈팅, 시연 자료 | **G4** | ◐ 진행 중 (M12 — ADR·설계문서 최신화 완료, README 최종·시연 자료·G4 잔여) |
 | 확장: 쿠폰 | M13 | 쿠폰 시스템 + 선착순 동시성 + k6 Before/After | — | ✅ 완료 (~2026-06-01) |
 | 확장: 데모 프론트 | M14 | 정적 Bootstrap 시연 UI | — | ✅ 완료 → M15 로 대체 |
 | 확장: Vue 프론트 | M15 | Vue 3 + Vite 전 기능 시연 UI | — | ✅ 완료 (2026-06-03) |
+| 확장: 흐름 개선 | M16 | 취소/반품 클레임·재고 lost-update·keyset 페이징·Caffeine 캐시·아웃박스 | — | ✅ 완료 (2026-06-17, #233~#239 머지) |
 
-> **로드맵 분기**: 본 문서의 W1~W12 로드맵에서 W1~W7(핵심 흐름)을 완료(G2 통과)한 뒤, **확장 도메인으로 쿠폰(M13)과 데모 프론트엔드(M14 바닐라 → M15 Vue 전환)** 를 먼저 진행했다. 이후 통합/시드(W8)·측정(W9, G3)·CS 개선(W10~W11)까지 모두 완료했고, **남은 로드맵은 문서화/시연(W12, G4) 단 하나**다. 쿠폰 확장이 그중 DoD #4(k6)·#5(Before/After) 일부를 선충족했다.
+> **로드맵 분기**: 본 문서의 W1~W12 로드맵에서 W1~W7(핵심 흐름)을 완료(G2 통과)한 뒤, **확장 도메인으로 쿠폰(M13)과 데모 프론트엔드(M14 바닐라 → M15 Vue 전환)** 를 먼저 진행했다. 이후 통합/시드(W8)·측정(W9, G3)·CS 개선(W10~W11)까지 모두 완료했고, 측정·감사에서 드러난 후속 흐름을 **확장 M16(분석 기반 흐름 개선)** 으로 마무리했다(#233~#239 머지). **남은 로드맵은 문서화/시연(W12, G4) 하나**이며, 그중 ADR·설계문서 최신화는 완료되고 README 최종·시연 자료가 잔여다. 쿠폰 확장이 DoD #4(k6)·#5(Before/After) 일부를 선충족했다.
 >
-> **확장 마일스톤**: M13 상세 이슈는 §3 끝의 「확장 — 쿠폰 시스템」 절([plans/coupon-system.md](plans/coupon-system.md)). M14/M15 프론트엔드는 백엔드 시연용 UI로, M14(정적 Bootstrap)를 폐기하고 M15(Vue 3 + Vite + Pinia + Tailwind, History 라우팅 → `SpaForwardConfig`, node-gradle 통합 빌드)로 재구축했다.
+> **확장 마일스톤**: M13 상세 이슈는 §3 끝의 「확장 — 쿠폰 시스템」 절([plans/coupon-system.md](plans/coupon-system.md)). M14/M15 프론트엔드는 백엔드 시연용 UI로, M14(정적 Bootstrap)를 폐기하고 M15(Vue 3 + Vite + Pinia + Tailwind, History 라우팅 → `SpaForwardConfig`, node-gradle 통합 빌드)로 재구축했다. M16은 측정·코드 감사에서 식별한 잔여 흐름(취소/반품 클레임, 재고 lost-update, keyset 페이징, 카탈로그 캐시, 트랜잭셔널 아웃박스)을 보강한 절로, 상세는 §3 끝의 「확장 — M16」 절.
 
 ---
 
@@ -127,10 +128,10 @@
 - [x] 발견된 문제 3건 이상 명시 (오버셀·N+1·풀스캔·5xx 4건, §3)
 - [x] W10~W11 개선 작업 계획 확정 (§4)
 
-### G4 — 최종 게이트 (W12 말)
+### G4 — 최종 게이트 (W12 말) ◐ 진행 중
 - [ ] PRD §11 산출물 정의(DoD) 모든 항목 충족
-- [ ] 측정 데이터 기반 Before/After 비교 사례 1건 이상 README 기재
-- [ ] 모든 설계 문서 최신화 완료
+- [ ] 측정 데이터 기반 Before/After 비교 사례 1건 이상 README 기재 (자료는 `docs/improvements`·`docs/portfolio` 에 있으나 README 본문 임베드는 잔여 — #W12-1)
+- [x] 모든 설계 문서 최신화 완료 (#W12-3 — PRD v1.2·ARCHITECTURE v2.2·ERD v1.8·API v1, 2026-06-17 M16까지 동기화)
 
 ---
 
@@ -150,14 +151,14 @@
 **목적**: 프로젝트 내 도메인 용어 정의 일원화
 
 **작업 내용**
-- [ ] `docs/glossary.md` 신규 작성
-- [ ] 핵심 도메인 용어 정의 (Album, Artist, Genre, Label, Cart, Order, Payment, Shipping, Review)
-- [ ] 상태 enum 의미 정리 (OrderStatus, PaymentStatus, ShippingStatus 등)
-- [ ] 영문/한글 표기 통일 규칙
+- [x] `docs/glossary.md` 신규 작성
+- [x] 핵심 도메인 용어 정의 (Album, Artist, Genre, Label, Cart, Order, Payment, Shipping, Review)
+- [x] 상태 enum 의미 정리 (OrderStatus, PaymentStatus, ShippingStatus 등)
+- [x] 영문/한글 표기 통일 규칙
 
 **완료 조건**
-- [ ] 모든 핵심 도메인이 1줄 이상 정의됨
-- [ ] PRD/ERD에서 사용된 용어와 일치 검증
+- [x] 모든 핵심 도메인이 1줄 이상 정의됨 (glossary.md §2.1~2.10)
+- [x] PRD/ERD에서 사용된 용어와 일치 검증
 
 ---
 
@@ -167,13 +168,13 @@
 **목적**: ERD 문서가 실제 구현에 충분한 정보를 담고 있는지 검토
 
 **작업 내용**
-- [ ] ERD.md 정독 + 누락 컬럼 보강
-- [ ] W5 시점 인덱스(최소) vs W10 시점 인덱스(추가) 명확히 분리되어 있는지 검증
-- [ ] 각 도메인의 비즈니스 룰이 DB 제약과 애플리케이션 검증 중 어디에 있는지 표시
+- [x] ERD.md 정독 + 누락 컬럼 보강
+- [x] W5 시점 인덱스(최소) vs W10 시점 인덱스(추가) 명확히 분리되어 있는지 검증 ([W5]/[W10] 태그)
+- [x] 각 도메인의 비즈니스 룰이 DB 제약과 애플리케이션 검증 중 어디에 있는지 표시
 
 **완료 조건**
-- [ ] ERD 문서에 미해결 항목(TBD) 0건
-- [ ] 인덱스 단계 구분 표 검증 완료
+- [x] ERD 문서에 미해결 항목(TBD) 0건 (ERD v1.8)
+- [x] 인덱스 단계 구분 표 검증 완료
 
 ---
 
@@ -183,14 +184,14 @@
 **목적**: W8에 5~10만 건 시드 데이터를 어떤 방식으로 확보할지 결정
 
 **작업 내용**
-- [ ] 공개 음악 메타데이터 데이터셋 조사 (MusicBrainz, Discogs API 등)
-- [ ] 자체 생성 스크립트 옵션 비교 (Python 스크립트 + Faker)
-- [ ] 라이선스 / 사용 가능성 검토
-- [ ] 결정 후 `docs/decisions/seed-data.md` 작성
+- [x] 공개 음악 메타데이터 데이터셋 조사 (MusicBrainz, Discogs API 등)
+- [x] 자체 생성 스크립트 옵션 비교 (Python 스크립트 + Faker)
+- [x] 라이선스 / 사용 가능성 검토
+- [x] 결정 후 `docs/decisions/seed-data.md` 작성
 
 **완료 조건**
-- [ ] 시드 데이터 출처 + 수급 방법 결정됨
-- [ ] 결정 근거가 ADR로 기록됨
+- [x] 시드 데이터 출처 + 수급 방법 결정됨
+- [x] 결정 근거가 ADR로 기록됨 (`docs/decisions/seed-data.md`, Accepted)
 
 ---
 
@@ -204,14 +205,14 @@
 **목적**: 모든 엔드포인트의 요청/응답/에러 코드가 명확히 정의되어 있는 상태
 
 **작업 내용**
-- [ ] API.md 전수 점검 (요청 본문, 응답 본문, 에러 코드)
-- [ ] 누락된 엔드포인트 보강
-- [ ] Postman 컬렉션 환경 변수 설계 (`baseUrl`, `accessToken`, `refreshToken`)
-- [ ] Postman 컬렉션 기본 폴더 구조 생성
+- [x] API.md 전수 점검 (요청 본문, 응답 본문, 에러 코드)
+- [x] 누락된 엔드포인트 보강
+- [x] 컬렉션 환경 변수 설계 (`baseUrl`, `accessToken`, `refreshToken`) — 도구는 #W8-4 에서 Postman→Bruno 전면 이행(`bruno/` 정본)
+- [x] 컬렉션 기본 폴더 구조 생성 (Bruno)
 
 **완료 조건**
-- [ ] API.md 미해결 항목 0건
-- [ ] Postman 환경 파일 export → 저장소 커밋
+- [x] API.md 미해결 항목 0건 (API.md v1, 2026-06-17)
+- [x] 컬렉션 → 저장소 커밋 (`bruno/`, 63/63 통과)
 
 ---
 
@@ -221,17 +222,17 @@
 **목적**: 빈 Spring Boot 4.0.x 프로젝트가 빌드·실행되는 상태
 
 **작업 내용**
-- [ ] Spring Initializr로 프로젝트 생성 (Java 21, Gradle Kotlin DSL, Jar)
-- [ ] 의존성 추가: Spring Web, Security, Data JPA, Validation, Actuator, Flyway, MySQL Driver, Lombok
-- [ ] `build.gradle.kts` 정리 (그룹 ID `com.groove`)
-- [ ] `.gitignore`, `.env.example`, `LICENSE`, `README.md` 초안
-- [ ] `./gradlew bootRun` 실행 성공 확인
-- [ ] 첫 커밋 + GitHub 푸시
+- [x] Spring Initializr로 프로젝트 생성 (Java 21, Gradle Kotlin DSL, Jar)
+- [x] 의존성 추가: Spring Web, Security, Data JPA, Validation, Actuator, Flyway, MySQL Driver, Lombok
+- [x] `build.gradle.kts` 정리 (그룹 ID `com.groove`)
+- [x] `.gitignore`, `.env.example`, `README.md` 초안 (LICENSE 파일은 미생성 — 후속)
+- [x] `./gradlew bootRun` 실행 성공 확인
+- [x] 첫 커밋 + GitHub 푸시
 
 **완료 조건**
-- [ ] `./gradlew build` 성공
-- [ ] `./gradlew bootRun` → 8080 포트 기동 성공
-- [ ] GitHub 저장소 공개 또는 비공개로 생성됨
+- [x] `./gradlew build` 성공
+- [x] `./gradlew bootRun` → 8080 포트 기동 성공
+- [x] GitHub 저장소 공개 또는 비공개로 생성됨
 
 ---
 
@@ -922,6 +923,7 @@
 **라벨**: `type:docs`, `M`
 **선행**: #W8-3, #W8-4
 **상태**: ✅ 완료. `README.md` 에 소개·차별화(성능/동시성 개선 사례)·빠른 시작·기술 스택·문서 링크·진행 현황 + 아키텍처 다이어그램 임베드까지 완료(#143). 시드 적용 안내(`./scripts/seed.sh`)는 #W8-3 에서 반영.
+> **비고(2026-06-18 정정)**: 당시 README 에 성능/동시성 개선 사례를 실었으나 이후 README 를 간결화(소개·스택·기능·구조·실행)하면서 성능 Before/After 는 `docs/improvements`·`docs/portfolio` 로 이전했다. README 본문 재기재는 W12-1/G4 잔여.
 
 **작업 내용**
 - [x] 프로젝트 한 줄 소개 + 차별화 포인트 (성능·동시성 개선 사례 섹션)
@@ -1086,6 +1088,7 @@
 ### #W10-4 (GH #206) [docs] W10 개선 사례 README 정리 ✅
 **라벨**: `type:docs`, `M`
 **선행**: #W10-1 ~ #W10-3
+**비고(2026-06-18 정정)**: 당시 README 에 추가했으나 이후 README 간결화로 성능 Before/After 섹션은 `docs/improvements`(측정)·`docs/portfolio`(케이스 스터디)로 이전. README 본문 재기재는 W12-1/G4 잔여.
 
 **작업 내용**
 - [x] README에 "성능 개선 사례" 섹션 추가
@@ -1182,17 +1185,18 @@
 
 **주차 목표**: 평가자가 30분 안에 가치를 파악할 수 있는 상태
 
-### #W12-1 [docs] README 최종 정리
+### #W12-1 [docs] README 최종 정리 ◐
 **라벨**: `type:docs`, `L`
 **선행**: #W11-2
+**상태**: ◐ 진행 중. 현 `README.md` 는 소개·차별화·기술 스택·주요 기능·시스템 구조(Mermaid)·실행 방법으로 간결화돼 있다. 성능 Before/After·기술 결정 트레이드오프·ADR/트러블슈팅 링크는 본문 미포함(자료는 `docs/improvements`·`docs/portfolio`·`docs/decisions` 에 존재).
 
 **작업 내용**
-- [ ] 프로젝트 소개 + 차별화 포인트 (서두 강력하게)
-- [ ] 빠른 시작 가이드
-- [ ] 아키텍처 요약 (다이어그램)
-- [ ] 핵심 기술 결정 + 트레이드오프
-- [ ] 성능 개선 사례 (Before/After)
-- [ ] 트러블슈팅 / 의사결정 기록 3건+
+- [x] 프로젝트 소개 + 차별화 포인트 (서두 강력하게)
+- [x] 빠른 시작 가이드 (실행 방법)
+- [x] 아키텍처 요약 (다이어그램 — Mermaid)
+- [ ] 핵심 기술 결정 + 트레이드오프 (README 본문 미포함)
+- [ ] 성능 개선 사례 (Before/After) (README 본문 미포함)
+- [ ] 트러블슈팅 / 의사결정 기록 3건+ (README 링크 미포함)
 
 **완료 조건**
 - [ ] 30분 안에 프로젝트 가치 파악 가능
@@ -1200,37 +1204,40 @@
 
 ---
 
-### #W12-2 [docs] 의사결정 기록(ADR) 정리
+### #W12-2 [docs] 의사결정 기록(ADR) 정리 ✅
 **라벨**: `type:docs`, `M`
 **선행**: 진행 중 누적된 결정사항
+**상태**: ✅ 완료. `docs/decisions/` 에 ADR 8건 + 인덱스 README(공통 형식·목록표) 정비.
 
 **작업 내용**
-- [ ] `docs/decisions/` 디렉토리 정리
-- [ ] 주요 결정 ADR 형식으로 작성 (Why X, Why not Y, 트레이드오프)
-- [ ] 최소 5건: PG 모킹, 동시성 전략, 이벤트 vs 큐, 패키지 구조, 테스트 전략
+- [x] `docs/decisions/` 디렉토리 정리 (인덱스 README + 공통 형식 표)
+- [x] 주요 결정 ADR 형식으로 작성 (Why X, Why not Y, 트레이드오프)
+- [x] 최소 5건: PG 모킹·동시성(상위/쿠폰)·이벤트+아웃박스(vs 큐)·패키지 구조·테스트 전략·JWT 라이브러리·시드 데이터 = **8건**
 
 **완료 조건**
-- [ ] ADR 5건 이상 작성
+- [x] ADR 5건 이상 작성 (8건 — `payment-gateway-mock`·`concurrency-control`·`coupon-concurrency`·`domain-events-and-outbox`·`package-structure`·`testing-strategy`·`jwt-library`·`seed-data`)
 
 ---
 
-### #W12-3 [docs] 모든 설계 문서 최신화
+### #W12-3 [docs] 모든 설계 문서 최신화 ✅
 **라벨**: `type:docs`, `M`
 **선행**: #W11-2
+**상태**: ✅ 완료. PRD/ARCHITECTURE/ERD/API 를 M16(클레임·캐시·아웃박스)까지 코드와 동기화(커밋 `189c8ea`).
 
 **작업 내용**
-- [ ] PRD.md / ARCHITECTURE.md / ERD.md / API.md 코드와 동기화
-- [ ] 각 문서 버전 번호 업데이트
-- [ ] 변경 이력(CHANGELOG) 추가
+- [x] PRD.md / ARCHITECTURE.md / ERD.md / API.md 코드와 동기화 (M16 반영)
+- [x] 각 문서 버전 번호 업데이트 (PRD v1.2·ARCHITECTURE v2.2·ERD v1.8·API v1)
+- [x] 변경 이력(CHANGELOG) 추가 (각 문서 헤더 메타 표 "변경 내용")
 
 **완료 조건**
-- [ ] 모든 설계 문서가 최종 코드 상태와 일치
+- [x] 모든 설계 문서가 최종 코드 상태와 일치 (2026-06-17 기준, 마이그레이션 V28까지)
 
 ---
 
 ### #W12-4 [docs] 시연 자료 (영상 또는 GIF)
 **라벨**: `type:docs`, `M`
 **선행**: #W12-1
+**상태**: 잔여. Before/After 측정 마크다운(`docs/improvements` 7건·`docs/portfolio` 5건 케이스 스터디)·k6 결과 JSON 은 풍부하나, README 임베드용 영상/GIF/그래프 이미지는 아직 없음.
 
 **작업 내용**
 - [ ] E2E 흐름 시연 영상 또는 GIF 1개 (회원가입 → 결제 → 배송 자동 진행)
@@ -1278,26 +1285,26 @@
 - [x] API §3.9(쿠폰)·§3.10(관리자 쿠폰) + 에러 코드 + rate limit
 - [x] glossary 엔티티·enum·용어
 - [x] 설계 plan + 동시성 ADR + 트러블슈팅 skeleton
-- [ ] `V14__init_coupon.sql`·`V15__order_coupon_columns.sql` SQL 초안
+- [x] `V14`~`V16` 쿠폰 마이그레이션 적용 (init_coupon·order_coupon_columns 등)
 
 **완료 조건**
 - [x] ERD/API/glossary/plan/ADR 상호 링크 정합
-- [ ] 마이그레이션 SQL 이 ERD 와 1:1
+- [x] 마이그레이션 SQL 이 ERD 와 1:1
 
 ### #C-1 (GH #89) [feature] 쿠폰 도메인 모델 (Coupon · MemberCoupon)
 **라벨**: `type:feature`, `domain:coupon`, `M`
 **선행**: #C-0
 
 **작업 내용**
-- [ ] `Coupon`·`MemberCoupon` 엔티티 + `CouponDiscountType`/`CouponStatus`/`MemberCouponStatus` enum
-- [ ] Repository + Flyway V14 적용
-- [ ] `Coupon.calculateDiscount(subtotal)` (정액/정률/캡/최소금액)
-- [ ] 상태 머신 `canTransitionTo`
-- [ ] `COUPON_*` ErrorCode 추가
+- [x] `Coupon`·`MemberCoupon` 엔티티 + `CouponDiscountType`/`CouponStatus`/`MemberCouponStatus` enum
+- [x] Repository + Flyway V14 적용
+- [x] `Coupon.calculateDiscount(subtotal)` (정액/정률/캡/최소금액)
+- [x] 상태 머신 `canTransitionTo`
+- [x] `COUPON_*` ErrorCode 추가
 
 **완료 조건**
-- [ ] 할인 계산 `@ParameterizedTest`(정액·정률·캡·최소금액 경계) 통과
-- [ ] 상태 전이 위반 거부 검증
+- [x] 할인 계산 `@ParameterizedTest`(정액·정률·캡·최소금액 경계) 통과
+- [x] 상태 전이 위반 거부 검증
 
 ### #C-2 (GH #90) [feature] 선착순 쿠폰 발급 + 동시성 (헤드라인)
 **라벨**: `type:feature`, `domain:coupon`, `L`
@@ -1306,42 +1313,42 @@
 **목적**: 초과발급 없이 정확히 한정수량만 발급. 베이스라인→비관적 락→원자적 UPDATE 단계 시연.
 
 **작업 내용**
-- [ ] `CouponIssueService` — 베이스라인(레이스) + 비관적 락 + 원자적 조건부 UPDATE
-- [ ] `POST /coupons/{id}/issue` (USER, Idempotency-Key) + `GET /coupons` + `GET /members/me/coupons`
-- [ ] `UNIQUE(coupon_id, member_id)` 중복발급 방지
-- [ ] 동시성 테스트(Testcontainers): 초과발급 재현(`@Disabled` 보존) + 원자적 UPDATE 정확성 검증
+- [x] `CouponIssueService` — 베이스라인(레이스) + 비관적 락 + 원자적 조건부 UPDATE
+- [x] `POST /coupons/{id}/issue` (USER, Idempotency-Key) + `GET /coupons` + `GET /members/me/coupons`
+- [x] `UNIQUE(coupon_id, member_id)` 중복발급 방지
+- [x] 동시성 테스트(Testcontainers): 초과발급 재현(`@Disabled` 보존) + 원자적 UPDATE 정확성 검증
 
 **완료 조건**
-- [ ] 원자적 UPDATE 경로에서 `발급수 == total_quantity` (초과발급 0)
-- [ ] 중복 요청 시 한 장만 발급
+- [x] 원자적 UPDATE 경로에서 `발급수 == total_quantity` (초과발급 0)
+- [x] 중복 요청 시 한 장만 발급
 
 ### #C-3 (GH #91) [feature] 주문/결제 쿠폰 통합 + 취소·환불 복원
 **라벨**: `type:feature`, `domain:coupon`, `domain:order`, `L`
 **선행**: #C-2
 
 **작업 내용**
-- [ ] `Order.discountAmount` + `getPayableAmount()`, `OrderCreateRequest.memberCouponId`, V15 적용
-- [ ] `OrderService.place` 쿠폰 검증·적용(USED 전이), 게스트 거부
-- [ ] `PaymentService` 청구액 `getPayableAmount()` 로 변경
-- [ ] `OrderService.cancel` + `AdminOrderService` 환불 시 쿠폰 복원(USED→ISSUED)
-- [ ] 통합테스트(발급→쿠폰주문→결제 청구액→취소/환불 복원)
+- [x] `Order.discountAmount` + `getPayableAmount()`, `OrderCreateRequest.memberCouponId`, V15 적용
+- [x] `OrderService.place` 쿠폰 검증·적용(USED 전이), 게스트 거부
+- [x] `PaymentService` 청구액 `getPayableAmount()` 로 변경
+- [x] `OrderService.cancel` + `AdminOrderService` 환불 시 쿠폰 복원(USED→ISSUED)
+- [x] 통합테스트(발급→쿠폰주문→결제 청구액→취소/환불 복원)
 
 **완료 조건**
-- [ ] 쿠폰 주문의 결제 금액 = payable
-- [ ] 취소·환불 양 경로 모두 쿠폰 복원 검증
+- [x] 쿠폰 주문의 결제 금액 = payable
+- [x] 취소·환불 양 경로 모두 쿠폰 복원 검증
 
 ### #C-4 (GH #92) [feature] 관리자 쿠폰 CRUD · 직접지급 · 만료 스케줄러
 **라벨**: `type:feature`, `domain:coupon`, `domain:admin`, `M`
 **선행**: #C-3
 
 **작업 내용**
-- [ ] `POST·GET /admin/coupons`, `PATCH /admin/coupons/{id}/status`, `POST /admin/coupons/{id}/grant`
-- [ ] 직접지급(선착순 한정수량과 별개, `member_coupon` INSERT)
-- [ ] 만료 스케줄러(ISSUED 중 `expires_at < now` → EXPIRED, `IdempotencyRecordCleanupTask` 패턴)
+- [x] `POST·GET /admin/coupons`, `PATCH /admin/coupons/{id}/status`, `POST /admin/coupons/{id}/grant`
+- [x] 직접지급(선착순 한정수량과 별개, `member_coupon` INSERT)
+- [x] 만료 스케줄러(ISSUED 중 `expires_at < now` → EXPIRED, `IdempotencyRecordCleanupTask` 패턴)
 
 **완료 조건**
-- [ ] 관리자 CRUD/grant 정상 + 권한 검증(ADMIN)
-- [ ] 만료 배치 동작 검증
+- [x] 관리자 CRUD/grant 정상 + 권한 검증(ADMIN)
+- [x] 만료 배치 동작 검증
 
 ### #C-5 (GH #93) [improvement] k6 발급 부하 측정 + Before/After + 커버리지 게이트
 **라벨**: `type:improvement`, `domain:coupon`, `M`
@@ -1350,14 +1357,14 @@
 **목적**: DoD #4(k6)·#5(Before/After) 충족.
 
 **작업 내용**
-- [ ] k6 발급 부하 스크립트(베이스라인/비관적/원자적 3종 비교)
-- [ ] [troubleshooting/coupon-issuance-concurrency.md](troubleshooting/coupon-issuance-concurrency.md) §3/§6 실측치 채움
-- [ ] `build.gradle.kts` JaCoCo 게이트에 `com.groove.coupon.*` 80% 편입
-- [ ] README 에 Before/After 사례 기재
+- [x] k6 발급 부하 스크립트(베이스라인/비관적/원자적 3종 비교)
+- [x] [troubleshooting/coupon-issuance-concurrency.md](troubleshooting/coupon-issuance-concurrency.md) §3/§6 실측치 채움
+- [x] `build.gradle.kts` JaCoCo 게이트에 `com.groove.coupon.*` 80% 편입
+- [x] README 에 Before/After 사례 기재 (이후 README 간결화로 `docs/troubleshooting`·`docs/portfolio` 로 이전 — W8-5 비고 참조)
 
 **완료 조건**
-- [ ] 3종 전략의 TPS·정확성 비교표 완성
-- [ ] coupon 패키지 라인 커버리지 80% 통과
+- [x] 3종 전략의 TPS·정확성 비교표 완성
+- [x] coupon 패키지 라인 커버리지 80% 통과
 
 ---
 
@@ -1372,6 +1379,25 @@
 - **✅ 완료 (2026-06-03)**: **Vue 3 + Vite + JS + Pinia + Tailwind v4** 로 전 기능 재구축(GH #113~#119, PR #120~#130). History 라우팅(`SpaForwardConfig` 필요) + node-gradle Gradle 빌드 통합.
 - 시연 GOTCHA: 주문 `status` PAID 정체 → 리뷰는 관리자 DELIVERED 전환 후 작성.
 - 쿠폰 발급은 고객용 선착순 `발급받기` 플로우만 둔다(인앱 "동시성 라이브 데모"는 은퇴). 동시성·부하 검증은 실 운영 방식대로 `loadtest/` k6 스파이크 + `CouponIssuanceConcurrencyTest` 로 한다.
+
+---
+
+## 확장 — M16 (분석 기반 흐름 개선, ✅ 완료)
+
+> W1~W12 본 로드맵 외 **확장**. W9 측정과 코드 감사에서 드러난 잔여 흐름(취소/반품 정합성·재고 lost-update·딥페이지 슬로우쿼리·조회 캐시·결제 후처리 이중쓰기)을 보강한 절이다. 전 이슈(#233~#239)가 머지 완료됐고(2026-06-13~16), 설계 문서(PRD/ARCHITECTURE/ERD/API)는 커밋 `189c8ea` 에서 M16 코드 상태까지 동기화됐다. 마이그레이션은 `V23`~`V28`.
+> 정본: 측정·개선은 [improvements/](improvements/)·[portfolio/](portfolio/), 결함 재현은 [troubleshooting/](troubleshooting/), 결정은 [decisions/](decisions/), 스키마는 [ERD.md](ERD.md), API 는 [API.md §3.11](API.md).
+
+| 이슈 | PR | 내용 | 핵심 산출물 |
+|---|---|---|---|
+| #233 | #240 | 발송 전(PREPARING) 취소·환불 시 배송 동기화 — Shipping CANCELLED + 프로비저닝 가드 | `claim` · `shipping` |
+| #234 | #242 | 재고 복원 lost-update 제거 — 원자적 가산 UPDATE | [troubleshooting/stock-restoration-concurrency.md](troubleshooting/stock-restoration-concurrency.md) |
+| #235 | #243 | 커서(keyset) 페이징 — Scroll API 로 deep-offset 개선 (커버링 인덱스 V25, 후속 #244) | [improvements/keyset-index-coverage.md](improvements/keyset-index-coverage.md) · [portfolio/keyset-pagination-case-study.md](portfolio/keyset-pagination-case-study.md) |
+| #236 | #246 | 카탈로그 조회 캐시 — Caffeine + TTL·무효화·스탬피드 | [improvements/catalog-cache.md](improvements/catalog-cache.md) · [portfolio/caffeine-cache-adr.md](portfolio/caffeine-cache-adr.md) |
+| #237 | #247 | 결제·환불 PG 호출 트랜잭션 분리 + 트랜잭셔널 아웃박스/릴레이 (V26·V28) | [decisions/domain-events-and-outbox.md](decisions/domain-events-and-outbox.md) |
+| #238 | #248 | 발송 전 부분 취소·부분 환불 — 통합 클레임 CANCEL 타입 (V27) | `claim` (부분 취소·환불 회계) |
+| #239 | #241 | 반품(Claim)→환불 역물류 상태머신 (V23·V24) | [ERD.md](ERD.md) §4.17 · [API.md §3.11](API.md) |
+
+> 취소·반품을 별도 도메인이 아닌 **통합 클레임(Claim)** 모델로 묶어, 전체 취소·부분 취소·반품을 한 상태머신/회계 경로로 처리한다(#238·#239). 캐시(#236)는 적중 시 트랜잭션 미개시를 위해 캐시 advice 를 `@Transactional` 바깥에 배치했고, 아웃박스(#237)는 결제 완료→배송 생성의 이중쓰기 문제를 해소한다.
 
 ---
 
@@ -1421,11 +1447,11 @@ GitHub README 상단에 진행 상황 표기:
 
 ```
 핵심 로드맵: ▓▓▓▓▓▓▓▓▓▓▓░ W1~W11 완료 (G2·G3 통과, CS 개선 완료)
-확장:        쿠폰(M13) · 데모 프론트(M14→M15 Vue) 완료
-남은 로드맵:  W12 문서/시연(G4) 단 하나
+확장:        쿠폰(M13) · 데모 프론트(M14→M15 Vue) · 흐름 개선(M16) 완료
+남은 로드맵:  W12 문서/시연(G4) — ADR·설계문서 최신화 완료, README 최종·시연 자료 잔여
 ```
 
-각 마일스톤은 GitHub [Milestones](https://github.com/heygw44/groove/milestones) 에서 자동 진행률 계산되므로 README 갱신 부담이 적다. 완료 마일스톤(**M1~M11, M13~M15**)은 closed, 남은 로드맵(**M12** 문서화)만 open 으로 유지한다. (M8~M11 은 산하 이슈 100% 종료 시점에 closed 처리.)
+각 마일스톤은 GitHub [Milestones](https://github.com/heygw44/groove/milestones) 에서 자동 진행률 계산되므로 README 갱신 부담이 적다. 완료 마일스톤(**M1~M11, M13~M16**)은 산하 이슈 100% 종료(M16 = #233~#239 머지), 남은 로드맵(**M12** 문서화)만 진행 중으로 유지한다. (M8~M11 은 산하 이슈 100% 종료 시점에 closed 처리.)
 
 ---
 
