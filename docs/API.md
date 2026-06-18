@@ -12,7 +12,7 @@
 | 실행 문서 | Swagger UI `/swagger-ui.html`, OpenAPI JSON `/v3/api-docs` (코드에서 자동 생성, #156) |
 | 관련 문서 | PRD.md, ARCHITECTURE.md, ERD.md |
 
-> 📑 본 문서는 **설계 의도·배경**을 담은 설계 명세다. 실제 요청/응답 스키마의 단일 진실은 코드에서 자동 생성되는 **실행 문서(Swagger UI)** 이며, 둘이 다르면 Swagger UI 가 우선한다. 서버 기동 후 `http://localhost:8080/swagger-ui.html` 에서 확인하고, 우측 상단 **Authorize** 에 로그인 accessToken 을 넣으면 보호 엔드포인트를 바로 try-out 할 수 있다.
+> 📑 본 문서는 **설계 의도·배경**을 담은 설계 명세다. 실제 요청/응답 스키마의 단일 진실은 코드에서 자동 생성되는 **실행 문서(Swagger UI)** 이며, 둘이 다르면 Swagger UI 가 우선한다. 서버 기동 후 `/swagger-ui.html`(docker compose: `http://localhost`, `./gradlew bootRun`: `http://localhost:8080`)에서 확인하고, 우측 상단 **Authorize** 에 로그인 accessToken 을 넣으면 보호 엔드포인트를 바로 try-out 할 수 있다.
 
 ---
 
