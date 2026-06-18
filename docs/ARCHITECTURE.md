@@ -581,13 +581,15 @@ volumes:
 기본 `docker compose up`(HTTP :80 데모)을 깨지 않도록 TLS 는 **compose override** 로 분리한다(`docker-compose.tls.yml` + `nginx-tls.conf`). nginx 가 443 을 종단하고 `X-Forwarded-Proto: https` 를 전달하면 app(`forward-headers-strategy: native`)이 이를 인식해 **Secure refresh 쿠키와 HSTS 를 자동 발급**한다(하이브리드 원칙상 nginx 는 HSTS 미추가).
 
 ```bash
-./scripts/gen-self-signed-cert.sh          # certs/cert.pem · key.pem (self-signed, 데모). 운영은 certbot 발급
-NGINX_CONF=nginx-tls.conf docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+./scripts/up-tls.sh        # 인증서 보장 + NGINX_CONF 고정 + 두 compose 합성(up -d)
+./scripts/up-tls.sh down   # 동일 파일셋으로 정리
 ```
 
-- self-signed 데모이므로 검증 시 `curl -k`. 운영은 Let's Encrypt/certbot 인증서를 같은 경로에 둔다.
+- 래퍼는 인증서 선생성과 `NGINX_CONF=nginx-tls.conf` 고정을 묶어 두 가지 footgun(① 인증서 없이 compose 먼저 → Docker 가 `./certs` 를 root 소유 빈 디렉토리로 생성해 cert 로드 실패, ② `NGINX_CONF` 누락 → 443 만 발행되고 리스너 없음)을 차단한다.
+- self-signed 데모이므로 검증 시 `curl -k`. 운영은 Let's Encrypt/certbot 인증서를 같은 경로에 두며, http-01 갱신을 위해 `/.well-known/acme-challenge/` 는 평문 80 으로 응답하도록 예외를 둔다(nginx-tls.conf).
 - override 가 `443` 포트·certs 마운트를 더하고 app 에 `AUTH_REFRESH_COOKIE_SECURE=true` 를 주입한다(`.env` 수정 불필요).
 - HSTS 는 Spring Security 가 발급(기본 `max-age` 1년) — OWASP 권장(2년·`includeSubDomains`)으로 강화하려면 Security 헤더 설정에서 조정한다.
+- `nginx-tls.conf` 는 `http2 on;`(SPA 자산 멀티플렉싱)·`ssl_session_tickets off;`(단일 호스트 FS)로 하드닝돼 있다.
 
 #### 검증 (운영 프로파일 기동)
 
