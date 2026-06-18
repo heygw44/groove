@@ -4,7 +4,7 @@ import org.springframework.boot.gradle.tasks.run.BootRun
 plugins {
     java
     jacoco
-    id("org.springframework.boot") version "4.0.6"
+    id("org.springframework.boot") version "4.1.0"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.github.node-gradle.node") version "7.1.0"
 }
@@ -41,11 +41,11 @@ dependencies {
     // Spring Boot BOM 미관리 의존성이라 버전을 명시한다.
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
     implementation("org.flywaydb:flyway-mysql")
-    implementation("com.bucket4j:bucket4j_jdk17-core:8.14.0")
-    implementation("com.github.ben-manes.caffeine:caffeine:3.2.0")
-    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    implementation("com.bucket4j:bucket4j_jdk17-core:8.19.0")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.2.4")
+    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("com.mysql:mysql-connector-j")
