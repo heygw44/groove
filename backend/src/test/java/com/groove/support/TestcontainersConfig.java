@@ -3,7 +3,7 @@ package com.groove.support;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 
 /**
  * 통합 테스트용 MySQL 컨테이너. .withReuse(true) + 정적 싱글턴으로 테스트 클래스 간 컨테이너를 재사용한다.
@@ -12,7 +12,7 @@ import org.testcontainers.containers.MySQLContainer;
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfig {
 
-    private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
+    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
             .withDatabaseName("groove")
             .withUsername("groove")
             .withPassword("test")
@@ -24,7 +24,7 @@ public class TestcontainersConfig {
 
     @Bean
     @ServiceConnection
-    public MySQLContainer<?> mysqlContainer() {
+    public MySQLContainer mysqlContainer() {
         return MYSQL;
     }
 }
