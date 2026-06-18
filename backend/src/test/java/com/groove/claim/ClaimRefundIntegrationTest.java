@@ -30,8 +30,8 @@ import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.mock.MockPaymentGateway;
-import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
+import com.groove.support.ClaimFixtures;
 import com.groove.support.MemberFixtures;
 import com.groove.support.OrderFixtures;
 import com.groove.support.TestcontainersConfig;
@@ -130,24 +130,8 @@ class ClaimRefundIntegrationTest {
 
     private Order persistDeliveredOrder(int qty) {
         Album album = albumRepository.findById(albumId).orElseThrow();
-        Order order = OrderFixtures.memberOrder("ORD-CLM-" + (++seq) + "-" + System.nanoTime(), memberId);
-        order.addItem(OrderItem.create(album, qty));
-        order.changeStatus(OrderStatus.PAID, null, Instant.now());
-        order.changeStatus(OrderStatus.PREPARING, null, Instant.now());
-        order.changeStatus(OrderStatus.SHIPPED, null, Instant.now());
-        order.changeStatus(OrderStatus.DELIVERED, null, Instant.now());
-        Order saved = orderRepository.saveAndFlush(order);
-
-        Payment payment = Payment.initiate(saved, saved.getPayableAmount(), PaymentMethod.CARD, "MOCK",
-                "mock-tx-" + seq + "-" + System.nanoTime());
-        payment.markPaid(Instant.now());
-        paymentRepository.saveAndFlush(payment);
-
-        Shipping shipping = Shipping.prepare(saved, saved.getShippingInfo(), "trk-" + seq + "-" + System.nanoTime());
-        shipping.markShipped(Instant.now());
-        shipping.markDelivered(Instant.now()); // delivered_at = now
-        shippingRepository.saveAndFlush(shipping);
-        return saved;
+        return ClaimFixtures.persistDeliveredOrder(orderRepository, paymentRepository, shippingRepository,
+                album, memberId, qty, (++seq) + "-" + System.nanoTime());
     }
 
     /** 발송 전(PAID) 주문 + PAID 결제 (배송행 없음) — 부분 취소(CANCEL) 대상. */

@@ -120,8 +120,9 @@ public class ReviewService {
         if (!Objects.equals(review.getMember().getId(), memberId)) {
             throw new ReviewNotOwnedException();
         }
-        // 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 접근하는 것을 차단(#269) — create() 와 동일한 활성 검증.
-        if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+        // 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 접근하는 것을 차단(#269).
+        // findWithMemberById 가 member 를 fetch join 하므로 추가 조회 없이 로드된 엔티티로 검사한다.
+        if (review.getMember().isWithdrawn()) {
             throw new MemberNotFoundException();
         }
         reviewRepository.delete(review);

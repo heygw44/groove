@@ -13,20 +13,16 @@ import com.groove.catalog.genre.domain.GenreRepository;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.claim.domain.ClaimRepository;
+import com.groove.claim.domain.ClaimStatus;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.domain.MemberRole;
 import com.groove.order.domain.Order;
-import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
-import com.groove.order.domain.OrderStatus;
-import com.groove.payment.domain.Payment;
-import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
-import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
+import com.groove.support.ClaimFixtures;
 import com.groove.support.MemberFixtures;
-import com.groove.support.OrderFixtures;
 import com.groove.support.TestcontainersConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -134,24 +130,8 @@ class ClaimApiIntegrationTest {
     /** 배송완료(DELIVERED) 회원 주문 + PAID 결제 + delivered_at 배송행을 영속화한다(반품 접수 자격). */
     private Order persistDeliveredOrder(int qty) {
         Album album = albumRepository.findById(albumId).orElseThrow();
-        Order order = OrderFixtures.memberOrder("ORD-CLM-" + (++seq) + "-" + System.nanoTime(), memberId);
-        order.addItem(OrderItem.create(album, qty));
-        order.changeStatus(OrderStatus.PAID, null, Instant.now());
-        order.changeStatus(OrderStatus.PREPARING, null, Instant.now());
-        order.changeStatus(OrderStatus.SHIPPED, null, Instant.now());
-        order.changeStatus(OrderStatus.DELIVERED, null, Instant.now());
-        Order saved = orderRepository.saveAndFlush(order);
-
-        Payment payment = Payment.initiate(saved, saved.getPayableAmount(), PaymentMethod.CARD, "MOCK",
-                "mock-tx-" + seq + "-" + System.nanoTime());
-        payment.markPaid(Instant.now());
-        paymentRepository.saveAndFlush(payment);
-
-        Shipping shipping = Shipping.prepare(saved, saved.getShippingInfo(), "trk-" + seq + "-" + System.nanoTime());
-        shipping.markShipped(Instant.now());
-        shipping.markDelivered(Instant.now());
-        shippingRepository.saveAndFlush(shipping);
-        return saved;
+        return ClaimFixtures.persistDeliveredOrder(orderRepository, paymentRepository, shippingRepository,
+                album, memberId, qty, (++seq) + "-" + System.nanoTime());
     }
 
     private String requestBody(Order order, int quantity) {
@@ -176,7 +156,8 @@ class ClaimApiIntegrationTest {
                         .content(requestBody(order, 1)))
                 .andExpect(status().isCreated());
 
-        assertThat(claimRepository.count()).isEqualTo(1);
+        // 공유 DB 오염에 견디도록 전역 count() 대신 이 주문에 묶인 반품으로 스코프해 단언한다.
+        assertThat(claimRepository.findByOrder_IdAndStatusNot(order.getId(), ClaimStatus.REJECTED)).hasSize(1);
     }
 
     @Test
@@ -195,6 +176,6 @@ class ClaimApiIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("MEMBER_NOT_FOUND"));
 
-        assertThat(claimRepository.count()).isZero();
+        assertThat(claimRepository.findByOrder_IdAndStatusNot(order.getId(), ClaimStatus.REJECTED)).isEmpty();
     }
 }
