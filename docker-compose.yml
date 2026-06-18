@@ -46,19 +46,19 @@ services:
       - groove-net
 
   nginx:
-    # 리버스 프록시(#265) — TLS 종단 · gzip · 정적 캐시 · Referrer-Policy 를 일괄 처리.
+    # 리버스 프록시(#265) — gzip · 정적 캐시 · Referrer-Policy 를 일괄 처리.
     # 단일 upstream(app) 전제 — LB 아님. 고정 태그로 재현성 확보.
+    # TLS 종단(:443)은 docker-compose.tls.yml override 로 활성화한다(#270, docs/ARCHITECTURE.md §10.6).
     image: nginx:1.27-alpine
     depends_on:
       app:
         condition: service_healthy
     ports:
       - "80:80"
-      # - "443:443"                    # 운영: TLS 종단(nginx.conf 의 443 server 블록과 함께 활성화)
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # 기본은 HTTP(nginx.conf). TLS 실행 시 NGINX_CONF=nginx-tls.conf 로 스왑(override 와 함께).
+      - ./docker/nginx/${NGINX_CONF:-nginx.conf}:/etc/nginx/conf.d/default.conf:ro
       - ./docker/nginx/snippets:/etc/nginx/snippets:ro
-      # - ./certs:/etc/nginx/certs:ro  # 운영 인증서 마운트 지점(cert.pem · key.pem)
     networks:
       - groove-net
 
