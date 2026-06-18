@@ -11,6 +11,7 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase.Replace;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Limit;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 
@@ -40,6 +41,12 @@ class OutboxEventRepositoryTest {
         return repository.saveAndFlush(event);
     }
 
+    private OutboxEvent unpublishedWithAttempts(int attemptCount) {
+        OutboxEvent event = OutboxEvent.of("ORDER", 3L, "ORDER_PAID", "{\"orderId\":3}");
+        ReflectionTestUtils.setField(event, "attemptCount", attemptCount);
+        return repository.saveAndFlush(event);
+    }
+
     @Test
     @DisplayName("findByPublishedAtIsNullOrderByIdAsc: 미발행 행만 id 오름차순(FIFO)으로, 발행 완료는 제외")
     void findsOnlyUnpublishedInFifoOrder() {
@@ -63,6 +70,36 @@ class OutboxEventRepositoryTest {
         unpublished();
 
         assertThat(repository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(2))).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("findByPublishedAtIsNullAndAttemptCountLessThan: attempt_count 가 상한 이상인 DLQ 행을 제외한다")
+    void findRelayable_excludesAtOrAboveMaxAttempts() {
+        int maxAttempts = 5;
+        OutboxEvent fresh = unpublishedWithAttempts(0);             // 릴레이 대상
+        OutboxEvent belowCap = unpublishedWithAttempts(maxAttempts - 1); // 릴레이 대상(아직 < N)
+        OutboxEvent atCap = unpublishedWithAttempts(maxAttempts);   // 격리(>= N)
+        OutboxEvent aboveCap = unpublishedWithAttempts(maxAttempts + 1); // 격리(>= N)
+        var myIds = java.util.Set.of(fresh.getId(), belowCap.getId(), atCap.getId(), aboveCap.getId());
+
+        // 공유 DB — 큰 Limit 로 절단을 피하고 내 id 로만 좁혀 단언한다(누적 행이 있어도 안정적, FIFO 순서 보존 확인)
+        var relayableMine = repository
+                .findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(maxAttempts, Limit.of(100_000))
+                .stream().map(OutboxEvent::getId).filter(myIds::contains).toList();
+
+        // < N 인 fresh·belowCap 만 FIFO 순으로 포함, >= N 인 atCap·aboveCap 은 제외
+        assertThat(relayableMine).containsExactly(fresh.getId(), belowCap.getId());
+    }
+
+    @Test
+    @DisplayName("incrementAttemptCount: 재시도 카운터를 1 증가시킨다")
+    void incrementAttemptCount_increments() {
+        OutboxEvent event = unpublishedWithAttempts(0);
+
+        assertThat(repository.incrementAttemptCount(event.getId())).isEqualTo(1);
+
+        em.clear();
+        assertThat(repository.findById(event.getId()).orElseThrow().getAttemptCount()).isEqualTo(1);
     }
 
     @Test

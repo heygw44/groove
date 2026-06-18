@@ -25,7 +25,9 @@ import java.util.Objects;
 @Table(
         name = "outbox_event",
         indexes = {
-                @Index(name = "idx_outbox_unpublished", columnList = "published_at, id")
+                // 릴레이 조회 published_at IS NULL AND attempt_count < N 를 위해 attempt_count 포함 — DLQ 격리 행을
+                // 인덱스 레벨에서 제외한다(V30, #268). 정리 쿼리는 published_at 선두를 활용.
+                @Index(name = "idx_outbox_unpublished", columnList = "published_at, attempt_count, id")
         }
 )
 public class OutboxEvent extends BaseTimeEntity {
@@ -58,6 +60,13 @@ public class OutboxEvent extends BaseTimeEntity {
     /** 발행 완료 시각 — null 이면 미발행(릴레이 대상). */
     @Column(name = "published_at")
     private Instant publishedAt;
+
+    /**
+     * 핸들러 실패 누적 횟수 — 릴레이 조회는 attempt_count < max-attempts 인 미발행 행만 대상으로 한다.
+     * 임계값에 도달한 이벤트는 DLQ(격리)로 더 이상 디스패치되지 않는다(#268).
+     */
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
 
     protected OutboxEvent() {
     }
@@ -118,5 +127,9 @@ public class OutboxEvent extends BaseTimeEntity {
 
     public Instant getPublishedAt() {
         return publishedAt;
+    }
+
+    public int getAttemptCount() {
+        return attemptCount;
     }
 }

@@ -143,6 +143,8 @@ groove:
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:PT5S}
       # 한 주기에 발행할 최대 건수 — 적체 시에도 메모리를 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
+      # 핸들러 실패 재시도 상한 — 이 횟수를 채운 poison 이벤트는 DLQ(격리)로 제외해 정상 이벤트 슬롯 점유를 막는다 (#268).
+      max-attempts: ${OUTBOX_RELAY_MAX_ATTEMPTS:5}
     cleanup:
       cron: ${OUTBOX_CLEANUP_CRON:0 0 * * * *}
       # 발행 완료 후 이 기간이 지난 행을 정리(감사/디버깅 보관 기간).
