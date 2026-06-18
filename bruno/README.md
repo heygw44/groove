@@ -5,13 +5,16 @@
 | 경로 | 내용 |
 |------|------|
 | [`bruno/`](.) | 전체 엔드포인트 + 응답 검증 스크립트 + 환경변수 자동 저장 (요청당 `.bru` 1개) |
-| [`environments/Groove Local.bru`](environments/Groove%20Local.bru) | `Groove Local` 환경(baseUrl·토큰·관리자 계정 등) |
+| [`environments/Groove Local.bru`](environments/Groove%20Local.bru) | `Groove Local` 환경 — `./gradlew bootRun`(직접 `:8080`) 대상(baseUrl·토큰·관리자 계정 등) |
+| [`environments/Groove Compose.bru`](environments/Groove%20Compose.bru) | `Groove Compose` 환경 — `docker-compose up`(nginx 리버스 프록시 `http://localhost`) 대상 |
 
-> **사전 조건**: 백엔드가 `localhost:8080`에 떠 있고 데모 시드가 적재돼 있어야 합니다. `local` 프로파일로 기동하면 `LocalDataSeeder`가 앨범 12장·데모 회원(`demo@groove.dev`)·**관리자(`admin@groove.dev` / `admin1234`)** 를 자동 생성합니다. 관리자 요청은 이 시드 계정으로 로그인합니다(환경변수 `adminEmail`/`adminPassword`).
+> **사전 조건**: 백엔드가 떠 있고 데모 시드가 적재돼 있어야 합니다. 대상에 따라 환경을 고릅니다 — `./gradlew bootRun`(직접 `:8080`)은 **Groove Local**, `docker-compose up`(nginx 경유 `http://localhost`)은 **Groove Compose**. `local` 프로파일로 기동하면 `LocalDataSeeder`가 앨범 12장·데모 회원(`demo@groove.dev`)·**관리자(`admin@groove.dev` / `admin1234`)** 를 자동 생성합니다. 관리자 요청은 이 시드 계정으로 로그인합니다(환경변수 `adminEmail`/`adminPassword`).
+>
+> ⚠️ **웹훅 폴더를 Compose 대상으로 돌릴 때**는 **Groove Compose** 의 `webhookSecret` 변수를 실행 중인 `.env` 의 `PAYMENT_MOCK_WEBHOOK_SECRET` 와 같은 값으로 맞춰야 서명 검증이 통과합니다.
 
 ## Bruno GUI
 
-1. Bruno 앱에서 `bruno/` 폴더를 열고(Open Collection) 우상단에서 `Groove Local` 환경을 선택합니다.
+1. Bruno 앱에서 `bruno/` 폴더를 열고(Open Collection) 우상단에서 대상에 맞는 환경(`Groove Local` 직접 `:8080` / `Groove Compose` nginx `http://localhost`)을 선택합니다.
 2. `1. Auth > Login` 실행 → `accessToken` 자동 저장(refresh 토큰은 HttpOnly 쿠키로 내려가 쿠키 jar에 보관, #163).
 3. `6. Member Flow (E2E) ★` 폴더를 위에서부터 순서대로 실행하면 장바구니 → 주문 → 결제 → 배송 → 리뷰 흐름이 1클릭으로 이어집니다.
    - 리뷰 작성(`8) Write Review`)은 주문이 `DELIVERED` 이상이어야 201입니다. 결제 PAID(Mock 웹훅/폴링 자동) 후 `8. Admin > Change Order Status`에서 `target`을 `PREPARING` → `SHIPPED` → `DELIVERED`로 순차 전환해야 통과합니다(그 전에는 422).

@@ -5,7 +5,7 @@
 | 버전 | 2.3 |
 | 작성일 | 2026-05-05 |
 | 최종 수정일 | 2026-06-18 |
-| 변경 내용 | v2.3 (#269): §12 #6 신설 — 탈퇴 회원 access 토큰 TTL(최대 30분) 잔존을 stateless JWT(ADR-5)의 의도적 트레이드오프로 명시(보충에 노출 범위·refresh 즉시 폐기·공식 가이드·denylist 강화 트리거 정리). 잔존 쓰기 2건(리뷰 삭제 `ReviewService.delete`·반품 접수 `ClaimService.request`)을 서비스단 활성 회원 가드로 보완해 "모든 쓰기는 서비스단 재검사" 서술을 사실화. v2.2 (M16 확장 반영 — 캐시·아웃박스·클레임): §12 #5 를 "Redis/캐싱 미도입" → **"분산 캐시·Redis 미도입(로컬 캐시는 도입)"** 으로 정정 — 카탈로그 read 는 Caffeine 로컬 캐시(#236)로 도입됐고 분산 캐시·분산락만 부재임을 명확화. ADR-14(Caffeine 카탈로그 캐시)·ADR-15(트랜잭셔널 아웃박스) 추가, §5.8 카탈로그 read 캐시(TTL·무효화·스탬피드) 신설. 결제 후속(배송 생성)이 인프로세스 AFTER_COMMIT 리스너에서 **트랜잭셔널 아웃박스(#237)**로 전환된 것을 §6.2~§6.4 에 반영(`OrderPaidEventListener`·`ShippingCreationListener` 제거, `OrderPaidOutboxHandler`·`OutboxRelayScheduler` 명시). §4.1 패키지에 `claim/`·`common/cache`·`common/outbox` 추가, §11.1/§11.2 트리거를 "도입 완료" 기준으로 갱신. (클레임 본문 §8 보충은 #238/#239 에서 반영됨). v2.1 (W12 문서화): §12 "알려진 한계 및 의도적 트레이드오프" 신설 — 코드 주석에 흩어진 의도적 한계 5종(재고 복원 last-write-wins·스케줄러 단일 인스턴스·rate-limit 인메모리·멱등성 409·Redis 미도입)과 각 도입 트리거를 한곳에 정리, 기존 §10.5·§11·§14와 상호 참조로 중복 제거. 이후 섹션 번호 +1(테스트 §13·컨벤션 §14·미해결 §15) (#226). v2.0 (W6~W7 + 확장 M13 쿠폰 + M14/M15 프론트 반영 — 전면 현행화): §4.1 패키지 구조를 현재 구현 기준으로 갱신(cart/order/payment/shipping/review/admin 구현 완료 + `coupon` 모듈 + `web`(SpaForwardConfig)·`common/scheduling` 추가), `backend/`(Spring Boot) + `frontend/`(Vue3) 형제 구조·node-gradle 통합 빌드 명시. ADR-11(쿠폰 선착순=원자적 조건부 UPDATE)·ADR-12(Vue3 SPA + node-gradle)·ADR-13(Caffeine rate-limit 저장) 추가. §5.5 쿠폰 발급 rate-limit·§5.7 쿠폰 발급 동시성 신설, §6.2 실제 이벤트(`OrderPaidEvent`·`MemberWithdrawnEvent`)로 정정, §10 프론트 빌드·프로파일(`.yaml`) 현행화. v1.2 (W5 완료 반영): catalog 4개 서브도메인 구현 완료 표기, AlbumQueryController + AlbumSpecs 동적 검색, 의도적 N+1 보존 정책(W10 시연용) 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain`) 기준으로 정정. |
+| 변경 내용 | v2.3 (#269): §12 #6 신설 — 탈퇴 회원 access 토큰 TTL(최대 30분) 잔존을 stateless JWT(ADR-5)의 의도적 트레이드오프로 명시(보충에 노출 범위·refresh 즉시 폐기·공식 가이드·denylist 강화 트리거 정리). 잔존 쓰기 2건(리뷰 삭제 `ReviewService.delete`·반품 접수 `ClaimService.request`)을 서비스단 활성 회원 가드로 보완해 "모든 쓰기는 서비스단 재검사" 서술을 사실화. **배포 전 점검(2026-06-18)**: §3.3 시스템 구성도에 nginx 리버스 프록시 노드와 `claim` 도메인 추가(README 와 일치), §10.1 예시 compose 의 mysql 이미지(`8.4`)·`MYSQL_ROOT_PASSWORD` 인터폴레이션과 §10.3 환경 변수명(`JWT_*_TOKEN_TTL_SECONDS`·`EMAIL_HASH_SECRET`)을 실제 `docker-compose.yml`/`.env.example` 과 일치하도록 정정(본문 변경 없어 버전은 v2.3 유지). v2.2 (M16 확장 반영 — 캐시·아웃박스·클레임): §12 #5 를 "Redis/캐싱 미도입" → **"분산 캐시·Redis 미도입(로컬 캐시는 도입)"** 으로 정정 — 카탈로그 read 는 Caffeine 로컬 캐시(#236)로 도입됐고 분산 캐시·분산락만 부재임을 명확화. ADR-14(Caffeine 카탈로그 캐시)·ADR-15(트랜잭셔널 아웃박스) 추가, §5.8 카탈로그 read 캐시(TTL·무효화·스탬피드) 신설. 결제 후속(배송 생성)이 인프로세스 AFTER_COMMIT 리스너에서 **트랜잭셔널 아웃박스(#237)**로 전환된 것을 §6.2~§6.4 에 반영(`OrderPaidEventListener`·`ShippingCreationListener` 제거, `OrderPaidOutboxHandler`·`OutboxRelayScheduler` 명시). §4.1 패키지에 `claim/`·`common/cache`·`common/outbox` 추가, §11.1/§11.2 트리거를 "도입 완료" 기준으로 갱신. (클레임 본문 §8 보충은 #238/#239 에서 반영됨). v2.1 (W12 문서화): §12 "알려진 한계 및 의도적 트레이드오프" 신설 — 코드 주석에 흩어진 의도적 한계 5종(재고 복원 last-write-wins·스케줄러 단일 인스턴스·rate-limit 인메모리·멱등성 409·Redis 미도입)과 각 도입 트리거를 한곳에 정리, 기존 §10.5·§11·§14와 상호 참조로 중복 제거. 이후 섹션 번호 +1(테스트 §13·컨벤션 §14·미해결 §15) (#226). v2.0 (W6~W7 + 확장 M13 쿠폰 + M14/M15 프론트 반영 — 전면 현행화): §4.1 패키지 구조를 현재 구현 기준으로 갱신(cart/order/payment/shipping/review/admin 구현 완료 + `coupon` 모듈 + `web`(SpaForwardConfig)·`common/scheduling` 추가), `backend/`(Spring Boot) + `frontend/`(Vue3) 형제 구조·node-gradle 통합 빌드 명시. ADR-11(쿠폰 선착순=원자적 조건부 UPDATE)·ADR-12(Vue3 SPA + node-gradle)·ADR-13(Caffeine rate-limit 저장) 추가. §5.5 쿠폰 발급 rate-limit·§5.7 쿠폰 발급 동시성 신설, §6.2 실제 이벤트(`OrderPaidEvent`·`MemberWithdrawnEvent`)로 정정, §10 프론트 빌드·프로파일(`.yaml`) 현행화. v1.2 (W5 완료 반영): catalog 4개 서브도메인 구현 완료 표기, AlbumQueryController + AlbumSpecs 동적 검색, 의도적 N+1 보존 정책(W10 시연용) 명시. v1.1 (W4 완료 반영): 패키지 내부 레이어 명을 실제 구현(`api/application/domain`) 기준으로 정정. |
 | 관련 문서 | PRD.md, ERD.md, API.md, glossary.md, MILESTONE.md |
 
 ---
@@ -70,17 +70,20 @@ flowchart TB
         k6["k6 부하 테스트"]
     end
 
+    Nginx["nginx 리버스 프록시<br/>TLS 종단 · gzip · 정적 캐시"]
+
     subgraph app["Spring Boot App · 단일 JAR (Docker Compose)"]
         direction TB
         Sec["Security · JWT · Rate Limit"]
-        Domains["도메인 모듈<br/>auth · member · catalog · cart · order<br/>payment · shipping · review · coupon"]
+        Domains["도메인 모듈<br/>auth · member · catalog · cart · order<br/>payment · shipping · review · coupon · claim"]
         MockPG["Mock PG<br/>(비동기 웹훅)"]
         Sched["Scheduler<br/>결제 폴링 · 배송 진행"]
     end
 
     DB[("MySQL 8.4<br/>+ Flyway")]
 
-    clients -->|"HTTP /api/v1"| Sec
+    clients -->|"HTTP(S)"| Nginx
+    Nginx -->|"proxy_pass :8080<br/>X-Forwarded-*"| Sec
     Sec --> Domains
     Domains --> MockPG
     MockPG -.->|"웹훅 콜백"| Domains
@@ -504,10 +507,11 @@ services:
     expose: ["8080"]                  # 호스트 미발행 — nginx 가 app:8080 으로 프록시
 
   mysql:
-    image: mysql:8
+    image: mysql:8.4
     environment:
       - MYSQL_DATABASE=groove
-      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?}   # fail-fast — 미설정 시 compose up 거부
+      - MYSQL_PASSWORD=${DB_PASSWORD:?}
     volumes: [mysql-data:/var/lib/mysql]
 
 volumes:
@@ -525,11 +529,11 @@ volumes:
 | test | 통합 테스트 | Testcontainers MySQL, 시간 가속(스케줄러) |
 
 ### 10.3 환경 변수 (`.env`)
-- `DB_PASSWORD`
-- `JWT_SECRET`
-- `JWT_ACCESS_TTL_MINUTES`
-- `JWT_REFRESH_TTL_DAYS`
-- `PAYMENT_MOCK_SUCCESS_RATE`
+- `DB_PASSWORD` · `MYSQL_ROOT_PASSWORD`
+- `JWT_SECRET` · `EMAIL_HASH_SECRET`
+- `JWT_ACCESS_TOKEN_TTL_SECONDS`
+- `JWT_REFRESH_TOKEN_TTL_SECONDS`
+- `PAYMENT_MOCK_SUCCESS_RATE` · `PAYMENT_MOCK_WEBHOOK_SECRET`
 
 → 저장소 미포함, `.env.example`만 커밋
 

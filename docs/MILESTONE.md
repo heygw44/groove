@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.4 (W1·W2 체크 + W12 부분완료 + M16 추가 동기화) |
+| 버전 | 1.5 (배포 준비 #265/#270/#274 + V30 + 설계문서 버전 동기화) |
 | 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-18 (코드 대조 동기화 — W1·W2(M1·M2) 산출물 검증 후 전체 체크[LICENSE만 미생성], M13 쿠폰 #C-1~#C-5 체크박스 채움, W12-2(ADR 8건)·W12-3(설계문서 4종 최신화) 완료 체크, G4 "설계문서 최신화" 통과, **확장 M16(분석 기반 흐름 개선, #233~#239 머지) 섹션 신규 추가**, W8-5·W10-4 README 비고 정정[성능 Before/After는 README 간결화로 docs/improvements·portfolio 이전], §1 일정표·§6 진행표 갱신) — 이전: 2026-06-12 (W8~W11 완료 반영 — M8(#69·#139~#143)·M9(#192~#197)·M10(#203~#206)·M11(#207~#211) 이슈 전부 머지/종료. §1 표 W8·W10·W11 ✅, §3 W8-1/2/4/5·W9·W10·W11 체크 갱신, 검색인덱스 V6→**V21** 정정, Redis(#210)·Virtual Threads(#211)는 측정 우선순위 밀려 NOT_PLANNED(컷), §6 진행 바·M8~M11 closed 정책 갱신) — 이전: 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
+| 최종 수정일 | 2026-06-18 (배포 전 문서 점검 — #W12-6 프로덕션 배포 준비 절 신규 추가[nginx #265·TLS/배포 체크리스트 #270·수평 확장 유보 ADR #274], W12-2 ADR 8건→**9건**(`horizontal-scaling` 추가), M16 마이그레이션 V28→**V30**(아웃박스 재시도 상한/DLQ #268), 설계문서 버전 표기 PRD v1.3·ARCHITECTURE v2.3·ERD v1.9 로 현행화) — 이전: 2026-06-18 (코드 대조 동기화 — W1·W2(M1·M2) 산출물 검증 후 전체 체크[LICENSE만 미생성], M13 쿠폰 #C-1~#C-5 체크박스 채움, W12-2(ADR)·W12-3(설계문서 4종 최신화) 완료 체크, G4 "설계문서 최신화" 통과, **확장 M16(분석 기반 흐름 개선, #233~#239 머지) 섹션 신규 추가**, W8-5·W10-4 README 비고 정정[성능 Before/After는 README 간결화로 docs/improvements·portfolio 이전], §1 일정표·§6 진행표 갱신) — 이전: 2026-06-12 (W8~W11 완료 반영 — M8(#69·#139~#143)·M9(#192~#197)·M10(#203~#206)·M11(#207~#211) 이슈 전부 머지/종료. §1 표 W8·W10·W11 ✅, §3 W8-1/2/4/5·W9·W10·W11 체크 갱신, 검색인덱스 V6→**V21** 정정, Redis(#210)·Virtual Threads(#211)는 측정 우선순위 밀려 NOT_PLANNED(컷), §6 진행 바·M8~M11 closed 정책 갱신) — 이전: 2026-06-10 (#197 W9-6 — W10/W11 개선 이슈 9건 발급 GH #203~#211, §3 헤더에 발급 번호 매핑·#W9-6 완료 갱신) — 2026-06-10 (G3 측정 게이트 통과 — #196 베이스라인 정산: `docs/measurement/baseline.md` 5종 통합 표·문제 4건·W10~W11 계획 확정, §2 G3 체크리스트·진행표·#W9-5 갱신) — 이전: 2026-06-05 (W8 정합성 동기화: #W8-4 Postman·#W8-5 README 산출물 저장소 확인 → 부분 완료(◐)로 갱신. 잔여=전체 엔드포인트·Rate Limit 엣지·응답검증 / 아키텍처 다이어그램 임베드 / #W8-3 대규모 시드) |
 | 진행 기간 | 12주 (단독, 전업) + 확장(쿠폰·프론트) |
 | 주당 가용 시간 | 35~45시간 |
 | 표기 방식 | 상대 (W1 ~ W12) + 확장 M13~M15 |
@@ -131,7 +131,7 @@
 ### G4 — 최종 게이트 (W12 말) ◐ 진행 중
 - [ ] PRD §11 산출물 정의(DoD) 모든 항목 충족
 - [ ] 측정 데이터 기반 Before/After 비교 사례 1건 이상 README 기재 (자료는 `docs/improvements`·`docs/portfolio` 에 있으나 README 본문 임베드는 잔여 — #W12-1)
-- [x] 모든 설계 문서 최신화 완료 (#W12-3 — PRD v1.2·ARCHITECTURE v2.2·ERD v1.8·API v1, 2026-06-17 M16까지 동기화)
+- [x] 모든 설계 문서 최신화 완료 (#W12-3 — PRD v1.3·ARCHITECTURE v2.3·ERD v1.9·API v1, 2026-06-18 M16+배포 준비까지 동기화)
 
 ---
 
@@ -1207,30 +1207,30 @@
 ### #W12-2 [docs] 의사결정 기록(ADR) 정리 ✅
 **라벨**: `type:docs`, `M`
 **선행**: 진행 중 누적된 결정사항
-**상태**: ✅ 완료. `docs/decisions/` 에 ADR 8건 + 인덱스 README(공통 형식·목록표) 정비.
+**상태**: ✅ 완료. `docs/decisions/` 에 ADR 9건 + 인덱스 README(공통 형식·목록표) 정비.
 
 **작업 내용**
 - [x] `docs/decisions/` 디렉토리 정리 (인덱스 README + 공통 형식 표)
 - [x] 주요 결정 ADR 형식으로 작성 (Why X, Why not Y, 트레이드오프)
-- [x] 최소 5건: PG 모킹·동시성(상위/쿠폰)·이벤트+아웃박스(vs 큐)·패키지 구조·테스트 전략·JWT 라이브러리·시드 데이터 = **8건**
+- [x] 최소 5건: PG 모킹·동시성(상위/쿠폰)·이벤트+아웃박스(vs 큐)·패키지 구조·테스트 전략·JWT 라이브러리·시드 데이터·수평 확장 유보 = **9건**
 
 **완료 조건**
-- [x] ADR 5건 이상 작성 (8건 — `payment-gateway-mock`·`concurrency-control`·`coupon-concurrency`·`domain-events-and-outbox`·`package-structure`·`testing-strategy`·`jwt-library`·`seed-data`)
+- [x] ADR 5건 이상 작성 (9건 — `payment-gateway-mock`·`concurrency-control`·`coupon-concurrency`·`domain-events-and-outbox`·`package-structure`·`testing-strategy`·`jwt-library`·`seed-data`·`horizontal-scaling`(#274))
 
 ---
 
 ### #W12-3 [docs] 모든 설계 문서 최신화 ✅
 **라벨**: `type:docs`, `M`
 **선행**: #W11-2
-**상태**: ✅ 완료. PRD/ARCHITECTURE/ERD/API 를 M16(클레임·캐시·아웃박스)까지 코드와 동기화(커밋 `189c8ea`).
+**상태**: ✅ 완료. PRD/ARCHITECTURE/ERD/API 를 M16(클레임·캐시·아웃박스)까지 코드와 동기화(커밋 `189c8ea`). 이후 배포 준비(#265/#270/#274)·아웃박스 재시도 상한(V29~V30, #268)·배포 전 문서 점검으로 추가 동기화.
 
 **작업 내용**
-- [x] PRD.md / ARCHITECTURE.md / ERD.md / API.md 코드와 동기화 (M16 반영)
-- [x] 각 문서 버전 번호 업데이트 (PRD v1.2·ARCHITECTURE v2.2·ERD v1.8·API v1)
+- [x] PRD.md / ARCHITECTURE.md / ERD.md / API.md 코드와 동기화 (M16 + 배포 준비 반영)
+- [x] 각 문서 버전 번호 업데이트 (PRD v1.3·ARCHITECTURE v2.3·ERD v1.9·API v1)
 - [x] 변경 이력(CHANGELOG) 추가 (각 문서 헤더 메타 표 "변경 내용")
 
 **완료 조건**
-- [x] 모든 설계 문서가 최종 코드 상태와 일치 (2026-06-17 기준, 마이그레이션 V28까지)
+- [x] 모든 설계 문서가 최종 코드 상태와 일치 (2026-06-18 기준, 마이그레이션 V30까지)
 
 ---
 
@@ -1263,6 +1263,22 @@
 **완료 조건**
 - [ ] G4 게이트 모든 항목 통과 ★
 - [ ] 외부에서 1회 클린 셋업 성공
+
+---
+
+### #W12-6 [infra] 프로덕션 배포 준비 ✅
+**라벨**: `type:infra`, `M`
+**선행**: #W12-3
+**상태**: ✅ 완료. 단일 인스턴스 전제는 유지하되, 배포 전 횡단 관심사(TLS·정적 캐시·보안 헤더)와 시크릿 fail-fast 를 정리했다. 상세는 ARCHITECTURE §10.1·§10.6, `docs/decisions/horizontal-scaling.md`.
+
+**작업 내용**
+- [x] nginx 리버스 프록시 도입 (#265) — `app` 호스트 포트 미발행(`expose`), nginx 가 TLS 종단·gzip·정적 캐시·`Referrer-Policy` 일괄 처리(`docker/nginx/`)
+- [x] TLS(HTTPS :443) 활성화 경로 + 프로덕션 배포 체크리스트 (#270) — `docker-compose.tls.yml`·`nginx-tls.conf`·`scripts/up-tls.sh`, 시크릿/쿠키/CORS/Swagger 기동 시 강제 항목 정리(ARCHITECTURE §10.6)
+- [x] 수평 확장 대비를 유보 ADR로 명문화 (#274 — `decisions/horizontal-scaling.md`, ADR-16): 스케줄러 분산락(ShedLock)·rate-limit 분산(Bucket4j-Lettuce)은 `deploy.replicas>1` 트리거 도달 시 도입
+
+**완료 조건**
+- [x] 기본 `docker compose up`(HTTP :80 데모)을 깨지 않고 TLS override 로 분리
+- [x] 7개 배포 게이트는 기동 시 강제, TLS 만 수동 활성화로 문서화
 
 ---
 
@@ -1384,7 +1400,7 @@
 
 ## 확장 — M16 (분석 기반 흐름 개선, ✅ 완료)
 
-> W1~W12 본 로드맵 외 **확장**. W9 측정과 코드 감사에서 드러난 잔여 흐름(취소/반품 정합성·재고 lost-update·딥페이지 슬로우쿼리·조회 캐시·결제 후처리 이중쓰기)을 보강한 절이다. 전 이슈(#233~#239)가 머지 완료됐고(2026-06-13~16), 설계 문서(PRD/ARCHITECTURE/ERD/API)는 커밋 `189c8ea` 에서 M16 코드 상태까지 동기화됐다. 마이그레이션은 `V23`~`V28`.
+> W1~W12 본 로드맵 외 **확장**. W9 측정과 코드 감사에서 드러난 잔여 흐름(취소/반품 정합성·재고 lost-update·딥페이지 슬로우쿼리·조회 캐시·결제 후처리 이중쓰기)을 보강한 절이다. 전 이슈(#233~#239)가 머지 완료됐고(2026-06-13~16), 설계 문서(PRD/ARCHITECTURE/ERD/API)는 커밋 `189c8ea` 에서 M16 코드 상태까지 동기화됐다. 마이그레이션은 `V23`~`V28`(아웃박스 재시도 상한/DLQ 보강 `V29`~`V30`, #268 포함 시 `V30` 까지).
 > 정본: 측정·개선은 [improvements/](improvements/)·[portfolio/](portfolio/), 결함 재현은 [troubleshooting/](troubleshooting/), 결정은 [decisions/](decisions/), 스키마는 [ERD.md](ERD.md), API 는 [API.md §3.11](API.md).
 
 | 이슈 | PR | 내용 | 핵심 산출물 |
