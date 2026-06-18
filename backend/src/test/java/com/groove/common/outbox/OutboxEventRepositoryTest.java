@@ -80,13 +80,15 @@ class OutboxEventRepositoryTest {
         OutboxEvent belowCap = unpublishedWithAttempts(maxAttempts - 1); // 릴레이 대상(아직 < N)
         OutboxEvent atCap = unpublishedWithAttempts(maxAttempts);   // 격리(>= N)
         OutboxEvent aboveCap = unpublishedWithAttempts(maxAttempts + 1); // 격리(>= N)
+        var myIds = java.util.Set.of(fresh.getId(), belowCap.getId(), atCap.getId(), aboveCap.getId());
 
-        var ids = repository.findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(maxAttempts, Limit.of(1000))
-                .stream().map(OutboxEvent::getId).toList();
+        // 공유 DB — 큰 Limit 로 절단을 피하고 내 id 로만 좁혀 단언한다(누적 행이 있어도 안정적, FIFO 순서 보존 확인)
+        var relayableMine = repository
+                .findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(maxAttempts, Limit.of(100_000))
+                .stream().map(OutboxEvent::getId).filter(myIds::contains).toList();
 
-        // 공유 DB 라 내 id 로 단언한다
-        assertThat(ids).contains(fresh.getId(), belowCap.getId());
-        assertThat(ids).doesNotContain(atCap.getId(), aboveCap.getId());
+        // < N 인 fresh·belowCap 만 FIFO 순으로 포함, >= N 인 atCap·aboveCap 은 제외
+        assertThat(relayableMine).containsExactly(fresh.getId(), belowCap.getId());
     }
 
     @Test

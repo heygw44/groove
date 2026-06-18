@@ -25,7 +25,9 @@ import java.util.Objects;
 @Table(
         name = "outbox_event",
         indexes = {
-                @Index(name = "idx_outbox_unpublished", columnList = "published_at, id")
+                // 릴레이 조회 published_at IS NULL AND attempt_count < N 를 위해 attempt_count 포함 — DLQ 격리 행을
+                // 인덱스 레벨에서 제외한다(V30, #268). 정리 쿼리는 published_at 선두를 활용.
+                @Index(name = "idx_outbox_unpublished", columnList = "published_at, attempt_count, id")
         }
 )
 public class OutboxEvent extends BaseTimeEntity {

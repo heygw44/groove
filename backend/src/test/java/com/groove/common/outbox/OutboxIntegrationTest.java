@@ -40,8 +40,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("아웃박스 E2E — 원자 기록 / at-least-once 릴레이 / 멱등 컨슈머 (#237)")
 class OutboxIntegrationTest {
 
-    // groove.outbox.relay.max-attempts 기본값(application.yaml). poison DLQ 격리 검증에서 사용.
-    private static final int MAX_ATTEMPTS = 5;
+    // 스케줄러 빈과 동일한 설정값을 주입받아 검증한다(하드코딩 결합 제거 — 테스트 상수가 빈 설정과 어긋날 여지 차단).
+    @org.springframework.beans.factory.annotation.Value("${groove.outbox.relay.max-attempts:5}")
+    private int maxAttempts;
 
     @Autowired
     private OrderRepository orderRepository;
@@ -134,8 +135,8 @@ class OutboxIntegrationTest {
         Payable p = persistPayableOrder();
         paymentCallbackService.applyResult(p.pgTx(), PaymentStatus.PAID, null);
 
-        // 상한(기본 5)만큼 릴레이를 반복 — healthy 는 1회차에 발행 완료, poison 은 매회 카운터 증가
-        for (int i = 0; i < MAX_ATTEMPTS; i++) {
+        // 상한만큼 릴레이를 반복 — healthy 는 1회차에 발행 완료, poison 은 매회 카운터 증가
+        for (int i = 0; i < maxAttempts; i++) {
             outboxRelayScheduler.relayPendingEvents();
         }
 
@@ -145,10 +146,10 @@ class OutboxIntegrationTest {
 
         // poison 은 상한에 도달해 릴레이 대상에서 제외(DLQ 격리)되지만, 미발행 행으로는 잔존한다
         OutboxEvent reloaded = outboxEventRepository.findById(poison.getId()).orElseThrow();
-        assertThat(reloaded.getAttemptCount()).isEqualTo(MAX_ATTEMPTS);
+        assertThat(reloaded.getAttemptCount()).isEqualTo(maxAttempts);
         assertThat(reloaded.getPublishedAt()).isNull();
         var relayableIds = outboxEventRepository
-                .findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(MAX_ATTEMPTS, Limit.of(100))
+                .findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(maxAttempts, Limit.of(100))
                 .stream().map(OutboxEvent::getId).toList();
         assertThat(relayableIds).doesNotContain(poison.getId());
         var unpublishedIds = outboxEventRepository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(100))

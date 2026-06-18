@@ -125,8 +125,8 @@ class OutboxRelaySchedulerTest {
     }
 
     @Test
-    @DisplayName("핸들러가 없는 이벤트는 발행을 보류한다 — 디스패치/표시 모두 없음")
-    void noHandler_holdsEvent() {
+    @DisplayName("핸들러가 없는 이벤트도 재시도 카운터를 증가시켜 결국 DLQ 격리한다 — 디스패치/발행표시는 없음")
+    void noHandler_incrementsAttemptCount() {
         OutboxEvent event = event(1L, "UNKNOWN_TYPE");
         given(repository.findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(anyInt(), any(Limit.class))).willReturn(List.of(event));
 
@@ -134,6 +134,23 @@ class OutboxRelaySchedulerTest {
 
         verify(handler, never()).handle(any());
         verify(repository, never()).markPublished(any(), any());
+        verify(repository).incrementAttemptCount(1L);
+    }
+
+    @Test
+    @DisplayName("재시도 카운터 증가가 실패해도 같은 배치의 다른 이벤트는 정상 발행된다 — 건별 격리")
+    void incrementFailure_doesNotAbortBatch() {
+        OutboxEvent poison = event(1L, EVENT_TYPE);
+        OutboxEvent healthy = event(2L, EVENT_TYPE);
+        given(repository.findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(anyInt(), any(Limit.class)))
+                .willReturn(List.of(poison, healthy));
+        org.mockito.BDDMockito.willThrow(new RuntimeException("consumer down")).given(handler).handle(poison);
+        // 카운터 증가 트랜잭션이 실패하는 상황 재현
+        org.mockito.BDDMockito.willThrow(new RuntimeException("db down")).given(repository).incrementAttemptCount(1L);
+
+        scheduler.relayPendingEvents(); // 예외가 배치 밖으로 전파되지 않아야 한다
+
+        verify(repository).markPublished(2L, NOW); // 정상 건은 계속 처리됨
     }
 
     @Test
