@@ -359,6 +359,22 @@ class ReviewApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("REVIEW_NOT_FOUND"));
     }
 
+    @Test
+    @DisplayName("탈퇴 회원이 만료 전 토큰으로 본인 리뷰 삭제 시도 → 404 MEMBER_NOT_FOUND, 리뷰 보존 (#269)")
+    void delete_withdrawnMember_returns404() throws Exception {
+        Long reviewId = persistReview(ownerId, OrderStatus.DELIVERED, 5);
+        // 탈퇴(soft delete) — ownerBearer 는 탈퇴 전 발급분이라 서명·만료상 여전히 유효(필터는 통과).
+        Member owner = memberRepository.findById(ownerId).orElseThrow();
+        owner.withdraw(Instant.now());
+        memberRepository.saveAndFlush(owner);
+
+        mockMvc.perform(delete("/api/v1/reviews/{id}", reviewId).header(HttpHeaders.AUTHORIZATION, ownerBearer))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("MEMBER_NOT_FOUND"));
+
+        assertThat(reviewRepository.existsById(reviewId)).isTrue();
+    }
+
     // ---------- 카탈로그 평점 연동 ----------
 
     @Test

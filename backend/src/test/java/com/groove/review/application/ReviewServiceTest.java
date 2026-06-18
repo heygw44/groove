@@ -310,6 +310,22 @@ class ReviewServiceTest {
     }
 
     @Test
+    @DisplayName("delete → 회원 탈퇴(soft delete) → 404 MemberNotFound, 삭제 안 함 (#269)")
+    void delete_memberWithdrawn() {
+        // fetch join 으로 로드된 member 의 deletedAt 으로 차단 — 별도 조회 없음.
+        Member withdrawn = memberWithId(OWNER_ID, "김민수");
+        withdrawn.withdraw(Instant.now());
+        Review review = Review.write(withdrawn, albumWithId(ALBUM_ID),
+                memberOrder(OWNER_ID, OrderStatus.DELIVERED, albumWithId(ALBUM_ID)), 4, "ok");
+        ReflectionTestUtils.setField(review, "id", 7L);
+        given(reviewRepository.findWithMemberById(7L)).willReturn(Optional.of(review));
+
+        assertThatThrownBy(() -> reviewService.delete(OWNER_ID, 7L))
+                .isInstanceOf(MemberNotFoundException.class);
+        then(reviewRepository).should(never()).delete(any(Review.class));
+    }
+
+    @Test
     @DisplayName("delete → 미존재 리뷰 → 404 ReviewNotFound")
     void delete_missing() {
         given(reviewRepository.findWithMemberById(7L)).willReturn(Optional.empty());

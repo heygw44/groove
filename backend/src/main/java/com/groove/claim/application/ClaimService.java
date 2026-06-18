@@ -15,6 +15,8 @@ import com.groove.claim.exception.ReturnWindowNotDeterminableException;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.StockRestorer;
 import com.groove.coupon.application.CouponApplicationService;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
@@ -55,7 +57,7 @@ import java.util.stream.Collectors;
 /**
  * 반품(claim) 접수/승인/거부/환불 트랜잭션 경계.
  *
- * <p>접수(request) 검증 순서: 주문 존재(404) → 본인 주문(404) → 반품 자격 {DELIVERED, COMPLETED}(422) → 반품
+ * <p>접수(request) 검증 순서: 주문 존재(404) → 본인 주문(404) → 회원 활성(404, 탈퇴 토큰 잔존 방어 #269) → 반품 자격 {DELIVERED, COMPLETED}(422) → 반품
  * 기한(422) → 항목 1개 이상(422) → 항목 소속·잔여 수량 가드(422 / 409).
  *
  * <p>환불(completeRefund): Payment FOR UPDATE 락 → 멱등(INSPECTING 아니면 no-op) → PG refund(claim 별 멱등 키)
@@ -77,6 +79,7 @@ public class ClaimService {
     private final CouponApplicationService couponApplicationService;
     private final ShippingService shippingService;
     private final AlbumRepository albumRepository;
+    private final MemberRepository memberRepository;
     private final Clock clock;
     private final Duration returnWindow;
 
@@ -87,6 +90,7 @@ public class ClaimService {
                         CouponApplicationService couponApplicationService,
                         ShippingService shippingService,
                         AlbumRepository albumRepository,
+                        MemberRepository memberRepository,
                         Clock clock,
                         @Value("${groove.claim.return-window:P7D}") Duration returnWindow) {
         this.claimRepository = claimRepository;
@@ -96,6 +100,7 @@ public class ClaimService {
         this.couponApplicationService = couponApplicationService;
         this.shippingService = shippingService;
         this.albumRepository = albumRepository;
+        this.memberRepository = memberRepository;
         this.clock = clock;
         this.returnWindow = returnWindow;
     }
@@ -108,6 +113,10 @@ public class ClaimService {
         // 본인 주문만 — memberId null 이거나 불일치면 404.
         if (command.memberId() == null || !Objects.equals(order.getMemberId(), command.memberId())) {
             throw new OrderNotFoundException();
+        }
+        // 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 반품 접수하는 것을 차단(#269).
+        if (!memberRepository.existsByIdAndDeletedAtIsNull(command.memberId())) {
+            throw new MemberNotFoundException();
         }
         if (!OrderStatus.DELIVERED_OR_COMPLETED.contains(order.getStatus())) {
             throw new OrderNotReturnableException(order.getStatus());

@@ -19,6 +19,8 @@ import com.groove.claim.exception.OrderNotReturnableException;
 import com.groove.claim.exception.ReturnWindowExpiredException;
 import com.groove.claim.exception.ReturnWindowNotDeterminableException;
 import com.groove.coupon.application.CouponApplicationService;
+import com.groove.member.domain.MemberRepository;
+import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
@@ -52,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -81,6 +84,8 @@ class ClaimServiceTest {
     private ShippingService shippingService;
     @Mock
     private AlbumRepository albumRepository;
+    @Mock
+    private MemberRepository memberRepository;
 
     private ClaimService claimService;
 
@@ -89,7 +94,9 @@ class ClaimServiceTest {
     @BeforeEach
     void setUp() {
         claimService = new ClaimService(claimRepository, orderRepository, paymentRepository, paymentGateway,
-                couponApplicationService, shippingService, albumRepository, CLOCK, WINDOW);
+                couponApplicationService, shippingService, albumRepository, memberRepository, CLOCK, WINDOW);
+        // request 경로는 본인 주문 검증 직후 회원 활성(#269)을 확인한다 — 기본은 활성 회원으로 둔다.
+        lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(MEMBER_ID)).thenReturn(true);
     }
 
     // --- fixtures -----------------------------------------------------------
@@ -197,6 +204,18 @@ class ClaimServiceTest {
         ClaimCreateCommand cmd = new ClaimCreateCommand(999L, ORDER_NUMBER, "변심",
                 List.of(new ClaimCreateCommand.Line(ITEM_ID, 1)));
         assertThatThrownBy(() -> claimService.request(cmd)).isInstanceOf(OrderNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("request: 탈퇴(soft delete) 회원이 만료 전 토큰으로 접수하면 MemberNotFoundException, 저장 안 함 (#269)")
+    void request_rejectsWithdrawnMember() {
+        Order order = deliveredOrder(15_000L, 2, 0);
+        given(orderRepository.findByOrderNumberForUpdate(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(memberRepository.existsByIdAndDeletedAtIsNull(MEMBER_ID)).willReturn(false);
+
+        assertThatThrownBy(() -> claimService.request(command(1)))
+                .isInstanceOf(MemberNotFoundException.class);
+        verify(claimRepository, never()).save(any());
     }
 
     @Test
