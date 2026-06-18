@@ -42,7 +42,8 @@ import java.util.Set;
  *
  * 조회(listByAlbum): 작성자명을 마스킹해 응답. 앨범이 없어도 빈 페이지를 돌려준다.
  *
- * 삭제(delete): 리뷰 미존재 시 ReviewNotFoundException (404), 작성자 ≠ 인증 회원이면 ReviewNotOwnedException (403).
+ * 삭제(delete): 리뷰 미존재 시 ReviewNotFoundException (404), 작성자 ≠ 인증 회원이면 ReviewNotOwnedException (403),
+ * 회원 활성 — 탈퇴(soft delete)된 회원이면 MemberNotFoundException (404). 탈퇴 후 만료 전 access 토큰 잔존 방어(#269).
  */
 @Service
 public class ReviewService {
@@ -118,6 +119,10 @@ public class ReviewService {
                 .orElseThrow(ReviewNotFoundException::new);
         if (!Objects.equals(review.getMember().getId(), memberId)) {
             throw new ReviewNotOwnedException();
+        }
+        // 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 접근하는 것을 차단(#269) — create() 와 동일한 활성 검증.
+        if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
         }
         reviewRepository.delete(review);
     }
