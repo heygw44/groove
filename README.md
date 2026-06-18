@@ -112,19 +112,3 @@ ALBUM_COUNT=200 MEMBER_COUNT=50 ./scripts/seed.sh --docker --yes
 # docker 프로파일은 기본 비공개 — .env 에 SPRINGDOC_ENABLED=true 설정 시 노출
 open http://localhost/swagger-ui.html
 ```
-
-### 리버스 프록시 / 배포 (#265)
-
-`app` 앞단에 nginx(`docker/nginx/nginx.conf`)를 두어 횡단 관심사를 일괄 처리합니다. `app` 컨테이너는 호스트 포트를 발행하지 않고 nginx를 통해서만 노출됩니다.
-
-| 관심사 | 담당 | 비고 |
-|---|---|---|
-| TLS 종단 | nginx | 로컬 `:80`(http), 운영 `:443`(https) — `nginx.conf`의 443 블록 + `./certs` 마운트 활성화 |
-| gzip 압축 | nginx | `gzip_proxied any`(프록시 응답은 기본 미압축) |
-| 정적 자산 캐시 | nginx | 자산 location에서 Spring의 `no-store`를 제거하고 `public, immutable`로 교체 |
-| `Referrer-Policy` | nginx | Spring 기본 헤더에 없는 유일한 보안 헤더 |
-| `X-Frame-Options`·`X-Content-Type-Options`·HSTS | **Spring Security** | 기본값으로 이미 발급 — nginx 중복 추가 안 함(HSTS는 `X-Forwarded-Proto: https`일 때 발급) |
-
-- **로컬**: nginx `:80`(http) + `AUTH_REFRESH_COOKIE_SECURE=false`.
-- **운영**: nginx `:443`(self-signed 또는 Let's Encrypt/certbot) + `X-Forwarded-Proto: https` + `AUTH_REFRESH_COOKIE_SECURE=true`. `app`은 `forward-headers-strategy: native`로 이 헤더를 인식해 Secure 쿠키와 HSTS를 발급합니다.
-- Bruno 검증은 compose(nginx) 대상의 **Groove Compose** 환경(`http://localhost`)을 사용합니다. `./gradlew bootRun`(직접 `:8080`)에는 기존 **Groove Local** 환경을 그대로 씁니다. 단, 웹훅 폴더를 compose 대상으로 돌릴 때는 **Groove Compose** 의 `webhookSecret` 변수를 실행 중인 `.env` 의 `PAYMENT_MOCK_WEBHOOK_SECRET` 와 같은 값으로 맞춰야 서명 검증이 통과합니다.
