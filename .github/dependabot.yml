@@ -1,0 +1,53 @@
+# 의존성 보안 점검 — GitHub Dependabot (이슈 #260)
+# backend(Gradle) · frontend(npm) · CI(GitHub Actions) 의존성을 주간 스캔해
+# 취약점/업데이트 PR 을 자동 생성한다. minor/patch 는 한 PR 로 묶어 노이즈를 줄인다.
+version: 2
+updates:
+  # 백엔드 — Spring Boot 4 / Gradle (Kotlin DSL)
+  - package-ecosystem: "gradle"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "type:chore"
+    commit-message:
+      prefix: "chore"
+    groups:
+      gradle-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # 프론트엔드 — Vue 3 / Vite (시연용 SPA)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "type:chore"
+    commit-message:
+      prefix: "chore"
+    groups:
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # CI 워크플로우 — GitHub Actions 핀 버전
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "type:chore"
+    commit-message:
+      prefix: "chore"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
