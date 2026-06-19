@@ -27,5 +27,3 @@
 | [testing-strategy.md](./testing-strategy.md) | 테스트 전략 — 피라미드 + MySQL Testcontainers + JaCoCo 게이트 | Accepted |
 | [jwt-library.md](./jwt-library.md) | JWT 라이브러리 선정 — JJWT(vs Nimbus/OAuth2 Resource Server) | Accepted |
 | [seed-data.md](./seed-data.md) | 시드 데이터 출처 및 수급 — Discogs(vs Faker) | Accepted |
-
-> 성능 개선의 Before/After 측정은 [`../improvements/`](../improvements/), 동시성 결함 재현 베이스라인은 [`../troubleshooting/`](../troubleshooting/) 에 있다. 캐시 선택(Caffeine vs Redis)은 [`../improvements/catalog-cache.md`](../improvements/catalog-cache.md) 를 참고하면 된다.

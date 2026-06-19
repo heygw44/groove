@@ -6,7 +6,7 @@
 | 날짜 | 2026-06-17 |
 | 연관 이슈 | #257 (W12-2 ADR 정리) |
 | 작성자 | ParkGunWoo |
-| 관련 문서 | [improvements/](../improvements/), [measurement/baseline.md](../measurement/baseline.md) |
+| 관련 문서 | [payment-gateway-mock.md](./payment-gateway-mock.md) |
 
 ---
 
@@ -101,5 +101,5 @@ JaCoCo 게이트(`build.gradle.kts`)는 핵심 도메인(auth·member·catalog·
 ## References
 
 - 코드: [`support/TestcontainersConfig.java`](../../backend/src/test/java/com/groove/support/TestcontainersConfig.java), [`support/ConcurrencyHarness.java`](../../backend/src/test/java/com/groove/support/ConcurrencyHarness.java), [`application-test.yaml`](../../backend/src/main/resources/application-test.yaml), [`build.gradle.kts`](../../backend/build.gradle.kts) (JaCoCo 룰)
-- 부하 측정: [`loadtest/`](../../loadtest/), [measurement/baseline.md](../measurement/baseline.md)
+- 부하 측정: [`loadtest/`](../../loadtest/)
 - [Testcontainers for Java](https://java.testcontainers.org/), [Spring Boot — Testcontainers](https://docs.spring.io/spring-boot/reference/testing/testcontainers.html)

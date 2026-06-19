@@ -6,8 +6,6 @@
 // 선행: 앱 기동 + loadtest/seed-coupon-loadtest.sql 적용(쿠폰 1건 + 회원 600명). rate limit 은
 //       COUPON_RATE_LIMIT_ISSUE_CAPACITY / AUTH_RATE_LIMIT_LOGIN_CAPACITY 를 크게 주입해 간섭을 제거한다.
 // 실행: k6 run -e COUPON_ID=<id> loadtest/coupon-issuance.js
-//
-// docs/troubleshooting/coupon-issuance-concurrency.md §3·§5 근거.
 
 import http from 'k6/http';
 import exec from 'k6/execution';
