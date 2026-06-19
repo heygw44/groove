@@ -10,7 +10,7 @@
 | 시간 | ISO 8601 UTC (예: `2026-05-05T14:23:00.000Z`) |
 | 통화 | 원 단위 정수 (KRW) |
 | 실행 문서 | Swagger UI `/swagger-ui.html`, OpenAPI JSON `/v3/api-docs` (코드에서 자동 생성, #156) |
-| 관련 문서 | PRD.md, ARCHITECTURE.md, ERD.md |
+| 관련 문서 | ARCHITECTURE.md, ERD.md |
 
 > 📑 본 문서는 **설계 의도·배경**을 담은 설계 명세다. 실제 요청/응답 스키마의 단일 진실은 코드에서 자동 생성되는 **실행 문서(Swagger UI)** 이며, 둘이 다르면 Swagger UI 가 우선한다. 서버 기동 후 `/swagger-ui.html`(docker compose: `http://localhost`, `./gradlew bootRun`: `http://localhost:8080`)에서 확인하고, 우측 상단 **Authorize** 에 로그인 accessToken 을 넣으면 보호 엔드포인트를 바로 try-out 할 수 있다.
 
@@ -925,7 +925,7 @@
 
 ### 3.9 쿠폰 ★ (확장 M13)
 
-> 확장 M13 으로 **구현 완료**. 컨트롤러: `CouponController`(`/coupons`)·`MyCouponController`(`/members/me/coupons`). 선착순 동시성 설계: [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md), 전문: [plans/coupon-system.md](./plans/coupon-system.md).
+> 확장 M13 으로 **구현 완료**. 컨트롤러: `CouponController`(`/coupons`)·`MyCouponController`(`/members/me/coupons`). 선착순 동시성 설계: [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md).
 
 #### GET `/coupons` — 발급 가능한 쿠폰 목록
 

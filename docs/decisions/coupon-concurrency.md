@@ -6,7 +6,7 @@
 | 날짜 | 2026-05-26 |
 | 연관 이슈 | 쿠폰 확장 P2 (선착순 발급) — 도입 시 이슈 번호 기재 |
 | 후속 작업 | 쿠폰 시스템 P2 구현, P5 k6 측정 |
-| 관련 문서 | [plans/coupon-system.md](../plans/coupon-system.md), [ERD.md §4.15](../ERD.md), [troubleshooting/coupon-issuance-concurrency.md](../troubleshooting/coupon-issuance-concurrency.md), [troubleshooting/overselling-baseline.md](../troubleshooting/overselling-baseline.md) |
+| 관련 문서 | [ERD.md §4.15](../ERD.md) |
 
 ---
 
@@ -14,7 +14,7 @@
 
 선착순 한정수량 쿠폰은 단일 행(`coupon.issued_count`)을 여러 요청이 동시에 증가시키는, 동시성 경합의 교과서 같은 문제다. 정확성 목표는 "정확히 `total_quantity` 만 발급"(초과발급 금지)이고, 비기능 목표는 스파이크 트래픽에서의 처리량을 시연하는 것이다.
 
-여기엔 몇 가지 제약과 선례가 깔려 있다. 우선 현재 인프라에 Redis 도 메시지 브로커도 없다(rate limit 은 Bucket4j 인메모리, 캐시는 Caffeine). 환불 경로(`PaymentRepository`)가 이미 `@Lock(PESSIMISTIC_WRITE)` 를 쓰고 있어 DB 락 패턴의 선례는 있다. 재고 차감은 일부러 락 없이 두어 [오버셀 baseline](../troubleshooting/overselling-baseline.md) 을 박제했고, W10 에서 비관적 락으로 개선하는 Before/After 서사가 이미 프로젝트에 깔려 있다. PRD §11 의 DoD #4(k6 부하테스트)와 #5(Before/After 개선 사례)도 아직 미충족이다.
+여기엔 몇 가지 제약과 선례가 깔려 있다. 우선 현재 인프라에 Redis 도 메시지 브로커도 없다(rate limit 은 Bucket4j 인메모리, 캐시는 Caffeine). 환불 경로(`PaymentRepository`)가 이미 `@Lock(PESSIMISTIC_WRITE)` 를 쓰고 있어 DB 락 패턴의 선례는 있다. 재고 차감은 일부러 락 없이 두어 오버셀 baseline 을 박제했고, W10 에서 비관적 락으로 개선하는 Before/After 서사가 이미 프로젝트에 깔려 있다. PRD §11 의 DoD #4(k6 부하테스트)와 #5(Before/After 개선 사례)도 아직 미충족이다.
 
 그래서 이 결정은 단순히 "어떻게 정확히 발급하나"가 아니다. **학습·시연 가치를 살리면서, 새 인프라 없이 정확성과 처리량을 어떻게 동시에 달성하나**가 진짜 질문이다.
 
@@ -93,7 +93,7 @@ Redis 의 원자적 DECR 로 슬롯을 선점하고, 큐나 비동기로 `member
 
 **긍정적**
 - 새 인프라 없이 정확성과 준수한 처리량을 함께 얻는다.
-- 베이스라인→비관적 락→원자적 UPDATE 의 3 단계가 그대로 k6 Before/After 측정 자료(DoD #4·#5)가 된다 — [재고 오버셀 baseline](../troubleshooting/overselling-baseline.md) 과 짝을 이루는 두 번째 동시성 개선 사례다.
+- 베이스라인→비관적 락→원자적 UPDATE 의 3 단계가 그대로 k6 Before/After 측정 자료(DoD #4·#5)가 된다 — 재고 오버셀 baseline 과 짝을 이루는 두 번째 동시성 개선 사례다.
 - `member_coupon` UNIQUE 와 `@Idempotent` 로 중복발급 방어선이 이중으로 깔린다.
 
 **부정적 / 트레이드오프**
@@ -105,4 +105,3 @@ Redis 의 원자적 DECR 로 슬롯을 선점하고, 큐나 비동기로 `member
 - [Spring Data JPA — Locking](https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html) (`@Lock`, `LockModeType`)
 - [Spring Data JPA — Modifying Queries](https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html) (`@Modifying @Query` 원자적 UPDATE)
 - [Redisson — RAtomicLong / RLock](https://github.com/redisson/redisson/wiki) (미래안 D 참고)
-- 연관: [plans/coupon-system.md](../plans/coupon-system.md), [overselling-baseline.md](../troubleshooting/overselling-baseline.md)

@@ -5,11 +5,11 @@
 | 버전 | 1.3 |
 | 작성일 | 2026-05-05 |
 | 최종 수정일 | 2026-06-17 (확장 M16 반영 — 클레임 엔티티·enum 추가, 아웃박스·로컬 캐시 도입 정정) |
-| 관련 문서 | PRD.md, ARCHITECTURE.md, ERD.md, API.md |
-| 정본 우선순위 | ERD > PRD > ARCHITECTURE > API |
+| 관련 문서 | ARCHITECTURE.md, ERD.md, API.md |
+| 정본 우선순위 | ERD > ARCHITECTURE > API |
 
 > 본 문서는 프로젝트 내 도메인 용어 정의를 일원화하여 팀 내(또는 자기 자신과의) 용어 혼선을 방지하기 위한 단일 출처(Single Source of Truth)다.
-> ERD/PRD가 변경되면 본 문서도 동기화되어야 하며, 충돌 시 ERD를 우선한다.
+> ERD가 변경되면 본 문서도 동기화되어야 하며, 충돌 시 ERD를 우선한다.
 
 ---
 
@@ -44,10 +44,9 @@
 | 카테고리 | 정본 |
 |---|---|
 | 테이블·컬럼·인덱스 | ERD.md |
-| 비즈니스 룰·정책 | PRD.md |
 | 패키지·클래스 구조 | ARCHITECTURE.md |
 | API 시그니처·에러 코드 | API.md |
-| **용어 정의 (본 문서)** | 위를 종합한 결과를 기록. 충돌 시 ERD ≻ PRD ≻ ARCH ≻ API |
+| **용어 정의 (본 문서)** | 위를 종합한 결과를 기록. 충돌 시 ERD ≻ ARCH ≻ API |
 
 ---
 
@@ -183,7 +182,7 @@
 | 할인 종류 | `CouponDiscountType` 2값 — §3.9 참조 |
 | 정책 상태 | `CouponStatus` 3값 — §3.10 / 보유 상태 `MemberCouponStatus` 4값 — §3.11 |
 | 적용 | 회원 주문에만 적용(게스트 불가). **payable = total_amount − discount_amount**, 결제는 payable 청구. 주문 취소/환불 시 쿠폰 복원(USED→ISSUED). |
-| 비고 | §8 v2 후보였던 `coupon`/`coupon_issue` 를 W7 완료 후 확장 도메인으로 승격. 설계 전문 [plans/coupon-system.md](plans/coupon-system.md), 동시성 결정 [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md). |
+| 비고 | §8 v2 후보였던 `coupon`/`coupon_issue` 를 W7 완료 후 확장 도메인으로 승격. 동시성 결정 [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md). |
 
 ---
 

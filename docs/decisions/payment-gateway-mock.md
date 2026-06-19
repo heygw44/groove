@@ -6,7 +6,7 @@
 | 날짜 | 2026-06-17 |
 | 연관 이슈 | #257 (W12-2 ADR 정리) |
 | 작성자 | ParkGunWoo |
-| 관련 문서 | [improvements/idempotency.md](../improvements/idempotency.md), [ERD.md §payment](../ERD.md), [API.md §payments](../API.md) |
+| 관련 문서 | [ERD.md §payment](../ERD.md), [API.md §payments](../API.md) |
 
 ---
 
@@ -109,6 +109,5 @@ return new PaymentResponse(pgTransactionId, PaymentStatus.PENDING, PROVIDER);
 ## References
 
 - 코드: [`payment/gateway/PaymentGateway.java`](../../backend/src/main/java/com/groove/payment/gateway/PaymentGateway.java), [`MockPaymentGateway.java`](../../backend/src/main/java/com/groove/payment/gateway/mock/MockPaymentGateway.java), [`MockWebhookSimulator.java`](../../backend/src/main/java/com/groove/payment/gateway/mock/MockWebhookSimulator.java), [`PaymentStatus.java`](../../backend/src/main/java/com/groove/payment/domain/PaymentStatus.java)
-- 멱등성 개선 사례: [improvements/idempotency.md](../improvements/idempotency.md)
 - 결제 콜백 직렬화: 본 디렉토리 [concurrency-control.md](./concurrency-control.md)
 - [Spring `TaskScheduler`](https://docs.spring.io/spring-framework/reference/integration/scheduling.html)

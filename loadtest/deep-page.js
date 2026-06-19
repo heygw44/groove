@@ -9,7 +9,6 @@
 // 실행: k6 run -e DEEP_ROW=10000 loadtest/deep-page.js
 //       → loadtest/deep-page-summary.json + stdout 에 offset/keyset p95 비교 출력
 //       정렬키별(#244): -e SORT=price,desc / -e SORT=releaseYear,desc 로 V25 커버링 인덱스 경로도 측정
-//       (Before/After·EXPLAIN: docs/improvements/keyset-index-coverage.md §4)
 
 import http from 'k6/http';
 import exec from 'k6/execution';

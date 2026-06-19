@@ -67,6 +67,13 @@ CLAUDE.md
 docs/features/
 docs/interview-prep/
 docs/portfolio/
+# 내부 진행·미완성 산출물 — 로컬 보존, 레포 비노출 (블로그/케이스스터디 원자료)
+docs/PRD.md
+docs/MILESTONE.md
+docs/improvements/
+docs/troubleshooting/
+docs/measurement/
+docs/plans/
 
 ### Frontend (Vue 3 + Vite, #113) ###
 frontend/node_modules/
