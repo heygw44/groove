@@ -7,7 +7,8 @@ import java.time.Instant;
 /**
  * PG 환불 요청에 대한 응답.
  *
- * <p>pgTransactionId: 환불 처리된 거래 식별자. status: 환불 후 상태. refundedAt: 환불 완료 시각.
+ * <p>pgTransactionId: 환불 처리된 거래 식별자. status: 환불 후 상태(REFUNDED 또는 PARTIALLY_REFUNDED).
+ * refundedAt: 환불 완료 시각.
  */
 public record RefundResponse(String pgTransactionId, PaymentStatus status, Instant refundedAt) {
 
@@ -17,6 +18,11 @@ public record RefundResponse(String pgTransactionId, PaymentStatus status, Insta
         }
         if (status == null) {
             throw new IllegalArgumentException("status 는 null 일 수 없습니다");
+        }
+        if (status != PaymentStatus.REFUNDED && status != PaymentStatus.PARTIALLY_REFUNDED) {
+            // 환불 응답 status 는 환불 상태여야 한다 — PG 가 비환불 상태를 돌려주면 계약 위반으로 거부한다.
+            throw new IllegalArgumentException(
+                    "환불 응답 status 는 REFUNDED 또는 PARTIALLY_REFUNDED 여야 합니다 (현재: " + status + ")");
         }
         if (refundedAt == null) {
             throw new IllegalArgumentException("refundedAt 은 null 일 수 없습니다");

@@ -50,6 +50,22 @@ class RefundResponseTest {
     }
 
     @Test
+    @DisplayName("PARTIALLY_REFUNDED 도 정상 환불 상태로 허용한다")
+    void partially_refunded_accepted() {
+        RefundResponse res = new RefundResponse(VALID_PG_TX, PaymentStatus.PARTIALLY_REFUNDED, VALID_REFUNDED_AT);
+
+        assertThat(res.status()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
+    }
+
+    @Test
+    @DisplayName("환불 상태가 아닌 status(PAID/PENDING/FAILED)는 거부한다")
+    void non_refund_status_rejected() {
+        assertThatThrownBy(() -> new RefundResponse(VALID_PG_TX, PaymentStatus.PAID, VALID_REFUNDED_AT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("REFUNDED");
+    }
+
+    @Test
     @DisplayName("refundedAt null 은 거부한다")
     void null_refunded_at_rejected() {
         assertThatThrownBy(() -> new RefundResponse(VALID_PG_TX, PaymentStatus.REFUNDED, null))

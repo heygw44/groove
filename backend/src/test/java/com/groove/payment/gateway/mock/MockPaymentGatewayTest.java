@@ -1,6 +1,7 @@
 package com.groove.payment.gateway.mock;
 
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.payment.gateway.ConfirmResponse;
 import com.groove.payment.gateway.PaymentMockProperties;
 import com.groove.payment.gateway.PaymentRequest;
 import com.groove.payment.gateway.PaymentResponse;
@@ -112,6 +113,24 @@ class MockPaymentGatewayTest {
             long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
             assertThat(elapsedMs).isGreaterThanOrEqualTo(15L);
+        }
+    }
+
+    @Nested
+    @DisplayName("confirm()")
+    class Confirm {
+
+        @Test
+        @DisplayName("paymentKey 거래를 PAID 로 기록하고 ConfirmResponse(PAID) 를 반환한다")
+        void confirm_recordsPaid() {
+            MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ZERO));
+
+            ConfirmResponse response = g.confirm("toss-pk-1", REQUEST.orderNumber(), REQUEST.amount());
+
+            assertThat(response.pgTransactionId()).isEqualTo("toss-pk-1");
+            assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
+            // 동기 확정이므로 이후 폴링 조회도 즉시 PAID 를 반환한다.
+            assertThat(g.query("toss-pk-1")).isEqualTo(PaymentStatus.PAID);
         }
     }
 
