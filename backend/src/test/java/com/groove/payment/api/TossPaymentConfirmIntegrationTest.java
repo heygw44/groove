@@ -27,6 +27,7 @@ import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
 import com.groove.order.event.OrderPaidEvent;
+import com.groove.payment.application.PaymentReconciliationScheduler;
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
@@ -93,6 +94,7 @@ class TossPaymentConfirmIntegrationTest {
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private OutboxEventRepository outboxEventRepository;
     @Autowired private IdempotencyRecordRepository idempotencyRecordRepository;
+    @Autowired private PaymentReconciliationScheduler reconciliationScheduler;
 
     private Long memberId;
     private Long albumId;
@@ -243,11 +245,9 @@ class TossPaymentConfirmIntegrationTest {
     }
 
     @Test
-    @DisplayName("failUrl: 302 fail, 결제 FAILED·주문 PAYMENT_FAILED·재고 복원·쿠폰 USED→ISSUED 복원")
-    void fail_compensatesStockAndCoupon() throws Exception {
+    @DisplayName("failUrl: 미인증 GET 이라 상태를 바꾸지 않고 302 fail 안내만 — 결제·주문·재고 PENDING 불변(교차 조작 차단)")
+    void fail_redirectsOnly_noStateChange() throws Exception {
         Checked c = checkout(2); // 재고 100 → 98
-        MemberCoupon applied = issueAndUseCoupon(c.orderId(), 5_000L);
-        Long memberCouponId = applied.getId();
         assertThat(currentStock()).isEqualTo(INITIAL_STOCK - 2);
 
         mockMvc.perform(get("/payments/toss/fail")
@@ -256,6 +256,23 @@ class TossPaymentConfirmIntegrationTest {
                         .param("orderId", c.orderNumber()))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=fail"));
+
+        // failUrl 은 보상하지 않는다 — 보상은 만료 리퍼의 신뢰 경로가 담당.
+        assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.PENDING);
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PENDING);
+        assertThat(currentStock()).isEqualTo(INITIAL_STOCK - 2); // 재고 미복원
+    }
+
+    @Test
+    @DisplayName("만료 리퍼: 미확정 토스 PENDING 을 FAILED 로 정리하고 재고·쿠폰을 복원한다(신뢰 가능한 보상 경로)")
+    void reaper_failsAbandonedTossPending_compensates() throws Exception {
+        Checked c = checkout(2); // 재고 100 → 98
+        MemberCoupon applied = issueAndUseCoupon(c.orderId(), 5_000L);
+        Long memberCouponId = applied.getId();
+        assertThat(currentStock()).isEqualTo(INITIAL_STOCK - 2);
+
+        // test 프로파일: min-age·toss-pending-timeout 모두 PT0S → 갓 접수된 toss-pending 도 즉시 만료 대상.
+        reconciliationScheduler.reconcilePendingPayments();
 
         assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.FAILED);
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAYMENT_FAILED);

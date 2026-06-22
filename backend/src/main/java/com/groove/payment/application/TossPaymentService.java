@@ -106,19 +106,6 @@ public class TossPaymentService {
                 () -> doConfirm(orderPk, paymentKey, orderId, amount));
     }
 
-    /**
-     * failUrl 처리. 기존 보상 경로(재고·쿠폰 복원)를 주문 단위 멱등 키로 1회만 적용한다.
-     */
-    public PaymentCallbackResult fail(String orderId, String code, String message) {
-        Order order = orderRepository.findByOrderNumber(orderId).orElseThrow(OrderNotFoundException::new);
-        long orderPk = order.getId();
-        String reason = buildFailureReason(code, message);
-        return idempotencyService.execute(
-                PaymentCallbackService.idempotencyKeyForFailure(orderId),
-                PaymentCallbackResult.class,
-                () -> callbackService.applyConfirmFailure(orderPk, reason));
-    }
-
     /** 토스는 request() 게이트웨이 호출 없이 잠정 pgTx=toss-pending:{orderNumber} 로 PENDING Payment 를 저장한다. */
     private PaymentApiResponse persistPending(PaymentRequestPrep prep, PaymentCreateRequest request) {
         PaymentResponse synthetic = new PaymentResponse(
@@ -149,11 +136,5 @@ public class TossPaymentService {
     private String clientKey() {
         TossPaymentProperties props = tossProperties.getIfAvailable();
         return props != null ? props.clientKey() : null;
-    }
-
-    private static String buildFailureReason(String code, String message) {
-        String c = (code == null || code.isBlank()) ? "UNKNOWN" : code;
-        String m = (message == null) ? "" : message;
-        return ("토스 결제 실패 [" + c + "] " + m).strip();
     }
 }

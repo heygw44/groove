@@ -29,8 +29,9 @@ import java.util.stream.Collectors;
  * - FAILED: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 재고 복원, 쿠폰 USED→ISSUED.
  * - 알 수 없는 거래/이미 종착 상태: 무시.
  *
- * <p>진입점: {@link #applyResult}(웹훅/폴링), {@link #applyConfirmedPaid}/{@link #applyConfirmFailure}(토스 confirm).
- * PENDING 잠금·흡수는 {@code lockPending} 로, PAID/FAILED 적용 본문은 {@code applyTo} 로 일원화한다.
+ * <p>진입점: {@link #applyResult}(웹훅/폴링/토스 만료 리퍼), {@link #applyConfirmedPaid}(토스 confirm 성공),
+ * {@link #linkPendingPaymentKey}(토스 비-PAID confirm). PENDING 잠금·흡수는 {@code lockPending} 로,
+ * PAID/FAILED 적용 본문은 {@code applyTo} 로 일원화한다.
  */
 @Service
 public class PaymentCallbackService {
@@ -59,14 +60,6 @@ public class PaymentCallbackService {
     /** pgTransactionId(토스는 paymentKey) 에 대한 IdempotencyService 키 — confirm/웹훅/폴링이 공유한다. */
     public static String idempotencyKeyFor(String pgTransactionId) {
         return "payment-callback:" + pgTransactionId;
-    }
-
-    /**
-     * 토스 failUrl 보상에 대한 IdempotencyService 키. paymentKey 가 없으므로 주문번호로 키잉하며,
-     * {@link #idempotencyKeyFor}(paymentKey) 와 값 공간이 겹치지 않는다.
-     */
-    public static String idempotencyKeyForFailure(String orderNumber) {
-        return "payment-callback-fail:" + orderNumber;
     }
 
     /** PG 콜백 결과(PAID/FAILED)를 적용한다. failureReason 은 FAILED 일 때만 의미, null 이면 기본 사유 기록. */
@@ -119,20 +112,6 @@ public class PaymentCallbackService {
         if (locked.payment() != null) {
             locked.payment().linkPgTransaction(paymentKey);
         }
-    }
-
-    /**
-     * 토스 failUrl/취소 적용 — orderId 로 PENDING Payment 를 잠그고 FAILED + 보상(재고·쿠폰 복원)을 1회 적용한다.
-     * 이미 종착 상태면 흡수한다(failUrl 재호출 멱등).
-     */
-    @Transactional
-    public PaymentCallbackResult applyConfirmFailure(long orderId, String reason) {
-        Locked locked = lockPending(paymentRepository.findByOrderIdForUpdate(orderId),
-                "order:" + orderId, "토스 결제 실패 적용");
-        if (locked.terminal() != null) {
-            return locked.terminal();
-        }
-        return applyTo(locked.payment(), PaymentStatus.FAILED, reason);
     }
 
     /**

@@ -105,22 +105,18 @@ public class TossPaymentController {
     }
 
     @Operation(summary = "토스 failUrl 콜백",
-            description = "결제 실패/취소 시 code·message·orderId 로 브라우저가 리다이렉트되는 타깃. 기존 보상 경로(재고·쿠폰 복원)를 1회 적용하고 SPA 로 302. "
-                    + "잘못된 주문 등 어떤 오류에도 JSON 누출 없이 fail 로 리다이렉트한다.")
-    @ApiResponse(responseCode = "302", description = "보상 처리 후 /orders/{orderNumber}?payment=fail 로 리다이렉트")
+            description = "결제 실패/취소 시 code·message·orderId 로 브라우저가 리다이렉트되는 타깃. 미인증 공개 GET 이라 서버 상태는 바꾸지 않고 "
+                    + "SPA 결과 라우트로 안내(302)만 한다. 실제 보상(재고·쿠폰 복원)은 미확정 PENDING 결제를 만료 처리하는 폴링 리퍼가 담당한다.")
+    @ApiResponse(responseCode = "302", description = "/orders/{orderNumber}?payment=fail 로 리다이렉트(상태 변경 없음)")
     @GetMapping("/payments/toss/fail")
     public ResponseEntity<Void> fail(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String message,
             @RequestParam(required = false) String orderId) {
-        try {
-            if (orderId != null && !orderId.isBlank()) {
-                tossPaymentService.fail(orderId, code, message);
-            }
-        } catch (RuntimeException e) {
-            // 보상은 멱등·PENDING 한정 — 알 수 없는 주문/이미 처리됨은 무해. 어떤 예외도 fail 리다이렉트로 흡수한다.
-            log.warn("토스 failUrl 보상 처리 실패(무시) — fail 리다이렉트: orderId={}, err={}", orderId, e.toString());
-        }
+        // 보안(#295 리뷰): failUrl 은 토스가 보내는 미인증 브라우저 GET 이라 orderNumber 만으로 호출 가능 — 여기서 결제를
+        // FAILED 로 바꾸면 제3자가 타인의 진행 중 결제를 강제 실패시킬 수 있다(CSRF). 따라서 안내 리다이렉트만 하고,
+        // 보상은 폴링 리퍼(PaymentReconciliationScheduler)의 신뢰 가능한 만료 경로가 1회 수행한다. 토큰 검증은 #304(프론트 위젯).
+        log.info("토스 결제 실패/취소 안내: orderId={}, code={}", orderId, code);
         return redirect(orderId, "fail");
     }
 

@@ -236,36 +236,6 @@ class PaymentCallbackServiceTest {
     }
 
     @Test
-    @DisplayName("applyConfirmFailure: FAILED 확정 + 재고·쿠폰 복원, 이벤트 미발행")
-    void applyConfirmFailure_compensates() {
-        Payment payment = pendingPayment(album(98), 2);
-        ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID);
-        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
-
-        PaymentCallbackResult result = service.applyConfirmFailure(ORDER_ID, "토스 결제 실패 [PAY_PROCESS_CANCELED] 사용자취소");
-
-        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.APPLIED);
-        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
-        assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
-        verify(albumRepository).restoreStock(ALBUM_ID, 2);
-        verify(couponApplicationService).restoreForOrder(ORDER_ID);
-        verifyNoInteractions(outboxEventPublisher);
-    }
-
-    @Test
-    @DisplayName("applyConfirmFailure: 이미 종착 상태면 ALREADY_PROCESSED, 보상 없음 (failUrl 재호출 멱등)")
-    void applyConfirmFailure_alreadyProcessed_noop() {
-        Payment payment = pendingPayment(album(99), 1);
-        payment.markPaid(CLOCK.instant());
-        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
-
-        PaymentCallbackResult result = service.applyConfirmFailure(ORDER_ID, "늦은 실패 통보");
-
-        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
-        verifyNoInteractions(albumRepository, couponApplicationService, outboxEventPublisher);
-    }
-
-    @Test
     @DisplayName("linkPendingPaymentKey: PENDING 결제의 잠정 pgTx 를 paymentKey 로 교체(상태 불변, 후속 정산용)")
     void linkPendingPaymentKey_linksOnPending() {
         Payment payment = pendingPayment(album(99), 1);

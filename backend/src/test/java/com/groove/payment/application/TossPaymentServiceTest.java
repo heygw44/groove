@@ -223,26 +223,4 @@ class TossPaymentServiceTest {
         verify(callbackService).linkPendingPaymentKey(ORDER_ID, PAYMENT_KEY); // 후속 웹훅/폴링이 정산하도록 연결
         verify(callbackService, never()).applyConfirmedPaid(anyLong(), anyString(), anyLong());
     }
-
-    // --- fail ---
-
-    @Test
-    @DisplayName("fail: 주문 단위 멱등 키로 applyConfirmFailure(보상) 위임, 사유에 code·message 포함")
-    void fail_appliesCompensationWithOrderKeyedIdempotency() {
-        Order order = orderMock();
-        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
-        runIdempotencyInline();
-        given(callbackService.applyConfirmFailure(eq(ORDER_ID), anyString()))
-                .willReturn(new PaymentCallbackResult(PaymentCallbackResult.Outcome.APPLIED, 42L, "order:" + ORDER_ID, PaymentStatus.FAILED));
-
-        service.fail(ORDER_NUMBER, "PAY_PROCESS_CANCELED", "사용자취소");
-
-        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
-        verify(idempotencyService).execute(key.capture(), eq(PaymentCallbackResult.class), any());
-        assertThat(key.getValue()).isEqualTo("payment-callback-fail:" + ORDER_NUMBER);
-
-        ArgumentCaptor<String> reason = ArgumentCaptor.forClass(String.class);
-        verify(callbackService).applyConfirmFailure(eq(ORDER_ID), reason.capture());
-        assertThat(reason.getValue()).contains("PAY_PROCESS_CANCELED").contains("사용자취소");
-    }
 }
