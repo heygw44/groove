@@ -1,6 +1,7 @@
 package com.groove.payment.gateway.mock;
 
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.payment.gateway.ConfirmResponse;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.PaymentMockProperties;
 import com.groove.payment.gateway.PaymentRequest;
@@ -30,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <ul>
  *   <li>request() — 처리 지연 후 거래 식별자를 발급하고 성공률로 최종 결과(PAID/FAILED)를 결정한 뒤
  *       웹훅 발사 시각을 정해 (auto-webhook 이 true 면) MockWebhookSimulator 에 예약하고 PENDING 으로 응답.</li>
+ *   <li>confirm() — 토스 동기 승인 모델 흉내. paymentKey 거래를 즉시 PAID 로 기록하고 PAID 를 응답.</li>
  *   <li>query() — 웹훅 발사 시각 전이면 PENDING, 이후면 결정된 최종 상태(또는 환불 시 REFUNDED).</li>
  *   <li>refund() — 같은 idempotencyKey 는 첫 응답을 그대로 재반환하고, 다른 키는 REFUNDED 응답을 새로 만든다.</li>
  * </ul>
@@ -37,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>거래 상태는 프로세스 메모리에만 보관하며, MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목을 정리한다.
  */
 @Component
-@Profile({"local", "dev", "test", "docker"})
+@Profile({"local", "test", "docker"})
 public class MockPaymentGateway implements PaymentGateway {
 
     /** provider 식별자. */
@@ -88,6 +90,24 @@ public class MockPaymentGateway implements PaymentGateway {
         log.info("Mock 결제 접수: pgTx={}, order={}, amount={}, 예정결과={}, 발사시각={}, autoWebhook={}",
                 pgTransactionId, request.orderNumber(), request.amount(), result, fireAt, autoWebhook);
         return new PaymentResponse(pgTransactionId, PaymentStatus.PENDING, PROVIDER);
+    }
+
+    @Override
+    public ConfirmResponse confirm(String paymentKey, String orderId, long amount) {
+        // 상태 변경(transactions.put) 전에 입력을 검증한다 — blank 면 거래가 남지 않도록 ConfirmResponse 생성 전 거른다.
+        if (paymentKey == null || paymentKey.isBlank()) {
+            throw new IllegalArgumentException("paymentKey 는 비어 있을 수 없습니다");
+        }
+        simulateProcessingLatency();
+
+        Instant now = clock.instant();
+        pruneStaleIfFull(now);
+
+        // confirm 은 동기 확정 — 즉시 PAID 거래로 기록(fireAt=now 라 이후 query 가 바로 PAID 를 반환).
+        transactions.put(paymentKey, new Transaction(PaymentStatus.PAID, now));
+
+        log.info("Mock 결제 승인(confirm): paymentKey={}, order={}, amount={} → PAID", paymentKey, orderId, amount);
+        return new ConfirmResponse(paymentKey, PaymentStatus.PAID);
     }
 
     @Override
