@@ -94,7 +94,10 @@ public class MockPaymentGateway implements PaymentGateway {
 
     @Override
     public ConfirmResponse confirm(String paymentKey, String orderId, long amount) {
-        Objects.requireNonNull(paymentKey, "paymentKey");
+        // 상태 변경(transactions.put) 전에 입력을 검증한다 — blank 면 거래가 남지 않도록 ConfirmResponse 생성 전 거른다.
+        if (paymentKey == null || paymentKey.isBlank()) {
+            throw new IllegalArgumentException("paymentKey 는 비어 있을 수 없습니다");
+        }
         simulateProcessingLatency();
 
         Instant now = clock.instant();

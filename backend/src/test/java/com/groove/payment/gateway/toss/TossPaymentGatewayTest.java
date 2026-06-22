@@ -106,6 +106,7 @@ class TossPaymentGatewayTest {
 
             assertThatThrownBy(() -> gateway.confirm("pk_1", "ORD-1", 105_000L))
                     .isInstanceOf(PaymentGatewayException.class);
+            server.verify();
         }
     }
 
@@ -144,6 +145,7 @@ class TossPaymentGatewayTest {
 
             assertThatThrownBy(() -> gateway.query("pk_1"))
                     .isInstanceOf(PaymentGatewayException.class);
+            server.verify();
         }
 
         @Test
@@ -154,6 +156,7 @@ class TossPaymentGatewayTest {
 
             assertThatThrownBy(() -> gateway.query("pk_1"))
                     .isInstanceOf(PaymentGatewayException.class);
+            server.verify();
         }
     }
 
@@ -216,6 +219,7 @@ class TossPaymentGatewayTest {
             assertThatThrownBy(() -> gateway.refund(new RefundRequest("pk_1", 1_000L, "x", "refund:1:pk_1")))
                     .isInstanceOf(RestClientResponseException.class)
                     .isNotInstanceOf(PaymentGatewayException.class);
+            server.verify();
         }
 
         @Test
@@ -227,6 +231,7 @@ class TossPaymentGatewayTest {
             assertThatThrownBy(() -> GatewayRefunds.refund(
                     gateway, new RefundRequest("pk_1", 1_000L, "x", "refund:1:pk_1")))
                     .isInstanceOf(PaymentGatewayException.class);
+            server.verify();
         }
     }
 

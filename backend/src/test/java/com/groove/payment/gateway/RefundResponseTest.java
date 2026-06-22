@@ -3,6 +3,8 @@ package com.groove.payment.gateway;
 import com.groove.payment.domain.PaymentStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Instant;
 
@@ -57,10 +59,11 @@ class RefundResponseTest {
         assertThat(res.status()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
     }
 
-    @Test
+    @ParameterizedTest
+    @EnumSource(value = PaymentStatus.class, names = {"PAID", "PENDING", "FAILED"})
     @DisplayName("환불 상태가 아닌 status(PAID/PENDING/FAILED)는 거부한다")
-    void non_refund_status_rejected() {
-        assertThatThrownBy(() -> new RefundResponse(VALID_PG_TX, PaymentStatus.PAID, VALID_REFUNDED_AT))
+    void non_refund_status_rejected(PaymentStatus status) {
+        assertThatThrownBy(() -> new RefundResponse(VALID_PG_TX, status, VALID_REFUNDED_AT))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("REFUNDED");
     }
