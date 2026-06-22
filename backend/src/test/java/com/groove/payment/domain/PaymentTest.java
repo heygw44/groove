@@ -86,6 +86,39 @@ class PaymentTest {
     }
 
     @Test
+    @DisplayName("linkPgTransaction: PENDING 결제의 잠정 pgTransactionId 를 실제 paymentKey 로 교체한다")
+    void linkPgTransaction_replacesOnPending() {
+        Payment payment = pending(ORDER_NUMBER); // 잠정 pgTx = orderNumber
+
+        payment.linkPgTransaction("toss-payment-key-1");
+
+        assertThat(payment.getPgTransactionId()).isEqualTo("toss-payment-key-1");
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("linkPgTransaction: blank·길이 초과 paymentKey 는 거부한다")
+    void linkPgTransaction_rejectsBlankOrTooLong() {
+        assertThatThrownBy(() -> pending(ORDER_NUMBER).linkPgTransaction(" "))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> pending(ORDER_NUMBER)
+                .linkPgTransaction("T".repeat(Payment.MAX_PG_TRANSACTION_ID_LENGTH + 1)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("linkPgTransaction: PENDING 이 아닌 결제(PAID/FAILED)는 IllegalStateException")
+    void linkPgTransaction_rejectsNonPending() {
+        Payment paid = pending(ORDER_NUMBER);
+        paid.markPaid(Instant.now());
+        assertThatThrownBy(() -> paid.linkPgTransaction("pk")).isInstanceOf(IllegalStateException.class);
+
+        Payment failed = pending(ORDER_NUMBER);
+        failed.markFailed("x");
+        assertThatThrownBy(() -> failed.linkPgTransaction("pk")).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     @DisplayName("markPaid: PENDING → PAID 로 전이하고 paidAt 을 기록한다")
     void markPaid_transitionsAndRecordsPaidAt() {
         Payment payment = pending("tx-paid");

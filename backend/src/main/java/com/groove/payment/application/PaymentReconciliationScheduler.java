@@ -6,6 +6,7 @@ import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.gateway.PaymentGateway;
+import com.groove.payment.gateway.toss.TossPaymentGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -67,6 +68,11 @@ public class PaymentReconciliationScheduler {
         }
         log.debug("결제 폴링 동기화 대상 {}건 (cutoff={}, limit={})", stale.size(), cutoff, batchLimit.max());
         for (Payment payment : stale) {
+            // 토스(동기 confirm 모델)는 query 폴링 대상이 아니다 — 미확정 PENDING 의 잠정 pgTx(toss-pending:…)는
+            // 토스 paymentKey 가 아니라 query 가 무의미하다(매 주기 404 유발). 정산은 confirm/웹훅 경로가 담당한다.
+            if (TossPaymentGateway.PROVIDER.equals(payment.getPgProvider())) {
+                continue;
+            }
             reconcileOne(payment.getPgTransactionId());
         }
     }
