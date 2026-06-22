@@ -31,7 +31,12 @@ public record TossPaymentProperties(
     private static final Duration DEFAULT_READ_TIMEOUT = Duration.ofSeconds(5);
 
     public TossPaymentProperties {
-        baseUrl = (baseUrl == null || baseUrl.isBlank()) ? DEFAULT_BASE_URL : baseUrl;
+        // env 주입 값에 섞인 앞뒤 공백(개행 등)을 정규화 — Basic Auth 헤더 불일치(401)·URL 오동작 방지.
+        baseUrl = (baseUrl == null || baseUrl.isBlank()) ? DEFAULT_BASE_URL : baseUrl.strip();
+        clientKey = clientKey == null ? null : clientKey.strip();
+        secretKey = secretKey == null ? null : secretKey.strip();
+        successUrl = successUrl == null ? null : successUrl.strip();
+        failUrl = failUrl == null ? null : failUrl.strip();
         requireNonBlank(clientKey, "payment.toss.client-key");
         requireNonBlank(secretKey, "payment.toss.secret-key");
         SecretPlaceholderGuard.rejectPlaceholder("payment.toss.secret-key", secretKey);

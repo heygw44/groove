@@ -63,13 +63,6 @@ class TossPaymentConfigTest {
     }
 
     @Test
-    @DisplayName("tossRestClient 빈 메서드는 RestClient 를 생성한다 (타임아웃·인터셉터 구성)")
-    void tossRestClient_beanMethod_buildsClient() {
-        RestClient client = new TossPaymentConfig().tossRestClient(validProps());
-        assertThat(client).isNotNull();
-    }
-
-    @Test
     @DisplayName("빌드된 tossRestClient 로 요청하면 base-url 과 Basic Auth 헤더가 실제 전송된다 (인터셉터 부착 회귀 방지)")
     void tossRestClient_sendsBaseUrlAndAuthHeader() {
         // client.mutate() 로 인터셉터·baseUrl 을 보존한 채 MockRestServiceServer 를 끼워 실제 전송 경로를 검증한다.

@@ -135,6 +135,28 @@ class TossPaymentPropertiesTest {
     }
 
     @Test
+    @DisplayName("앞뒤 공백은 strip 으로 정규화되어 저장된다 (env 개행/공백 방어)")
+    void whitespace_isStripped() {
+        TossPaymentProperties p = new TossPaymentProperties(
+                "  https://api.tosspayments.com  ", "  test_ck_abc  ", "  test_sk_abc  ",
+                "  http://localhost:8080/success  ", "  http://localhost:8080/fail  ", null, null);
+        assertThat(p.baseUrl()).isEqualTo("https://api.tosspayments.com");
+        assertThat(p.clientKey()).isEqualTo("test_ck_abc");
+        assertThat(p.secretKey()).isEqualTo("test_sk_abc");
+        assertThat(p.successUrl()).isEqualTo("http://localhost:8080/success");
+        assertThat(p.failUrl()).isEqualTo("http://localhost:8080/fail");
+    }
+
+    @Test
+    @DisplayName("공백만 있는 값은 strip 후 blank 로 거부된다")
+    void whitespaceOnly_throws() {
+        assertThatThrownBy(() -> new TossPaymentProperties(
+                null, "test_ck_abc", "   ", "http://s", "http://f", null, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("secret-key");
+    }
+
+    @Test
     @DisplayName("접근자는 입력값을 그대로 반환한다")
     void accessors() {
         TossPaymentProperties p = valid();
