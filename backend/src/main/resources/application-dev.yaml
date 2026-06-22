@@ -1,0 +1,35 @@
+# dev 프로파일(#293) — 토스페이먼츠 테스트 연동 확인용. test/local 은 여전히 Mock 게이트웨이를 쓰고,
+# dev/prod 에서만 TossPaymentConfig 의 RestClient 빈이 구성된다. dev 는 Mock 도 함께 활성(@Profile 에 dev 포함)이라
+# Mock 과 토스 설정이 모두 바인딩된다. 아래 값은 키 없이도 dev 부팅이 되도록 한 개발용 fallback 이며,
+# 실제 환경 변수가 있으면 그쪽이 우선한다(${VAR:fallback}). 운영(prod)은 env 로만 주입한다.
+spring:
+  datasource:
+    password: changeme
+  jpa:
+    properties:
+      hibernate:
+        show_sql: false
+        format_sql: false
+
+jwt:
+  secret: dev-secret-key-minimum-256-bits-long-for-jwt-signing
+
+email:
+  hash:
+    secret: dev-email-hash-secret-minimum-256-bits-long
+
+payment:
+  mock:
+    webhook-secret: dev-mock-webhook-secret
+  # 토스 테스트 키 — 발급 후 .env(PAYMENT_TOSS_*)로 실제 test_sk_/test_ck_ 값을 주입해 아래 더미를 덮어쓴다.
+  # 더미 값에 change-this/change-me/changeme 마커가 들어가면 SecretPlaceholderGuard 가 기동을 거부한다(#165).
+  toss:
+    client-key: ${PAYMENT_TOSS_CLIENT_KEY:test_ck_dev_placeholder}
+    secret-key: ${PAYMENT_TOSS_SECRET_KEY:test_sk_dev_placeholder}
+    success-url: ${PAYMENT_TOSS_SUCCESS_URL:http://localhost:8080/payments/toss/success}
+    fail-url: ${PAYMENT_TOSS_FAIL_URL:http://localhost:8080/payments/toss/fail}
+
+logging:
+  level:
+    root: INFO
+    com.groove: INFO

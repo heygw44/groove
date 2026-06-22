@@ -247,3 +247,14 @@ payment:
     # request() 후 webhook-delay 만큼 뒤에 PaymentWebhookHandler 로 결과 콜백을 자동 발사한다 (#W7-4).
     # 통합 테스트는 결정적 검증을 위해 false 로 끄고 HTTP 웹훅 엔드포인트/폴링을 직접 호출한다.
     auto-webhook: ${PAYMENT_MOCK_AUTO_WEBHOOK:true}
+  # 토스페이먼츠 테스트 연동(#293). dev/prod 프로파일에서만 바인딩된다(TossPaymentConfig @Profile).
+  # secret-key 는 webhook-secret 과 동일하게 fallback 없이 환경 변수로만 주입 — 미설정 시 기동 실패가 의도된 동작.
+  # dev fallback 은 application-dev.yaml 에 정의. test/local 은 Mock 을 쓰므로 이 키가 바인딩되지 않는다.
+  toss:
+    base-url: ${PAYMENT_TOSS_BASE_URL:https://api.tosspayments.com}
+    client-key: ${PAYMENT_TOSS_CLIENT_KEY}
+    secret-key: ${PAYMENT_TOSS_SECRET_KEY}
+    success-url: ${PAYMENT_TOSS_SUCCESS_URL}
+    fail-url: ${PAYMENT_TOSS_FAIL_URL}
+    connect-timeout: ${PAYMENT_TOSS_CONNECT_TIMEOUT:2s}
+    read-timeout: ${PAYMENT_TOSS_READ_TIMEOUT:5s}
