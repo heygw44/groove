@@ -75,13 +75,14 @@ public class SecurityConfig {
             "/webjars/swagger-ui/**"
     };
 
-    /** permitAll 로 여는 POST 진입점 (게스트 주문 생성·조회, 결제 요청, 토스 checkout, PG 웹훅). */
+    /** permitAll 로 여는 POST 진입점 (게스트 주문 생성·조회, 결제 요청, 토스 checkout, PG 웹훅·토스 웹훅). */
     private static final String[] PUBLIC_POST_PATTERNS = {
             "/api/v1/orders",
             "/api/v1/orders/*/guest-lookup",
             "/api/v1/payments",
             "/api/v1/payments/toss/checkout",
-            "/api/v1/payments/webhook"
+            "/api/v1/payments/webhook",
+            "/api/v1/payments/toss/webhook"
     };
 
     private static final String ADMIN_PATTERN = "/api/v1/admin/**";
