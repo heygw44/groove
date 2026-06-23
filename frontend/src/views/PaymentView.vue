@@ -12,10 +12,14 @@ import { usePolling } from '@/composables/usePolling'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseSelect from '@/components/base/BaseSelect.vue'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
+import TossPaymentWidget from '@/components/payment/TossPaymentWidget.vue'
 
 const route = useRoute()
 const auth = useAuthStore()
 const { isAuthenticated } = storeToRefs(auth)
+
+// 결제 모드 토글 — 'toss' 면 토스 결제위젯, 그 외(기본 mock)는 서버 비동기 + 폴링 흐름.
+const isToss = import.meta.env.VITE_PAYMENT_PROVIDER === 'toss'
 
 const orderNumber = route.params.orderNumber
 // 체크아웃이 전달한 결제 예정액(표시용) — NaN 만 null 처리
@@ -103,6 +107,11 @@ async function pay() {
       </div>
     </div>
 
+    <!-- 토스 결제위젯 모드(VITE_PAYMENT_PROVIDER=toss) — checkout → 위젯 → successUrl/failUrl 서버 콜백 -->
+    <TossPaymentWidget v-if="isToss" :order-number="orderNumber" :display-amount="displayAmount" />
+
+    <!-- mock(데모) 결제 모드 — 서버 비동기 접수 + 클라 폴링 -->
+    <template v-else>
     <p v-if="formError" class="mt-4 rounded-lg bg-rust-500/10 px-4 py-3 text-sm text-rust-600" role="alert">
       {{ formError }}
     </p>
@@ -175,5 +184,6 @@ async function pay() {
         </RouterLink>
       </div>
     </div>
+    </template>
   </section>
 </template>
