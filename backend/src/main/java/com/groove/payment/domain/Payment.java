@@ -110,6 +110,24 @@ public class Payment extends BaseTimeEntity {
     }
 
     /**
+     * 토스 confirm 성공 시 잠정 pgTransactionId(요청 단계의 orderNumber)를 실제 paymentKey 로 교체한다.
+     * 이후 환불(/v1/payments/{paymentKey}/cancel)이 paymentKey 를 읽으므로 확정 전 반드시 연결해야 한다.
+     * PENDING 일 때만 허용하며, blank·길이 제한을 initiate 와 동일하게 검증한다.
+     */
+    public void linkPgTransaction(String pgTransactionId) {
+        if (status != PaymentStatus.PENDING) {
+            throw new IllegalStateException("PENDING 결제만 pgTransactionId 를 연결할 수 있습니다 (현재: " + status + ")");
+        }
+        if (pgTransactionId == null || pgTransactionId.isBlank()) {
+            throw new IllegalArgumentException("pgTransactionId must not be blank");
+        }
+        if (pgTransactionId.length() > MAX_PG_TRANSACTION_ID_LENGTH) {
+            throw new IllegalArgumentException("pgTransactionId length must be <= " + MAX_PG_TRANSACTION_ID_LENGTH);
+        }
+        this.pgTransactionId = pgTransactionId;
+    }
+
+    /**
      * 결제 완료 확정 — PAID 로 전이하고 paidAt 을 주입된 now 로 기록한다. 전이 위반 시 IllegalStateException.
      */
     public void markPaid(Instant now) {

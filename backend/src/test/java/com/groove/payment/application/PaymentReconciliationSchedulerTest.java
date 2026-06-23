@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -38,6 +39,7 @@ class PaymentReconciliationSchedulerTest {
 
     private static final Instant NOW = Instant.parse("2026-05-12T10:00:00Z");
     private static final Duration MIN_AGE = Duration.ofMinutes(1);
+    private static final Duration TOSS_TIMEOUT = Duration.ofMinutes(20);
     private static final int BATCH_SIZE = 200;
 
     @Mock
@@ -54,12 +56,19 @@ class PaymentReconciliationSchedulerTest {
     @BeforeEach
     void setUp() {
         scheduler = new PaymentReconciliationScheduler(paymentRepository, paymentGateway, callbackService,
-                idempotencyService, Clock.fixed(NOW, ZoneOffset.UTC), MIN_AGE, BATCH_SIZE);
+                idempotencyService, Clock.fixed(NOW, ZoneOffset.UTC), MIN_AGE, TOSS_TIMEOUT, BATCH_SIZE);
     }
 
     private static Payment pending(String pgTransactionId) {
         Order order = Order.placeForMember("ORD-20260512-A1B2C3", 1L, com.groove.support.OrderFixtures.sampleShippingInfo());
         return Payment.initiate(order, 35000L, PaymentMethod.CARD, "MOCK", pgTransactionId);
+    }
+
+    private static Payment tossPending(String pgTransactionId, Instant createdAt) {
+        Order order = Order.placeForMember("ORD-20260512-A1B2C3", 1L, com.groove.support.OrderFixtures.sampleShippingInfo());
+        Payment payment = Payment.initiate(order, 35000L, PaymentMethod.CARD, "TOSS", pgTransactionId);
+        ReflectionTestUtils.setField(payment, "createdAt", createdAt); // 만료 판정용 createdAt 주입
+        return payment;
     }
 
     private void passSupplierThrough() {
@@ -114,6 +123,42 @@ class PaymentReconciliationSchedulerTest {
     @DisplayName("대상이 없으면 PG·콜백을 건드리지 않는다")
     void reconcile_noStalePayments_noop() {
         given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of());
+
+        scheduler.reconcilePendingPayments();
+
+        verifyNoInteractions(paymentGateway, idempotencyService, callbackService);
+    }
+
+    @Test
+    @DisplayName("토스 미확정 PENDING(toss-pending) 이 만료되면 query 대신 FAILED 만료 처리로 정리한다")
+    void reconcile_tossExpiredPending_reapsFailed() {
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any()))
+                .willReturn(List.of(tossPending("toss-pending:ORD-20260512-A1B2C3", NOW.minus(Duration.ofMinutes(21)))));
+        passSupplierThrough();
+
+        scheduler.reconcilePendingPayments();
+
+        verify(paymentGateway, never()).query(anyString()); // 토스는 query 폴링 비대상
+        verify(callbackService).applyResult(
+                "toss-pending:ORD-20260512-A1B2C3", PaymentStatus.FAILED, "토스 결제 미확정 만료 — 자동 실패 처리");
+    }
+
+    @Test
+    @DisplayName("토스 미확정 PENDING 이 아직 만료 전이면 query·만료 처리 모두 하지 않는다")
+    void reconcile_tossFreshPending_skips() {
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any()))
+                .willReturn(List.of(tossPending("toss-pending:ORD-20260512-A1B2C3", NOW.minus(Duration.ofMinutes(5)))));
+
+        scheduler.reconcilePendingPayments();
+
+        verifyNoInteractions(paymentGateway, idempotencyService, callbackService);
+    }
+
+    @Test
+    @DisplayName("토스이지만 실제 paymentKey 가 연결된(가상계좌) PENDING 은 만료 리퍼 대상이 아니다")
+    void reconcile_tossLinkedPending_notReaped() {
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any()))
+                .willReturn(List.of(tossPending("real-payment-key", NOW.minus(Duration.ofMinutes(21)))));
 
         scheduler.reconcilePendingPayments();
 

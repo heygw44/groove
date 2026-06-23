@@ -12,6 +12,7 @@ import com.groove.payment.api.dto.PaymentCallbackResult;
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.payment.exception.PaymentAmountMismatchException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -19,13 +20,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * 웹훅·폴링 공통 결제 콜백 적용 트랜잭션 경계.
+ * 결제 콜백 적용 트랜잭션 경계 — 웹훅·폴링(pgTransactionId 조회)과 토스 confirm(orderId 조회)이 공유한다.
  * - PAID: Payment PENDING→PAID(paidAt 기록), Order PENDING→PAID, OrderPaidEvent 아웃박스 기록.
  * - FAILED: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 재고 복원, 쿠폰 USED→ISSUED.
  * - 알 수 없는 거래/이미 종착 상태: 무시.
+ *
+ * <p>진입점: {@link #applyResult}(웹훅/폴링/토스 만료 리퍼), {@link #applyConfirmedPaid}(토스 confirm 성공),
+ * {@link #linkPendingPaymentKey}(토스 비-PAID confirm). PENDING 잠금·흡수는 {@code lockPending} 로,
+ * PAID/FAILED 적용 본문은 {@code applyTo} 로 일원화한다.
  */
 @Service
 public class PaymentCallbackService {
@@ -51,7 +57,7 @@ public class PaymentCallbackService {
         this.clock = clock;
     }
 
-    /** pgTransactionId 에 대한 IdempotencyService 키. */
+    /** pgTransactionId(토스는 paymentKey) 에 대한 IdempotencyService 키 — confirm/웹훅/폴링이 공유한다. */
     public static String idempotencyKeyFor(String pgTransactionId) {
         return "payment-callback:" + pgTransactionId;
     }
@@ -65,16 +71,80 @@ public class PaymentCallbackService {
         }
         // FOR UPDATE 로 콜백 적용을 직렬화 — 동시 콜백(웹훅/폴링)의 패자는 락 해제 후 종착 상태를 읽어
         // IllegalStateException 대신 alreadyProcessed 로 흡수된다. order/items 는 같은 트랜잭션에서 lazy 로딩.
-        Payment payment = paymentRepository.findByPgTransactionIdForUpdate(pgTransactionId).orElse(null);
+        Locked locked = lockPending(paymentRepository.findByPgTransactionIdForUpdate(pgTransactionId),
+                pgTransactionId, "결제 콜백");
+        if (locked.terminal() != null) {
+            return locked.terminal();
+        }
+        return applyTo(locked.payment(), result, failureReason);
+    }
+
+    /**
+     * 토스 confirm 성공 적용 — orderId 로 PENDING Payment 를 잠그고(FOR UPDATE), 잠정 pgTransactionId 를 실제
+     * paymentKey 로 교체한 뒤 PAID 를 적용한다. successUrl 새로고침/재호출에도 1회만 전이한다(이미 PAID 면 흡수).
+     * confirmedAmount 는 confirm 호출 전 이미 검증되었으나, 직접 호출 방어를 위해 한 번 더 대조한다.
+     */
+    @Transactional
+    public PaymentCallbackResult applyConfirmedPaid(long orderId, String paymentKey, long confirmedAmount) {
+        Locked locked = lockPending(paymentRepository.findByOrderIdForUpdate(orderId),
+                "order:" + orderId, "토스 confirm 적용");
+        if (locked.terminal() != null) {
+            return locked.terminal();
+        }
+        Payment payment = locked.payment();
+        if (payment.getAmount() != confirmedAmount) {
+            throw new PaymentAmountMismatchException(payment.getOrder().getOrderNumber(), payment.getAmount(), confirmedAmount);
+        }
+        // 잠정 pgTx(toss-pending:orderNumber) → 실제 paymentKey 로 교체(환불 경로가 paymentKey 를 읽음).
+        payment.linkPgTransaction(paymentKey);
+        return applyTo(payment, PaymentStatus.PAID, null);
+    }
+
+    /**
+     * 토스 confirm 이 즉시 PAID 가 아닌(가상계좌 등) PENDING 을 반환했을 때, 잠정 pgTransactionId 를 실제 paymentKey 로
+     * 교체만 한다(상태 전이 없음). 이후 입금 PAID 웹훅/폴링이 {@code findByPgTransactionIdForUpdate(paymentKey)} 로
+     * 같은 행을 찾아 정산할 수 있게 한다. 없음/종착이면 no-op.
+     */
+    @Transactional
+    public void linkPendingPaymentKey(long orderId, String paymentKey) {
+        Locked locked = lockPending(paymentRepository.findByOrderIdForUpdate(orderId),
+                "order:" + orderId, "토스 미확정 키 연결");
+        if (locked.payment() != null) {
+            locked.payment().linkPgTransaction(paymentKey);
+        }
+    }
+
+    /**
+     * 잠긴 조회 결과를 PENDING 이면 그대로(payment non-null), 없음/이미 종착이면 흡수 결과(terminal non-null)로 매핑한다.
+     * 세 진입점(웹훅/폴링·confirm·fail)의 동일한 "락 + null/종착 가드" 전문을 일원화한다.
+     */
+    private Locked lockPending(Optional<Payment> found, String ignoredKey, String context) {
+        Payment payment = found.orElse(null);
         if (payment == null) {
-            log.warn("결제 콜백: 알 수 없는 거래 pgTx={} — 무시", pgTransactionId);
-            return PaymentCallbackResult.ignored(pgTransactionId);
+            log.warn("{}: 알 수 없는 거래/주문 {} — 무시", context, ignoredKey);
+            return new Locked(null, PaymentCallbackResult.ignored(ignoredKey));
         }
         if (payment.getStatus() != PaymentStatus.PENDING) {
-            log.info("결제 콜백: 이미 처리됨 paymentId={}, status={} — 무시", payment.getId(), payment.getStatus());
-            return PaymentCallbackResult.alreadyProcessed(payment);
+            log.info("{}: 이미 처리됨 paymentId={}, status={} — 무시", context, payment.getId(), payment.getStatus());
+            return new Locked(null, PaymentCallbackResult.alreadyProcessed(payment));
         }
+        return new Locked(payment, null);
+    }
 
+    /** lockPending 결과 — 정확히 하나만 non-null. payment 가 있으면 PENDING(적용 진행), terminal 이 있으면 흡수. */
+    private record Locked(Payment payment, PaymentCallbackResult terminal) {
+    }
+
+    /**
+     * PENDING Payment 에 PAID/FAILED 결과를 적용하는 공통 본문(웹훅/폴링/토스 confirm 공유).
+     * - PAID: markPaid + Order PAID + OrderPaidEvent 아웃박스(배송 트리거).
+     * - FAILED: markFailed + Order PAYMENT_FAILED + 재고 복원 + 쿠폰 USED→ISSUED.
+     */
+    private PaymentCallbackResult applyTo(Payment payment, PaymentStatus result, String failureReason) {
+        // 적용 분기는 PAID/FAILED 만 유효 — 진입점 가드를 거치지만 본문에서도 인변을 강제한다.
+        if (result != PaymentStatus.PAID && result != PaymentStatus.FAILED) {
+            throw new IllegalArgumentException("적용 결과는 PAID 또는 FAILED 여야 합니다: " + result);
+        }
         Instant now = clock.instant();
         Order order = payment.getOrder();
         if (result == PaymentStatus.PAID) {

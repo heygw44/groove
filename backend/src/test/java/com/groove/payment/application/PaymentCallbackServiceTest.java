@@ -175,4 +175,88 @@ class PaymentCallbackServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(paymentRepository, outboxEventPublisher, couponApplicationService, albumRepository);
     }
+
+    // --- 토스 confirm 적용 (orderId 키잉) ---
+
+    @Test
+    @DisplayName("applyConfirmedPaid: 잠정 pgTx 를 paymentKey 로 교체하고 PAID 확정 + OrderPaidEvent 발행")
+    void applyConfirmedPaid_linksKeyAndConfirms() {
+        Payment payment = pendingPayment(album(99), 1);
+        ReflectionTestUtils.setField(payment, "id", 42L);
+        ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID);
+        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
+
+        PaymentCallbackResult result = service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", payment.getAmount());
+
+        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.APPLIED);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(payment.getPgTransactionId()).isEqualTo("toss-pk-1"); // 잠정값 교체됨
+        assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAID);
+        verify(outboxEventPublisher).publish(eq(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE), eq(ORDER_ID),
+                eq(OrderPaidEvent.OUTBOX_EVENT_TYPE), any(OrderPaidEvent.class));
+        verifyNoInteractions(albumRepository);
+        verify(couponApplicationService, never()).restoreForOrder(any());
+    }
+
+    @Test
+    @DisplayName("applyConfirmedPaid: 이미 PAID 면 ALREADY_PROCESSED, 재전이·이벤트 없음 (successUrl 새로고침 멱등)")
+    void applyConfirmedPaid_alreadyPaid_idempotent() {
+        Payment payment = pendingPayment(album(99), 1);
+        payment.markPaid(CLOCK.instant());
+        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
+
+        PaymentCallbackResult result = service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", payment.getAmount());
+
+        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
+        verifyNoInteractions(outboxEventPublisher);
+    }
+
+    @Test
+    @DisplayName("applyConfirmedPaid: 알 수 없는 주문 → IGNORED")
+    void applyConfirmedPaid_unknownOrder_ignored() {
+        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.empty());
+
+        PaymentCallbackResult result = service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", 1000L);
+
+        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.IGNORED);
+        verifyNoInteractions(outboxEventPublisher);
+    }
+
+    @Test
+    @DisplayName("applyConfirmedPaid: 저장 금액과 confirmedAmount 불일치 → PaymentAmountMismatchException, 미전이")
+    void applyConfirmedPaid_amountMismatch_rejected() {
+        Payment payment = pendingPayment(album(99), 1);
+        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", payment.getAmount() + 1))
+                .isInstanceOf(com.groove.payment.exception.PaymentAmountMismatchException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(payment.getPgTransactionId()).isEqualTo(PG_TX); // 교체되지 않음
+        verifyNoInteractions(outboxEventPublisher);
+    }
+
+    @Test
+    @DisplayName("linkPendingPaymentKey: PENDING 결제의 잠정 pgTx 를 paymentKey 로 교체(상태 불변, 후속 정산용)")
+    void linkPendingPaymentKey_linksOnPending() {
+        Payment payment = pendingPayment(album(99), 1);
+        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
+
+        service.linkPendingPaymentKey(ORDER_ID, "toss-pk-vbank");
+
+        assertThat(payment.getPgTransactionId()).isEqualTo("toss-pk-vbank");
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+        verifyNoInteractions(outboxEventPublisher, albumRepository, couponApplicationService);
+    }
+
+    @Test
+    @DisplayName("linkPendingPaymentKey: 없음/종착이면 no-op")
+    void linkPendingPaymentKey_terminal_noop() {
+        Payment payment = pendingPayment(album(99), 1);
+        payment.markPaid(CLOCK.instant());
+        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
+
+        service.linkPendingPaymentKey(ORDER_ID, "toss-pk-vbank");
+
+        assertThat(payment.getPgTransactionId()).isEqualTo(PG_TX); // 변경 없음
+    }
 }

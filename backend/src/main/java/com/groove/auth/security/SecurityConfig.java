@@ -38,7 +38,10 @@ public class SecurityConfig {
             "/api/v1/labels/**",
             "/api/v1/shippings/**",
             // 발급 가능 쿠폰 목록만 공개. 와일드카드 없는 정확 경로라 하위 경로는 매칭되지 않는다.
-            "/api/v1/coupons"
+            "/api/v1/coupons",
+            // 토스 successUrl/failUrl 브라우저 리다이렉트 타깃(#295). 인증 없이 confirm/보상 처리 후 SPA 로 302.
+            "/payments/toss/success",
+            "/payments/toss/fail"
     };
 
     /**
@@ -72,11 +75,12 @@ public class SecurityConfig {
             "/webjars/swagger-ui/**"
     };
 
-    /** permitAll 로 여는 POST 진입점 (게스트 주문 생성·조회, 결제 요청, PG 웹훅). */
+    /** permitAll 로 여는 POST 진입점 (게스트 주문 생성·조회, 결제 요청, 토스 checkout, PG 웹훅). */
     private static final String[] PUBLIC_POST_PATTERNS = {
             "/api/v1/orders",
             "/api/v1/orders/*/guest-lookup",
             "/api/v1/payments",
+            "/api/v1/payments/toss/checkout",
             "/api/v1/payments/webhook"
     };
 
