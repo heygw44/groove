@@ -147,6 +147,15 @@ class TossWebhookServiceTest {
     }
 
     @Test
+    @DisplayName("본문 전체 누락(null)은 거부 대신 무해 무시(200 IGNORED), outbound 미발생")
+    void handle_nullBody_ignored() {
+        PaymentCallbackResult result = service.handle(null);
+
+        verifyNoInteractions(paymentRepository, paymentGateway, settlementService);
+        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.IGNORED);
+    }
+
+    @Test
     @DisplayName("대상 외 이벤트는 선조회·재조회·정산 없이 무시")
     void handle_otherEvent_ignored() {
         PaymentCallbackResult result = service.handle(webhook("DEPOSIT_CALLBACK", PAYMENT_KEY));

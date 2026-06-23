@@ -55,6 +55,11 @@ public class TossWebhookService {
      * PAID/FAILED 일 때 콜백 파이프에 적용한다. 무거운 처리는 정산 헬퍼에 위임하고 컨트롤러는 빠르게 200 으로 ACK 한다.
      */
     public PaymentCallbackResult handle(TossWebhookRequest body) {
+        if (body == null) {
+            // 본문 전체 누락(required=false) — 영구 malformed 이므로 거부 대신 무해 무시(토스 재전송 무의미).
+            log.warn("토스 웹훅 무시: 본문 없음");
+            return PaymentCallbackResult.ignored(null);
+        }
         String eventType = body.eventType();
         if (!PAYMENT_STATUS_CHANGED.equals(eventType)) {
             log.info("토스 웹훅 무시: 대상 외 이벤트 eventType={}", eventType);

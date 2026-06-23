@@ -40,7 +40,8 @@ public class TossWebhookController {
     @ApiResponse(responseCode = "200", description = "수신 처리됨 (APPLIED / ALREADY_PROCESSED / IGNORED)")
     @ApiResponse(responseCode = "502", description = "토스 결제 조회 일시 실패 — 재전송 유도 (PAYMENT_GATEWAY_FAILURE)")
     @PostMapping("/toss/webhook")
-    public ResponseEntity<PaymentCallbackResult> handle(@RequestBody TossWebhookRequest body) {
+    public ResponseEntity<PaymentCallbackResult> handle(@RequestBody(required = false) TossWebhookRequest body) {
+        // 본문 전체 누락도 무해 무시(200)로 처리하기 위해 required=false — null 은 서비스가 IGNORED 로 흡수한다.
         return ResponseEntity.ok(tossWebhookService.handle(body));
     }
 }

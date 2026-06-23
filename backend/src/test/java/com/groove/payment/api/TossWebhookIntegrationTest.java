@@ -214,6 +214,15 @@ class TossWebhookIntegrationTest {
     }
 
     @Test
+    @DisplayName("요청 본문 전체 누락 → 거부(400) 대신 200 IGNORED (무해 ACK 계약)")
+    void webhook_missingBody_ignored() throws Exception {
+        mockMvc.perform(post("/api/v1/payments/toss/webhook")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("IGNORED"));
+    }
+
+    @Test
     @DisplayName("data.paymentKey 누락 → 거부(400) 대신 200 IGNORED, 결제 불변")
     void webhook_missingPaymentKey_ignored() throws Exception {
         Created c = createPendingPayment(1);
