@@ -215,6 +215,8 @@ class TossPaymentServiceTest {
     @Test
     @DisplayName("confirm: 금액 일치 → 게이트웨이 confirm 후 applyConfirmedPaid 위임")
     void confirm_paid_verifiesAmountThenApplies() {
+        // #306 경계: 게스트 토큰이 누출돼 토큰 검증을 통과하더라도, PAID 전이는 게이트웨이 confirm(토스가 발급한 유효 paymentKey)이
+        // PAID 를 반환해야만 일어난다. 즉 토큰만으로는 PAID 강제 불가 — 유효 paymentKey 가 핵심 관문이다(위조 paymentKey 거부는 실 게이트웨이/dev·prod 책임, mock 으론 재현 불가).
         Order order = orderMock();
         Payment pending = paymentMock(PaymentStatus.PENDING, AMOUNT);
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));

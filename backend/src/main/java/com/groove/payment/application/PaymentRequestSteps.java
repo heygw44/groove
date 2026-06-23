@@ -111,7 +111,14 @@ class PaymentRequestSteps {
         return paymentRepository.findByOrderId(orderId).map(PaymentApiResponse::from);
     }
 
-    /** 게스트 주문은 익명 호출자도 결제 시작 가능, 회원 주문은 본인만. */
+    /**
+     * 게스트 주문은 익명 호출자도 결제 시작 가능, 회원 주문은 본인만.
+     *
+     * <p>게스트는 인증 주체(memberId)가 없어 본인 확인이 불가하므로 익명 checkout 을 허용한다. 그 결과 게스트 주문은
+     * orderNumber 만 알면 누구나 checkout 으로 결제별 콜백 토큰(#304)을 받을 수 있어 토큰이 비밀이 아니다(#306).
+     * 이 잔존 노출은 하류 confirm 관문(저장 payable 과의 금액 위변조 검증 + 토스가 발급한 유효 paymentKey 필수)이 한정한다 —
+     * 토큰만으로는 PAID 를 강제할 수 없다. 회원 주문은 memberId 일치를 요구해 토큰이 실제 비밀로 기능한다.
+     */
     private boolean canRequestPaymentFor(Order order, Long callerMemberId) {
         if (order.isGuestOrder()) {
             return true;

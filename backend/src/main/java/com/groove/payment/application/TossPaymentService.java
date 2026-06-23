@@ -84,6 +84,7 @@ public class TossPaymentService {
     public TossCheckoutResponse checkout(Long callerMemberId, PaymentCreateRequest request) {
         PaymentRequestPrep prep = steps.prepare(callerMemberId, request);
         // 결제별 무작위 토큰 — successUrl/failUrl 쿼리로 round-trip 시켜 콜백 핸들러가 일치 검증한다(교차 주문 조작 차단, #304).
+        // 단 이 보호는 회원 주문에 한해 강하다 — 게스트 주문은 checkout 이 익명(orderNumber 만)이라 토큰이 비밀이 아니다(#306, confirm 의 금액 검증·유효 paymentKey 가 실제 관문).
         // 기존 결제 멱등 응답이면 새 토큰을 발급하지 않고 저장된 토큰을 그대로 재사용한다(successUrl 재구성 일관성).
         if (prep.isExisting()) {
             PaymentApiResponse existing = prep.existingResponse();
@@ -97,7 +98,11 @@ public class TossPaymentService {
         return buildResponse(pending.response(), pending.token());
     }
 
-    /** 멱등 응답 경로에서 저장된 결제의 callback_token 을 재조회한다(없으면 null — 레거시 결제). */
+    /**
+     * 멱등 응답 경로에서 저장된 결제의 callback_token 을 재조회한다(없으면 null — 레거시 결제).
+     * 게스트 주문은 익명 재조회에도 저장 토큰을 그대로 반환한다 — 위젯 새로고침 시 successUrl 재구성을 보존하기 위한 의도된 동작이며,
+     * 게스트 토큰이 비밀이 아님을 전제로 한 잔존 위험이다(실제 관문은 confirm 의 금액 검증·유효 paymentKey, #306).
+     */
     private String existingCallbackToken(String orderNumber) {
         return orderRepository.findByOrderNumber(orderNumber)
                 .flatMap(o -> paymentRepository.findByOrderId(o.getId()))
