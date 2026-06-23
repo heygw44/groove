@@ -171,6 +171,10 @@ groove:
       # 토스(confirm 모델) 미확정 PENDING(toss-pending: 잠정 pgTx) 만료 한도 — 결제위젯 체류 시간 이상으로 길게 둔다.
       # 초과 시 폴링 리퍼가 FAILED + 재고·쿠폰 보상으로 정리한다(failUrl 콜백은 상태를 바꾸지 않음).
       toss-pending-timeout: ${PAYMENT_TOSS_PENDING_TIMEOUT:PT20M}
+      # generic PG 폴링 종결 한도 — query 가 응답하지 못하는 영구 해소 불가(예: 잔존 non-TOSS pgTx 404/502)만 max-age
+      # 초과 시 FAILED 로 종결해 무한 폴링/WARN/PG 호출을 끊는다. PG 가 정상 응답(PENDING 포함)하는 동안은 종결하지
+      # 않는다(느린 비동기 PG 오탐 방지). 일시 장애 오탐을 피하려 min-age 보다 충분히 크게(부팅 시 max-age>min-age 검증).
+      max-age: ${PAYMENT_RECONCILIATION_MAX_AGE:PT1H}
       # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리/PG 호출량을 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${PAYMENT_RECONCILIATION_BATCH_SIZE:200}
   # 배송 자동 진행 (#W7-6). 실 택배사 연동 없음 — interval 마다 PREPARING→SHIPPED→DELIVERED 를 한 단계씩 민다.

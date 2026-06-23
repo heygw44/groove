@@ -104,6 +104,9 @@ groove:
       min-age: PT0S
       # 토스 미확정 만료도 0 — 갓 접수된 toss-pending PENDING 도 리퍼 직접 호출 시 즉시 만료 처리 대상.
       toss-pending-timeout: PT0S
+      # max-age 는 query 영구 실패(404/502) 종결 한도. min-age(0) 보다 커야 하고(부팅 검증), 갓 접수된 결제가
+      # 일시 조회 오류로 종결되지 않도록 테스트 수명보다 길게 둔다.
+      max-age: PT1H
   # 배송 자동 진행 스케줄러도 테스트 중 자동 실행하지 않는다 — progressShipments() 를 직접 호출해 검증한다.
   # prepare-delay/ship-delay 0 이면 갓 생성/발송된 배송도 즉시 다음 단계 대상.
   shipping:
