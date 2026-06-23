@@ -94,8 +94,10 @@ class PaymentRequestStepsTest {
     }
 
     @Test
-    @DisplayName("prepare: 게스트 주문 → 익명 호출자도 proceed")
+    @DisplayName("prepare: 게스트 주문 → 익명 호출자도 proceed (orderNumber 만으로 토큰 획득 가능 — #306 의도된 신뢰 경계)")
     void prepare_guestOrder_anonymousCaller_proceed() {
+        // 게스트는 memberId 가 없어 본인 확인이 불가 → 익명 checkout 허용. 그 결과 orderNumber 만 알면 결제별 콜백 토큰을 받을 수 있어
+        // 게스트 주문엔 토큰이 비밀이 아니다(#306). 이 잔존 노출은 confirm 의 금액 검증·유효 paymentKey 가 한정한다(TossPaymentServiceTest 의 confirm_* 참고).
         Order order = order(true, null, OrderStatus.PENDING);
         when(orderRepository.findByOrderNumber(ORDER_NUMBER)).thenReturn(Optional.of(order));
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());

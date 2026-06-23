@@ -38,9 +38,20 @@ import java.net.URI;
  *
  * <p><b>보안 주의(브라우저 리다이렉트 콜백):</b> success/fail 은 토스가 브라우저를 보내는 미인증 GET 타깃이라 Bearer 인증이 없다.
  * 보상(fail)·승인(success)은 PENDING 결제에 대해 멱등으로만 동작하지만, orderNumber 만 알면 누구나 호출할 수 있어
- * 교차 주문 조작(타인의 진행 중 결제 강제 실패 등) 여지가 있다. 결제마다 발급한 토큰을 successUrl/failUrl 쿼리에 실어
- * 검증하는 강한 보호는 per-payment successUrl 을 지정하는 프론트 결제위젯(M17 후속 이슈)에서 완성한다.
- * 또한 어떤 예외가 나도 JSON 을 노출하지 않고 항상 SPA 결과 라우트로 302 리다이렉트한다.
+ * 교차 주문 조작(타인의 진행 중 결제 강제 실패 등) 여지가 있다. 어떤 예외가 나도 JSON 을 노출하지 않고 항상 SPA 결과 라우트로 302 한다.
+ *
+ * <p><b>콜백 토큰(#304)의 신뢰 모델 — 회원/게스트 비대칭(#306):</b>
+ * checkout 이 결제마다 발급해 successUrl/failUrl 쿼리에 싣는 토큰은 콜백 단계에서 저장 토큰과 일치 검증된다. 단 토큰의 "비밀성"은 주문 유형에 따라 다르다.
+ * <ul>
+ *   <li><b>회원 주문</b>: checkout 이 소유자 전용({@code PaymentRequestSteps.canRequestPaymentFor} 가 memberId 일치 요구)이라 토큰이 실제 비밀로 기능 → 교차 주문 조작 차단이 강하다.
+ *   <li><b>게스트 주문</b>: checkout 이 익명(orderNumber 만)이라 토큰이 비밀이 아니다 — orderNumber 만 알면 누구나 checkout 으로 토큰을 받을 수 있고, 멱등 재조회 경로는
+ *       저장 토큰을 그대로 재노출한다(위젯 새로고침 시 successUrl 재구성 보존 목적, 의도된 동작). 토큰만 숨겨도 최초 checkout 이 토큰을 발급하므로, 미인증 게스트 엔드포인트에서
+ *       토큰을 진짜 비밀로 만드는 것은 게스트 인증 없이는 불가능하다. 따라서 게스트엔 토큰이 단독 방어선이 아니다.
+ * </ul>
+ * <b>게스트 콜백의 실제 방어선</b>은 ⓐ orderNumber 비추측성({@code RandomOrderNumberGenerator} 의 SecureRandom base36^6 ≈ 21.7억),
+ * ⓑ confirm 의 서버측 금액 위변조 검증(저장 payable == 리다이렉트 amount), ⓒ confirm 의 유효 paymentKey 필수(토스가 발급, 위조 불가 —
+ * 실 게이트웨이는 토스 플로우가 가동되는 dev/prod 에만 존재), ⓓ fail 은 상태 무변경 + 폴링 리퍼 보상이다.
+ * 즉 게스트라도 토큰만으로는 PAID 를 강제할 수 없다(ⓑⓒ 가 핵심 관문).
  */
 @Tag(name = "결제(토스)", description = "토스페이먼츠 confirm 승인 흐름 — checkout · successUrl/failUrl 콜백")
 @RestController
@@ -100,6 +111,7 @@ public class TossPaymentController {
             // 응답 → "어떤 예외도 JSON 누출 없이 항상 302 fail" 불변식을 깨뜨린다. 가드는 catch 안으로 흘러 불변식을 보존한다.
             requireBoundedParams(paymentKey, orderId, amount, token);
             // token 은 checkout 이 successUrl 에 박은 결제별 토큰 — confirm 이 저장 토큰과 일치를 검증해 교차 주문 조작을 차단한다(#304).
+            // 회원 주문엔 강하나(checkout 소유자 전용) 게스트 주문엔 토큰이 비밀이 아니므로, confirm 의 금액 검증·유효 paymentKey 가 실제 관문이다(#306, 클래스 javadoc 참고).
             PaymentCallbackResult result = tossPaymentService.confirm(paymentKey, orderId, Long.parseLong(amount), token);
             status = result.paymentStatus() == PaymentStatus.PAID ? "success" : "fail";
         } catch (RuntimeException e) {
