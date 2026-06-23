@@ -91,13 +91,15 @@ public class TossPaymentController {
     public ResponseEntity<Void> success(
             @RequestParam(required = false) String paymentKey,
             @RequestParam(required = false) String orderId,
-            @RequestParam(required = false) String amount) {
+            @RequestParam(required = false) String amount,
+            @RequestParam(required = false) String token) {
         String status;
         try {
-            PaymentCallbackResult result = tossPaymentService.confirm(paymentKey, orderId, Long.parseLong(amount));
+            // token 은 checkout 이 successUrl 에 박은 결제별 토큰 — confirm 이 저장 토큰과 일치를 검증해 교차 주문 조작을 차단한다(#304).
+            PaymentCallbackResult result = tossPaymentService.confirm(paymentKey, orderId, Long.parseLong(amount), token);
             status = result.paymentStatus() == PaymentStatus.PAID ? "success" : "fail";
         } catch (RuntimeException e) {
-            // successUrl 은 브라우저 리다이렉트 타깃 — 위변조·만료·미확정·파라미터 오류 등 어떤 예외도 JSON 누출 없이 fail 안내한다.
+            // successUrl 은 브라우저 리다이렉트 타깃 — 위변조·토큰 불일치·만료·미확정·파라미터 오류 등 어떤 예외도 JSON 누출 없이 fail 안내한다.
             log.warn("토스 confirm 처리 실패 — fail 리다이렉트: orderId={}, err={}", orderId, e.toString());
             status = "fail";
         }
@@ -112,11 +114,15 @@ public class TossPaymentController {
     public ResponseEntity<Void> fail(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String message,
-            @RequestParam(required = false) String orderId) {
+            @RequestParam(required = false) String orderId,
+            @RequestParam(required = false) String token) {
         // 보안(#295 리뷰): failUrl 은 토스가 보내는 미인증 브라우저 GET 이라 orderNumber 만으로 호출 가능 — 여기서 결제를
         // FAILED 로 바꾸면 제3자가 타인의 진행 중 결제를 강제 실패시킬 수 있다(CSRF). 따라서 안내 리다이렉트만 하고,
-        // 보상은 폴링 리퍼(PaymentReconciliationScheduler)의 신뢰 가능한 만료 경로가 1회 수행한다. 토큰 검증은 #304(프론트 위젯).
-        log.info("토스 결제 실패/취소 안내: orderId={}, code={}", orderId, code);
+        // 보상은 폴링 리퍼(PaymentReconciliationScheduler)의 신뢰 가능한 만료 경로가 1회 수행한다.
+        // token 은 #304 로 round-trip 되지만 fail 은 상태를 바꾸지 않으므로 강제 검증 대신 안내만 한다(success 게이트가 핵심).
+        // 토큰 값은 로그에 남기지 않고 존재 여부만 기록한다(추적용).
+        log.info("토스 결제 실패/취소 안내: orderId={}, code={}, token={}",
+                orderId, code, token != null ? "present" : "absent");
         return redirect(orderId, "fail");
     }
 

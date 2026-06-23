@@ -12,6 +12,7 @@ import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentAmountMismatchException;
+import com.groove.payment.exception.PaymentCallbackTokenMismatchException;
 import com.groove.payment.exception.PaymentGatewayException;
 import com.groove.payment.gateway.ConfirmResponse;
 import com.groove.payment.gateway.PaymentGateway;
@@ -56,6 +57,7 @@ class TossPaymentServiceTest {
     private static final String PAYMENT_KEY = "toss-payment-key-1";
     private static final long AMOUNT = 32_000L;
     private static final long ORDER_ID = 10L;
+    private static final String VALID_CALLBACK = "tok-2b8f1c6a-3d4e-4f5a";
 
     @Mock private PaymentRequestSteps steps;
     @Mock private PaymentGateway paymentGateway;
@@ -94,6 +96,7 @@ class TossPaymentServiceTest {
         given(payment.getAmount()).willReturn(amount);
         given(payment.getId()).willReturn(42L);
         given(payment.getPgTransactionId()).willReturn(PAYMENT_KEY);
+        given(payment.getCallbackToken()).willReturn(VALID_CALLBACK);
         return payment;
     }
 
@@ -106,46 +109,76 @@ class TossPaymentServiceTest {
     // --- checkout ---
 
     @Test
-    @DisplayName("checkout: 게이트웨이 request() 없이 잠정 pgTx=orderNumber·provider=TOSS 로 PENDING 저장하고 위젯값 응답")
+    @DisplayName("checkout: 게이트웨이 request() 없이 잠정 pgTx=orderNumber·provider=TOSS·콜백 토큰으로 PENDING 저장하고 위젯값 응답")
     void checkout_proceed_persistsPendingWithProvisionalPgTx() {
         given(steps.prepare(1L, request())).willReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, AMOUNT));
-        given(steps.persist(any(), eq(PaymentMethod.CARD), any())).willReturn(pendingResponse());
-        given(tossProperties.getIfAvailable()).willReturn(null); // test 프로파일 — clientKey 없음
+        given(steps.persist(any(), eq(PaymentMethod.CARD), any(), any())).willReturn(pendingResponse());
+        given(tossProperties.getIfAvailable()).willReturn(null); // test 프로파일 — clientKey/URL 없음
 
         TossCheckoutResponse response = service.checkout(1L, request());
 
         assertThat(response.orderId()).isEqualTo(ORDER_NUMBER);
         assertThat(response.amount()).isEqualTo(AMOUNT);
         assertThat(response.clientKey()).isNull();
+        assertThat(response.successUrl()).isNull(); // props 부재 → URL null
+        assertThat(response.failUrl()).isNull();
 
         ArgumentCaptor<PaymentResponse> pg = ArgumentCaptor.forClass(PaymentResponse.class);
-        verify(steps).persist(any(PaymentRequestPrep.class), eq(PaymentMethod.CARD), pg.capture());
+        ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
+        verify(steps).persist(any(PaymentRequestPrep.class), eq(PaymentMethod.CARD), pg.capture(), tokenCaptor.capture());
         assertThat(pg.getValue().pgTransactionId()).isEqualTo(TossPaymentService.PENDING_PG_TX_PREFIX + ORDER_NUMBER); // 잠정 pgTx
         assertThat(pg.getValue().provider()).isEqualTo("TOSS");
         assertThat(pg.getValue().status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(tokenCaptor.getValue()).isNotBlank(); // 결제별 콜백 토큰 발급·저장
         verify(paymentGateway, never()).request(any()); // 토스는 request() 미사용
     }
 
     @Test
-    @DisplayName("checkout: 기존 결제(existing) → persist 미호출, dev clientKey 포함 응답")
+    @DisplayName("checkout: dev props 존재 → successUrl/failUrl 에 발급 토큰 쿼리 포함")
+    void checkout_proceed_buildsCallbackUrlsWithToken() {
+        given(steps.prepare(1L, request())).willReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, AMOUNT));
+        given(steps.persist(any(), eq(PaymentMethod.CARD), any(), any())).willReturn(pendingResponse());
+        TossPaymentProperties props = new TossPaymentProperties(
+                null, "test_ck_abc", "test_sk_abc",
+                "http://localhost:8080/payments/toss/success", "http://localhost:8080/payments/toss/fail", null, null);
+        given(tossProperties.getIfAvailable()).willReturn(props);
+
+        TossCheckoutResponse response = service.checkout(1L, request());
+
+        ArgumentCaptor<String> tokenCaptor = ArgumentCaptor.forClass(String.class);
+        verify(steps).persist(any(), eq(PaymentMethod.CARD), any(), tokenCaptor.capture());
+        String token = tokenCaptor.getValue();
+        assertThat(response.clientKey()).isEqualTo("test_ck_abc");
+        assertThat(response.successUrl()).isEqualTo("http://localhost:8080/payments/toss/success?token=" + token);
+        assertThat(response.failUrl()).isEqualTo("http://localhost:8080/payments/toss/fail?token=" + token);
+    }
+
+    @Test
+    @DisplayName("checkout: 기존 결제(existing) → persist 미호출, dev clientKey·저장 토큰으로 재구성한 successUrl 응답")
     void checkout_existing_returnsClientKeyWithoutPersist() {
         given(steps.prepare(1L, request())).willReturn(PaymentRequestPrep.existing(pendingResponse()));
         TossPaymentProperties props = new TossPaymentProperties(
                 null, "test_ck_abc", "test_sk_abc", "http://s", "http://f", null, null);
         given(tossProperties.getIfAvailable()).willReturn(props);
+        // 멱등 경로는 저장된 결제의 토큰을 재조회해 successUrl 을 재구성한다.
+        Order order = orderMock();
+        Payment existing = paymentMock(PaymentStatus.PENDING, AMOUNT);
+        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(existing));
 
         TossCheckoutResponse response = service.checkout(1L, request());
 
         assertThat(response.clientKey()).isEqualTo("test_ck_abc");
         assertThat(response.orderId()).isEqualTo(ORDER_NUMBER);
-        verify(steps, never()).persist(any(), any(), any());
+        assertThat(response.successUrl()).isEqualTo("http://s?token=" + VALID_CALLBACK); // 저장 토큰 재사용
+        verify(steps, never()).persist(any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("checkout: persist 가 uk_payment_order 충돌 → 기존 결제 재조회로 멱등 복원")
     void checkout_persistConflict_recoversExisting() {
         given(steps.prepare(1L, request())).willReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, AMOUNT));
-        given(steps.persist(any(), any(), any())).willThrow(new DataIntegrityViolationException("uk"));
+        given(steps.persist(any(), any(), any(), any())).willThrow(new DataIntegrityViolationException("uk"));
         given(steps.findExistingForOrder(ORDER_ID)).willReturn(Optional.of(pendingResponse()));
         given(tossProperties.getIfAvailable()).willReturn(null);
 
@@ -153,6 +186,28 @@ class TossPaymentServiceTest {
 
         assertThat(response.orderId()).isEqualTo(ORDER_NUMBER);
         assertThat(response.amount()).isEqualTo(AMOUNT);
+    }
+
+    @Test
+    @DisplayName("checkout: persist 동시 충돌 시 successUrl 토큰은 우리 로컬 토큰이 아니라 '저장된' 기존 결제 토큰을 쓴다")
+    void checkout_persistConflict_usesStoredTokenNotLocal() {
+        given(steps.prepare(1L, request())).willReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, AMOUNT));
+        given(steps.persist(any(), any(), any(), any())).willThrow(new DataIntegrityViolationException("uk"));
+        given(steps.findExistingForOrder(ORDER_ID)).willReturn(Optional.of(pendingResponse()));
+        TossPaymentProperties props = new TossPaymentProperties(
+                null, "test_ck_abc", "test_sk_abc", "http://s", "http://f", null, null);
+        given(tossProperties.getIfAvailable()).willReturn(props);
+        // 충돌 복원 경로가 재조회하는 "승자" 결제 — 저장 토큰 = VALID_CALLBACK
+        Order order = orderMock();
+        Payment winner = paymentMock(PaymentStatus.PENDING, AMOUNT);
+        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(winner));
+
+        TossCheckoutResponse response = service.checkout(1L, request());
+
+        // 로컬 랜덤 토큰이 아니라 저장된 토큰이 successUrl 에 박혀야 confirm 이 통과한다(#1 동시성 버그 회귀 방지).
+        assertThat(response.successUrl()).isEqualTo("http://s?token=" + VALID_CALLBACK);
+        assertThat(response.failUrl()).isEqualTo("http://f?token=" + VALID_CALLBACK);
     }
 
     // --- confirm ---
@@ -170,7 +225,7 @@ class TossPaymentServiceTest {
         given(callbackService.applyConfirmedPaid(ORDER_ID, PAYMENT_KEY, AMOUNT))
                 .willReturn(new PaymentCallbackResult(PaymentCallbackResult.Outcome.APPLIED, 42L, PAYMENT_KEY, PaymentStatus.PAID));
 
-        PaymentCallbackResult result = service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT);
+        PaymentCallbackResult result = service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT, VALID_CALLBACK);
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.APPLIED);
         assertThat(result.paymentStatus()).isEqualTo(PaymentStatus.PAID);
@@ -186,8 +241,36 @@ class TossPaymentServiceTest {
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(pending));
 
-        assertThatThrownBy(() -> service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT + 1))
+        assertThatThrownBy(() -> service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT + 1, VALID_CALLBACK))
                 .isInstanceOf(PaymentAmountMismatchException.class);
+
+        verifyNoInteractions(paymentGateway, callbackService, idempotencyService);
+    }
+
+    @Test
+    @DisplayName("confirm: 토큰 불일치 → 금액검증·게이트웨이 전에 PaymentCallbackTokenMismatchException, 상태 전이 없음")
+    void confirm_tokenMismatch_rejectedBeforeEverything() {
+        Order order = orderMock();
+        Payment pending = paymentMock(PaymentStatus.PENDING, AMOUNT); // 저장 토큰 = VALID_CALLBACK
+        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT, "wrong-token"))
+                .isInstanceOf(PaymentCallbackTokenMismatchException.class);
+
+        verifyNoInteractions(paymentGateway, callbackService, idempotencyService);
+    }
+
+    @Test
+    @DisplayName("confirm: 토큰 누락(null) → 거부")
+    void confirm_tokenMissing_rejected() {
+        Order order = orderMock();
+        Payment pending = paymentMock(PaymentStatus.PENDING, AMOUNT);
+        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(pending));
+
+        assertThatThrownBy(() -> service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT, null))
+                .isInstanceOf(PaymentCallbackTokenMismatchException.class);
 
         verifyNoInteractions(paymentGateway, callbackService, idempotencyService);
     }
@@ -200,7 +283,7 @@ class TossPaymentServiceTest {
         given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(paid));
 
-        PaymentCallbackResult result = service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT);
+        PaymentCallbackResult result = service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT, VALID_CALLBACK);
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
         verifyNoInteractions(paymentGateway, callbackService, idempotencyService);
@@ -217,7 +300,7 @@ class TossPaymentServiceTest {
         given(paymentGateway.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT))
                 .willReturn(new ConfirmResponse(PAYMENT_KEY, PaymentStatus.PENDING));
 
-        assertThatThrownBy(() -> service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT))
+        assertThatThrownBy(() -> service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT, VALID_CALLBACK))
                 .isInstanceOf(PaymentGatewayException.class);
 
         verify(callbackService).linkPendingPaymentKey(ORDER_ID, PAYMENT_KEY); // 후속 웹훅/폴링이 정산하도록 연결

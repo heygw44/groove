@@ -128,7 +128,7 @@ class TossPaymentConfirmIntegrationTest {
         bearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
     }
 
-    private record Checked(Long orderId, String orderNumber, long payable, String paymentKey) {
+    private record Checked(Long orderId, String orderNumber, long payable, String paymentKey, String callbackToken) {
     }
 
     /** PENDING 주문 생성(재고 차감) → 토스 checkout 으로 PENDING 결제(잠정 pgTx=orderNumber) 접수. */
@@ -156,7 +156,8 @@ class TossPaymentConfirmIntegrationTest {
 
         Payment payment = paymentRepository.findByOrderId(orderId).orElseThrow();
         // paymentKey 는 결제마다 고유 — 토스가 발급하는 paymentKey 가 고유하듯 멱등 키 충돌을 피한다.
-        return new Checked(orderId, orderNumber, payment.getAmount(), "pk-" + orderNumber);
+        // callbackToken: checkout 이 발급·저장한 결제별 토큰 — successUrl 콜백이 이 값을 round-trip 해야 confirm 이 통과한다.
+        return new Checked(orderId, orderNumber, payment.getAmount(), "pk-" + orderNumber, payment.getCallbackToken());
     }
 
     private PaymentStatus paymentStatus(Long orderId) {
@@ -197,7 +198,8 @@ class TossPaymentConfirmIntegrationTest {
         mockMvc.perform(get("/payments/toss/success")
                         .param("paymentKey", c.paymentKey())
                         .param("orderId", c.orderNumber())
-                        .param("amount", String.valueOf(c.payable())))
+                        .param("amount", String.valueOf(c.payable()))
+                        .param("token", c.callbackToken()))
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=success"));
 
@@ -217,12 +219,47 @@ class TossPaymentConfirmIntegrationTest {
         mockMvc.perform(get("/payments/toss/success")
                         .param("paymentKey", c.paymentKey())
                         .param("orderId", c.orderNumber())
-                        .param("amount", String.valueOf(c.payable() + 1_000))) // 조작된 금액
+                        .param("amount", String.valueOf(c.payable() + 1_000)) // 조작된 금액
+                        .param("token", c.callbackToken())) // 토큰은 유효 → 금액 검증 단계까지 도달
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=fail"));
 
         assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.PENDING);
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PENDING);
+        assertThat(orderPaidEventCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("successUrl: 토큰 불일치 → 302 fail, 결제·주문 PENDING 유지(교차 주문 조작 차단)")
+    void success_tokenMismatch_rejected() throws Exception {
+        Checked c = checkout(1);
+
+        mockMvc.perform(get("/payments/toss/success")
+                        .param("paymentKey", c.paymentKey())
+                        .param("orderId", c.orderNumber())
+                        .param("amount", String.valueOf(c.payable()))
+                        .param("token", "forged-token")) // 위조 토큰
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=fail"));
+
+        assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.PENDING);
+        assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PENDING);
+        assertThat(orderPaidEventCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("successUrl: 토큰 누락 → 302 fail, 결제 PENDING 유지")
+    void success_tokenMissing_rejected() throws Exception {
+        Checked c = checkout(1);
+
+        mockMvc.perform(get("/payments/toss/success")
+                        .param("paymentKey", c.paymentKey())
+                        .param("orderId", c.orderNumber())
+                        .param("amount", String.valueOf(c.payable()))) // token 없음
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=fail"));
+
+        assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.PENDING);
         assertThat(orderPaidEventCount()).isZero();
     }
 
@@ -235,7 +272,8 @@ class TossPaymentConfirmIntegrationTest {
             mockMvc.perform(get("/payments/toss/success")
                             .param("paymentKey", c.paymentKey())
                             .param("orderId", c.orderNumber())
-                            .param("amount", String.valueOf(c.payable())))
+                            .param("amount", String.valueOf(c.payable()))
+                            .param("token", c.callbackToken()))
                     .andExpect(status().isFound())
                     .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=success"));
         }

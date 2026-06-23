@@ -12,6 +12,7 @@ import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentAmountMismatchException;
+import com.groove.payment.exception.PaymentCallbackTokenMismatchException;
 import com.groove.payment.exception.PaymentGatewayException;
 import com.groove.payment.exception.PaymentNotFoundException;
 import com.groove.payment.gateway.ConfirmResponse;
@@ -25,6 +26,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.UUID;
 
 /**
  * 토스페이먼츠 동기 confirm 승인 흐름 오케스트레이터(#295).
@@ -77,17 +83,54 @@ public class TossPaymentService {
      */
     public TossCheckoutResponse checkout(Long callerMemberId, PaymentCreateRequest request) {
         PaymentRequestPrep prep = steps.prepare(callerMemberId, request);
-        PaymentApiResponse persisted = prep.isExisting() ? prep.existingResponse() : persistPending(prep, request);
-        return new TossCheckoutResponse(clientKey(), persisted.orderNumber(), persisted.amount());
+        // 결제별 무작위 토큰 — successUrl/failUrl 쿼리로 round-trip 시켜 콜백 핸들러가 일치 검증한다(교차 주문 조작 차단, #304).
+        // 기존 결제 멱등 응답이면 새 토큰을 발급하지 않고 저장된 토큰을 그대로 재사용한다(successUrl 재구성 일관성).
+        if (prep.isExisting()) {
+            PaymentApiResponse existing = prep.existingResponse();
+            String token = existingCallbackToken(existing.orderNumber());
+            return buildResponse(existing, token);
+        }
+        String token = UUID.randomUUID().toString();
+        // persistPending 이 동시 충돌(uk_payment_order)로 다른 스레드의 기존 결제를 복원했을 수 있다 —
+        // 그 경우 우리 token 은 저장되지 않았으므로, 응답 successUrl 에는 항상 "실제 저장된" 토큰을 쓴다.
+        PendingPayment pending = persistPending(prep, request, token);
+        return buildResponse(pending.response(), pending.token());
+    }
+
+    /** 멱등 응답 경로에서 저장된 결제의 callback_token 을 재조회한다(없으면 null — 레거시 결제). */
+    private String existingCallbackToken(String orderNumber) {
+        return orderRepository.findByOrderNumber(orderNumber)
+                .flatMap(o -> paymentRepository.findByOrderId(o.getId()))
+                .map(Payment::getCallbackToken)
+                .orElse(null);
+    }
+
+    /** clientKey + orderId/amount + 토큰이 박힌 successUrl/failUrl 로 응답을 조립한다. props 부재(mock)면 URL 은 null. */
+    private TossCheckoutResponse buildResponse(PaymentApiResponse persisted, String token) {
+        TossPaymentProperties props = tossProperties.getIfAvailable();
+        String clientKey = props != null ? props.clientKey() : null;
+        String successUrl = props != null ? appendToken(props.successUrl(), token) : null;
+        String failUrl = props != null ? appendToken(props.failUrl(), token) : null;
+        return new TossCheckoutResponse(clientKey, persisted.orderNumber(), persisted.amount(), successUrl, failUrl);
+    }
+
+    /** base 콜백 URL 에 token 쿼리를 덧붙인다. token 이 null 이면 base 를 그대로 반환한다. */
+    private static String appendToken(String baseUrl, String token) {
+        if (token == null) {
+            return baseUrl;
+        }
+        return UriComponentsBuilder.fromUriString(baseUrl).queryParam("token", token).encode().build().toUriString();
     }
 
     /**
      * successUrl confirm 처리. 저장된 payable 과 리다이렉트 amount 일치를 confirm 호출 전에 검증해 위변조를 차단하고,
      * paymentKey 기준 멱등 래퍼로 confirm + PAID 적용을 1회만 수행한다(successUrl 새로고침/재호출 안전).
      */
-    public PaymentCallbackResult confirm(String paymentKey, String orderId, long amount) {
+    public PaymentCallbackResult confirm(String paymentKey, String orderId, long amount, String token) {
         Order order = orderRepository.findByOrderNumber(orderId).orElseThrow(OrderNotFoundException::new);
         Payment pending = paymentRepository.findByOrderId(order.getId()).orElseThrow(PaymentNotFoundException::new);
+        // 토큰 일치 검증을 최우선으로 — 미인증 콜백의 교차 주문 조작 차단(#304). 멱등 흡수/금액검증/confirm 모두 이 관문 뒤에서만.
+        verifyCallbackToken(pending, token, orderId);
         if (pending.getStatus() != PaymentStatus.PENDING) {
             // 이미 PAID(새로고침) 또는 FAILED — 재승인 없이 현재 상태를 멱등 반환한다.
             log.info("토스 confirm 멱등 흡수: order={}, status={}", orderId, pending.getStatus());
@@ -106,15 +149,20 @@ public class TossPaymentService {
                 () -> doConfirm(orderPk, paymentKey, orderId, amount));
     }
 
-    /** 토스는 request() 게이트웨이 호출 없이 잠정 pgTx=toss-pending:{orderNumber} 로 PENDING Payment 를 저장한다. */
-    private PaymentApiResponse persistPending(PaymentRequestPrep prep, PaymentCreateRequest request) {
+    /** persistPending 결과 — 응답 DTO 와 그 결제에 "실제 저장된" 콜백 토큰(충돌 복원 시 우리 token 과 다를 수 있다). */
+    private record PendingPayment(PaymentApiResponse response, String token) {
+    }
+
+    /** 토스는 request() 게이트웨이 호출 없이 잠정 pgTx=toss-pending:{orderNumber} 로 PENDING Payment(+콜백 토큰) 를 저장한다. */
+    private PendingPayment persistPending(PaymentRequestPrep prep, PaymentCreateRequest request, String callbackToken) {
         PaymentResponse synthetic = new PaymentResponse(
                 PENDING_PG_TX_PREFIX + prep.orderNumber(), PaymentStatus.PENDING, TossPaymentGateway.PROVIDER);
         try {
-            return steps.persist(prep, request.method(), synthetic);
+            return new PendingPayment(steps.persist(prep, request.method(), synthetic, callbackToken), callbackToken);
         } catch (DataIntegrityViolationException duplicate) {
-            // uk_payment_order 동시 충돌 — 기존 결제를 재조회해 멱등 응답한다.
-            return steps.findExistingForOrder(prep.orderId()).orElseThrow(() -> duplicate);
+            // uk_payment_order 동시 충돌 — 승자가 저장한 기존 결제와 그 토큰을 재조회한다(우리 token 은 저장되지 않았다).
+            PaymentApiResponse existing = steps.findExistingForOrder(prep.orderId()).orElseThrow(() -> duplicate);
+            return new PendingPayment(existing, existingCallbackToken(existing.orderNumber()));
         }
     }
 
@@ -133,8 +181,17 @@ public class TossPaymentService {
         return callbackService.applyConfirmedPaid(orderPk, confirmed.pgTransactionId(), amount);
     }
 
-    private String clientKey() {
-        TossPaymentProperties props = tossProperties.getIfAvailable();
-        return props != null ? props.clientKey() : null;
+    /**
+     * 콜백 토큰 검증 — 저장 토큰과 successUrl 으로 들어온 token 의 일치를 상수시간 비교한다.
+     * 저장 토큰 null(레거시 결제)·수신 token null/불일치는 모두 거부한다(타이밍 노출 최소화).
+     */
+    private static void verifyCallbackToken(Payment payment, String token, String orderNumber) {
+        String expected = payment.getCallbackToken();
+        boolean ok = expected != null && token != null
+                && MessageDigest.isEqual(
+                        expected.getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8));
+        if (!ok) {
+            throw new PaymentCallbackTokenMismatchException(orderNumber);
+        }
     }
 }

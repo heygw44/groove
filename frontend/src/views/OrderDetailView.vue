@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, reactive, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { getOrder, cancelOrder } from '@/api/orders'
 import * as reviewsApi from '@/api/reviews'
 import { useUiStore } from '@/stores/ui'
@@ -15,7 +15,15 @@ import BaseButton from '@/components/base/BaseButton.vue'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
 const route = useRoute()
+const router = useRouter()
 const ui = useUiStore()
+
+// 토스 결제 콜백 결과 — 서버가 confirm/실패 처리 후 /orders/{n}?payment=success|fail 로 302 한다.
+// 값을 캡처해 배너로 안내하고, 쿼리는 즉시 정리해 새로고침 시 재노출되지 않게 한다.
+const paymentResult = ref(typeof route.query.payment === 'string' ? route.query.payment : '')
+onMounted(() => {
+  if (paymentResult.value) router.replace({ query: {} })
+})
 
 const order = ref(null)
 const trackingNumber = ref('')
@@ -178,6 +186,23 @@ watch(() => route.params.orderNumber, fetchOrder, { immediate: true })
       <RouterLink :to="{ name: 'orders' }" class="text-sm text-vinyl-800/60 hover:text-rust-600">
         주문 내역
       </RouterLink>
+    </div>
+
+    <!-- 토스 결제 콜백 결과 안내 -->
+    <div
+      v-if="paymentResult === 'success'"
+      class="mb-6 rounded-lg bg-gold-500/10 px-4 py-3 text-sm text-vinyl-black"
+      role="status"
+    >
+      결제가 완료되었습니다 🎉 아래에서 주문 상태와 배송을 확인하세요.
+    </div>
+    <div
+      v-else-if="paymentResult === 'fail'"
+      class="mb-6 rounded-lg bg-rust-500/10 px-4 py-3 text-sm text-rust-600"
+      role="alert"
+    >
+      결제가 완료되지 않았습니다. 다시 시도하시거나
+      <RouterLink to="/catalog" class="underline hover:text-rust-700">장바구니에서 새로 주문</RouterLink>해 주세요.
     </div>
 
     <div v-if="loading" class="flex justify-center py-24"><BaseSpinner size="lg" /></div>

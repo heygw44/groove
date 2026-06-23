@@ -33,6 +33,8 @@ public class Payment extends BaseTimeEntity {
     static final int MAX_PG_TRANSACTION_ID_LENGTH = 100;
     /** failure_reason 컬럼 길이. */
     static final int MAX_FAILURE_REASON_LENGTH = 500;
+    /** callback_token 컬럼 길이. */
+    static final int MAX_CALLBACK_TOKEN_LENGTH = 64;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -66,6 +68,13 @@ public class Payment extends BaseTimeEntity {
     private String failureReason;
 
     /**
+     * 토스 successUrl/failUrl 콜백 검증용 결제별 무작위 토큰(#297/#304). checkout 에서 발급·저장하고
+     * successUrl/failUrl 쿼리로 round-trip 시킨 뒤 콜백 핸들러가 일치 검증한다. 레거시(mock) 경로는 null.
+     */
+    @Column(name = "callback_token", length = MAX_CALLBACK_TOKEN_LENGTH)
+    private String callbackToken;
+
+    /**
      * 누적 환불액. markRefunded()는 amount 전액을, refund(long, Instant)는 claim 환불액을 누적한다.
      * refundedAmount == amount 면 REFUNDED, 그 전엔 PARTIALLY_REFUNDED.
      */
@@ -75,20 +84,31 @@ public class Payment extends BaseTimeEntity {
     protected Payment() {
     }
 
-    private Payment(Order order, long amount, PaymentMethod method, String pgProvider, String pgTransactionId) {
+    private Payment(Order order, long amount, PaymentMethod method, String pgProvider, String pgTransactionId,
+                    String callbackToken) {
         this.order = order;
         this.amount = amount;
         this.method = method;
         this.pgProvider = pgProvider;
         this.pgTransactionId = pgTransactionId;
+        this.callbackToken = callbackToken;
         this.status = PaymentStatus.PENDING;
     }
 
     /**
-     * 결제 접수 — PENDING 으로 생성한다. amount 양수, pgProvider/pgTransactionId blank 불가·길이 제한 검증.
+     * 결제 접수 — PENDING 으로 생성한다(콜백 토큰 없음). amount 양수, pgProvider/pgTransactionId blank 불가·길이 제한 검증.
      */
     public static Payment initiate(Order order, long amount, PaymentMethod method,
                                    String pgProvider, String pgTransactionId) {
+        return initiate(order, amount, method, pgProvider, pgTransactionId, null);
+    }
+
+    /**
+     * 결제 접수 — PENDING 으로 생성한다. amount 양수, pgProvider/pgTransactionId blank 불가·길이 제한 검증.
+     * callbackToken 은 토스 successUrl/failUrl 검증용 결제별 토큰으로 null 허용(레거시 경로)이며, 주면 길이 제한 검증한다.
+     */
+    public static Payment initiate(Order order, long amount, PaymentMethod method,
+                                   String pgProvider, String pgTransactionId, String callbackToken) {
         Objects.requireNonNull(order, "order must not be null");
         Objects.requireNonNull(method, "method must not be null");
         if (amount <= 0) {
@@ -106,7 +126,10 @@ public class Payment extends BaseTimeEntity {
         if (pgTransactionId.length() > MAX_PG_TRANSACTION_ID_LENGTH) {
             throw new IllegalArgumentException("pgTransactionId length must be <= " + MAX_PG_TRANSACTION_ID_LENGTH);
         }
-        return new Payment(order, amount, method, pgProvider, pgTransactionId);
+        if (callbackToken != null && callbackToken.length() > MAX_CALLBACK_TOKEN_LENGTH) {
+            throw new IllegalArgumentException("callbackToken length must be <= " + MAX_CALLBACK_TOKEN_LENGTH);
+        }
+        return new Payment(order, amount, method, pgProvider, pgTransactionId, callbackToken);
     }
 
     /**
@@ -254,5 +277,9 @@ public class Payment extends BaseTimeEntity {
 
     public String getFailureReason() {
         return failureReason;
+    }
+
+    public String getCallbackToken() {
+        return callbackToken;
     }
 }

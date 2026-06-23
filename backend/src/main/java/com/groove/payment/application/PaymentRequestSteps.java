@@ -78,17 +78,27 @@ class PaymentRequestSteps {
     }
 
     /**
-     * PG 응답 직후 Payment(PENDING) 영속화(별도 tx). saveAndFlush 로 uk_payment_order 충돌을 즉시 드러낸다.
+     * PG 응답 직후 Payment(PENDING) 영속화(별도 tx, 콜백 토큰 없음). saveAndFlush 로 uk_payment_order 충돌을 즉시 드러낸다.
      */
     @Transactional
     PaymentApiResponse persist(PaymentRequestPrep prep, PaymentMethod method, PaymentResponse pgResponse) {
+        return persist(prep, method, pgResponse, null);
+    }
+
+    /**
+     * PG 응답 직후 Payment(PENDING) 영속화(별도 tx). saveAndFlush 로 uk_payment_order 충돌을 즉시 드러낸다.
+     * callbackToken 은 토스 successUrl/failUrl 검증용 결제별 토큰으로 null 허용(레거시 경로).
+     */
+    @Transactional
+    PaymentApiResponse persist(PaymentRequestPrep prep, PaymentMethod method, PaymentResponse pgResponse,
+                               String callbackToken) {
         Order order = orderRepository.findById(prep.orderId()).orElseThrow(OrderNotFoundException::new);
         // 주문이 PENDING 이 아니면 결제를 만들지 않는다.
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateTransitionException(order.getStatus(), OrderStatus.PAID);
         }
         Payment payment = paymentRepository.saveAndFlush(Payment.initiate(
-                order, prep.payable(), method, pgResponse.provider(), pgResponse.pgTransactionId()));
+                order, prep.payable(), method, pgResponse.provider(), pgResponse.pgTransactionId(), callbackToken));
         log.info("결제 접수: paymentId={}, order={}, amount={}, method={}, pgTx={}",
                 payment.getId(), prep.orderNumber(), payment.getAmount(), payment.getMethod(),
                 payment.getPgTransactionId());
