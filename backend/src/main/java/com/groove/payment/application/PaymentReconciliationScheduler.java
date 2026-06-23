@@ -58,8 +58,16 @@ public class PaymentReconciliationScheduler {
         this.minAge = Objects.requireNonNull(minAge, "minAge");
         this.tossPendingTimeout = Objects.requireNonNull(tossPendingTimeout, "tossPendingTimeout");
         this.maxAge = Objects.requireNonNull(maxAge, "maxAge");
+        // 음수 기간은 cutoff(now - 기간)를 미래로 밀어 조용히 오작동시킨다 — 부팅 시 차단한다. min-age/timeout 0 은 허용.
+        if (minAge.isNegative()) {
+            throw new IllegalArgumentException("groove.payment.reconciliation.min-age 는 음수일 수 없습니다: " + minAge);
+        }
+        if (tossPendingTimeout.isNegative()) {
+            throw new IllegalArgumentException(
+                    "groove.payment.reconciliation.toss-pending-timeout 는 음수일 수 없습니다: " + tossPendingTimeout);
+        }
         // max-age 가 min-age 이하이면 폴링 대상(created_at < now-min-age)이 첫 주기에 곧바로 expired 로 판정돼
-        // 모든 PENDING 이 query 결과와 무관하게 강제 FAILED 종결된다 — 오설정을 부팅 시 차단한다.
+        // 모든 PENDING 이 query 결과와 무관하게 강제 FAILED 종결된다 — 오설정을 부팅 시 차단한다(maxAge 양수도 보장).
         if (maxAge.compareTo(minAge) <= 0) {
             throw new IllegalArgumentException(
                     "groove.payment.reconciliation.max-age 는 min-age 보다 커야 합니다: max-age=" + maxAge + ", min-age=" + minAge);

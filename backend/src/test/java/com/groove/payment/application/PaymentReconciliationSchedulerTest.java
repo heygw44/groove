@@ -199,6 +199,20 @@ class PaymentReconciliationSchedulerTest {
     }
 
     @Test
+    @DisplayName("createdAt 이 max-age 경계값과 정확히 같으면(미만료) 조회 실패해도 종결하지 않고 재시도한다 (오프바이원 가드)")
+    void reconcile_atGiveUpCutoffQueryError_retriesNextCycle() {
+        // giveUpCutoff = NOW - MAX_AGE. createdAt == giveUpCutoff 이면 isBefore=false → 미만료.
+        // clean PENDING 은 만료 여부와 무관하게 종결되지 않으므로, expired 경계는 query 예외 경로로만 검증된다.
+        Payment boundary = pending("mock-tx-boundary", NOW.minus(MAX_AGE));
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(boundary));
+        given(paymentGateway.query("mock-tx-boundary")).willThrow(new RuntimeException("PG 일시 장애"));
+
+        assertThatCode(() -> scheduler.reconcilePendingPayments()).doesNotThrowAnyException();
+
+        verifyNoInteractions(settlementService);
+    }
+
+    @Test
     @DisplayName("max-age 초과 종결의 settle 자체가 실패해도 예외를 전파하지 않는다 (best-effort)")
     void reconcile_terminateSettleThrows_swallowed() {
         Payment expired = pending("mock-tx-stale", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
