@@ -19,10 +19,14 @@ const router = useRouter()
 const ui = useUiStore()
 
 // 토스 결제 콜백 결과 — 서버가 confirm/실패 처리 후 /orders/{n}?payment=success|fail 로 302 한다.
-// 값을 캡처해 배너로 안내하고, 쿼리는 즉시 정리해 새로고침 시 재노출되지 않게 한다.
-const paymentResult = ref(typeof route.query.payment === 'string' ? route.query.payment : '')
+// 값을 캡처해 배너로 안내하고, payment 키만 정리해 새로고침 시 재노출되지 않게 한다(다른 쿼리는 보존).
+const paymentResult = ref(
+  route.query.payment === 'success' || route.query.payment === 'fail' ? route.query.payment : '',
+)
 onMounted(() => {
-  if (paymentResult.value) router.replace({ query: {} })
+  if (!paymentResult.value) return
+  const { payment, ...rest } = route.query
+  router.replace({ query: rest })
 })
 
 const order = ref(null)

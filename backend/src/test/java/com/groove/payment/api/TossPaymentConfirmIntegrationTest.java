@@ -264,6 +264,24 @@ class TossPaymentConfirmIntegrationTest {
     }
 
     @Test
+    @DisplayName("successUrl: 경계 초과(과대 token) → JSON 누출 없이 302 fail, 결제 PENDING 유지(컨트롤러 입력 가드)")
+    void success_oversizedParam_redirectsFail() throws Exception {
+        Checked c = checkout(1);
+        String hugeToken = "x".repeat(200); // MAX_CALLBACK_PARAM_LENGTH(64) 초과
+
+        mockMvc.perform(get("/payments/toss/success")
+                        .param("paymentKey", c.paymentKey())
+                        .param("orderId", c.orderNumber())
+                        .param("amount", String.valueOf(c.payable()))
+                        .param("token", hugeToken))
+                .andExpect(status().isFound())
+                .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=fail"));
+
+        assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.PENDING);
+        assertThat(orderPaidEventCount()).isZero();
+    }
+
+    @Test
     @DisplayName("successUrl 재호출(새로고침): 멱등 — 주문 PAID 유지, ORDER_PAID 이벤트 1회")
     void success_calledTwice_idempotent() throws Exception {
         Checked c = checkout(1);

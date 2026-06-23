@@ -95,11 +95,15 @@ public class TossPaymentController {
             @RequestParam(required = false) String token) {
         String status;
         try {
+            // 미인증 공개 콜백 — 과대 입력이 서비스/게이트웨이/로그에 닿기 전에 컨트롤러에서 경계 검증한다(위반 시 아래 catch 가 fail 302).
+            // @Validated 대신 in-method 가드를 쓰는 이유: 빈 검증 위반은 메서드 실행 전에 던져져 GlobalExceptionHandler 가 JSON 400 을
+            // 응답 → "어떤 예외도 JSON 누출 없이 항상 302 fail" 불변식을 깨뜨린다. 가드는 catch 안으로 흘러 불변식을 보존한다.
+            requireBoundedParams(paymentKey, orderId, amount, token);
             // token 은 checkout 이 successUrl 에 박은 결제별 토큰 — confirm 이 저장 토큰과 일치를 검증해 교차 주문 조작을 차단한다(#304).
             PaymentCallbackResult result = tossPaymentService.confirm(paymentKey, orderId, Long.parseLong(amount), token);
             status = result.paymentStatus() == PaymentStatus.PAID ? "success" : "fail";
         } catch (RuntimeException e) {
-            // successUrl 은 브라우저 리다이렉트 타깃 — 위변조·토큰 불일치·만료·미확정·파라미터 오류 등 어떤 예외도 JSON 누출 없이 fail 안내한다.
+            // successUrl 은 브라우저 리다이렉트 타깃 — 위변조·토큰 불일치·만료·미확정·파라미터 오류·경계 초과 등 어떤 예외도 JSON 누출 없이 fail 안내한다.
             log.warn("토스 confirm 처리 실패 — fail 리다이렉트: orderId={}, err={}", orderId, e.toString());
             status = "fail";
         }
@@ -126,11 +130,23 @@ public class TossPaymentController {
         return redirect(orderId, "fail");
     }
 
-    /** /orders/{orderNumber}?payment={status} 상대경로(동일 오리진)로 302. orderNumber 가 없으면 /orders 로 폴백한다. */
+    /** 미인증 공개 콜백 파라미터(orderId·amount·token·paymentKey)의 최대 허용 길이. orderNumber 는 ~20자, 토큰은 UUID(36자). */
+    private static final int MAX_CALLBACK_PARAM_LENGTH = 64;
+
+    /** 콜백 파라미터 길이 경계 — 하나라도 초과하면 예외(success 의 catch 가 fail 302 로 흡수). */
+    private static void requireBoundedParams(String... params) {
+        for (String p : params) {
+            if (p != null && p.length() > MAX_CALLBACK_PARAM_LENGTH) {
+                throw new IllegalArgumentException("토스 콜백 파라미터 길이 초과");
+            }
+        }
+    }
+
+    /** /orders/{orderNumber}?payment={status} 상대경로(동일 오리진)로 302. orderNumber 가 없거나 경계 초과면 /orders 로 폴백한다. */
     private static ResponseEntity<Void> redirect(String orderNumber, String status) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/orders");
-        if (orderNumber != null && !orderNumber.isBlank()) {
-            builder.pathSegment(orderNumber); // 단일 세그먼트로 인코딩 — 경로/헤더 인젝션 방지.
+        if (orderNumber != null && !orderNumber.isBlank() && orderNumber.length() <= MAX_CALLBACK_PARAM_LENGTH) {
+            builder.pathSegment(orderNumber); // 단일 세그먼트로 인코딩 — 경로/헤더 인젝션·과대 입력 방지.
         }
         URI location = builder.queryParam("payment", status).encode().build().toUri();
         return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
