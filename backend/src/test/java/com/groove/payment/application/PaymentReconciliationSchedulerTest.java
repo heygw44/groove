@@ -23,6 +23,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -38,6 +39,7 @@ class PaymentReconciliationSchedulerTest {
     private static final Instant NOW = Instant.parse("2026-05-12T10:00:00Z");
     private static final Duration MIN_AGE = Duration.ofMinutes(1);
     private static final Duration TOSS_TIMEOUT = Duration.ofMinutes(20);
+    private static final Duration MAX_AGE = Duration.ofHours(1);
     private static final int BATCH_SIZE = 200;
 
     @Mock
@@ -52,12 +54,19 @@ class PaymentReconciliationSchedulerTest {
     @BeforeEach
     void setUp() {
         scheduler = new PaymentReconciliationScheduler(paymentRepository, paymentGateway, settlementService,
-                Clock.fixed(NOW, ZoneOffset.UTC), MIN_AGE, TOSS_TIMEOUT, BATCH_SIZE);
+                Clock.fixed(NOW, ZoneOffset.UTC), MIN_AGE, TOSS_TIMEOUT, MAX_AGE, BATCH_SIZE);
     }
 
+    /** 만료 전(createdAt=NOW) generic PENDING — reconcileOne 이 createdAt 을 읽으므로 주입 필수. */
     private static Payment pending(String pgTransactionId) {
+        return pending(pgTransactionId, NOW);
+    }
+
+    private static Payment pending(String pgTransactionId, Instant createdAt) {
         Order order = Order.placeForMember("ORD-20260512-A1B2C3", 1L, com.groove.support.OrderFixtures.sampleShippingInfo());
-        return Payment.initiate(order, 35000L, PaymentMethod.CARD, "MOCK", pgTransactionId);
+        Payment payment = Payment.initiate(order, 35000L, PaymentMethod.CARD, "MOCK", pgTransactionId);
+        ReflectionTestUtils.setField(payment, "createdAt", createdAt); // max-age 판정용 createdAt 주입
+        return payment;
     }
 
     private static Payment tossPending(String pgTransactionId, Instant createdAt) {
@@ -110,6 +119,105 @@ class PaymentReconciliationSchedulerTest {
 
         verify(settlementService).settle("mock-tx-good", PaymentStatus.PAID, null);
         verify(settlementService, never()).settle(eq("mock-tx-bad"), any(), any());
+    }
+
+    @Test
+    @DisplayName("PG 가 취소(REFUNDED)를 반환하면 미확정 결제를 FAILED 로 종결한다")
+    void reconcile_pgRefunded_settlesFailed() {
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
+        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.REFUNDED);
+        settleReturnsApplied();
+
+        scheduler.reconcilePendingPayments();
+
+        verify(settlementService).settle("mock-tx-1", PaymentStatus.FAILED, "PG 측 결제 취소 확인 — 미확정 결제 실패 처리");
+    }
+
+    @Test
+    @DisplayName("PG 가 부분취소(PARTIALLY_REFUNDED)를 반환해도 미확정 결제를 FAILED 로 종결한다")
+    void reconcile_pgPartialCanceled_settlesFailed() {
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
+        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PARTIALLY_REFUNDED);
+        settleReturnsApplied();
+
+        scheduler.reconcilePendingPayments();
+
+        verify(settlementService).settle("mock-tx-1", PaymentStatus.FAILED, "PG 측 결제 취소 확인 — 미확정 결제 실패 처리");
+    }
+
+    @Test
+    @DisplayName("max-age 초과여도 PG 가 PENDING(진행 중)을 답하면 종결하지 않고 다음 주기에 재시도한다 (#299 리뷰 #2)")
+    void reconcile_expiredPendingPersists_doesNotSettle() {
+        Payment expired = pending("mock-tx-1", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(expired));
+        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PENDING);
+
+        scheduler.reconcilePendingPayments();
+
+        // PG 가 정상적으로 '진행 중'이라 응답하면 max-age 초과여도 강제 실패시키지 않는다(오류 케이스만 종결).
+        verifyNoInteractions(settlementService);
+    }
+
+    @Test
+    @DisplayName("max-age 초과 결제의 query 가 계속 실패하면 FAILED 로 종결한다 (잔존 pgTx 404/502)")
+    void reconcile_expiredQueryError_settlesFailed() {
+        Payment expired = pending("mock-tx-stale", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(expired));
+        given(paymentGateway.query("mock-tx-stale")).willThrow(new RuntimeException("PG 404 → 502"));
+        settleReturnsApplied();
+
+        scheduler.reconcilePendingPayments();
+
+        verify(settlementService).settle(
+                "mock-tx-stale", PaymentStatus.FAILED, "결제 폴링 조회 반복 실패(max-age 초과) — 자동 실패 처리");
+    }
+
+    @Test
+    @DisplayName("만료 전 결제의 query 가 실패하면 종결하지 않고 다음 주기에 재시도한다")
+    void reconcile_freshQueryError_retriesNextCycle() {
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
+        given(paymentGateway.query("mock-tx-1")).willThrow(new RuntimeException("PG 일시 장애"));
+
+        assertThatCode(() -> scheduler.reconcilePendingPayments()).doesNotThrowAnyException();
+
+        verifyNoInteractions(settlementService);
+    }
+
+    @Test
+    @DisplayName("max-age 초과 + query=PAID 인데 settle 이 실패해도 FAILED 로 뒤집지 않고 다음 주기에 재시도한다")
+    void reconcile_expiredPaidButSettleThrows_doesNotForceFail() {
+        Payment expired = pending("mock-tx-1", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(expired));
+        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PAID);
+        given(settlementService.settle("mock-tx-1", PaymentStatus.PAID, null)).willThrow(new RuntimeException("일시 정산 실패"));
+
+        assertThatCode(() -> scheduler.reconcilePendingPayments()).doesNotThrowAnyException();
+
+        verify(settlementService).settle("mock-tx-1", PaymentStatus.PAID, null);
+        // 핵심: PAID 확정 결제가 settle 일시 오류로 FAILED 로 뒤집히면 안 된다(#299 리뷰).
+        verify(settlementService, never()).settle(eq("mock-tx-1"), eq(PaymentStatus.FAILED), any());
+    }
+
+    @Test
+    @DisplayName("max-age 초과 종결의 settle 자체가 실패해도 예외를 전파하지 않는다 (best-effort)")
+    void reconcile_terminateSettleThrows_swallowed() {
+        Payment expired = pending("mock-tx-stale", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(expired));
+        given(paymentGateway.query("mock-tx-stale")).willThrow(new RuntimeException("PG 404 → 502"));
+        given(settlementService.settle(anyString(), any(), any())).willThrow(new RuntimeException("정산 DB 오류"));
+
+        assertThatCode(() -> scheduler.reconcilePendingPayments()).doesNotThrowAnyException();
+
+        verify(settlementService).settle(
+                "mock-tx-stale", PaymentStatus.FAILED, "결제 폴링 조회 반복 실패(max-age 초과) — 자동 실패 처리");
+    }
+
+    @Test
+    @DisplayName("max-age 가 min-age 이하이면 생성자가 거부한다")
+    void constructor_maxAgeNotGreaterThanMinAge_throws() {
+        assertThatThrownBy(() -> new PaymentReconciliationScheduler(paymentRepository, paymentGateway, settlementService,
+                Clock.fixed(NOW, ZoneOffset.UTC), MIN_AGE, TOSS_TIMEOUT, MIN_AGE, BATCH_SIZE))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
