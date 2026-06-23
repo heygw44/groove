@@ -1,6 +1,5 @@
 package com.groove.payment.application;
 
-import com.groove.common.idempotency.IdempotencyService;
 import com.groove.payment.api.dto.PaymentCallbackResult;
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
@@ -32,8 +31,7 @@ public class PaymentReconciliationScheduler {
 
     private final PaymentRepository paymentRepository;
     private final PaymentGateway paymentGateway;
-    private final PaymentCallbackService callbackService;
-    private final IdempotencyService idempotencyService;
+    private final PaymentSettlementService settlementService;
     private final Clock clock;
     private final Duration minAge;
     private final Duration tossPendingTimeout;
@@ -41,16 +39,14 @@ public class PaymentReconciliationScheduler {
 
     public PaymentReconciliationScheduler(PaymentRepository paymentRepository,
                                           PaymentGateway paymentGateway,
-                                          PaymentCallbackService callbackService,
-                                          IdempotencyService idempotencyService,
+                                          PaymentSettlementService settlementService,
                                           Clock clock,
                                           @Value("${groove.payment.reconciliation.min-age:PT1M}") Duration minAge,
                                           @Value("${groove.payment.reconciliation.toss-pending-timeout:PT20M}") Duration tossPendingTimeout,
                                           @Value("${groove.payment.reconciliation.batch-size:200}") int batchSize) {
         this.paymentRepository = paymentRepository;
         this.paymentGateway = paymentGateway;
-        this.callbackService = callbackService;
-        this.idempotencyService = idempotencyService;
+        this.settlementService = settlementService;
         this.clock = clock;
         this.minAge = Objects.requireNonNull(minAge, "minAge");
         this.tossPendingTimeout = Objects.requireNonNull(tossPendingTimeout, "tossPendingTimeout");
@@ -87,13 +83,10 @@ public class PaymentReconciliationScheduler {
         }
     }
 
-    /** 만료된 토스 미확정 PENDING 을 FAILED 로 확정하고 재고·쿠폰을 복원한다(applyResult 재사용, 멱등). */
+    /** 만료된 토스 미확정 PENDING 을 FAILED 로 확정하고 재고·쿠폰을 복원한다(공유 정산 헬퍼 재사용, 멱등). */
     private void reapAbandonedToss(String pgTransactionId) {
         try {
-            idempotencyService.execute(
-                    PaymentCallbackService.idempotencyKeyFor(pgTransactionId),
-                    PaymentCallbackResult.class,
-                    () -> callbackService.applyResult(pgTransactionId, PaymentStatus.FAILED, "토스 결제 미확정 만료 — 자동 실패 처리"));
+            settlementService.settle(pgTransactionId, PaymentStatus.FAILED, "토스 결제 미확정 만료 — 자동 실패 처리");
             log.info("토스 미확정 결제 만료 처리(FAILED+보상): pgTx={}", pgTransactionId);
         } catch (RuntimeException e) {
             log.warn("토스 미확정 결제 만료 처리 실패: pgTx={} — 다음 주기 재시도", pgTransactionId, e);
@@ -110,10 +103,7 @@ public class PaymentReconciliationScheduler {
                 log.warn("결제 폴링: 예상치 못한 PG 상태 pgTx={}, status={} — 건너뜀", pgTransactionId, pgStatus);
                 return;
             }
-            PaymentCallbackResult result = idempotencyService.execute(
-                    PaymentCallbackService.idempotencyKeyFor(pgTransactionId),
-                    PaymentCallbackResult.class,
-                    () -> callbackService.applyResult(pgTransactionId, pgStatus, null));
+            PaymentCallbackResult result = settlementService.settle(pgTransactionId, pgStatus, null);
             log.info("결제 폴링 동기화: pgTx={} → {} ({})", pgTransactionId, pgStatus, result.outcome());
         } catch (RuntimeException e) {
             log.warn("결제 폴링 동기화 실패: pgTx={} — 다음 주기에 재시도", pgTransactionId, e);

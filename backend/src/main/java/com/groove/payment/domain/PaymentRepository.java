@@ -27,6 +27,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByOrderIdForUpdate(@Param("orderId") Long orderId);
 
     /**
+     * PG 거래 식별자로 결제를 가볍게 조회한다(연관 fetch 없음). 웹훅 수신 시 outbound 재조회 전에
+     * 로컬 결제 존재·상태를 먼저 확인하는 선조회용 — 미존재/종착 결제는 재조회 없이 무해 처리한다.
+     */
+    Optional<Payment> findByPgTransactionId(String pgTransactionId);
+
+    /**
      * PG 거래 식별자로 결제를 조회하며 order + order.items + order.items.album 까지 한 번에 fetch 한다.
      */
     @EntityGraph(attributePaths = {"order", "order.items", "order.items.album"})
