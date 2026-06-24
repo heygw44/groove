@@ -1,6 +1,7 @@
 package com.groove.shipping.application;
 
 import com.groove.order.domain.Order;
+import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
 import com.groove.shipping.api.dto.ShippingResponse;
 import com.groove.shipping.domain.Shipping;
@@ -24,6 +25,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,11 +39,14 @@ class ShippingServiceTest {
     @Mock
     private ShippingRepository shippingRepository;
 
+    @Mock
+    private OrderRepository orderRepository;
+
     private ShippingService shippingService;
 
     @BeforeEach
     void setUp() {
-        shippingService = new ShippingService(shippingRepository, CLOCK);
+        shippingService = new ShippingService(shippingRepository, orderRepository, CLOCK);
     }
 
     private Shipping preparingShipping() {
@@ -92,7 +97,8 @@ class ShippingServiceTest {
     @DisplayName("advanceToShipped — PREPARING 이면 SHIPPED 로 전이하고 주문도 SHIPPED 로 동반 전이")
     void advanceToShipped_fromPreparing() {
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
-        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+        given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
+        given(orderRepository.findByIdForUpdate(any())).willReturn(Optional.of(shipping.getOrder()));
 
         shippingService.advanceToShipped(1L);
 
@@ -106,7 +112,7 @@ class ShippingServiceTest {
         // 배송 SHIPPED, 주문 PREPARING — 배송 가드에서 단락돼 주문이 PREPARING 으로 남는다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
         shipping.markShipped(CLOCK.instant());
-        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+        given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
 
         shippingService.advanceToShipped(1L);
 
@@ -117,7 +123,7 @@ class ShippingServiceTest {
     @Test
     @DisplayName("advanceToShipped — 대상 없으면 무해")
     void advanceToShipped_missing_noop() {
-        given(shippingRepository.findWithOrderById(99L)).willReturn(Optional.empty());
+        given(shippingRepository.findById(99L)).willReturn(Optional.empty());
 
         shippingService.advanceToShipped(99L);
     }
@@ -127,7 +133,8 @@ class ShippingServiceTest {
     void advanceToDelivered_fromShipped() {
         Shipping shipping = shippingWithOrderAt(OrderStatus.SHIPPED);
         shipping.markShipped(CLOCK.instant());
-        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+        given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
+        given(orderRepository.findByIdForUpdate(any())).willReturn(Optional.of(shipping.getOrder()));
 
         shippingService.advanceToDelivered(1L);
 
@@ -140,7 +147,7 @@ class ShippingServiceTest {
     void advanceToDelivered_fromPreparing_noop() {
         // 배송 PREPARING, 주문 SHIPPED — 배송 가드에서 단락돼 주문이 SHIPPED 로 남는다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.SHIPPED);
-        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+        given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
 
         shippingService.advanceToDelivered(1L);
 
@@ -149,16 +156,17 @@ class ShippingServiceTest {
     }
 
     @Test
-    @DisplayName("advanceToDelivered — 주문이 한 단계 뒤처져(PREPARING) 있으면 불법 점프 대신 무해 무시 (가드가 예외 차단)")
-    void advanceToDelivered_orderBehind_guardSkipsWithoutThrowing() {
-        // 배송 SHIPPED, 주문 PREPARING — PREPARING→DELIVERED 는 불법이라 가드가 예외를 막는다.
+    @DisplayName("advanceToDelivered — 주문이 한 단계 뒤처져(PREPARING) 있으면 주문·배송 모두 전진 안 함 (락스텝 원자성)")
+    void advanceToDelivered_orderBehind_skipsBothWithoutThrowing() {
+        // 배송 SHIPPED, 주문 PREPARING — PREPARING→DELIVERED 는 불법이라 주문 전이가 false → 배송도 SHIPPED 유지.
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
         shipping.markShipped(CLOCK.instant());
-        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+        given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
+        given(orderRepository.findByIdForUpdate(any())).willReturn(Optional.of(shipping.getOrder()));
 
         assertThatCode(() -> shippingService.advanceToDelivered(1L)).doesNotThrowAnyException();
 
-        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
+        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.SHIPPED);
         assertThat(shipping.getOrder().getStatus()).isEqualTo(OrderStatus.PREPARING);
     }
 
@@ -167,7 +175,8 @@ class ShippingServiceTest {
     void advanceToShipped_orderTerminal_skipsAdvance() {
         // 주문 CANCELLED, 배송 PREPARING — 스케줄러가 밀면 안 된다.
         Shipping shipping = shippingWithOrderAt(OrderStatus.CANCELLED);
-        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+        given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
+        given(orderRepository.findByIdForUpdate(any())).willReturn(Optional.of(shipping.getOrder()));
 
         shippingService.advanceToShipped(1L);
 
@@ -180,7 +189,8 @@ class ShippingServiceTest {
     void advanceToDelivered_orderTerminal_skipsAdvance() {
         Shipping shipping = shippingWithOrderAt(OrderStatus.CANCELLED);
         shipping.markShipped(CLOCK.instant());
-        given(shippingRepository.findWithOrderById(1L)).willReturn(Optional.of(shipping));
+        given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
+        given(orderRepository.findByIdForUpdate(any())).willReturn(Optional.of(shipping.getOrder()));
 
         assertThatCode(() -> shippingService.advanceToDelivered(1L)).doesNotThrowAnyException();
 

@@ -133,7 +133,8 @@ public class OrderService {
      */
     @Transactional
     public Order cancel(Long memberId, String orderNumber, String reason) {
-        Order order = orderRepository.findWithAlbumsByOrderNumber(orderNumber)
+        // 주문 행을 PESSIMISTIC_WRITE 로 잠그고 상태를 재검증 — 동시 취소(더블클릭/투명 재시도)의 재고·쿠폰 이중 복원 차단.
+        Order order = orderRepository.findByOrderNumberForUpdate(orderNumber)
                 .orElseThrow(OrderNotFoundException::new);
         if (order.isGuestOrder() || !order.getMemberId().equals(memberId)) {
             throw new OrderNotFoundException();
@@ -147,6 +148,8 @@ public class OrderService {
         }
         order.changeStatus(OrderStatus.CANCELLED, reason, clock.instant());
         // 재고 복원 — 원자적 가산 UPDATE (restoreStock). albumId 오름차순으로 정렬.
+        // 락 조회(findByOrderNumberForUpdate)는 items 를 fetch 하지 않으므로, 이 순회가 컨트롤러 응답 직렬화 전에
+        // items 컬렉션을 초기화하는 역할도 겸한다(album 은 id=FK 만 필요해 프록시로 충분).
         StockRestorer.restore(albumRepository, order.getItems().stream()
                 .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
         // 쿠폰 USED→ISSUED 복원. 미적용 주문이면 no-op.

@@ -369,7 +369,7 @@ class OrderServiceTest {
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a1, 2));
         order.addItem(OrderItem.create(a2, 3));
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
+        given(orderRepository.findByOrderNumberForUpdate("ORD-1")).willReturn(Optional.of(order));
 
         Order result = orderService.cancel(1L, "ORD-1", "단순 변심");
 
@@ -386,7 +386,7 @@ class OrderServiceTest {
         Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
+        given(orderRepository.findByOrderNumberForUpdate("ORD-1")).willReturn(Optional.of(order));
 
         Order result = orderService.cancel(1L, "ORD-1", null);
 
@@ -402,7 +402,7 @@ class OrderServiceTest {
         Album a = album(10L, AlbumStatus.SELLING, 99, 30000L);
         Order order = OrderFixtures.memberOrder("ORD-1", withdrawnMemberId);
         order.addItem(OrderItem.create(a, 1));
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
+        given(orderRepository.findByOrderNumberForUpdate("ORD-1")).willReturn(Optional.of(order));
         given(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).willReturn(false);
 
         assertThatThrownBy(() -> orderService.cancel(withdrawnMemberId, "ORD-1", "변심"))
@@ -415,7 +415,7 @@ class OrderServiceTest {
     @Test
     @DisplayName("cancel — 미존재 주문이면 OrderNotFoundException")
     void cancel_missing_throwsNotFound() {
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-X")).willReturn(Optional.empty());
+        given(orderRepository.findByOrderNumberForUpdate("ORD-X")).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-X", null))
                 .isInstanceOf(OrderNotFoundException.class);
@@ -425,7 +425,7 @@ class OrderServiceTest {
     @DisplayName("cancel — 타 회원 주문이면 OrderNotFoundException (404)")
     void cancel_otherMembersOrder_throwsNotFound() {
         Order order = OrderFixtures.memberOrder("ORD-1", 2L);
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
+        given(orderRepository.findByOrderNumberForUpdate("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-1", null))
                 .isInstanceOf(OrderNotFoundException.class);
@@ -438,7 +438,7 @@ class OrderServiceTest {
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
         order.changeStatus(OrderStatus.PAID, null, CLOCK.instant());
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
+        given(orderRepository.findByOrderNumberForUpdate("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-1", null))
                 .isInstanceOf(IllegalStateTransitionException.class);
@@ -452,7 +452,7 @@ class OrderServiceTest {
         Order order = OrderFixtures.memberOrder("ORD-1", 1L);
         order.addItem(OrderItem.create(a, 1));
         order.changeStatus(OrderStatus.CANCELLED, "first", CLOCK.instant());
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-1")).willReturn(Optional.of(order));
+        given(orderRepository.findByOrderNumberForUpdate("ORD-1")).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderService.cancel(1L, "ORD-1", null))
                 .isInstanceOf(IllegalStateTransitionException.class);
@@ -529,7 +529,7 @@ class OrderServiceTest {
         Order order = Order.placeForMember("ORD-20260528-C3C3C3", 1L, OrderFixtures.sampleShippingInfo());
         order.addItem(com.groove.order.domain.OrderItem.create(a, 2));
         ReflectionTestUtils.setField(order, "id", 777L);
-        given(orderRepository.findWithAlbumsByOrderNumber("ORD-20260528-C3C3C3"))
+        given(orderRepository.findByOrderNumberForUpdate("ORD-20260528-C3C3C3"))
                 .willReturn(Optional.of(order));
 
         orderService.cancel(1L, "ORD-20260528-C3C3C3", "변심");
