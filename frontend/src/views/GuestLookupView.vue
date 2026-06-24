@@ -2,10 +2,12 @@
 import { ref, reactive, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useForm } from '@/composables/useForm'
+import { usePaymentResultBanner } from '@/composables/usePaymentResultBanner'
 import { guestLookup } from '@/api/orders'
 import { isPaidStatus } from '@/lib/order-enums'
 import OrderItemsCard from '@/components/order/OrderItemsCard.vue'
 import ShippingTracker from '@/components/order/ShippingTracker.vue'
+import PaymentResultBanner from '@/components/payment/PaymentResultBanner.vue'
 import BaseInput from '@/components/base/BaseInput.vue'
 import BaseButton from '@/components/base/BaseButton.vue'
 
@@ -15,6 +17,9 @@ const form = reactive({
   email: '',
 })
 const requiredError = ref('')
+
+// 게스트 토스 결제 콜백 결과(#308) — 라우터 가드가 order-detail 바운스 대신 ?payment= 를 보존해 이리로 보낸다.
+const { paymentResult } = usePaymentResultBanner()
 
 const order = ref(null)
 const { formError, submitting, submit } = useForm(async () => {
@@ -38,6 +43,9 @@ async function onSubmit() {
   <section class="mx-auto max-w-2xl py-8">
     <h1 class="mb-2 font-display text-2xl font-bold text-vinyl-black">비회원 주문 조회</h1>
     <p class="mb-6 text-sm text-vinyl-800/70">주문 시 입력한 주문번호와 이메일로 조회합니다.</p>
+
+    <!-- 토스 결제 콜백 결과 안내(게스트) -->
+    <PaymentResultBanner v-if="paymentResult" :result="paymentResult" />
 
     <form class="space-y-3" @submit.prevent="onSubmit">
       <p

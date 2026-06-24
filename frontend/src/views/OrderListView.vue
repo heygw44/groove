@@ -2,17 +2,21 @@
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouteQuery } from '@/composables/useRouteQuery'
+import { usePaymentResultBanner } from '@/composables/usePaymentResultBanner'
 import { myOrders } from '@/api/orders'
 import { errorMessage } from '@/lib/problem-detail'
 import { firstStr, pageParam } from '@/lib/query'
 import { formatWon, formatDate } from '@/lib/format'
 import { orderStatusLabel, ORDER_STATUS_FILTER_OPTIONS } from '@/lib/order-enums'
 import Pagination from '@/components/Pagination.vue'
+import PaymentResultBanner from '@/components/payment/PaymentResultBanner.vue'
 import BaseSelect from '@/components/base/BaseSelect.vue'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
 const route = useRoute()
 const { patchQuery } = useRouteQuery()
+// 토스 결제 취소 콜백(#308): 서버가 orderId 없이 /orders?payment=fail 로 302 할 때 회원에게 결과를 안내하고 URL 을 정리한다.
+const { paymentResult } = usePaymentResultBanner()
 
 const page = ref(null)
 const loading = ref(true)
@@ -52,12 +56,21 @@ function onStatusChange(value) {
   patchQuery({ status: value, page: undefined })
 }
 
-watch(() => route.query, fetchOrders, { immediate: true })
+// 조회에 영향 주는 status·page 만 감시 — payment 등 무관 쿼리 정리(콜백 후 usePaymentResultBanner)로
+// 중복 조회되지 않도록 소스별(getter 배열) 값 비교를 쓴다.
+watch(
+  [() => firstStr(route.query.status), () => pageParam(route.query)],
+  () => fetchOrders(route.query),
+  { immediate: true },
+)
 </script>
 
 <template>
   <section class="mx-auto max-w-2xl py-8">
     <h1 class="mb-6 font-display text-2xl font-bold text-vinyl-black">주문 내역</h1>
+
+    <!-- 토스 결제 콜백 결과 안내(주로 취소 시 /orders?payment=fail) -->
+    <PaymentResultBanner v-if="paymentResult" :result="paymentResult" />
 
     <div class="mb-4 max-w-xs">
       <BaseSelect
