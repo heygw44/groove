@@ -118,7 +118,7 @@ class PaymentServiceTest {
         when(paymentGateway.request(any())).thenReturn(new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK"));
         when(steps.persist(any(), any(), any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk"));
         PaymentApiResponse recovered = pendingResponse();
-        when(steps.findExistingForOrder(ORDER_ID)).thenReturn(Optional.of(recovered));
+        when(steps.findExistingForOrder(ORDER_ID)).thenReturn(Optional.of(PaymentRequestPrep.existing(recovered, null)));
 
         PaymentApiResponse response = paymentService.requestPayment(1L, request());
 

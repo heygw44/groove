@@ -37,7 +37,7 @@ import java.util.UUID;
  *
  * <p>① checkout: 주문 검증 + payable 을 PENDING 으로 저장(잠정 pgTx=toss-pending:{orderNumber})하고 프론트에 clientKey·orderId·amount 응답.
  * ② confirm(successUrl): 금액 위변조 검증 → 게이트웨이 confirm → 성공 시 {@link PaymentCallbackService} 로 PAID 적용.
- * ③ fail(failUrl): 기존 보상 경로(재고·쿠폰 복원) 1회 적용.
+ * ③ fail(failUrl): 상태 무변경 안내만(미인증 콜백 CSRF 방어) — 보상(재고·쿠폰 복원)은 폴링 리퍼가 만료 경로로 1회 수행.
  *
  * <p>토스는 confirm 모델이라 {@code PaymentGateway.request()} 가 {@code UnsupportedOperationException} 이므로
  * {@code PaymentService.requestPayment}(request 경로)와 분리한다. 외부 confirm 호출은 트랜잭션 밖에서 한다.
@@ -98,18 +98,6 @@ public class TossPaymentService {
         return buildResponse(pending.response(), pending.token());
     }
 
-    /**
-     * 멱등 응답 경로에서 저장된 결제의 callback_token 을 재조회한다(없으면 null — 레거시 결제).
-     * 게스트 주문은 익명 재조회에도 저장 토큰을 그대로 반환한다 — 위젯 새로고침 시 successUrl 재구성을 보존하기 위한 의도된 동작이며,
-     * 게스트 토큰이 비밀이 아님을 전제로 한 잔존 위험이다(실제 관문은 confirm 의 금액 검증·유효 paymentKey, #306).
-     */
-    private String existingCallbackToken(String orderNumber) {
-        return orderRepository.findByOrderNumber(orderNumber)
-                .flatMap(o -> paymentRepository.findByOrderId(o.getId()))
-                .map(Payment::getCallbackToken)
-                .orElse(null);
-    }
-
     /** clientKey + orderId/amount + 토큰이 박힌 successUrl + (토큰 없는) failUrl 로 응답을 조립한다. props 부재(mock)면 URL 은 null. */
     private TossCheckoutResponse buildResponse(PaymentApiResponse persisted, String token) {
         TossPaymentProperties props = tossProperties.getIfAvailable();
@@ -166,9 +154,9 @@ public class TossPaymentService {
         try {
             return new PendingPayment(steps.persist(prep, request.method(), synthetic, callbackToken), callbackToken);
         } catch (DataIntegrityViolationException duplicate) {
-            // uk_payment_order 동시 충돌 — 승자가 저장한 기존 결제와 그 토큰을 재조회한다(우리 token 은 저장되지 않았다).
-            PaymentApiResponse existing = steps.findExistingForOrder(prep.orderId()).orElseThrow(() -> duplicate);
-            return new PendingPayment(existing, existingCallbackToken(existing.orderNumber()));
+            // uk_payment_order 동시 충돌 — 승자가 저장한 기존 결제와 그 토큰을 한 번에 재조회한다(우리 token 은 저장되지 않았다).
+            PaymentRequestPrep recovered = steps.findExistingForOrder(prep.orderId()).orElseThrow(() -> duplicate);
+            return new PendingPayment(recovered.existingResponse(), recovered.callbackToken());
         }
     }
 

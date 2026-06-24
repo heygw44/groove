@@ -177,7 +177,7 @@ class TossPaymentServiceTest {
     void checkout_persistConflict_recoversExisting() {
         given(steps.prepare(1L, request())).willReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, AMOUNT));
         given(steps.persist(any(), any(), any(), any())).willThrow(new DataIntegrityViolationException("uk"));
-        given(steps.findExistingForOrder(ORDER_ID)).willReturn(Optional.of(pendingResponse()));
+        given(steps.findExistingForOrder(ORDER_ID)).willReturn(Optional.of(PaymentRequestPrep.existing(pendingResponse(), null)));
         given(tossProperties.getIfAvailable()).willReturn(null);
 
         TossCheckoutResponse response = service.checkout(1L, request());
@@ -191,21 +191,19 @@ class TossPaymentServiceTest {
     void checkout_persistConflict_usesStoredTokenNotLocal() {
         given(steps.prepare(1L, request())).willReturn(PaymentRequestPrep.proceed(ORDER_ID, ORDER_NUMBER, AMOUNT));
         given(steps.persist(any(), any(), any(), any())).willThrow(new DataIntegrityViolationException("uk"));
-        given(steps.findExistingForOrder(ORDER_ID)).willReturn(Optional.of(pendingResponse()));
+        // 충돌 복원 경로는 findExistingForOrder 가 "승자" 결제의 응답과 저장 토큰(VALID_CALLBACK)을 함께 실어 준다 — 추가 재조회 없음(#309).
+        given(steps.findExistingForOrder(ORDER_ID))
+                .willReturn(Optional.of(PaymentRequestPrep.existing(pendingResponse(), VALID_CALLBACK)));
         TossPaymentProperties props = new TossPaymentProperties(
                 null, "test_ck_abc", "test_sk_abc", "http://s", "http://f", null, null);
         given(tossProperties.getIfAvailable()).willReturn(props);
-        // 충돌 복원 경로가 재조회하는 "승자" 결제 — 저장 토큰 = VALID_CALLBACK
-        Order order = orderMock();
-        Payment winner = paymentMock(PaymentStatus.PENDING, AMOUNT);
-        given(orderRepository.findByOrderNumber(ORDER_NUMBER)).willReturn(Optional.of(order));
-        given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(winner));
 
         TossCheckoutResponse response = service.checkout(1L, request());
 
         // 로컬 랜덤 토큰이 아니라 저장된 토큰이 successUrl 에 박혀야 confirm 이 통과한다(#1 동시성 버그 회귀 방지).
         assertThat(response.successUrl()).isEqualTo("http://s?token=" + VALID_CALLBACK);
         assertThat(response.failUrl()).isEqualTo("http://f"); // fail 은 토큰 미부착(#309)
+        verifyNoInteractions(orderRepository, paymentRepository); // 충돌 복원도 토큰 재조회 0건(#309)
     }
 
     // --- confirm ---

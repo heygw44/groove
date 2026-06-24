@@ -106,10 +106,14 @@ class PaymentRequestSteps {
         return PaymentApiResponse.from(payment);
     }
 
-    /** 주문에 이미 접수된 결제를 새 트랜잭션에서 재조회한다(uk_payment_order 충돌 복원용). */
+    /**
+     * 주문에 이미 접수된 결제를 새 트랜잭션에서 재조회한다(uk_payment_order 충돌 복원용).
+     * 콜백 토큰도 함께 실어, 토스 충돌 복원 경로가 토큰 재조회 없이 successUrl 을 재구성하게 한다(#309).
+     */
     @Transactional(readOnly = true)
-    Optional<PaymentApiResponse> findExistingForOrder(long orderId) {
-        return paymentRepository.findByOrderId(orderId).map(PaymentApiResponse::from);
+    Optional<PaymentRequestPrep> findExistingForOrder(long orderId) {
+        return paymentRepository.findByOrderId(orderId)
+                .map(p -> PaymentRequestPrep.existing(PaymentApiResponse.from(p), p.getCallbackToken()));
     }
 
     /**
