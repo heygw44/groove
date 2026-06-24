@@ -178,12 +178,12 @@ public class TossPaymentService {
     private PaymentCallbackResult doConfirm(long orderPk, String paymentKey, String orderId, long amount) {
         ConfirmResponse confirmed = paymentGateway.confirm(paymentKey, orderId, amount);
         if (confirmed.status() != PaymentStatus.PAID) {
-            callbackService.linkPendingPaymentKey(orderPk, confirmed.pgTransactionId());
+            callbackService.linkPendingPaymentKey(orderPk, confirmed.pgTransactionId(), confirmed.method());
             log.info("토스 confirm 비-PAID 결과: order={}, status={} — paymentKey 연결 후 후속 정산 대기", orderId, confirmed.status());
             throw new PaymentGatewayException(
                     new IllegalStateException("토스 결제가 즉시 확정되지 않았습니다: " + confirmed.status()));
         }
-        return callbackService.applyConfirmedPaid(orderPk, confirmed.pgTransactionId(), amount);
+        return callbackService.applyConfirmedPaid(orderPk, confirmed.pgTransactionId(), amount, confirmed.method());
     }
 
     /**

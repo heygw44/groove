@@ -107,7 +107,8 @@ public class MockPaymentGateway implements PaymentGateway {
         transactions.put(paymentKey, new Transaction(PaymentStatus.PAID, now));
 
         log.info("Mock 결제 승인(confirm): paymentKey={}, order={}, amount={} → PAID", paymentKey, orderId, amount);
-        return new ConfirmResponse(paymentKey, PaymentStatus.PAID);
+        // Mock 은 실제 결제수단을 모른다 — method 는 null 로 두어 호출부가 잠정 method 를 유지하게 한다.
+        return new ConfirmResponse(paymentKey, PaymentStatus.PAID, null);
     }
 
     @Override

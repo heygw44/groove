@@ -151,6 +151,19 @@ public class Payment extends BaseTimeEntity {
     }
 
     /**
+     * 토스 confirm 이 알려준 실제 결제수단으로 checkout 시 받은 잠정 method 를 보정한다(정합성 #307).
+     * 결제수단 선택은 토스 결제위젯이 담당하므로 checkout 의 method 는 잠정값이며, confirm 응답이 단일 진실원이다.
+     * pgTransactionId 보정과 동일하게 PENDING 일 때만 허용한다.
+     */
+    public void correctMethod(PaymentMethod method) {
+        if (status != PaymentStatus.PENDING) {
+            throw new IllegalStateException("PENDING 결제만 method 를 보정할 수 있습니다 (현재: " + status + ")");
+        }
+        Objects.requireNonNull(method, "method must not be null");
+        this.method = method;
+    }
+
+    /**
      * 결제 완료 확정 — PAID 로 전이하고 paidAt 을 주입된 now 로 기록한다. 전이 위반 시 IllegalStateException.
      */
     public void markPaid(Instant now) {

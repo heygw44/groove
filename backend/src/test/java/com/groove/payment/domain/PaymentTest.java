@@ -119,6 +119,38 @@ class PaymentTest {
     }
 
     @Test
+    @DisplayName("correctMethod: PENDING 결제의 잠정 method 를 confirm 이 알려준 실제 수단으로 보정한다 (#307)")
+    void correctMethod_replacesOnPending() {
+        Payment payment = pending(ORDER_NUMBER); // 잠정 method = CARD
+
+        payment.correctMethod(PaymentMethod.VIRTUAL_ACCOUNT);
+
+        assertThat(payment.getMethod()).isEqualTo(PaymentMethod.VIRTUAL_ACCOUNT);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("correctMethod: null 수단은 거부한다")
+    void correctMethod_rejectsNull() {
+        assertThatThrownBy(() -> pending(ORDER_NUMBER).correctMethod(null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    @DisplayName("correctMethod: PENDING 이 아닌 결제(PAID/FAILED)는 IllegalStateException")
+    void correctMethod_rejectsNonPending() {
+        Payment paid = pending(ORDER_NUMBER);
+        paid.markPaid(Instant.now());
+        assertThatThrownBy(() -> paid.correctMethod(PaymentMethod.VIRTUAL_ACCOUNT))
+                .isInstanceOf(IllegalStateException.class);
+
+        Payment failed = pending(ORDER_NUMBER);
+        failed.markFailed("x");
+        assertThatThrownBy(() -> failed.correctMethod(PaymentMethod.VIRTUAL_ACCOUNT))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     @DisplayName("markPaid: PENDING → PAID 로 전이하고 paidAt 을 기록한다")
     void markPaid_transitionsAndRecordsPaidAt() {
         Payment payment = pending("tx-paid");

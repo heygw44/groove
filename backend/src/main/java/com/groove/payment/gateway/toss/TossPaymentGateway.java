@@ -1,5 +1,6 @@
 package com.groove.payment.gateway.toss;
 
+import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentGatewayException;
 import com.groove.payment.gateway.ConfirmResponse;
@@ -77,8 +78,10 @@ public class TossPaymentGateway implements PaymentGateway {
                     .retrieve()
                     .body(TossPayment.class);
             PaymentStatus status = TossStatusMapper.toPaymentStatus(requireBody(payment).status());
-            log.info("토스 결제 승인: paymentKey={}, orderId={}, amount={} → {}", paymentKey, orderId, amount, status);
-            return new ConfirmResponse(payment.paymentKey(), status);
+            PaymentMethod method = TossMethodMapper.toPaymentMethod(payment.method());
+            log.info("토스 결제 승인: paymentKey={}, orderId={}, amount={} → {} ({})",
+                    paymentKey, orderId, amount, status, method);
+            return new ConfirmResponse(payment.paymentKey(), status, method);
         } catch (RuntimeException e) {
             // confirm 은 호출부 공통 래퍼가 없으므로 어댑터가 직접 502 로 정규화한다.
             logTossError("결제 승인", e);
