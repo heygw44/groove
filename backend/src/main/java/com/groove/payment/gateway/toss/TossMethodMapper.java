@@ -4,6 +4,8 @@ import com.groove.payment.domain.PaymentMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.text.Normalizer;
+
 /**
  * 토스 결제수단 문자열(한글) → 도메인 {@link PaymentMethod} 매퍼.
  *
@@ -28,12 +30,18 @@ final class TossMethodMapper {
     private TossMethodMapper() {
     }
 
-    /** 토스 method 문자열을 도메인 수단으로 매핑한다. null/공백/미지값은 {@code null}(보정 스킵). */
+    /**
+     * 토스 method 문자열을 도메인 수단으로 매핑한다. null/공백/미지값은 {@code null}(보정 스킵).
+     *
+     * <p>외부 PG 응답 문자열이라 정확 일치 전에 앞뒤 공백을 제거하고 유니코드 NFC 로 정규화한다 — 후행 공백·NFD
+     * 분해형 한글이 섞여도 매핑이 깨지지 않도록 한다.
+     */
     static PaymentMethod toPaymentMethod(String tossMethod) {
         if (tossMethod == null || tossMethod.isBlank()) {
             return null;
         }
-        return switch (tossMethod) {
+        String normalized = Normalizer.normalize(tossMethod.strip(), Normalizer.Form.NFC);
+        return switch (normalized) {
             case "카드" -> PaymentMethod.CARD;
             case "계좌이체" -> PaymentMethod.BANK_TRANSFER;
             case "가상계좌" -> PaymentMethod.VIRTUAL_ACCOUNT;

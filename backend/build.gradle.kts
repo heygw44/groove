@@ -19,6 +19,12 @@ java {
     }
 }
 
+// 소스 인코딩을 UTF-8 로 고정한다 — 한글 리터럴(예: TossMethodMapper 의 토스 결제수단 매칭)이
+// 빌드 플랫폼 기본 charset 에 휘둘려 깨지지 않도록 한다. JDK 21 은 JEP 400 으로 기본 UTF-8 이나 명시한다.
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}
+
 jacoco {
     toolVersion = "0.8.13"
 }

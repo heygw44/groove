@@ -98,12 +98,7 @@ public class PaymentCallbackService {
         if (payment.getAmount() != confirmedAmount) {
             throw new PaymentAmountMismatchException(payment.getOrder().getOrderNumber(), payment.getAmount(), confirmedAmount);
         }
-        // 잠정 pgTx(toss-pending:orderNumber) → 실제 paymentKey 로 교체(환불 경로가 paymentKey 를 읽음).
-        payment.linkPgTransaction(paymentKey);
-        // 잠정 method → confirm 이 알려준 실제 결제수단으로 보정(#307). 미상이면 보정 생략.
-        if (confirmedMethod != null) {
-            payment.correctMethod(confirmedMethod);
-        }
+        linkAndCorrect(payment, paymentKey, confirmedMethod);
         return applyTo(payment, PaymentStatus.PAID, null);
     }
 
@@ -118,10 +113,19 @@ public class PaymentCallbackService {
         Locked locked = lockPending(paymentRepository.findByOrderIdForUpdate(orderId),
                 "order:" + orderId, "토스 미확정 키 연결");
         if (locked.payment() != null) {
-            locked.payment().linkPgTransaction(paymentKey);
-            if (confirmedMethod != null) {
-                locked.payment().correctMethod(confirmedMethod);
-            }
+            linkAndCorrect(locked.payment(), paymentKey, confirmedMethod);
+        }
+    }
+
+    /**
+     * PENDING 결제의 잠정 pgTransactionId 를 실제 paymentKey 로 교체하고(환불 경로가 paymentKey 를 읽음), 잠정 method 를
+     * confirm 이 알려준 실제 결제수단으로 보정한다(#307). confirmedMethod 가 null(Mock·미지 수단)이면 보정을 건너뛴다.
+     * 토스 confirm 의 PAID·비-PAID 두 진입점이 공유한다.
+     */
+    private static void linkAndCorrect(Payment payment, String paymentKey, PaymentMethod confirmedMethod) {
+        payment.linkPgTransaction(paymentKey);
+        if (confirmedMethod != null) {
+            payment.correctMethod(confirmedMethod);
         }
     }
 
