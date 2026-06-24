@@ -1,5 +1,6 @@
 package com.groove.payment.gateway.toss;
 
+import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentGatewayException;
 import com.groove.payment.gateway.ConfirmResponse;
@@ -64,9 +65,13 @@ class TossPaymentGatewayTest {
     }
 
     private static String paymentJson(String paymentKey, String status) {
+        return paymentJson(paymentKey, status, "카드");
+    }
+
+    private static String paymentJson(String paymentKey, String status, String method) {
         return """
-                {"paymentKey":"%s","orderId":"ORD-1","status":"%s","totalAmount":105000,"balanceAmount":0}
-                """.formatted(paymentKey, status);
+                {"paymentKey":"%s","orderId":"ORD-1","status":"%s","method":"%s","totalAmount":105000,"balanceAmount":0}
+                """.formatted(paymentKey, status, method);
     }
 
     private static String errorJson(String code, String message) {
@@ -93,6 +98,40 @@ class TossPaymentGatewayTest {
 
             assertThat(response.pgTransactionId()).isEqualTo("pk_1");
             assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
+            assertThat(response.method()).isEqualTo(PaymentMethod.CARD);
+            server.verify();
+        }
+
+        @ParameterizedTest(name = "{0} → {1}")
+        @CsvSource({
+                "카드,CARD",
+                "계좌이체,BANK_TRANSFER",
+                "가상계좌,VIRTUAL_ACCOUNT",
+                "간편결제,EASY_PAY",
+                "휴대폰,MOBILE_PHONE",
+                "문화상품권,GIFT_CERTIFICATE",
+        })
+        @DisplayName("응답 method(한글)를 도메인 PaymentMethod 로 매핑한다 (#307 결제수단 정합성)")
+        void confirm_mapsMethod(String tossMethod, PaymentMethod expected) {
+            server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+                    .andRespond(withSuccess(paymentJson("pk_1", "DONE", tossMethod), MediaType.APPLICATION_JSON));
+
+            ConfirmResponse response = gateway.confirm("pk_1", "ORD-1", 105_000L);
+
+            assertThat(response.method()).isEqualTo(expected);
+            server.verify();
+        }
+
+        @Test
+        @DisplayName("알 수 없는 method 는 보정 스킵용 null 로 두되 결제는 성공시킨다 (status 미지와 달리 예외 없음)")
+        void confirm_unknownMethod_nullButPaid() {
+            server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+                    .andRespond(withSuccess(paymentJson("pk_1", "DONE", "이상한수단"), MediaType.APPLICATION_JSON));
+
+            ConfirmResponse response = gateway.confirm("pk_1", "ORD-1", 105_000L);
+
+            assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
+            assertThat(response.method()).isNull();
             server.verify();
         }
 

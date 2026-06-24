@@ -10,6 +10,7 @@ import com.groove.order.domain.OrderStatus;
 import com.groove.order.event.OrderPaidEvent;
 import com.groove.payment.api.dto.PaymentCallbackResult;
 import com.groove.payment.domain.Payment;
+import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentAmountMismatchException;
@@ -81,11 +82,13 @@ public class PaymentCallbackService {
 
     /**
      * 토스 confirm 성공 적용 — orderId 로 PENDING Payment 를 잠그고(FOR UPDATE), 잠정 pgTransactionId 를 실제
-     * paymentKey 로 교체한 뒤 PAID 를 적용한다. successUrl 새로고침/재호출에도 1회만 전이한다(이미 PAID 면 흡수).
-     * confirmedAmount 는 confirm 호출 전 이미 검증되었으나, 직접 호출 방어를 위해 한 번 더 대조한다.
+     * paymentKey 로 교체하고 잠정 method 를 confirm 이 알려준 실제 수단으로 보정한 뒤 PAID 를 적용한다. successUrl
+     * 새로고침/재호출에도 1회만 전이한다(이미 PAID 면 흡수). confirmedAmount 는 confirm 호출 전 이미 검증되었으나,
+     * 직접 호출 방어를 위해 한 번 더 대조한다. confirmedMethod 가 null(Mock·미지 수단)이면 보정을 건너뛴다.
      */
     @Transactional
-    public PaymentCallbackResult applyConfirmedPaid(long orderId, String paymentKey, long confirmedAmount) {
+    public PaymentCallbackResult applyConfirmedPaid(long orderId, String paymentKey, long confirmedAmount,
+                                                    PaymentMethod confirmedMethod) {
         Locked locked = lockPending(paymentRepository.findByOrderIdForUpdate(orderId),
                 "order:" + orderId, "토스 confirm 적용");
         if (locked.terminal() != null) {
@@ -95,22 +98,34 @@ public class PaymentCallbackService {
         if (payment.getAmount() != confirmedAmount) {
             throw new PaymentAmountMismatchException(payment.getOrder().getOrderNumber(), payment.getAmount(), confirmedAmount);
         }
-        // 잠정 pgTx(toss-pending:orderNumber) → 실제 paymentKey 로 교체(환불 경로가 paymentKey 를 읽음).
-        payment.linkPgTransaction(paymentKey);
+        linkAndCorrect(payment, paymentKey, confirmedMethod);
         return applyTo(payment, PaymentStatus.PAID, null);
     }
 
     /**
      * 토스 confirm 이 즉시 PAID 가 아닌(가상계좌 등) PENDING 을 반환했을 때, 잠정 pgTransactionId 를 실제 paymentKey 로
-     * 교체만 한다(상태 전이 없음). 이후 입금 PAID 웹훅/폴링이 {@code findByPgTransactionIdForUpdate(paymentKey)} 로
-     * 같은 행을 찾아 정산할 수 있게 한다. 없음/종착이면 no-op.
+     * 교체하고 잠정 method 를 실제 수단으로 보정한다(상태 전이 없음). 이후 입금 PAID 웹훅/폴링이
+     * {@code findByPgTransactionIdForUpdate(paymentKey)} 로 같은 행을 찾아 정산할 수 있게 한다. confirm 시점에 이미
+     * method 가 응답에 있으므로 여기서 보정해야 정합성 갭이 완전히 닫힌다. 없음/종착이면 no-op, confirmedMethod null 이면 보정 생략.
      */
     @Transactional
-    public void linkPendingPaymentKey(long orderId, String paymentKey) {
+    public void linkPendingPaymentKey(long orderId, String paymentKey, PaymentMethod confirmedMethod) {
         Locked locked = lockPending(paymentRepository.findByOrderIdForUpdate(orderId),
                 "order:" + orderId, "토스 미확정 키 연결");
         if (locked.payment() != null) {
-            locked.payment().linkPgTransaction(paymentKey);
+            linkAndCorrect(locked.payment(), paymentKey, confirmedMethod);
+        }
+    }
+
+    /**
+     * PENDING 결제의 잠정 pgTransactionId 를 실제 paymentKey 로 교체하고(환불 경로가 paymentKey 를 읽음), 잠정 method 를
+     * confirm 이 알려준 실제 결제수단으로 보정한다(#307). confirmedMethod 가 null(Mock·미지 수단)이면 보정을 건너뛴다.
+     * 토스 confirm 의 PAID·비-PAID 두 진입점이 공유한다.
+     */
+    private static void linkAndCorrect(Payment payment, String paymentKey, PaymentMethod confirmedMethod) {
+        payment.linkPgTransaction(paymentKey);
+        if (confirmedMethod != null) {
+            payment.correctMethod(confirmedMethod);
         }
     }
 

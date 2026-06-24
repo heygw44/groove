@@ -27,7 +27,9 @@ let checkout = null // { clientKey, orderId, amount, successUrl, failUrl }
 
 onMounted(async () => {
   try {
-    // 멱등 키 — checkout 재호출(예: HMR) 시에도 같은 PENDING 결제를 멱등 반환받도록 시도당 1회 생성.
+    // 'CARD' 는 잠정 placeholder다 — 실제 결제수단은 아래 결제위젯(renderPaymentMethods)에서 사용자가 고르며,
+    // 백엔드가 confirm 응답의 실제 수단으로 Payment.method 를 보정한다(#307). 멱등 키는 checkout 재호출
+    // (예: HMR) 시에도 같은 PENDING 결제를 멱등 반환받도록 시도당 1회 생성.
     checkout = await tossCheckout(props.orderNumber, 'CARD', randomUuid())
     if (!checkout.clientKey || !checkout.successUrl || !checkout.failUrl) {
       // 백엔드가 토스 미설정(local/docker 등 mock 프로파일) — 토스 모드를 쓸 수 없다.

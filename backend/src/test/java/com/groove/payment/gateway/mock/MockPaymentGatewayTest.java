@@ -121,7 +121,7 @@ class MockPaymentGatewayTest {
     class Confirm {
 
         @Test
-        @DisplayName("paymentKey 거래를 PAID 로 기록하고 ConfirmResponse(PAID) 를 반환한다")
+        @DisplayName("paymentKey 거래를 PAID 로 기록하고 ConfirmResponse(PAID, method=null) 를 반환한다")
         void confirm_recordsPaid() {
             MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ZERO));
 
@@ -129,6 +129,8 @@ class MockPaymentGatewayTest {
 
             assertThat(response.pgTransactionId()).isEqualTo("toss-pk-1");
             assertThat(response.status()).isEqualTo(PaymentStatus.PAID);
+            // Mock 은 실제 결제수단을 모른다 — method 는 null(호출부가 잠정 method 유지).
+            assertThat(response.method()).isNull();
             // 동기 확정이므로 이후 폴링 조회도 즉시 PAID 를 반환한다.
             assertThat(g.query("toss-pk-1")).isEqualTo(PaymentStatus.PAID);
         }

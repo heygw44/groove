@@ -74,6 +74,7 @@ docs/improvements/
 docs/troubleshooting/
 docs/measurement/
 docs/plans/
+docs/onboarding/
 
 ### Frontend (Vue 3 + Vite, #113) ###
 frontend/node_modules/

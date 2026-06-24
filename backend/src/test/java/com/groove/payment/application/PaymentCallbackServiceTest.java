@@ -179,23 +179,38 @@ class PaymentCallbackServiceTest {
     // --- 토스 confirm 적용 (orderId 키잉) ---
 
     @Test
-    @DisplayName("applyConfirmedPaid: 잠정 pgTx 를 paymentKey 로 교체하고 PAID 확정 + OrderPaidEvent 발행")
+    @DisplayName("applyConfirmedPaid: 잠정 pgTx·method 를 보정하고 PAID 확정 + OrderPaidEvent 발행 (#307)")
     void applyConfirmedPaid_linksKeyAndConfirms() {
-        Payment payment = pendingPayment(album(99), 1);
+        Payment payment = pendingPayment(album(99), 1); // 잠정 method = CARD
         ReflectionTestUtils.setField(payment, "id", 42L);
         ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID);
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
 
-        PaymentCallbackResult result = service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", payment.getAmount());
+        PaymentCallbackResult result = service.applyConfirmedPaid(
+                ORDER_ID, "toss-pk-1", payment.getAmount(), PaymentMethod.VIRTUAL_ACCOUNT);
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.APPLIED);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(payment.getPgTransactionId()).isEqualTo("toss-pk-1"); // 잠정값 교체됨
+        assertThat(payment.getMethod()).isEqualTo(PaymentMethod.VIRTUAL_ACCOUNT); // 잠정 CARD → 실제 수단 보정
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAID);
         verify(outboxEventPublisher).publish(eq(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE), eq(ORDER_ID),
                 eq(OrderPaidEvent.OUTBOX_EVENT_TYPE), any(OrderPaidEvent.class));
         verifyNoInteractions(albumRepository);
         verify(couponApplicationService, never()).restoreForOrder(any());
+    }
+
+    @Test
+    @DisplayName("applyConfirmedPaid: confirmedMethod 가 null(Mock·미지) 이면 잠정 method 를 유지한다")
+    void applyConfirmedPaid_nullMethod_keepsProvisional() {
+        Payment payment = pendingPayment(album(99), 1); // 잠정 method = CARD
+        ReflectionTestUtils.setField(payment.getOrder(), "id", ORDER_ID);
+        given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
+
+        service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", payment.getAmount(), null);
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(payment.getMethod()).isEqualTo(PaymentMethod.CARD); // 보정 생략 — 잠정값 유지
     }
 
     @Test
@@ -205,7 +220,8 @@ class PaymentCallbackServiceTest {
         payment.markPaid(CLOCK.instant());
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
 
-        PaymentCallbackResult result = service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", payment.getAmount());
+        PaymentCallbackResult result = service.applyConfirmedPaid(
+                ORDER_ID, "toss-pk-1", payment.getAmount(), PaymentMethod.CARD);
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
         verifyNoInteractions(outboxEventPublisher);
@@ -216,7 +232,7 @@ class PaymentCallbackServiceTest {
     void applyConfirmedPaid_unknownOrder_ignored() {
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.empty());
 
-        PaymentCallbackResult result = service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", 1000L);
+        PaymentCallbackResult result = service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", 1000L, PaymentMethod.CARD);
 
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.IGNORED);
         verifyNoInteractions(outboxEventPublisher);
@@ -228,22 +244,25 @@ class PaymentCallbackServiceTest {
         Payment payment = pendingPayment(album(99), 1);
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
 
-        assertThatThrownBy(() -> service.applyConfirmedPaid(ORDER_ID, "toss-pk-1", payment.getAmount() + 1))
+        assertThatThrownBy(() -> service.applyConfirmedPaid(
+                ORDER_ID, "toss-pk-1", payment.getAmount() + 1, PaymentMethod.VIRTUAL_ACCOUNT))
                 .isInstanceOf(com.groove.payment.exception.PaymentAmountMismatchException.class);
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(payment.getPgTransactionId()).isEqualTo(PG_TX); // 교체되지 않음
+        assertThat(payment.getMethod()).isEqualTo(PaymentMethod.CARD); // method 도 보정 전 — 금액 검증이 먼저
         verifyNoInteractions(outboxEventPublisher);
     }
 
     @Test
-    @DisplayName("linkPendingPaymentKey: PENDING 결제의 잠정 pgTx 를 paymentKey 로 교체(상태 불변, 후속 정산용)")
+    @DisplayName("linkPendingPaymentKey: 잠정 pgTx·method 를 보정한다 (상태 불변, 가상계좌 후속 정산용 #307)")
     void linkPendingPaymentKey_linksOnPending() {
-        Payment payment = pendingPayment(album(99), 1);
+        Payment payment = pendingPayment(album(99), 1); // 잠정 method = CARD
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
 
-        service.linkPendingPaymentKey(ORDER_ID, "toss-pk-vbank");
+        service.linkPendingPaymentKey(ORDER_ID, "toss-pk-vbank", PaymentMethod.VIRTUAL_ACCOUNT);
 
         assertThat(payment.getPgTransactionId()).isEqualTo("toss-pk-vbank");
+        assertThat(payment.getMethod()).isEqualTo(PaymentMethod.VIRTUAL_ACCOUNT); // confirm 시점에 실제 수단 보정
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
         verifyNoInteractions(outboxEventPublisher, albumRepository, couponApplicationService);
     }
@@ -255,7 +274,7 @@ class PaymentCallbackServiceTest {
         payment.markPaid(CLOCK.instant());
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
 
-        service.linkPendingPaymentKey(ORDER_ID, "toss-pk-vbank");
+        service.linkPendingPaymentKey(ORDER_ID, "toss-pk-vbank", PaymentMethod.VIRTUAL_ACCOUNT);
 
         assertThat(payment.getPgTransactionId()).isEqualTo(PG_TX); // 변경 없음
     }

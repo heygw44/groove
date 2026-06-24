@@ -223,8 +223,8 @@ class TossPaymentServiceTest {
         given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(pending));
         runIdempotencyInline();
         given(paymentGateway.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT))
-                .willReturn(new ConfirmResponse(PAYMENT_KEY, PaymentStatus.PAID));
-        given(callbackService.applyConfirmedPaid(ORDER_ID, PAYMENT_KEY, AMOUNT))
+                .willReturn(new ConfirmResponse(PAYMENT_KEY, PaymentStatus.PAID, PaymentMethod.VIRTUAL_ACCOUNT));
+        given(callbackService.applyConfirmedPaid(ORDER_ID, PAYMENT_KEY, AMOUNT, PaymentMethod.VIRTUAL_ACCOUNT))
                 .willReturn(new PaymentCallbackResult(PaymentCallbackResult.Outcome.APPLIED, 42L, PAYMENT_KEY, PaymentStatus.PAID));
 
         PaymentCallbackResult result = service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT, VALID_CALLBACK);
@@ -232,7 +232,8 @@ class TossPaymentServiceTest {
         assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.APPLIED);
         assertThat(result.paymentStatus()).isEqualTo(PaymentStatus.PAID);
         verify(paymentGateway).confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT);
-        verify(callbackService).applyConfirmedPaid(ORDER_ID, PAYMENT_KEY, AMOUNT);
+        // confirm 응답의 실제 수단(가상계좌)이 적용 경로로 스레딩된다 (#307).
+        verify(callbackService).applyConfirmedPaid(ORDER_ID, PAYMENT_KEY, AMOUNT, PaymentMethod.VIRTUAL_ACCOUNT);
     }
 
     @Test
@@ -300,12 +301,13 @@ class TossPaymentServiceTest {
         given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(pending));
         runIdempotencyInline();
         given(paymentGateway.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT))
-                .willReturn(new ConfirmResponse(PAYMENT_KEY, PaymentStatus.PENDING));
+                .willReturn(new ConfirmResponse(PAYMENT_KEY, PaymentStatus.PENDING, PaymentMethod.VIRTUAL_ACCOUNT));
 
         assertThatThrownBy(() -> service.confirm(PAYMENT_KEY, ORDER_NUMBER, AMOUNT, VALID_CALLBACK))
                 .isInstanceOf(PaymentGatewayException.class);
 
-        verify(callbackService).linkPendingPaymentKey(ORDER_ID, PAYMENT_KEY); // 후속 웹훅/폴링이 정산하도록 연결
-        verify(callbackService, never()).applyConfirmedPaid(anyLong(), anyString(), anyLong());
+        // 후속 웹훅/폴링이 정산하도록 연결하며, confirm 시점의 실제 수단(가상계좌)도 함께 보정한다 (#307).
+        verify(callbackService).linkPendingPaymentKey(ORDER_ID, PAYMENT_KEY, PaymentMethod.VIRTUAL_ACCOUNT);
+        verify(callbackService, never()).applyConfirmedPaid(anyLong(), anyString(), anyLong(), any());
     }
 }
