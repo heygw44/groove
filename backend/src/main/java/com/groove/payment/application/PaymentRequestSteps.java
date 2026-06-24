@@ -61,8 +61,9 @@ class PaymentRequestSteps {
 
         Payment existing = paymentRepository.findByOrderId(order.getId()).orElse(null);
         if (existing != null) {
-            // 이미 접수된 결제가 있으면 그대로 반환(주문 레벨 멱등).
-            return PaymentRequestPrep.existing(PaymentApiResponse.from(existing));
+            // 이미 접수된 결제가 있으면 그대로 반환(주문 레벨 멱등). 콜백 토큰도 같이 실어 보내
+            // checkout 멱등 경로가 successUrl 재구성 시 재조회(findByOrderNumber+findByOrderId) 없이 쓰게 한다.
+            return PaymentRequestPrep.existing(PaymentApiResponse.from(existing), existing.getCallbackToken());
         }
 
         if (order.getStatus() != OrderStatus.PENDING) {
@@ -126,15 +127,19 @@ class PaymentRequestSteps {
         return order.getMemberId().equals(callerMemberId);
     }
 
-    /** prepare 결과 — 기존 결제 멱등 반환(existingResponse non-null) 또는 신규 접수 진행(orderId/orderNumber/payable). */
-    record PaymentRequestPrep(PaymentApiResponse existingResponse, Long orderId, String orderNumber, long payable) {
+    /**
+     * prepare 결과 — 기존 결제 멱등 반환(existingResponse non-null) 또는 신규 접수 진행(orderId/orderNumber/payable).
+     * callbackToken 은 멱등 반환 경로에서만 채워진다(기존 결제의 저장 토큰, 레거시 결제면 null). 신규 진행 경로는 null.
+     */
+    record PaymentRequestPrep(PaymentApiResponse existingResponse, Long orderId, String orderNumber, long payable,
+                              String callbackToken) {
 
-        static PaymentRequestPrep existing(PaymentApiResponse response) {
-            return new PaymentRequestPrep(response, null, null, 0L);
+        static PaymentRequestPrep existing(PaymentApiResponse response, String callbackToken) {
+            return new PaymentRequestPrep(response, null, null, 0L, callbackToken);
         }
 
         static PaymentRequestPrep proceed(Long orderId, String orderNumber, long payable) {
-            return new PaymentRequestPrep(null, orderId, orderNumber, payable);
+            return new PaymentRequestPrep(null, orderId, orderNumber, payable, null);
         }
 
         boolean isExisting() {

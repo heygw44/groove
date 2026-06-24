@@ -4,15 +4,14 @@ import { loadTossPayments, ANONYMOUS } from '@tosspayments/tosspayments-sdk'
 import { tossCheckout } from '@/api/payments'
 import { errorMessage } from '@/lib/problem-detail'
 import { formatWon } from '@/lib/format'
-import { randomUuid } from '@/lib/uuid'
+import { idempotencyKeyFor } from '@/lib/uuid'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
 // 토스 결제위젯(@tosspayments/tosspayments-sdk). checkout 으로 받은 clientKey/orderId/amount/successUrl/failUrl 로
-// 위젯을 띄우고 requestPayment 를 호출한다. 성공/실패 시 토스가 successUrl/failUrl(서버 콜백, 토큰 포함)로 리다이렉트한다.
+// 위젯을 띄우고 requestPayment 를 호출한다. 성공/실패 시 토스가 successUrl(토큰 포함)/failUrl(서버 콜백)로 리다이렉트한다.
 const props = defineProps({
   orderNumber: { type: String, required: true },
-  displayAmount: { type: Number, default: null },
 })
 
 const loading = ref(true) // checkout + 위젯 렌더 진행 중
@@ -20,7 +19,7 @@ const loadError = ref('') // 초기화 실패(설정 누락·네트워크 등)
 const ready = ref(false) // 위젯 렌더 완료 → 결제 버튼 활성
 const payError = ref('') // requestPayment 실패/취소 안내(재시도 가능)
 const submitting = ref(false)
-const amount = ref(props.displayAmount) // 표시용 — 준비되면 서버 payable 로 교체
+const amount = ref(null) // 서버 payable — checkout 응답으로 채워지며, 버튼은 ready(렌더 완료) 후에만 보인다
 
 let widgets = null
 let checkout = null // { clientKey, orderId, amount, successUrl, failUrl }
@@ -28,9 +27,9 @@ let checkout = null // { clientKey, orderId, amount, successUrl, failUrl }
 onMounted(async () => {
   try {
     // 'CARD' 는 잠정 placeholder다 — 실제 결제수단은 아래 결제위젯(renderPaymentMethods)에서 사용자가 고르며,
-    // 백엔드가 confirm 응답의 실제 수단으로 Payment.method 를 보정한다(#307). 멱등 키는 checkout 재호출
-    // (예: HMR) 시에도 같은 PENDING 결제를 멱등 반환받도록 시도당 1회 생성.
-    checkout = await tossCheckout(props.orderNumber, 'CARD', randomUuid())
+    // 백엔드가 confirm 응답의 실제 수단으로 Payment.method 를 보정한다(#307). 멱등 키는 주문번호로 스코프해
+    // sessionStorage 에 캐시한다 — checkout 재호출(재마운트·HMR·새로고침)이 같은 키를 재사용해 동일 PENDING 을 멱등 반환받는다(#309).
+    checkout = await tossCheckout(props.orderNumber, 'CARD', idempotencyKeyFor(props.orderNumber))
     if (!checkout.clientKey || !checkout.successUrl || !checkout.failUrl) {
       // 백엔드가 토스 미설정(local/docker 등 mock 프로파일) — 토스 모드를 쓸 수 없다.
       loadError.value = '토스 결제가 구성되어 있지 않습니다. 백엔드를 dev/prod 프로파일(토스 테스트 키)로 실행해 주세요.'

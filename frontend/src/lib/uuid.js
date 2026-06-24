@@ -25,3 +25,19 @@ export function randomUuid() {
     hex.slice(10, 16).join('')
   )
 }
+
+// scope(예: 주문번호) 단위로 안정적인 멱등 키를 반환한다. sessionStorage 에 캐시해 같은 논리적 요청
+// (재마운트·HMR·새로고침)이 같은 키를 재사용하도록 한다 — 토스 멱등키 권장(같은 요청은 키 재사용).
+// sessionStorage 사용 불가(프라이빗 모드 등)면 매번 새 UUID 로 폴백한다.
+export function idempotencyKeyFor(scope) {
+  const storageKey = `idem:${scope}`
+  try {
+    const cached = sessionStorage.getItem(storageKey)
+    if (cached) return cached
+    const key = randomUuid()
+    sessionStorage.setItem(storageKey, key)
+    return key
+  } catch {
+    return randomUuid()
+  }
+}

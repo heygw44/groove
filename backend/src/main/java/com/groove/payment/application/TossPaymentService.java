@@ -83,13 +83,13 @@ public class TossPaymentService {
      */
     public TossCheckoutResponse checkout(Long callerMemberId, PaymentCreateRequest request) {
         PaymentRequestPrep prep = steps.prepare(callerMemberId, request);
-        // 결제별 무작위 토큰 — successUrl/failUrl 쿼리로 round-trip 시켜 콜백 핸들러가 일치 검증한다(교차 주문 조작 차단, #304).
+        // 결제별 무작위 토큰 — successUrl 쿼리로만 round-trip 시켜 confirm 이 일치 검증한다(교차 주문 조작 차단, #304).
+        // fail 은 상태를 바꾸지 않아 토큰 검증이 불필요하므로 failUrl 엔 토큰을 싣지 않는다(노출면 축소, #309).
         // 단 이 보호는 회원 주문에 한해 강하다 — 게스트 주문은 checkout 이 익명(orderNumber 만)이라 토큰이 비밀이 아니다(#306, confirm 의 금액 검증·유효 paymentKey 가 실제 관문).
         // 기존 결제 멱등 응답이면 새 토큰을 발급하지 않고 저장된 토큰을 그대로 재사용한다(successUrl 재구성 일관성).
         if (prep.isExisting()) {
-            PaymentApiResponse existing = prep.existingResponse();
-            String token = existingCallbackToken(existing.orderNumber());
-            return buildResponse(existing, token);
+            // prepare 가 이미 로드한 기존 결제의 저장 토큰을 그대로 재사용한다(추가 조회 0건, 레거시 결제면 null).
+            return buildResponse(prep.existingResponse(), prep.callbackToken());
         }
         String token = UUID.randomUUID().toString();
         // persistPending 이 동시 충돌(uk_payment_order)로 다른 스레드의 기존 결제를 복원했을 수 있다 —
@@ -110,12 +110,13 @@ public class TossPaymentService {
                 .orElse(null);
     }
 
-    /** clientKey + orderId/amount + 토큰이 박힌 successUrl/failUrl 로 응답을 조립한다. props 부재(mock)면 URL 은 null. */
+    /** clientKey + orderId/amount + 토큰이 박힌 successUrl + (토큰 없는) failUrl 로 응답을 조립한다. props 부재(mock)면 URL 은 null. */
     private TossCheckoutResponse buildResponse(PaymentApiResponse persisted, String token) {
         TossPaymentProperties props = tossProperties.getIfAvailable();
         String clientKey = props != null ? props.clientKey() : null;
+        // 토큰은 confirm 이 검증하는 successUrl 에만 싣는다. failUrl 은 상태 무변경이라 토큰이 불필요하다(노출면 축소, #309).
         String successUrl = props != null ? appendToken(props.successUrl(), token) : null;
-        String failUrl = props != null ? appendToken(props.failUrl(), token) : null;
+        String failUrl = props != null ? props.failUrl() : null;
         return new TossCheckoutResponse(clientKey, persisted.orderNumber(), persisted.amount(), successUrl, failUrl);
     }
 
