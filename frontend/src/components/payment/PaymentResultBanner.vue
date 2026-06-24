@@ -23,6 +23,6 @@ defineProps({
     role="alert"
   >
     결제가 완료되지 않았습니다. 다시 시도하시거나
-    <RouterLink to="/catalog" class="underline hover:text-rust-700">장바구니에서 새로 주문</RouterLink>해 주세요.
+    <RouterLink to="/catalog" class="underline hover:text-rust-700">상품 목록</RouterLink>에서 새로 주문해 주세요.
   </div>
 </template>

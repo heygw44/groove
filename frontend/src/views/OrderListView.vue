@@ -56,7 +56,13 @@ function onStatusChange(value) {
   patchQuery({ status: value, page: undefined })
 }
 
-watch(() => route.query, fetchOrders, { immediate: true })
+// 조회에 영향 주는 status·page 만 감시 — payment 등 무관 쿼리 정리(콜백 후 usePaymentResultBanner)로
+// 중복 조회되지 않도록 소스별(getter 배열) 값 비교를 쓴다.
+watch(
+  [() => firstStr(route.query.status), () => pageParam(route.query)],
+  () => fetchOrders(route.query),
+  { immediate: true },
+)
 </script>
 
 <template>
