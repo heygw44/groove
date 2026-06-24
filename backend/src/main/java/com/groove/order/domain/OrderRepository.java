@@ -30,10 +30,18 @@ public interface OrderRepository extends JpaRepository<Order, Long>, JpaSpecific
     @EntityGraph(attributePaths = {"items", "items.album"})
     Optional<Order> findWithAlbumsByOrderNumber(String orderNumber);
 
-    /** 반품 접수 직렬화용 — 주문 행을 PESSIMISTIC_WRITE 로 잠근다. items 는 호출 측이 지연 로드. */
+    /**
+     * 주문 행을 orderNumber 로 PESSIMISTIC_WRITE 잠근다 — 반품 접수/부분취소(ClaimService)와 회원 본인 취소(OrderService.cancel)의
+     * 동시 전이를 직렬화한다. items 는 호출 측이 지연 로드.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.orderNumber = :orderNumber")
     Optional<Order> findByOrderNumberForUpdate(@Param("orderNumber") String orderNumber);
+
+    /** 배송 자동진행 직렬화용 — orderId 로 주문 행을 PESSIMISTIC_WRITE 로 잠근다. items 는 호출 측이 지연 로드. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
     boolean existsByOrderNumber(String orderNumber);
 
