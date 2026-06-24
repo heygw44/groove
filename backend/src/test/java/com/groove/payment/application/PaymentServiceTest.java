@@ -90,7 +90,7 @@ class PaymentServiceTest {
     @DisplayName("requestPayment: 기존 결제(existing) → PG·persist 미호출, 기존 응답 반환")
     void requestPayment_existing_returnsWithoutGateway() {
         PaymentApiResponse existing = pendingResponse();
-        when(steps.prepare(1L, request())).thenReturn(PaymentRequestPrep.existing(existing));
+        when(steps.prepare(1L, request())).thenReturn(PaymentRequestPrep.existing(existing, null));
 
         PaymentApiResponse response = paymentService.requestPayment(1L, request());
 
@@ -118,7 +118,7 @@ class PaymentServiceTest {
         when(paymentGateway.request(any())).thenReturn(new PaymentResponse("mock-tx-1", PaymentStatus.PENDING, "MOCK"));
         when(steps.persist(any(), any(), any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk"));
         PaymentApiResponse recovered = pendingResponse();
-        when(steps.findExistingForOrder(ORDER_ID)).thenReturn(Optional.of(recovered));
+        when(steps.findExistingForOrder(ORDER_ID)).thenReturn(Optional.of(PaymentRequestPrep.existing(recovered, null)));
 
         PaymentApiResponse response = paymentService.requestPayment(1L, request());
 

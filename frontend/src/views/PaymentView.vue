@@ -108,7 +108,7 @@ async function pay() {
     </div>
 
     <!-- 토스 결제위젯 모드(VITE_PAYMENT_PROVIDER=toss) — checkout → 위젯 → successUrl/failUrl 서버 콜백 -->
-    <TossPaymentWidget v-if="isToss" :order-number="orderNumber" :display-amount="displayAmount" />
+    <TossPaymentWidget v-if="isToss" :order-number="orderNumber" />
 
     <!-- mock(데모) 결제 모드 — 서버 비동기 접수 + 클라 폴링 -->
     <template v-else>

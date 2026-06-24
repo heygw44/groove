@@ -41,7 +41,7 @@ import java.net.URI;
  * 교차 주문 조작(타인의 진행 중 결제 강제 실패 등) 여지가 있다. 어떤 예외가 나도 JSON 을 노출하지 않고 항상 SPA 결과 라우트로 302 한다.
  *
  * <p><b>콜백 토큰(#304)의 신뢰 모델 — 회원/게스트 비대칭(#306):</b>
- * checkout 이 결제마다 발급해 successUrl/failUrl 쿼리에 싣는 토큰은 콜백 단계에서 저장 토큰과 일치 검증된다. 단 토큰의 "비밀성"은 주문 유형에 따라 다르다.
+ * checkout 이 결제마다 발급해 successUrl 쿼리에 싣는 토큰은 confirm 단계에서 저장 토큰과 일치 검증된다(fail 은 상태 무변경이라 토큰 미부착, #309). 단 토큰의 "비밀성"은 주문 유형에 따라 다르다.
  * <ul>
  *   <li><b>회원 주문</b>: checkout 이 소유자 전용({@code PaymentRequestSteps.canRequestPaymentFor} 가 memberId 일치 요구)이라 토큰이 실제 비밀로 기능 → 교차 주문 조작 차단이 강하다.
  *   <li><b>게스트 주문</b>: checkout 이 익명(orderNumber 만)이라 토큰이 비밀이 아니다 — orderNumber 만 알면 누구나 checkout 으로 토큰을 받을 수 있고, 멱등 재조회 경로는
@@ -130,15 +130,12 @@ public class TossPaymentController {
     public ResponseEntity<Void> fail(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String message,
-            @RequestParam(required = false) String orderId,
-            @RequestParam(required = false) String token) {
+            @RequestParam(required = false) String orderId) {
         // 보안(#295 리뷰): failUrl 은 토스가 보내는 미인증 브라우저 GET 이라 orderNumber 만으로 호출 가능 — 여기서 결제를
         // FAILED 로 바꾸면 제3자가 타인의 진행 중 결제를 강제 실패시킬 수 있다(CSRF). 따라서 안내 리다이렉트만 하고,
         // 보상은 폴링 리퍼(PaymentReconciliationScheduler)의 신뢰 가능한 만료 경로가 1회 수행한다.
-        // token 은 #304 로 round-trip 되지만 fail 은 상태를 바꾸지 않으므로 강제 검증 대신 안내만 한다(success 게이트가 핵심).
-        // 토큰 값은 로그에 남기지 않고 존재 여부만 기록한다(추적용).
-        log.info("토스 결제 실패/취소 안내: orderId={}, code={}, token={}",
-                orderId, code, token != null ? "present" : "absent");
+        // #304 콜백 토큰은 successUrl(confirm)에서만 검증한다 — fail 은 상태 무변경이라 토큰이 불필요해 failUrl 엔 싣지 않는다(#309).
+        log.info("토스 결제 실패/취소 안내: orderId={}, code={}", orderId, code);
         return redirect(orderId, "fail");
     }
 

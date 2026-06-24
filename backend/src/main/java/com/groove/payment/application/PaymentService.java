@@ -46,8 +46,9 @@ public class PaymentService {
         try {
             return steps.persist(prep, request.method(), pgResponse);
         } catch (DataIntegrityViolationException duplicate) {
-            // uk_payment_order 충돌 시 새 트랜잭션에서 기존 결제를 재조회해 주문 레벨 멱등으로 응답한다.
+            // uk_payment_order 충돌 시 새 트랜잭션에서 기존 결제를 재조회해 주문 레벨 멱등으로 응답한다(mock 경로는 콜백 토큰 미사용).
             return steps.findExistingForOrder(prep.orderId())
+                    .map(PaymentRequestPrep::existingResponse)
                     .orElseThrow(() -> duplicate);
         }
     }
