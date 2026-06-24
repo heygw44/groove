@@ -156,9 +156,9 @@ class ShippingServiceTest {
     }
 
     @Test
-    @DisplayName("advanceToDelivered — 주문이 한 단계 뒤처져(PREPARING) 있으면 불법 점프 대신 무해 무시 (가드가 예외 차단)")
-    void advanceToDelivered_orderBehind_guardSkipsWithoutThrowing() {
-        // 배송 SHIPPED, 주문 PREPARING — PREPARING→DELIVERED 는 불법이라 가드가 예외를 막는다.
+    @DisplayName("advanceToDelivered — 주문이 한 단계 뒤처져(PREPARING) 있으면 주문·배송 모두 전진 안 함 (락스텝 원자성)")
+    void advanceToDelivered_orderBehind_skipsBothWithoutThrowing() {
+        // 배송 SHIPPED, 주문 PREPARING — PREPARING→DELIVERED 는 불법이라 주문 전이가 false → 배송도 SHIPPED 유지.
         Shipping shipping = shippingWithOrderAt(OrderStatus.PREPARING);
         shipping.markShipped(CLOCK.instant());
         given(shippingRepository.findById(1L)).willReturn(Optional.of(shipping));
@@ -166,7 +166,7 @@ class ShippingServiceTest {
 
         assertThatCode(() -> shippingService.advanceToDelivered(1L)).doesNotThrowAnyException();
 
-        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
+        assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.SHIPPED);
         assertThat(shipping.getOrder().getStatus()).isEqualTo(OrderStatus.PREPARING);
     }
 

@@ -90,8 +90,9 @@ public class ShippingService {
     }
 
     /**
-     * 자동 진행 한 단계 — 배송이 기대 상태(from)이고 주문이 종착이 아닐 때만 배송을 전이(mark)시키고,
-     * 같은 트랜잭션의 주문도 Order.advanceTo 로 락스텝 전진시킨다(합법 전이만).
+     * 자동 진행 한 단계 — 배송이 기대 상태(from)이고 주문이 종착이 아닐 때, 주문을 Order.advanceTo 로 먼저 전진시키고
+     * 합법 전이로 성공했을 때만 배송도 같은 트랜잭션에서 전이(mark)시킨다. 주문 전이가 불법이면(false) 배송도 전진시키지
+     * 않아 둘이 항상 락스텝으로 함께 움직인다(주문 PREPARING·배송 SHIPPED 같은 비대칭 상태를 만들지 않는다).
      *
      * 주문 행은 findByIdForUpdate 로 잠그고 최신 상태를 재조회한 뒤 종착 여부를 재검증한다 — 같은 주문 행 락을 잡는
      * cancelPartially 와 직렬화되고, 종착 재검증으로 발송 전 취소·환불이 CANCELLED 로 만든 주문을 자동진행이 덮어쓰지 않는다.
@@ -109,8 +110,11 @@ public class ShippingService {
                 return;
             }
             Instant now = clock.instant();
+            // 주문 전이가 합법일 때만 배송을 전이 — 불법이면 배송도 그대로 둬 배송·주문 비대칭을 막는다.
+            if (!order.advanceTo(target, now)) {
+                return;
+            }
             mark.accept(shipping, now);
-            order.advanceTo(target, now);
         });
     }
 }
