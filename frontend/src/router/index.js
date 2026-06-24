@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { safeRedirect } from '@/lib/redirect'
+import { firstStr } from '@/lib/query'
+import { isPaymentResult } from '@/lib/payment-result'
 
 // History(clean URL) 라우팅.
 const router = createRouter({
@@ -142,6 +144,19 @@ const router = createRouter({
 // 인증 가드 — 라우트 meta 기반.
 router.beforeEach((to) => {
   const auth = useAuthStore()
+
+  // 게스트 토스 결제 콜백(#308): 서버가 /orders/{n}?payment= (취소 시 orderId 없어 /orders?payment=fail) 로 302하는데
+  // 이 라우트들은 requiresAuth라 미인증 게스트가 로그인으로 바운스된다. 결과 확인용 공개 라우트(guest-lookup)로 안내한다.
+  const payment = firstStr(to.query.payment)
+  if (
+    isPaymentResult(payment) &&
+    !auth.isAuthenticated &&
+    (to.name === 'order-detail' || to.name === 'orders')
+  ) {
+    const query = { payment }
+    if (to.params.orderNumber) query.orderNumber = to.params.orderNumber
+    return { name: 'guest-lookup', query }
+  }
 
   // 로그인 필수 라우트에 미인증 접근 → 로그인으로, redirect 보존.
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
