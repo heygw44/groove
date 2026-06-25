@@ -4,6 +4,7 @@ import com.groove.payment.api.dto.PaymentCallbackResult;
 import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.toss.TossPaymentGateway;
 import org.slf4j.Logger;
@@ -133,9 +134,9 @@ public class PaymentReconciliationScheduler {
     private void reconcileOne(Payment payment, Instant giveUpCutoff) {
         String pgTransactionId = payment.getPgTransactionId();
 
-        PaymentStatus pgStatus;
+        GatewayQuery query;
         try {
-            pgStatus = paymentGateway.query(pgTransactionId);
+            query = paymentGateway.query(pgTransactionId);
         } catch (RuntimeException queryError) {
             // query 가 응답하지 못하는 영구 해소 불가(예: 잔존 pgTx 404/502)만 max-age 초과 시 종결한다.
             // settle 실패는 여기 섞이지 않는다(별도 catch).
@@ -147,7 +148,16 @@ public class PaymentReconciliationScheduler {
             return;
         }
 
+        PaymentStatus pgStatus = query.status();
         if (pgStatus == PaymentStatus.PAID || pgStatus == PaymentStatus.FAILED) {
+            // PAID 정산 전 금액 위변조 대조(#320) — PG 권위 금액이 저장 금액과 다르면 자동 정산하지 않고 PENDING 으로 둔다.
+            // 다음 주기에 재시도되고, 끝내 해소되지 않으면 max-age 초과 시 terminateUnresolvable 가 FAILED+보상으로 종결한다.
+            if (pgStatus == PaymentStatus.PAID && query.settledAmount() != null
+                    && query.settledAmount() != payment.getAmount()) {
+                log.warn("결제 폴링: PAID 정산금액 불일치 — 자동 정산 보류, 수동 확인 필요 pgTx={}, 저장={}, PG={}",
+                        pgTransactionId, payment.getAmount(), query.settledAmount());
+                return;
+            }
             PaymentCallbackResult result = settleQuietly(pgTransactionId, pgStatus, null);
             if (result != null) {
                 log.info("결제 폴링 동기화: pgTx={} → {} ({})", pgTransactionId, pgStatus, result.outcome());

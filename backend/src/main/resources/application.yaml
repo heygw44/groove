@@ -161,11 +161,15 @@ groove:
         capacity: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_CAPACITY:10}
         refill-period: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_REFILL_PERIOD:PT1M}
   payment:
-    # 결제 Rate Limit (#208). POST /payments 회원당 분당 5회(API.md §1.6) — JWT memberId 로 키잉(게스트·토큰 부재 시 IP 폴백).
+    # 결제 Rate Limit (#208, #320). post=결제 생성(POST /payments + /toss/checkout) 회원당 분당 5회 — JWT memberId 키잉(게스트·토큰 부재 시 IP 폴백).
+    # webhook=토스 웹훅(POST /toss/webhook) IP당 분당 60회 — 회원 토큰 없는 공개 엔드포인트라 별도 IP 버킷으로 분리(#320). 토스 IP 피크 수용 + 단일 IP 증폭 캡.
     rate-limit:
       post:
         capacity: ${PAYMENT_RATE_LIMIT_POST_CAPACITY:5}
         refill-period: ${PAYMENT_RATE_LIMIT_POST_REFILL_PERIOD:PT1M}
+      webhook:
+        capacity: ${PAYMENT_RATE_LIMIT_WEBHOOK_CAPACITY:60}
+        refill-period: ${PAYMENT_RATE_LIMIT_WEBHOOK_REFILL_PERIOD:PT1M}
     # 결제 웹훅 유실 대비 폴링 동기화 (#W7-4). PENDING 결제를 interval 마다 PG query() 로 조회한다.
     reconciliation:
       interval: ${PAYMENT_RECONCILIATION_INTERVAL:PT1M}
@@ -269,3 +273,14 @@ payment:
     fail-url: ${PAYMENT_TOSS_FAIL_URL}
     connect-timeout: ${PAYMENT_TOSS_CONNECT_TIMEOUT:2s}
     read-timeout: ${PAYMENT_TOSS_READ_TIMEOUT:5s}
+    # 외부 PG 호출 재시도·서킷브레이커 (#320). dev/prod 에서만 바인딩. 재시도는 일시 장애(5xx·연결 실패)만,
+    # 동기 confirm 워커 점유·UX 보호를 위해 보수적으로(2회·짧은 백오프). 서킷은 누적 실패율/느린호출율 임계 초과 시 OPEN.
+    resilience:
+      retry-max-attempts: ${PAYMENT_TOSS_RETRY_MAX_ATTEMPTS:2}
+      retry-wait-duration: ${PAYMENT_TOSS_RETRY_WAIT:200ms}
+      cb-failure-rate-threshold: ${PAYMENT_TOSS_CB_FAILURE_RATE:50}
+      cb-slow-call-duration-threshold: ${PAYMENT_TOSS_CB_SLOW_CALL_DURATION:3s}
+      cb-slow-call-rate-threshold: ${PAYMENT_TOSS_CB_SLOW_CALL_RATE:100}
+      cb-sliding-window-size: ${PAYMENT_TOSS_CB_WINDOW_SIZE:20}
+      cb-minimum-number-of-calls: ${PAYMENT_TOSS_CB_MIN_CALLS:10}
+      cb-wait-in-open-state: ${PAYMENT_TOSS_CB_WAIT_OPEN:10s}

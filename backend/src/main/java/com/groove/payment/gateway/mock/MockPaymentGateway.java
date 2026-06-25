@@ -2,6 +2,7 @@ package com.groove.payment.gateway.mock;
 
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.gateway.ConfirmResponse;
+import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.PaymentMockProperties;
 import com.groove.payment.gateway.PaymentRequest;
@@ -112,19 +113,20 @@ public class MockPaymentGateway implements PaymentGateway {
     }
 
     @Override
-    public PaymentStatus query(String pgTransactionId) {
+    public GatewayQuery query(String pgTransactionId) {
         Objects.requireNonNull(pgTransactionId, "pgTransactionId");
         simulateProcessingLatency();
 
+        // Mock 은 거래별 금액을 보유하지 않으므로 정산금액은 항상 null 로 반환한다 — 호출부의 금액 검증은 생략된다(#320).
         Transaction tx = transactions.get(pgTransactionId);
         if (tx == null) {
             log.warn("Mock 결제 조회: 알 수 없는 거래 pgTx={} — PENDING 으로 응답", pgTransactionId);
-            return PaymentStatus.PENDING;
+            return new GatewayQuery(PaymentStatus.PENDING, null);
         }
         if (clock.instant().isBefore(tx.fireAt())) {
-            return PaymentStatus.PENDING;
+            return new GatewayQuery(PaymentStatus.PENDING, null);
         }
-        return tx.currentStatus();
+        return new GatewayQuery(tx.currentStatus(), null);
     }
 
     @Override

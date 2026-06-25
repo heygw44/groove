@@ -102,7 +102,7 @@ class MockPaymentGatewayTest {
 
             verifyNoInteractions(webhookSimulator);
             // 거래는 기록되어 폴링 조회는 가능하다.
-            assertThat(g.query(response.pgTransactionId())).isEqualTo(PaymentStatus.PAID);
+            assertThat(g.query(response.pgTransactionId()).status()).isEqualTo(PaymentStatus.PAID);
         }
 
         @Test
@@ -132,7 +132,7 @@ class MockPaymentGatewayTest {
             // Mock 은 실제 결제수단을 모른다 — method 는 null(호출부가 잠정 method 유지).
             assertThat(response.method()).isNull();
             // 동기 확정이므로 이후 폴링 조회도 즉시 PAID 를 반환한다.
-            assertThat(g.query("toss-pk-1")).isEqualTo(PaymentStatus.PAID);
+            assertThat(g.query("toss-pk-1").status()).isEqualTo(PaymentStatus.PAID);
         }
     }
 
@@ -146,7 +146,7 @@ class MockPaymentGatewayTest {
             MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ofSeconds(5)));
             PaymentResponse response = g.request(REQUEST);
 
-            assertThat(g.query(response.pgTransactionId())).isEqualTo(PaymentStatus.PENDING);
+            assertThat(g.query(response.pgTransactionId()).status()).isEqualTo(PaymentStatus.PENDING);
         }
 
         @Test
@@ -155,13 +155,13 @@ class MockPaymentGatewayTest {
             MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ZERO));
             PaymentResponse response = g.request(REQUEST);
 
-            assertThat(g.query(response.pgTransactionId())).isEqualTo(PaymentStatus.PAID);
+            assertThat(g.query(response.pgTransactionId()).status()).isEqualTo(PaymentStatus.PAID);
         }
 
         @Test
         @DisplayName("알 수 없는 거래는 PENDING 으로 응답한다")
         void unknownTransaction_returnsPending() {
-            assertThat(gateway(props(1.0, Duration.ZERO, Duration.ZERO)).query("mock-tx-unknown"))
+            assertThat(gateway(props(1.0, Duration.ZERO, Duration.ZERO)).query("mock-tx-unknown").status())
                     .isEqualTo(PaymentStatus.PENDING);
         }
     }
@@ -188,12 +188,12 @@ class MockPaymentGatewayTest {
         void knownTransaction_queryReflectsRefund() {
             MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ZERO));
             PaymentResponse paid = g.request(REQUEST);
-            assertThat(g.query(paid.pgTransactionId())).isEqualTo(PaymentStatus.PAID);
+            assertThat(g.query(paid.pgTransactionId()).status()).isEqualTo(PaymentStatus.PAID);
 
             g.refund(new RefundRequest(paid.pgTransactionId(), REQUEST.amount(), null,
                     "refund:1:" + paid.pgTransactionId()));
 
-            assertThat(g.query(paid.pgTransactionId())).isEqualTo(PaymentStatus.REFUNDED);
+            assertThat(g.query(paid.pgTransactionId()).status()).isEqualTo(PaymentStatus.REFUNDED);
         }
 
         @Test
@@ -252,7 +252,7 @@ class MockPaymentGatewayTest {
             g.refund(req);
             g.refund(req);
 
-            assertThat(g.query(paid.pgTransactionId())).isEqualTo(PaymentStatus.REFUNDED);
+            assertThat(g.query(paid.pgTransactionId()).status()).isEqualTo(PaymentStatus.REFUNDED);
             assertThat(g.refundCallCount()).isEqualTo(1);
         }
     }

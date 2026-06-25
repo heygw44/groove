@@ -11,10 +11,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * POST /api/v1/payments 에 대한 회원 단위 Rate Limit 정책 (회원당 분당 5회).
+ * 결제 생성(checkout) POST 에 대한 회원 단위 Rate Limit 정책 (회원당 분당 5회).
+ *
+ * <p>대상 경로는 generic 결제 요청 {@code POST /api/v1/payments} 와 토스 결제 요청
+ * {@code POST /api/v1/payments/toss/checkout} 둘 다다(#320). 토스 checkout 은 회원/게스트 결제 진입점이라
+ * generic 결제 요청과 동일한 회원 키잉·한도가 적합하다. 반면 토스 웹훅({@code /toss/webhook})은 회원 토큰이 없고
+ * 토스 서버 IP 로 몰려 이 회원 한도(5/분)에 throttle 되므로, 이 정책에서 의도적으로 제외하고
+ * {@link PaymentWebhookRateLimitPolicy}(IP 키잉, 별도 한도)로 분리한다.
  *
  * 키잉은 회원이면 memberId, 게스트면 IP 다. Authorization 헤더의 Bearer 토큰을 JwtProvider 로 직접 디코드해
  * memberId 를 키로 삼고, 토큰이 없거나 위조면 IP 로 폴백한다.
@@ -24,7 +31,8 @@ import java.util.function.Supplier;
 public class PaymentRateLimitPolicy implements RateLimitPolicy {
 
     static final String NAME = "payment-create";
-    static final String PATH = "/api/v1/payments";
+    /** 회원 키잉 한도를 적용할 결제 생성 경로 — generic 요청 + 토스 checkout. 웹훅은 별도 정책으로 분리한다. */
+    static final Set<String> CREATE_PATHS = Set.of("/api/v1/payments", "/api/v1/payments/toss/checkout");
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final PaymentRateLimitProperties.Policy config;
@@ -43,7 +51,7 @@ public class PaymentRateLimitPolicy implements RateLimitPolicy {
     @Override
     public boolean appliesTo(HttpServletRequest request) {
         return HttpMethod.POST.matches(request.getMethod())
-                && PATH.equals(RequestPaths.normalizedPath(request));
+                && CREATE_PATHS.contains(RequestPaths.normalizedPath(request));
     }
 
     @Override

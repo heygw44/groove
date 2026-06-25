@@ -6,6 +6,7 @@ import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -87,7 +88,7 @@ class PaymentReconciliationSchedulerTest {
         given(paymentRepository.findByStatusAndCreatedAtBefore(
                 eq(PaymentStatus.PENDING), eq(NOW.minus(MIN_AGE)), eq(Limit.of(BATCH_SIZE))))
                 .willReturn(List.of(pending("mock-tx-1")));
-        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PAID);
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.PAID, null));
         settleReturnsApplied();
 
         scheduler.reconcilePendingPayments();
@@ -96,10 +97,22 @@ class PaymentReconciliationSchedulerTest {
     }
 
     @Test
+    @DisplayName("PG 가 PAID 인데 정산금액이 저장 금액과 불일치하면 자동 정산하지 않고 PENDING 으로 둔다 (#320)")
+    void reconcile_pgPaidAmountMismatch_skips() {
+        // pending() 의 저장 금액은 35000 — PG 가 다른 금액을 답하면 위변조 의심으로 정산을 보류한다.
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.PAID, 999000L));
+
+        scheduler.reconcilePendingPayments();
+
+        verifyNoInteractions(settlementService);
+    }
+
+    @Test
     @DisplayName("PG 가 아직 PENDING 이면 정산 헬퍼를 호출하지 않는다")
     void reconcile_pgPending_skips() {
         given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
-        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PENDING);
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.PENDING, null));
 
         scheduler.reconcilePendingPayments();
 
@@ -112,7 +125,7 @@ class PaymentReconciliationSchedulerTest {
         given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any()))
                 .willReturn(List.of(pending("mock-tx-bad"), pending("mock-tx-good")));
         given(paymentGateway.query("mock-tx-bad")).willThrow(new RuntimeException("PG 일시 장애"));
-        given(paymentGateway.query("mock-tx-good")).willReturn(PaymentStatus.PAID);
+        given(paymentGateway.query("mock-tx-good")).willReturn(new GatewayQuery(PaymentStatus.PAID, null));
         settleReturnsApplied();
 
         assertThatCode(() -> scheduler.reconcilePendingPayments()).doesNotThrowAnyException();
@@ -125,7 +138,7 @@ class PaymentReconciliationSchedulerTest {
     @DisplayName("PG 가 취소(REFUNDED)를 반환하면 미확정 결제를 FAILED 로 종결한다")
     void reconcile_pgRefunded_settlesFailed() {
         given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
-        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.REFUNDED);
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.REFUNDED, null));
         settleReturnsApplied();
 
         scheduler.reconcilePendingPayments();
@@ -137,7 +150,7 @@ class PaymentReconciliationSchedulerTest {
     @DisplayName("PG 가 부분취소(PARTIALLY_REFUNDED)를 반환해도 미확정 결제를 FAILED 로 종결한다")
     void reconcile_pgPartialCanceled_settlesFailed() {
         given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
-        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PARTIALLY_REFUNDED);
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.PARTIALLY_REFUNDED, null));
         settleReturnsApplied();
 
         scheduler.reconcilePendingPayments();
@@ -150,7 +163,7 @@ class PaymentReconciliationSchedulerTest {
     void reconcile_expiredPendingPersists_doesNotSettle() {
         Payment expired = pending("mock-tx-1", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
         given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(expired));
-        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PENDING);
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.PENDING, null));
 
         scheduler.reconcilePendingPayments();
 
@@ -188,7 +201,7 @@ class PaymentReconciliationSchedulerTest {
     void reconcile_expiredPaidButSettleThrows_doesNotForceFail() {
         Payment expired = pending("mock-tx-1", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
         given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(expired));
-        given(paymentGateway.query("mock-tx-1")).willReturn(PaymentStatus.PAID);
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.PAID, null));
         given(settlementService.settle("mock-tx-1", PaymentStatus.PAID, null)).willThrow(new RuntimeException("일시 정산 실패"));
 
         assertThatCode(() -> scheduler.reconcilePendingPayments()).doesNotThrowAnyException();
