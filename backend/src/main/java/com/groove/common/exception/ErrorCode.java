@@ -97,6 +97,9 @@ public enum ErrorCode {
     // EXTERNAL
     EXTERNAL_SERVICE_ERROR(HttpStatus.BAD_GATEWAY, "EXT_001", "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요"),
 
+    // COMMON (전역 폴백)
+    DATA_INTEGRITY_CONFLICT(HttpStatus.CONFLICT, "DATA_INTEGRITY_CONFLICT", "요청이 현재 상태와 충돌했습니다. 잠시 후 다시 시도해 주세요"),
+
     // SYSTEM
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "SYSTEM_001", "서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요"),
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "SYSTEM_002", "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요");

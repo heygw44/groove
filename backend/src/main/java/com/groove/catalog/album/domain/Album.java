@@ -16,12 +16,15 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
 
 /**
  * LP 상품 엔티티. Artist/Genre 는 NOT NULL FK, Label 은 NULL 허용. 모든 연관은 LAZY.
+ * 클래스 레벨 @BatchSize 는 Album 이 LAZY 프록시로 로드될 때(예: cart_item.album) IN 쿼리 1회로 일괄 초기화한다.
  */
 @Entity
 @Table(name = "album")
+@BatchSize(size = 100)
 public class Album extends BaseTimeEntity {
 
     @Id
