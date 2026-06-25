@@ -14,13 +14,16 @@ public interface IdempotencyRecordRepository extends JpaRepository<IdempotencyRe
     Optional<IdempotencyRecord> findByIdempotencyKey(String idempotencyKey);
 
     /**
-     * 키로 IN_PROGRESS 행만 삭제. 처리 실패 시 소유자가 자기 마커를 회수할 때 사용 — 회수 race 로
-     * 다른 요청이 같은 키로 COMPLETED 캐시를 만든 경우 그 캐시 행은 건드리지 않는다(#317).
+     * 키+소유자 토큰으로 IN_PROGRESS 행만 삭제. 처리 실패 시 소유자가 자기 마커만 회수할 때 사용 —
+     * 회수 race 로 마커가 회수되고 다른 요청이 같은 키로 새 마커/COMPLETED 캐시를 만든 경우, ownerToken 이
+     * 달라 그 행은 건드리지 않는다(#317 fencing).
      */
     @Modifying
     @Query("DELETE FROM IdempotencyRecord r WHERE r.idempotencyKey = :idempotencyKey "
+            + "AND r.ownerToken = :ownerToken "
             + "AND r.status = com.groove.common.idempotency.IdempotencyStatus.IN_PROGRESS")
-    int deleteInProgressByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
+    int deleteInProgressByKeyAndOwner(@Param("idempotencyKey") String idempotencyKey,
+                                      @Param("ownerToken") String ownerToken);
 
     /** 키로 status = COMPLETED AND expiresAt <= now 인 행만 삭제 (TTL 지난 캐시 회수). */
     @Modifying

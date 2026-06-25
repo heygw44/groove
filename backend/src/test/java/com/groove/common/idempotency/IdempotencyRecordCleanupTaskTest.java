@@ -93,8 +93,8 @@ class IdempotencyRecordCleanupTaskTest {
 
     private String saveCompleted(Instant expiresAt) {
         String key = UUID.randomUUID().toString();
-        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofMinutes(5), Instant.now());
-        record.complete("com.groove.Sample", "{}", Instant.now().plus(Duration.ofHours(24)));
+        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofMinutes(5), Instant.now(), "owner-1");
+        record.complete("com.groove.Sample", "{}", Instant.now().plus(Duration.ofHours(24)), "owner-1");
         ReflectionTestUtils.setField(record, "expiresAt", expiresAt);
         repository.saveAndFlush(record);
         return key;
@@ -102,7 +102,7 @@ class IdempotencyRecordCleanupTaskTest {
 
     private String saveInProgress(Instant expiresAt) {
         String key = UUID.randomUUID().toString();
-        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofMinutes(5), Instant.now());
+        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofMinutes(5), Instant.now(), "owner-1");
         ReflectionTestUtils.setField(record, "expiresAt", expiresAt);
         repository.saveAndFlush(record);
         return key;

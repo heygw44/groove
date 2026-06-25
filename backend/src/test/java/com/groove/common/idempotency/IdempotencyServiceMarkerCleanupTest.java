@@ -20,6 +20,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -71,7 +73,7 @@ class IdempotencyServiceMarkerCleanupTest {
                 idempotencyService.execute(key, SampleResult.class, () -> new SampleResult("ok", 1)))
                 .isSameAs(serializeFailure);
 
-        verify(repository).deleteInProgressByIdempotencyKey(key);
+        verify(repository).deleteInProgressByKeyAndOwner(eq(key), anyString());
     }
 
     @Test
@@ -87,6 +89,6 @@ class IdempotencyServiceMarkerCleanupTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("멱등성 마커가 사라졌습니다");
 
-        verify(repository).deleteInProgressByIdempotencyKey(key);
+        verify(repository).deleteInProgressByKeyAndOwner(eq(key), anyString());
     }
 }

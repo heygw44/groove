@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
@@ -75,8 +76,9 @@ public class IdempotencyService {
         Objects.requireNonNull(action, "action must not be null");
 
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            if (tryInsertMarker(idempotencyKey, requestFingerprint)) {
-                return runAndCache(idempotencyKey, action);
+            String ownerToken = UUID.randomUUID().toString();
+            if (tryInsertMarker(idempotencyKey, requestFingerprint, ownerToken)) {
+                return runAndCache(idempotencyKey, ownerToken, action);
             }
             Optional<IdempotencyRecord> existing = findInNewTx(idempotencyKey);
             if (existing.isEmpty()) {
@@ -111,22 +113,22 @@ public class IdempotencyService {
         throw new IdempotencyConflictException(idempotencyKey);
     }
 
-    private boolean tryInsertMarker(String idempotencyKey, String requestFingerprint) {
+    private boolean tryInsertMarker(String idempotencyKey, String requestFingerprint, String ownerToken) {
         try {
             requiresNewTx.executeWithoutResult(status ->
-                    repository.saveAndFlush(IdempotencyRecord.start(idempotencyKey, requestFingerprint, inProgressTimeout, clock.instant())));
+                    repository.saveAndFlush(IdempotencyRecord.start(idempotencyKey, requestFingerprint, inProgressTimeout, clock.instant(), ownerToken)));
             return true;
         } catch (DataIntegrityViolationException duplicateKey) {
             return false;
         }
     }
 
-    private <T> T runAndCache(String idempotencyKey, Supplier<T> action) {
+    private <T> T runAndCache(String idempotencyKey, String ownerToken, Supplier<T> action) {
         T result;
         try {
             result = action.get();
         } catch (RuntimeException actionFailure) {
-            removeMarkerQuietly(idempotencyKey);
+            removeMarkerQuietly(idempotencyKey, ownerToken);
             throw actionFailure;
         }
 
@@ -138,24 +140,25 @@ public class IdempotencyService {
             requiresNewTx.executeWithoutResult(status -> {
                 IdempotencyRecord record = repository.findByIdempotencyKey(idempotencyKey)
                         .orElseThrow(() -> new IllegalStateException("멱등성 마커가 사라졌습니다: " + idempotencyKey));
-                record.complete(typeName, body, cacheExpiresAt);
+                // ownerToken 으로 소유권 검증 — 마커가 회수되고 다른 요청이 새로 만든 행이면 complete 가 거부된다(#317).
+                record.complete(typeName, body, cacheExpiresAt, ownerToken);
             });
         } catch (RuntimeException cacheFailure) {
             // 결과 직렬화 또는 complete() 트랜잭션 실패 — action 실패 경로와 대칭으로 마커를 정리한다.
-            removeMarkerQuietly(idempotencyKey);
+            removeMarkerQuietly(idempotencyKey, ownerToken);
             throw cacheFailure;
         }
         return result;
     }
 
     /**
-     * 소유자가 처리 실패 시 자기 IN_PROGRESS 마커만 삭제한다. status=IN_PROGRESS 가드로, 처리 타임아웃 초과로
-     * 마커가 회수돼 다른 요청이 같은 키로 만든 COMPLETED 캐시는 파괴하지 않는다(#317 회수 race 방어).
-     * 회수 실패는 경고만 남긴다.
+     * 소유자가 처리 실패 시 자기 IN_PROGRESS 마커만 삭제한다. key+ownerToken+status=IN_PROGRESS 가드로,
+     * 처리 타임아웃 초과로 마커가 회수돼 다른 요청이 같은 키로 만든 마커/COMPLETED 캐시는 파괴하지 않는다
+     * (#317 회수 race 방어). 회수 실패는 경고만 남긴다.
      */
-    private void removeMarkerQuietly(String idempotencyKey) {
+    private void removeMarkerQuietly(String idempotencyKey, String ownerToken) {
         try {
-            requiresNewTx.executeWithoutResult(status -> repository.deleteInProgressByIdempotencyKey(idempotencyKey));
+            requiresNewTx.executeWithoutResult(status -> repository.deleteInProgressByKeyAndOwner(idempotencyKey, ownerToken));
         } catch (RuntimeException cleanupFailure) {
             log.warn("멱등성 마커 회수 실패 key={} — TTL 정리로 회수 예정", idempotencyKey, cleanupFailure);
         }

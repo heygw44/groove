@@ -91,13 +91,14 @@ public class OrderController {
 
     /**
      * 같은 멱등 키를 다른 소유자/본문으로 재사용하면 409(mismatch)로 막기 위한 요청 지문.
-     * request_fingerprint 컬럼(255자) 한도에 맞춰 본문은 SHA-256(64자 hex)로 줄이고, 소유자 태그를 앞에 붙인다.
+     * 소유자 태그(게스트 email 은 최대 255자)와 본문을 합쳐 통째로 SHA-256 해시해, raw email 길이와 무관하게
+     * request_fingerprint 컬럼(255자) 한도 안에서 항상 고정 64자 hex 를 만든다.
      */
     private String orderFingerprint(Long memberId, OrderCreateRequest request) {
-        String ownerTag = memberId != null
+        String owner = memberId != null
                 ? "m:" + memberId
                 : "g:" + (request.guest() != null ? request.guest().email() : "");
-        return ownerTag + "|" + Sha256Hasher.hex(objectMapper.writeValueAsString(request));
+        return Sha256Hasher.hex(owner + "|" + objectMapper.writeValueAsString(request));
     }
 
     @Operation(summary = "본인 주문 단건 조회",

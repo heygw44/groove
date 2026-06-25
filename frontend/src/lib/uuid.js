@@ -41,3 +41,12 @@ export function idempotencyKeyFor(scope) {
     return randomUuid()
   }
 }
+
+// idempotencyKeyFor 로 저장한 키를 비운다 — 성공 후 호출해 같은 세션의 다음 제출이 replay 되지 않고 새 키를 쓰게 한다.
+export function clearIdempotencyKey(scope) {
+  try {
+    sessionStorage.removeItem(`idem:${scope}`)
+  } catch {
+    /* sessionStorage 사용 불가 환경: 무시 */
+  }
+}
