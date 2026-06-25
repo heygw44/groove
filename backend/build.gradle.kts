@@ -49,6 +49,10 @@ dependencies {
     implementation("org.flywaydb:flyway-mysql")
     implementation("com.bucket4j:bucket4j_jdk17-core:8.19.0")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.4")
+    // 토스 외부 PG 호출 장애 격리 (#320). 프레임워크 무관 core 모듈을 프로그램적으로 사용한다 —
+    // resilience4j-spring-boot 스타터는 Boot 4.x 호환이 불확실해 의존하지 않는다. Spring BOM 미관리라 버전 명시.
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.3.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.3.0")
     implementation("io.jsonwebtoken:jjwt-api:0.13.0")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")

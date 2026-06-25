@@ -4,11 +4,18 @@ import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.exception.PaymentGatewayException;
 import com.groove.payment.gateway.ConfirmResponse;
+import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.GatewayRefunds;
 import com.groove.payment.gateway.PaymentRequest;
 import com.groove.payment.gateway.RefundRequest;
 import com.groove.payment.gateway.RefundResponse;
 import com.groove.payment.gateway.TossPaymentProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -50,10 +57,48 @@ class TossPaymentGatewayTest {
 
     @BeforeEach
     void setUp() {
-        // TossPaymentConfig 로 빌드한 클라이언트(baseUrl·Basic Auth 인터셉터 포함)에 MockRestServiceServer 를 끼운다.
+        // 매핑 테스트 기본 게이트웨이 — 재시도 없음(단일 시도)·서킷 비개방(높은 최소호출수)으로 기존 동작을 보존한다.
+        gateway = newGateway(noRetry(), permissiveBreaker());
+    }
+
+    /** TossPaymentConfig 로 빌드한 클라이언트(baseUrl·Basic Auth 인터셉터 포함)에 MockRestServiceServer 를 끼우고, 주어진 CB/Retry 로 어댑터를 만든다. */
+    private TossPaymentGateway newGateway(Retry retry, CircuitBreaker breaker) {
         RestClient.Builder builder = new TossPaymentConfig().tossRestClient(validProps()).mutate();
         server = MockRestServiceServer.bindTo(builder).build();
-        gateway = new TossPaymentGateway(builder.build(), CLOCK);
+        return new TossPaymentGateway(builder.build(), CLOCK, breaker, retry);
+    }
+
+    /** 재시도 없음(maxAttempts=1) — 단일 시도. */
+    private static Retry noRetry() {
+        return Retry.of("test", RetryConfig.custom().maxAttempts(1).build());
+    }
+
+    /** 일시 장애 1회 재시도(maxAttempts=2, 백오프 1ms) — 어댑터와 동일한 전이 술어 사용. */
+    private static Retry retryOnce() {
+        return Retry.of("test", RetryConfig.custom()
+                .maxAttempts(2)
+                .intervalFunction(IntervalFunction.of(Duration.ofMillis(1)))
+                .retryOnException(TossPaymentGateway::isRetryableTransient)
+                .build());
+    }
+
+    /** 사실상 열리지 않는 서킷(최소호출수 100) — 매핑 테스트 격리용. */
+    private static CircuitBreaker permissiveBreaker() {
+        return CircuitBreaker.of("test", CircuitBreakerConfig.custom()
+                .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
+                .slidingWindowSize(100).minimumNumberOfCalls(100)
+                .build());
+    }
+
+    /** 일시 장애 2건이면 즉시 OPEN 되는 서킷 — 어댑터와 동일한 집계 술어 사용. */
+    private static CircuitBreaker eagerBreaker() {
+        return CircuitBreaker.of("test", CircuitBreakerConfig.custom()
+                .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
+                .slidingWindowSize(2).minimumNumberOfCalls(2)
+                .failureRateThreshold(50.0f)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .recordException(TossPaymentGateway::isRetryableTransient)
+                .build());
     }
 
     private static TossPaymentProperties validProps() {
@@ -162,18 +207,21 @@ class TossPaymentGatewayTest {
                     .andExpect(method(HttpMethod.GET))
                     .andRespond(withSuccess(paymentJson("pk_1", tossStatus), MediaType.APPLICATION_JSON));
 
-            assertThat(gateway.query("pk_1")).isEqualTo(PaymentStatus.PENDING);
+            assertThat(gateway.query("pk_1").status()).isEqualTo(PaymentStatus.PENDING);
             server.verify();
         }
 
         @ParameterizedTest(name = "{0} → {1}")
         @CsvSource({"DONE,PAID", "ABORTED,FAILED", "EXPIRED,FAILED"})
-        @DisplayName("종착 상태를 도메인 상태로 매핑한다")
+        @DisplayName("종착 상태를 도메인 상태로 매핑하고 totalAmount 를 정산금액으로 반환한다(#320)")
         void query_terminal_maps(String tossStatus, PaymentStatus expected) {
             server.expect(requestTo(BASE_URL + "/v1/payments/pk_1"))
                     .andRespond(withSuccess(paymentJson("pk_1", tossStatus), MediaType.APPLICATION_JSON));
 
-            assertThat(gateway.query("pk_1")).isEqualTo(expected);
+            GatewayQuery result = gateway.query("pk_1");
+
+            assertThat(result.status()).isEqualTo(expected);
+            assertThat(result.settledAmount()).isEqualTo(105_000L);
             server.verify();
         }
 
@@ -280,5 +328,57 @@ class TossPaymentGatewayTest {
     void request_unsupported() {
         assertThatThrownBy(() -> gateway.request(new PaymentRequest("ORD-1", 1_000L)))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Nested
+    @DisplayName("재시도·서킷브레이커 (#320)")
+    class Resilience {
+
+        @Test
+        @DisplayName("일시 장애(5xx)는 재시도해 다음 성공 응답으로 회복한다")
+        void transient5xx_retriedThenSucceeds() {
+            gateway = newGateway(retryOnce(), permissiveBreaker());
+            server.expect(requestTo(BASE_URL + "/v1/payments/pk_1")).andRespond(withServerError());
+            server.expect(requestTo(BASE_URL + "/v1/payments/pk_1"))
+                    .andRespond(withSuccess(paymentJson("pk_1", "DONE"), MediaType.APPLICATION_JSON));
+
+            GatewayQuery result = gateway.query("pk_1");
+
+            assertThat(result.status()).isEqualTo(PaymentStatus.PAID);
+            server.verify(); // 두 요청(실패→성공) 모두 소비
+        }
+
+        @Test
+        @DisplayName("4xx(결정적 오류)는 재시도하지 않고 단일 호출로 502 래핑한다")
+        void clientError4xx_notRetried() {
+            gateway = newGateway(retryOnce(), permissiveBreaker());
+            // 단 한 번만 기대 — 재시도하면 두 번째 미기대 요청으로 검증 실패한다.
+            server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+                    .andRespond(withStatus(HttpStatus.BAD_REQUEST)
+                            .body(errorJson("INVALID_REQUEST", "잘못된 요청"))
+                            .contentType(MediaType.APPLICATION_JSON));
+
+            assertThatThrownBy(() -> gateway.confirm("pk_1", "ORD-1", 105_000L))
+                    .isInstanceOf(PaymentGatewayException.class);
+            server.verify();
+        }
+
+        @Test
+        @DisplayName("일시 장애가 임계 누적되면 서킷이 OPEN 되어 후속 호출을 PG 호출 없이 빠르게 실패시킨다 (query 는 502 미정규화 → CallNotPermittedException 전파)")
+        void circuitOpens_failsFastWithoutCallingPg() {
+            gateway = newGateway(noRetry(), eagerBreaker());
+            // 두 번의 5xx 로 서킷을 연다(재시도 없음 → 호출당 요청 1회).
+            server.expect(requestTo(BASE_URL + "/v1/payments/pk_1")).andRespond(withServerError());
+            server.expect(requestTo(BASE_URL + "/v1/payments/pk_1")).andRespond(withServerError());
+
+            // 5xx 두 건은 502 로 정규화(서킷 집계).
+            assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(PaymentGatewayException.class);
+            assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(PaymentGatewayException.class);
+            // 세 번째는 서킷 OPEN → PG 미호출(기대 요청 없음). query 는 CallNotPermittedException 을 래핑하지 않고 전파해
+            // 폴링 스케줄러가 일시 단락을 영구 오류로 오인하지 않게 한다(#332 리뷰).
+            assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(CallNotPermittedException.class);
+
+            server.verify(); // 정확히 두 요청만 소비됨(세 번째는 단락)
+        }
     }
 }

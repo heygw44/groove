@@ -15,14 +15,24 @@ class PaymentRateLimitPropertiesTest {
     @DisplayName("유효한 설정은 통과")
     void validConfig() {
         assertThatCode(() -> new PaymentRateLimitProperties(
-                new PaymentRateLimitProperties.Policy(5L, Duration.ofMinutes(1))))
+                new PaymentRateLimitProperties.Policy(5L, Duration.ofMinutes(1)),
+                new PaymentRateLimitProperties.Policy(60L, Duration.ofMinutes(1))))
                 .doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("post 정책 누락 → 예외")
     void missingPost_throws() {
-        assertThatThrownBy(() -> new PaymentRateLimitProperties(null))
+        assertThatThrownBy(() -> new PaymentRateLimitProperties(
+                null, new PaymentRateLimitProperties.Policy(60L, Duration.ofMinutes(1))))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("webhook 정책 누락 → 예외")
+    void missingWebhook_throws() {
+        assertThatThrownBy(() -> new PaymentRateLimitProperties(
+                new PaymentRateLimitProperties.Policy(5L, Duration.ofMinutes(1)), null))
                 .isInstanceOf(IllegalStateException.class);
     }
 

@@ -1,7 +1,5 @@
 package com.groove.payment.gateway;
 
-import com.groove.payment.domain.PaymentStatus;
-
 /**
  * PG 연동 추상화 (Strategy 패턴).
  *
@@ -27,8 +25,13 @@ public interface PaymentGateway {
      */
     ConfirmResponse confirm(String paymentKey, String orderId, long amount);
 
-    /** PG 측 현재 결제 상태를 조회한다. 처리 중이면 PENDING. */
-    PaymentStatus query(String pgTransactionId);
+    /**
+     * PG 측 현재 결제 상태와 (보고됐다면) 권위 정산금액을 조회한다. 처리 중이면 PENDING.
+     *
+     * <p>정산금액({@link GatewayQuery#settledAmount()})은 PAID 정산 전 저장 금액과 대조해 위변조를 차단하는 데 쓴다(#320).
+     * PG 가 금액을 보고하지 않으면 null 이며, 이 경우 호출부는 금액 검증을 생략한다.
+     */
+    GatewayQuery query(String pgTransactionId);
 
     /** 결제를 환불한다. */
     RefundResponse refund(RefundRequest request);

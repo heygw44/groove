@@ -27,7 +27,8 @@ class PaymentRateLimitPolicyTest {
     void setUp() {
         jwtProvider = mock(JwtProvider.class);
         PaymentRateLimitProperties properties = new PaymentRateLimitProperties(
-                new PaymentRateLimitProperties.Policy(2L, Duration.ofMinutes(1)));
+                new PaymentRateLimitProperties.Policy(2L, Duration.ofMinutes(1)),
+                new PaymentRateLimitProperties.Policy(60L, Duration.ofMinutes(1)));
         policy = new PaymentRateLimitPolicy(properties, jwtProvider);
     }
 
@@ -38,12 +39,15 @@ class PaymentRateLimitPolicyTest {
     }
 
     @Test
-    @DisplayName("POST /payments 에만 적용 (메서드·고정경로 매칭)")
-    void appliesOnlyToPaymentPost() {
+    @DisplayName("POST 결제 생성 경로(/payments · /toss/checkout)에만 적용, 웹훅·기타는 제외")
+    void appliesToCreatePaths() {
         assertThat(policy.appliesTo(request("POST", "/api/v1/payments"))).isTrue();
+        assertThat(policy.appliesTo(request("POST", "/api/v1/payments/toss/checkout"))).isTrue();
         assertThat(policy.appliesTo(request("GET", "/api/v1/payments"))).isFalse();
         assertThat(policy.appliesTo(request("POST", "/api/v1/payments/123"))).isFalse();
         assertThat(policy.appliesTo(request("POST", "/api/v1/payment"))).isFalse();
+        // 웹훅은 회원 정책 제외(별도 PaymentWebhookRateLimitPolicy 가 IP 키잉으로 담당).
+        assertThat(policy.appliesTo(request("POST", "/api/v1/payments/toss/webhook"))).isFalse();
     }
 
     @Test

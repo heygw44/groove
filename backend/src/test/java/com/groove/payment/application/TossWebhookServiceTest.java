@@ -8,6 +8,7 @@ import com.groove.payment.domain.Payment;
 import com.groove.payment.domain.PaymentMethod;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
+import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.support.OrderFixtures;
 import org.junit.jupiter.api.DisplayName;
@@ -62,10 +63,36 @@ class TossWebhookServiceTest {
     }
 
     @Test
-    @DisplayName("로컬 PENDING + 재조회 PAID → settle(PAID) 위임, APPLIED")
+    @DisplayName("로컬 PENDING + 재조회 PAID(금액 일치) → settle(PAID) 위임, APPLIED")
     void handle_paid_settles() {
         given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
-        given(paymentGateway.query(PAYMENT_KEY)).willReturn(PaymentStatus.PAID);
+        given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.PAID, 35000L));
+        given(settlementService.settle(PAYMENT_KEY, PaymentStatus.PAID, null)).willReturn(applied(PaymentStatus.PAID));
+
+        PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));
+
+        verify(settlementService).settle(PAYMENT_KEY, PaymentStatus.PAID, null);
+        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.APPLIED);
+    }
+
+    @Test
+    @DisplayName("재조회 PAID 금액 불일치 → 정산 보류, 수동 확인 IGNORED (#320)")
+    void handle_paidAmountMismatch_ignored() {
+        given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
+        // 저장 금액 35000 과 다른 정산금액을 토스가 알려줌 → 자동 전이하지 않는다.
+        given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.PAID, 999000L));
+
+        PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));
+
+        verifyNoInteractions(settlementService);
+        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.IGNORED);
+    }
+
+    @Test
+    @DisplayName("재조회 PAID 금액 미보고(null) → 검증 생략, 정상 settle(PAID) (#320)")
+    void handle_paidAmountNull_settles() {
+        given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
+        given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.PAID, null));
         given(settlementService.settle(PAYMENT_KEY, PaymentStatus.PAID, null)).willReturn(applied(PaymentStatus.PAID));
 
         PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));
@@ -78,7 +105,7 @@ class TossWebhookServiceTest {
     @DisplayName("재조회 FAILED → settle(FAILED, 사유) 위임")
     void handle_failed_settlesFailed() {
         given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
-        given(paymentGateway.query(PAYMENT_KEY)).willReturn(PaymentStatus.FAILED);
+        given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.FAILED, null));
         given(settlementService.settle(PAYMENT_KEY, PaymentStatus.FAILED, "토스 웹훅 결제 실패"))
                 .willReturn(applied(PaymentStatus.FAILED));
 
@@ -113,7 +140,7 @@ class TossWebhookServiceTest {
     @DisplayName("재조회가 비종착(PENDING)이면 정산하지 않고 IGNORED")
     void handle_pending_ignored() {
         given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
-        given(paymentGateway.query(PAYMENT_KEY)).willReturn(PaymentStatus.PENDING);
+        given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.PENDING, null));
 
         PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));
 
@@ -125,7 +152,7 @@ class TossWebhookServiceTest {
     @DisplayName("재조회 REFUNDED 등 PAID/FAILED 외 종착은 정산하지 않는다(취소 흐름 범위 외)")
     void handle_refunded_ignored() {
         given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
-        given(paymentGateway.query(PAYMENT_KEY)).willReturn(PaymentStatus.REFUNDED);
+        given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.REFUNDED, null));
 
         PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));
 
@@ -137,7 +164,7 @@ class TossWebhookServiceTest {
     @DisplayName("동시 처리 충돌(IdempotencyConflictException)은 흡수해 IGNORED(200), 토스 재전송 폭주 방지")
     void handle_idempotencyConflict_absorbed() {
         given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
-        given(paymentGateway.query(PAYMENT_KEY)).willReturn(PaymentStatus.PAID);
+        given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.PAID, 35000L));
         given(settlementService.settle(PAYMENT_KEY, PaymentStatus.PAID, null))
                 .willThrow(new IdempotencyConflictException("payment-callback:" + PAYMENT_KEY));
 
