@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,10 +23,15 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>PG 가 비동기 결제 결과를 POST /api/v1/payments/webhook 으로 통보한다. X-Mock-Signature 헤더로 서명을 검증하며(실패 시 401) permitAll 이다.
  * 멱등성은 본문의 pgTransactionId 에서 키를 합성해 보장한다. 같은 키를 공유하는 Mock 웹훅·폴링 스케줄러로 중복 수신해도 상태 전이는 1회다.
+ *
+ * <p>Mock 프로파일 전용(#321) — 주입받는 {@link WebhookSignatureVerifier}(유일 구현 MockWebhookSignatureVerifier)가
+ * {@code @Profile(local/dev/test/docker)}라 prod 에는 빈이 없다. prod 의 실 결제 inbound 는 별도 {@code TossWebhookController}
+ * 경로이므로, 이 레거시 Mock 웹훅 수신기를 prod 에서 제외해 prod 컨텍스트 기동 실패(미충족 의존성)를 막는다.
  */
 @Tag(name = "결제 웹훅", description = "PG 결제 결과 콜백 수신 (인증 토큰이 아니라 X-Mock-Signature 헤더 서명으로 검증)")
 @RestController
 @RequestMapping("/api/v1/payments")
+@Profile({"local", "dev", "test", "docker"})
 public class PaymentWebhookController {
 
     static final String SIGNATURE_HEADER = "X-Mock-Signature";
