@@ -1,176 +1,97 @@
 package com.groove.cart.application;
 
-import com.groove.catalog.album.domain.Album;
-import com.groove.catalog.album.domain.AlbumFormat;
-import com.groove.catalog.album.domain.AlbumRepository;
-import com.groove.catalog.album.domain.AlbumStatus;
-import com.groove.catalog.album.exception.AlbumNotFoundException;
-import com.groove.catalog.artist.domain.Artist;
-import com.groove.catalog.genre.domain.Genre;
-import com.groove.catalog.label.domain.Label;
 import com.groove.cart.domain.Cart;
-import com.groove.cart.domain.CartRepository;
-import com.groove.cart.exception.AlbumNotPurchasableException;
-import com.groove.cart.exception.CartItemNotFoundException;
-import com.groove.member.domain.MemberRepository;
-import com.groove.member.exception.MemberNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
-
-import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 장바구니 쓰기 오케스트레이터 단위 테스트 — CartSteps 위임과 addItem 동시성 충돌 1회 멱등 재시도.
+ * 트랜잭션 단계 자체의 검증은 {@link CartStepsTest} 에 있다.
+ */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("CartService 단위 테스트")
+@DisplayName("CartService")
 class CartServiceTest {
 
     @Mock
-    private CartRepository cartRepository;
-    @Mock
-    private AlbumRepository albumRepository;
-    @Mock
-    private MemberRepository memberRepository;
+    private CartSteps steps;
 
     private CartService cartService;
 
     @BeforeEach
     void setUp() {
-        cartService = new CartService(cartRepository, albumRepository, memberRepository);
-        // 활성 회원 기본값 — 탈퇴 시나리오만 false 로 override 한다.
-        lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
-    }
-
-    private Album album(long id, AlbumStatus status) {
-        Artist artist = Artist.create("A", null);
-        Genre genre = Genre.create("G");
-        Label label = Label.create("L");
-        Album album = Album.create("Title-" + id, artist, genre, label,
-                (short) 2020, AlbumFormat.LP_12, 30000L, 100,
-                status, false, null, null);
-        ReflectionTestUtils.setField(album, "id", id);
-        return album;
+        cartService = new CartService(steps);
     }
 
     @Test
-    @DisplayName("find → cart 없으면 비영속 빈 Cart 반환 (관찰만으로 영속화하지 않음)")
-    void find_returnsEmptyCartWhenAbsent() {
-        given(cartRepository.findByMemberIdWithItems(1L)).willReturn(Optional.empty());
-
-        Cart cart = cartService.find(1L);
-
-        assertThat(cart.getId()).isNull();
-        assertThat(cart.getItems()).isEmpty();
-    }
-
-    @Test
-    @DisplayName("addItem → cart 가 없으면 자동 생성 후 항목 추가")
-    void addItem_lazyCreatesCart() {
-        given(cartRepository.findByMemberIdWithItems(1L)).willReturn(Optional.empty());
-        given(cartRepository.save(any(Cart.class))).willAnswer(inv -> inv.getArgument(0));
-        given(albumRepository.findById(10L)).willReturn(Optional.of(album(10L, AlbumStatus.SELLING)));
+    @DisplayName("addItem: 충돌 없으면 steps.addItem 1회 호출하고 결과 반환")
+    void addItem_noConflict_delegatesOnce() {
+        Cart result = Cart.openFor(1L);
+        when(steps.addItem(1L, 10L, 2)).thenReturn(result);
 
         Cart cart = cartService.addItem(1L, 10L, 2);
 
-        assertThat(cart.getMemberId()).isEqualTo(1L);
-        assertThat(cart.getItems()).hasSize(1);
-        assertThat(cart.getItems().get(0).getQuantity()).isEqualTo(2);
+        assertThat(cart).isSameAs(result);
+        verify(steps, times(1)).addItem(1L, 10L, 2);
     }
 
     @Test
-    @DisplayName("addItem → 동일 album 재추가 시 quantity 누적")
-    void addItem_accumulates() {
-        Cart existing = Cart.openFor(1L);
-        existing.addOrAccumulate(album(10L, AlbumStatus.SELLING), 2);
-        given(cartRepository.findByMemberIdWithItems(1L)).willReturn(Optional.of(existing));
-        given(albumRepository.findById(10L)).willReturn(Optional.of(album(10L, AlbumStatus.SELLING)));
+    @DisplayName("addItem: 첫 시도가 DIVE(동시 쓰기 충돌) → 1회 재시도로 멱등 흡수, 두 번째 결과 반환")
+    void addItem_firstAttemptConflict_retriesOnceAndRecovers() {
+        Cart recovered = Cart.openFor(1L);
+        when(steps.addItem(1L, 10L, 2))
+                .thenThrow(new DataIntegrityViolationException("uk_cart_item_cart_album"))
+                .thenReturn(recovered);
 
-        Cart cart = cartService.addItem(1L, 10L, 3);
+        Cart cart = cartService.addItem(1L, 10L, 2);
 
-        assertThat(cart.getItems()).hasSize(1);
-        assertThat(cart.getItems().get(0).getQuantity()).isEqualTo(5);
+        assertThat(cart).isSameAs(recovered);
+        verify(steps, times(2)).addItem(1L, 10L, 2);
     }
 
     @Test
-    @DisplayName("addItem → album 이 HIDDEN 이면 AlbumNotPurchasableException")
-    void addItem_hiddenAlbumRejected() {
-        given(albumRepository.findById(10L)).willReturn(Optional.of(album(10L, AlbumStatus.HIDDEN)));
+    @DisplayName("addItem: 재시도도 제약 위반이면(이론상) 예외 전파 → 전역 핸들러가 409 로 매핑")
+    void addItem_retryAlsoConflicts_propagates() {
+        when(steps.addItem(1L, 10L, 2))
+                .thenThrow(new DataIntegrityViolationException("uk_cart_member"));
 
         assertThatThrownBy(() -> cartService.addItem(1L, 10L, 2))
-                .isInstanceOf(AlbumNotPurchasableException.class);
+                .isInstanceOf(DataIntegrityViolationException.class);
+        verify(steps, times(2)).addItem(1L, 10L, 2);
     }
 
     @Test
-    @DisplayName("addItem → album 이 SOLD_OUT 이면 AlbumNotPurchasableException")
-    void addItem_soldOutAlbumRejected() {
-        given(albumRepository.findById(10L)).willReturn(Optional.of(album(10L, AlbumStatus.SOLD_OUT)));
+    @DisplayName("find / changeItemQuantity / removeItem / clear / deleteForMember → steps 로 단순 위임(재시도 없음)")
+    void otherOperations_delegateWithoutRetry() {
+        Cart found = Cart.openFor(1L);
+        Cart changed = Cart.openFor(1L);
+        Cart removed = Cart.openFor(1L);
+        Cart cleared = Cart.openFor(1L);
+        when(steps.find(1L)).thenReturn(found);
+        when(steps.changeItemQuantity(1L, 5L, 3)).thenReturn(changed);
+        when(steps.removeItem(1L, 5L)).thenReturn(removed);
+        when(steps.clear(1L)).thenReturn(cleared);
 
-        assertThatThrownBy(() -> cartService.addItem(1L, 10L, 2))
-                .isInstanceOf(AlbumNotPurchasableException.class);
-    }
-
-    @Test
-    @DisplayName("addItem → 존재하지 않는 albumId → AlbumNotFoundException")
-    void addItem_albumNotFound() {
-        given(albumRepository.findById(99L)).willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> cartService.addItem(1L, 99L, 2))
-                .isInstanceOf(AlbumNotFoundException.class);
-    }
-
-    @Test
-    @DisplayName("removeItem → 본인 cart 에 없는 itemId → CartItemNotFoundException")
-    void removeItem_notInOwnCart() {
-        Cart empty = Cart.openFor(1L);
-        given(cartRepository.findByMemberIdWithItems(1L)).willReturn(Optional.of(empty));
-
-        assertThatThrownBy(() -> cartService.removeItem(1L, 12345L))
-                .isInstanceOf(CartItemNotFoundException.class);
-    }
-
-    @Test
-    @DisplayName("deleteForMember → cart 존재 시 삭제 위임 (#78 탈퇴 정리)")
-    void deleteForMember_present_delegatesDelete() {
-        Cart cart = Cart.openFor(1L);
-        given(cartRepository.findByMemberId(1L)).willReturn(Optional.of(cart));
-
+        assertThat(cartService.find(1L)).isSameAs(found);
+        assertThat(cartService.changeItemQuantity(1L, 5L, 3)).isSameAs(changed);
+        assertThat(cartService.removeItem(1L, 5L)).isSameAs(removed);
+        assertThat(cartService.clear(1L)).isSameAs(cleared);
         cartService.deleteForMember(1L);
 
-        verify(cartRepository).delete(cart);
-    }
-
-    @Test
-    @DisplayName("deleteForMember → cart 없으면 no-op (삭제·생성 모두 하지 않음 — 빈 cart 안 만듦)")
-    void deleteForMember_absent_noOpAndDoesNotCreate() {
-        given(cartRepository.findByMemberId(1L)).willReturn(Optional.empty());
-
-        cartService.deleteForMember(1L);
-
-        verify(cartRepository, never()).delete(any(Cart.class));
-        verify(cartRepository, never()).save(any(Cart.class));
-    }
-
-    @Test
-    @DisplayName("쓰기(clear) → 탈퇴(soft delete) 회원이면 MemberNotFoundException, cart 미조회·미저장 (#187)")
-    void write_memberWithdrawn_throws() {
-        long withdrawnMemberId = 99L;
-        when(memberRepository.existsByIdAndDeletedAtIsNull(withdrawnMemberId)).thenReturn(false);
-
-        assertThatThrownBy(() -> cartService.clear(withdrawnMemberId))
-                .isInstanceOf(MemberNotFoundException.class);
-        verify(cartRepository, never()).findByMemberIdWithItems(any());
-        verify(cartRepository, never()).save(any(Cart.class));
+        verify(steps, times(1)).find(1L);
+        verify(steps, times(1)).changeItemQuantity(1L, 5L, 3);
+        verify(steps, times(1)).removeItem(1L, 5L);
+        verify(steps, times(1)).clear(1L);
+        verify(steps, times(1)).deleteForMember(1L);
     }
 }

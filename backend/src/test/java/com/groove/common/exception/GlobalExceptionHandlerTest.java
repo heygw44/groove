@@ -17,6 +17,7 @@ import org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoCon
 import org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterAutoConfiguration;
 import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -161,6 +162,28 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("DataIntegrityViolationException(제약 위반 원인) → 409, code=DATA_INTEGRITY_CONFLICT")
+    void dataIntegrityConflict_constraintViolation() throws Exception {
+        mockMvc.perform(get("/stub/constraint-violation"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.code").value("DATA_INTEGRITY_CONFLICT"))
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.traceId").exists());
+    }
+
+    @Test
+    @DisplayName("DataIntegrityViolationException(제약 위반 아님 — 범위 초과 등) → 500, code=SYSTEM_001")
+    void dataIntegrityNonConstraint_isServerError() throws Exception {
+        mockMvc.perform(get("/stub/data-range-error"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.code").value("SYSTEM_001"))
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.traceId").exists());
+    }
+
+    @Test
     @DisplayName("RuntimeException(폴백) → 500, code=SYSTEM_001")
     void genericException() throws Exception {
         mockMvc.perform(get("/stub/generic-error"))
@@ -205,6 +228,20 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/auth-exception")
         void authenticationException() {
             throw new BadCredentialsException("인증 실패");
+        }
+
+        @GetMapping("/constraint-violation")
+        void constraintViolation() {
+            // 근본 원인이 SQLIntegrityConstraintViolationException (MySQL 1062 중복키 등) → 409.
+            throw new DataIntegrityViolationException("uk_test 위반",
+                    new java.sql.SQLIntegrityConstraintViolationException("Duplicate entry for key 'uk_test'"));
+        }
+
+        @GetMapping("/data-range-error")
+        void dataRangeError() {
+            // 제약 위반이 아닌 무결성 오류(범위 초과 등) → 500.
+            throw new DataIntegrityViolationException("out of range",
+                    new java.sql.SQLException("Out of range value", "22003"));
         }
 
         @GetMapping("/generic-error")

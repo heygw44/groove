@@ -175,7 +175,8 @@ public class AlbumService {
     /**
      * 공개 검색/목록 — keyset(커서) 페이징 변형 (GET /albums/scroll). search 와 동일한 AlbumSpecs
      * 동적 조건을 Spring Data Scroll API(findBy(...).scroll(position))로 Window 반환한다. fluent
-     * findBy 경로는 @EntityGraph 미적용이라 to-one 연관은 Album 의 @BatchSize 로 일괄 페치된다.
+     * findBy 경로는 @EntityGraph 미적용이라 to-one 연관(artist/genre/label)은 각 대상 엔티티의 클래스 레벨
+     * @BatchSize 로 IN 쿼리 일괄 페치된다.
      */
     @Transactional(readOnly = true)
     public Window<AlbumSummaryResponse> searchKeyset(AlbumSearchCondition condition, int size, Sort sort, ScrollPosition position) {

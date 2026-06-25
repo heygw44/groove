@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -91,6 +93,27 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     /** 검증 메시지가 null 이면 기본 메시지를 반환한다. */
     private static String messageOrDefault(String message) {
         return message != null ? message : "유효하지 않은 값입니다";
+    }
+
+    /**
+     * 미매핑 무결성 위반의 전역 안전망. UNIQUE/제약 위반(예: 장바구니 동시 쓰기 경합)이 도메인 변환 없이 새어
+     * 500 으로 노출되는 것을 막아 409 로 매핑한다. 단 근본 원인이 제약 위반(SQLIntegrityConstraintViolationException,
+     * 예: MySQL 1062 중복키)일 때만 409 이고, 범위 초과(1264)·데이터 절단 등 비-제약 무결성 오류는 서버 오류이므로
+     * 500 폴백으로 둔다. Hibernate/JPA 는 커밋 시점 제약 위반을 DuplicateKeyException 이 아닌 일반
+     * DataIntegrityViolationException 으로 변환하므로(코드베이스 전 도메인 동일), 원인 SQL 예외 타입으로 갈라본다.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetail> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex, HttpServletRequest request) {
+        Throwable cause = ex.getMostSpecificCause();
+        if (cause instanceof SQLIntegrityConstraintViolationException) {
+            // UNIQUE/FK 등 제약 위반 — 동시성 충돌로 보고 409(서버 오류 아님 → WARN).
+            log.warn("무결성 제약 위반 [{}]: {}", request.getRequestURI(), cause.getMessage());
+            return buildResponse(ErrorCode.DATA_INTEGRITY_CONFLICT);
+        }
+        // 범위 초과·데이터 절단 등 제약 위반이 아닌 무결성 오류는 예기치 못한 서버 오류로 둔다.
+        log.error("데이터 무결성 오류 [{}]", request.getRequestURI(), ex);
+        return buildResponse(ErrorCode.INTERNAL_ERROR);
     }
 
     @ExceptionHandler(Exception.class)
