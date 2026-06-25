@@ -10,6 +10,7 @@ import com.groove.payment.gateway.PaymentRequest;
 import com.groove.payment.gateway.RefundRequest;
 import com.groove.payment.gateway.RefundResponse;
 import com.groove.payment.gateway.TossPaymentProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.core.IntervalFunction;
@@ -363,17 +364,19 @@ class TossPaymentGatewayTest {
         }
 
         @Test
-        @DisplayName("일시 장애가 임계 누적되면 서킷이 OPEN 되어 후속 호출을 PG 호출 없이 빠르게 502 로 실패시킨다")
+        @DisplayName("일시 장애가 임계 누적되면 서킷이 OPEN 되어 후속 호출을 PG 호출 없이 빠르게 실패시킨다 (query 는 502 미정규화 → CallNotPermittedException 전파)")
         void circuitOpens_failsFastWithoutCallingPg() {
             gateway = newGateway(noRetry(), eagerBreaker());
             // 두 번의 5xx 로 서킷을 연다(재시도 없음 → 호출당 요청 1회).
             server.expect(requestTo(BASE_URL + "/v1/payments/pk_1")).andRespond(withServerError());
             server.expect(requestTo(BASE_URL + "/v1/payments/pk_1")).andRespond(withServerError());
 
+            // 5xx 두 건은 502 로 정규화(서킷 집계).
             assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(PaymentGatewayException.class);
             assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(PaymentGatewayException.class);
-            // 세 번째는 서킷 OPEN → PG 미호출(기대 요청 없음)로 즉시 502.
-            assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(PaymentGatewayException.class);
+            // 세 번째는 서킷 OPEN → PG 미호출(기대 요청 없음). query 는 CallNotPermittedException 을 래핑하지 않고 전파해
+            // 폴링 스케줄러가 일시 단락을 영구 오류로 오인하지 않게 한다(#332 리뷰).
+            assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(CallNotPermittedException.class);
 
             server.verify(); // 정확히 두 요청만 소비됨(세 번째는 단락)
         }

@@ -2,6 +2,7 @@ package com.groove.payment.gateway.mock;
 
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.gateway.ConfirmResponse;
+import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentMockProperties;
 import com.groove.payment.gateway.PaymentRequest;
 import com.groove.payment.gateway.PaymentResponse;
@@ -141,12 +142,15 @@ class MockPaymentGatewayTest {
     class Query {
 
         @Test
-        @DisplayName("웹훅 발사 예정 시각 전이면 PENDING 을 반환한다")
+        @DisplayName("웹훅 발사 예정 시각 전이면 PENDING 을 반환하고, Mock 은 거래별 금액 미보유라 settledAmount 는 null 이다")
         void pendingBeforeReadyAt() {
             MockPaymentGateway g = gateway(props(1.0, Duration.ZERO, Duration.ofSeconds(5)));
             PaymentResponse response = g.request(REQUEST);
 
-            assertThat(g.query(response.pgTransactionId()).status()).isEqualTo(PaymentStatus.PENDING);
+            GatewayQuery result = g.query(response.pgTransactionId());
+            assertThat(result.status()).isEqualTo(PaymentStatus.PENDING);
+            // Mock 계약: 거래별 금액 미보유 → settledAmount 항상 null → 호출부 금액 검증 생략(#320).
+            assertThat(result.settledAmount()).isNull();
         }
 
         @Test

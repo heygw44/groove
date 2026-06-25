@@ -97,7 +97,7 @@ class PaymentRateLimitIntegrationTest {
     @Test
     @DisplayName("토스 웹훅 IP당 capacity(2) 초과 → 3번째 429 (별도 IP 버킷)")
     void webhookPerIpLimit_exceeded_returns429() throws Exception {
-        // 본문 없는 웹훅은 IGNORED 로 200 ACK — 토큰 소진 전까지 통과.
+        // paymentKey 없는 빈 본문({}) 웹훅은 IGNORED 로 200 ACK — 토큰 소진 전까지 통과.
         for (int i = 1; i <= 2; i++) {
             mockMvc.perform(post("/api/v1/payments/toss/webhook")
                             .contentType(MediaType.APPLICATION_JSON)

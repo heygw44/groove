@@ -7,6 +7,7 @@ import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.toss.TossPaymentGateway;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -137,6 +138,11 @@ public class PaymentReconciliationScheduler {
         GatewayQuery query;
         try {
             query = paymentGateway.query(pgTransactionId);
+        } catch (CallNotPermittedException circuitOpen) {
+            // 서킷 OPEN — 토스 일시 장애 백오프 중(영구 해소 불가가 아님). 만료 결제라도 종결하지 않고 다음 주기에 재시도해,
+            // 실제로는 PAID 일 수 있는 결제를 일시 단락만으로 FAILED 로 뒤집지 않는다(#332 리뷰).
+            log.warn("결제 폴링 조회 단락(서킷 OPEN): pgTx={} — 다음 주기에 재시도", pgTransactionId);
+            return;
         } catch (RuntimeException queryError) {
             // query 가 응답하지 못하는 영구 해소 불가(예: 잔존 pgTx 404/502)만 max-age 초과 시 종결한다.
             // settle 실패는 여기 섞이지 않는다(별도 catch).
@@ -152,8 +158,7 @@ public class PaymentReconciliationScheduler {
         if (pgStatus == PaymentStatus.PAID || pgStatus == PaymentStatus.FAILED) {
             // PAID 정산 전 금액 위변조 대조(#320) — PG 권위 금액이 저장 금액과 다르면 자동 정산하지 않고 PENDING 으로 둔다.
             // 다음 주기에 재시도되고, 끝내 해소되지 않으면 max-age 초과 시 terminateUnresolvable 가 FAILED+보상으로 종결한다.
-            if (pgStatus == PaymentStatus.PAID && query.settledAmount() != null
-                    && query.settledAmount() != payment.getAmount()) {
+            if (pgStatus == PaymentStatus.PAID && query.settledAmountMismatches(payment.getAmount())) {
                 log.warn("결제 폴링: PAID 정산금액 불일치 — 자동 정산 보류, 수동 확인 필요 pgTx={}, 저장={}, PG={}",
                         pgTransactionId, payment.getAmount(), query.settledAmount());
                 return;

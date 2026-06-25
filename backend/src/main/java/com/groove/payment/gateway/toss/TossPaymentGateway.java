@@ -14,6 +14,7 @@ import com.groove.payment.gateway.toss.dto.TossCancelRequest;
 import com.groove.payment.gateway.toss.dto.TossConfirmRequest;
 import com.groove.payment.gateway.toss.dto.TossErrorResponse;
 import com.groove.payment.gateway.toss.dto.TossPayment;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;
 import org.slf4j.Logger;
@@ -143,6 +144,10 @@ public class TossPaymentGateway implements PaymentGateway {
             // 토스가 알려준 권위 정산금액(totalAmount)을 함께 반환 — 웹훅/폴링이 PAID 정산 전 위변조 대조에 쓴다(#320).
             PaymentStatus status = TossStatusMapper.toPaymentStatus(requireBody(payment).status());
             return new GatewayQuery(status, payment.totalAmount());
+        } catch (CallNotPermittedException circuitOpen) {
+            // 서킷 OPEN 은 일시 백오프 상태다 — 502(영구 오류)로 정규화하지 않고 그대로 전파해, 폴링 스케줄러가 이를
+            // '영구 해소 불가'로 오인해 만료 PENDING 결제를 FAILED 로 종결하지 않도록 한다(#332 리뷰).
+            throw circuitOpen;
         } catch (RuntimeException e) {
             // query 도 호출부(폴링 스케줄러)가 502 로 변환하지 않으므로 어댑터가 직접 정규화한다.
             logTossError("결제 조회", e);

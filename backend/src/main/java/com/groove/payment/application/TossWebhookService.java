@@ -102,8 +102,7 @@ public class TossWebhookService {
 
         // PAID 정산 전 금액 위변조 대조(#320) — 토스가 알려준 권위 정산금액이 저장 금액과 다르면 자동 전이하지 않고
         // 수동 확인 대상으로 남긴다(취소/환불 분기와 동일 패턴). 금액 미보고(null)면 검증을 생략한다.
-        if (authoritative == PaymentStatus.PAID && query.settledAmount() != null
-                && query.settledAmount() != payment.getAmount()) {
+        if (authoritative == PaymentStatus.PAID && query.settledAmountMismatches(payment.getAmount())) {
             log.warn("토스 웹훅: PAID 정산금액 불일치 — 자동 정산 보류, 수동 확인 필요 paymentKey={}, 저장={}, 토스={}",
                     paymentKey, payment.getAmount(), query.settledAmount());
             return PaymentCallbackResult.ignored(paymentKey);

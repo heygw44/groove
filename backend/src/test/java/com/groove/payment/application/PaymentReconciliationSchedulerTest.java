@@ -8,6 +8,8 @@ import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
 import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentGateway;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -106,6 +108,39 @@ class PaymentReconciliationSchedulerTest {
         scheduler.reconcilePendingPayments();
 
         verifyNoInteractions(settlementService);
+    }
+
+    @Test
+    @DisplayName("PG 가 PAID 이고 정산금액이 저장 금액과 일치(non-null)하면 정상 정산한다 (#320 일치 경로)")
+    void reconcile_pgPaidAmountMatch_syncs() {
+        // pending() 의 저장 금액 35000 과 동일한 non-null 정산금액 — 박싱 Long 값비교가 정상 통과해야 한다.
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(pending("mock-tx-1")));
+        given(paymentGateway.query("mock-tx-1")).willReturn(new GatewayQuery(PaymentStatus.PAID, 35000L));
+        settleReturnsApplied();
+
+        scheduler.reconcilePendingPayments();
+
+        verify(settlementService).settle("mock-tx-1", PaymentStatus.PAID, null);
+    }
+
+    @Test
+    @DisplayName("max-age 초과여도 query 가 서킷 OPEN(CallNotPermittedException)으로 단락되면 종결하지 않고 다음 주기에 재시도한다 (#332 리뷰)")
+    void reconcile_expiredCircuitOpen_doesNotTerminate() {
+        Payment expired = pending("mock-tx-1", NOW.minus(MAX_AGE).minus(Duration.ofMinutes(1)));
+        given(paymentRepository.findByStatusAndCreatedAtBefore(any(), any(), any())).willReturn(List.of(expired));
+        given(paymentGateway.query("mock-tx-1")).willThrow(circuitOpenException());
+
+        scheduler.reconcilePendingPayments();
+
+        // 서킷 OPEN 은 일시 백오프 — 만료 결제라도 FAILED 로 종결하지 않는다(영구 해소 불가만 종결).
+        verifyNoInteractions(settlementService);
+    }
+
+    /** OPEN 상태 서킷에서 발생하는 CallNotPermittedException 을 만든다. */
+    private static CallNotPermittedException circuitOpenException() {
+        CircuitBreaker cb = CircuitBreaker.ofDefaults("test");
+        cb.transitionToOpenState();
+        return CallNotPermittedException.createCallNotPermittedException(cb);
     }
 
     @Test
