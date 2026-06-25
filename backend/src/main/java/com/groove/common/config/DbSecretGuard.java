@@ -17,8 +17,8 @@ import org.springframework.util.StringUtils;
  * <ul>
  *   <li>{@code spring.datasource.password}(=DB_PASSWORD) — 앱이 인증에 쓰는 값. blank·약한값·플레이스홀더 거부.</li>
  *   <li>{@code MYSQL_ROOT_PASSWORD} — 앱이 직접 읽는 Spring 프로퍼티가 아니지만(docker-compose mysql
- *       서비스 전용), app 서비스가 {@code env_file: .env} 로 주입하면 환경에 존재한다. 존재할 때만 검사하고,
- *       관리형 DB 등 부재 환경은 통과시킨다.</li>
+ *       서비스 전용), app 서비스가 {@code env_file: .env} 로 주입하면 환경에 존재한다. 부재(null)는
+ *       관리형 DB 등을 위해 통과시키되, 존재하면(빈 값 포함) 검사한다 — 빈 값은 거부(시크릿 게이트 우회 방지).</li>
  * </ul>
  *
  * <p>부적합 시 {@link InitializingBean#afterPropertiesSet()} 에서 IllegalStateException 으로 기동을
@@ -45,8 +45,14 @@ public class DbSecretGuard implements InitializingBean {
         }
         SecretPlaceholderGuard.rejectWeakDbPassword("spring.datasource.password", dbPassword);
 
+        // 부재(null)는 통과(관리형 DB 등). 그러나 빈 문자열(MYSQL_ROOT_PASSWORD=)로 주입되면 약한값보다 더
+        // 위험하므로 명시적으로 거부한다 — hasText 만으로 건너뛰면 빈 값이 게이트를 우회한다.
         String rootPassword = environment.getProperty("MYSQL_ROOT_PASSWORD");
-        if (StringUtils.hasText(rootPassword)) {
+        if (rootPassword != null) {
+            if (!StringUtils.hasText(rootPassword)) {
+                throw new IllegalStateException(
+                        "MYSQL_ROOT_PASSWORD 가 비어 있습니다 — 운영 배포 전 강력한 고유 값을 주입하세요 (이슈 #321)");
+            }
             SecretPlaceholderGuard.rejectWeakDbPassword("MYSQL_ROOT_PASSWORD", rootPassword);
         }
     }

@@ -46,6 +46,17 @@ class DbSecretGuardTest {
     }
 
     @Test
+    @DisplayName("MYSQL_ROOT_PASSWORD 가 존재하지만 빈 값이면 거부한다 (게이트 우회 방지)")
+    void rejectsBlankRootPassword() {
+        MockEnvironment env = new MockEnvironment()
+                .withProperty("spring.datasource.password", "kP9$mVx2Lr8QwZ7nTb4Hy6Fc")
+                .withProperty("MYSQL_ROOT_PASSWORD", "");
+        assertThatThrownBy(() -> guard(env).afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("MYSQL_ROOT_PASSWORD");
+    }
+
+    @Test
     @DisplayName("강한 DB_PASSWORD + MYSQL_ROOT_PASSWORD 부재면 통과한다 (관리형 DB)")
     void allowsStrongPasswordWithoutRoot() {
         MockEnvironment env = new MockEnvironment()
