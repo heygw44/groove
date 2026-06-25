@@ -125,13 +125,19 @@ async function handleSubmit() {
           :error="errors.totalQuantity"
           @update:model-value="clearError('totalQuantity')"
         />
-        <BaseInput
-          v-model="form.perMemberLimit"
-          type="number"
-          label="회원당 한도"
-          :error="errors.perMemberLimit"
-          @update:model-value="clearError('perMemberLimit')"
-        />
+        <label class="block">
+          <span class="mb-1 block text-sm font-medium text-vinyl-800">회원당 한도</span>
+          <input
+            :value="form.perMemberLimit"
+            type="number"
+            min="1"
+            max="1"
+            readonly
+            aria-label="회원당 한도"
+            class="w-full cursor-not-allowed rounded-lg border border-vinyl-800/20 bg-cream-100 px-3 py-2 text-sm text-vinyl-800/70 focus:outline-hidden"
+          />
+          <span class="mt-1 block text-xs text-vinyl-800/50">현재 회원당 1장만 지원합니다.</span>
+        </label>
       </div>
 
       <div class="grid grid-cols-2 gap-4">

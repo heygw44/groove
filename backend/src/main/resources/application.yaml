@@ -127,6 +127,9 @@ groove:
     expiration:
       cron: ${COUPON_EXPIRATION_CRON:0 0 * * * *}
       batch-size: ${COUPON_EXPIRATION_BATCH_SIZE:1000}
+    # 취소/환불 복원 (#319). 복원 시점에 이미 만료된 쿠폰을 now + grace 로 연장해 되살린다.
+    restore:
+      grace: ${COUPON_RESTORE_GRACE:P7D}
   # 멱등성 인프라 (#W7-2). cleanup-cron 을 "-" 로 두면 정리 스케줄러가 비활성화된다.
   idempotency:
     ttl: ${IDEMPOTENCY_TTL:PT24H}

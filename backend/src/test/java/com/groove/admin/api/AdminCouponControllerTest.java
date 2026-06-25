@@ -286,6 +286,45 @@ class AdminCouponControllerTest {
     }
 
     @Test
+    @DisplayName("POST 생성 perMemberLimit=2 → 400 (#319 다회 발급 미지원, @Max(1) Bean Validation)")
+    void create_perMemberLimitAboveOne_returns400() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "name", "다회 발급 시도",
+                "discountType", "FIXED_AMOUNT",
+                "discountValue", 1000,
+                "minOrderAmount", 0,
+                "perMemberLimit", 2,
+                "validFrom", VALID_FROM.toString(),
+                "validUntil", VALID_UNTIL.toString()));
+        mockMvc.perform(post("/api/v1/admin/coupons")
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+        assertThat(couponRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("POST 생성 FIXED_AMOUNT 상한 초과(1,000,001) → 400 VALIDATION_FAILED (#319 위생 가드)")
+    void create_fixedAmountAboveCap_returns400() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of(
+                "name", "과대 정액",
+                "discountType", "FIXED_AMOUNT",
+                "discountValue", 1_000_001,
+                "minOrderAmount", 0,
+                "perMemberLimit", 1,
+                "validFrom", VALID_FROM.toString(),
+                "validUntil", VALID_UNTIL.toString()));
+        mockMvc.perform(post("/api/v1/admin/coupons")
+                        .header(HttpHeaders.AUTHORIZATION, adminBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALID_001"));
+        assertThat(couponRepository.count()).isZero();
+    }
+
+    @Test
     @DisplayName("POST 생성 name 누락 → 400 (Bean Validation)")
     void create_missingName_returns400() throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(

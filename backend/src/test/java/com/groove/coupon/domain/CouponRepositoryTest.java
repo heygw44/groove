@@ -32,6 +32,8 @@ class CouponRepositoryTest {
 
     private static final Instant VALID_FROM = Instant.parse("2026-01-01T00:00:00Z");
     private static final Instant VALID_UNTIL = VALID_FROM.plus(30, ChronoUnit.DAYS);
+    /** 발급 기간(VALID_FROM ~ VALID_UNTIL) 안의 시각 — incrementIssuedCount 호출에 쓴다. */
+    private static final Instant NOW = VALID_FROM.plus(1, ChronoUnit.DAYS);
 
     @Autowired
     private CouponRepository couponRepository;
@@ -85,7 +87,7 @@ class CouponRepositoryTest {
     void incrementIssuedCount_belowLimit_increments() {
         Coupon saved = couponRepository.saveAndFlush(limited(2));
 
-        int affected = couponRepository.incrementIssuedCount(saved.getId());
+        int affected = couponRepository.incrementIssuedCount(saved.getId(), NOW);
         flushAndClear();
 
         assertThat(affected).isEqualTo(1);
@@ -96,10 +98,10 @@ class CouponRepositoryTest {
     @DisplayName("incrementIssuedCount — 소진(issued == total)이면 0행 영향 + 카운터 불변")
     void incrementIssuedCount_soldOut_returnsZero() {
         Coupon saved = couponRepository.saveAndFlush(limited(1));
-        assertThat(couponRepository.incrementIssuedCount(saved.getId())).isEqualTo(1);
+        assertThat(couponRepository.incrementIssuedCount(saved.getId(), NOW)).isEqualTo(1);
         flushAndClear();
 
-        int affected = couponRepository.incrementIssuedCount(saved.getId());
+        int affected = couponRepository.incrementIssuedCount(saved.getId(), NOW);
         flushAndClear();
 
         assertThat(affected).isZero();
@@ -112,11 +114,23 @@ class CouponRepositoryTest {
         Coupon saved = couponRepository.saveAndFlush(Coupon.builder(
                 "무제한", CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).build());
 
-        assertThat(couponRepository.incrementIssuedCount(saved.getId())).isEqualTo(1);
-        assertThat(couponRepository.incrementIssuedCount(saved.getId())).isEqualTo(1);
+        assertThat(couponRepository.incrementIssuedCount(saved.getId(), NOW)).isEqualTo(1);
+        assertThat(couponRepository.incrementIssuedCount(saved.getId(), NOW)).isEqualTo(1);
         flushAndClear();
 
         assertThat(couponRepository.findById(saved.getId()).orElseThrow().getIssuedCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("incrementIssuedCount — 발급 기간 밖(now > validUntil)이면 0행 영향 + 카운터 불변 (#319 TOCTOU)")
+    void incrementIssuedCount_outsidePeriod_returnsZero() {
+        Coupon saved = couponRepository.saveAndFlush(limited(10));
+
+        int affected = couponRepository.incrementIssuedCount(saved.getId(), VALID_UNTIL.plus(1, ChronoUnit.DAYS));
+        flushAndClear();
+
+        assertThat(affected).isZero();
+        assertThat(couponRepository.findById(saved.getId()).orElseThrow().getIssuedCount()).isZero();
     }
 
     @Test

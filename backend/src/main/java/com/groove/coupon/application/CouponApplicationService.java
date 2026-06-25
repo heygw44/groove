@@ -9,13 +9,12 @@ import com.groove.coupon.exception.CouponNotFoundException;
 import com.groove.coupon.exception.CouponNotIssuableException;
 import com.groove.coupon.exception.CouponNotOwnedException;
 import com.groove.order.domain.Order;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.OptionalLong;
 
@@ -33,14 +32,15 @@ import java.util.OptionalLong;
 @Service
 public class CouponApplicationService {
 
-    private static final Logger log = LoggerFactory.getLogger(CouponApplicationService.class);
-
     private final MemberCouponRepository memberCouponRepository;
     private final Clock clock;
+    private final Duration restoreGrace;
 
-    public CouponApplicationService(MemberCouponRepository memberCouponRepository, Clock clock) {
+    public CouponApplicationService(MemberCouponRepository memberCouponRepository, Clock clock,
+                                    CouponRestoreProperties restoreProperties) {
         this.memberCouponRepository = memberCouponRepository;
         this.clock = clock;
+        this.restoreGrace = restoreProperties.grace();
     }
 
     /**
@@ -85,24 +85,18 @@ public class CouponApplicationService {
     }
 
     /**
-     * 주문에 적용된 쿠폰을 복원한다 — USED → ISSUED (복원 시점에 이미 만료됐으면 USED → EXPIRED). 쿠폰 미적용 주문은 no-op.
+     * 주문에 적용된 쿠폰을 복원한다 — USED → ISSUED. 쿠폰 미적용 주문은 no-op.
      *
-     * MemberCoupon.restore(now) 가 usedAt 과 orderId 를 비우고 clock 기준 만료 여부를 판정한다.
-     * status≠USED 가 관측되면 WARN 기록 후 복원을 스킵한다.
+     * MemberCoupon.restore(now, grace) 가 멱등이라 USED 가 아니면 no-op 이며(무락 동시 복원 안전),
+     * 복원 시점에 이미 만료된 쿠폰은 grace 만큼 연장해 되살린다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void restoreForOrder(Long orderId) {
         if (orderId == null) {
             return;
         }
-        memberCouponRepository.findByOrderId(orderId).ifPresent(memberCoupon -> {
-            if (memberCoupon.getStatus() == MemberCouponStatus.USED) {
-                memberCoupon.restore(clock.instant());
-            } else {
-                log.warn("쿠폰 복원 스킵 — status 가 USED 가 아님: orderId={}, memberCouponId={}, status={}",
-                        orderId, memberCoupon.getId(), memberCoupon.getStatus());
-            }
-        });
+        memberCouponRepository.findByOrderId(orderId)
+                .ifPresent(memberCoupon -> memberCoupon.restore(clock.instant(), restoreGrace));
     }
 
     /**
