@@ -389,7 +389,7 @@ class FullPurchaseJourneyE2ETest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", items);
         body.put("shipping", shippingBody());
-        MvcResult result = mockMvc.perform(post("/api/v1/orders")
+        MvcResult result = mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, bearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(body)))
@@ -403,7 +403,7 @@ class FullPurchaseJourneyE2ETest {
         body.put("items", items);
         body.put("guest", Map.of("email", email, "phone", phone));
         body.put("shipping", shippingBody());
-        MvcResult result = mockMvc.perform(post("/api/v1/orders")
+        MvcResult result = mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(body)))
                 .andExpect(status().isCreated())

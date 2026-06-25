@@ -286,7 +286,7 @@ class CartOrderE2EIntegrationTest {
                         itemBody(hiddenAlbumId, 1)),
                 "shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, memberABearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -325,7 +325,7 @@ class CartOrderE2EIntegrationTest {
         body.put("items", items);
         body.put("shipping", shippingBody());
 
-        MvcResult result = mockMvc.perform(post("/api/v1/orders")
+        MvcResult result = mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, bearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -340,7 +340,7 @@ class CartOrderE2EIntegrationTest {
         body.put("guest", Map.of("email", email, "phone", phone));
         body.put("shipping", shippingBody());
 
-        MvcResult result = mockMvc.perform(post("/api/v1/orders")
+        MvcResult result = mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())

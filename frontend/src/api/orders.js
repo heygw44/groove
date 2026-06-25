@@ -2,9 +2,14 @@ import client from './client'
 
 // 주문 API. 생성은 회원/게스트 공용(POST /orders permitAll) — 로그인 상태면 client 가 Bearer 를 자동 첨부.
 
-/** 주문 생성. → OrderResponse. */
-export function createOrder(body) {
-  return client.post('/orders', body).then((res) => res.data)
+/**
+ * 주문 생성. 호출자가 안정적인 멱등 키를 넘긴다 — 사용자 재제출(더블클릭·새로고침)에도 같은 키를 보내야
+ * 서버가 중복 주문을 막는다(매 호출 새 UUID 면 멱등 보호가 작동하지 않음). → OrderResponse.
+ */
+export function createOrder(body, idempotencyKey) {
+  return client
+    .post('/orders', body, { headers: { 'Idempotency-Key': idempotencyKey } })
+    .then((res) => res.data)
 }
 
 /** 주문 단건 조회(회원 본인). → OrderResponse. */

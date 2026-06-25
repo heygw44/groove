@@ -19,9 +19,9 @@ import java.util.Objects;
 /**
  * 멱등성 레코드 엔티티. 한 행이 처리 소유권 마커(IN_PROGRESS)와 결과 캐시(COMPLETED + responseBody)를 겸한다.
  *
- * <p>생성은 start 정적 팩토리만 허용하며 IN_PROGRESS·expiresAt = now + ttl 로 시작한다. 완료 전이는
- * complete 단일 진입점이고, 이미 COMPLETED 인 행에 다시 호출하면 IllegalStateException. idempotencyKey 에
- * DB UNIQUE 제약이 걸려 있다.
+ * <p>생성은 start 정적 팩토리만 허용하며 IN_PROGRESS·expiresAt = now + 처리 타임아웃(짧게) 으로 시작한다.
+ * 완료 전이는 complete 단일 진입점이고, 이때 expiresAt 을 결과 캐시 보관 기간(now + ttl)으로 연장한다.
+ * 이미 COMPLETED 인 행에 다시 호출하면 IllegalStateException. idempotencyKey 에 DB UNIQUE 제약이 걸려 있다.
  */
 @Entity
 @Table(
@@ -61,36 +61,54 @@ public class IdempotencyRecord extends BaseTimeEntity {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    /** 마커 소유권 토큰(#317). 회수 race 에서 원소유자만 자기 마커를 finalize/삭제하도록 식별한다. */
+    @Column(name = "owner_token", length = 36)
+    private String ownerToken;
+
     protected IdempotencyRecord() {
     }
 
-    private IdempotencyRecord(String idempotencyKey, String requestFingerprint, Instant expiresAt) {
+    private IdempotencyRecord(String idempotencyKey, String requestFingerprint, Instant expiresAt, String ownerToken) {
         this.idempotencyKey = idempotencyKey;
         this.requestFingerprint = requestFingerprint;
         this.expiresAt = expiresAt;
+        this.ownerToken = ownerToken;
         this.status = IdempotencyStatus.IN_PROGRESS;
     }
 
-    /** 마커 행 생성. 상태 IN_PROGRESS, expiresAt = now + ttl. */
-    public static IdempotencyRecord start(String idempotencyKey, String requestFingerprint, Duration ttl, Instant now) {
+    /** 마커 행 생성. 상태 IN_PROGRESS, expiresAt = now + 처리 타임아웃(짧게), ownerToken = 호출자별 고유 토큰. */
+    public static IdempotencyRecord start(String idempotencyKey, String requestFingerprint, Duration inProgressTimeout,
+                                          Instant now, String ownerToken) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException("idempotencyKey must not be blank");
         }
-        if (ttl == null || ttl.isZero() || ttl.isNegative()) {
-            throw new IllegalArgumentException("ttl must be positive");
+        if (inProgressTimeout == null || inProgressTimeout.isZero() || inProgressTimeout.isNegative()) {
+            throw new IllegalArgumentException("inProgressTimeout must be positive");
         }
         Objects.requireNonNull(now, "now must not be null");
-        return new IdempotencyRecord(idempotencyKey, requestFingerprint, now.plus(ttl));
+        Objects.requireNonNull(ownerToken, "ownerToken must not be null");
+        return new IdempotencyRecord(idempotencyKey, requestFingerprint, now.plus(inProgressTimeout), ownerToken);
     }
 
-    /** 처리 완료 + 결과 캐싱. IN_PROGRESS → COMPLETED 전이만 허용. */
-    public void complete(String responseType, String responseBody) {
+    /**
+     * 처리 완료 + 결과 캐싱. IN_PROGRESS → COMPLETED 전이만 허용하며, expiresAt 을 결과 캐시
+     * 보관 기간(newExpiresAt = now + ttl)으로 연장한다. 레코드는 시계에 의존하지 않으므로 호출자가 계산해 넘긴다.
+     *
+     * <p>expectedOwnerToken 이 행의 ownerToken 과 다르면(처리 타임아웃 초과로 마커가 회수되고 다른 요청이
+     * 새 마커를 만든 경우) IllegalStateException — 원소유자가 남의 마커를 finalize 하지 못하게 한다(#317).
+     */
+    public void complete(String responseType, String responseBody, Instant newExpiresAt, String expectedOwnerToken) {
         if (status != IdempotencyStatus.IN_PROGRESS) {
             throw new IllegalStateException("이미 완료된 멱등성 레코드입니다: " + idempotencyKey);
         }
+        if (!Objects.equals(ownerToken, expectedOwnerToken)) {
+            throw new IllegalStateException("멱등성 마커 소유권을 상실했습니다(회수됨): " + idempotencyKey);
+        }
+        Objects.requireNonNull(newExpiresAt, "newExpiresAt must not be null");
         this.status = IdempotencyStatus.COMPLETED;
         this.responseType = responseType;
         this.responseBody = responseBody;
+        this.expiresAt = newExpiresAt;
     }
 
     public boolean isCompleted() {
@@ -134,5 +152,9 @@ public class IdempotencyRecord extends BaseTimeEntity {
 
     public Instant getExpiresAt() {
         return expiresAt;
+    }
+
+    public String getOwnerToken() {
+        return ownerToken;
     }
 }

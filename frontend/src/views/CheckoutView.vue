@@ -9,6 +9,7 @@ import { useUiStore } from '@/stores/ui'
 import { useForm } from '@/composables/useForm'
 import { createOrder } from '@/api/orders'
 import { myCoupons } from '@/api/coupons'
+import { idempotencyKeyFor, clearIdempotencyKey } from '@/lib/uuid'
 import * as albumsApi from '@/api/albums'
 import { errorMessage } from '@/lib/problem-detail'
 import { formatWon } from '@/lib/format'
@@ -140,7 +141,11 @@ const { errors, formError, submitting, submit } = useForm(async () => {
   if (isAuthenticated.value && selectedCouponId.value) {
     body.memberCouponId = Number(selectedCouponId.value)
   }
-  createdOrder.value = await createOrder(body)
+  // 주문 본문 전체를 scope 로 안정 키를 만들어(sessionStorage) 더블클릭·새로고침 재제출에도 같은 키를 보낸다.
+  // items 만 쓰면 배송지·게스트·쿠폰 변경 시 같은 키로 서버 fingerprint mismatch(409)가 나므로 본문 전체를 쓴다.
+  const scope = 'order:' + JSON.stringify(body)
+  createdOrder.value = await createOrder(body, idempotencyKeyFor(scope))
+  clearIdempotencyKey(scope) // 성공 후 키를 비워 같은 세션 후속 주문이 replay 되지 않게 한다
 })
 
 async function onSubmit() {

@@ -18,16 +18,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * IdempotencyRecordCleanupTask 통합 테스트 (Testcontainers MySQL).
- * cleanup-batch-size=2 로 배치 루프를, in-progress-grace=PT1H 로 상태별 회수 시점(COMPLETED 는 expiresAt 경과,
- * IN_PROGRESS 는 grace 추가)을 검증한다. 태스크를 직접 호출한다.
+ * cleanup-batch-size=2 로 배치 루프를, expiresAt <= now 단일 기준 회수(status 무관)를 검증한다. 태스크를 직접 호출한다.
+ * IN_PROGRESS 는 처리 타임아웃(짧게), COMPLETED 는 ttl(길게)로 expiresAt 이 분리되므로 단일 기준으로 충분하다.
  */
 @SpringBootTest(properties = {
-        "groove.idempotency.cleanup-batch-size=2",
-        "groove.idempotency.in-progress-grace=PT1H"
+        "groove.idempotency.cleanup-batch-size=2"
 })
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
-@DisplayName("IdempotencyRecordCleanupTask — TTL 경과 레코드 정리")
+@DisplayName("IdempotencyRecordCleanupTask — expiresAt 경과 레코드 정리")
 class IdempotencyRecordCleanupTaskTest {
 
     @Autowired
@@ -42,27 +41,28 @@ class IdempotencyRecordCleanupTaskTest {
     }
 
     @Test
-    @DisplayName("만료된 COMPLETED 와 grace 지난 IN_PROGRESS 만 배치로 삭제, 유효분은 보존")
-    void deletesExpiredCompletedAndStuckInProgress_inBatches() {
+    @DisplayName("expiresAt 지난 COMPLETED·IN_PROGRESS 를 status 무관 배치로 삭제, 미래 expiresAt 은 보존")
+    void deletesExpiredRecords_inBatches() {
         for (int i = 0; i < 4; i++) {
             saveCompleted(Instant.now().minus(Duration.ofHours(1)));   // 만료 캐시 → 삭제
         }
-        saveInProgress(Instant.now().minus(Duration.ofHours(2)));       // grace 지난 마커 → 삭제
+        saveInProgress(Instant.now().minus(Duration.ofHours(2)));       // 처리 타임아웃 지난 마커 → 삭제
+        saveInProgress(Instant.now().minus(Duration.ofMinutes(30)));    // 처리 타임아웃 지난 마커 → 삭제
         String freshCache = saveCompleted(Instant.now().plus(Duration.ofHours(1)));       // 유효 캐시 → 보존
-        String inFlight = saveInProgress(Instant.now().minus(Duration.ofMinutes(30)));    // grace 안 처리 중 → 보존
+        String inFlight = saveInProgress(Instant.now().plus(Duration.ofMinutes(5)));      // 처리 중 마커 → 보존
 
         int deleted = cleanupTask.deleteExpired(Instant.now());
 
-        assertThat(deleted).isEqualTo(5);
+        assertThat(deleted).isEqualTo(6);
         assertThat(repository.count()).isEqualTo(2);
         assertThat(repository.findByIdempotencyKey(freshCache)).isPresent();
         assertThat(repository.findByIdempotencyKey(inFlight)).isPresent();
     }
 
     @Test
-    @DisplayName("TTL 지났어도 grace 안의 IN_PROGRESS 마커는 보존 — 느린 action 이중 실행 방지(#160)")
-    void inProgressWithinGrace_isPreserved() {
-        String inFlight = saveInProgress(Instant.now().minus(Duration.ofMinutes(1)));
+    @DisplayName("처리 타임아웃 안의 IN_PROGRESS 마커(미래 expiresAt)는 보존 — 진행 중 이중 실행 방지(#160)")
+    void inProgressWithinTimeout_isPreserved() {
+        String inFlight = saveInProgress(Instant.now().plus(Duration.ofMinutes(1)));
 
         int deleted = cleanupTask.deleteExpired(Instant.now());
 
@@ -93,8 +93,8 @@ class IdempotencyRecordCleanupTaskTest {
 
     private String saveCompleted(Instant expiresAt) {
         String key = UUID.randomUUID().toString();
-        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofHours(24), Instant.now());
-        record.complete("com.groove.Sample", "{}");
+        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofMinutes(5), Instant.now(), "owner-1");
+        record.complete("com.groove.Sample", "{}", Instant.now().plus(Duration.ofHours(24)), "owner-1");
         ReflectionTestUtils.setField(record, "expiresAt", expiresAt);
         repository.saveAndFlush(record);
         return key;
@@ -102,7 +102,7 @@ class IdempotencyRecordCleanupTaskTest {
 
     private String saveInProgress(Instant expiresAt) {
         String key = UUID.randomUUID().toString();
-        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofHours(24), Instant.now());
+        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofMinutes(5), Instant.now(), "owner-1");
         ReflectionTestUtils.setField(record, "expiresAt", expiresAt);
         repository.saveAndFlush(record);
         return key;

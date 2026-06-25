@@ -208,7 +208,7 @@ class MemberOrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, bearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
