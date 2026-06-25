@@ -33,6 +33,10 @@ import java.util.Objects;
  * (request→PENDING→웹훅)에 대응하는 토스 API 가 없어 {@code UnsupportedOperationException} 을 던진다.
  * confirm 을 호출하는 컨트롤러/프론트 결제위젯 배선은 M17 후속 이슈다.
  *
+ * <p><b>멱등성:</b> {@link #confirm}/{@link #refund} 는 토스 POST API 라 {@code Idempotency-Key} 헤더로
+ * 재시도 중복을 막는다. confirm 은 자연 멱등 단위인 {@code paymentKey} 를, refund 는 결정적으로 조립한
+ * {@code RefundRequest#idempotencyKey()} 를 키로 쓴다(둘 다 같은 시도 → 같은 키 → 토스 dedup).
+ *
  * <p><b>502 매핑 정책:</b> {@code tossRestClient} 는 커스텀 status handler 가 없어 4xx/5xx 를
  * {@code RestClientResponseException}(RuntimeException)으로 전파한다.
  * <ul>
@@ -73,6 +77,8 @@ public class TossPaymentGateway implements PaymentGateway {
         try {
             TossPayment payment = tossRestClient.post()
                     .uri("/v1/payments/confirm")
+                    // paymentKey 는 confirm 의 자연 멱등 단위다 — read-timeout 후 successUrl 재호출 시 토스가 dedup 한다.
+                    .header("Idempotency-Key", paymentKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new TossConfirmRequest(paymentKey, orderId, amount))
                     .retrieve()

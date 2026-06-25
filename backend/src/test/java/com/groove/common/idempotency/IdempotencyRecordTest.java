@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 class IdempotencyRecordTest {
 
     @Test
-    @DisplayName("start — IN_PROGRESS 로 시작, expiresAt = now + ttl")
+    @DisplayName("start — IN_PROGRESS 로 시작, expiresAt = now + 처리 타임아웃")
     void start_initialState() {
         Instant before = Instant.now();
 
@@ -44,7 +44,7 @@ class IdempotencyRecordTest {
     }
 
     @Test
-    @DisplayName("start — 비양수 ttl 거부")
+    @DisplayName("start — 비양수 처리 타임아웃 거부")
     void start_nonPositiveTtl_rejected() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> IdempotencyRecord.start("k", null, Duration.ZERO, Instant.now()));
@@ -53,25 +53,30 @@ class IdempotencyRecordTest {
     }
 
     @Test
-    @DisplayName("complete — IN_PROGRESS → COMPLETED, 결과 캐싱")
+    @DisplayName("complete — IN_PROGRESS → COMPLETED, 결과 캐싱 + expiresAt 을 캐시 보관 기간으로 연장")
     void complete_cachesResult() {
-        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofHours(1), Instant.now());
+        Instant now = Instant.now();
+        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofMinutes(5), now);
+        Instant cacheExpiresAt = now.plus(Duration.ofHours(24));
 
-        record.complete("com.example.Dto", "{\"a\":1}");
+        record.complete("com.example.Dto", "{\"a\":1}", cacheExpiresAt);
 
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(record.isCompleted()).isTrue();
         assertThat(record.getResponseType()).isEqualTo("com.example.Dto");
         assertThat(record.getResponseBody()).isEqualTo("{\"a\":1}");
+        assertThat(record.getExpiresAt()).isEqualTo(cacheExpiresAt);
     }
 
     @Test
     @DisplayName("complete — 이미 완료된 레코드에 재호출 시 IllegalStateException")
     void complete_alreadyCompleted_rejected() {
-        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofHours(1), Instant.now());
-        record.complete(null, null);
+        Instant now = Instant.now();
+        IdempotencyRecord record = IdempotencyRecord.start("k", null, Duration.ofMinutes(5), now);
+        record.complete(null, null, now.plus(Duration.ofHours(24)));
 
-        assertThatIllegalStateException().isThrownBy(() -> record.complete("x", "y"));
+        assertThatIllegalStateException()
+                .isThrownBy(() -> record.complete("x", "y", now.plus(Duration.ofHours(24))));
     }
 
     @Test

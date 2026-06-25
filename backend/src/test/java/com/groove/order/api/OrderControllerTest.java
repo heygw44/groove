@@ -144,7 +144,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -177,7 +177,7 @@ class OrderControllerTest {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(sellingAlbumId, 1)));
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -195,7 +195,7 @@ class OrderControllerTest {
         body.put("items", List.of(itemBody(sellingAlbumId, 1)));
         body.put("shipping", shipping);
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -214,7 +214,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())
@@ -234,7 +234,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -253,7 +253,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -269,7 +269,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -285,7 +285,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isUnprocessableEntity())
@@ -304,7 +304,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
@@ -318,7 +318,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -333,7 +333,7 @@ class OrderControllerTest {
 
         body.put("shipping", shippingBody());
 
-        mockMvc.perform(post("/api/v1/orders")
+        mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -505,13 +505,90 @@ class OrderControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    @DisplayName("Idempotency-Key 헤더 누락 → 400 IDEMPOTENCY_KEY_REQUIRED (#317)")
+    void missingIdempotencyKey_returns400() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", List.of(itemBody(sellingAlbumId, 1)));
+        body.put("shipping", shippingBody());
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REQUIRED"));
+
+        assertThat(orderRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key + 같은 본문 재요청 → 동일 주문 1건 반환, 재고 1회만 차감 (#317)")
+    void sameKeySameBody_returnsSameOrder_stockDecrementedOnce() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("items", List.of(itemBody(sellingAlbumId, 2)));
+        body.put("shipping", shippingBody());
+        String payload = objectMapper.writeValueAsString(body);
+        String key = java.util.UUID.randomUUID().toString();
+
+        String first = mockMvc.perform(post("/api/v1/orders")
+                        .header("Idempotency-Key", key)
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String second = mockMvc.perform(post("/api/v1/orders")
+                        .header("Idempotency-Key", key)
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String firstNo = objectMapper.readTree(first).get("orderNumber").asText();
+        String secondNo = objectMapper.readTree(second).get("orderNumber").asText();
+        assertThat(secondNo).isEqualTo(firstNo);
+        assertThat(orderRepository.count()).isEqualTo(1);
+        // 2개 차감이 한 번만 — replay 는 action 을 재실행하지 않는다.
+        assertThat(albumRepository.findById(sellingAlbumId).orElseThrow().getStock()).isEqualTo(100 - 2);
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key + 다른 본문 재요청 → 409 IDEMPOTENCY_KEY_REUSE_MISMATCH (#317)")
+    void sameKeyDifferentBody_returns409Mismatch() throws Exception {
+        String key = java.util.UUID.randomUUID().toString();
+        Map<String, Object> first = new LinkedHashMap<>();
+        first.put("items", List.of(itemBody(sellingAlbumId, 1)));
+        first.put("shipping", shippingBody());
+        mockMvc.perform(post("/api/v1/orders")
+                        .header("Idempotency-Key", key)
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(first)))
+                .andExpect(status().isCreated());
+
+        Map<String, Object> second = new LinkedHashMap<>();
+        second.put("items", List.of(itemBody(sellingAlbumId, 2)));   // 수량 변경 → 다른 지문
+        second.put("shipping", shippingBody());
+        mockMvc.perform(post("/api/v1/orders")
+                        .header("Idempotency-Key", key)
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(second)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSE_MISMATCH"));
+
+        assertThat(orderRepository.count()).isEqualTo(1);
+    }
+
     /** 회원 주문을 한 건 만들고 orderNumber 를 반환한다. */
     private String placeMemberOrder(Long albumId, int quantity) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("items", List.of(itemBody(albumId, quantity)));
         body.put("shipping", shippingBody());
 
-        String json = mockMvc.perform(post("/api/v1/orders")
+        String json = mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .header(HttpHeaders.AUTHORIZATION, userBearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -529,7 +606,7 @@ class OrderControllerTest {
         body.put("guest", guest);
         body.put("shipping", shippingBody());
 
-        String json = mockMvc.perform(post("/api/v1/orders")
+        String json = mockMvc.perform(post("/api/v1/orders").header("Idempotency-Key", java.util.UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())

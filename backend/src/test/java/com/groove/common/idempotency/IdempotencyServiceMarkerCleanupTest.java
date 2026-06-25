@@ -56,7 +56,7 @@ class IdempotencyServiceMarkerCleanupTest {
         TransactionTemplate requiresNewTx = new TransactionTemplate(transactionManager);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         IdempotencyProperties properties =
-                new IdempotencyProperties(Duration.ofHours(24), Duration.ofHours(1), 1000);
+                new IdempotencyProperties(Duration.ofHours(24), Duration.ofMinutes(5), 1000);
         idempotencyService = new IdempotencyService(repository, requiresNewTx, objectMapper, clock, properties);
     }
 
@@ -71,7 +71,7 @@ class IdempotencyServiceMarkerCleanupTest {
                 idempotencyService.execute(key, SampleResult.class, () -> new SampleResult("ok", 1)))
                 .isSameAs(serializeFailure);
 
-        verify(repository).deleteByIdempotencyKey(key);
+        verify(repository).deleteInProgressByIdempotencyKey(key);
     }
 
     @Test
@@ -87,6 +87,6 @@ class IdempotencyServiceMarkerCleanupTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("멱등성 마커가 사라졌습니다");
 
-        verify(repository).deleteByIdempotencyKey(key);
+        verify(repository).deleteInProgressByIdempotencyKey(key);
     }
 }

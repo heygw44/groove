@@ -85,10 +85,11 @@ class TossPaymentGatewayTest {
     class Confirm {
 
         @Test
-        @DisplayName("DONE 응답을 PAID 로 매핑하고 요청 바디에 paymentKey/orderId/amount 를 담는다")
+        @DisplayName("DONE 응답을 PAID 로 매핑하고 paymentKey 를 Idempotency-Key 헤더로·바디에 paymentKey/orderId/amount 를 담는다")
         void confirm_done_mapsToPaid() {
             server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
                     .andExpect(method(HttpMethod.POST))
+                    .andExpect(header("Idempotency-Key", "pk_1"))
                     .andExpect(jsonPath("$.paymentKey").value("pk_1"))
                     .andExpect(jsonPath("$.orderId").value("ORD-1"))
                     .andExpect(jsonPath("$.amount").value(105_000))

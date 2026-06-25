@@ -13,6 +13,7 @@ import com.groove.member.exception.MemberNotFoundException;
 import com.groove.order.api.dto.GuestInfoRequest;
 import com.groove.order.api.dto.OrderCreateRequest;
 import com.groove.order.api.dto.OrderItemRequest;
+import com.groove.order.api.dto.OrderResponse;
 import com.groove.order.api.dto.ShippingInfoRequest;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
@@ -157,10 +158,24 @@ public class OrderService {
         return order;
     }
 
-    /** 주문 생성 — 재고 차감에 비관적 락(SELECT ... FOR UPDATE)을 적용한다. 프로덕션 진입점. */
+    /**
+     * 주문 생성 — 재고 차감에 비관적 락(SELECT ... FOR UPDATE)을 적용하고 Order 엔티티를 반환한다.
+     * HTTP 주문 생성(OrderController)은 멱등 래핑을 위해 DTO 를 반환하는 placeAndRespond 를 거치며,
+     * 이 메서드는 엔티티가 필요한 내부 호출(시더·테스트)용이다.
+     */
     @Transactional
     public Order place(Long memberId, OrderCreateRequest request) {
         return placeInternal(memberId, request, true);
+    }
+
+    /**
+     * 주문을 생성하고 응답 DTO 로 변환해 반환한다 — IdempotencyService.execute 래핑용 진입점(#317).
+     * execute 의 action 은 JSON 왕복 가능한 DTO 를 반환해야 하고, OrderResponse.from 이 items/shippingInfo 를
+     * 즉시 초기화하므로 트랜잭션 경계 안에서 변환해 lazy 로딩 예외를 피한다.
+     */
+    @Transactional
+    public OrderResponse placeAndRespond(Long memberId, OrderCreateRequest request) {
+        return OrderResponse.from(placeInternal(memberId, request, true));
     }
 
     /**

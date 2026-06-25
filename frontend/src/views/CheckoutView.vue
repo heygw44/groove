@@ -9,6 +9,7 @@ import { useUiStore } from '@/stores/ui'
 import { useForm } from '@/composables/useForm'
 import { createOrder } from '@/api/orders'
 import { myCoupons } from '@/api/coupons'
+import { idempotencyKeyFor } from '@/lib/uuid'
 import * as albumsApi from '@/api/albums'
 import { errorMessage } from '@/lib/problem-detail'
 import { formatWon } from '@/lib/format'
@@ -140,7 +141,9 @@ const { errors, formError, submitting, submit } = useForm(async () => {
   if (isAuthenticated.value && selectedCouponId.value) {
     body.memberCouponId = Number(selectedCouponId.value)
   }
-  createdOrder.value = await createOrder(body)
+  // 장바구니 구성 단위로 안정 키를 만들어(sessionStorage) 더블클릭·새로고침 재제출에도 같은 키를 보낸다.
+  const scope = 'order:' + body.items.map((i) => `${i.albumId}x${i.quantity}`).join(',')
+  createdOrder.value = await createOrder(body, idempotencyKeyFor(scope))
 })
 
 async function onSubmit() {

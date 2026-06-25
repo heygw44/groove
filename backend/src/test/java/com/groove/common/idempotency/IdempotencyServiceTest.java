@@ -76,6 +76,8 @@ class IdempotencyServiceTest {
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(record.getResponseType()).isEqualTo(SampleResult.class.getName());
         assertThat(record.getResponseBody()).contains("hello");
+        // complete 시 expiresAt 이 처리 타임아웃(짧음)에서 캐시 보관 기간(ttl, 길음)으로 연장된다 (#317)
+        assertThat(record.getExpiresAt()).isAfter(Instant.now().plus(Duration.ofHours(1)));
     }
 
     @Test
@@ -173,6 +175,28 @@ class IdempotencyServiceTest {
     }
 
     @Test
+    @DisplayName("처리 타임아웃 지난 IN_PROGRESS 마커는 회수하고 action 재실행 후 캐싱(#317)")
+    void expiredInProgressMarker_isReclaimed_andReprocessed() {
+        String key = UUID.randomUUID().toString();
+        saveExpiredInProgress(key);   // 처리 타임아웃이 지난(죽은 소유자) 마커
+        AtomicInteger counter = new AtomicInteger();
+
+        SampleResult result = idempotencyService.execute(key, SampleResult.class, () -> {
+            counter.incrementAndGet();
+            return new SampleResult("fresh", 2);
+        });
+
+        assertThat(counter.get()).isEqualTo(1);
+        assertThat(result).isEqualTo(new SampleResult("fresh", 2));
+
+        assertThat(repository.count()).isEqualTo(1);   // 죽은 마커는 교체됐고 중복 행이 남지 않는다
+        IdempotencyRecord reloaded = repository.findByIdempotencyKey(key).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
+        assertThat(reloaded.isExpired(Instant.now())).isFalse();
+        assertThat(reloaded.getResponseBody()).contains("fresh");
+    }
+
+    @Test
     @DisplayName("TTL 지난 캐시는 지문이 달라도 mismatch 가 아니라 새로 처리(#160)")
     void expiredCompletedCache_differentFingerprint_reprocessesWithoutMismatch() {
         String key = UUID.randomUUID().toString();
@@ -246,8 +270,15 @@ class IdempotencyServiceTest {
 
     /** TTL 이 이미 지난 COMPLETED 캐시 행을 직접 심는다. */
     private void saveExpiredCompleted(String key, String fingerprint, String responseBody) {
-        IdempotencyRecord record = IdempotencyRecord.start(key, fingerprint, Duration.ofHours(1), Instant.now());
-        record.complete(SampleResult.class.getName(), responseBody);
+        IdempotencyRecord record = IdempotencyRecord.start(key, fingerprint, Duration.ofMinutes(5), Instant.now());
+        record.complete(SampleResult.class.getName(), responseBody, Instant.now().plus(Duration.ofHours(24)));
+        ReflectionTestUtils.setField(record, "expiresAt", Instant.now().minus(Duration.ofMinutes(1)));
+        repository.saveAndFlush(record);
+    }
+
+    /** 처리 타임아웃이 이미 지난 IN_PROGRESS 마커 행을 직접 심는다. */
+    private void saveExpiredInProgress(String key) {
+        IdempotencyRecord record = IdempotencyRecord.start(key, null, Duration.ofMinutes(5), Instant.now());
         ReflectionTestUtils.setField(record, "expiresAt", Instant.now().minus(Duration.ofMinutes(1)));
         repository.saveAndFlush(record);
     }
