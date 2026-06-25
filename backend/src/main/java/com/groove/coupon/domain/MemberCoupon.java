@@ -15,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -94,12 +95,24 @@ public class MemberCoupon extends BaseTimeEntity {
     }
 
     /**
-     * 복원 (USED → ISSUED, 이미 만료됐으면 USED → EXPIRED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을
-     * 비운다. 만료 판정은 strict 비교(expiresAt < now).
+     * 복원 (USED → ISSUED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을 비운다.
+     *
+     * <p>정당한 취소/환불로 돌려받은 쿠폰은 복원 시점에 이미 만료(expiresAt &lt; now)됐더라도 소멸시키지 않고,
+     * expiresAt 을 now + grace 로 연장해 되살린다 — 만료 직전 사용했다가 취소했다는 이유로 쿠폰을 잃지 않게 한다.
+     *
+     * <p>멱등: USED 가 아닌 상태(이미 ISSUED/EXPIRED/CANCELLED)면 no-op. 무락 동시 복원의 두 번째 호출이
+     * IllegalCouponStateTransitionException 으로 트랜잭션을 롤백시키지 않도록 한다.
      */
-    public void restore(Instant now) {
+    public void restore(Instant now, Duration grace) {
         Objects.requireNonNull(now, "now must not be null");
-        transitionTo(expiresAt.isBefore(now) ? MemberCouponStatus.EXPIRED : MemberCouponStatus.ISSUED);
+        Objects.requireNonNull(grace, "grace must not be null");
+        if (status != MemberCouponStatus.USED) {
+            return; // 멱등: 이미 복원/소멸된 쿠폰은 건드리지 않는다.
+        }
+        if (expiresAt.isBefore(now)) {
+            this.expiresAt = now.plus(grace);
+        }
+        transitionTo(MemberCouponStatus.ISSUED);
         this.usedAt = null;
         this.orderId = null;
     }

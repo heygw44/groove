@@ -4,6 +4,7 @@ import com.groove.coupon.exception.IllegalCouponStateTransitionException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -15,6 +16,7 @@ class MemberCouponTest {
 
     private static final long MEMBER_ID = 42L;
     private static final long ORDER_ID = 7L;
+    private static final Duration GRACE = Duration.ofDays(7);
 
     // coupon() 의 validUntil(= expiresAt 스냅샷) = 2026-01-31. 그 전/후 시점을 restore 만료 판정에 쓴다.
     private static final Instant BEFORE_EXPIRY = Instant.parse("2026-01-15T00:00:00Z");
@@ -58,40 +60,45 @@ class MemberCouponTest {
     }
 
     @Test
-    @DisplayName("restore: 미만료 시 USED → ISSUED, usedAt·orderId 초기화")
+    @DisplayName("restore: 미만료 시 USED → ISSUED, expiresAt 보존, usedAt·orderId 초기화")
     void restore_notExpired() {
         MemberCoupon mc = issued();
+        Instant originalExpiry = mc.getExpiresAt();
         mc.use(ORDER_ID, Instant.now());
 
-        mc.restore(BEFORE_EXPIRY);
+        mc.restore(BEFORE_EXPIRY, GRACE);
 
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+        assertThat(mc.getExpiresAt()).isEqualTo(originalExpiry);   // 미만료는 연장 안 함
         assertThat(mc.getUsedAt()).isNull();
         assertThat(mc.getOrderId()).isNull();
     }
 
     @Test
-    @DisplayName("restore: 이미 만료된 경우 USED → EXPIRED (ISSUED 로 부활 안 함), usedAt·orderId 초기화")
+    @DisplayName("restore: 이미 만료된 경우에도 소멸하지 않고 USED → ISSUED, expiresAt = now + grace 연장 (#319)")
     void restore_expired() {
         MemberCoupon mc = issued();
         mc.use(ORDER_ID, Instant.now());
 
-        mc.restore(AFTER_EXPIRY);
+        mc.restore(AFTER_EXPIRY, GRACE);
 
-        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.EXPIRED);
+        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+        assertThat(mc.getExpiresAt()).isEqualTo(AFTER_EXPIRY.plus(GRACE));
         assertThat(mc.getUsedAt()).isNull();
         assertThat(mc.getOrderId()).isNull();
     }
 
     @Test
-    @DisplayName("restore: 만료 경계(now == expiresAt) — strict 비교라 만료 아님 → USED → ISSUED")
+    @DisplayName("restore: 만료 경계(now == expiresAt) — strict 비교라 만료 아님 → USED → ISSUED, expiresAt 보존")
     void restore_atExpiry() {
         MemberCoupon mc = issued();
+        Instant originalExpiry = mc.getExpiresAt();
         mc.use(ORDER_ID, Instant.now());
 
-        mc.restore(mc.getExpiresAt());   // expiresAt.isBefore(now) == false → ISSUED
+        mc.restore(mc.getExpiresAt(), GRACE);   // expiresAt.isBefore(now) == false → 연장 없이 ISSUED
 
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+        assertThat(mc.getExpiresAt()).isEqualTo(originalExpiry);
         assertThat(mc.getUsedAt()).isNull();
         assertThat(mc.getOrderId()).isNull();
     }
@@ -137,11 +144,25 @@ class MemberCouponTest {
     }
 
     @Test
-    @DisplayName("ISSUED 상태에서 restore(미만료 → ISSUED 시도) → ISSUED→ISSUED 위반")
-    void restore_whenIssued_throws() {
+    @DisplayName("restore: 이미 ISSUED 면 멱등 no-op (예외 없음) (#319)")
+    void restore_whenIssued_noop() {
         MemberCoupon mc = issued();
 
-        assertThatThrownBy(() -> mc.restore(BEFORE_EXPIRY))
-                .isInstanceOf(IllegalCouponStateTransitionException.class);
+        mc.restore(BEFORE_EXPIRY, GRACE);
+
+        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+    }
+
+    @Test
+    @DisplayName("restore: 두 번 연속 호출해도 두 번째는 멱등 no-op (무락 동시 복원 안전) (#319)")
+    void restore_twice_idempotent() {
+        MemberCoupon mc = issued();
+        mc.use(ORDER_ID, Instant.now());
+
+        mc.restore(BEFORE_EXPIRY, GRACE);
+        mc.restore(BEFORE_EXPIRY, GRACE);   // 두 번째: status 가 USED 가 아니라 no-op
+
+        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+        assertThat(mc.getOrderId()).isNull();
     }
 }

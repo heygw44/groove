@@ -31,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -80,7 +81,7 @@ class CouponIssueServiceTest {
 
         assertThatThrownBy(() -> service.issue(MEMBER_ID, COUPON_ID))
                 .isInstanceOf(CouponNotFoundException.class);
-        verify(couponRepository, never()).incrementIssuedCount(any());
+        verify(couponRepository, never()).incrementIssuedCount(any(), any());
     }
 
     @Test
@@ -91,7 +92,7 @@ class CouponIssueServiceTest {
 
         assertThatThrownBy(() -> service.issue(MEMBER_ID, COUPON_ID))
                 .isInstanceOf(CouponNotIssuableException.class);
-        verify(couponRepository, never()).incrementIssuedCount(any());
+        verify(couponRepository, never()).incrementIssuedCount(any(), any());
     }
 
     @Test
@@ -102,7 +103,7 @@ class CouponIssueServiceTest {
 
         assertThatThrownBy(() -> service.issue(MEMBER_ID, COUPON_ID))
                 .isInstanceOf(CouponAlreadyIssuedException.class);
-        verify(couponRepository, never()).incrementIssuedCount(any());
+        verify(couponRepository, never()).incrementIssuedCount(any(), any());
     }
 
     @Test
@@ -110,7 +111,7 @@ class CouponIssueServiceTest {
     void issue_soldOut_throws() {
         when(couponRepository.findById(COUPON_ID)).thenReturn(Optional.of(coupon));
         when(memberCouponRepository.existsByCoupon_IdAndMemberId(COUPON_ID, MEMBER_ID)).thenReturn(false);
-        when(couponRepository.incrementIssuedCount(COUPON_ID)).thenReturn(0);
+        when(couponRepository.incrementIssuedCount(eq(COUPON_ID), any())).thenReturn(0);
 
         assertThatThrownBy(() -> service.issue(MEMBER_ID, COUPON_ID))
                 .isInstanceOf(CouponSoldOutException.class);
@@ -130,7 +131,26 @@ class CouponIssueServiceTest {
                 .thenReturn(Optional.of(coupon))
                 .thenReturn(Optional.of(suspended));
         when(memberCouponRepository.existsByCoupon_IdAndMemberId(COUPON_ID, MEMBER_ID)).thenReturn(false);
-        when(couponRepository.incrementIssuedCount(COUPON_ID)).thenReturn(0);
+        when(couponRepository.incrementIssuedCount(eq(COUPON_ID), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> service.issue(MEMBER_ID, COUPON_ID))
+                .isInstanceOf(CouponNotIssuableException.class);
+        verify(memberCouponRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("사전 검사 통과 후 발급기간 경과 경합(UPDATE 0행) → 재조회로 COUPON_NOT_ISSUABLE (#319 TOCTOU)")
+    void issue_expiredDuringRace_returnsNotIssuable() {
+        Coupon expired = Coupon.builder("정액 3천원", CouponDiscountType.FIXED_AMOUNT, 3_000,
+                        NOW.minus(10, ChronoUnit.DAYS), NOW.minus(1, ChronoUnit.DAYS))
+                .totalQuantity(100)
+                .build();
+        // 1차 findById(사전검사)=ACTIVE·기간 내 통과, increment 0행(기간 밖), 2차 findById(재조회)=기간 만료.
+        when(couponRepository.findById(COUPON_ID))
+                .thenReturn(Optional.of(coupon))
+                .thenReturn(Optional.of(expired));
+        when(memberCouponRepository.existsByCoupon_IdAndMemberId(COUPON_ID, MEMBER_ID)).thenReturn(false);
+        when(couponRepository.incrementIssuedCount(eq(COUPON_ID), any())).thenReturn(0);
 
         assertThatThrownBy(() -> service.issue(MEMBER_ID, COUPON_ID))
                 .isInstanceOf(CouponNotIssuableException.class);
@@ -142,7 +162,7 @@ class CouponIssueServiceTest {
     void issue_success() {
         when(couponRepository.findById(COUPON_ID)).thenReturn(Optional.of(coupon));
         when(memberCouponRepository.existsByCoupon_IdAndMemberId(COUPON_ID, MEMBER_ID)).thenReturn(false);
-        when(couponRepository.incrementIssuedCount(COUPON_ID)).thenReturn(1);
+        when(couponRepository.incrementIssuedCount(eq(COUPON_ID), any())).thenReturn(1);
         when(couponRepository.getReferenceById(COUPON_ID)).thenReturn(coupon);
         when(memberCouponRepository.saveAndFlush(any()))
                 .thenReturn(MemberCoupon.issue(coupon, MEMBER_ID, NOW));
@@ -151,7 +171,7 @@ class CouponIssueServiceTest {
 
         assertThat(response.status()).isEqualTo(MemberCouponStatus.ISSUED);
         assertThat(response.name()).isEqualTo("정액 3천원");
-        verify(couponRepository).incrementIssuedCount(COUPON_ID);
+        verify(couponRepository).incrementIssuedCount(eq(COUPON_ID), any());
         verify(memberCouponRepository).saveAndFlush(any());
     }
 
@@ -160,7 +180,7 @@ class CouponIssueServiceTest {
     void issue_uniqueRace_mapsToAlreadyIssued() {
         when(couponRepository.findById(COUPON_ID)).thenReturn(Optional.of(coupon));
         when(memberCouponRepository.existsByCoupon_IdAndMemberId(COUPON_ID, MEMBER_ID)).thenReturn(false);
-        when(couponRepository.incrementIssuedCount(COUPON_ID)).thenReturn(1);
+        when(couponRepository.incrementIssuedCount(eq(COUPON_ID), any())).thenReturn(1);
         when(couponRepository.getReferenceById(COUPON_ID)).thenReturn(coupon);
         when(memberCouponRepository.saveAndFlush(any()))
                 .thenThrow(new DataIntegrityViolationException("uk_member_coupon_coupon_member"));

@@ -2,6 +2,7 @@ package com.groove.admin.api.dto;
 
 import com.groove.coupon.domain.CouponDiscountType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -30,8 +31,8 @@ public record AdminCouponCreateRequest(
         @Schema(description = "총 발급 한정수량 — null 이면 무제한(직접지급 전용)", example = "1000")
         @PositiveOrZero Integer totalQuantity,
 
-        @Schema(description = "회원 1인당 발급 제한 수량", example = "1")
-        @Positive int perMemberLimit,
+        @Schema(description = "회원 1인당 발급 제한 수량 — 현재 1 만 허용", example = "1")
+        @Positive @Max(1) int perMemberLimit,
 
         @Schema(description = "유효기간 시작 시각 (ISO-8601 UTC)", example = "2026-06-01T00:00:00Z")
         @NotNull Instant validFrom,

@@ -84,6 +84,9 @@ groove:
     # 테스트 중 만료 스케줄러 자동 실행 차단 — 배치 동작은 태스크를 직접 호출해 검증한다.
     expiration:
       cron: "-"
+    # 복원 유예기간 — 테스트 결정성을 위해 명시.
+    restore:
+      grace: P7D
   # 테스트 중 정리 스케줄러 자동 실행 차단 — 정리 동작은 태스크를 직접 호출해 검증한다.
   idempotency:
     cleanup-cron: "-"

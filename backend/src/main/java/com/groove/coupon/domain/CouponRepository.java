@@ -21,8 +21,12 @@ import java.util.Optional;
 public interface CouponRepository extends JpaRepository<Coupon, Long> {
 
     /**
-     * 원자적 조건부 발급 카운터 증가 — 정책이 ACTIVE 이고 issued_count < total_quantity (또는 무제한)인 경우에만 +1
-     * 한다. 반환값: 1 = 슬롯 확보 성공, 0 = 발급 불가(소진 또는 비ACTIVE). 0행일 때 사유 판별은 서비스가 재조회로 한다.
+     * 원자적 조건부 발급 카운터 증가 — 정책이 ACTIVE 이고, 발급 기간(validFrom ≤ now ≤ validUntil) 안이며,
+     * issued_count < total_quantity (또는 무제한)인 경우에만 +1 한다. 반환값: 1 = 슬롯 확보 성공,
+     * 0 = 발급 불가(소진·비ACTIVE·기간 밖). 0행일 때 사유 판별은 서비스가 재조회로 한다.
+     *
+     * <p>기간 조건은 경계 포함(≤/≥)으로 Coupon.isIssuable(!isBefore/!isAfter) 과 일치시켜, 사전 검사 통과 후
+     * 만료 경계에서 발급되는 TOCTOU 를 닫는다.
      *
      * 벌크 UPDATE 는 영속성 컨텍스트를 우회하므로 flushAutomatically = true 로 직전 dirty 상태를 flush 하고,
      * clearAutomatically = true 로 1차 캐시를 비운다.
@@ -30,8 +34,9 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Coupon c SET c.issuedCount = c.issuedCount + 1 "
             + "WHERE c.id = :id AND c.status = com.groove.coupon.domain.CouponStatus.ACTIVE "
-            + "AND (c.totalQuantity IS NULL OR c.issuedCount < c.totalQuantity)")
-    int incrementIssuedCount(@Param("id") Long id);
+            + "AND (c.totalQuantity IS NULL OR c.issuedCount < c.totalQuantity) "
+            + "AND c.validFrom <= :now AND c.validUntil >= :now")
+    int incrementIssuedCount(@Param("id") Long id, @Param("now") Instant now);
 
     /** coupon 행을 SELECT ... FOR UPDATE 로 잠근다. 행 락은 트랜잭션 종료 시 해제된다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

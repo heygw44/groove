@@ -31,6 +31,10 @@ public class Coupon extends BaseTimeEntity {
     private static final long PERCENTAGE_MIN = 1L;
     /** 정률(PERCENTAGE) 할인율 허용 상한. */
     private static final long PERCENTAGE_MAX = 100L;
+    /** 정액(FIXED_AMOUNT) 할인액 허용 상한(원) — 운영 실수로 사실상 전액 무료 쿠폰이 생성되는 것을 막는 위생 가드. */
+    private static final long FIXED_AMOUNT_DISCOUNT_MAX = 1_000_000L;
+    /** 회원당 발급 한도 — 현재 1만 허용(회원당 1장은 uk_member_coupon_coupon_member UNIQUE 가 강제). */
+    private static final int PER_MEMBER_LIMIT_ONLY = 1;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -240,7 +244,7 @@ public class Coupon extends BaseTimeEntity {
             return this;
         }
 
-        /** 회원당 발급 한도. 기본 1. */
+        /** 회원당 발급 한도. 현재 1 만 허용한다(1 외 값은 build() 에서 거부). 기본 1. */
         public Builder perMemberLimit(int perMemberLimit) {
             this.perMemberLimit = perMemberLimit;
             return this;
@@ -265,6 +269,11 @@ public class Coupon extends BaseTimeEntity {
                 throw new IllegalArgumentException(
                         "percentage discountValue must be 1..100: " + discountValue);
             }
+            // 정액 할인은 위생 상한을 둔다 — 관리자 실수로 사실상 전액 무료 쿠폰이 만들어지는 것을 막는다.
+            if (discountType == CouponDiscountType.FIXED_AMOUNT && discountValue > FIXED_AMOUNT_DISCOUNT_MAX) {
+                throw new IllegalArgumentException(
+                        "FIXED_AMOUNT discountValue must be <= " + FIXED_AMOUNT_DISCOUNT_MAX + ": " + discountValue);
+            }
             if (maxDiscountAmount != null && maxDiscountAmount <= 0) {
                 throw new IllegalArgumentException(
                         "maxDiscountAmount must be positive when present: " + maxDiscountAmount);
@@ -281,8 +290,11 @@ public class Coupon extends BaseTimeEntity {
             if (totalQuantity != null && totalQuantity <= 0) {
                 throw new IllegalArgumentException("totalQuantity must be positive when present: " + totalQuantity);
             }
-            if (perMemberLimit <= 0) {
-                throw new IllegalArgumentException("perMemberLimit must be positive: " + perMemberLimit);
+            // 회원당 다회 발급은 미지원 — 회원당 1장은 uk_member_coupon_coupon_member UNIQUE 가 강제하므로
+            // perMemberLimit 는 1 만 허용한다(설정-동작 모순 차단). 필드·컬럼은 향후 확장 여지로 보존한다.
+            if (perMemberLimit != PER_MEMBER_LIMIT_ONLY) {
+                throw new IllegalArgumentException(
+                        "perMemberLimit must be 1 (per-member multi-issue is not supported): " + perMemberLimit);
             }
             Objects.requireNonNull(validFrom, "validFrom must not be null");
             Objects.requireNonNull(validUntil, "validUntil must not be null");

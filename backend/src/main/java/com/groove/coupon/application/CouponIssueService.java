@@ -56,9 +56,9 @@ public class CouponIssueService {
     /**
      * 발급 경로 — 원자적 조건부 UPDATE.
      *
-     * status + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로 원자 처리한다(affected=1 성공 / 0
-     * 발급불가 → 재조회로 소진·비ACTIVE 판별). 발급 기간(validFrom·validUntil)은 UPDATE 가 검사하지 않으므로
-     * validateIssuable 사전 검사가 게이트한다.
+     * status + 발급 기간 + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로 원자 처리한다
+     * (affected=1 성공 / 0 발급불가 → 재조회로 소진·비ACTIVE·기간밖 판별). validateIssuable 사전 검사가
+     * 빠른 거부를 담당하고, UPDATE 의 기간 조건이 만료 경계 TOCTOU 를 닫는다.
      */
     @Transactional
     public MemberCouponResponse issue(Long memberId, Long couponId) {
@@ -69,8 +69,8 @@ public class CouponIssueService {
         validateIssuable(couponId);
         requireNotYetIssued(couponId, memberId);
 
-        if (couponRepository.incrementIssuedCount(couponId) == 0) {
-            // 0행은 소진 또는 SUSPENDED 전환. clearAutomatically 로 컨텍스트가 비었으니 재조회로 사유를 가린다.
+        if (couponRepository.incrementIssuedCount(couponId, clock.instant()) == 0) {
+            // 0행은 소진·SUSPENDED 전환·기간 밖. clearAutomatically 로 컨텍스트가 비었으니 재조회로 사유를 가린다.
             throw resolveIssueFailure(couponId);
         }
         // clearAutomatically 가 영속성 컨텍스트를 비우므로 managed 참조를 다시 얻는다.

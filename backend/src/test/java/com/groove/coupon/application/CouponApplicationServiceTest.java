@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -48,6 +49,7 @@ import static org.mockito.Mockito.when;
 class CouponApplicationServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-05-28T00:00:00Z");
+    private static final Duration GRACE = Duration.ofDays(7);
     private static final long MEMBER_ID = 42L;
     private static final long OTHER_MEMBER_ID = 99L;
     private static final long MEMBER_COUPON_ID = 7L;
@@ -64,7 +66,8 @@ class CouponApplicationServiceTest {
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        service = new CouponApplicationService(memberCouponRepository, clock);
+        service = new CouponApplicationService(memberCouponRepository, clock,
+                new CouponRestoreProperties(GRACE));
     }
 
     // --- helpers -------------------------------------------------------------
@@ -240,8 +243,8 @@ class CouponApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("복원 시점에 이미 만료된 USED 쿠폰 → ISSUED 가 아니라 EXPIRED 로 복원 (표시 정합성)")
-    void restore_expiredAtRestoreTime_becomesExpired() {
+    @DisplayName("복원 시점에 이미 만료된 USED 쿠폰 → 소멸 없이 ISSUED 로 부활, expiresAt = now + grace 연장 (#319)")
+    void restore_expiredAtRestoreTime_revivesWithGrace() {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
         mc.use(ORDER_ID, NOW);
@@ -250,9 +253,25 @@ class CouponApplicationServiceTest {
 
         service.restoreForOrder(ORDER_ID);
 
-        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.EXPIRED);
+        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+        assertThat(mc.getExpiresAt()).isEqualTo(NOW.plus(GRACE));   // 복원 clock(NOW) + grace
         assertThat(mc.getOrderId()).isNull();
         assertThat(mc.getUsedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("USED 쿠폰을 두 번 복원해도 두 번째는 멱등 no-op (무락 동시 복원 안전) (#319)")
+    void restore_twice_idempotent() {
+        Coupon coupon = fixedCoupon(3_000L, 0L);
+        MemberCoupon mc = issued(coupon, MEMBER_ID);
+        mc.use(ORDER_ID, NOW);
+        when(memberCouponRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(mc));
+
+        service.restoreForOrder(ORDER_ID);
+        service.restoreForOrder(ORDER_ID);   // 두 번째: status 가 USED 가 아니라 no-op (예외 없음)
+
+        assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
+        assertThat(mc.getOrderId()).isNull();
     }
 
     @Test

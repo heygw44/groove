@@ -121,6 +121,10 @@ class CouponTest {
                             CouponDiscountType.PERCENTAGE, 10, VALID_FROM, VALID_UNTIL).build()),
                     Arguments.of("perMemberLimit 0", (Runnable) () -> Coupon.builder("쿠폰",
                             CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).perMemberLimit(0).build()),
+                    Arguments.of("perMemberLimit 2 (#319 다회 발급 미지원)", (Runnable) () -> Coupon.builder("쿠폰",
+                            CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_FROM, VALID_UNTIL).perMemberLimit(2).build()),
+                    Arguments.of("FIXED_AMOUNT 상한 초과 (#319 위생 가드)", (Runnable) () -> Coupon.builder("쿠폰",
+                            CouponDiscountType.FIXED_AMOUNT, 1_000_001, VALID_FROM, VALID_UNTIL).build()),
                     Arguments.of("validUntil <= validFrom", (Runnable) () -> Coupon.builder("쿠폰",
                             CouponDiscountType.FIXED_AMOUNT, 1_000, VALID_UNTIL, VALID_FROM).build())
             );
@@ -131,6 +135,14 @@ class CouponTest {
         @DisplayName("제약 위반 값 → IllegalArgumentException")
         void create_invalid(String label, Runnable factory) {
             assertThatThrownBy(factory::run).isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("FIXED_AMOUNT 할인액이 상한(1,000,000)과 같으면 허용 (경계 #319)")
+        void create_fixedAmountAtCap_ok() {
+            assertThatCode(() -> Coupon.builder("쿠폰",
+                    CouponDiscountType.FIXED_AMOUNT, 1_000_000, VALID_FROM, VALID_UNTIL).build())
+                    .doesNotThrowAnyException();
         }
     }
 
