@@ -147,6 +147,9 @@ public class AlbumService {
         Album album = albumRepository.findById(id)
                 .orElseThrow(AlbumNotFoundException::new);
         // cart_item/order_item 이 참조 중이면 409 로 거절. review 는 ON DELETE CASCADE.
+        // 사전 검사~flush 사이 TOCTOU 경합 창이 있으나, cart_item/order_item 이 ON DELETE RESTRICT 라
+        // 그 사이 새 참조가 생기면 flush 가 FK 위반→DataIntegrityViolationException→AlbumInUseException(409) 으로
+        // 안전 변환한다. 이 안전망이 견고하므로 SELECT FOR UPDATE 행 락은 두지 않는다.
         if (cartRepository.existsByAlbumId(id) || orderRepository.existsByAlbumId(id)) {
             throw new AlbumInUseException();
         }

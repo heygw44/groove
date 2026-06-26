@@ -387,6 +387,35 @@ class AlbumQueryControllerTest {
         }
 
         @Test
+        @DisplayName("minPrice > maxPrice → 400(빈 결과 대신 검증 실패)")
+        void filter_minPriceGreaterThanMaxPrice_returns400() throws Exception {
+            mockMvc.perform(get("/api/v1/albums")
+                            .param("minPrice", "50000")
+                            .param("maxPrice", "10000"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("minYear > maxYear → 400(빈 결과 대신 검증 실패)")
+        void filter_minYearGreaterThanMaxYear_returns400() throws Exception {
+            mockMvc.perform(get("/api/v1/albums")
+                            .param("minYear", "2025")
+                            .param("maxYear", "2000"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("정상 가격·연도 범위(min<=max) → 200")
+        void filter_validRanges_returns200() throws Exception {
+            mockMvc.perform(get("/api/v1/albums")
+                            .param("minPrice", "10000")
+                            .param("maxPrice", "50000")
+                            .param("minYear", "2000")
+                            .param("maxYear", "2025"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
         @DisplayName("응답에 averageRating(null) / reviewCount(0) placeholder 포함 (W7 도입 전)")
         void response_includesReviewPlaceholderFields() throws Exception {
             persistAlbum("A", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
