@@ -177,6 +177,11 @@ public class Album extends BaseTimeEntity {
         return status;
     }
 
+    /** 구매 가능 상태인지 — SELLING 만 주문·장바구니에 담을 수 있다. */
+    public boolean isSelling() {
+        return status == AlbumStatus.SELLING;
+    }
+
     public boolean isLimited() {
         return limited;
     }

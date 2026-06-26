@@ -2,7 +2,6 @@ package com.groove.order.application;
 
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumRepository;
-import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.album.domain.StockRestorer;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.exception.AlbumNotPurchasableException;
@@ -41,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -190,7 +190,7 @@ public class OrderService {
 
     /**
      * place(락)와 placeWithoutLock(락 없음)의 공유 본문. useLock 이 재고 조회 전략을 가른다 —
-     * true 면 findByIdForUpdate(행 락 선점), false 면 findById(락 없음).
+     * true 면 albumId 오름차순 단건 findByIdForUpdate(행 락 선점), false 면 findAllById 일괄 조회(락 없음).
      */
     private Order placeInternal(Long memberId, OrderCreateRequest request, boolean useLock) {
         validateOwnership(memberId, request.guest());
@@ -276,47 +276,41 @@ public class OrderService {
      * 항목 수만큼의 단건 쿼리를 없앤다.
      */
     private List<ResolvedLine> resolveLines(List<OrderItemRequest> items, boolean useLock) {
+        // album 해소 전략만 분기한다. 락 경로는 데드락 회피를 위해 albumId 오름차순으로 단건 행 락을,
+        // 비락 baseline 은 findAllById 일괄 조회 후 맵 조회를 쓴다. 이후 검증·차감 루프는 공유한다.
+        List<OrderItemRequest> ordered;
+        Function<Long, Album> resolve;
         if (useLock) {
-            List<OrderItemRequest> ordered = items.size() > 1
+            ordered = items.size() > 1
                     ? items.stream().sorted(Comparator.comparingLong(OrderItemRequest::albumId)).toList()
                     : items;
-            List<ResolvedLine> lines = new ArrayList<>(ordered.size());
-            for (OrderItemRequest line : ordered) {
-                Album album = loadPurchasableForUpdate(line.albumId());
-                decreaseStock(album, line.quantity());
-                lines.add(new ResolvedLine(album, line.quantity()));
-            }
-            return lines;
+            resolve = albumId -> validatePurchasable(albumRepository.findByIdForUpdate(albumId).orElse(null));
+        } else {
+            ordered = items;
+            Map<Long, Album> byId = albumRepository.findAllById(
+                            items.stream().map(OrderItemRequest::albumId).distinct().toList()).stream()
+                    .collect(Collectors.toMap(Album::getId, album -> album));
+            resolve = albumId -> validatePurchasable(byId.get(albumId));
         }
 
-        List<Long> albumIds = items.stream().map(OrderItemRequest::albumId).distinct().toList();
-        Map<Long, Album> byId = albumRepository.findAllById(albumIds).stream()
-                .collect(Collectors.toMap(Album::getId, album -> album));
-        List<ResolvedLine> lines = new ArrayList<>(items.size());
-        for (OrderItemRequest line : items) {
-            Album album = byId.get(line.albumId());
-            if (album == null) {
-                throw new AlbumNotFoundException();
-            }
-            validateSelling(album);
+        List<ResolvedLine> lines = new ArrayList<>(ordered.size());
+        for (OrderItemRequest line : ordered) {
+            Album album = resolve.apply(line.albumId());
             decreaseStock(album, line.quantity());
             lines.add(new ResolvedLine(album, line.quantity()));
         }
         return lines;
     }
 
-    /** 구매 가능 album 을 행 락(SELECT ... FOR UPDATE)으로 선점하고 SELLING 검증한다. */
-    private Album loadPurchasableForUpdate(Long albumId) {
-        Album album = albumRepository.findByIdForUpdate(albumId)
-                .orElseThrow(AlbumNotFoundException::new);
-        validateSelling(album);
-        return album;
-    }
-
-    private static void validateSelling(Album album) {
-        if (album.getStatus() != AlbumStatus.SELLING) {
+    /** 구매 가능 album 검증 — 미존재(null)면 404, SELLING 이 아니면 422. */
+    private static Album validatePurchasable(Album album) {
+        if (album == null) {
+            throw new AlbumNotFoundException();
+        }
+        if (!album.isSelling()) {
             throw new AlbumNotPurchasableException();
         }
+        return album;
     }
 
     private void decreaseStock(Album album, int quantity) {
