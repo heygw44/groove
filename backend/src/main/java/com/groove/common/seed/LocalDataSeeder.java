@@ -46,11 +46,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 로컬 데모 자동 시드. local 프로파일 기동 시 샘플 카탈로그·데모 계정·유저 풀·한정 쿠폰·DELIVERED 주문을 자동 생성한다.
- *
- * <p>@Profile("local") 로만 등록되며 run 진입 시 활성 프로파일에 local 포함 여부를 한 번 더 확인한다. 앨범이 한 장이라도
- * 있으면 전체를 건너뛰고, 시드 본체는 단일 트랜잭션(txTemplate)으로 커밋한다. 생성은 가능한 한 application service 를
- * 경유하고, 관리자 role 지정과 주문 상태 전진만 도메인/리포지터리를 직접 사용한다.
+ * 로컬 데모 자동 시드. local 프로파일 기동 시 샘플 카탈로그·데모 계정·유저 풀·한정 쿠폰·DELIVERED 주문을 생성한다.
+ * @Profile("local") 로만 등록되며 run 진입 시 활성 프로파일을 한 번 더 확인한다. 앨범이 한 장이라도 있으면 전체를
+ * 건너뛰고, 시드 본체는 단일 트랜잭션으로 커밋한다. 생성은 가능한 한 application service 를 경유하고, 관리자 role
+ * 지정과 주문 상태 전진만 도메인/리포지터리를 직접 사용한다.
  */
 @Component
 @Profile("local")

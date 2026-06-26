@@ -5,13 +5,9 @@ import org.hibernate.boot.model.FunctionContributor;
 import org.hibernate.type.StandardBasicTypes;
 
 /**
- * MySQL FULLTEXT 검색용 커스텀 HQL 함수 등록.
- *
- * <p>fts_match(c1, c2, query) 호출을 MATCH(c1, c2) AGAINST(query IN BOOLEAN MODE) 로 렌더링하고
- * relevance score(Double)를 반환한다.
- *
- * <p>Hibernate 가 META-INF/services/org.hibernate.boot.model.FunctionContributor 의 ServiceLoader 항목으로
- * 부팅 시 자동 발견한다.
+ * MySQL FULLTEXT 검색용 커스텀 HQL 함수 등록. fts_match(c1, c2, query) 를
+ * MATCH(c1, c2) AGAINST(query IN BOOLEAN MODE) 로 렌더링하고 relevance score(Double)를 반환한다.
+ * Hibernate 가 META-INF/services 의 FunctionContributor ServiceLoader 항목으로 부팅 시 자동 발견한다.
  */
 public class FulltextFunctionContributor implements FunctionContributor {
 

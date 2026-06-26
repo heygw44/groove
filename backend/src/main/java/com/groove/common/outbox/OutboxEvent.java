@@ -13,13 +13,9 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 이벤트 아웃박스 레코드.
- *
- * <p>상태 변경과 같은 트랜잭션에서 후속 이벤트를 이 행으로 기록한다. OutboxRelayScheduler 가
- * publishedAt IS NULL(미발행) 행을 주기적으로 발행하고 성공 시 markPublished 로 발행 완료로 표시한다.
- *
- * <p>생성은 of 정적 팩토리만 허용하며 항상 미발행(publishedAt == null)으로 시작한다. payload 는 이벤트 본문
- * JSON 직렬화다.
+ * 이벤트 아웃박스 레코드. 상태 변경과 같은 트랜잭션에서 후속 이벤트를 이 행으로 기록한다.
+ * OutboxRelayScheduler 가 publishedAt IS NULL(미발행) 행을 주기 발행하고 성공 시 markPublished 한다.
+ * 생성은 of 팩토리만 허용하며 항상 미발행으로 시작한다. payload 는 이벤트 본문 JSON 직렬화.
  */
 @Entity
 @Table(

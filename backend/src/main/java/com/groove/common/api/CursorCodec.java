@@ -17,16 +17,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * keyset 커서 ↔ KeysetScrollPosition 코덱.
+ * keyset 커서 ↔ KeysetScrollPosition 코덱. 커서는 정렬 키-값 맵과 정렬 시그니처를 불투명 문자열로
+ * 직렬화한 것으로, 각 값을 타입 태그와 함께 저장하고 디코딩 시 원래 런타임 타입으로 복원한다.
  *
- * <p>커서는 정렬 키-값 맵과 정렬 시그니처를 불투명 문자열로 직렬화한 것이다. 각 값을 타입 태그와 함께
- * 문자열로 저장하고, 디코딩 시 원래 런타임 타입으로 복원한다.
- *
- * <p>직렬화 형식: Base64URL( JSON{ v, s:["prop:DIR", …], k:[{n,t,val}, …] } ).
- * v=포맷 버전, s=정렬 시그니처(속성:방향, 순서 보존), k=정렬 순서를 보존한 키 목록
- * (n=속성명, t=타입태그, val=문자열값). 디코딩 결과는 LinkedHashMap 으로 구성한다.
- *
- * <p>잘못되거나 위조된 커서는 모두 ValidationException(400 VALID_001) 으로 거절한다.
+ * 형식: Base64URL( JSON{ v=포맷버전, s=정렬 시그니처(속성:방향, 순서 보존), k=키 목록(n=속성명·t=타입태그·val=문자열값) } ).
+ * 잘못되거나 위조된 커서는 모두 ValidationException(400 VALID_001) 으로 거절한다.
  */
 @Component
 public class CursorCodec {

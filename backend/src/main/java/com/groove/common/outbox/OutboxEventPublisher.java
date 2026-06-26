@@ -5,10 +5,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 아웃박스 발행 진입점 — 이벤트를 outbox 테이블에 기록한다.
- *
- * <p>반드시 상태 변경과 같은 트랜잭션 안에서 호출해야 한다. 실제 발행(컨슈머 디스패치)은 OutboxRelayScheduler 가
- * 비동기로 수행한다. payload 는 JSON 왕복 가능한 단순 record 여야 한다.
+ * 아웃박스 발행 진입점 — 이벤트를 outbox 테이블에 기록한다. 반드시 상태 변경과 같은 트랜잭션 안에서 호출해야
+ * 한다. 실제 발행(컨슈머 디스패치)은 OutboxRelayScheduler 가 비동기로 수행한다. payload 는 JSON 왕복 가능한
+ * 단순 record 여야 한다.
  */
 @Component
 public class OutboxEventPublisher {

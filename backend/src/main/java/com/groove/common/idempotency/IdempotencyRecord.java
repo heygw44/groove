@@ -19,9 +19,9 @@ import java.util.Objects;
 /**
  * 멱등성 레코드 엔티티. 한 행이 처리 소유권 마커(IN_PROGRESS)와 결과 캐시(COMPLETED + responseBody)를 겸한다.
  *
- * <p>생성은 start 정적 팩토리만 허용하며 IN_PROGRESS·expiresAt = now + 처리 타임아웃(짧게) 으로 시작한다.
- * 완료 전이는 complete 단일 진입점이고, 이때 expiresAt 을 결과 캐시 보관 기간(now + ttl)으로 연장한다.
- * 이미 COMPLETED 인 행에 다시 호출하면 IllegalStateException. idempotencyKey 에 DB UNIQUE 제약이 걸려 있다.
+ * 생성은 start 팩토리만 허용(IN_PROGRESS·expiresAt = now + 처리 타임아웃). 완료 전이는 complete 단일 진입점이며
+ * expiresAt 을 결과 캐시 보관 기간(now + ttl)으로 연장한다. COMPLETED 행에 재호출하면 IllegalStateException.
+ * idempotencyKey 에 DB UNIQUE 제약.
  */
 @Entity
 @Table(
@@ -91,11 +91,10 @@ public class IdempotencyRecord extends BaseTimeEntity {
     }
 
     /**
-     * 처리 완료 + 결과 캐싱. IN_PROGRESS → COMPLETED 전이만 허용하며, expiresAt 을 결과 캐시
-     * 보관 기간(newExpiresAt = now + ttl)으로 연장한다. 레코드는 시계에 의존하지 않으므로 호출자가 계산해 넘긴다.
-     *
-     * <p>expectedOwnerToken 이 행의 ownerToken 과 다르면(처리 타임아웃 초과로 마커가 회수되고 다른 요청이
-     * 새 마커를 만든 경우) IllegalStateException — 원소유자가 남의 마커를 finalize 하지 못하게 한다(#317).
+     * 처리 완료 + 결과 캐싱. IN_PROGRESS → COMPLETED 전이만 허용하며 expiresAt 을 결과 캐시 보관 기간
+     * (newExpiresAt = now + ttl)으로 연장한다. 레코드는 시계에 의존하지 않아 호출자가 계산해 넘긴다.
+     * expectedOwnerToken 이 행의 ownerToken 과 다르면(타임아웃 초과로 회수돼 다른 요청이 새 마커 생성)
+     * IllegalStateException — 원소유자가 남의 마커를 finalize 하지 못하게 한다(#317).
      */
     public void complete(String responseType, String responseBody, Instant newExpiresAt, String expectedOwnerToken) {
         if (status != IdempotencyStatus.IN_PROGRESS) {

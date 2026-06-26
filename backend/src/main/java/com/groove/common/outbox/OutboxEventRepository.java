@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * 아웃박스 영속성.
  *
- * <p>릴레이는 findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc 로 대상(미발행 + 재시도 상한 미만)을
+ * 릴레이는 findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc 로 대상(미발행 + 재시도 상한 미만)을
  * 조회하고 markPublished 로 발행 완료를 표시한다. 핸들러 실패 시 incrementAttemptCount 로 카운터를 올려
  * 상한을 채운 poison 행을 릴레이 대상에서 제외(DLQ 격리)한다. 정리 스케줄러는 deletePublishedBefore 로
  * 보관 기간이 지난 발행 완료 행을 회수한다.

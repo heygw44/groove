@@ -17,23 +17,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 아웃박스 릴레이 스케줄러 — 미발행 이벤트를 주기적으로 컨슈머에 디스패치하고 발행 완료로 표시한다
- * (at-least-once).
+ * 아웃박스 릴레이 스케줄러 — 미발행 이벤트를 주기적으로 컨슈머에 디스패치하고 발행 완료로 표시한다(at-least-once).
  *
- * <p>처리: published_at IS NULL 행을 id FIFO 로 .batch-size 만큼 조회 → 건별로 OutboxEventHandler 디스패치 →
- * 성공 시 markPublished(독립 트랜잭션). 한 건의 실패는 건별로 격리하고(다음 주기에 재시도), 스케줄러 스레드 밖으로
- * 예외를 흘리지 않는다.
+ * 처리: published_at IS NULL 행을 id FIFO 로 .batch-size 만큼 조회 → 건별 OutboxEventHandler 디스패치 → 성공 시
+ * markPublished(독립 트랜잭션). 실패는 건별 격리하고(다음 주기 재시도) 스케줄러 스레드 밖으로 예외를 흘리지 않는다.
+ * 컨슈머 커밋 후 markPublished 가 실패하면 재디스패치되지만 컨슈머가 멱등이라 부수효과는 1회다.
  *
- * <p>컨슈머가 커밋한 뒤 markPublished 가 실패하면 행이 미발행으로 남아 재디스패치되지만, 컨슈머가 멱등이라
- * 부수효과는 1회다.
+ * 영구 실패(poison) 격리: 핸들러 실패(예외/미등록) 시 attempt_count 를 증가시키고, 릴레이 조회는 attempt_count <
+ * max-attempts 인 미발행 행만 대상으로 한다. 임계값을 채운 이벤트는 DLQ(격리)로 디스패치되지 않아 정상 슬롯을
+ * 점유하지 않는다(#268). markPublished 실패는 카운터를 증가시키지 않는다(멱등 재전달).
  *
- * <p>영구 실패(poison) 격리: 핸들러 실패(예외 또는 미등록) 시 attempt_count 를 증가시키고, 릴레이 조회는
- * attempt_count < max-attempts 인 미발행 행만 대상으로 한다. 임계값을 채운 이벤트는 DLQ(격리)로 더 이상
- * 디스패치되지 않아 정상 이벤트 슬롯을 점유하지 않는다(#268). markPublished 실패는 카운터를 증가시키지
- * 않는다(멱등 재전달).
- *
- * <p>실행 주기/초기 지연은 groove.outbox.relay.{interval,initial-delay}, 주기당 처리 상한은 .batch-size,
- * 재시도 상한은 .max-attempts 다.
+ * 주기/초기 지연=groove.outbox.relay.{interval,initial-delay}, 처리 상한=.batch-size, 재시도 상한=.max-attempts.
  */
 @Component
 public class OutboxRelayScheduler {

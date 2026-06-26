@@ -7,22 +7,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * prod 프로파일에서만 로드되어 약한 DB 시크릿으로 기동하는 것을 거부하는 가드 (이슈 #321).
+ * prod 전용 — 약한 DB 시크릿으로 기동하는 것을 거부하는 가드(이슈 #321). docker/local 데모는 약한
+ * 데모 비밀번호(changeme/rootpw)를 정당하게 쓰므로 약한값 거부는 반드시 prod 전용이다(전역이면 데모 기동이
+ * 깨진다). 부적합 시 afterPropertiesSet 에서 IllegalStateException 으로 fail-fast.
  *
- * <p>docker/local 데모는 약한 데모 비밀번호(changeme/rootpw)를 정당하게 쓰므로, 약한값 거부는 반드시
- * prod 전용이어야 한다(전역으로 두면 데모 기동이 깨진다). 그래서 기존 {@code SecretPlaceholderGuard}
- * (시크릿 4종에서 전역 호출)와 달리, DB 약한값 검사는 이 {@code @Profile("prod")} 컴포넌트로 분리한다.
+ * 검사 대상:
+ * - spring.datasource.password(=DB_PASSWORD) — blank·약한값·플레이스홀더 거부.
+ * - MYSQL_ROOT_PASSWORD — docker-compose mysql 전용이라 부재(null)는 통과(관리형 DB 등)하되,
+ *   존재하면 빈 값 포함 검사한다(시크릿 게이트 우회 방지).
  *
- * <p>검사 대상:
- * <ul>
- *   <li>{@code spring.datasource.password}(=DB_PASSWORD) — 앱이 인증에 쓰는 값. blank·약한값·플레이스홀더 거부.</li>
- *   <li>{@code MYSQL_ROOT_PASSWORD} — 앱이 직접 읽는 Spring 프로퍼티가 아니지만(docker-compose mysql
- *       서비스 전용), app 서비스가 {@code env_file: .env} 로 주입하면 환경에 존재한다. 부재(null)는
- *       관리형 DB 등을 위해 통과시키되, 존재하면(빈 값 포함) 검사한다 — 빈 값은 거부(시크릿 게이트 우회 방지).</li>
- * </ul>
- *
- * <p>부적합 시 {@link InitializingBean#afterPropertiesSet()} 에서 IllegalStateException 으로 기동을
- * fail-fast 중단한다(기존 시크릿 가드와 동일 패턴). 런북은 docs/ARCHITECTURE.md §10.6.
+ * 런북은 docs/ARCHITECTURE.md §10.6.
  */
 @Component
 @Profile("prod")
