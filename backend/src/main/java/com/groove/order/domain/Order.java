@@ -267,10 +267,12 @@ public class Order extends BaseTimeEntity {
         if (item == null) {
             throw new IllegalArgumentException("item must not be null");
         }
+        // 합계를 먼저 계산해 오버플로(ArithmeticException) 시 컬렉션·연관을 건드리기 전에 실패시킨다 —
+        // aggregate 가 항목만 추가되고 totalAmount 는 옛값인 불일치 상태로 남지 않도록.
+        long nextTotal = Math.addExact(this.totalAmount, item.getSubtotal());
         item.attachTo(this);
         items.add(item);
-        // 누적 합도 오버플로 시 ArithmeticException 으로 즉시 실패시킨다.
-        this.totalAmount = Math.addExact(this.totalAmount, item.getSubtotal());
+        this.totalAmount = nextTotal;
     }
 
     public Long getId() {

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -33,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -130,8 +132,11 @@ class RefreshTokenServiceTest {
 
         assertThat(result.accessToken()).isEqualTo("new-access");
         assertThat(result.refreshToken()).isEqualTo("new-refresh");
-        verify(refreshTokenRepository).revokeIfActive(100L, NOW, null);
-        verify(refreshTokenRepository).linkReplacement(100L, 200L);
+        // 순서까지 고정 — revoke → INSERT(save) → linkReplacement. 인자만 맞고 순서가 뒤집히는 회귀를 막는다.
+        InOrder inOrder = inOrder(refreshTokenRepository);
+        inOrder.verify(refreshTokenRepository).revokeIfActive(100L, NOW, null);
+        inOrder.verify(refreshTokenRepository).save(any(RefreshToken.class));
+        inOrder.verify(refreshTokenRepository).linkReplacement(100L, 200L);
         verify(refreshTokenAdmin, never()).forceRevokeAllActiveSessions(anyLong(), any());
     }
 

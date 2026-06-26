@@ -46,6 +46,8 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
             UPDATE RefreshToken r
                SET r.replacedByTokenId = :replacedBy
              WHERE r.id = :id
+               AND r.revokedAt IS NOT NULL
+               AND r.replacedByTokenId IS NULL
             """)
     int linkReplacement(
             @Param("id") Long id,

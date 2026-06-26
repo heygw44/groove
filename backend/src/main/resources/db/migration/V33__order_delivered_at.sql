@@ -8,13 +8,8 @@
 -- 진입점을 거치므로(정상 파이프라인·관리자 강제·시드 공통), 이후 생성되는 주문은 배송 행 유무와
 -- 무관하게 delivered_at 을 항상 갖는다. paid_at/cancelled_at 과 같은 패턴.
 
+-- 스키마 추가만 수행한다. 대량 백필 UPDATE 는 매칭 주문 행 락을 문장 종료까지 잡아 배포 중 쓰기 경로를
+-- 막을 수 있으므로 마이그레이션에 두지 않는다. delivered_at 이 비어 있는 기존 배송완료 주문은
+-- ClaimService 가 읽기 시점에 shipping.delivered_at 로 보강(결정적)하므로 백필 없이도 반품 가능성이 보존된다.
 ALTER TABLE orders
     ADD COLUMN delivered_at DATETIME(6) NULL AFTER paid_at;
-
--- 기존 주문 백필 — 정상 배송 파이프라인을 거친 주문은 shipping.delivered_at 을 보유하므로 그대로 복사해
--- 이미 배송완료된 주문의 반품 가능성을 보존한다. 배송 행이 없는 과거 강제 전이 주문은 결정 불가로 남는다.
-UPDATE orders o
-    JOIN shipping s ON s.order_id = o.id
-   SET o.delivered_at = s.delivered_at
- WHERE o.delivered_at IS NULL
-   AND s.delivered_at IS NOT NULL;
