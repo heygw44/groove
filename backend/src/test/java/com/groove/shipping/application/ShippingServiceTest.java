@@ -81,7 +81,9 @@ class ShippingServiceTest {
 
         assertThat(response.trackingNumber()).isEqualTo(TRACKING);
         assertThat(response.status()).isEqualTo(ShippingStatus.PREPARING);
-        assertThat(response.recipientName()).isEqualTo("김철수");
+        // 공개 응답은 PII 부분 마스킹 (#322): 김철수 → 김*수, 주소는 앞 2토큰만 노출
+        assertThat(response.recipientName()).isEqualTo("김*수");
+        assertThat(response.address()).isEqualTo("서울시 강남구 ***");
     }
 
     @Test

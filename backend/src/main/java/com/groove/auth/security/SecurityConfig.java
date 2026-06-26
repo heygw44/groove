@@ -28,7 +28,7 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class, AuthRateLimitProperties.class, RefreshCookieProperties.class})
+@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class, AuthRateLimitProperties.class, RefreshCookieProperties.class, SecurityHeadersProperties.class})
 public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {
@@ -108,12 +108,23 @@ public class SecurityConfig {
                                                    RestAuthenticationEntryPoint authenticationEntryPoint,
                                                    RestAccessDeniedHandler accessDeniedHandler,
                                                    CorsConfigurationSource corsConfigurationSource,
+                                                   SecurityHeadersProperties securityHeaders,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
+                .headers(headers -> {
+                    if (securityHeaders.enabled()) {
+                        headers.contentSecurityPolicy(csp -> {
+                            csp.policyDirectives(securityHeaders.policy());
+                            if (securityHeaders.reportOnly()) {
+                                csp.reportOnly();
+                            }
+                        });
+                    }
+                })
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
