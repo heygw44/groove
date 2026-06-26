@@ -57,4 +57,32 @@ class SecretPlaceholderGuardTest {
         assertThatCode(() -> SecretPlaceholderGuard.rejectPlaceholder("some.secret", secret))
                 .doesNotThrowAnyException();
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "rootpw",          // .env 실값 (이슈 #321 명시) — 마커엔 안 걸리는 약값
+            "changeme",        // .env 실값 (changeme 마커도 해당)
+            "changeme-root",   // .env.example 실값
+            "password",        // 흔한 약값
+            "ROOTPW",          // 대소문자 무시
+            "  rootpw  ",      // 앞뒤 공백 무시
+            "change-this-db-password", // change-this 마커
+    })
+    @DisplayName("DB 약한값/플레이스홀더는 거부한다 (prod)")
+    void rejectsWeakDbPasswords(String password) {
+        assertThatThrownBy(() -> SecretPlaceholderGuard.rejectWeakDbPassword("spring.datasource.password", password))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("spring.datasource.password");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "kP9$mVx2Lr8QwZ7nTb4Hy6Fc",          // 강력한 무작위
+            "groove-prod-strong-db-pw-2026-xyz", // 약값 목록·마커에 없는 충분히 긴 값
+    })
+    @DisplayName("강력한 DB 비밀번호는 통과한다")
+    void allowsStrongDbPasswords(String password) {
+        assertThatCode(() -> SecretPlaceholderGuard.rejectWeakDbPassword("spring.datasource.password", password))
+                .doesNotThrowAnyException();
+    }
 }
