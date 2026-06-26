@@ -43,6 +43,7 @@ public class OutboxRelayScheduler {
     private final OutboxEventRepository repository;
     private final TransactionTemplate requiresNewTx;
     private final Clock clock;
+    private final OutboxMetrics metrics;
     private final Limit batchLimit;
     private final int maxAttempts;
     private final Map<String, OutboxEventHandler> handlers;
@@ -50,12 +51,14 @@ public class OutboxRelayScheduler {
     public OutboxRelayScheduler(OutboxEventRepository repository,
                                 @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
                                 Clock clock,
+                                OutboxMetrics metrics,
                                 List<OutboxEventHandler> handlers,
                                 @Value("${groove.outbox.relay.batch-size:200}") int batchSize,
                                 @Value("${groove.outbox.relay.max-attempts:5}") int maxAttempts) {
         this.repository = repository;
         this.requiresNewTx = requiresNewTx;
         this.clock = clock;
+        this.metrics = metrics;
         if (batchSize <= 0) {
             throw new IllegalArgumentException("groove.outbox.relay.batch-size 는 양수여야 합니다: " + batchSize);
         }
@@ -120,6 +123,8 @@ public class OutboxRelayScheduler {
         // 단일 스케줄러 인스턴스 기준 조회 스냅샷 + 1 이 증가 후 권위 값이다(멀티 인스턴스에선 로그상 근사일 수 있음).
         int attempts = event.getAttemptCount() + 1;
         if (attempts >= maxAttempts) {
+            // 릴레이 조회가 격리 행을 제외하므로 이 분기는 이벤트당 정확히 1회(상한 도달 전이) 실행된다 → 메트릭 중복 없음(#323).
+            metrics.recordQuarantined(event.getEventType());
             log.error("아웃박스 릴레이 DLQ 격리: eventType={}, id={}, attempts={}/{}, 사유={} — 재시도 중단(수동 조치 필요)",
                     event.getEventType(), event.getId(), attempts, maxAttempts, reason, cause);
         } else {

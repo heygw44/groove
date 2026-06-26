@@ -92,6 +92,41 @@ class OutboxEventRepositoryTest {
     }
 
     @Test
+    @DisplayName("findByPublishedAtIsNullAndAttemptCountGreaterThanEqual: DLQ(격리) 행만 조회 — 릴레이 대상의 여집합 (#323)")
+    void findDlq_includesOnlyAtOrAboveMaxAttempts() {
+        int maxAttempts = 5;
+        OutboxEvent fresh = unpublishedWithAttempts(0);             // 릴레이 대상(< N)
+        OutboxEvent belowCap = unpublishedWithAttempts(maxAttempts - 1); // 릴레이 대상(< N)
+        OutboxEvent atCap = unpublishedWithAttempts(maxAttempts);   // 격리(>= N)
+        OutboxEvent aboveCap = unpublishedWithAttempts(maxAttempts + 1); // 격리(>= N)
+        OutboxEvent published = publishedAt(T0);                    // 발행 완료(미발행 아님)
+        var myIds = java.util.Set.of(fresh.getId(), belowCap.getId(), atCap.getId(), aboveCap.getId(), published.getId());
+
+        // 공유 DB — 큰 Limit 로 절단을 피하고 내 id 로만 좁혀 단언한다(FIFO 순서 보존 확인)
+        var dlqMine = repository
+                .findByPublishedAtIsNullAndAttemptCountGreaterThanEqualOrderByIdAsc(maxAttempts, Limit.of(100_000))
+                .stream().map(OutboxEvent::getId).filter(myIds::contains).toList();
+
+        // >= N 인 atCap·aboveCap 만 FIFO 순으로 포함, < N 인 fresh·belowCap 과 발행 완료는 제외
+        assertThat(dlqMine).containsExactly(atCap.getId(), aboveCap.getId());
+    }
+
+    @Test
+    @DisplayName("countByPublishedAtIsNullAndAttemptCountGreaterThanEqual: 격리 행이 카운트에 반영된다 (#323)")
+    void countDlq_reflectsQuarantinedRows() {
+        int maxAttempts = 5;
+        long before = repository.countByPublishedAtIsNullAndAttemptCountGreaterThanEqual(maxAttempts);
+
+        unpublishedWithAttempts(maxAttempts);       // 격리 +1
+        unpublishedWithAttempts(maxAttempts + 1);   // 격리 +1
+        unpublishedWithAttempts(maxAttempts - 1);   // 릴레이 대상 — 카운트 제외
+
+        // 공유 DB 라 절대값 대신 내 격리 2건만큼 증가했는지로 단언한다
+        assertThat(repository.countByPublishedAtIsNullAndAttemptCountGreaterThanEqual(maxAttempts))
+                .isEqualTo(before + 2);
+    }
+
+    @Test
     @DisplayName("incrementAttemptCount: 재시도 카운터를 1 증가시킨다")
     void incrementAttemptCount_increments() {
         OutboxEvent event = unpublishedWithAttempts(0);

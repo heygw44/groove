@@ -28,6 +28,19 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
      */
     List<OutboxEvent> findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(int attemptCount, Limit limit);
 
+    /**
+     * DLQ(격리) 건수 — 미발행 + attempt_count >= attemptCount(=max-attempts) 인 행 수를 센다.
+     * 격리 상태를 쿼리 가능한 형태로 노출하는 조건이며(#323), 메트릭 Gauge 의 backing 으로 쓴다.
+     * 릴레이 대상 조회와 대칭(LessThan 의 여집합)이고 idx_outbox_unpublished 범위 스캔으로 처리된다.
+     */
+    long countByPublishedAtIsNullAndAttemptCountGreaterThanEqual(int attemptCount);
+
+    /**
+     * DLQ(격리) 행을 id 오름차순(FIFO)으로 최대 limit 개 조회한다 — 운영 진단용(#323).
+     * 미발행 + attempt_count >= attemptCount(=max-attempts) 인, 수동 조치가 필요한 poison 행이다.
+     */
+    List<OutboxEvent> findByPublishedAtIsNullAndAttemptCountGreaterThanEqualOrderByIdAsc(int attemptCount, Limit limit);
+
     /** 발행 완료로 표시 (조건부 UPDATE, published_at IS NULL 가드). 갱신된 행 수(0 또는 1)를 반환한다. */
     @Modifying
     @Query("UPDATE OutboxEvent o SET o.publishedAt = :now WHERE o.id = :id AND o.publishedAt IS NULL")
