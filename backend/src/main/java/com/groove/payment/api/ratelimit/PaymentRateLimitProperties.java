@@ -5,10 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * 결제 엔드포인트 Rate Limit 정책 설정. groove.payment.rate-limit.* 키와 매핑된다.
- *
- * <p>post: 결제 생성(generic 요청 + 토스 checkout) 회원 키잉 한도({@link PaymentRateLimitPolicy}).
- * webhook: 토스 웹훅 IP 키잉 한도({@link PaymentWebhookRateLimitPolicy}, #320).
+ * 결제 엔드포인트 Rate Limit 설정. groove.payment.rate-limit.* 키와 매핑.
+ * post: 결제 생성 회원 키잉 한도({@link PaymentRateLimitPolicy}). webhook: 토스 웹훅 IP 키잉 한도({@link PaymentWebhookRateLimitPolicy}, #320).
  */
 @ConfigurationProperties(prefix = "groove.payment.rate-limit")
 public record PaymentRateLimitProperties(Policy post, Policy webhook) {

@@ -15,12 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 토스페이먼츠 웹훅 수신 API(#296).
  *
- * <p>토스가 결제 상태 변경을 {@code POST /api/v1/payments/toss/webhook} 으로 통보한다. 결제 웹훅
- * ({@code PAYMENT_STATUS_CHANGED})은 서명 헤더가 없어, 본문을 신뢰하는 대신 {@code paymentKey} 로 결제 조회 API 를
- * 재호출(재조회 검증)해 권위 상태만 적용한다(위조 본문 무력화). permitAll 공개 엔드포인트.
- *
- * <p>토스는 10초 내 2xx 미응답 시 최대 7회 재전송하므로, 가벼운 재조회+적용을 동기로 처리하고 빠르게 200 으로 ACK 한다.
- * 멱등키 {@code payment-callback:{paymentKey}} 를 confirm·폴링과 공유해 중복 수신·이중 처리에도 상태 전이는 1회다.
+ * 토스가 결제 상태 변경을 POST /api/v1/payments/toss/webhook 으로 통보한다. PAYMENT_STATUS_CHANGED 는 서명 헤더가 없어
+ * 본문을 신뢰하지 않고 paymentKey 로 결제 조회를 재호출해 권위 상태만 적용한다(위조 본문 무력화). permitAll 공개 엔드포인트.
+ * 토스는 10초 내 2xx 미응답 시 최대 7회 재전송하므로 동기 재조회+적용 후 빠르게 200 ACK 한다.
+ * 멱등키 payment-callback:{paymentKey} 를 confirm·폴링과 공유해 중복 수신·이중 처리에도 상태 전이는 1회.
  */
 @Tag(name = "토스 결제 웹훅", description = "토스페이먼츠 결제 상태 변경 웹훅 수신 (서명 대신 결제 조회 재검증)")
 @RestController

@@ -9,19 +9,8 @@ import java.text.Normalizer;
 /**
  * 토스 결제수단 문자열(한글) → 도메인 {@link PaymentMethod} 매퍼.
  *
- * <pre>
- *   카드                                          → CARD
- *   계좌이체                                       → BANK_TRANSFER
- *   가상계좌                                       → VIRTUAL_ACCOUNT
- *   간편결제                                       → EASY_PAY
- *   휴대폰                                         → MOBILE_PHONE
- *   문화상품권 / 도서문화상품권 / 게임문화상품권      → GIFT_CERTIFICATE
- * </pre>
- *
- * <p><b>{@link TossStatusMapper} 와 의도적으로 다른 점:</b> 미지/누락 값을 예외로 던지지 않고 {@code null} 을
- * 반환한다(보정 스킵). status 는 결제 진행에 필수라 미지값을 거부해야 하지만, method 는 기록·표시용이라
- * 토스가 새 결제수단 라벨을 추가했다고 <b>이미 확정된 결제를 실패시켜서는 안 된다</b>. 미지값은 경고만 남기고
- * 호출부가 잠정 method 를 유지하도록 한다.
+ * TossStatusMapper 와 달리 미지/누락 값을 예외 대신 null 반환(보정 스킵). status 는 결제 진행 필수라 미지값을 거부하지만,
+ * method 는 기록·표시용이라 새 결제수단 라벨이 추가됐다고 이미 확정된 결제를 실패시키면 안 된다. 미지값은 경고만 남기고 잠정 method 를 유지한다.
  */
 final class TossMethodMapper {
 
@@ -31,10 +20,8 @@ final class TossMethodMapper {
     }
 
     /**
-     * 토스 method 문자열을 도메인 수단으로 매핑한다. null/공백/미지값은 {@code null}(보정 스킵).
-     *
-     * <p>외부 PG 응답 문자열이라 정확 일치 전에 앞뒤 공백을 제거하고 유니코드 NFC 로 정규화한다 — 후행 공백·NFD
-     * 분해형 한글이 섞여도 매핑이 깨지지 않도록 한다.
+     * 토스 method 문자열을 도메인 수단으로 매핑. null/공백/미지값은 null(보정 스킵).
+     * 외부 PG 문자열이라 정확 일치 전에 strip + NFC 정규화한다 — 후행 공백·NFD 분해형 한글이 섞여도 매핑이 깨지지 않게.
      */
     static PaymentMethod toPaymentMethod(String tossMethod) {
         if (tossMethod == null || tossMethod.isBlank()) {

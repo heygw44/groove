@@ -5,10 +5,8 @@ import com.groove.payment.domain.PaymentStatus;
 import java.time.Instant;
 
 /**
- * PG 환불 요청에 대한 응답.
- *
- * <p>pgTransactionId: 환불 처리된 거래 식별자. status: 환불 후 상태(REFUNDED 또는 PARTIALLY_REFUNDED).
- * refundedAt: 환불 완료 시각.
+ * PG 환불 응답.
+ * pgTransactionId: 환불 처리된 거래. status: 환불 후 상태(REFUNDED/PARTIALLY_REFUNDED). refundedAt: 완료 시각.
  */
 public record RefundResponse(String pgTransactionId, PaymentStatus status, Instant refundedAt) {
 

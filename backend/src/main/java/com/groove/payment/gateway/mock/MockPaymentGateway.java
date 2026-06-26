@@ -28,16 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 결제 라이프사이클을 재현하는 Mock 게이트웨이.
- *
- * <ul>
- *   <li>request() — 처리 지연 후 거래 식별자를 발급하고 성공률로 최종 결과(PAID/FAILED)를 결정한 뒤
- *       웹훅 발사 시각을 정해 (auto-webhook 이 true 면) MockWebhookSimulator 에 예약하고 PENDING 으로 응답.</li>
- *   <li>confirm() — 토스 동기 승인 모델 흉내. paymentKey 거래를 즉시 PAID 로 기록하고 PAID 를 응답.</li>
- *   <li>query() — 웹훅 발사 시각 전이면 PENDING, 이후면 결정된 최종 상태(또는 환불 시 REFUNDED).</li>
- *   <li>refund() — 같은 idempotencyKey 는 첫 응답을 그대로 재반환하고, 다른 키는 REFUNDED 응답을 새로 만든다.</li>
- * </ul>
- *
- * <p>거래 상태는 프로세스 메모리에만 보관하며, MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목을 정리한다.
+ * - request() — 지연 후 거래 발급, 성공률로 최종 결과 결정, 웹훅 발사 시각 예약(auto-webhook 시), PENDING 응답.
+ * - confirm() — 토스 동기 승인 흉내. paymentKey 거래를 즉시 PAID 로 기록하고 PAID 응답.
+ * - query() — 발사 시각 전이면 PENDING, 이후면 최종 상태(환불 시 REFUNDED).
+ * - refund() — 같은 idempotencyKey 는 첫 응답 재반환, 다른 키는 REFUNDED 새로 생성.
+ * 거래 상태는 프로세스 메모리 보관, MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목 정리.
  */
 @Component
 @Profile({"local", "test", "docker"})
@@ -213,11 +208,7 @@ public class MockPaymentGateway implements PaymentGateway {
         return Duration.ofMillis(ThreadLocalRandom.current().nextLong(minMs, maxMs + 1));
     }
 
-    /**
-     * 거래 상태 스냅샷.
-     *
-     * <p>currentStatus: 현재 상태. fireAt: 웹훅 콜백 발사 시각(이 시각 이전 조회는 PENDING).
-     */
+    /** 거래 상태 스냅샷. fireAt 은 웹훅 콜백 발사 시각으로, 이전 조회는 PENDING. */
     private record Transaction(PaymentStatus currentStatus, Instant fireAt) {
     }
 }

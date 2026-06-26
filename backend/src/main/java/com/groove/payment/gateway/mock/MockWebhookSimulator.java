@@ -16,10 +16,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 비동기 웹훅 콜백을 흉내 내는 발사기.
- *
- * <p>게이트웨이가 정한 발사 시각(fireAt)에 전용 TaskScheduler(paymentTaskScheduler)
- * 위에서 일회성 작업을 예약해 WebhookDispatcher 로 결제 결과 통보를 전달한다.
+ * 비동기 웹훅 콜백을 흉내 내는 발사기. 게이트웨이가 정한 fireAt 시각에 전용 TaskScheduler(paymentTaskScheduler)로
+ * 일회성 작업을 예약해 WebhookDispatcher 로 결제 결과 통보를 전달한다.
  */
 @Component
 @Profile({"local", "dev", "test", "docker"})

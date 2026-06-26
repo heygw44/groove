@@ -6,9 +6,7 @@ import java.time.Instant;
 
 /**
  * PG 가 비동기로 전달하는 결제 결과 통보.
- *
- * <p>pgTransactionId: PG 거래 식별자. orderNumber: 주문 식별자. status: 결제 결과(PAID 또는 FAILED).
- * occurredAt: PG 측 처리 시각. signature: 서명 값.
+ * pgTransactionId: 거래 식별자. orderNumber: 주문 식별자. status: 결과(PAID/FAILED). occurredAt: PG 처리 시각. signature: 서명 값.
  */
 public record WebhookNotification(
         String pgTransactionId,

@@ -33,25 +33,15 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * 토스페이먼츠 실 PG 어댑터(#294). #293 의 {@code tossRestClient}(Basic Auth) 를 주입해 코어 API 를 호출한다.
- * dev/prod 프로파일에서만 로드되며, test/local/docker 는 {@code MockPaymentGateway} 를 쓴다(프로파일로 택1).
+ * 토스페이먼츠 실 PG 어댑터(#294). #293 의 tossRestClient(Basic Auth)로 코어 API 를 호출한다.
+ * dev/prod 에서만 로드(test/local/docker 는 MockPaymentGateway, 프로파일 택1).
  *
- * <p><b>승인 모델:</b> 토스는 동기 confirm 모델이라 {@link #confirm}이 진입점이다. 비동기 {@link #request}
- * (request→PENDING→웹훅)에 대응하는 토스 API 가 없어 {@code UnsupportedOperationException} 을 던진다.
- * confirm 을 호출하는 컨트롤러/프론트 결제위젯 배선은 M17 후속 이슈다.
- *
- * <p><b>멱등성:</b> {@link #confirm}/{@link #refund} 는 토스 POST API 라 {@code Idempotency-Key} 헤더로
- * 재시도 중복을 막는다. confirm 은 자연 멱등 단위인 {@code paymentKey} 를, refund 는 결정적으로 조립한
- * {@code RefundRequest#idempotencyKey()} 를 키로 쓴다(둘 다 같은 시도 → 같은 키 → 토스 dedup).
- *
- * <p><b>502 매핑 정책:</b> {@code tossRestClient} 는 커스텀 status handler 가 없어 4xx/5xx 를
- * {@code RestClientResponseException}(RuntimeException)으로 전파한다.
- * <ul>
- *   <li>{@link #confirm}/{@link #query} — 공통 호출부 래퍼가 없으므로 어댑터가 직접 PaymentGatewayException(502)으로 래핑.</li>
- *   <li>{@link #refund} — 두 호출부(AdminOrderService/ClaimService)가 {@code GatewayRefunds} 로 래핑하므로
- *       어댑터는 래핑하지 않고 raw RuntimeException 을 전파한다(더블래핑 방지).</li>
- * </ul>
- * 세 메서드 모두 실패 시 {@code logTossError} 로 토스 에러({code, message})를 진단 로깅한다.
+ * 승인 모델: 동기 confirm 모델이라 {@link #confirm}이 진입점. 비동기 {@link #request}에 대응하는 토스 API 가 없어 UnsupportedOperationException.
+ * 멱등성: confirm/refund 는 Idempotency-Key 헤더로 재시도 중복을 막는다 — confirm 은 paymentKey, refund 는 RefundRequest#idempotencyKey()(같은 시도 → 같은 키 → 토스 dedup).
+ * 502 매핑: tossRestClient 는 status handler 가 없어 4xx/5xx 를 RestClientResponseException 으로 전파한다.
+ * - confirm/query — 공통 호출부 래퍼가 없어 어댑터가 직접 PaymentGatewayException(502)으로 래핑.
+ * - refund — 호출부(AdminOrderService/ClaimService)가 GatewayRefunds 로 래핑하므로 raw RuntimeException 전파(더블래핑 방지).
+ * 세 메서드 모두 실패 시 logTossError 로 토스 에러({code, message})를 진단 로깅한다.
  */
 @Component
 @Profile({"dev", "prod"})
@@ -88,10 +78,9 @@ public class TossPaymentGateway implements PaymentGateway {
     }
 
     /**
-     * 재시도·서킷브레이커가 일시 장애로 간주할 예외 술어(#320). 토스 5xx 와 연결 단계 실패(연결 거부·연결 타임아웃)만
-     * 일시 장애다. 4xx(결정적 클라이언트 오류)·알 수 없는 상태(IllegalStateException)는 재시도/집계하지 않는다.
-     * 읽기 타임아웃({@link java.net.http.HttpTimeoutException} 중 connect 가 아닌 것)은 이미 read-timeout 을 소모했으므로
-     * 재시도하지 않는다 — 동기 confirm 워커 점유 증폭 방지. {@code CallNotPermittedException} 도 비대상이라 서킷 OPEN 시 즉시 전파된다.
+     * 재시도·서킷브레이커가 일시 장애로 간주할 예외 술어(#320). 토스 5xx 와 연결 단계 실패(연결 거부·연결 타임아웃)만 일시 장애.
+     * 4xx·알 수 없는 상태(IllegalStateException)는 재시도/집계 안 함. 읽기 타임아웃은 이미 read-timeout 을 소모해 재시도 안 함
+     * (동기 confirm 워커 점유 증폭 방지). CallNotPermittedException 도 비대상이라 서킷 OPEN 시 즉시 전파된다.
      */
     static boolean isRetryableTransient(Throwable throwable) {
         if (throwable instanceof RestClientResponseException response) {

@@ -11,18 +11,15 @@ import org.springframework.stereotype.Component;
 import java.util.function.Supplier;
 
 /**
- * POST /api/v1/payments/toss/webhook 에 대한 IP 단위 Rate Limit 정책 (#320).
+ * POST /api/v1/payments/toss/webhook IP 단위 Rate Limit 정책 (#320).
  *
- * <p>토스 웹훅은 permitAll 공개 엔드포인트이고 회원 토큰이 없어, 회원 키잉 결제 정책({@link PaymentRateLimitPolicy})에
- * 포함하면 토스 서버 IP 로 몰린 정상 웹훅이 회원 한도(5/분)에 throttle 된다. 그래서 별도 정책으로 분리하고
- * {@link RateLimitKeyResolver#clientIp()} 로 IP 키잉한다(한도는 {@link PaymentRateLimitProperties#webhook()}).
+ * 토스 웹훅은 permitAll·회원 토큰이 없어 회원 키잉 정책({@link PaymentRateLimitPolicy})에 넣으면 토스 IP 로 몰린
+ * 정상 웹훅이 회원 한도(5/분)에 throttle 된다. 그래서 분리하고 IP 키잉한다(한도는 {@link PaymentRateLimitProperties#webhook()}).
  *
- * <p><b>한도 트레이드오프:</b> 정상 토스 웹훅은 소수의 토스 IP 로 집계되므로 한도는 피크 수신을 수용하되 단일 IP 증폭을
- * 제한하는 수준으로 둔다(기본 분당 60). 위조 paymentKey 웹훅은 {@code TossWebhookService} 의 로컬 선조회가 outbound
- * 재조회 없이 무해 무시하므로 증폭은 이미 차단돼 있고, 이 율제는 그 선조회(인덱스 SELECT) 폭주를 캡하는 방어심층이다.
- * 웹훅 유실의 실질 백스톱은 폴링 리퍼({@code PaymentReconciliationScheduler})다.
- *
- * <p>목 웹훅({@code /api/v1/payments/webhook})은 HMAC 서명이 있고 비-prod 전용이라 이 정책 대상에서 제외한다.
+ * 한도 트레이드오프: 정상 웹훅은 소수의 토스 IP 로 집계되므로 피크 수용 + 단일 IP 증폭 제한 수준(기본 분당 60).
+ * 위조 paymentKey 는 TossWebhookService 로컬 선조회가 outbound 없이 무해 무시하므로, 이 율제는 그 선조회(인덱스 SELECT)
+ * 폭주를 캡하는 방어심층이다. 웹훅 유실의 실질 백스톱은 폴링 리퍼(PaymentReconciliationScheduler).
+ * 목 웹훅(/api/v1/payments/webhook)은 HMAC 서명이 있고 비-prod 전용이라 제외한다.
  */
 @Component
 public class PaymentWebhookRateLimitPolicy implements RateLimitPolicy {

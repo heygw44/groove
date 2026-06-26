@@ -9,9 +9,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /**
- * Mock PG 구성.
- *
- * <p>제공 빈 paymentTaskScheduler — MockWebhookSimulator 가 웹훅 콜백을 일회성 지연 실행하는 전용 TaskScheduler.
+ * Mock PG 구성. paymentTaskScheduler 빈 — MockWebhookSimulator 가 웹훅 콜백을 일회성 지연 실행하는 전용 TaskScheduler.
  */
 @Configuration(proxyBeanMethods = false)
 @Profile({"local", "dev", "test", "docker"})

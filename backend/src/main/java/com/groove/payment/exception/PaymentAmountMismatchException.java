@@ -4,9 +4,8 @@ import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 
 /**
- * 서버에 저장된 결제 예정액과 토스 successUrl 리다이렉트로 전달된 amount 가 일치하지 않는 경우. HTTP 400.
- *
- * <p>클라이언트 금액 조작(위변조)을 confirm 호출 전에 차단하기 위한 방어선이다.
+ * 저장된 결제 예정액과 successUrl 리다이렉트 amount 불일치. HTTP 400.
+ * 클라이언트 금액 위변조를 confirm 호출 전에 차단하는 방어선.
  */
 public class PaymentAmountMismatchException extends DomainException {
 

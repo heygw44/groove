@@ -7,9 +7,7 @@ import java.time.Duration;
 
 /**
  * Mock PG 동작 파라미터. payment.mock.* 키와 매핑되며 compact constructor 에서 검증한다.
- *
- * <p>successRate: 결제 성공 비율(0.0~1.0). delayMin/delayMax: 호출 처리 지연 범위.
- * webhookDelayMin/webhookDelayMax: 웹훅 콜백 발사 지연 범위. webhookSecret: 웹훅 서명 값.
+ * successRate: 성공 비율(0.0~1.0). delayMin/Max: 호출 지연. webhookDelayMin/Max: 웹훅 발사 지연. webhookSecret: 웹훅 서명 값.
  */
 @ConfigurationProperties(prefix = "payment.mock")
 public record PaymentMockProperties(

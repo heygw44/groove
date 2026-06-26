@@ -6,14 +6,11 @@ import java.time.Duration;
 
 /**
  * 토스 외부 PG 호출의 재시도·서킷브레이커 파라미터 (#320). payment.toss.resilience.* 키와 매핑되며 compact constructor 에서
- * 기본값·검증을 적용한다. dev/prod 프로파일에서만 바인딩된다(TossPaymentConfig 의 @Profile).
+ * 기본값·검증을 적용한다. dev/prod 프로파일에서만 바인딩(TossPaymentConfig 의 @Profile).
  *
- * <p><b>재시도:</b> 일시 장애(5xx·연결 실패)만 재시도한다. 동기 confirm(사용자 대기) 워커 점유·UX 를 보호하려고
- * maxAttempts 는 작게(기본 2=재시도 1회), waitDuration 도 짧게(기본 200ms 지수 백오프) 둔다. 읽기 타임아웃은
- * 재시도하지 않는다(어댑터 술어가 연결 단계 실패만 재시도) — 이미 read-timeout 을 소모했으므로 재시도는 점유만 늘린다.
- *
- * <p><b>서킷브레이커:</b> 일시 장애를 임계 비율 이상 누적하거나 느린 호출이 임계 이상이면 OPEN 되어 후속 호출을
- * 빠르게 실패(CallNotPermittedException)시킨다 → 톰캣 워커 점유·장애 전파를 끊는다. waitDuration 후 HALF_OPEN 으로 탐색한다.
+ * 재시도: 일시 장애(5xx·연결 실패)만. 동기 confirm 워커 점유·UX 보호로 maxAttempts 작게(기본 2)·waitDuration 짧게(기본 200ms 백오프).
+ * 읽기 타임아웃은 재시도 안 함 — 이미 read-timeout 을 소모해 재시도는 점유만 늘린다.
+ * 서킷브레이커: 임계 비율 이상 실패·느린 호출이면 OPEN 되어 후속 호출을 빠르게 실패(CallNotPermittedException)시켜 워커 점유·장애 전파를 끊는다. waitDuration 후 HALF_OPEN 탐색.
  */
 @ConfigurationProperties(prefix = "payment.toss.resilience")
 public record TossResilienceProperties(
