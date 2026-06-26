@@ -1,10 +1,13 @@
 package com.groove.catalog.artist.application;
 
+import com.groove.catalog.album.application.AlbumCaches;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
 import com.groove.catalog.artist.exception.ArtistInUseException;
 import com.groove.catalog.artist.exception.ArtistNotFoundException;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +34,16 @@ public class ArtistService {
         return artistRepository.save(Artist.create(command.name(), command.description()));
     }
 
+    /**
+     * 아티스트 수정. 이름이 바뀌면 album.artist_name 비정규화 컬럼을 일괄 동기화하고,
+     * 라이브 artist.getName() 을 렌더하는 앨범 조회 캐시(albumDetail/albumLandingList)를 무효화한다.
+     * 어노테이션은 nameChanged 내부 상태를 조건으로 쓸 수 없어 description-only 수정에서도 evict 되지만,
+     * admin 저빈도 쓰기라 무해하다. DETAIL 은 key=앨범 id 구조라 아티스트→앨범 역매핑이 없어 allEntries 로 비운다.
+     */
+    @Caching(evict = {
+            @CacheEvict(cacheNames = AlbumCaches.DETAIL, allEntries = true),
+            @CacheEvict(cacheNames = AlbumCaches.LANDING_LIST, allEntries = true)
+    })
     @Transactional
     public Artist update(Long id, ArtistCommand command) {
         Artist artist = artistRepository.findById(id)

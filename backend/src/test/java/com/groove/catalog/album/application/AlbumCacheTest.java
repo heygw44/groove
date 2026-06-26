@@ -6,6 +6,8 @@ import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
+import com.groove.catalog.artist.application.ArtistCommand;
+import com.groove.catalog.artist.application.ArtistService;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.artist.domain.ArtistRepository;
 import com.groove.catalog.genre.domain.Genre;
@@ -58,6 +60,9 @@ class AlbumCacheTest {
 
     @Autowired
     private AlbumService albumService;
+
+    @Autowired
+    private ArtistService artistService;
 
     @MockitoSpyBean
     private AlbumRepository albumRepository;
@@ -134,6 +139,22 @@ class AlbumCacheTest {
         assertThatThrownBy(() -> albumService.findDetail(id))
                 .as("delete 후에는 캐시가 비워져 재조회가 404 여야 한다(stale 캐시 서빙 금지)")
                 .isInstanceOf(AlbumNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("아티스트 이름변경 — 상세 캐시 evict(변경된 아티스트 이름이 바로 보임)")
+    void artistRename_evictsAlbumDetailCache() {
+        Album album = seedSellingAlbum("Artist Rename", 5);
+        Long albumId = album.getId();
+        Long artistId = album.getArtist().getId();
+
+        String original = albumService.findDetail(albumId).artist().name(); // 캐시 적재
+        artistService.update(artistId, new ArtistCommand("Renamed Artist", null));
+
+        assertThat(albumService.findDetail(albumId).artist().name())
+                .as("아티스트 이름변경이 상세 캐시를 evict 해 새 이름이 즉시 보여야 한다")
+                .isNotEqualTo(original)
+                .isEqualTo("Renamed Artist");
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.groove.catalog.album.application.AlbumSearchCondition;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -34,6 +35,18 @@ public record AlbumSearchRequest(
         @Schema(description = "판매 상태 필터 (미지정 시 SELLING 강제, HIDDEN 은 공개 검색에서 거부)", example = "SELLING")
         AlbumStatus status
 ) {
+
+    /** 가격 범위 교차 검증 — 한쪽이 비면 통과. min>max 면 빈 결과 대신 400 으로 거절한다. */
+    @AssertTrue(message = "최소 가격은 최대 가격보다 클 수 없습니다")
+    public boolean isPriceRangeValid() {
+        return minPrice == null || maxPrice == null || minPrice <= maxPrice;
+    }
+
+    /** 연도 범위 교차 검증 — 한쪽이 비면 통과. min>max 면 빈 결과 대신 400 으로 거절한다. */
+    @AssertTrue(message = "최소 발매 연도는 최대 발매 연도보다 클 수 없습니다")
+    public boolean isYearRangeValid() {
+        return minYear == null || maxYear == null || minYear <= maxYear;
+    }
 
     /** Public 변환 — status 가 null 이면 SELLING 으로 강제한다. */
     public AlbumSearchCondition toPublicCondition() {
