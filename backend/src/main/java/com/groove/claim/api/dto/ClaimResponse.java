@@ -9,9 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
 
-/**
- * 반품 상세 응답 — 회원 조회·관리자 조회·승인/거부/환불 결과 공용.
- */
+/** 반품 상세 응답 — 회원 조회·관리자 조회·승인/거부/환불 결과 공용. */
 public record ClaimResponse(
         @Schema(description = "반품 식별자", example = "5")
         Long claimId,

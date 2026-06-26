@@ -20,15 +20,9 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 회원 보유 쿠폰 — 정책(Coupon) 의 발급 인스턴스.
- *
- * <p>UNIQUE(coupon_id, member_id) 로 회원당 동일 쿠폰 1장을 DB 가 강제한다. 사용 주문은 orderId 단방향
- * 역참조로 추적한다.
- *
- * <p>memberId·orderId 는 연관 매핑 없이 식별자 컬럼으로만 둔다. coupon 만 ManyToOne 으로 매핑한다.
- *
- * <p>상태 전이는 use/restore/expire/cancel 가드 메서드만 허용한다 — MemberCouponStatus.canTransitionTo
- * 위반 시 IllegalCouponStateTransitionException.
+ * 회원 보유 쿠폰 — 정책(Coupon) 의 발급 인스턴스. UNIQUE(coupon_id, member_id) 로 회원당 동일 쿠폰 1장을 DB 가 강제한다.
+ * memberId·orderId 는 식별자 컬럼으로만 두고 coupon 만 ManyToOne 으로 매핑한다.
+ * 상태 전이는 use/restore/expire/cancel 가드 메서드만 허용한다(위반 시 IllegalCouponStateTransitionException).
  */
 @Entity
 @Table(name = "member_coupon", uniqueConstraints = {
@@ -75,9 +69,7 @@ public class MemberCoupon extends BaseTimeEntity {
         this.expiresAt = expiresAt;
     }
 
-    /**
-     * 발급. 초기 상태 ISSUED, issuedAt 은 주입된 now, expiresAt 은 발급 시점 coupon.validUntil 스냅샷이다.
-     */
+    /** 발급. 초기 상태 ISSUED, issuedAt 은 주입된 now, expiresAt 은 발급 시점 coupon.validUntil 스냅샷이다. */
     public static MemberCoupon issue(Coupon coupon, Long memberId, Instant now) {
         Objects.requireNonNull(coupon, "coupon must not be null");
         Objects.requireNonNull(memberId, "memberId must not be null");
@@ -95,13 +87,9 @@ public class MemberCoupon extends BaseTimeEntity {
     }
 
     /**
-     * 복원 (USED → ISSUED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을 비운다.
-     *
-     * <p>정당한 취소/환불로 돌려받은 쿠폰은 복원 시점에 이미 만료(expiresAt &lt; now)됐더라도 소멸시키지 않고,
-     * expiresAt 을 now + grace 로 연장해 되살린다 — 만료 직전 사용했다가 취소했다는 이유로 쿠폰을 잃지 않게 한다.
-     *
-     * <p>멱등: USED 가 아닌 상태(이미 ISSUED/EXPIRED/CANCELLED)면 no-op. 무락 동시 복원의 두 번째 호출이
-     * IllegalCouponStateTransitionException 으로 트랜잭션을 롤백시키지 않도록 한다.
+     * 복원 (USED → ISSUED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을 비운다. 복원 시점에 이미 만료됐어도
+     * 소멸시키지 않고 expiresAt 을 now + grace 로 연장해 되살린다(만료 직전 사용 후 취소로 쿠폰을 잃지 않게).
+     * 멱등: USED 가 아니면 no-op — 무락 동시 복원의 두 번째 호출이 트랜잭션을 롤백시키지 않도록 한다.
      */
     public void restore(Instant now, Duration grace) {
         Objects.requireNonNull(now, "now must not be null");
@@ -118,10 +106,7 @@ public class MemberCoupon extends BaseTimeEntity {
     }
 
     /**
-     * 만료 (ISSUED → EXPIRED).
-     *
-     * <p>운영 만료 배치는 MemberCouponRepository.expireOverdueBatch 벌크 UPDATE 로 본 메서드를 우회한다.
-     * 본 메서드는 단건 만료 경로용 진입점이다.
+     * 만료 (ISSUED → EXPIRED). 단건 만료 경로용 진입점 — 운영 만료 배치는 expireOverdueBatch 벌크 UPDATE 로 우회한다.
      */
     public void expire() {
         transitionTo(MemberCouponStatus.EXPIRED);

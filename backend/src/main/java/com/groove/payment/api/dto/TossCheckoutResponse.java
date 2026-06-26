@@ -3,11 +3,11 @@ package com.groove.payment.api.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 토스 결제 요청(checkout) 응답 — 프론트 결제위젯 초기화에 필요한 값.
+ * 토스 결제 요청(checkout) 응답 — 프론트 결제위젯 초기화 값.
  *
- * <p>clientKey 로 위젯을 띄우고, orderId(= 주문번호)·amount(= 서버 저장 payable)로 결제창을 연다.
- * successUrl 은 결제별 토큰(callback_token)이 쿼리에 박힌, failUrl 은 토큰 없는 서버 콜백 URL로, 위젯의 requestPayment 에 그대로 넘긴다(#309).
- * clientKey·successUrl·failUrl 은 dev/prod 에서만 바인딩되며(test/local 은 null) — 토스 모드는 dev/prod 한정이다.
+ * clientKey 로 위젯을 띄우고 orderId(주문번호)·amount(서버 저장 payable)로 결제창을 연다.
+ * successUrl 엔 결제별 토큰(callback_token)이 쿼리에 박히고 failUrl 은 토큰 없는 콜백 URL(#309).
+ * clientKey·successUrl·failUrl 은 dev/prod 에서만 바인딩(test/local 은 null) — 토스 모드는 dev/prod 한정.
  */
 public record TossCheckoutResponse(
         @Schema(description = "토스 결제위젯 공개 클라이언트 키 (dev/prod 에서만 제공, 그 외 null)",

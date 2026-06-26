@@ -13,16 +13,9 @@ import java.time.Clock;
 import java.time.Instant;
 
 /**
- * 회원 보유 쿠폰 만료 배치.
- *
- * <p>groove.coupon.expiration.cron cron 으로 주기 실행되며(기본 매시 정각), expires_at 이 지난 ISSUED 행을
- * groove.coupon.expiration.batch-size 개씩 독립 트랜잭션으로 EXPIRED 로 전환한다. cron 을 "-" 로 두면
- * 비활성화된다.
- *
- * <p>USED/CANCELLED 는 종착 상태라 WHERE 조건에서 제외된다. 벌크 UPDATE 는 MemberCoupon.expire() 를
- * 우회한다.
- *
- * <p>배치 실패는 잡아서 로깅만 하고 다음 주기에 재시도한다.
+ * 회원 보유 쿠폰 만료 배치. groove.coupon.expiration.cron 으로 주기 실행(기본 매시 정각), expires_at 이 지난 ISSUED 행을
+ * batch-size 개씩 독립 트랜잭션으로 EXPIRED 로 전환한다. 벌크 UPDATE 는 MemberCoupon.expire() 를 우회한다.
+ * 배치 실패는 로깅만 하고 다음 주기에 재시도한다.
  */
 @Component
 public class MemberCouponExpirationTask {

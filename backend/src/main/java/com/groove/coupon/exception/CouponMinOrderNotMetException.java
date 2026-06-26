@@ -3,11 +3,7 @@ package com.groove.coupon.exception;
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 
-/**
- * 쿠폰 최소 주문금액 미충족. HTTP 422.
- *
- * <p>Coupon.calculateDiscount(long) 가 주문 소계(subtotal)가 쿠폰의 minOrderAmount 미만일 때 던진다.
- */
+/** 쿠폰 최소 주문금액 미충족 — subtotal < minOrderAmount. HTTP 422. */
 public class CouponMinOrderNotMetException extends DomainException {
 
     public CouponMinOrderNotMetException(long subtotal, long minOrderAmount) {

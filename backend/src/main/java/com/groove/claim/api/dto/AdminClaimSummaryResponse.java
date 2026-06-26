@@ -7,9 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/**
- * 관리자 반품 목록 요약 응답. 항목은 펼치지 않는다.
- */
+/** 관리자 반품 목록 요약 응답. 항목은 펼치지 않는다. */
 public record AdminClaimSummaryResponse(
         @Schema(description = "반품 식별자", example = "5")
         Long claimId,

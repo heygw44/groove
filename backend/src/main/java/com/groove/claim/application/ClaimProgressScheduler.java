@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 /**
  * 반품 자동 진행 스케줄러.
  *
- * <p>틱마다 한 단계만 민다 — APPROVED 로 approve-delay 이상 머문 반품을 IN_TRANSIT 으로, IN_TRANSIT 로
+ * 틱마다 한 단계만 민다 — APPROVED 로 approve-delay 이상 머문 반품을 IN_TRANSIT 으로, IN_TRANSIT 로
  * transit-delay 이상 머문 반품을 INSPECTING 으로, INSPECTING 으로 inspect-delay 이상 머문 반품을 검수 통과 처리해
  * REFUNDED(PG 환불 + 재입고 + 전량 시 쿠폰 복원)로 보낸다. 상태 전이는 ClaimService 트랜잭션 메서드에 위임하고
  * 건별로 격리한다. 한 주기 처리량은 batch-size 로 제한한다.

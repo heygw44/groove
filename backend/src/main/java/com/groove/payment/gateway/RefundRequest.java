@@ -2,10 +2,8 @@ package com.groove.payment.gateway;
 
 /**
  * PG 환불 요청 파라미터.
- *
- * <p>pgTransactionId: 환불 대상 거래 식별자. amount: 환불 금액. reason: 환불 사유(선택).
- * idempotencyKey: 멱등 키 — 같은 키로 재호출 시 첫 응답을 재사용한다. blank 불가,
- * {@value #MAX_IDEMPOTENCY_KEY_LENGTH}자 이하.
+ * pgTransactionId: 환불 대상 거래. amount: 환불 금액. reason: 사유(선택).
+ * idempotencyKey: 멱등 키 — 같은 키 재호출은 첫 응답 재사용. blank 불가, {@value #MAX_IDEMPOTENCY_KEY_LENGTH}자 이하.
  */
 public record RefundRequest(String pgTransactionId, long amount, String reason, String idempotencyKey) {
 

@@ -7,14 +7,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * 아웃박스 DLQ(격리) 운영 메트릭 (#323) — 영구 실패(poison) 이벤트의 가시성을 actuator/Prometheus 로 노출한다.
- *
- * <p>두 지표를 상호 보완으로 내보낸다:
- * <ul>
- *   <li>{@code groove.outbox.dlq.size} (Gauge) — 현재 격리 backlog. 미발행 + attempt_count >= max-attempts 행 수를
- *       scrape 시점에 조회한다(인덱스 카운트). 재시작에도 DB 진실값을 반영하므로 "지금 쌓여 있는 격리 건"의 권위 값이다.</li>
- *   <li>{@code groove.outbox.dlq.quarantined} (Counter, eventType 태그) — 격리 전이(transition) 누적 건수.
- *       이벤트가 상한에 도달하는 순간 1회 증가한다. {@code increase()[5m]} 류 알림룰로 신규 격리 발생률을 잡는다.</li>
- * </ul>
+ * 두 지표를 상호 보완으로 내보낸다:
+ * - groove.outbox.dlq.size (Gauge) — 현재 격리 backlog. 미발행 + attempt_count >= max-attempts 행 수를 scrape
+ *   시점에 조회한다(인덱스 카운트). 재시작에도 DB 진실값을 반영하는 권위 값이다.
+ * - groove.outbox.dlq.quarantined (Counter, eventType 태그) — 격리 전이 누적 건수. 상한 도달 순간 1회 증가하며
+ *   increase()[5m] 류 알림룰로 신규 격리 발생률을 잡는다.
  */
 @Component
 public class OutboxMetrics {

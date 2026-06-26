@@ -11,8 +11,7 @@ import jakarta.persistence.Table;
 
 /**
  * 음반 레이블 엔티티. name 최대 100 자의 단순 카탈로그 메타.
- *
- * <p>클래스 레벨 @BatchSize: label LAZY 프록시 N+1 을 IN 쿼리 1회로 흡수한다.
+ * 클래스 레벨 @BatchSize 는 label LAZY 프록시 N+1 을 IN 쿼리 1회로 흡수한다.
  */
 @Entity
 @Table(name = "label")

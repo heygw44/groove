@@ -4,9 +4,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
 /**
- * Spring Data JPA Auditing 활성화.
- *
- * <p>BaseTimeEntity 의 @CreatedDate/@LastModifiedDate 가 동작하도록 한다.
+ * Spring Data JPA Auditing 활성화 — BaseTimeEntity 의 @CreatedDate/@LastModifiedDate 가 동작하게 한다.
  */
 @Configuration
 @EnableJpaAuditing

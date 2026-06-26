@@ -27,9 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 결제 API.
  *
- * <p>POST /payments 는 Idempotency-Key 헤더를 검증(없으면 400)하고 같은 키당 한 번만 실행하며, 재요청은 캐시된 응답을 replay 한다(202).
- * POST /payments 는 회원/게스트 공통 permitAll, GET /payments/{id} 는 회원 전용이다.
- * POST /payments 는 회원당 분당 5회 Rate Limit 을 적용한다(회원은 JWT memberId, 게스트·토큰 부재 시 IP 폴백).
+ * POST /payments 는 Idempotency-Key 필수(없으면 400)·키당 1회 실행·재요청은 응답 replay(202), 회원/게스트 공통 permitAll·회원당 분당 5회 Rate Limit(memberId, 게스트는 IP 폴백).
+ * GET /payments/{id} 는 회원 전용.
  */
 @Tag(name = "결제", description = "결제 요청(회원/게스트, 멱등) · 본인 결제 단건 조회")
 @RestController

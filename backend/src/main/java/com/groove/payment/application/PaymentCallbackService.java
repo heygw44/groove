@@ -30,9 +30,8 @@ import java.util.stream.Collectors;
  * - FAILED: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 재고 복원, 쿠폰 USED→ISSUED.
  * - 알 수 없는 거래/이미 종착 상태: 무시.
  *
- * <p>진입점: {@link #applyResult}(웹훅/폴링/토스 만료 리퍼), {@link #applyConfirmedPaid}(토스 confirm 성공),
- * {@link #linkPendingPaymentKey}(토스 비-PAID confirm). PENDING 잠금·흡수는 {@code lockPending} 로,
- * PAID/FAILED 적용 본문은 {@code applyTo} 로 일원화한다.
+ * 진입점은 applyResult(웹훅/폴링/토스 만료 리퍼)·applyConfirmedPaid(토스 confirm 성공)·linkPendingPaymentKey(토스 비-PAID confirm)다.
+ * PENDING 잠금·흡수는 lockPending, PAID/FAILED 적용 본문은 applyTo 로 일원화한다.
  */
 @Service
 public class PaymentCallbackService {
@@ -66,7 +65,6 @@ public class PaymentCallbackService {
     /** PG 콜백 결과(PAID/FAILED)를 적용한다. failureReason 은 FAILED 일 때만 의미, null 이면 기본 사유 기록. */
     @Transactional
     public PaymentCallbackResult applyResult(String pgTransactionId, PaymentStatus result, String failureReason) {
-        // 결과는 PAID 또는 FAILED 만 허용.
         if (result != PaymentStatus.PAID && result != PaymentStatus.FAILED) {
             throw new IllegalArgumentException("결제 콜백 결과는 PAID 또는 FAILED 여야 합니다: " + result);
         }
@@ -81,10 +79,9 @@ public class PaymentCallbackService {
     }
 
     /**
-     * 토스 confirm 성공 적용 — orderId 로 PENDING Payment 를 잠그고(FOR UPDATE), 잠정 pgTransactionId 를 실제
-     * paymentKey 로 교체하고 잠정 method 를 confirm 이 알려준 실제 수단으로 보정한 뒤 PAID 를 적용한다. successUrl
-     * 새로고침/재호출에도 1회만 전이한다(이미 PAID 면 흡수). confirmedAmount 는 confirm 호출 전 이미 검증되었으나,
-     * 직접 호출 방어를 위해 한 번 더 대조한다. confirmedMethod 가 null(Mock·미지 수단)이면 보정을 건너뛴다.
+     * 토스 confirm 성공 적용 — orderId 로 PENDING Payment 를 잠그고(FOR UPDATE) 잠정 pgTransactionId/method 를 실제값으로
+     * 교체한 뒤 PAID 를 적용한다. successUrl 새로고침/재호출에도 1회만 전이한다(이미 PAID 면 흡수). confirmedAmount 는
+     * confirm 전 이미 검증됐지만 직접 호출 방어로 한 번 더 대조하고, confirmedMethod 가 null(Mock)이면 보정을 건너뛴다.
      */
     @Transactional
     public PaymentCallbackResult applyConfirmedPaid(long orderId, String paymentKey, long confirmedAmount,
@@ -103,10 +100,9 @@ public class PaymentCallbackService {
     }
 
     /**
-     * 토스 confirm 이 즉시 PAID 가 아닌(가상계좌 등) PENDING 을 반환했을 때, 잠정 pgTransactionId 를 실제 paymentKey 로
-     * 교체하고 잠정 method 를 실제 수단으로 보정한다(상태 전이 없음). 이후 입금 PAID 웹훅/폴링이
-     * {@code findByPgTransactionIdForUpdate(paymentKey)} 로 같은 행을 찾아 정산할 수 있게 한다. confirm 시점에 이미
-     * method 가 응답에 있으므로 여기서 보정해야 정합성 갭이 완전히 닫힌다. 없음/종착이면 no-op, confirmedMethod null 이면 보정 생략.
+     * 토스 confirm 이 즉시 PAID 가 아닌(가상계좌 등) PENDING 을 반환했을 때, 잠정 pgTransactionId/method 를 실제값으로
+     * 교체한다(상태 전이 없음). 이후 입금 PAID 웹훅/폴링이 paymentKey 로 같은 행을 찾아 정산할 수 있게 한다.
+     * 없음/종착이면 no-op, confirmedMethod 가 null 이면 보정을 생략한다.
      */
     @Transactional
     public void linkPendingPaymentKey(long orderId, String paymentKey, PaymentMethod confirmedMethod) {
@@ -118,9 +114,8 @@ public class PaymentCallbackService {
     }
 
     /**
-     * PENDING 결제의 잠정 pgTransactionId 를 실제 paymentKey 로 교체하고(환불 경로가 paymentKey 를 읽음), 잠정 method 를
-     * confirm 이 알려준 실제 결제수단으로 보정한다(#307). confirmedMethod 가 null(Mock·미지 수단)이면 보정을 건너뛴다.
-     * 토스 confirm 의 PAID·비-PAID 두 진입점이 공유한다.
+     * PENDING 결제의 잠정 pgTransactionId 를 실제 paymentKey 로 교체하고(환불 경로가 paymentKey 를 읽음) 잠정 method 를
+     * 실제 결제수단으로 보정한다(#307). confirmedMethod 가 null 이면 보정 생략. 토스 confirm 의 PAID·비-PAID 진입점이 공유한다.
      */
     private static void linkAndCorrect(Payment payment, String paymentKey, PaymentMethod confirmedMethod) {
         payment.linkPgTransaction(paymentKey);
@@ -156,7 +151,7 @@ public class PaymentCallbackService {
      * - FAILED: markFailed + Order PAYMENT_FAILED + 재고 복원 + 쿠폰 USED→ISSUED.
      */
     private PaymentCallbackResult applyTo(Payment payment, PaymentStatus result, String failureReason) {
-        // 적용 분기는 PAID/FAILED 만 유효 — 진입점 가드를 거치지만 본문에서도 인변을 강제한다.
+        // 적용 분기는 PAID/FAILED 만 유효 — 진입점 가드를 거치지만 본문에서도 불변식을 강제한다.
         if (result != PaymentStatus.PAID && result != PaymentStatus.FAILED) {
             throw new IllegalArgumentException("적용 결과는 PAID 또는 FAILED 여야 합니다: " + result);
         }

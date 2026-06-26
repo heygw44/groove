@@ -12,14 +12,9 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Refresh Token 영속 엔티티.
- *
- * <p>토큰 본문은 저장하지 않고 SHA-256 해시 값을 tokenHash (CHAR(64), UNIQUE) 로 저장해 lookup 한다.
- *
- * <p>회전 체인은 replacedByTokenId 로 추적한다 — 회전 시 기존 행을 revoke 하면서 새 행 id 를 채운다.
- * 강제 무효화는 replacedByTokenId 가 null 인 채로 revokedAt 만 설정된다.
- *
- * <p>revokedAt/replacedByTokenId 는 Repository 의 @Modifying JPQL 로만 변경되며, 변경자 메서드를 노출하지 않는다.
+ * Refresh Token 영속 엔티티. 토큰 본문은 저장하지 않고 SHA-256 해시를 tokenHash(CHAR(64), UNIQUE)로 저장해 lookup 한다.
+ * 회전 체인은 replacedByTokenId 로 추적한다 — 회전은 revoke 하며 새 행 id 를 채우고, 강제 무효화는 id 없이 revokedAt 만 설정.
+ * revokedAt·replacedByTokenId 는 Repository 의 @Modifying JPQL 로만 변경하며 변경자 메서드를 노출하지 않는다.
  */
 @Entity
 @Table(

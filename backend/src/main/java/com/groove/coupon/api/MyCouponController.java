@@ -26,11 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Set;
 
-/**
- * 회원 본인 보유 쿠폰 목록 (GET /members/me/coupons).
- *
- * <p>정렬 화이트리스트: issuedAt 만 허용.
- */
+/** 회원 본인 보유 쿠폰 목록 (GET /members/me/coupons). 정렬 화이트리스트: issuedAt 만 허용. */
 @Tag(name = "내 쿠폰", description = "로그인한 회원 본인이 보유한 쿠폰 목록 조회")
 @RestController
 @RequestMapping("/api/v1/members/me/coupons")

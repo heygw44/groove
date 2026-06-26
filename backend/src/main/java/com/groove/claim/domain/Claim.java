@@ -27,7 +27,7 @@ import java.util.Objects;
 /**
  * 반품(claim) — 배송완료 후 변심 환불의 역물류 aggregate root.
  *
- * <p>주문/품목을 참조하되 ClaimStatus 별도 상태머신을 가진다. 상태 전이는 approve/startTransit/startInspecting/
+ * 주문/품목을 참조하되 ClaimStatus 별도 상태머신을 가진다. 상태 전이는 approve/startTransit/startInspecting/
  * markRefunded/reject 단일 진입점만 허용하고, 합법 전이는 ClaimStatus.canTransitionTo 가 판정한다 — 위반 시
  * ClaimInvalidStateTransitionException(409). ClaimItem 은 aggregate child(cascade=ALL + orphanRemoval=true).
  */

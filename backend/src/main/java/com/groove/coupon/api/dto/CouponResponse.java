@@ -8,8 +8,7 @@ import java.time.Instant;
 
 /**
  * 발급 가능한 쿠폰 응답 (GET /coupons).
- *
- * <p>remainingQuantity 는 total_quantity − issued_count 이며 무제한 발급이면 null.
+ * remainingQuantity 는 total_quantity − issued_count 이며 무제한 발급이면 null.
  */
 public record CouponResponse(
         @Schema(description = "쿠폰 식별자", example = "1")

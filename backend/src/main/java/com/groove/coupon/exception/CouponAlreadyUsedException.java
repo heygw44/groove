@@ -3,11 +3,7 @@ package com.groove.coupon.exception;
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 
-/**
- * 이미 사용된 회원 쿠폰의 재적용 시도. HTTP 409.
- *
- * <p>MemberCoupon.status == USED 인 경우 발생한다.
- */
+/** 이미 사용된 회원 쿠폰(status == USED)의 재적용 시도. HTTP 409. */
 public class CouponAlreadyUsedException extends DomainException {
 
     public CouponAlreadyUsedException(Long memberCouponId) {

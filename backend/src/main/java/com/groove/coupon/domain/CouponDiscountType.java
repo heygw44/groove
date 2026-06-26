@@ -1,10 +1,8 @@
 package com.groove.coupon.domain;
 
 /**
- * 쿠폰 할인 방식.
- *
- * <p>할인액 산정을 각 상수의 행위로 위임한다. Coupon.calculateDiscount(long) 가 가드·불변식을 적용하기 전,
- * 본 메서드는 "원시 할인액(raw)" 만 계산한다.
+ * 쿠폰 할인 방식. 할인액 산정을 각 상수의 행위로 위임한다.
+ * Coupon.calculateDiscount 가 가드·불변식을 적용하기 전 단계의 "원시 할인액(raw)" 만 계산한다.
  */
 public enum CouponDiscountType {
 

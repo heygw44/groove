@@ -3,9 +3,8 @@ package com.groove.payment.gateway;
 import com.groove.payment.domain.PaymentStatus;
 
 /**
- * PG 결제 요청에 대한 즉시 응답. status 는 항상 PENDING.
- *
- * <p>pgTransactionId: PG 가 발급한 거래 식별자. provider: PG 식별자.
+ * PG 결제 요청 즉시 응답. status 는 항상 PENDING.
+ * pgTransactionId: PG 발급 거래 식별자. provider: PG 식별자.
  */
 public record PaymentResponse(String pgTransactionId, PaymentStatus status, String provider) {
 

@@ -13,9 +13,7 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-/**
- * 관리자 부분 취소 요청 (POST /admin/claims/cancel). 취소할 OrderItem 과 수량을 항목 목록으로 받는다.
- */
+/** 관리자 부분 취소 요청 (POST /admin/claims/cancel). 취소할 OrderItem 과 수량을 항목 목록으로 받는다. */
 public record OrderPartialCancelRequest(
         @Schema(description = "취소 대상 주문 번호", example = "ORD-20260606-A1B2C3")
         @NotBlank String orderNumber,

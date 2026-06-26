@@ -12,10 +12,8 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * 결제 완료(OrderPaid) 아웃박스 컨슈머. ORDER_PAID 이벤트 payload 를 OrderPaidEvent 로 역직렬화해
- * ShippingProvisioner.provisionForOrder 로 배송을 생성한다.
- *
- * <p>DataIntegrityViolationException 발생 시, 해당 주문 배송이 실제 존재할 때만 흡수하고
- * 그 외 위반은 전파해 다음 주기에 재시도시킨다.
+ * ShippingProvisioner.provisionForOrder 로 배송을 생성한다. DataIntegrityViolationException 은 해당 주문 배송이
+ * 실제 존재할 때만 흡수하고, 그 외 위반은 전파해 다음 주기에 재시도시킨다.
  */
 @Component
 public class OrderPaidOutboxHandler implements OutboxEventHandler {

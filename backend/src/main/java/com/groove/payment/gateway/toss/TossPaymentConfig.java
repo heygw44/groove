@@ -21,24 +21,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * 토스페이먼츠 연동 구성(#293) — 코드베이스 최초의 외부 HTTP 클라이언트.
+ * 토스페이먼츠 연동 구성(#293) — 코드베이스 최초의 외부 HTTP 클라이언트. dev/prod 에서만 활성(test/local/docker 는 MockPaymentGateway).
  *
- * <p>dev/prod 프로파일에서만 활성화되며, test/local/docker 는 기존 MockPaymentGateway 를 그대로 쓴다.
- *
- * <p><b>커넥션 풀(#320):</b> {@link JdkClientHttpRequestFactory}({@link HttpClient})를 쓴다. JDK21 내장
- * HttpClient 는 keep-alive 커넥션을 풀링·재사용하므로, 매 호출 소켓을 새로 여는 {@code SimpleClientHttpRequestFactory}
- * (JDK HttpURLConnection)와 달리 토스 지연 시 톰캣 워커가 소켓 생성에 묶이지 않는다. connect 타임아웃은 HttpClient 에,
- * read 타임아웃은 RequestFactory 에 건다. (풀 상한·stale 축출 등 세밀 제어가 필요해지면 Apache HttpClient5 가 업그레이드 경로다.)
- *
- * <p><b>재시도·서킷브레이커(#320):</b> Resilience4j core 로 만든 {@link Retry}·{@link CircuitBreaker} 빈을
- * {@link TossPaymentGateway} 에 주입해 confirm/query/refund 호출을 감싼다. 일시 장애만 재시도하고, 누적 실패·느린 호출이
- * 임계를 넘으면 서킷이 OPEN 되어 후속 호출을 빠르게 실패시켜 장애 전파를 끊는다. 설정은 {@link TossResilienceProperties}.
- *
- * <p><b>4xx/5xx → 502 매핑 정책:</b> 이 RestClient 에는 커스텀 status handler 를 두지 않는다.
- * 토스 오류 응답은 RestClient 기본 동작대로 {@code RestClientResponseException}(RuntimeException)으로 전파되고,
- * 결제 호출부(PaymentService#callGateway, GatewayRefunds#refund)가 이미 모든 RuntimeException 을
- * {@code PaymentGatewayException}(HTTP 502)으로 일괄 래핑한다. 따라서 여기서 PaymentGatewayException 을
- * 직접 던지면 호출부에서 더블래핑되므로 던지지 않는다 — 502 변환은 호출부 래퍼에 위임한다.
+ * 커넥션 풀(#320): {@link JdkClientHttpRequestFactory}({@link HttpClient}). JDK21 HttpClient 는 keep-alive 를 풀링·재사용하므로
+ * 매 호출 소켓을 새로 여는 SimpleClientHttpRequestFactory 와 달리 토스 지연 시 톰캣 워커가 소켓 생성에 묶이지 않는다.
+ * connect 타임아웃은 HttpClient, read 타임아웃은 RequestFactory 에 건다. (세밀 제어 필요 시 Apache HttpClient5 가 업그레이드 경로.)
+ * 재시도·서킷브레이커(#320): Resilience4j {@link Retry}·{@link CircuitBreaker} 를 {@link TossPaymentGateway} 에 주입해 confirm/query/refund 를 감싼다(설정 {@link TossResilienceProperties}).
+ * 4xx/5xx → 502 매핑: 커스텀 status handler 를 두지 않는다 — 토스 오류는 RestClientResponseException 으로 전파되고 호출부 래퍼가
+ * 모든 RuntimeException 을 PaymentGatewayException(502)으로 일괄 래핑한다. 여기서 직접 던지면 더블래핑되므로 호출부에 위임한다.
  */
 @Configuration(proxyBeanMethods = false)
 @Profile({"dev", "prod"})

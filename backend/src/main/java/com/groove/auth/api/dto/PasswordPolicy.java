@@ -1,9 +1,8 @@
 package com.groove.auth.api.dto;
 
 /**
- * 비밀번호 검증 정책 상수. SignupRequest 와 ChangePasswordRequest 가 공유한다.
- *
- * <p>모두 컴파일 타임 상수(static final)라 Bean Validation 애너테이션 속성으로 사용할 수 있다.
+ * 비밀번호 검증 정책 상수. SignupRequest·ChangePasswordRequest 가 공유한다.
+ * 모두 컴파일 타임 상수라 Bean Validation 애너테이션 속성으로 쓸 수 있다.
  */
 public final class PasswordPolicy {
 

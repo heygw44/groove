@@ -9,15 +9,11 @@ import java.util.Set;
 /**
  * 배송 상태. 전이 규칙은 canTransitionTo(ShippingStatus) 단일 메서드에서 판정한다.
  *
- * <p>합법 전이 (4종, 그 외는 모두 불법):
- * <pre>
- *   PREPARING → SHIPPED
- *   PREPARING → CANCELLED
- *   SHIPPED   → DELIVERED
- *   SHIPPED   → CANCELLED
+ * 합법 전이 (그 외는 모두 불법):
+ *   PREPARING → SHIPPED, CANCELLED
+ *   SHIPPED   → DELIVERED, CANCELLED
  *   DELIVERED → (종착)
  *   CANCELLED → (종착)
- * </pre>
  */
 public enum ShippingStatus {
     PREPARING,

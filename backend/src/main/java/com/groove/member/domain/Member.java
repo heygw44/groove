@@ -26,7 +26,7 @@ public class Member extends BaseTimeEntity {
 
     /**
      * 이메일 점유 해시. EmailHasher 가 계산한 정규화 이메일의 HMAC-SHA-256 값으로, 버전 prefix 를 포함한다
-     * (예: v1:&lt;64 hex&gt;). 가입 중복 검사·재가입 차단의 권위 컬럼이며, 탈퇴 익명화 후에도 보존된다.
+     * (예: v1:64hex). 가입 중복 검사·재가입 차단의 권위 컬럼이며, 탈퇴 익명화 후에도 보존된다.
      */
     @Column(name = "email_hash", nullable = false, length = 72, unique = true)
     private String emailHash;

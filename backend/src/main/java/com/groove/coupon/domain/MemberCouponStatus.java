@@ -7,18 +7,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 회원 보유 쿠폰 상태.
- *
- * <p>전이 규칙은 canTransitionTo(MemberCouponStatus) 단일 메서드에서 판정한다. 위반 시 MemberCoupon 의 가드
- * 전이 메서드가 IllegalCouponStateTransitionException 을 던진다.
- *
- * <p>합법 전이 (4종, 그 외는 모두 불법):
- * <pre>
- *   ISSUED → USED, EXPIRED, CANCELLED   (3)
- *   USED   → ISSUED, EXPIRED            (2, 주문 취소/환불 시 복원 — 이미 만료됐으면 EXPIRED)
- *   EXPIRED   → (종착)
- *   CANCELLED → (종착)
- * </pre>
+ * 회원 보유 쿠폰 상태. 전이 규칙은 canTransitionTo 단일 메서드에서 판정하고, 위반 시 MemberCoupon 가드 메서드가
+ * IllegalCouponStateTransitionException 을 던진다. 합법 전이(그 외는 불법):
+ * - ISSUED → USED, EXPIRED, CANCELLED
+ * - USED   → ISSUED, EXPIRED   (주문 취소/환불 시 복원 — 이미 만료됐으면 EXPIRED)
+ * - EXPIRED, CANCELLED → (종착)
  */
 public enum MemberCouponStatus {
     ISSUED,

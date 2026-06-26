@@ -6,11 +6,9 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
- * @Idempotent 핸들러의 Idempotency-Key 헤더를 검증하는 인터셉터.
- *
- * <p>핸들러가 @Idempotent 면 preHandle 에서 헤더를 IdempotencyKeyValidator 로 검증하고(위반 시
- * IdempotencyKeyRequiredException, HTTP 400), 검증된 키를 요청 속성 KEY_ATTRIBUTE 으로 노출한다.
- * @Idempotent 가 없는 핸들러는 통과.
+ * @Idempotent 핸들러의 Idempotency-Key 헤더를 검증하는 인터셉터. preHandle 에서 헤더를
+ * IdempotencyKeyValidator 로 검증하고(위반 시 IdempotencyKeyRequiredException, HTTP 400), 검증된 키를
+ * 요청 속성 KEY_ATTRIBUTE 으로 노출한다. @Idempotent 가 없는 핸들러는 통과.
  */
 public class IdempotencyKeyInterceptor implements HandlerInterceptor {
 

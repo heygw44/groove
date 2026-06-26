@@ -18,16 +18,12 @@ import org.springframework.http.ProblemDetail;
 import java.util.Map;
 
 /**
- * SpringDoc(OpenAPI 3 / Swagger UI) 전역 설정.
+ * SpringDoc(OpenAPI 3 / Swagger UI) 전역 설정. API 문서를 코드(컨트롤러·record DTO·Jakarta 검증 애노테이션)에서
+ * 자동 생성한다. Swagger UI=/swagger-ui.html, OpenAPI JSON=/v3/api-docs(그룹: storefront·admin).
  *
- * API 문서를 코드(컨트롤러·record DTO·Jakarta 검증 애노테이션)에서 자동 생성한다.
- * Swagger UI 는 /swagger-ui.html, OpenAPI JSON 은 /v3/api-docs(그룹: /v3/api-docs/storefront, /v3/api-docs/admin).
- *
- * JWT Bearer 보안 스킴(bearerAuth)만 전역에 정의하고, 전역 SecurityRequirement 는 걸지 않는다. 보호 엔드포인트는 각
- * 컨트롤러에서 @SecurityRequirement("bearerAuth") 로 개별 표기한다.
- *
- * 에러 응답 스키마(RFC 7807 ProblemDetail)와 operationId 는 problemDetailErrorResponses · stableOperationId
- * 커스터마이저로 일괄 부여한다.
+ * JWT Bearer 보안 스킴(bearerAuth)만 전역 정의하고 전역 SecurityRequirement 는 걸지 않는다 — 보호 엔드포인트는
+ * 컨트롤러에서 @SecurityRequirement("bearerAuth") 로 개별 표기한다. 에러 응답 스키마(RFC 7807 ProblemDetail)와
+ * operationId 는 problemDetailErrorResponses·stableOperationId 커스터마이저로 일괄 부여한다.
  */
 @Configuration(proxyBeanMethods = false)
 public class OpenApiConfig {

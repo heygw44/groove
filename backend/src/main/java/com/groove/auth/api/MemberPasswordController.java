@@ -16,10 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 비밀번호 변경 (PATCH /members/me/password).
- *
- * <p>인증 기본 정책으로 보호되며 본인 식별은 AuthPrincipal 로만 한다 (경로에 memberId 미노출).
- * 성공 시 본문 없이 204 No Content.
+ * 비밀번호 변경(PATCH /members/me/password). 본인 식별은 AuthPrincipal 로만 한다(경로에 memberId 미노출). 성공 시 204.
  */
 @Tag(name = "비밀번호", description = "로그인한 본인의 비밀번호 변경 (인증 필요 — 변경 시 모든 활성 세션 무효화)")
 @SecurityRequirement(name = "bearerAuth")

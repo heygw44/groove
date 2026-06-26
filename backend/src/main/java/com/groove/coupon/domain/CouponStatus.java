@@ -7,16 +7,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 쿠폰 정책 상태.
- *
- * <p>전이 규칙은 canTransitionTo(CouponStatus) 단일 메서드에서 판정한다.
- *
- * <p>합법 전이 (4종, 그 외는 모두 불법):
- * <pre>
- *   ACTIVE    → SUSPENDED, ENDED   (2)
- *   SUSPENDED → ACTIVE, ENDED      (2)
- *   ENDED     → (종착)
- * </pre>
+ * 쿠폰 정책 상태. 전이 규칙은 canTransitionTo 단일 메서드에서 판정한다. 합법 전이(그 외는 불법):
+ * - ACTIVE    → SUSPENDED, ENDED
+ * - SUSPENDED → ACTIVE, ENDED
+ * - ENDED     → (종착)
  */
 public enum CouponStatus {
     ACTIVE,

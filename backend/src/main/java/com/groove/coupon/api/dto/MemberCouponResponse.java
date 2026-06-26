@@ -9,14 +9,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
 /**
- * 회원 보유 쿠폰 응답.
- *
- * <p>발급 201 응답(POST /coupons/{id}/issue)과 목록(GET /members/me/coupons)이 공용으로 쓰는 필드
- * 합집합이다 — 발급 직후엔 usedAt/orderNumber 가 null, 목록에선 상태에 따라 채워진다.
- *
- * <p>orderNumber 는 쿠폰 사용(USED) 시 연결된 주문 번호다. 발급(201) 응답에서는 항상 null 이고, 내 쿠폰
- * 목록 조회에서는 CouponQueryService 가 orderId → orderNumber 를 일괄 resolve 해 from(MemberCoupon, String)
- * 으로 주입한다.
+ * 회원 보유 쿠폰 응답 — 발급 201(POST /coupons/{id}/issue)과 목록(GET /members/me/coupons)이 공용으로 쓰는 필드 합집합.
+ * 발급 직후엔 usedAt/orderNumber 가 null, 목록에선 상태에 따라 채워진다.
+ * orderNumber(USED 시 연결 주문 번호)는 목록 조회에서 CouponQueryService 가 orderId → orderNumber 를 일괄 resolve 해 주입한다.
  */
 public record MemberCouponResponse(
         @Schema(description = "회원 보유 쿠폰 식별자", example = "10")

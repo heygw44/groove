@@ -9,17 +9,13 @@ import java.util.Set;
 /**
  * 주문 상태. 전이 규칙은 canTransitionTo 단일 메서드에서 판정한다.
  *
- * <p>합법 전이 (그 외는 모두 불법):
- * <pre>
- *   PENDING        → PAID, PAYMENT_FAILED, CANCELLED   (3)
- *   PAID           → PREPARING, CANCELLED              (2)
- *   PREPARING      → SHIPPED, CANCELLED                (2)
- *   SHIPPED        → DELIVERED                         (1)
- *   DELIVERED      → COMPLETED                         (1)
- *   COMPLETED      → (종착)
- *   CANCELLED      → (종착)
- *   PAYMENT_FAILED → (종착)
- * </pre>
+ * 합법 전이 (그 외는 모두 불법):
+ *   PENDING        → PAID, PAYMENT_FAILED, CANCELLED
+ *   PAID           → PREPARING, CANCELLED
+ *   PREPARING      → SHIPPED, CANCELLED
+ *   SHIPPED        → DELIVERED
+ *   DELIVERED      → COMPLETED
+ *   COMPLETED / CANCELLED / PAYMENT_FAILED → (종착)
  */
 public enum OrderStatus {
     PENDING,

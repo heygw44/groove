@@ -33,25 +33,10 @@ import java.net.URI;
 /**
  * 토스페이먼츠 동기 confirm 승인 흐름 API(#295).
  *
- * <p>POST /api/v1/payments/toss/checkout — 결제 요청(회원/게스트, Idempotency-Key 필수). 프론트 결제위젯 초기화 값 응답.
- * GET /payments/toss/success·/fail — 토스가 브라우저를 리다이렉트하는 타깃. 서버 confirm/보상 처리 후 SPA 결과 라우트로 302.
- *
- * <p><b>보안 주의(브라우저 리다이렉트 콜백):</b> success/fail 은 토스가 브라우저를 보내는 미인증 GET 타깃이라 Bearer 인증이 없다.
- * 보상(fail)·승인(success)은 PENDING 결제에 대해 멱등으로만 동작하지만, orderNumber 만 알면 누구나 호출할 수 있어
- * 교차 주문 조작(타인의 진행 중 결제 강제 실패 등) 여지가 있다. 어떤 예외가 나도 JSON 을 노출하지 않고 항상 SPA 결과 라우트로 302 한다.
- *
- * <p><b>콜백 토큰(#304)의 신뢰 모델 — 회원/게스트 비대칭(#306):</b>
- * checkout 이 결제마다 발급해 successUrl 쿼리에 싣는 토큰은 confirm 단계에서 저장 토큰과 일치 검증된다(fail 은 상태 무변경이라 토큰 미부착, #309). 단 토큰의 "비밀성"은 주문 유형에 따라 다르다.
- * <ul>
- *   <li><b>회원 주문</b>: checkout 이 소유자 전용({@code PaymentRequestSteps.canRequestPaymentFor} 가 memberId 일치 요구)이라 토큰이 실제 비밀로 기능 → 교차 주문 조작 차단이 강하다.
- *   <li><b>게스트 주문</b>: checkout 이 익명(orderNumber 만)이라 토큰이 비밀이 아니다 — orderNumber 만 알면 누구나 checkout 으로 토큰을 받을 수 있고, 멱등 재조회 경로는
- *       저장 토큰을 그대로 재노출한다(위젯 새로고침 시 successUrl 재구성 보존 목적, 의도된 동작). 토큰만 숨겨도 최초 checkout 이 토큰을 발급하므로, 미인증 게스트 엔드포인트에서
- *       토큰을 진짜 비밀로 만드는 것은 게스트 인증 없이는 불가능하다. 따라서 게스트엔 토큰이 단독 방어선이 아니다.
- * </ul>
- * <b>게스트 콜백의 실제 방어선</b>은 ⓐ orderNumber 비추측성({@code RandomOrderNumberGenerator} 의 SecureRandom base36^6 ≈ 21.7억),
- * ⓑ confirm 의 서버측 금액 위변조 검증(저장 payable == 리다이렉트 amount), ⓒ confirm 의 유효 paymentKey 필수(토스가 발급, 위조 불가 —
- * 실 게이트웨이는 토스 플로우가 가동되는 dev/prod 에만 존재), ⓓ fail 은 상태 무변경 + 폴링 리퍼 보상이다.
- * 즉 게스트라도 토큰만으로는 PAID 를 강제할 수 없다(ⓑⓒ 가 핵심 관문).
+ * success/fail 은 토스가 브라우저를 보내는 미인증 GET 콜백이다. orderNumber 만 알면 호출 가능하므로
+ * 어떤 예외에도 JSON 을 노출하지 않고 항상 SPA 결과 라우트로 302 한다(교차 주문 조작 방어).
+ * confirm 의 실제 관문은 콜백 토큰이 아니라 서버측 금액 위변조 검증과 유효 paymentKey 다 — 게스트
+ * 주문은 토큰이 비밀이 아니기 때문. 콜백 토큰 신뢰 모델의 회원/게스트 비대칭은 #304/#306 참조.
  */
 @Tag(name = "결제(토스)", description = "토스페이먼츠 confirm 승인 흐름 — checkout · successUrl/failUrl 콜백")
 @RestController
@@ -106,12 +91,10 @@ public class TossPaymentController {
             @RequestParam(required = false) String token) {
         String status;
         try {
-            // 미인증 공개 콜백 — 과대 입력이 서비스/게이트웨이/로그에 닿기 전에 컨트롤러에서 경계 검증한다(위반 시 아래 catch 가 fail 302).
-            // @Validated 대신 in-method 가드를 쓰는 이유: 빈 검증 위반은 메서드 실행 전에 던져져 GlobalExceptionHandler 가 JSON 400 을
-            // 응답 → "어떤 예외도 JSON 누출 없이 항상 302 fail" 불변식을 깨뜨린다. 가드는 catch 안으로 흘러 불변식을 보존한다.
+            // in-method 가드로 경계 검증(@Validated 대신). 빈 검증 위반은 메서드 진입 전 던져져 JSON 400 이 나가
+            // "어떤 예외도 JSON 누출 없이 항상 302 fail" 불변식을 깨므로, 가드를 catch 안으로 흘려보낸다.
             requireBoundedParams(paymentKey, orderId, amount, token);
-            // token 은 checkout 이 successUrl 에 박은 결제별 토큰 — confirm 이 저장 토큰과 일치를 검증해 교차 주문 조작을 차단한다(#304).
-            // 회원 주문엔 강하나(checkout 소유자 전용) 게스트 주문엔 토큰이 비밀이 아니므로, confirm 의 금액 검증·유효 paymentKey 가 실제 관문이다(#306, 클래스 javadoc 참고).
+            // token 은 checkout 이 successUrl 에 박은 결제별 토큰 — confirm 이 저장 토큰과 일치를 검증한다(교차 주문 조작 차단, #304/#306).
             PaymentCallbackResult result = tossPaymentService.confirm(paymentKey, orderId, Long.parseLong(amount), token);
             status = result.paymentStatus() == PaymentStatus.PAID ? "success" : "fail";
         } catch (RuntimeException e) {
@@ -131,10 +114,9 @@ public class TossPaymentController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String message,
             @RequestParam(required = false) String orderId) {
-        // 보안(#295 리뷰): failUrl 은 토스가 보내는 미인증 브라우저 GET 이라 orderNumber 만으로 호출 가능 — 여기서 결제를
-        // FAILED 로 바꾸면 제3자가 타인의 진행 중 결제를 강제 실패시킬 수 있다(CSRF). 따라서 안내 리다이렉트만 하고,
-        // 보상은 폴링 리퍼(PaymentReconciliationScheduler)의 신뢰 가능한 만료 경로가 1회 수행한다.
-        // #304 콜백 토큰은 successUrl(confirm)에서만 검증한다 — fail 은 상태 무변경이라 토큰이 불필요해 failUrl 엔 싣지 않는다(#309).
+        // failUrl 은 미인증 브라우저 GET 이라 orderNumber 만으로 호출 가능 — 여기서 FAILED 로 바꾸면 제3자가 타인의
+        // 결제를 강제 실패시킬 수 있다(CSRF, #295). 안내만 하고 보상은 폴링 리퍼의 만료 경로가 1회 수행한다.
+        // fail 은 상태 무변경이라 콜백 토큰을 싣지 않는다(#309).
         log.info("토스 결제 실패/취소 안내: orderId={}, code={}", orderId, code);
         return redirect(orderId, "fail");
     }

@@ -7,18 +7,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 결제 상태. 전이 규칙은 canTransitionTo(PaymentStatus) 가 판정한다.
- *
- * <p>합법 전이 (그 외는 모두 불법):
- * <pre>
- *   PENDING            → PAID, FAILED
- *   PAID               → PARTIALLY_REFUNDED, REFUNDED
- *   PARTIALLY_REFUNDED → REFUNDED
- *   FAILED             → (종착)
- *   REFUNDED           → (종착)
- * </pre>
- *
- * <p>PARTIALLY_REFUNDED 는 결제액 일부만 환불된 상태이며, 누적 환불액이 전액에 도달하면 REFUNDED 로 전이한다.
+ * 결제 상태. 전이 규칙은 canTransitionTo(PaymentStatus) 가 판정한다(그 외는 모두 불법).
+ * - PENDING → PAID, FAILED
+ * - PAID → PARTIALLY_REFUNDED, REFUNDED
+ * - PARTIALLY_REFUNDED → REFUNDED
+ * - FAILED, REFUNDED → 종착
+ * PARTIALLY_REFUNDED 는 일부 환불 상태로, 누적 환불액이 전액에 도달하면 REFUNDED 로 전이한다.
  */
 public enum PaymentStatus {
     PENDING,

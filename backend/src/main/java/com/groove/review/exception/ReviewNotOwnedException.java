@@ -5,9 +5,8 @@ import com.groove.common.exception.ErrorCode;
 
 /**
  * 본인의 리뷰/주문이 아닌 경우. HTTP 403.
- *
- * <p>두 곳에서 던진다 — (1) POST /reviews: 대상 주문이 인증 회원의 주문이 아닐 때(게스트 주문 포함),
- * (2) DELETE /reviews/{reviewId}: 삭제하려는 리뷰의 작성자가 인증 회원이 아닐 때.
+ * POST /reviews(대상 주문이 인증 회원 주문 아님, 게스트 포함)와
+ * DELETE /reviews/{reviewId}(리뷰 작성자 ≠ 인증 회원) 두 곳에서 던진다.
  */
 public class ReviewNotOwnedException extends DomainException {
 

@@ -8,12 +8,9 @@ import org.springframework.stereotype.Service;
 /**
  * PG 종착 상태(PAID/FAILED)를 공유 멱등키로 1회 적용하는 정산 헬퍼.
  *
- * <p>웹훅({@link TossWebhookService})·폴링({@link PaymentReconciliationScheduler})·만료 리퍼가 공유하던
- * {@code idempotencyService.execute(idempotencyKeyFor(pgTx), PaymentCallbackResult.class, () -> applyResult(...))}
- * 삼중주를 한곳으로 모은다. 멱등키 합성·결과 타입·콜백 위임이 흩어지지 않도록 단일 진입점으로 유지한다.
- *
- * <p>{@code execute} 는 열린 트랜잭션 밖에서 호출해야 하므로 이 메서드는 비-트랜잭션이며, 별도 빈인
- * {@link PaymentCallbackService#applyResult}(자체 @Transactional)를 프록시 경유로 호출한다(자기호출 우회 금지).
+ * 웹훅·폴링·만료 리퍼가 공유하던 멱등 execute + applyResult 위임을 단일 진입점으로 모은다.
+ * execute 는 열린 트랜잭션 밖에서 호출해야 하므로 비-트랜잭션이며, 별도 빈 {@link PaymentCallbackService#applyResult}
+ * (자체 @Transactional)를 프록시 경유로 호출한다(자기호출 우회 금지).
  */
 @Service
 public class PaymentSettlementService {

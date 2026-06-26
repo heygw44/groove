@@ -7,12 +7,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * 비밀번호 변경 요청.
- *
- * <p>newPassword 는 비밀번호 정책(최소 10자 + 영·숫·특수 각 1자 이상)을 적용한다.
- * currentPassword 는 존재 여부(@NotBlank)만 검증한다.
- *
- * <p>current == new 거부는 @AssertTrue 파생 메서드로 처리한다. 위반 시 400.
+ * 비밀번호 변경 요청. newPassword 는 비밀번호 정책(최소 10자 + 영·숫·특수 각 1자 이상), currentPassword 는 @NotBlank 만 검증한다.
+ * current == new 거부는 @AssertTrue 파생 메서드로 처리한다(위반 시 400).
  */
 public record ChangePasswordRequest(
         @Schema(description = "현재 비밀번호", example = "P@ssw0rd123!")
@@ -26,9 +22,7 @@ public record ChangePasswordRequest(
         String newPassword
 ) {
 
-    /**
-     * 신규 비밀번호가 현재 비밀번호와 동일하면 거부한다. 한쪽이 비어 있으면 통과시킨다.
-     */
+    /** 신규 비밀번호가 현재와 동일하면 거부한다. 한쪽이 비면 통과시킨다. */
     @AssertTrue(message = "새 비밀번호는 현재 비밀번호와 달라야 합니다")
     public boolean isNewPasswordDistinct() {
         if (currentPassword == null || currentPassword.isBlank()

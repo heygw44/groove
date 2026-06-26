@@ -7,9 +7,7 @@ import java.time.Duration;
 
 /**
  * 쿠폰 복원 정책 설정 (groove.coupon.restore.*).
- *
- * <p>grace 는 주문 취소/환불로 쿠폰을 되살릴 때, 복원 시점에 이미 만료된 쿠폰의 만료시각을
- * now + grace 로 연장해 주는 유예기간이다 (1 이상). 기본 7일.
+ * grace 는 주문 취소/환불로 되살릴 때 이미 만료된 쿠폰의 만료시각을 now + grace 로 연장하는 유예기간(기본 7일).
  */
 @ConfigurationProperties(prefix = "groove.coupon.restore")
 public record CouponRestoreProperties(

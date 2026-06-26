@@ -10,9 +10,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 
 /**
- * 모든 엔티티가 공유하는 감사 컬럼.
- *
- * <p>AuditingEntityListener 가 @PrePersist/@PreUpdate 시점에 값을 채운다.
+ * 모든 엔티티가 공유하는 감사 컬럼. AuditingEntityListener 가 @PrePersist/@PreUpdate 시점에 값을 채운다.
  */
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)

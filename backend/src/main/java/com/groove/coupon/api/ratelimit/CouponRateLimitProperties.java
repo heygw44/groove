@@ -4,11 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 
-/**
- * 쿠폰 엔드포인트 Rate Limit 정책 설정.
- *
- * <p>application.yaml 의 groove.coupon.rate-limit.* 키와 매핑된다.
- */
+/** 쿠폰 엔드포인트 Rate Limit 정책 설정 (groove.coupon.rate-limit.*). */
 @ConfigurationProperties(prefix = "groove.coupon.rate-limit")
 public record CouponRateLimitProperties(Policy issue) {
 

@@ -13,23 +13,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * 토스페이먼츠 웹훅 처리(#296). 동기 confirm(#295) 외에 결제 상태 변경을 비동기로 알리는 웹훅을 수신해
- * 기존 콜백 파이프({@link PaymentCallbackService#applyResult})에 합류시킨다. 가상계좌 입금 등 confirm 시점에
- * 즉시 확정되지 않은(PENDING) 결제를 사후 정산하는 것이 실질 가치다.
+ * 토스페이먼츠 웹훅 처리(#296). 가상계좌 입금 등 confirm(#295) 시점에 즉시 확정되지 않은 PENDING 결제를
+ * 사후 정산해 콜백 파이프({@link PaymentCallbackService#applyResult})에 합류시키는 것이 실질 가치다.
  *
- * <p><b>이벤트:</b> {@code PAYMENT_STATUS_CHANGED} 만 처리한다(토스 공식상 모든 결제수단의 상태 변경을 포괄).
- * 가상계좌 입금 정산도 이 이벤트로 도착하므로, 토스 개발자센터에 이 이벤트가 등록돼 있어야 한다. 그 외 이벤트는 무시한다.
- *
- * <p><b>재조회 검증:</b> 토스 결제 웹훅에는 서명 헤더가 없다(서명은 payout/seller 전용). 그래서 본문을 신뢰하지 않고
- * {@code paymentKey} 로 {@link PaymentGateway#query} 를 재호출해 토스가 직접 알려준 권위 상태만 적용한다 —
- * 위조 본문으로는 상태를 바꿀 수 없다.
- *
- * <p><b>로컬 선조회:</b> outbound 재조회 전에 로컬 결제를 {@code paymentKey} 로 먼저 본다. 미존재(위조·미연결)면
- * 재조회 없이 무해 무시하고(공개 엔드포인트의 outbound 증폭·위조 키 차단), 이미 종착이면 재조회 없이 무해 응답한다
- * (토스 최대 7회 재전송 시 중복 outbound 제거). PENDING 일 때만 토스에 재조회한다.
- *
- * <p>멱등키 {@code payment-callback:{paymentKey}} 는 confirm·폴링과 공유한다({@link PaymentSettlementService}).
- * confirm 으로 이미 처리됐거나 동시 처리 중이어도 캐시 재생/비-PENDING 흡수/충돌 흡수로 중복 전이가 없다(무해).
+ * 이벤트: PAYMENT_STATUS_CHANGED 만 처리(모든 결제수단 포괄, 가상계좌 입금 정산도 이 이벤트). 그 외 무시.
+ * 재조회 검증: 토스 결제 웹훅엔 서명 헤더가 없어, 본문을 신뢰하지 않고 paymentKey 로 query 를 재호출한 권위 상태만 적용한다(위조 본문 무력화).
+ * 로컬 선조회: outbound 전에 로컬 결제를 본다 — 미존재(위조·미연결)면 재조회 없이 무시(outbound 증폭 차단), 종착이면 무해 응답, PENDING 일 때만 재조회.
+ * 멱등키 payment-callback:{paymentKey} 는 confirm·폴링과 공유 — 이미 처리/동시 처리여도 캐시 재생·비-PENDING·충돌 흡수로 중복 전이 없다.
  */
 @Service
 public class TossWebhookService {

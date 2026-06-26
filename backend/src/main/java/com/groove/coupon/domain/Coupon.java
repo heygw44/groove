@@ -16,12 +16,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 쿠폰 정책.
- *
- * 할인 규칙(정액/정률·상한·최소주문금액)과 발급 제약(한정수량·회원당 한도·유효기간)을 담는 정책 엔티티다.
- * 정책 1건이 N명의 MemberCoupon 으로 발급된다.
- *
- * 도메인 가드는 생성 시점에 한 번 검증한다. 상태 변경은 changeStatus(CouponStatus) 단일 진입점만 허용한다.
+ * 쿠폰 정책 — 할인 규칙(정액/정률·상한·최소주문금액)과 발급 제약(한정수량·회원당 한도·유효기간). 정책 1건이 N명의 MemberCoupon 으로 발급된다.
+ * 도메인 가드는 생성 시점에 한 번 검증하고, 상태 변경은 changeStatus 단일 진입점만 허용한다.
  */
 @Entity
 @Table(name = "coupon")
@@ -92,17 +88,14 @@ public class Coupon extends BaseTimeEntity {
         this.status = CouponStatus.ACTIVE;
     }
 
-    /**
-     * 쿠폰 정책 빌더 진입점. 필수값(이름·할인방식·할인값·유효기간)을 받고,
-     * 선택값(상한·최소주문금액·한정수량·회원당한도)은 Builder 의 fluent 메서드로 설정한다. 검증은 Builder.build().
-     */
+    /** 빌더 진입점. 필수값(이름·할인방식·할인값·유효기간)을 받고, 선택값은 fluent 메서드로 설정한다. 검증은 build(). */
     public static Builder builder(String name, CouponDiscountType discountType, long discountValue,
                                   Instant validFrom, Instant validUntil) {
         return new Builder(name, discountType, discountValue, validFrom, validUntil);
     }
 
     /**
-     * 주문 소계(subtotal) 에 대한 할인액을 계산한다. subtotal < minOrderAmount 면 CouponMinOrderNotMetException(422).
+     * 주문 소계에 대한 할인액. subtotal < minOrderAmount 면 CouponMinOrderNotMetException(422).
      * 원시 할인액은 CouponDiscountType 에 위임하고, 결과는 min(raw, subtotal).
      */
     public long calculateDiscount(long subtotal) {
@@ -114,8 +107,8 @@ public class Coupon extends BaseTimeEntity {
     }
 
     /**
-     * 지정 시각 기준 발급 가능 여부 — 정책 상태가 CouponStatus.ACTIVE 이고 현재가 발급 기간
-     * (validFrom ≤ now ≤ validUntil) 안인지를 판단한다. 소진(issuedCount) 여부는 포함하지 않는다.
+     * 지정 시각 기준 발급 가능 여부 — 상태 ACTIVE 이고 발급 기간(validFrom ≤ now ≤ validUntil) 안인지.
+     * 소진(issuedCount) 여부는 포함하지 않는다.
      */
     public boolean isIssuable(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
@@ -124,16 +117,14 @@ public class Coupon extends BaseTimeEntity {
                 && !now.isAfter(validUntil);
     }
 
-    /**
-     * 남은 발급 수량 — max(0, totalQuantity − issuedCount). 무제한(totalQuantity == null)이면 null.
-     */
+    /** 남은 발급 수량 — max(0, totalQuantity − issuedCount). 무제한(totalQuantity == null)이면 null. */
     public Integer remainingQuantity() {
         return totalQuantity == null ? null : Math.max(0, totalQuantity - issuedCount);
     }
 
     /**
-     * 발급 슬롯 1개를 차감 시도 — 한정수량 여유가 있으면(또는 무제한) issuedCount 를 증가시키고 true, 소진이면 false 를
-     * 반환한다 (read-check-increment). 그 자체로 원자적이지 않다.
+     * 발급 슬롯 1개 차감 시도(read-check-increment) — 여유/무제한이면 issuedCount 증가 후 true, 소진이면 false.
+     * 그 자체로 원자적이지 않다.
      */
     public boolean tryIssueOne() {
         if (totalQuantity != null && issuedCount >= totalQuantity) {
@@ -202,8 +193,7 @@ public class Coupon extends BaseTimeEntity {
 
     /**
      * 쿠폰 정책 빌더. 초기 상태 ACTIVE, issuedCount=0.
-     *
-     * 선택값 기본: 상한 없음(무제한), 최소주문금액 0, 한정수량 null(무제한 발급), 회원당 1장. build() 가 값을 검증한다.
+     * 선택값 기본: 상한 없음, 최소주문금액 0, 한정수량 null(무제한 발급), 회원당 1장. build() 가 값을 검증한다.
      */
     public static final class Builder {
 

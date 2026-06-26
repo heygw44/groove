@@ -34,14 +34,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Set;
 
 /**
- * 쿠폰 API.
- *
- * <p>GET /coupons 는 발급 가능 목록(Public). POST /coupons/{id}/issue 는 선착순 발급으로 USER 권한 +
- * Idempotency-Key 헤더가 필수다. IdempotencyKeyInterceptor 가 헤더를 검증(없으면 400)하고, 처리 본체는
- * IdempotencyService.execute 로 같은 키당 한 번만 실행된다. 컨트롤러는 비트랜잭션이며
- * CouponIssueService.issue 가 자기 트랜잭션을 커밋한 뒤 멱등성 마커가 COMPLETED 로 갱신된다.
- *
- * <p>POST .../issue 는 회원당 분당 발급 횟수가 CouponIssueRateLimitPolicy 로 제한된다.
+ * 쿠폰 API. GET /coupons 는 발급 가능 목록(Public), POST /coupons/{id}/issue 는 선착순 발급(USER + Idempotency-Key 필수).
+ * 처리 본체는 IdempotencyService.execute 로 같은 키당 한 번만 실행되고, 비트랜잭션 컨트롤러가 issue 커밋 후 멱등성 마커를 COMPLETED 로 갱신한다.
+ * issue 는 회원당 분당 발급 횟수가 CouponIssueRateLimitPolicy 로 제한된다.
  */
 @Tag(name = "쿠폰", description = "발급 가능 쿠폰 목록 조회(공개) · 선착순 쿠폰 발급(인증)")
 @RestController

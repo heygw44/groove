@@ -5,9 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * 인증 엔드포인트 Rate Limit 정책 설정.
- *
- * <p>application.yaml 의 groove.auth.rate-limit.* 키와 매핑된다.
+ * 인증 엔드포인트 Rate Limit 정책 설정. application.yaml 의 groove.auth.rate-limit.* 키와 매핑된다.
  */
 @ConfigurationProperties(prefix = "groove.auth.rate-limit")
 public record AuthRateLimitProperties(Policy login, Policy signup, Policy passwordChange) {

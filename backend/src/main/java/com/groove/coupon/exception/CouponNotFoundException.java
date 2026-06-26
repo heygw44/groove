@@ -3,11 +3,7 @@ package com.groove.coupon.exception;
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 
-/**
- * 쿠폰 정책을 찾을 수 없는 경우. HTTP 404.
- *
- * <p>존재하지 않는 couponId 가 지정된 경우 발생한다.
- */
+/** 쿠폰 정책을 찾을 수 없음 — 존재하지 않는 couponId. HTTP 404. */
 public class CouponNotFoundException extends DomainException {
 
     public CouponNotFoundException(Long couponId) {

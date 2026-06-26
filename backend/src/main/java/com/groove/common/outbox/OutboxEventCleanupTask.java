@@ -15,13 +15,9 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 발행 완료 아웃박스 레코드 정리.
- *
- * <p>groove.outbox.cleanup.cron cron 으로 주기 실행되며(기본 매시 정각), 발행 완료 후
- * groove.outbox.cleanup.retention 이 지난 행을 .batch-size 개씩 독립 트랜잭션으로 삭제한다. cron 을 "-" 로 두면
- * 비활성화된다.
- *
- * <p>미발행 행은 삭제하지 않는다. 정리 실패는 로깅만 하고 다음 주기에 재시도한다.
+ * 발행 완료 아웃박스 레코드 정리. groove.outbox.cleanup.cron 으로 주기 실행되며(기본 매시 정각), 발행 완료 후
+ * .retention 이 지난 행을 .batch-size 개씩 독립 트랜잭션으로 삭제한다. 미발행 행은 삭제하지 않는다.
+ * 정리 실패는 로깅만 하고 다음 주기에 재시도한다.
  */
 @Component
 public class OutboxEventCleanupTask {

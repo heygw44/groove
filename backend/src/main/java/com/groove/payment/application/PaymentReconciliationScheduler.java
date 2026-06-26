@@ -22,14 +22,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 결제 폴링 동기화 스케줄러 — min-age 이상 PENDING 으로 머문 결제를 PG query() 로 조회해 결과를 동기화한다.
- * 동기화는 PaymentCallbackService 를 동일 IdempotencyService 키로 호출한다. 건별로 격리하고 batch-size 로 처리량을 제한한다.
- * 주기/초기지연/최소경과시간/처리상한은 groove.payment.reconciliation.{interval,initial-delay,min-age,batch-size}.
+ * 결제 폴링 동기화 스케줄러 — min-age 이상 PENDING 인 결제를 PG query() 로 조회해 동기화한다.
+ * PaymentCallbackService 를 동일 IdempotencyService 키로 호출, 건별 격리·batch-size 처리량 제한.
+ * 설정: groove.payment.reconciliation.{interval,initial-delay,min-age,batch-size}.
  *
- * <p>generic PG 경로는 무상태(retryCount 미보유)라 PENDING 밖으로 전이시키지 않으면 매 주기 재선택된다. 영구
- * 해소 불가(예: 잔존 non-TOSS pgTx 를 토스로 조회 → 404/502)·영구 PENDING 은 max-age(생성 후 경과 기준) 초과 시
- * FAILED 로 종결해 무한 폴링을 끊는다(groove.payment.reconciliation.max-age). PG 가 취소 상태
- * (REFUNDED/PARTIALLY_REFUNDED)를 반환하면 미확정 결제이므로 즉시 FAILED 로 종결한다.
+ * 영구 해소 불가(예: 잔존 non-TOSS pgTx 를 토스로 조회 → 404/502)·영구 PENDING 은 max-age 초과 시 FAILED 로 종결해
+ * 무한 폴링을 끊는다(max-age). PG 가 취소(REFUNDED/PARTIALLY_REFUNDED)를 반환하면 미확정 결제이므로 즉시 FAILED 종결한다.
  */
 @Component
 public class PaymentReconciliationScheduler {
@@ -119,18 +117,15 @@ public class PaymentReconciliationScheduler {
     }
 
     /**
-     * generic PG 의 PENDING 결제 한 건을 query 로 동기화한다. expired(생성 후 maxAge 초과)는 무한 폴링을 끊기 위한
-     * 종결 게이트다.
-     * <ul>
-     *   <li>PAID/FAILED → 공유 정산 헬퍼로 동기화(기존 동작).</li>
-     *   <li>REFUNDED/PARTIALLY_REFUNDED → PG 측 취소. 미확정(미캡처) 결제이므로 환불이 아니라 FAILED 로 종결(나이 무관).</li>
-     *   <li>query 예외 + expired → 영구 해소 불가(예: 잔존 pgTx 404/502). FAILED 로 종결해 폴링 중단.</li>
-     *   <li>query 가 PENDING(진행 중) 응답 → 나이와 무관하게 종결하지 않고 다음 주기 재시도. PG 가 정상 응답하는 한
-     *       자동 실패시키지 않는다(느린 비동기 PG 의 정상 결제 오탐 방지 — #299 리뷰 #2).</li>
-     *   <li>query 예외 + 만료 전 → 다음 주기 재시도.</li>
-     * </ul>
-     * <p>query 호출만 종결 게이트(catch)로 감싼다 — settle 실패가 query 실패로 오분류돼 PAID 확정 결제를 FAILED 로
-     * 뒤집는 것을 막는다. settle 실패는 {@link #settleQuietly} 가 강제 종결 없이 다음 주기 재시도로 흡수한다.
+     * generic PG 의 PENDING 결제 한 건을 query 로 동기화한다. expired(생성 후 maxAge 초과)는 무한 폴링을 끊는 종결 게이트.
+     * - PAID/FAILED → 공유 정산 헬퍼로 동기화.
+     * - REFUNDED/PARTIALLY_REFUNDED → PG 측 취소. 미캡처 결제라 환불이 아니라 FAILED 로 종결(나이 무관).
+     * - query 예외 + expired → 영구 해소 불가(예: 잔존 pgTx 404/502). FAILED 종결해 폴링 중단.
+     * - query 가 PENDING 응답 → 종결 않고 다음 주기 재시도. PG 가 정상 응답하는 한 자동 실패 안 함(느린 비동기 PG 오탐 방지 — #299 리뷰 #2).
+     * - query 예외 + 만료 전 → 다음 주기 재시도.
+     *
+     * query 호출만 종결 게이트(catch)로 감싼다 — settle 실패가 query 실패로 오분류돼 PAID 확정 결제를 FAILED 로 뒤집는 것을
+     * 막는다. settle 실패는 {@link #settleQuietly} 가 강제 종결 없이 다음 주기 재시도로 흡수한다.
      */
     private void reconcileOne(Payment payment, Instant giveUpCutoff) {
         String pgTransactionId = payment.getPgTransactionId();

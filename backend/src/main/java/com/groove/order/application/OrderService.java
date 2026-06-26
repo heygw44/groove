@@ -268,13 +268,7 @@ public class OrderService {
         return candidate;
     }
 
-    /**
-     * 항목별 album 검증 + 재고 차감 후 ResolvedLine 목록을 만든다.
-     *
-     * <p>락 경로(useLock)는 데드락 회피를 위해 다중 album 을 albumId 오름차순으로 단건 행 락(SELECT
-     * ... FOR UPDATE)한다. 비락 경로(테스트/시연 baseline)는 락이 없으므로 findAllById 로 일괄 조회해
-     * 항목 수만큼의 단건 쿼리를 없앤다.
-     */
+    /** 항목별 album 검증 + 재고 차감 후 ResolvedLine 목록을 만든다. */
     private List<ResolvedLine> resolveLines(List<OrderItemRequest> items, boolean useLock) {
         // album 해소 전략만 분기한다. 락 경로는 데드락 회피를 위해 albumId 오름차순으로 단건 행 락을,
         // 비락 baseline 은 findAllById 일괄 조회 후 맵 조회를 쓴다. 이후 검증·차감 루프는 공유한다.
