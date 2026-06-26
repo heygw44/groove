@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { loadTossPayments, ANONYMOUS } from '@tosspayments/tosspayments-sdk'
 import { tossCheckout } from '@/api/payments'
 import { errorMessage } from '@/lib/problem-detail'
+import { tossErrorMessage } from '@/lib/toss-error'
 import { formatWon } from '@/lib/format'
 import { idempotencyKeyFor } from '@/lib/uuid'
 import BaseButton from '@/components/base/BaseButton.vue'
@@ -65,8 +66,10 @@ async function pay() {
       failUrl: checkout.failUrl,
     })
   } catch (e) {
-    // 사용자가 결제창을 닫거나(USER_CANCEL) 요청 실패 — 인라인 안내 후 재시도 가능. 토스 SDK 에러는 message 를 그대로 노출.
-    payError.value = e?.message || '결제를 진행하지 못했습니다.'
+    // 사용자가 결제창을 닫거나(USER_CANCEL) 요청 실패 — 인라인 안내 후 재시도 가능.
+    // 토스 SDK 원문 message 는 노출하지 않고 console 로깅만, 사용자에겐 코드 매핑 한글 안내.
+    console.error('[toss] requestPayment 실패', e)
+    payError.value = tossErrorMessage(e)
     submitting.value = false
   }
 }

@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { useAuthStore, clearLegacyTokenStorage } from '@/stores/auth'
-import { tryRefresh } from '@/api/client'
+import { tryRefresh, REFRESH_INVALID } from '@/api/client'
 import './assets/main.css'
 
 const app = createApp(App)
@@ -18,8 +18,9 @@ async function boot() {
   try {
     const auth = useAuthStore(pinia)
     if (auth.hadSession && !auth.isAuthenticated) {
-      const restored = await tryRefresh()
-      if (!restored) auth.logout()
+      // ok → 인증됨 / invalid → 세션 정리 / transient → 세션 유지(게스트 마운트, 나중 재시도 허용)
+      const status = await tryRefresh()
+      if (status === REFRESH_INVALID) auth.logout()
     }
   } catch (e) {
     console.error('세션 복원 실패 — 게스트 상태로 마운트:', e)

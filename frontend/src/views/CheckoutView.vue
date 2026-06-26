@@ -52,6 +52,20 @@ function fromCartItem(i) {
   }
 }
 
+// AlbumDetail → 주문 라인. 바로구매·게스트 재조회 공통 매퍼(서버 현재가 권위).
+function lineFromAlbum(a, quantity, available = true) {
+  return {
+    albumId: a.id,
+    title: a.title,
+    artistName: a.artist?.name ?? '',
+    coverImageUrl: a.coverImageUrl,
+    unitPrice: a.price,
+    quantity,
+    subtotal: a.price * quantity,
+    available,
+  }
+}
+
 // 품절·판매중지 항목이 있으면 주문 차단
 const hasUnavailableLine = computed(() => lines.value.some((l) => !l.available))
 
@@ -61,23 +75,39 @@ onMounted(async () => {
       const id = Number(route.query.albumId)
       const qty = Math.max(1, Math.min(99, Number(route.query.qty) || 1))
       const album = await albumsApi.detail(id)
-      lines.value = [
-        {
-          albumId: album.id,
-          title: album.title,
-          artistName: album.artist?.name ?? '',
-          coverImageUrl: album.coverImageUrl,
-          unitPrice: album.price,
-          quantity: qty,
-          subtotal: album.price * qty,
-          available: true,
-        },
-      ]
+      lines.value = [lineFromAlbum(album, qty)]
     } else if (isAuthenticated.value) {
       await cart.load()
       lines.value = cart.items.map(fromCartItem) // 품절 항목도 표시하되 주문은 차단
     } else {
-      lines.value = guestCart.items.map(fromCartItem)
+      // 게스트 카트: localStorage unitPrice 는 노후·변조 가능 → 체크아웃 진입 시 서버 현재가로 재조회.
+      let priceChanged = false
+      let transientFailures = 0 // 네트워크/5xx 등 일시 조회 실패 — 품절(판매중지)과 구분
+      const built = await Promise.all(
+        guestCart.items.map(async (i) => {
+          try {
+            const a = await albumsApi.detail(i.albumId)
+            if (a.price !== i.unitPrice) priceChanged = true
+            return lineFromAlbum(a, i.quantity, a.status === 'SELLING')
+          } catch (e) {
+            // 일시 오류(네트워크 status 0·5xx)는 품절이 아니라 재조회 대상 → 따로 집계.
+            if (e?.status === 0 || e?.status >= 500) transientFailures++
+            // 삭제·판매중지(404 등)·일시오류 모두 현재가를 신뢰할 수 없어 주문은 차단.
+            return { ...fromCartItem(i), available: false }
+          }
+        }),
+      )
+      // 전 항목이 일시 오류로 실패 → 거짓 '품절'·'장바구니에서 제거' 대신 재시도 가능한 에러로.
+      if (transientFailures > 0 && transientFailures === guestCart.items.length) {
+        loadError.value = '상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+        return
+      }
+      lines.value = built
+      if (transientFailures > 0) {
+        ui.notify('일부 상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error')
+      } else if (priceChanged) {
+        ui.notify('일부 상품 가격이 변경되었습니다. 변경된 금액을 확인해 주세요.', 'info')
+      }
     }
   } catch (e) {
     loadError.value = errorMessage(e, '주문 정보를 불러오지 못했습니다.')
