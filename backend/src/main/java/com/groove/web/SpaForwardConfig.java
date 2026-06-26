@@ -5,9 +5,7 @@ import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * SPA(Vue Router history 모드) clean URL fallback.
- *
- * <p>SpaRoutes.PATTERNS 의 경로를 index.html 로 forward 한다.
+ * SPA(Vue Router history 모드) clean URL fallback — SpaRoutes.PATTERNS 의 경로를 index.html 로 forward 한다.
  */
 @Configuration(proxyBeanMethods = false)
 public class SpaForwardConfig implements WebMvcConfigurer {

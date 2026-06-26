@@ -90,11 +90,10 @@ public class MemberService {
     }
 
     /**
-     * 회원 탈퇴 (DELETE /members/me). soft delete.
-     *
-     * <p>본인 비밀번호를 BCrypt 비교로 재확인한 뒤, "진행 중" 주문이 없으면 deleted_at 을 찍고 회원 PII 를
+     * 회원 탈퇴 (DELETE /members/me) — soft delete.
+     * 본인 비밀번호를 BCrypt 로 재확인한 뒤, "진행 중" 주문이 없으면 deleted_at 을 찍고 회원 PII 를
      * 익명화(Member.anonymize, email_hash 는 보존)한 다음 MemberWithdrawnEvent 를 발행한다. 이미 탈퇴 상태면
-     * no-op 으로 끝나(멱등) 반복 호출은 204 로 수렴한다.
+     * no-op(멱등)으로 반복 호출은 204 로 수렴한다.
      */
     @Transactional
     public void withdraw(Long memberId, String rawPassword) {

@@ -24,12 +24,10 @@ import java.time.Instant;
 import java.util.stream.Collectors;
 
 /**
- * 환불의 트랜잭션 단계 협력 빈.
+ * 환불의 트랜잭션 단계 협력 빈. AdminOrderService.refund 가 prepare(검증+잠금, tx) →
+ * PG refund()(트랜잭션 밖, 멱등 키) → apply(상태 반영+보상, tx) 순으로 호출한다.
  *
- * <p>AdminOrderService.refund 가 prepare(검증+잠금, tx) → PG refund()(트랜잭션 밖, 멱등 키) →
- * apply(상태 반영+보상, tx) 순으로 이 빈을 호출한다.
- *
- * <p>보상(재고/쿠폰 복원, 상태 전이)은 apply 의 PESSIMISTIC_WRITE 락 + status == PAID 가드 안에서
+ * 보상(재고/쿠폰 복원, 상태 전이)은 apply 의 PESSIMISTIC_WRITE 락 + status == PAID 가드 안에서
  * PAID→REFUNDED 전이에서만 일어난다. PG 는 refundIdempotencyKey 로 1회만 환불하고, apply 는 락으로
  * 직렬화돼 둘째는 REFUNDED 를 보고 멱등 no-op 한다.
  */

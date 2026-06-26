@@ -2,8 +2,7 @@ package com.groove.web;
 
 /**
  * SPA(Vue Router history 모드) 클라이언트 라우트 패턴 — 단일 진실 소스.
- *
- * <p>SpaForwardConfig 가 forward:/index.html 대상으로, SecurityConfig 가 GET permitAll 대상으로 참조한다.
+ * SpaForwardConfig 가 forward:/index.html 대상으로, SecurityConfig 가 GET permitAll 대상으로 참조한다.
  */
 public final class SpaRoutes {
 
