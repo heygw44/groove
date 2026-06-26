@@ -23,8 +23,9 @@ import java.time.Instant;
  *
  * 회전(rotate) 흐름: JWT 파싱으로 형식·서명·만료·typ 검증 후 memberId 확보, 본문의 SHA-256 해시로 DB 행
  * 조회(모르는 토큰은 401), 이미 revoked 면 재사용으로 간주해 같은 사용자 활성 토큰 전체 무효화, DB
- * 만료 검증, 새 access·refresh 발급 후 새 행 영속화. 마지막으로 revokeIfActive 로 atomic CAS 하는데,
- * 0 행이면 동시 회전 경쟁에서 패배한 케이스로 단순 거부한다.
+ * 만료 검증, 새 access·refresh 발급. 구 토큰을 revokeIfActive 로 atomic CAS 하는데 0 행이면 동시 회전
+ * 경쟁에서 패배한 케이스로 INSERT 전에 단순 거부한다(떠도는 토큰 방지). CAS 성공 시에만 새 행을 INSERT
+ * 하고 linkReplacement 로 회전 체인(replacedByTokenId)을 사후 연결한다.
  *
  * 만료 검사 순서는 revoked → DB expired 순. 만료된 토큰의 재사용은 단순 만료 응답만 반환한다.
  *
@@ -106,15 +107,18 @@ public class RefreshTokenService {
 
         String newAccess = jwtProvider.issueAccessToken(member.getId(), member.getRole());
         String newRefresh = jwtProvider.issueRefreshToken(member.getId());
-        RefreshToken newRow = persistNewToken(member.getId(), newRefresh, now);
 
-        int affected = refreshTokenRepository.revokeIfActive(existing.getId(), now, newRow.getId());
+        // 구 토큰 CAS revoke 를 INSERT 보다 먼저 수행한다. 0 행(동시 회전 race 패배)이면 새 토큰을 아직
+        // INSERT 하지 않았으므로, 호출부가 예외를 삼키더라도 떠도는 토큰이 영속될 여지가 없다.
+        int affected = refreshTokenRepository.revokeIfActive(existing.getId(), now, null);
         if (affected == 0) {
-            // 동시 회전 race 패배 — 전체 무효화 없이 단순 거부한다. 외부 트랜잭션 롤백으로 방금 INSERT 한 newRow 가 함께 취소된다.
             log.warn("리프레시 회전 race 패배 - 단순 거부 memberId={} tokenId={}",
                     memberId, existing.getId());
             throw new AuthException(ErrorCode.AUTH_INVALID_TOKEN);
         }
+
+        RefreshToken newRow = persistNewToken(member.getId(), newRefresh, now);
+        refreshTokenRepository.linkReplacement(existing.getId(), newRow.getId());
 
         log.info("리프레시 회전 성공 memberId={} oldId={} newId={}",
                 memberId, existing.getId(), newRow.getId());

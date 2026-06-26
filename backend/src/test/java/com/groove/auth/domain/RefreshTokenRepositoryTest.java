@@ -117,6 +117,27 @@ class RefreshTokenRepositoryTest {
     }
 
     @Test
+    @DisplayName("linkReplacement → revoke 된 행에 후속 토큰 id 를 사후 연결 (회전 순서 뒤집기 경로)")
+    void linkReplacement_connectsChainAfterRevoke() {
+        Instant now = Instant.now();
+        RefreshToken oldToken = refreshTokenRepository.saveAndFlush(
+                RefreshToken.issue(memberId, hash("old"), now, now.plus(14, ChronoUnit.DAYS)));
+        // 회전은 먼저 replacedBy 없이 revoke 한 뒤 새 토큰을 INSERT 한다.
+        refreshTokenRepository.revokeIfActive(oldToken.getId(), now, null);
+        RefreshToken newToken = refreshTokenRepository.saveAndFlush(
+                RefreshToken.issue(memberId, hash("new"), now, now.plus(14, ChronoUnit.DAYS)));
+
+        int affected = refreshTokenRepository.linkReplacement(oldToken.getId(), newToken.getId());
+        em.flush();
+        em.clear();
+
+        assertThat(affected).isEqualTo(1);
+        RefreshToken reloaded = refreshTokenRepository.findById(oldToken.getId()).orElseThrow();
+        assertThat(reloaded.isRevoked()).isTrue();
+        assertThat(reloaded.getReplacedByTokenId()).isEqualTo(newToken.getId());
+    }
+
+    @Test
     @DisplayName("revokeIfActive → 이미 revoked 상태면 0 행 (race 패자 시나리오)")
     void revokeIfActive_alreadyRevoked_returnsZero() {
         Instant now = Instant.now();

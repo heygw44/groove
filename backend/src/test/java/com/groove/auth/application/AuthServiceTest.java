@@ -121,6 +121,9 @@ class AuthServiceTest {
         authService.changePassword(1L, RAW_PASSWORD, NEW_PASSWORD);
 
         assertThat(member.getPassword()).isEqualTo(NEW_PASSWORD_HASH);
+        // member.password UPDATE 는 flush 하지 않고 dirty-check 으로 두며(refresh_token→member FK 데드락
+        // 회피), 세션 무효화는 REQUIRES_NEW 로 먼저 커밋한다. saveAndFlush 를 호출하지 않아야 한다.
+        verify(memberRepository, never()).saveAndFlush(any());
         verify(refreshTokenAdmin).forceRevokeAllActiveSessions(1L, FIXED_NOW);
     }
 

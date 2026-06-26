@@ -78,6 +78,10 @@ public class Order extends BaseTimeEntity {
     @Column(name = "paid_at")
     private Instant paidAt;
 
+    /** 배송완료(DELIVERED) 진입 시점 — 반품 기한 anchor 의 결정적 기준. DELIVERED 전이에서만 기록. */
+    @Column(name = "delivered_at")
+    private Instant deliveredAt;
+
     @Column(name = "cancelled_at")
     private Instant cancelledAt;
 
@@ -163,7 +167,9 @@ public class Order extends BaseTimeEntity {
 
     /**
      * 상태 전이 단일 진입점. 불법 전이면 IllegalStateTransitionException.
-     * PAID 진입 시 paidAt, CANCELLED 진입 시 cancelledAt·cancelledReason 기록(시각은 주입된 now).
+     * PAID 진입 시 paidAt, DELIVERED 진입 시 deliveredAt, CANCELLED 진입 시 cancelledAt·cancelledReason
+     * 기록(시각은 주입된 now). 정상 배송 파이프라인·관리자 강제 전이·시드가 모두 이 진입점을 거치므로
+     * deliveredAt 은 배송 행 유무와 무관하게 항상 채워진다(반품 기한 anchor 의 결정성 보장).
      */
     public void changeStatus(OrderStatus next, String reason, Instant now) {
         Objects.requireNonNull(next, "next status must not be null");
@@ -174,6 +180,8 @@ public class Order extends BaseTimeEntity {
         this.status = next;
         if (next == OrderStatus.PAID) {
             this.paidAt = now;
+        } else if (next == OrderStatus.DELIVERED) {
+            this.deliveredAt = now;
         } else if (next == OrderStatus.CANCELLED) {
             this.cancelledAt = now;
             this.cancelledReason = reason;
@@ -261,7 +269,8 @@ public class Order extends BaseTimeEntity {
         }
         item.attachTo(this);
         items.add(item);
-        this.totalAmount += item.getSubtotal();
+        // 누적 합도 오버플로 시 ArithmeticException 으로 즉시 실패시킨다.
+        this.totalAmount = Math.addExact(this.totalAmount, item.getSubtotal());
     }
 
     public Long getId() {
@@ -308,6 +317,11 @@ public class Order extends BaseTimeEntity {
 
     public Instant getPaidAt() {
         return paidAt;
+    }
+
+    /** 배송완료 진입 시점 — 반품 기한 anchor. DELIVERED 를 거치지 않은 주문이면 null. */
+    public Instant getDeliveredAt() {
+        return deliveredAt;
     }
 
     public Instant getAnonymizedAt() {

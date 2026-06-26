@@ -38,6 +38,21 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     );
 
     /**
+     * 회전 체인 연결 — 이미 revoke 된 행에 후속 토큰 id 를 채운다. 회전 경로는 revoke 를 먼저 수행한 뒤
+     * 새 토큰 INSERT 가 성공해야 그 id 를 사후 연결하므로 별도 UPDATE 로 분리한다(replacedByTokenId audit 보존).
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE RefreshToken r
+               SET r.replacedByTokenId = :replacedBy
+             WHERE r.id = :id
+            """)
+    int linkReplacement(
+            @Param("id") Long id,
+            @Param("replacedBy") Long replacedBy
+    );
+
+    /**
      * 특정 회원의 활성 refresh 토큰을 일괄 revoke 하고 revoke 된 행 수를 반환한다.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
