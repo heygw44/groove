@@ -123,10 +123,15 @@ public class OutboxRelayScheduler {
         // 단일 스케줄러 인스턴스 기준 조회 스냅샷 + 1 이 증가 후 권위 값이다(멀티 인스턴스에선 로그상 근사일 수 있음).
         int attempts = event.getAttemptCount() + 1;
         if (attempts >= maxAttempts) {
-            // 릴레이 조회가 격리 행을 제외하므로 이 분기는 이벤트당 정확히 1회(상한 도달 전이) 실행된다 → 메트릭 중복 없음(#323).
-            metrics.recordQuarantined(event.getEventType());
             log.error("아웃박스 릴레이 DLQ 격리: eventType={}, id={}, attempts={}/{}, 사유={} — 재시도 중단(수동 조치 필요)",
                     event.getEventType(), event.getId(), attempts, maxAttempts, reason, cause);
+            // 릴레이 조회가 격리 행을 제외하므로 이 호출은 이벤트당 정확히 1회(상한 도달 전이) 실행된다 → 메트릭 중복 없음(#323).
+            // 에러 로그 뒤에 두고 실패를 삼켜, 메트릭 장애가 격리 로그 누락이나 배치(건별 격리)를 깨지 않게 한다.
+            try {
+                metrics.recordQuarantined(event.getEventType());
+            } catch (RuntimeException e) {
+                log.warn("DLQ 격리 메트릭 기록 실패: eventType={}, id={}", event.getEventType(), event.getId(), e);
+            }
         } else {
             log.warn("아웃박스 릴레이 실패: eventType={}, id={}, attempts={}/{}, 사유={} — 다음 주기에 재시도",
                     event.getEventType(), event.getId(), attempts, maxAttempts, reason, cause);

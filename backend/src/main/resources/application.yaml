@@ -75,11 +75,11 @@ management:
   endpoints:
     web:
       exposure:
-        # 아웃박스 DLQ 메트릭(#323)을 Prometheus 로 노출. /actuator/prometheus 는 SecurityConfig 에서
-        # authenticated() 뒤에 있어(공개는 /actuator/health 뿐) 익명 접근은 401 이다 — 스크레이퍼는 서비스
-        # JWT(scrape_config 의 authorization/bearer_token)로 인증하거나 내부망 전용 경로로 긁어야 한다.
-        # 노출 자체를 끄려면 MANAGEMENT_EXPOSURE=health 로 오버라이드.
-        include: ${MANAGEMENT_EXPOSURE:health,prometheus}
+        # 기본은 health 만 노출(최소 노출 원칙, #162 와 동일 기조). 아웃박스 DLQ 메트릭(#323)을 Prometheus 로
+        # 긁으려면 MANAGEMENT_EXPOSURE=health,prometheus 로 명시 opt-in 한다. /actuator/prometheus 는
+        # SecurityConfig 에서 authenticated() 뒤라(공개는 /actuator/health 뿐) 익명 접근은 401 이고,
+        # 스크레이퍼는 scrape_config 의 authorization/bearer_token 으로 인증해야 한다.
+        include: ${MANAGEMENT_EXPOSURE:health}
   endpoint:
     health:
       show-details: never
