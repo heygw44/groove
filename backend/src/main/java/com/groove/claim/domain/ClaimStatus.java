@@ -9,15 +9,13 @@ import java.util.Set;
 /**
  * 반품(claim) 상태 — 역물류 상태머신. 전이 규칙은 canTransitionTo(ClaimStatus) 가 판정한다.
  *
- * <p>합법 전이 (6종, 그 외는 모두 불법):
- * <pre>
- *   REQUESTED  → APPROVED, REJECTED   (2)  관리자 승인/거부
- *   APPROVED   → IN_TRANSIT           (1)  스케줄러 자동
- *   IN_TRANSIT → INSPECTING           (1)  스케줄러 자동
- *   INSPECTING → REFUNDED, REJECTED   (2)  스케줄러 자동통과+환불 / 관리자 검수 불합격
+ * 합법 전이 (그 외는 모두 불법):
+ *   REQUESTED  → APPROVED, REJECTED   관리자 승인/거부
+ *   APPROVED   → IN_TRANSIT           스케줄러 자동
+ *   IN_TRANSIT → INSPECTING           스케줄러 자동
+ *   INSPECTING → REFUNDED, REJECTED   스케줄러 자동통과+환불 / 관리자 검수 불합격
  *   REFUNDED   → (종착)
  *   REJECTED   → (종착)
- * </pre>
  */
 public enum ClaimStatus {
     REQUESTED,

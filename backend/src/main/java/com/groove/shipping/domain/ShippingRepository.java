@@ -10,24 +10,16 @@ import java.util.Optional;
 
 public interface ShippingRepository extends JpaRepository<Shipping, Long> {
 
-    /**
-     * 운송장 번호로 배송 조회 — uk_shipping_tracking UNIQUE 이므로 최대 1건.
-     */
+    /** 운송장 번호로 배송 조회 — uk_shipping_tracking UNIQUE 이므로 최대 1건. */
     Optional<Shipping> findByTrackingNumber(String trackingNumber);
 
-    /**
-     * 주문에 이미 생성된 배송이 있는지 — 결제 완료 이벤트 중복 전달 시 배송이 1건만 생기도록 하는 가드. 최종 방어선은 uk_shipping_order.
-     */
+    /** 주문에 이미 생성된 배송이 있는지 — 결제 완료 이벤트 중복 전달 시 배송 1건만 생기도록 하는 가드. 최종 방어선은 uk_shipping_order. */
     boolean existsByOrderId(Long orderId);
 
-    /**
-     * 주문 식별자로 배송을 조회한다 (order_id UNIQUE → 최대 1건).
-     */
+    /** 주문 식별자로 배송을 조회한다 (order_id UNIQUE → 최대 1건). */
     Optional<Shipping> findByOrderId(Long orderId);
 
-    /**
-     * 식별자로 배송을 조회하되 order 를 함께 로드한다 — 자동 진행이 주문을 락스텝 전진시킬 때 N+1 을 없애려 fetch 한다.
-     */
+    /** 식별자로 배송을 조회하되 order 를 함께 로드한다 — 자동 진행이 주문을 락스텝 전진시킬 때 N+1 을 없애려 fetch 한다. */
     @EntityGraph(attributePaths = "order")
     Optional<Shipping> findWithOrderById(Long id);
 
@@ -37,9 +29,7 @@ public interface ShippingRepository extends JpaRepository<Shipping, Long> {
      */
     List<Shipping> findByStatusAndCreatedAtBefore(ShippingStatus status, Instant createdAtBefore, Limit limit);
 
-    /**
-     * 자동 진행 스케줄러의 SHIPPED → DELIVERED 대상 — shippedAtBefore 이전에 발송된 배송.
-     */
+    /** 자동 진행 스케줄러의 SHIPPED → DELIVERED 대상 — shippedAtBefore 이전에 발송된 배송. */
     List<Shipping> findByStatusAndShippedAtBefore(ShippingStatus status, Instant shippedAtBefore, Limit limit);
 
     /**

@@ -16,13 +16,10 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * 배송완료 + 보존기간이 지난 주문/배송의 PII 를 익명화하는 단일 진입점. OrderPiiAnonymizationScheduler 가 배치 건별로 호출.
- *
- * 독립 트랜잭션(REQUIRES_NEW): 주문마다 격리된 커밋 경계를 둬 한 건 실패가 같은 주기 다른 건을 롤백하지 않게 한다.
- *
- * 배송지 PII 는 주문 시점 스냅샷이 배송 행에도 복사돼 있어, 배송을 order 와 함께 로드(findWithOrderById)해 양쪽을 한 트랜잭션에서 마스킹한다.
- *
- * 멱등: 이미 익명화된 배송이면(anonymized_at != null) no-op.
+ * 배송완료 + 보존기간이 지난 주문/배송의 PII 를 익명화하는 단일 진입점. OrderPiiAnonymizationScheduler 가 배치
+ * 건별로 호출한다. 독립 트랜잭션(REQUIRES_NEW)으로 주문마다 격리해 한 건 실패가 같은 주기 다른 건을 롤백하지 않게 한다.
+ * 배송지 PII 는 주문 시점 스냅샷이 배송 행에도 복사돼 있어 order 와 함께 로드(findWithOrderById)해 양쪽을 한
+ * 트랜잭션에서 마스킹한다. 멱등 — 이미 익명화된 배송이면(anonymized_at != null) no-op.
  */
 @Component
 public class OrderPiiAnonymizer {
@@ -44,9 +41,7 @@ public class OrderPiiAnonymizer {
         this.orderRepository = orderRepository;
     }
 
-    /**
-     * 배송(+주문)의 PII 를 마스킹하고 anonymized_at 을 찍는다. 배송이 없거나 이미 익명화됐으면 false 를 반환하고 건너뛴다.
-     */
+    /** 배송(+주문)의 PII 를 마스킹하고 anonymized_at 을 찍는다. 배송이 없거나 이미 익명화됐으면 false 를 반환하고 건너뛴다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean anonymizeForShipping(Long shippingId, Instant now) {
         Shipping shipping = shippingRepository.findWithOrderById(shippingId).orElse(null);

@@ -20,13 +20,9 @@ import java.util.function.Consumer;
 /**
  * 배송 자동 진행 스케줄러 — 배송 상태를 PREPARING → SHIPPED → DELIVERED 로 한 단계씩 자동 진행시킨다.
  *
- * <p>틱마다 한 단계만 민다 — PREPARING 으로 prepare-delay 이상 머문 배송을 SHIPPED 로,
- * SHIPPED 로 ship-delay 이상 머문 배송을 DELIVERED 로. 상태 전이는 식별자 단위로
- * ShippingService 의 트랜잭션 메서드에 위임하고, 건별 try/catch 로 격리한다(다음 주기 재시도).
- * 한 주기 처리량은 .batch-size 로 제한한다.
- *
- * <p>실행 주기/초기 지연은 groove.shipping.progress.{interval,initial-delay}, 각 단계 체류 최소 시간은
- * .prepare-delay/.ship-delay, 주기당 처리 상한은 .batch-size.
+ * 틱마다 한 단계만 민다 — PREPARING 으로 prepare-delay 이상 머문 배송을 SHIPPED 로, SHIPPED 로 ship-delay 이상
+ * 머문 배송을 DELIVERED 로. 상태 전이는 식별자 단위로 ShippingService 의 트랜잭션 메서드에 위임하고, 건별
+ * try/catch 로 격리한다(다음 주기 재시도). 한 주기 처리량은 batch-size 로 제한한다.
  */
 @Component
 public class ShippingProgressScheduler {

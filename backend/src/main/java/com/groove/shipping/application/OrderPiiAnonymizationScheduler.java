@@ -17,14 +17,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 주문/배송 PII 익명화 배치 스케줄러. 배송완료(ShippingStatus.DELIVERED)된 지 보존기간
- * (groove.privacy.order-anonymization.retention)이 지난 주문/배송의 수령인·주소·게스트 PII 를 주기적으로 마스킹한다.
- * 대상은 delivered_at 이 now - retention 이전이고 아직 익명화되지 않은(anonymized_at IS NULL) DELIVERED 배송이다.
+ * 주문/배송 PII 익명화 배치 스케줄러. 배송완료(DELIVERED)된 지 보존기간(retention)이 지난 주문/배송의 수령인·주소·
+ * 게스트 PII 를 주기적으로 마스킹한다. 대상은 delivered_at 이 now - retention 이전이고 아직 익명화되지 않은
+ * (anonymized_at IS NULL) DELIVERED 배송이다.
  *
- * <p>경량 projection 으로 대상 id 를 조회하고, 건별로 OrderPiiAnonymizer(REQUIRES_NEW)를 호출한다.
- * 건별 try/catch 로 한 건 실패를 격리하고(다음 주기 재시도), 한 주기 처리량은 .batch-size 로 제한한다.
- *
- * <p>배송이 생성되지 않는 종착 주문(PENDING / PAYMENT_FAILED / 배송 생성 전 CANCELLED)의 PII 는
+ * 경량 projection 으로 대상 id 를 조회하고, 건별로 OrderPiiAnonymizer(REQUIRES_NEW)를 호출한다. 건별 try/catch 로
+ * 한 건 실패를 격리하고(다음 주기 재시도), 한 주기 처리량은 batch-size 로 제한한다.
+ * 배송이 생성되지 않는 종착 주문(PENDING / PAYMENT_FAILED / 배송 생성 전 CANCELLED)의 PII 는
  * anonymizeTerminalNonShippingOrders() 가 주문 상태 + updated_at + 보존기간 기준으로 별도 익명화한다.
  */
 @Component

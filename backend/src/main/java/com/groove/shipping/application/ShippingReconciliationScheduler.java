@@ -19,12 +19,9 @@ import java.util.Objects;
 /**
  * 배송 생성 보충(reconciliation) 스케줄러 — 결제는 PAID 로 커밋됐지만 배송이 없는 "고아 주문"을 주기적으로 스캔해 보충한다.
  *
- * <p>대상은 paid_at 이 now - groove.shipping.reconciliation.min-age 이전인 PAID 주문이다.
- * 보충은 아웃박스 컨슈머와 동일한 ShippingProvisioner 를 호출하므로 existsByOrderId + uk_shipping_order
- * 중복 방어로 재시도가 안전하다. 건별 try/catch 로 격리하고(다음 주기 재시도), 한 주기 처리량은 .batch-size 로 제한한다.
- *
- * <p>실행 주기/초기 지연은 groove.shipping.reconciliation.{interval,initial-delay}, 대상 최소 경과 시간은
- * .min-age, 주기당 처리 상한은 .batch-size.
+ * 대상은 paid_at 이 now - min-age 이전인 PAID 주문이다. 보충은 아웃박스 컨슈머와 동일한 ShippingProvisioner 를
+ * 호출하므로 existsByOrderId + uk_shipping_order 중복 방어로 재시도가 안전하다. 건별 try/catch 로 격리하고(다음
+ * 주기 재시도), 한 주기 처리량은 batch-size 로 제한한다.
  */
 @Component
 public class ShippingReconciliationScheduler {

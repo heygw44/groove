@@ -15,13 +15,11 @@ import java.time.Clock;
 
 /**
  * 결제 완료 주문에 배송을 생성(프로비저닝)하는 단일 진입점 — 아웃박스 컨슈머 OrderPaidOutboxHandler 와
- * 보충 스케줄러 ShippingReconciliationScheduler 가 같은 로직을 공유한다.
+ * 보충 스케줄러 ShippingReconciliationScheduler 가 공유한다. 독립 트랜잭션(REQUIRES_NEW)으로 주문마다 격리된
+ * 커밋 경계를 둔다.
  *
- * 독립 트랜잭션(REQUIRES_NEW): 주문마다 격리된 커밋 경계를 둔다.
- *
- * 한 주문당 배송 1건: existsByOrderId 로 미리 거르고, 최종 방어선은 uk_shipping_order UNIQUE 다 — saveAndFlush 로 충돌을 즉시 드러낸다.
- *
- * 충돌(DataIntegrityViolationException)·일시 장애 예외는 호출자(컨슈머/스케줄러)로 전파한다.
+ * 한 주문당 배송 1건 — existsByOrderId 로 미리 거르고 최종 방어선은 uk_shipping_order UNIQUE 다(saveAndFlush 로
+ * 충돌 즉시 노출). 충돌(DataIntegrityViolationException)·일시 장애 예외는 호출자로 전파한다.
  */
 @Component
 public class ShippingProvisioner {

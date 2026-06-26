@@ -10,7 +10,7 @@ import java.time.Instant;
 /**
  * 배송 조회 응답. 수령인 이름·기본 주소·안전 포장 여부·진행 상태/시각만 담는다(연락처·우편번호·상세 주소 제외).
  *
- * <p>공개 엔드포인트(GET /shippings/{trackingNumber})라 운송장만 알면 비인증 조회가 가능하므로,
+ * 공개 엔드포인트(GET /shippings/{trackingNumber})라 운송장만 알면 비인증 조회가 가능하므로,
  * 수령인 이름·기본 주소는 PiiMasking 으로 부분 마스킹해 노출한다(#322). 이미 익명화된 배송은 마스킹하지 않는다.
  */
 public record ShippingResponse(

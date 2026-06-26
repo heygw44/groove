@@ -19,13 +19,10 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 배송.
- *
- * 주문당 배송 1건 — order_id UNIQUE. prepare 로 PREPARING 상태로 생성하고, 자동 진행 스케줄러가
- * markShipped → markDelivered 로 한 단계씩 밀어준다. 배송지 정보는 주문 시점 OrderShippingInfo 스냅샷을 그대로 복사한다.
- *
- * 상태 전이 규칙은 ShippingStatus.canTransitionTo 가 판정한다(위반 시 IllegalStateException).
- * 발송 전 취소·환불 시에는 cancel 로 CANCELLED 로 전이시킨다.
+ * 배송 — 주문당 1건(order_id UNIQUE). prepare 로 PREPARING 상태로 생성하고, 자동 진행 스케줄러가
+ * markShipped → markDelivered 로 한 단계씩 민다. 배송지 정보는 주문 시점 OrderShippingInfo 스냅샷을 복사한다.
+ * 상태 전이 규칙은 ShippingStatus.canTransitionTo 가 판정하고(위반 시 IllegalStateException), 발송 전 취소·환불은
+ * cancel 로 CANCELLED 로 전이시킨다.
  */
 @Entity
 @Table(name = "shipping")
@@ -95,9 +92,7 @@ public class Shipping extends BaseTimeEntity {
         this.safePackagingRequested = info.safePackagingRequested();
     }
 
-    /**
-     * 배송 준비 시작 — 초기 상태 PREPARING. 운송장 번호는 blank 불가, {@value #MAX_TRACKING_NUMBER_LENGTH}자 이하.
-     */
+    /** 배송 준비 시작 — 초기 상태 PREPARING. 운송장 번호는 blank 불가, {@value #MAX_TRACKING_NUMBER_LENGTH}자 이하. */
     public static Shipping prepare(Order order, OrderShippingInfo shippingInfo, String trackingNumber) {
         Objects.requireNonNull(order, "order must not be null");
         Objects.requireNonNull(shippingInfo, "shippingInfo must not be null");
@@ -110,27 +105,21 @@ public class Shipping extends BaseTimeEntity {
         return new Shipping(order, trackingNumber, shippingInfo);
     }
 
-    /**
-     * 발송 처리 — SHIPPED 로 전이하고 shippedAt 을 주입된 now 로 기록한다.
-     */
+    /** 발송 처리 — SHIPPED 로 전이하고 shippedAt 을 주입된 now 로 기록한다. */
     public void markShipped(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
         transitionTo(ShippingStatus.SHIPPED);
         this.shippedAt = now;
     }
 
-    /**
-     * 배송 완료 처리 — DELIVERED 로 전이하고 deliveredAt 을 주입된 now 로 기록한다.
-     */
+    /** 배송 완료 처리 — DELIVERED 로 전이하고 deliveredAt 을 주입된 now 로 기록한다. */
     public void markDelivered(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
         transitionTo(ShippingStatus.DELIVERED);
         this.deliveredAt = now;
     }
 
-    /**
-     * 배송 취소 — 종착 상태(CANCELLED)로 전이한다. DELIVERED·이미 CANCELLED 에서는 불법 전이로 IllegalStateException.
-     */
+    /** 배송 취소 — 종착(CANCELLED)으로 전이한다. DELIVERED·이미 CANCELLED 에서는 불법 전이로 IllegalStateException. */
     public void cancel() {
         transitionTo(ShippingStatus.CANCELLED);
     }
@@ -143,8 +132,8 @@ public class Shipping extends BaseTimeEntity {
     }
 
     /**
-     * 배송 PII 익명화 — 수령인/주소 PII 를 마스킹한다. address_detail 은 NULL 로 비운다. 운송장 번호·상태·시각 등 비-PII 는 보존.
-     * 멱등: 이미 익명화됐으면(anonymized_at != null) no-op.
+     * 배송 PII 익명화 — 수령인/주소를 마스킹하고 address_detail 은 NULL 로 비운다(운송장·상태·시각 등 비-PII 는 보존).
+     * 멱등 — 이미 익명화됐으면(anonymized_at != null) no-op.
      */
     public void anonymizePii(Instant now) {
         if (this.anonymizedAt != null) {

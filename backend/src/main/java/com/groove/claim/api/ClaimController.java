@@ -22,9 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 반품 접수·조회 API (회원 전용). 본인 주문/반품 여부는 ClaimService 가 검증한다.
- */
+/** 반품 접수·조회 API (회원 전용). 본인 주문/반품 여부는 ClaimService 가 검증한다. */
 @Tag(name = "반품", description = "반품 접수 · 조회 (인증 회원 전용, 본인 주문/반품만 가능)")
 @RestController
 @RequestMapping("/api/v1/claims")

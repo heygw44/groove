@@ -57,10 +57,9 @@ import java.util.stream.Collectors;
 /**
  * 반품(claim) 접수/승인/거부/환불 트랜잭션 경계.
  *
- * <p>접수(request) 검증 순서: 주문 존재(404) → 본인 주문(404) → 회원 활성(404, 탈퇴 토큰 잔존 방어 #269) → 반품 자격 {DELIVERED, COMPLETED}(422) → 반품
- * 기한(422) → 항목 1개 이상(422) → 항목 소속·잔여 수량 가드(422 / 409).
- *
- * <p>환불(completeRefund): Payment FOR UPDATE 락 → 멱등(INSPECTING 아니면 no-op) → PG refund(claim 별 멱등 키)
+ * 접수(request) 검증 순서: 주문 존재(404) → 본인 주문(404) → 회원 활성(404, 탈퇴 토큰 잔존 방어 #269) → 반품 자격
+ * {DELIVERED, COMPLETED}(422) → 반품 기한(422) → 항목 1개 이상(422) → 항목 소속·잔여 수량 가드(422 / 409).
+ * 환불(completeRefund): Payment FOR UPDATE 락 → 멱등(INSPECTING 아니면 no-op) → PG refund(claim 별 멱등 키)
  * → Payment 부분/전액 환불 누적 → 검수 통과 항목 재입고 → 전량 반품 완성 시 쿠폰 복원 + 주문 반품 마커.
  */
 @Service
@@ -147,12 +146,12 @@ public class ClaimService {
     /**
      * 관리자 발송 전 부분 취소 — CANCEL 클레임을 즉시 환불 확정한다(회수·검수 없음).
      *
-     * <p>흐름: 주문 FOR UPDATE → 자격(PAID/PREPARING) → 항목 소속·취소가능 수량 가드 → 결제 FOR
+     * 흐름: 주문 FOR UPDATE → 자격(PAID/PREPARING) → 항목 소속·취소가능 수량 가드 → 결제 FOR
      * UPDATE(PAID/PARTIALLY_REFUNDED) → CANCEL 클레임 저장 → 쿠폰 인지 환불액 산출 → (양수면) PG 환불 + 결제
      * 부분/전액 누적 → 취소 수량 재입고 → 쿠폰 무효 시 복원 → 전량 취소면 주문 CANCELLED + 발송 전 배송 취소 →
      * 클레임 REFUNDED 확정.
      *
-     * <p>쿠폰 정책: 부분취소 후 잔여 정가 ≥ 최소주문금액이면 할인 안분(쿠폰 USED 유지), 미만이면 쿠폰을 무효화해 적용
+     * 쿠폰 정책: 부분취소 후 잔여 정가 ≥ 최소주문금액이면 할인 안분(쿠폰 USED 유지), 미만이면 쿠폰을 무효화해 적용
      * 할인분을 환불에서 제외하고 쿠폰을 복원한다. 적용 할인이 취소 품목 정가를 초과하면 무효화하지 않고 안분으로 폴백한다.
      */
     @Transactional
@@ -254,7 +253,7 @@ public class ClaimService {
     /**
      * 검수 통과 환불 (스케줄러 자동통과 또는 관리자 수동 complete) — INSPECTING → REFUNDED.
      *
-     * <p>INSPECTING 이 아니면 부수효과 없이 현재 상태를 반환한다(멱등). 부분 반품이면 결제는 PARTIALLY_REFUNDED,
+     * INSPECTING 이 아니면 부수효과 없이 현재 상태를 반환한다(멱등). 부분 반품이면 결제는 PARTIALLY_REFUNDED,
      * 누적 환불액이 결제 전액에 도달하면 REFUNDED 가 되고 그때만 쿠폰 복원 + 주문 반품 마커를 찍는다.
      */
     @Transactional
@@ -322,10 +321,8 @@ public class ClaimService {
     }
 
     /**
-     * 비례 배분 환불 증분 = 이번 누적 목표 − 기환불액.
-     *
-     * <p>누적 반품 정가(cumGrossIncl)가 총정가(totalGross)에서 차지하는 비율만큼의 실결제액(payable)을 목표로 잡고,
-     * 기환불액을 뺀 증분을 이번 환불액으로 한다. BigInteger 로 곱셈/반올림한다.
+     * 비례 배분 환불 증분 = 이번 누적 목표 − 기환불액. 누적 반품 정가(cumGrossIncl)가 총정가(totalGross)에서
+     * 차지하는 비율만큼의 실결제액(payable)을 목표로 잡고, 기환불액을 뺀 증분을 이번 환불액으로 한다(BigInteger 곱셈/반올림).
      */
     static long proportionalRefund(long payable, long totalGross, long cumGrossIncl, long alreadyRefunded) {
         long remaining = payable - alreadyRefunded;
@@ -345,13 +342,10 @@ public class ClaimService {
 
     /**
      * 환불 증분 + 쿠폰 무효 여부 — 취소(allowCouponVoid=true)·반품(false) 공용 환불 계산. 세 분기:
-     *
-     * <ul>
-     *   <li>쿠폰 미적용(couponMinOrder.isEmpty()) → 이번 클레임 자기 정가(thisClaimGross)만 환불(잔여 한도 캡).</li>
-     *   <li>취소 무효(allowCouponVoid 이고 부분취소 후 잔여 정가 &lt; 최소주문금액) → 누적 환불 목표 =
-     *       cumGrossIncl − discount, 호출 측이 쿠폰 복원. 증분 0 이하면 비례로 폴백.</li>
-     *   <li>그 외 → proportionalRefund 비례 배분.</li>
-     * </ul>
+     * - 쿠폰 미적용(couponMinOrder.isEmpty()) → 이번 클레임 자기 정가(thisClaimGross)만 환불(잔여 한도 캡).
+     * - 취소 무효(allowCouponVoid 이고 부분취소 후 잔여 정가 < 최소주문금액) → 누적 환불 목표 = cumGrossIncl − discount,
+     *   호출 측이 쿠폰 복원. 증분 0 이하면 비례로 폴백.
+     * - 그 외 → proportionalRefund 비례 배분.
      */
     static RefundComputation refundIncrement(long payable, long totalGross, long thisClaimGross,
                                              long cumGrossIncl, long alreadyRefunded,

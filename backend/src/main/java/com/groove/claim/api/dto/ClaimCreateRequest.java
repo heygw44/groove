@@ -12,9 +12,7 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-/**
- * 반품 접수 요청 (POST /claims). 반품할 OrderItem 과 수량을 항목 목록으로 받는다.
- */
+/** 반품 접수 요청 (POST /claims). 반품할 OrderItem 과 수량을 항목 목록으로 받는다. */
 public record ClaimCreateRequest(
         @Schema(description = "반품 대상 주문 번호", example = "ORD-20260606-A1B2C3")
         @NotBlank String orderNumber,

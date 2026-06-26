@@ -34,9 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Set;
 
-/**
- * 관리자 반품 관리 API. 조회·승인·거부·수동 환불을 노출한다. 정렬은 createdAt 만 허용.
- */
+/** 관리자 반품 관리 API. 조회·승인·거부·수동 환불을 노출한다. 정렬은 createdAt 만 허용. */
 @Tag(name = "반품 (관리자)", description = "반품 조회·승인·거부·수동 환불 (모두 ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
