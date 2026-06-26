@@ -14,12 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 
 /**
- * 인증 흐름 애플리케이션 서비스.
- *
- * <p>로그인은 활성 회원 조회 → 비밀번호 BCrypt 비교 → 토큰 발급 순으로 진행한다.
- * 이메일 미존재와 비밀번호 불일치는 모두 동일하게 AUTH_INVALID_CREDENTIALS 응답으로 처리한다.
- *
- * <p>토큰 발급·영속화는 RefreshTokenService 에 위임하고, refresh·logout 위임 메서드를 제공한다.
+ * 인증 흐름 애플리케이션 서비스. 로그인은 활성 회원 조회 → 비밀번호 BCrypt 비교 → 토큰 발급 순.
+ * 이메일 미존재와 비밀번호 불일치는 모두 AUTH_INVALID_CREDENTIALS 로 응답한다(계정 열거 차단).
+ * 토큰 발급·영속화는 RefreshTokenService 에 위임한다.
  */
 @Service
 public class AuthService {
@@ -72,10 +69,8 @@ public class AuthService {
     }
 
     /**
-     * 비밀번호 변경.
-     *
-     * <p>현재 비밀번호를 BCrypt 비교로 검증한 뒤 신규 해시로 교체하고, 해당 회원의 활성 refresh
-     * 토큰을 전부 무효화한다. 현재 비밀번호 불일치는 MEMBER_PASSWORD_MISMATCH(400) 로 응답한다.
+     * 비밀번호 변경. 현재 비밀번호 BCrypt 검증 후 신규 해시로 교체하고 해당 회원의 활성 refresh 를 전부 무효화한다.
+     * 현재 비밀번호 불일치는 MEMBER_PASSWORD_MISMATCH(400).
      */
     @Transactional
     public void changePassword(Long memberId, String currentPassword, String newPassword) {

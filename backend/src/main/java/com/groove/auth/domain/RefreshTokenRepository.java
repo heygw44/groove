@@ -9,12 +9,8 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Refresh 토큰 영속성.
- *
- * <p>revokeIfActive 는 conditional update 로, 같은 토큰을 동시에 보낸 두 요청 중
- * 첫 요청만 affected rows = 1, 두 번째는 0 을 받는다.
- *
- * <p>UPDATE 쿼리는 clearAutomatically=true, flushAutomatically=true 로 1차 캐시 stale 상태를 방지한다.
+ * Refresh 토큰 영속성. revokeIfActive 는 conditional update 라 동시 회전 시 첫 요청만 affected=1, 두 번째는 0 을 받는다.
+ * UPDATE 는 clearAutomatically·flushAutomatically=true 로 1차 캐시 stale 을 막는다.
  */
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
 

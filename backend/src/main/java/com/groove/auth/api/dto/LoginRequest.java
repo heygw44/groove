@@ -5,9 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * 로그인 요청.
- *
- * <p>형식만 검증한다. 빈 값은 400 으로 차단한다.
+ * 로그인 요청. 형식만 검증하며 빈 값은 400.
  */
 public record LoginRequest(
         @NotBlank
