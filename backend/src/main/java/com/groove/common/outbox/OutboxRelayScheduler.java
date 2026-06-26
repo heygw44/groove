@@ -43,6 +43,7 @@ public class OutboxRelayScheduler {
     private final OutboxEventRepository repository;
     private final TransactionTemplate requiresNewTx;
     private final Clock clock;
+    private final OutboxMetrics metrics;
     private final Limit batchLimit;
     private final int maxAttempts;
     private final Map<String, OutboxEventHandler> handlers;
@@ -50,12 +51,14 @@ public class OutboxRelayScheduler {
     public OutboxRelayScheduler(OutboxEventRepository repository,
                                 @Qualifier(CommonTransactionConfig.REQUIRES_NEW_TX_TEMPLATE) TransactionTemplate requiresNewTx,
                                 Clock clock,
+                                OutboxMetrics metrics,
                                 List<OutboxEventHandler> handlers,
                                 @Value("${groove.outbox.relay.batch-size:200}") int batchSize,
                                 @Value("${groove.outbox.relay.max-attempts:5}") int maxAttempts) {
         this.repository = repository;
         this.requiresNewTx = requiresNewTx;
         this.clock = clock;
+        this.metrics = metrics;
         if (batchSize <= 0) {
             throw new IllegalArgumentException("groove.outbox.relay.batch-size 는 양수여야 합니다: " + batchSize);
         }
@@ -122,6 +125,13 @@ public class OutboxRelayScheduler {
         if (attempts >= maxAttempts) {
             log.error("아웃박스 릴레이 DLQ 격리: eventType={}, id={}, attempts={}/{}, 사유={} — 재시도 중단(수동 조치 필요)",
                     event.getEventType(), event.getId(), attempts, maxAttempts, reason, cause);
+            // 릴레이 조회가 격리 행을 제외하므로 이 호출은 이벤트당 정확히 1회(상한 도달 전이) 실행된다 → 메트릭 중복 없음(#323).
+            // 에러 로그 뒤에 두고 실패를 삼켜, 메트릭 장애가 격리 로그 누락이나 배치(건별 격리)를 깨지 않게 한다.
+            try {
+                metrics.recordQuarantined(event.getEventType());
+            } catch (RuntimeException e) {
+                log.warn("DLQ 격리 메트릭 기록 실패: eventType={}, id={}", event.getEventType(), event.getId(), e);
+            }
         } else {
             log.warn("아웃박스 릴레이 실패: eventType={}, id={}, attempts={}/{}, 사유={} — 다음 주기에 재시도",
                     event.getEventType(), event.getId(), attempts, maxAttempts, reason, cause);

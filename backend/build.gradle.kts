@@ -58,6 +58,9 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
+    // 아웃박스 DLQ 가시성 메트릭을 Prometheus 로 노출 (#323). actuator 가 micrometer-core 를 제공하므로
+    // 레지스트리만 추가하면 /actuator/prometheus 가 활성화된다. Spring Boot BOM 관리 의존성이라 버전 생략.
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     runtimeOnly("com.mysql:mysql-connector-j")
     annotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")

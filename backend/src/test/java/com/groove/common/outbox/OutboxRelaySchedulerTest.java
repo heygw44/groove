@@ -42,6 +42,8 @@ class OutboxRelaySchedulerTest {
     @Mock
     private OutboxEventHandler handler;
     @Mock
+    private OutboxMetrics metrics;
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     private OutboxRelayScheduler scheduler;
@@ -53,7 +55,7 @@ class OutboxRelaySchedulerTest {
         lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        scheduler = new OutboxRelayScheduler(repository, tx, clock, List.of(handler), 200, MAX_ATTEMPTS);
+        scheduler = new OutboxRelayScheduler(repository, tx, clock, metrics, List.of(handler), 200, MAX_ATTEMPTS);
     }
 
     private OutboxEvent event(long id, String eventType) {
@@ -112,7 +114,7 @@ class OutboxRelaySchedulerTest {
     }
 
     @Test
-    @DisplayName("재시도 상한 직전 이벤트가 다시 실패하면 카운터를 증가시켜 DLQ 임계에 도달시킨다")
+    @DisplayName("재시도 상한 직전 이벤트가 다시 실패하면 카운터를 증가시키고 DLQ 격리 메트릭을 1회 기록한다")
     void reachingMaxAttempts_stillIncrements() {
         OutboxEvent event = event(1L, EVENT_TYPE, MAX_ATTEMPTS - 1);
         given(repository.findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(anyInt(), any(Limit.class))).willReturn(List.of(event));
@@ -122,6 +124,20 @@ class OutboxRelaySchedulerTest {
 
         verify(repository).incrementAttemptCount(1L);
         verify(repository, never()).markPublished(any(), any());
+        // 상한 도달 전이 시점에 정확히 1회 격리 메트릭 기록 (#323)
+        verify(metrics).recordQuarantined(EVENT_TYPE);
+    }
+
+    @Test
+    @DisplayName("상한 미만 실패는 DLQ 격리 메트릭을 기록하지 않는다 — 아직 재시도 대상")
+    void belowMaxAttempts_doesNotRecordQuarantineMetric() {
+        OutboxEvent event = event(1L, EVENT_TYPE);
+        given(repository.findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(anyInt(), any(Limit.class))).willReturn(List.of(event));
+        org.mockito.BDDMockito.willThrow(new RuntimeException("consumer down")).given(handler).handle(event);
+
+        scheduler.relayPendingEvents();
+
+        verify(metrics, never()).recordQuarantined(any());
     }
 
     @Test
