@@ -27,16 +27,11 @@ import java.time.Clock;
 /**
  * 관리자 쿠폰 CRUD · 직접지급 트랜잭션 경계.
  *
- * 입력 검증: 형식·필수값은 DTO Bean Validation, 정률 1~100·validUntil>validFrom·정률 상한 필수 같은 의미 검증은
- * Coupon.Builder.build() 가 처리한다 — 도메인이 던진 IllegalArgumentException 을 ValidationException 으로 매핑해
- * 400 으로 응답한다.
+ * 의미 검증(정률 1~100·validUntil>validFrom·정률 상한 필수)은 Coupon.Builder.build() 가 담당하고,
+ * 도메인 IllegalArgumentException 을 ValidationException(400)으로 매핑한다.
  *
- * 상태 변경: changeStatus 는 행 락(findByIdForUpdate)으로 동시 변경 race 를 직렬화하고, canTransitionTo 위반은
- * 409(IllegalCouponStateTransitionException). self-transition(from == target)은 현재 상태를 그대로 반환한다.
- *
- * 직접지급: grant 는 선착순 한정수량(total_quantity)과 독립적으로 member_coupon 1행을 INSERT 한다 —
- * issuedCount 는 변하지 않는다. isIssuable 가드로 SUSPENDED/ENDED/만료 쿠폰 발급을 차단한다. 활성 회원만
- * 허용하고, 이미 보유한 회원은 409 — UNIQUE 충돌 race 시에도 같은 409 로 응답한다.
+ * changeStatus·grant 는 행 락(findByIdForUpdate)으로 동시 변경 race 를 직렬화한다. grant 는 선착순 한정수량과
+ * 독립적으로 member_coupon 1행을 INSERT 하며 issuedCount 를 증가시키지 않고, UNIQUE 충돌 race 도 같은 409 로 응답한다.
  */
 @Service
 public class AdminCouponService {

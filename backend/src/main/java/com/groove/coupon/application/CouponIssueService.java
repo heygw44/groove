@@ -20,17 +20,13 @@ import java.time.Clock;
 import java.util.Locale;
 
 /**
- * 선착순 쿠폰 발급.
+ * 선착순 쿠폰 발급. 세 경로 제공 — issue(원자적 조건부 UPDATE 로 소진 검사+증가),
+ * issueWithoutLock(락 없음, lost-update 로 초과발급 재현), issueWithPessimisticLock(FOR UPDATE 행 락).
  *
- * 발급을 3가지로 제공한다 — issue(원자적 조건부 UPDATE 로 한 문장에 소진 검사+증가),
- * issueWithoutLock(락 없음, lost-update 로 초과발급 재현), issueWithPessimisticLock(SELECT ... FOR UPDATE 행 락).
+ * 회원당 1장 보증: 사전 검사로 거르고, 통과한 동시 중복은 uk_member_coupon_coupon_member UNIQUE 가 잡는다 —
+ * INSERT 충돌 시 트랜잭션이 롤백되며 증가시킨 카운터도 함께 되돌아간다.
  *
- * 회원당 1장 보증: 사전 검사(existsByCoupon_IdAndMemberId)로 거르고, 통과한 동시 중복은
- * uk_member_coupon_coupon_member UNIQUE 가 잡는다 — INSERT 충돌 시 트랜잭션이 롤백되며 증가시킨 카운터도
- * 함께 되돌아간다.
- *
- * 트랜잭션 경계: issue 는 @Transactional 자기완결 메서드다 — @Idempotent 컨트롤러가 비트랜잭션으로 호출하고 이
- * 메서드가 커밋한 뒤 멱등성 마커가 COMPLETED 로 갱신된다.
+ * issue 는 @Transactional 자기완결 — @Idempotent 컨트롤러가 비트랜잭션으로 호출하고 커밋 후 멱등성 마커가 COMPLETED 로 갱신된다.
  */
 @Service
 public class CouponIssueService {
@@ -54,11 +50,8 @@ public class CouponIssueService {
     }
 
     /**
-     * 발급 경로 — 원자적 조건부 UPDATE.
-     *
-     * status + 발급 기간 + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로 원자 처리한다
-     * (affected=1 성공 / 0 발급불가 → 재조회로 소진·비ACTIVE·기간밖 판별). validateIssuable 사전 검사가
-     * 빠른 거부를 담당하고, UPDATE 의 기간 조건이 만료 경계 TOCTOU 를 닫는다.
+     * 발급 경로 — 원자적 조건부 UPDATE. status + 발급 기간 + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로
+     * 원자 처리한다(affected=1 성공 / 0 발급불가 → 재조회로 사유 판별). UPDATE 의 기간 조건이 만료 경계 TOCTOU 를 닫는다.
      */
     @Transactional
     public MemberCouponResponse issue(Long memberId, Long couponId) {

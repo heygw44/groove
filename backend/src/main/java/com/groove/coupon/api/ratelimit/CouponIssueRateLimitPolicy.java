@@ -15,13 +15,10 @@ import org.springframework.util.AntPathMatcher;
 import java.util.function.Supplier;
 
 /**
- * POST /api/v1/coupons/{id}/issue 에 대한 회원 단위 Rate Limit 정책.
- *
- * "회원당 분당 N회" 를 키로 쓴다. RateLimitFilter 는 Spring Security 필터보다 먼저 실행돼 SecurityContext 가 아직
- * 비어 있으므로, principal 대신 Authorization 헤더의 Bearer 토큰을 JwtProvider 로 직접 디코드해 memberId 를 키로
- * 삼는다. 토큰이 없거나 위조면 IP 로 폴백한다.
- *
- * 한도/리필 주기는 CouponRateLimitProperties 에서 주입받고, 초과 시 RateLimitFilter 가 429 + Retry-After 를 작성한다.
+ * POST /api/v1/coupons/{id}/issue 에 대한 회원 단위 Rate Limit 정책("회원당 분당 N회").
+ * RateLimitFilter 는 Spring Security 필터보다 먼저 실행돼 SecurityContext 가 비어 있으므로, principal 대신
+ * Authorization Bearer 토큰을 JwtProvider 로 직접 디코드해 memberId 를 키로 삼는다(부재/위조 시 IP 폴백).
+ * 한도/리필 주기는 CouponRateLimitProperties 주입, 초과 시 RateLimitFilter 가 429 + Retry-After 작성.
  */
 @Component
 public class CouponIssueRateLimitPolicy implements RateLimitPolicy {

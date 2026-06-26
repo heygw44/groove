@@ -20,9 +20,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * 쿠폰 조회 — 발급 가능 목록(GET /coupons)과 내 보유 쿠폰(GET /members/me/coupons).
- */
+/** 쿠폰 조회 — 발급 가능 목록(GET /coupons)과 내 보유 쿠폰(GET /members/me/coupons). */
 @Service
 public class CouponQueryService {
 
@@ -49,9 +47,7 @@ public class CouponQueryService {
 
     /**
      * 회원 보유 쿠폰 페이지 — status 가 null 이면 전체, 아니면 해당 상태만.
-     *
-     * <p>USED 쿠폰의 사용 주문번호(orderNumber)는 페이지의 orderId 집합을 모아 OrderRepository.findByIdIn 으로
-     * 한 번에 resolve 한다. 복원된 쿠폰은 orderId 가 비어 있어 null 로 매핑된다.
+     * USED 쿠폰의 orderNumber 는 페이지의 orderId 집합을 모아 findByIdIn 으로 한 번에 resolve 한다(복원된 쿠폰은 null).
      */
     @Transactional(readOnly = true)
     public Page<MemberCouponResponse> listForMember(Long memberId, MemberCouponStatus status, Pageable pageable) {

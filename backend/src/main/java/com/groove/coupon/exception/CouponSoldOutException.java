@@ -5,8 +5,7 @@ import com.groove.common.exception.ErrorCode;
 
 /**
  * 한정수량이 모두 소진된 쿠폰 발급 시도. HTTP 409.
- *
- * <p>원자적 조건부 UPDATE 가 issued_count < total_quantity 를 만족하지 못해 0행을 반환할 때 던진다.
+ * 원자적 조건부 UPDATE 가 issued_count < total_quantity 를 만족하지 못해 0행을 반환할 때.
  */
 public class CouponSoldOutException extends DomainException {
 

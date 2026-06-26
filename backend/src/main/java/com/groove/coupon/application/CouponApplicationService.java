@@ -19,12 +19,7 @@ import java.time.Instant;
 import java.util.OptionalLong;
 
 /**
- * 회원 쿠폰을 주문에 적용/복원하는 조율 서비스.
- *
- * 호출자는 둘 — OrderService.place 가 적용(applyToOrder), OrderService.cancel + AdminOrderService.refund 가
- * 복원(restoreForOrder)한다.
- *
- * 트랜잭션 경계: 두 진입점 모두 Propagation.MANDATORY — 호출자의 @Transactional 안에서 실행된다.
+ * 회원 쿠폰을 주문에 적용/복원하는 조율 서비스. 두 진입점 모두 Propagation.MANDATORY — 호출자 트랜잭션 안에서 실행된다.
  *
  * 동시성: applyToOrder 는 findByIdForUpdate 로 회원 쿠폰 행을 잠근다(두 번째는 status=USED 를 본다).
  * restoreForOrder 는 단일 row 변경이라 추가 락이 없다.
@@ -44,10 +39,8 @@ public class CouponApplicationService {
     }
 
     /**
-     * 회원 쿠폰을 주문에 적용한다 — 검증 → 할인 계산 → Order.applyDiscount → use(orderId). 적용된 할인 금액을 반환한다.
-     *
-     * 검증은 fail-fast: 존재(404) → 소유자(403) → ISSUED 상태(USED/EXPIRED/CANCELLED 별 매핑) → 만료(422) →
-     * Coupon.calculateDiscount → order.applyDiscount → memberCoupon.use(orderId)(ISSUED→USED).
+     * 회원 쿠폰을 주문에 적용하고 할인액을 반환한다. fail-fast 검증:
+     * 존재(404) → 소유자(403) → ISSUED 상태(USED/EXPIRED/CANCELLED 별 매핑) → 만료(422) → 할인 계산 → use(ISSUED→USED).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public long applyToOrder(Long memberCouponId, Long memberId, Order order) {
@@ -85,10 +78,8 @@ public class CouponApplicationService {
     }
 
     /**
-     * 주문에 적용된 쿠폰을 복원한다 — USED → ISSUED. 쿠폰 미적용 주문은 no-op.
-     *
-     * MemberCoupon.restore(now, grace) 가 멱등이라 USED 가 아니면 no-op 이며(무락 동시 복원 안전),
-     * 복원 시점에 이미 만료된 쿠폰은 grace 만큼 연장해 되살린다.
+     * 주문에 적용된 쿠폰을 복원한다(USED → ISSUED). 쿠폰 미적용 주문은 no-op.
+     * MemberCoupon.restore 가 멱등이라 USED 가 아니면 no-op(무락 동시 복원 안전), 이미 만료된 쿠폰은 grace 만큼 연장해 되살린다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void restoreForOrder(Long orderId) {
@@ -99,9 +90,7 @@ public class CouponApplicationService {
                 .ifPresent(memberCoupon -> memberCoupon.restore(clock.instant(), restoreGrace));
     }
 
-    /**
-     * 주문에 적용된 쿠폰의 최소주문금액. 쿠폰 미적용 주문은 빈 값.
-     */
+    /** 주문에 적용된 쿠폰의 최소주문금액. 쿠폰 미적용 주문은 빈 값. */
     @Transactional(propagation = Propagation.MANDATORY)
     public OptionalLong appliedCouponMinOrderAmount(Long orderId) {
         if (orderId == null) {

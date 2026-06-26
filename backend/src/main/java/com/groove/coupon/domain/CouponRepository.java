@@ -13,23 +13,16 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * 쿠폰 정책 저장소.
- *
- * 선착순 발급의 동시성 제어를 제공한다. incrementIssuedCount — 원자적 조건부 UPDATE 로 한 문장에 소진 검사 +
- * 카운터 증가를 수행한다. findByIdForUpdate — 비관적 락. 베이스라인(락 없음)은 기본 findById 로 구현한다.
+ * 쿠폰 정책 저장소 — 선착순 발급의 동시성 제어를 제공한다.
+ * incrementIssuedCount(원자적 조건부 UPDATE)·findByIdForUpdate(비관적 락). 베이스라인(락 없음)은 기본 findById.
  */
 public interface CouponRepository extends JpaRepository<Coupon, Long> {
 
     /**
-     * 원자적 조건부 발급 카운터 증가 — 정책이 ACTIVE 이고, 발급 기간(validFrom ≤ now ≤ validUntil) 안이며,
-     * issued_count < total_quantity (또는 무제한)인 경우에만 +1 한다. 반환값: 1 = 슬롯 확보 성공,
-     * 0 = 발급 불가(소진·비ACTIVE·기간 밖). 0행일 때 사유 판별은 서비스가 재조회로 한다.
-     *
-     * <p>기간 조건은 경계 포함(≤/≥)으로 Coupon.isIssuable(!isBefore/!isAfter) 과 일치시켜, 사전 검사 통과 후
-     * 만료 경계에서 발급되는 TOCTOU 를 닫는다.
-     *
-     * 벌크 UPDATE 는 영속성 컨텍스트를 우회하므로 flushAutomatically = true 로 직전 dirty 상태를 flush 하고,
-     * clearAutomatically = true 로 1차 캐시를 비운다.
+     * 원자적 조건부 발급 카운터 증가 — ACTIVE + 발급 기간(validFrom ≤ now ≤ validUntil) + issued_count < total_quantity
+     * (또는 무제한)일 때만 +1. 반환 1=슬롯 확보, 0=발급 불가(사유 판별은 서비스가 재조회).
+     * 기간 조건은 경계 포함으로 Coupon.isIssuable 과 일치시켜 만료 경계 TOCTOU 를 닫는다.
+     * 벌크 UPDATE 는 영속성 컨텍스트를 우회하므로 flushAutomatically(직전 dirty flush)·clearAutomatically(1차 캐시 비움).
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Coupon c SET c.issuedCount = c.issuedCount + 1 "
