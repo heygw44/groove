@@ -52,8 +52,32 @@ function fromCartItem(i) {
   }
 }
 
-// 품절·판매중지 항목이 있으면 주문 차단
+// AlbumDetail → 주문 라인. 바로구매·게스트 재조회 공통 매퍼(서버 현재가 권위).
+// status 코드(enums.js: SELLING/SOLD_OUT/HIDDEN)가 'SELLING' 일 때만 구매 가능.
+function lineFromAlbum(a, quantity) {
+  const available = a.status === 'SELLING'
+  return {
+    albumId: a.id,
+    title: a.title,
+    artistName: a.artist?.name ?? '',
+    coverImageUrl: a.coverImageUrl,
+    unitPrice: a.price,
+    quantity,
+    subtotal: a.price * quantity,
+    available,
+    unavailableReason: available ? null : 'unavailable', // 'unavailable'(품절·판매중지) | 'temporary'(일시 조회 실패)
+  }
+}
+
+// 품절·판매중지 또는 일시 조회 실패 항목이 있으면 주문 차단
 const hasUnavailableLine = computed(() => lines.value.some((l) => !l.available))
+// 안내 메시지 분기 — 실제 품절·판매중지 vs 네트워크/5xx 일시 실패 구분
+const hasRealUnavailableLine = computed(() =>
+  lines.value.some((l) => !l.available && l.unavailableReason !== 'temporary'),
+)
+const hasTemporaryLine = computed(() =>
+  lines.value.some((l) => l.unavailableReason === 'temporary'),
+)
 
 onMounted(async () => {
   try {
@@ -61,23 +85,44 @@ onMounted(async () => {
       const id = Number(route.query.albumId)
       const qty = Math.max(1, Math.min(99, Number(route.query.qty) || 1))
       const album = await albumsApi.detail(id)
-      lines.value = [
-        {
-          albumId: album.id,
-          title: album.title,
-          artistName: album.artist?.name ?? '',
-          coverImageUrl: album.coverImageUrl,
-          unitPrice: album.price,
-          quantity: qty,
-          subtotal: album.price * qty,
-          available: true,
-        },
-      ]
+      lines.value = [lineFromAlbum(album, qty)]
     } else if (isAuthenticated.value) {
       await cart.load()
       lines.value = cart.items.map(fromCartItem) // 품절 항목도 표시하되 주문은 차단
     } else {
-      lines.value = guestCart.items.map(fromCartItem)
+      // 게스트 카트: localStorage unitPrice 는 노후·변조 가능 → 체크아웃 진입 시 서버 현재가로 재조회.
+      let priceChanged = false
+      let transientFailures = 0 // 네트워크/5xx 등 일시 조회 실패 — 품절(판매중지)과 구분
+      const built = await Promise.all(
+        guestCart.items.map(async (i) => {
+          try {
+            const a = await albumsApi.detail(i.albumId)
+            if (a.price !== i.unitPrice) priceChanged = true
+            return lineFromAlbum(a, i.quantity)
+          } catch (e) {
+            // 일시 오류(네트워크 status 0·5xx)는 품절이 아니라 재조회 대상 → 사유를 보존해 구분.
+            const temporary = e?.status === 0 || e?.status >= 500
+            if (temporary) transientFailures++
+            // 삭제·판매중지(404 등)·일시오류 모두 현재가를 신뢰할 수 없어 주문은 차단(사유만 구분).
+            return {
+              ...fromCartItem(i),
+              available: false,
+              unavailableReason: temporary ? 'temporary' : 'unavailable',
+            }
+          }
+        }),
+      )
+      // 전 항목이 일시 오류로 실패 → 거짓 '품절'·'장바구니에서 제거' 대신 재시도 가능한 에러로.
+      if (transientFailures > 0 && transientFailures === guestCart.items.length) {
+        loadError.value = '상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+        return
+      }
+      lines.value = built
+      if (transientFailures > 0) {
+        ui.notify('일부 상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.', 'error')
+      } else if (priceChanged) {
+        ui.notify('일부 상품 가격이 변경되었습니다. 변경된 금액을 확인해 주세요.', 'info')
+      }
     }
   } catch (e) {
     loadError.value = errorMessage(e, '주문 정보를 불러오지 못했습니다.')
@@ -154,7 +199,12 @@ async function onSubmit() {
     return
   }
   if (hasUnavailableLine.value) {
-    ui.notify('품절·판매중지된 상품이 있어 주문할 수 없습니다. 장바구니에서 제거해 주세요.', 'error')
+    ui.notify(
+      hasRealUnavailableLine.value
+        ? '품절·판매중지된 상품이 있어 주문할 수 없습니다. 장바구니에서 제거해 주세요.'
+        : '일부 상품 정보를 일시적으로 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
+      'error',
+    )
     return
   }
   if (!(await submit())) return
@@ -217,7 +267,9 @@ async function onSubmit() {
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-vinyl-black">{{ l.title }}</p>
               <p class="truncate text-xs text-vinyl-800/60">{{ l.artistName }} · {{ l.quantity }}개</p>
-              <p v-if="!l.available" class="text-xs font-medium text-rust-600">품절 · 판매중지</p>
+              <p v-if="!l.available" class="text-xs font-medium text-rust-600">
+                {{ l.unavailableReason === 'temporary' ? '정보를 불러오지 못함 · 다시 시도' : '품절 · 판매중지' }}
+              </p>
             </div>
             <p class="text-sm font-semibold text-vinyl-black">{{ formatWon(l.subtotal) }}</p>
           </li>
@@ -276,11 +328,18 @@ async function onSubmit() {
       </div>
 
       <p
-        v-if="hasUnavailableLine"
+        v-if="hasRealUnavailableLine"
         class="rounded-lg bg-rust-500/10 px-4 py-3 text-sm text-rust-600"
         role="alert"
       >
         품절·판매중지된 상품이 있어 주문할 수 없습니다. 장바구니에서 제거해 주세요.
+      </p>
+      <p
+        v-if="hasTemporaryLine"
+        class="rounded-lg bg-rust-500/10 px-4 py-3 text-sm text-rust-600"
+        role="alert"
+      >
+        일부 상품 정보를 일시적으로 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
       </p>
       <BaseButton type="submit" class="w-full" :loading="submitting" :disabled="hasUnavailableLine">
         결제하기
