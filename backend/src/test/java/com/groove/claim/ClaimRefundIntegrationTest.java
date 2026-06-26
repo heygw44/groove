@@ -277,7 +277,8 @@ class ClaimRefundIntegrationTest {
                 List.of(new ClaimCreateCommand.Line(orderItemId, 1))));
         assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getRefundedAmount()).isEqualTo(UNIT_PRICE);
 
-        // 2) 잔여 1개를 배송 진행 후 배송완료로 — 반품 자격(DELIVERED) 확보.
+        // 2) 잔여 1개를 배송 진행 후 배송완료로 — 반품 자격(DELIVERED) 확보. 배송 행 없이 강제 전이해도
+        //    Order.changeStatus(DELIVERED) 가 order.deliveredAt 을 기록하므로 반품 기한 anchor 가 결정된다.
         Order live = orderRepository.findById(orderId).orElseThrow();
         live.changeStatus(OrderStatus.PREPARING, null, Instant.now());
         live.changeStatus(OrderStatus.SHIPPED, null, Instant.now());

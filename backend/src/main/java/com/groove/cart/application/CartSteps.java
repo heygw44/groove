@@ -2,7 +2,6 @@ package com.groove.cart.application;
 
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumRepository;
-import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.domain.Cart;
 import com.groove.cart.domain.CartRepository;
@@ -93,7 +92,7 @@ class CartSteps {
     private Album loadPurchasableAlbum(Long albumId) {
         Album album = albumRepository.findById(albumId)
                 .orElseThrow(AlbumNotFoundException::new);
-        if (album.getStatus() != AlbumStatus.SELLING) {
+        if (!album.isSelling()) {
             throw new AlbumNotPurchasableException();
         }
         return album;

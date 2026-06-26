@@ -2,7 +2,6 @@ package com.groove.order.application;
 
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumRepository;
-import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.album.domain.StockRestorer;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.exception.AlbumNotPurchasableException;
@@ -40,6 +39,8 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -189,7 +190,7 @@ public class OrderService {
 
     /**
      * place(락)와 placeWithoutLock(락 없음)의 공유 본문. useLock 이 재고 조회 전략을 가른다 —
-     * true 면 findByIdForUpdate(행 락 선점), false 면 findById(락 없음).
+     * true 면 albumId 오름차순 단건 findByIdForUpdate(행 락 선점), false 면 findAllById 일괄 조회(락 없음).
      */
     private Order placeInternal(Long memberId, OrderCreateRequest request, boolean useLock) {
         validateOwnership(memberId, request.guest());
@@ -202,19 +203,13 @@ public class OrderService {
             throw new CouponNotApplicableException("게스트 주문에는 쿠폰을 적용할 수 없습니다");
         }
 
-        // 1) 도메인 검증 + 재고 차감. 락 경로의 다중 album 주문만 albumId 오름차순으로 처리한다.
-        List<OrderItemRequest> orderedItems = (useLock && request.items().size() > 1)
-                ? request.items().stream().sorted(Comparator.comparingLong(OrderItemRequest::albumId)).toList()
-                : request.items();
-        List<ResolvedLine> lines = new ArrayList<>(orderedItems.size());
-        for (OrderItemRequest line : orderedItems) {
-            Album album = loadPurchasable(line.albumId(), useLock);
-            decreaseStock(album, line.quantity());
-            lines.add(new ResolvedLine(album, line.quantity()));
-        }
-
-        // 2) orderNumber 발급 + Order/OrderItem 영속화.
+        // 1) orderNumber 사전발급 — 비락 조회라 행 락 선점 전에 끝낸다(락 보유 구간 밖으로 분리).
         String orderNumber = allocateOrderNumber();
+
+        // 2) 도메인 검증 + 재고 차감.
+        List<ResolvedLine> lines = resolveLines(request.items(), useLock);
+
+        // 3) Order/OrderItem 영속화.
         Order order = newOrder(orderNumber, memberId, request.guest(), toShippingInfo(request.shipping()));
         for (ResolvedLine line : lines) {
             order.addItem(OrderItem.create(line.album, line.quantity));
@@ -222,7 +217,7 @@ public class OrderService {
 
         Order persisted = orderRepository.save(order);
 
-        // 3) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다.
+        // 4) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다.
         if (request.memberCouponId() != null) {
             long discount = couponApplicationService.applyToOrder(
                     request.memberCouponId(), memberId, persisted);
@@ -274,15 +269,45 @@ public class OrderService {
     }
 
     /**
-     * 구매 가능 album 로딩 + SELLING 검증. useLock 이면 SELECT ... FOR UPDATE 로 행 락을 선점,
-     * 아니면 일반 findById.
+     * 항목별 album 검증 + 재고 차감 후 ResolvedLine 목록을 만든다.
+     *
+     * <p>락 경로(useLock)는 데드락 회피를 위해 다중 album 을 albumId 오름차순으로 단건 행 락(SELECT
+     * ... FOR UPDATE)한다. 비락 경로(테스트/시연 baseline)는 락이 없으므로 findAllById 로 일괄 조회해
+     * 항목 수만큼의 단건 쿼리를 없앤다.
      */
-    private Album loadPurchasable(Long albumId, boolean useLock) {
-        Album album = (useLock
-                ? albumRepository.findByIdForUpdate(albumId)
-                : albumRepository.findById(albumId))
-                .orElseThrow(AlbumNotFoundException::new);
-        if (album.getStatus() != AlbumStatus.SELLING) {
+    private List<ResolvedLine> resolveLines(List<OrderItemRequest> items, boolean useLock) {
+        // album 해소 전략만 분기한다. 락 경로는 데드락 회피를 위해 albumId 오름차순으로 단건 행 락을,
+        // 비락 baseline 은 findAllById 일괄 조회 후 맵 조회를 쓴다. 이후 검증·차감 루프는 공유한다.
+        List<OrderItemRequest> ordered;
+        Function<Long, Album> resolve;
+        if (useLock) {
+            ordered = items.size() > 1
+                    ? items.stream().sorted(Comparator.comparingLong(OrderItemRequest::albumId)).toList()
+                    : items;
+            resolve = albumId -> validatePurchasable(albumRepository.findByIdForUpdate(albumId).orElse(null));
+        } else {
+            ordered = items;
+            Map<Long, Album> byId = albumRepository.findAllById(
+                            items.stream().map(OrderItemRequest::albumId).distinct().toList()).stream()
+                    .collect(Collectors.toMap(Album::getId, album -> album));
+            resolve = albumId -> validatePurchasable(byId.get(albumId));
+        }
+
+        List<ResolvedLine> lines = new ArrayList<>(ordered.size());
+        for (OrderItemRequest line : ordered) {
+            Album album = resolve.apply(line.albumId());
+            decreaseStock(album, line.quantity());
+            lines.add(new ResolvedLine(album, line.quantity()));
+        }
+        return lines;
+    }
+
+    /** 구매 가능 album 검증 — 미존재(null)면 404, SELLING 이 아니면 422. */
+    private static Album validatePurchasable(Album album) {
+        if (album == null) {
+            throw new AlbumNotFoundException();
+        }
+        if (!album.isSelling()) {
             throw new AlbumNotPurchasableException();
         }
         return album;

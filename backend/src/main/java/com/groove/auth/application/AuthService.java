@@ -88,7 +88,15 @@ public class AuthService {
         }
 
         member.changePassword(passwordEncoder.encode(newPassword));
-        // member 의 password 변경은 flush 하지 않고 본 트랜잭션 커밋 시점까지 미룬 뒤 revoke 를 먼저 커밋한다.
+        // [순서 불변] member.password UPDATE 는 flush 하지 않고 본 트랜잭션 커밋까지 미룬 뒤, revoke 를
+        // REQUIRES_NEW 로 먼저 커밋한다. 이 순서를 "비번 먼저 확정" 으로 뒤집지 말 것:
+        //   - revoke 의 REQUIRES_NEW 는 토큰 재사용 감지(RefreshTokenService.rotate)가 예외 throw 후에도
+        //     무효화를 보존하려고 의존하므로 제거 불가.
+        //   - 그렇다고 여기서 member 를 saveAndFlush 하면, outer 가 member 행 락을 쥔 채 REQUIRES_NEW 가
+        //     refresh_token 을 revoke(자식→부모 FK fk_refresh_token_member 로 member 와 묶임)하면서 락
+        //     경합·데드락(Lock wait timeout)을 일으킨다. 실측으로 병렬 스위트에서 1205/40001 재현됨.
+        // 따라서 현재 순서가 유일하게 안전하다. 잔존 위험(revoke 커밋 후 outer 롤백 시 세션만 죽고 비번은
+        // 옛값)은 fail-safe 방향(보안 약화 없음, 재로그인만 요구)이라 수용한다.
         int revoked = refreshTokenAdmin.forceRevokeAllActiveSessions(memberId, clock.instant());
         log.info("비밀번호 변경 성공 memberId={} revokedSessions={}", memberId, revoked);
     }

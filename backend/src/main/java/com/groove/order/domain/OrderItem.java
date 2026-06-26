@@ -71,7 +71,8 @@ public class OrderItem extends BaseTimeEntity {
     }
 
     public long getSubtotal() {
-        return unitPrice * quantity;
+        // 오버플로 시 조용한 음수 대신 ArithmeticException 으로 즉시 실패한다(도달은 비현실적).
+        return Math.multiplyExact(unitPrice, quantity);
     }
 
     public Long getId() {

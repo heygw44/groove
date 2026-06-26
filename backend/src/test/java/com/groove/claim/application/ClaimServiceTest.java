@@ -181,18 +181,34 @@ class ClaimServiceTest {
     }
 
     @Test
-    @DisplayName("request: 배송행 deliveredAt 부재 시 주문 updated_at 으로 기한 폴백(관리자 강제 DELIVERED)")
-    void request_fallsBackToOrderUpdatedAtWhenShippingMissing() {
+    @DisplayName("request: 배송행 없어도 order.deliveredAt 으로 기한 결정 — 관리자 강제 전이/시드 주문 반품 가능")
+    void request_anchorsOnOrderDeliveredAtWithoutShippingRow() {
         Order order = deliveredOrder(15_000L, 2, 0);
-        ReflectionTestUtils.setField(order, "updatedAt", CLOCK.instant().minus(Duration.ofDays(1)));
+        // 배송 행 없이 DELIVERED 로 전이된 주문 — order.deliveredAt 이 결정적 anchor 가 된다.
+        ReflectionTestUtils.setField(order, "deliveredAt", CLOCK.instant().minus(Duration.ofDays(1)));
         given(orderRepository.findByOrderNumberForUpdate(ORDER_NUMBER)).willReturn(Optional.of(order));
-        given(shippingService.findDeliveredAt(ORDER_ID)).willReturn(Optional.empty());
         given(claimRepository.findByOrder_IdAndStatusNot(ORDER_ID, ClaimStatus.REJECTED)).willReturn(List.of());
         given(claimRepository.save(any(Claim.class))).willAnswer(inv -> inv.getArgument(0));
 
         Claim claim = claimService.request(command(1));
 
         assertThat(claim.getStatus()).isEqualTo(ClaimStatus.REQUESTED);
+        // order.deliveredAt 이 있으면 shipping 애그리거트는 조회하지 않는다.
+        verify(shippingService, never()).findDeliveredAt(any());
+    }
+
+    @Test
+    @DisplayName("request: 배송행 deliveredAt 부재 시 order.updated_at 폴백은 제거됨 — 최근 updated_at 이라도 결정 불가로 거부")
+    void request_ignoresOrderUpdatedAtWhenShippingMissing() {
+        Order order = deliveredOrder(15_000L, 2, 0);
+        // updated_at 이 window 내(1일 전)라도 비결정적이므로 anchor 로 쓰지 않는다.
+        ReflectionTestUtils.setField(order, "updatedAt", CLOCK.instant().minus(Duration.ofDays(1)));
+        given(orderRepository.findByOrderNumberForUpdate(ORDER_NUMBER)).willReturn(Optional.of(order));
+        given(shippingService.findDeliveredAt(ORDER_ID)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> claimService.request(command(1)))
+                .isInstanceOf(ReturnWindowNotDeterminableException.class);
+        verify(claimRepository, never()).save(any());
     }
 
     @Test

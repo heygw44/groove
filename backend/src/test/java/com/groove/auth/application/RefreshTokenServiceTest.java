@@ -17,6 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -31,7 +32,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -121,14 +124,19 @@ class RefreshTokenServiceTest {
                     ReflectionTestUtils.setField(row, "id", 200L);
                     return row;
                 });
-        given(refreshTokenRepository.revokeIfActive(eq(100L), any(Instant.class), eq(200L)))
+        // 회전은 구 토큰을 먼저 revoke(replacedBy 는 아직 null)한 뒤 새 행을 INSERT 하고 linkReplacement 로 연결한다.
+        given(refreshTokenRepository.revokeIfActive(eq(100L), any(Instant.class), isNull()))
                 .willReturn(1);
 
         TokenPair result = service.rotate(RAW_REFRESH);
 
         assertThat(result.accessToken()).isEqualTo("new-access");
         assertThat(result.refreshToken()).isEqualTo("new-refresh");
-        verify(refreshTokenRepository).revokeIfActive(100L, NOW, 200L);
+        // 순서까지 고정 — revoke → INSERT(save) → linkReplacement. 인자만 맞고 순서가 뒤집히는 회귀를 막는다.
+        InOrder inOrder = inOrder(refreshTokenRepository);
+        inOrder.verify(refreshTokenRepository).revokeIfActive(100L, NOW, null);
+        inOrder.verify(refreshTokenRepository).save(any(RefreshToken.class));
+        inOrder.verify(refreshTokenRepository).linkReplacement(100L, 200L);
         verify(refreshTokenAdmin, never()).forceRevokeAllActiveSessions(anyLong(), any());
     }
 
@@ -218,14 +226,8 @@ class RefreshTokenServiceTest {
         given(memberRepository.findByIdAndDeletedAtIsNull(MEMBER_ID)).willReturn(Optional.of(member));
         given(jwtProvider.issueAccessToken(MEMBER_ID, MemberRole.USER)).willReturn("new-access");
         given(jwtProvider.issueRefreshToken(MEMBER_ID)).willReturn("new-refresh");
-        given(jwtProperties.refreshTokenTtlSeconds()).willReturn(REFRESH_TTL);
-        given(refreshTokenRepository.save(any(RefreshToken.class)))
-                .willAnswer(inv -> {
-                    RefreshToken row = inv.getArgument(0);
-                    ReflectionTestUtils.setField(row, "id", 201L);
-                    return row;
-                });
-        given(refreshTokenRepository.revokeIfActive(eq(100L), any(Instant.class), eq(201L)))
+        // revoke 를 INSERT 보다 먼저 수행하므로 race 패배(0행) 시 새 토큰은 아예 INSERT 되지 않는다.
+        given(refreshTokenRepository.revokeIfActive(eq(100L), any(Instant.class), isNull()))
                 .willReturn(0); // race 패배
 
         assertThatThrownBy(() -> service.rotate(RAW_REFRESH))
@@ -233,8 +235,10 @@ class RefreshTokenServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.AUTH_INVALID_TOKEN);
 
-        // race 패배는 전체 무효화하지 않는다.
+        // race 패배는 전체 무효화하지 않고, 떠도는 토큰도 남기지 않는다(INSERT·연결 미발생).
         verify(refreshTokenAdmin, never()).forceRevokeAllActiveSessions(anyLong(), any());
+        verify(refreshTokenRepository, never()).save(any());
+        verify(refreshTokenRepository, never()).linkReplacement(anyLong(), anyLong());
     }
 
     @Test

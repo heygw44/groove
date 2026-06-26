@@ -64,6 +64,15 @@ class OrderItemTest {
     }
 
     @Test
+    @DisplayName("getSubtotal — long 오버플로 시 조용한 음수 대신 ArithmeticException")
+    void subtotal_overflowThrows() {
+        Album a = album(1L, "T", Long.MAX_VALUE);
+        OrderItem item = OrderItem.create(a, 2);
+
+        assertThatThrownBy(item::getSubtotal).isInstanceOf(ArithmeticException.class);
+    }
+
+    @Test
     @DisplayName("create — quantity 0 또는 음수 → InvalidOrderItemException")
     void create_rejectsNonPositiveQuantity() {
         Album a = album(1L, "T", 1000L);
