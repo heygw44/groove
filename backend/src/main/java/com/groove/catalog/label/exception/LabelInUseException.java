@@ -3,9 +3,7 @@ package com.groove.catalog.label.exception;
 import com.groove.common.exception.DomainException;
 import com.groove.common.exception.ErrorCode;
 
-/**
- * 삭제하려는 레이블이 album 에서 참조 중인 경우. 409 응답으로 매핑된다.
- */
+/** 삭제하려는 레이블이 album 에서 참조 중인 경우. 409 응답으로 매핑된다. */
 public class LabelInUseException extends DomainException {
 
     public LabelInUseException() {

@@ -11,8 +11,7 @@ import jakarta.persistence.Table;
 
 /**
  * 장르 엔티티. 이름만 가진 카탈로그 메타이며 UNIQUE 는 DB 제약에 위임한다.
- *
- * <p>클래스 레벨 @BatchSize: genre LAZY 프록시 N+1 을 IN 쿼리 1회로 흡수한다.
+ * 클래스 레벨 @BatchSize 는 genre LAZY 프록시 N+1 을 IN 쿼리 1회로 흡수한다.
  */
 @Entity
 @Table(name = "genre")
@@ -33,16 +32,11 @@ public class Genre extends BaseTimeEntity {
         this.name = name;
     }
 
-    /**
-     * 정적 팩토리.
-     */
+    /** 정적 팩토리. */
     public static Genre create(String name) {
         return new Genre(name);
     }
 
-    /**
-     * 이름 변경.
-     */
     public void rename(String newName) {
         this.name = newName;
     }

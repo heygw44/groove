@@ -12,9 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * 장르 공개 조회 (비로그인 GET 전체 목록).
- */
+/** 장르 공개 조회 (비로그인 GET 전체 목록). */
 @Tag(name = "장르", description = "장르 공개 조회 (비로그인 — 전체 목록)")
 @RestController
 @RequestMapping("/api/v1/genres")

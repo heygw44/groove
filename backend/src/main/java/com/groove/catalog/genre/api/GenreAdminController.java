@@ -28,9 +28,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.List;
 
-/**
- * 장르 관리자 CRUD (ADMIN 전용).
- */
+/** 장르 관리자 CRUD (ADMIN 전용). */
 @Tag(name = "장르 (관리자)", description = "장르 등록·조회·수정·삭제 (ADMIN 권한 필요)")
 @SecurityRequirement(name = "bearerAuth")
 @RestController

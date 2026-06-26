@@ -4,9 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/**
- * 레이블 생성 요청. name 최대 100 자.
- */
+/** 레이블 생성 요청. name 최대 100 자. */
 public record LabelCreateRequest(
         @Schema(description = "레이블 이름 (UNIQUE)", example = "Blue Note", maxLength = 100)
         @NotBlank
