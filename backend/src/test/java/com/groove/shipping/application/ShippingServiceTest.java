@@ -87,6 +87,20 @@ class ShippingServiceTest {
     }
 
     @Test
+    @DisplayName("findByTrackingNumber — 이미 익명화된 배송은 재마스킹하지 않고 저장값(\"익명\") 그대로 반환")
+    void findByTrackingNumber_anonymized_notReMasked() {
+        Shipping shipping = preparingShipping();
+        shipping.anonymizePii(CLOCK.instant());
+        given(shippingRepository.findByTrackingNumber(TRACKING)).willReturn(Optional.of(shipping));
+
+        ShippingResponse response = shippingService.findByTrackingNumber(TRACKING);
+
+        // 익명화된 값("익명")에 마스킹을 다시 입히지 않는다.
+        assertThat(response.recipientName()).isEqualTo("익명");
+        assertThat(response.address()).isEqualTo("익명");
+    }
+
+    @Test
     @DisplayName("findByTrackingNumber — 미존재 → ShippingNotFoundException")
     void findByTrackingNumber_notFound() {
         given(shippingRepository.findByTrackingNumber("nope")).willReturn(Optional.empty());

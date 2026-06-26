@@ -17,7 +17,12 @@ public record SecurityHeadersProperties(
         String policy
 ) {
 
-    /** Toss 결제 위젯(iframe·리소스)을 허용하는 기본 CSP. 값 미설정 시 사용한다. */
+    /**
+     * Toss 결제 위젯(iframe·리소스)을 허용하는 기본 CSP. 값 미설정 시 사용한다.
+     *
+     * <p>위반 리포트의 중앙 수집을 원하면(현재 앱에 수집 엔드포인트 없음) {@code GROOVE_CSP_POLICY} 로 정책을 재정의하며
+     * {@code report-to <group>} 디렉티브를 덧붙이고, 별도로 {@code Reporting-Endpoints} 헤더에 수집 URL 을 연결한다.
+     */
     private static final String DEFAULT_POLICY = "default-src 'self'; "
             + "script-src 'self' https://*.tosspayments.com; "
             + "style-src 'self' 'unsafe-inline'; "

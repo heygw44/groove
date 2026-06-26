@@ -25,16 +25,20 @@ public final class PiiMasking {
         if (name == null || name.isBlank()) {
             return name;
         }
-        int length = name.length();
-        if (length == 1) {
+        // length()/charAt() 은 UTF-16 code unit 기준이라 보조 평면 문자(이모지·희귀 한자)를 surrogate half 로
+        // 쪼갤 수 있으므로 code point 단위로 처리한다.
+        int codePoints = name.codePointCount(0, name.length());
+        if (codePoints == 1) {
             return String.valueOf(MASK);
         }
-        if (length == 2) {
-            return name.charAt(0) + String.valueOf(MASK);
+        int firstEnd = name.offsetByCodePoints(0, 1);
+        if (codePoints == 2) {
+            return name.substring(0, firstEnd) + MASK;
         }
-        return name.charAt(0)
-                + String.valueOf(MASK).repeat(length - 2)
-                + name.charAt(length - 1);
+        int lastStart = name.offsetByCodePoints(0, codePoints - 1);
+        return name.substring(0, firstEnd)
+                + String.valueOf(MASK).repeat(codePoints - 2)
+                + name.substring(lastStart);
     }
 
     /**
