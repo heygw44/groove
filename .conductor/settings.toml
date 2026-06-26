@@ -1,0 +1,31 @@
+#:schema https://conductor.build/schemas/settings.repo.schema.json
+
+# Conductor 공유 설정 (groove) — 워크스페이스는 별도 git worktree 라 gitignore 된 env/시크릿이 따라오지 않는다.
+# 이 앱은 .env 없이는 기동이 거부되므로(docker compose 의 ${MYSQL_ROOT_PASSWORD:?}·#321 시크릿 게이트),
+# setup 이 루트에서 env 를 복사하고 의존성을 워밍한 뒤, run 이 풀스택(docker compose)을 띄운다.
+
+[scripts]
+# 워크스페이스 생성 시 실행(워크스페이스 디렉토리에서, 비대화형 zsh). 각 단계는 실패해도 setup 을 막지 않도록 best-effort.
+setup = """
+# 1) gitignore 된 env/시크릿을 루트 체크아웃에서 복사(없을 때만 — 재실행/기존 파일 보존). 이게 없으면 run 이 기동 거부된다.
+cp -n "$CONDUCTOR_ROOT_PATH/.env" .env 2>/dev/null || true
+cp -n "$CONDUCTOR_ROOT_PATH/frontend/.env" frontend/.env 2>/dev/null || true
+cp -n "$CONDUCTOR_ROOT_PATH/backend/src/main/resources/application-local.yaml" backend/src/main/resources/application-local.yaml 2>/dev/null || true
+# 2) 루트 체크아웃을 최신 base 로 fast-forward(불가하면 무시).
+git -C "$CONDUCTOR_ROOT_PATH" fetch --prune origin && git -C "$CONDUCTOR_ROOT_PATH" pull --ff-only || true
+# 3) 백엔드 Gradle 의존성 워밍(Dockerfile 과 동일 패턴).
+(cd backend && ./gradlew dependencies --no-daemon -q || true)
+# 4) 프론트 의존성(npm 이 PATH 에 있을 때만 — gradle node 플러그인도 빌드 시 처리하므로 best-effort).
+command -v npm >/dev/null 2>&1 && (cd frontend && npm ci) || true
+"""
+
+# Run 버튼: 풀스택(mysql + app + nginx)을 포그라운드로 기동. --build 로 현재 코드(백+프론트 통합 JAR)를 반영한다.
+# 빠른 재시작만 필요하면 --build 를 빼도 된다(기존 이미지 재사용).
+run = "docker compose up --build"
+
+# nginx 가 호스트 80 을 고정 점유하고 mysql 볼륨을 공유하므로 두 워크스페이스를 동시에 Run 할 수 없다.
+run_mode = "nonconcurrent"
+
+# 워크스페이스 아카이브 전 정리 — Run 중지 시 SIGHUP 으로 백그라운드에 남을 수 있는 컨테이너/네트워크를 회수한다.
+# 볼륨(mysql-data)은 보존(-v 미사용) — 데이터 보호. 미기동 상태면 down 은 무해하게 no-op.
+archive = "docker compose down"
