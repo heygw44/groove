@@ -579,7 +579,8 @@ volumes:
 | `ddl-auto: validate` | 엔티티↔스키마 드리프트 시 기동 실패(런타임 DDL 변경 없음) |
 | `open-in-view: false` | OSIV 비활성 — 뷰 렌더 중 지연 쿼리/커넥션 점유 차단 |
 | 에러 응답 `include-stacktrace: never` / `include-exception: false` | 내부 구현·스택 노출 차단 |
-| `forward-headers-strategy: native` + nginx `X-Forwarded-For $proxy_add_x_forwarded_for` | 신뢰 프록시 경유 클라이언트 IP 복원 + 클라이언트 위조 XFF 방어(rate-limit 키 신뢰성) |
+| `forward-headers-strategy: native` + `server.tomcat.remoteip.internal-proxies`(#322) + nginx `X-Forwarded-For $proxy_add_x_forwarded_for` | 신뢰 프록시 경유 클라이언트 IP 복원 + 클라이언트 위조 XFF 방어(rate-limit 키 신뢰성). **기본 `internal-proxies` 는 Tomcat 기본 사설 대역과 동치(10/8·172.16/12·192.168/16·169.254/16·127/8 + CGNAT 100.64/10 + ::1)** — 100.64/10 은 AWS NLB/ALB·GCP 등 클라우드 LB 대역이라 포함이 필수. LB/프록시가 이 대역 밖(공인 IP)이면 `SERVER_TOMCAT_INTERNAL_PROXIES` 에 **실제 프록시 CIDR 정규식**을 명시해야 `getRemoteAddr()` 가 실 클라이언트 IP 를 가리킨다(미설정 시 전 사용자가 LB IP 단일 버킷 공유 → 정상 사용자 429 가능) |
+| CSP(`Content-Security-Policy-Report-Only`, #322) | `SecurityConfig` 가 기본 Report-Only 로 발급(Toss 위젯 `*.tosspayments.com` 허용). 비차단이라 기본값 안전. **후속 운영 조치(선택)**: 위반 리포트 관측 후 `GROOVE_CSP_REPORT_ONLY=false` 로 enforce 전환. `GROOVE_CSP_POLICY` 로 정책 재정의 가능 |
 | `.env` gitignore + `.env.example` 만 추적 | 실 시크릿 미커밋, 템플릿은 가드가 거부하는 플레이스홀더 |
 
 #### 실 결제(prod) 프로파일 배포 (M17, #321)

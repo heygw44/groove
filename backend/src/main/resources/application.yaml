@@ -55,6 +55,16 @@ spring:
 server:
   port: 8080
   forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:native}
+  # 신뢰 프록시(RemoteIpValve) — 이 대역에서 온 요청만 X-Forwarded-For 를 신뢰해 getRemoteAddr() 에 실 클라이언트 IP 를
+  # 채운다(#322). Rate Limit 키(클라이언트 IP)의 정확성에 직결. 기본값은 Tomcat RemoteIpValve 의 기본 사설 대역과
+  # 동일하게 유지한다(10/8·172.16/12·192.168/16·169.254/16·127/8 + CGNAT 100.64/10 + IPv6 ::1) — 100.64/10 은
+  # AWS NLB/ALB·GCP 등 클라우드 LB 가 쓰는 대역이라 누락 시 XFF 미신뢰로 전 사용자가 LB IP 단일 버킷을 공유한다.
+  # 운영 LB 가 이 대역 밖(공인 IP)이면 SERVER_TOMCAT_INTERNAL_PROXIES 에 실제 LB CIDR 정규식을 명시한다(배포 런북 참조).
+  tomcat:
+    remoteip:
+      internal-proxies: ${SERVER_TOMCAT_INTERNAL_PROXIES:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|100\.6[4-9]\.\d{1,3}\.\d{1,3}|100\.[7-9]\d\.\d{1,3}\.\d{1,3}|100\.1[0-1]\d\.\d{1,3}\.\d{1,3}|100\.12[0-7]\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|0:0:0:0:0:0:0:1|::1}
+      remote-ip-header: X-Forwarded-For
+      protocol-header: X-Forwarded-Proto
   error:
     include-message: never
     include-stacktrace: never
@@ -117,6 +127,13 @@ groove:
       password-change:
         capacity: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_CAPACITY:5}
         refill-period: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_REFILL_PERIOD:PT1M}
+  # 응답 보안 헤더 (#322). CSP 는 기본 Report-Only — 운영 관측 후 GROOVE_CSP_REPORT_ONLY=false 로 enforce 전환.
+  security:
+    csp:
+      enabled: ${GROOVE_CSP_ENABLED:true}
+      report-only: ${GROOVE_CSP_REPORT_ONLY:true}
+      # Toss 결제 위젯(iframe·리소스)은 *.tosspayments.com 에서 로드된다. 미설정 시 코드 기본값을 쓴다.
+      policy: ${GROOVE_CSP_POLICY:}
   # 선착순 쿠폰 발급 Rate Limit (#90). 회원당 분당 발급 횟수 제한 — JWT memberId 로 키잉(IP 폴백).
   coupon:
     rate-limit:

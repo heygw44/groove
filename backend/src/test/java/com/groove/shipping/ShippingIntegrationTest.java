@@ -209,8 +209,9 @@ class ShippingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trackingNumber").value(tracking))
                 .andExpect(jsonPath("$.status").value(ShippingStatus.PREPARING.name()))
-                .andExpect(jsonPath("$.recipientName").value("김철수"))
-                .andExpect(jsonPath("$.address").value("서울시 강남구 테헤란로 123"))
+                // 공개 응답은 PII 부분 마스킹 (#322): 저장값은 "김철수"/전체 주소지만 노출은 마스킹된다.
+                .andExpect(jsonPath("$.recipientName").value("김*수"))
+                .andExpect(jsonPath("$.address").value("서울시 강남구 ***"))
                 .andExpect(jsonPath("$.safePackagingRequested").value(false))
                 .andExpect(jsonPath("$.shippedAt").doesNotExist())
                 .andExpect(jsonPath("$.deliveredAt").doesNotExist());

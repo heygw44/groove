@@ -211,6 +211,17 @@ class SecurityConfigIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("CSP 기본 Report-Only 헤더 발급 + Toss 도메인 허용 (#322), enforce 헤더는 미발급")
+    void csp_reportOnlyHeaderIsIssued() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("Content-Security-Policy-Report-Only"))
+                .andExpect(header().string("Content-Security-Policy-Report-Only",
+                        org.hamcrest.Matchers.containsString("https://*.tosspayments.com")))
+                .andExpect(header().doesNotExist("Content-Security-Policy"));
+    }
+
     /**
      * 보호 엔드포인트 검증용 테스트 전용 컨트롤러. 메인 코드에는 포함되지 않는다.
      */
