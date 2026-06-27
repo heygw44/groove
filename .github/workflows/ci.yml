@@ -59,3 +59,89 @@ jobs:
             backend/build/reports/tests/
             backend/build/reports/jacoco/
           retention-days: 7
+
+  # 이미지 빌드 → 취약점 스캔 → (main push 시) GHCR 게시. test·커버리지 green 일 때만 돈다(#345).
+  docker:
+    runs-on: ubuntu-latest
+    needs: build             # 테스트·커버리지 통과 후에만 이미지 빌드/게시 (깨진 이미지 push 방지)
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write        # GHCR push — push(main) 이벤트에서만 실제 사용
+      security-events: write # Trivy SARIF 를 Security > Code scanning 으로 업로드
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Image metadata (tags/labels)
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ghcr.io/${{ github.repository }}   # ghcr.io/heygw44/groove (소문자)
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build image (load to local daemon for scan)
+        # 빌드 컨텍스트 = 저장소 루트(.) — Dockerfile 이 backend/ ↔ ../frontend 형제 구조를 재현하기 때문(#131).
+        # load: true 로 로컬 daemon 에 적재해 먼저 스캔하고, push 는 main 에서만 별도 단계로 수행(게시 전 스캔).
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: backend/Dockerfile
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (table → 잡 로그, report-only)
+        # exit-code 0: 취약점 발견돼도 PR 을 막지 않는다 — Spring Boot 트랜지티브/베이스 OS CVE 는 상시 존재.
+        # 리포트는 잡 로그 table + 아래 SARIF(Security 탭)로 노출. tags[0] = sha 태그(항상 존재·결정적).
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: table
+          scanners: vuln
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+
+      - name: Trivy scan (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: sarif
+          output: trivy-results.sarif
+          scanners: vuln
+          exit-code: '0'
+
+      - name: Upload SARIF to code scanning
+        if: always()   # 스캔 단계가 실패해도 수집분은 올린다
+        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push'   # main push 에서만 — 포크 PR 은 시크릿 없이 빌드+스캔만
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to GHCR (sha + latest)
+        if: github.event_name == 'push'
+        # buildx gha 캐시로 레이어 재사용 → 재빌드 비용 거의 없음.
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
