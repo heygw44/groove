@@ -64,6 +64,9 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     needs: build             # 테스트·커버리지 통과 후에만 이미지 빌드/게시 (깨진 이미지 push 방지)
+    # 포크 PR 은 read-only 토큰이라 SARIF 업로드·gha 캐시 export 가 실패한다 → fork PR 에선 잡 자체를 건너뛴다.
+    # push(main) 는 항상, PR 은 head 가 같은 레포일 때만(= 포크 아님) 실행.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     timeout-minutes: 20
     permissions:
       contents: read
@@ -100,18 +103,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trivy scan (table → 잡 로그, report-only)
+      - name: Trivy scan (SARIF → Security 탭, report-only)
         # exit-code 0: 취약점 발견돼도 PR 을 막지 않는다 — Spring Boot 트랜지티브/베이스 OS CVE 는 상시 존재.
-        # 리포트는 잡 로그 table + 아래 SARIF(Security 탭)로 노출. tags[0] = sha 태그(항상 존재·결정적).
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
-          format: table
-          scanners: vuln
-          severity: CRITICAL,HIGH,MEDIUM
-          exit-code: '0'
-
-      - name: Trivy scan (SARIF)
+        # cache: true → vuln DB 를 런 간 캐시(actions/cache). tags[0] = sha 태그(항상 존재·결정적).
+        # 이 스텝이 trivy 바이너리·DB 셋업을 담당하고, 아래 table 스텝은 이를 재사용한다.
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
@@ -119,6 +114,18 @@ jobs:
           output: trivy-results.sarif
           scanners: vuln
           exit-code: '0'
+          cache: 'true'
+
+      - name: Trivy scan (table → 잡 로그)
+        # skip-setup-trivy: 위 스텝이 설치한 바이너리·공유 cache-dir 의 DB 를 재사용(중복 설치/다운로드 제거).
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: table
+          scanners: vuln
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+          skip-setup-trivy: 'true'
 
       - name: Upload SARIF to code scanning
         if: always()   # 스캔 단계가 실패해도 수집분은 올린다
@@ -136,12 +143,6 @@ jobs:
 
       - name: Push to GHCR (sha + latest)
         if: github.event_name == 'push'
-        # buildx gha 캐시로 레이어 재사용 → 재빌드 비용 거의 없음.
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          file: backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+        # 재빌드하지 않고 위에서 load 해 스캔까지 끝낸 로컬 이미지를 그대로 push → 빌드 1회, 게시 == 스캔 이미지.
+        # --all-tags: 이 런이 만든 sha/latest 태그만 로컬에 존재(ephemeral 러너).
+        run: docker push --all-tags ghcr.io/${{ github.repository }}
