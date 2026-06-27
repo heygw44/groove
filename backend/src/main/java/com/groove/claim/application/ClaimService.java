@@ -80,6 +80,7 @@ public class ClaimService {
     private final AlbumRepository albumRepository;
     private final MemberRepository memberRepository;
     private final Clock clock;
+    /** 반품 가능 기한 — 배송완료 anchor 로부터 이 기간 내에만 접수 허용. 기본 P7D(7일), groove.claim.return-window 로 설정. */
     private final Duration returnWindow;
 
     public ClaimService(ClaimRepository claimRepository,
@@ -106,34 +107,11 @@ public class ClaimService {
 
     @Transactional
     public Claim request(ClaimCreateCommand command) {
-        // 주문 행 PESSIMISTIC_WRITE 로 동시 접수 직렬화.
-        Order order = orderRepository.findByOrderNumberForUpdate(command.orderNumber())
-                .orElseThrow(OrderNotFoundException::new);
-        // 본인 주문만 — memberId null 이거나 불일치면 404.
-        if (command.memberId() == null || !Objects.equals(order.getMemberId(), command.memberId())) {
-            throw new OrderNotFoundException();
-        }
-        // 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 반품 접수하는 것을 차단(#269).
-        if (!memberRepository.existsByIdAndDeletedAtIsNull(command.memberId())) {
-            throw new MemberNotFoundException();
-        }
-        if (!OrderStatus.DELIVERED_OR_COMPLETED.contains(order.getStatus())) {
-            throw new OrderNotReturnableException(order.getStatus());
-        }
-        // 반품 기한 anchor = 결정적 배송완료 시각. order.deliveredAt(DELIVERED 전이 시 기록)을 1차 기준으로
-        // 삼는다 — 정상 파이프라인·관리자 강제 전이·시드가 모두 Order.changeStatus 를 거치므로 배송 행 유무와
-        // 무관하게 채워진다. delivered_at 컬럼(V33) 도입 전 배송완료된 레거시 주문만 shipping.deliveredAt 로
-        // 보강하고, 그조차 없으면(배송 행 없는 과거 강제 전이) 결정 불가로 거부한다. updatedAt 폴백(비결정적)은
-        // 쓰지 않는다.
-        Instant deliveredAt = Optional.ofNullable(order.getDeliveredAt())
-                .or(() -> shippingService.findDeliveredAt(order.getId()))
-                .orElseThrow(ReturnWindowNotDeterminableException::new);
-        if (clock.instant().isAfter(deliveredAt.plus(returnWindow))) {
-            throw new ReturnWindowExpiredException();
-        }
-        if (command.lines() == null || command.lines().isEmpty()) {
-            throw new EmptyClaimException();
-        }
+        Order order = loadOwnedOrderForUpdate(command);
+        requireActiveMember(command.memberId());
+        requireReturnableStatus(order);
+        requireWithinReturnWindow(order);
+        requireNonEmptyLines(command);
 
         Map<Long, Integer> requested = mergeRequestedQuantities(command.lines());
         Claim claim = Claim.request(order, command.reason());
@@ -141,6 +119,53 @@ public class ClaimService {
         Claim saved = claimRepository.save(claim);
         log.info("반품 접수 — claimId={}, order={}, 항목 {}건", saved.getId(), order.getOrderNumber(), requested.size());
         return saved;
+    }
+
+    /** 주문 행을 PESSIMISTIC_WRITE 로 잠가 동시 접수를 직렬화하고 본인 주문임을 확인 — 부재·미소유(memberId null/불일치)면 404. */
+    private Order loadOwnedOrderForUpdate(ClaimCreateCommand command) {
+        Order order = orderRepository.findByOrderNumberForUpdate(command.orderNumber())
+                .orElseThrow(OrderNotFoundException::new);
+        if (command.memberId() == null || !Objects.equals(order.getMemberId(), command.memberId())) {
+            throw new OrderNotFoundException();
+        }
+        return order;
+    }
+
+    /** 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 반품 접수하는 것을 차단(#269). */
+    private void requireActiveMember(Long memberId) {
+        if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
+            throw new MemberNotFoundException();
+        }
+    }
+
+    /** 반품 자격 — 주문이 {DELIVERED, COMPLETED} 가 아니면 422. */
+    private void requireReturnableStatus(Order order) {
+        if (!OrderStatus.DELIVERED_OR_COMPLETED.contains(order.getStatus())) {
+            throw new OrderNotReturnableException(order.getStatus());
+        }
+    }
+
+    /**
+     * 반품 기한 가드. anchor = 결정적 배송완료 시각. order.deliveredAt(DELIVERED 전이 시 기록)을 1차 기준으로
+     * 삼는다 — 정상 파이프라인·관리자 강제 전이·시드가 모두 Order.changeStatus 를 거치므로 배송 행 유무와
+     * 무관하게 채워진다. delivered_at 컬럼(V33) 도입 전 배송완료된 레거시 주문만 shipping.deliveredAt 로
+     * 보강하고, 그조차 없으면(배송 행 없는 과거 강제 전이) 결정 불가로 거부한다. updatedAt 폴백(비결정적)은
+     * 쓰지 않는다. anchor + returnWindow 를 넘기면 422.
+     */
+    private void requireWithinReturnWindow(Order order) {
+        Instant deliveredAt = Optional.ofNullable(order.getDeliveredAt())
+                .or(() -> shippingService.findDeliveredAt(order.getId()))
+                .orElseThrow(ReturnWindowNotDeterminableException::new);
+        if (clock.instant().isAfter(deliveredAt.plus(returnWindow))) {
+            throw new ReturnWindowExpiredException();
+        }
+    }
+
+    /** 항목 1개 이상 — 비면 422. */
+    private void requireNonEmptyLines(ClaimCreateCommand command) {
+        if (command.lines() == null || command.lines().isEmpty()) {
+            throw new EmptyClaimException();
+        }
     }
 
     /**
