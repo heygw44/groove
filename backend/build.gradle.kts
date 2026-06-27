@@ -69,6 +69,9 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
     testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    // 모듈 의존 규칙(계층 순서 api→application→domain·도메인 단방향)을 테스트로 고정 (#344).
+    // Spring Boot BOM 미관리 의존성이라 버전을 명시한다.
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.0")
     testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
