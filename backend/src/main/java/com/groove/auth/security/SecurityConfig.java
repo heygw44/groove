@@ -6,13 +6,22 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 
 import java.time.Clock;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -28,7 +37,7 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class, AuthRateLimitProperties.class, RefreshCookieProperties.class, SecurityHeadersProperties.class})
+@EnableConfigurationProperties({CorsProperties.class, JwtProperties.class, AuthRateLimitProperties.class, RefreshCookieProperties.class, SecurityHeadersProperties.class, MetricsScrapeProperties.class})
 public class SecurityConfig {
 
     private static final String[] PUBLIC_GET_PATTERNS = {
@@ -101,6 +110,39 @@ public class SecurityConfig {
     @Bean
     public RestAccessDeniedHandler restAccessDeniedHandler(ObjectMapper objectMapper) {
         return new RestAccessDeniedHandler(objectMapper);
+    }
+
+    /**
+     * /actuator/prometheus 전용 Basic 인증 필터체인 (#343). nginx 가 /actuator/** 를 app 으로 위임해 외부에서도
+     * 도달하므로 이 메트릭 엔드포인트만 본 체인(JWT)보다 먼저(@Order) 가로채 Basic 인증으로 보호한다.
+     * <p>
+     * 자격증명은 체인 로컬 InMemoryUserDetailsManager + 전용 AuthenticationManager 로만 검증한다 — 전역 빈으로
+     * 노출하지 않아 본 API 의 JWT 인증 경로와 무간섭이다. 전역 PasswordEncoder 는 BCrypt(PasswordConfig)지만
+     * 이 체인은 위임 인코더({noop} 지원)를 명시 주입하므로 평문 데모 자격증명을 그대로 매칭한다.
+     * Prometheus 는 scrape_config 의 basic_auth 로 인증한다.
+     */
+    @Bean
+    @Order(0)
+    public SecurityFilterChain metricsScrapeSecurityFilterChain(HttpSecurity http,
+                                                                MetricsScrapeProperties metricsScrape) throws Exception {
+        UserDetails scraper = User.withUsername(metricsScrape.username())
+                .password("{noop}" + metricsScrape.password())
+                .roles("METRICS")
+                .build();
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(new InMemoryUserDetailsManager(scraper));
+        provider.setPasswordEncoder(PasswordEncoderFactories.createDelegatingPasswordEncoder());
+        AuthenticationManager authenticationManager = new ProviderManager(provider);
+
+        http
+                .securityMatcher("/actuator/prometheus")
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorize -> authorize.anyRequest().hasRole("METRICS"))
+                .httpBasic(Customizer.withDefaults())
+                .authenticationManager(authenticationManager);
+
+        return http.build();
     }
 
     @Bean

@@ -1,7 +1,20 @@
 management:
+  endpoints:
+    web:
+      exposure:
+        # 데모(docker)에선 health 에 더해 prometheus 를 노출한다(#343). /actuator/prometheus 는 SecurityConfig 의
+        # 메트릭 전용 Basic 체인이 보호하므로 상시 노출해도 익명 접근은 401 이다(외부/내부 모두 보호).
+        include: ${MANAGEMENT_EXPOSURE:health,prometheus}
   endpoint:
     health:
       show-details: ${HEALTH_SHOW_DETAILS:when_authorized}
+  metrics:
+    distribution:
+      # http.server.requests 의 p95 패널(histogram_quantile)에 필요한 *_bucket 시리즈 생성 (#343). docker 데모
+      # 한정 — uri·status·method 조합마다 버킷 세트가 생기므로 운영 프로파일로 확장 시 시계열 폭증에 주의
+      # (maximum-expected-value/SLO 버킷 제한 동반 고려). 그대로 prod 로 복사하지 말 것.
+      percentiles-histogram:
+        http.server.requests: true
 
 # Swagger/OpenAPI 는 배포 기본 비공개 (#162). 전 API 표면(경로·파라미터·DTO·admin 그룹)의 익명 노출 차단.
 # enabled=false 면 /v3/api-docs/** 와 /swagger-ui/** 가 미등록(404)된다 — 데모로 노출하려면 SPRINGDOC_ENABLED=true.

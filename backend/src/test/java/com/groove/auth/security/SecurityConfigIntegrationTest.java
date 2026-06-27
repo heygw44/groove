@@ -9,11 +9,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +31,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -40,7 +43,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+// Spring Boot 는 테스트에서 메트릭 export 를 기본 비활성화한다 — prometheus 엔드포인트 검증(#343)을 위해 재활성화.
+@AutoConfigureMetrics
 @ActiveProfiles("test")
+// /actuator/prometheus 보안 체인(#343) 검증을 위해 test 에서 prometheus 엔드포인트를 노출한다(기본은 health 만).
+@TestPropertySource(properties = "management.endpoints.web.exposure.include=health,prometheus")
 @Import({SecurityConfigIntegrationTest.SecuredPingController.class, TestcontainersConfig.class})
 @DisplayName("SecurityFilterChain 통합 동작")
 class SecurityConfigIntegrationTest {
@@ -100,6 +107,30 @@ class SecurityConfigIntegrationTest {
         int status = mockMvc.perform(get("/actuator/health"))
                 .andReturn().getResponse().getStatus();
         assertThat(status).isNotIn(401, 403);
+    }
+
+    @Test
+    @DisplayName("/actuator/prometheus 무자격 접근 → 401 (#343 메트릭 전용 Basic 체인)")
+    void actuatorPrometheus_withoutCredentials_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("/actuator/prometheus 틀린 비밀번호 → 401 (#343)")
+    void actuatorPrometheus_withWrongPassword_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus").with(httpBasic("metrics", "wrong")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("/actuator/prometheus 유효 Basic 자격증명 → 200 + DLQ 메트릭 본문 (#343 대시보드 쿼리명 일치)")
+    void actuatorPrometheus_withValidCredentials_returnsMetrics() throws Exception {
+        // username=metrics(base 기본값), password=application-test.yaml 의 metrics.scrape.password.
+        // groove_outbox_dlq_size 는 Grafana 대시보드가 쿼리하는 이름 — 노출 회귀 가드(#323 Gauge).
+        mockMvc.perform(get("/actuator/prometheus").with(httpBasic("metrics", "test-metrics-scrape-secret")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("groove_outbox_dlq_size")));
     }
 
     @Test

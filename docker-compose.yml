@@ -62,9 +62,54 @@ services:
     networks:
       - groove-net
 
+  # ── 관측 스택 (#343) — 데모 전용, 기본 비활성 ──────────────────────────────────
+  # profiles 키가 있어 기본 `docker compose up` 에선 기동되지 않는다.
+  # 활성화: docker compose --profile observability up
+  #   Grafana  http://localhost:3000  (익명 Viewer — groove 운영 가시성 대시보드 자동 로드)
+  #   Prometheus http://localhost:9090 (타깃 상태: /targets)
+  # ⚠️ 로컬 신뢰 네트워크 데모 전용 — 외부/공유 환경 노출 금지. Grafana 는 익명 Viewer 열람 + admin 기본 비번
+  #   (GRAFANA_ADMIN_PASSWORD 미설정 시 'admin') + :3000 호스트 퍼블리시 상태다. 공개망에 띄우려면 익명 OFF·
+  #   강한 GRAFANA_ADMIN_PASSWORD·포트 비공개로 하드닝할 것(README "관측(Observability) 데모" 참조).
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["observability"]
+    depends_on:
+      app:
+        condition: service_healthy
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=2h"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - groove-net
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: ["observability"]
+    depends_on:
+      - prometheus
+    environment:
+      # 데모 편의: 익명 열람(Viewer) 허용 — 로그인 없이 대시보드 확인. admin 비번은 env 로 주입(기본 데모값).
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - groove-net
+
 networks:
   groove-net:
     driver: bridge
 
 volumes:
   mysql-data:
+  grafana-data:
