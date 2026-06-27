@@ -4,33 +4,60 @@
     <property name="LOG_PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [reqId=%X{requestId:-} uid=%X{userId:-}] %logger{36} - %msg%n"/>
 
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>${LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
+    <!--
+    prod 구조화(JSON) 로깅 (#343). Spring Boot 내장 StructuredLogEncoder + logstash 포맷 — 신규 의존성 없음.
+    MDC(requestId/userId)가 자동으로 JSON 필드에 포함돼 로그 수집기에서 요청 단위 추적이 가능하다.
+    한 줄에 @timestamp/level/logger_name/message + MDC 가 담긴다.
+    -->
+    <springProfile name="prod">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="org.springframework.boot.logging.logback.StructuredLogEncoder">
+                <format>logstash</format>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
 
-    <appender name="BIZ_EVENT_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [reqId=%X{requestId:-} uid=%X{userId:-}] %msg%n</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
+        <logger name="BIZ_EVENT" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </logger>
 
-    <logger name="BIZ_EVENT" level="INFO" additivity="false">
-        <appender-ref ref="BIZ_EVENT_CONSOLE"/>
-    </logger>
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
 
-    <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-    </root>
+        <logger name="com.groove" level="INFO"/>
+    </springProfile>
+
+    <!-- non-prod 는 사람이 읽는 패턴 콘솔을 쓴다(개발 DX). 어펜더도 이 프로파일에서만 정의해 미참조 경고를 피한다. -->
+    <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <appender name="BIZ_EVENT_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [reqId=%X{requestId:-} uid=%X{userId:-}] %msg%n</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <logger name="BIZ_EVENT" level="INFO" additivity="false">
+            <appender-ref ref="BIZ_EVENT_CONSOLE"/>
+        </logger>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
 
     <springProfile name="local">
         <logger name="com.groove" level="DEBUG"/>
     </springProfile>
 
-    <springProfile name="docker | prod">
+    <springProfile name="docker">
         <logger name="com.groove" level="INFO"/>
     </springProfile>
 
