@@ -43,6 +43,12 @@ spring:
 jwt:
   secret: test-only-secret-key-minimum-256-bits-long-for-jwt-signing
 
+# 테스트 전용 /actuator/prometheus 스크레이프 비번 (#343) — base 는 폴백 없는 ${METRICS_SCRAPE_PASSWORD}.
+# SecurityConfigIntegrationTest 의 httpBasic 자격증명과 일치해야 한다.
+metrics:
+  scrape:
+    password: test-metrics-scrape-secret
+
 # 테스트 전용 이메일 점유 해시 HMAC 키 (#186) — 256bit 이상 필요 (EmailHashProperties 검증).
 # ⚠️ 이 값은 MemberFixtures.TEST_EMAIL_HASH_SECRET 과 byte-equal 이어야 한다 — @SpringBootTest 가 주입하는
 # EmailHasher 와 슬라이스/단위 테스트의 MemberFixtures 가 동일 해시를 내야 점유 단언이 일치한다.

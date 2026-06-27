@@ -124,11 +124,11 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
-    @DisplayName("/actuator/prometheus 데모 Basic 자격증명 → 200 + DLQ 메트릭 본문 (#343 대시보드 쿼리명 일치)")
+    @DisplayName("/actuator/prometheus 유효 Basic 자격증명 → 200 + DLQ 메트릭 본문 (#343 대시보드 쿼리명 일치)")
     void actuatorPrometheus_withValidCredentials_returnsMetrics() throws Exception {
-        // application.yaml 의 metrics.scrape.* 데모 기본값(metrics/change-me-demo).
+        // username=metrics(base 기본값), password=application-test.yaml 의 metrics.scrape.password.
         // groove_outbox_dlq_size 는 Grafana 대시보드가 쿼리하는 이름 — 노출 회귀 가드(#323 Gauge).
-        mockMvc.perform(get("/actuator/prometheus").with(httpBasic("metrics", "change-me-demo")))
+        mockMvc.perform(get("/actuator/prometheus").with(httpBasic("metrics", "test-metrics-scrape-secret")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("groove_outbox_dlq_size")));
     }

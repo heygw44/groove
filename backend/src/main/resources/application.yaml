@@ -86,11 +86,13 @@ management:
 
 # /actuator/prometheus 스크레이프 전용 Basic 인증 자격증명 (#343). SecurityConfig 의 메트릭 전용 체인이 검증한다.
 # /actuator/prometheus 는 nginx 가 외부로 위임해 도달 가능하므로 JWT 본 체인과 분리된 Basic 으로 보호한다.
-# 데모 기본값을 두되 운영에서는 METRICS_SCRAPE_USERNAME / METRICS_SCRAPE_PASSWORD 로 강한 값을 주입한다.
+# password 는 jwt.secret 과 동일하게 폴백 없는 env 바인딩 — 공통 설정에 공개 데모 비번을 두지 않는다(운영/스테이징이
+# 알려진 값으로 폴백하는 것을 차단). 프로파일별 데모·테스트 값은 application-{local,test}.yaml 에, docker/dev/prod 는
+# env(.env)로 주입한다. prod 추가 방어는 MetricsScrapeSecretGuard(@Profile prod). username 은 비민감이라 기본값 유지.
 metrics:
   scrape:
     username: ${METRICS_SCRAPE_USERNAME:metrics}
-    password: ${METRICS_SCRAPE_PASSWORD:change-me-demo}
+    password: ${METRICS_SCRAPE_PASSWORD}
 
 logging:
   level:

@@ -112,3 +112,19 @@ ALBUM_COUNT=200 MEMBER_COUNT=50 ./scripts/seed.sh --docker --yes
 # docker 프로파일은 기본 비공개 — .env 에 SPRINGDOC_ENABLED=true 설정 시 노출
 open http://localhost/swagger-ui.html
 ```
+
+### 관측(Observability) 데모 — 선택
+
+DLQ·캐시·HTTP 지연 메트릭을 Prometheus 로 스크레이프하고 Grafana 대시보드로 본다(#343).
+기본 비활성이라 `observability` 프로파일로만 기동한다.
+
+```bash
+docker compose --profile observability up -d   # 기존 스택 + Prometheus·Grafana
+open http://localhost:3000   # Grafana — "groove 운영 가시성" 대시보드 자동 로드
+open http://localhost:9090/targets   # Prometheus — groove-app 타깃 UP 확인
+```
+
+> ⚠️ **로컬 신뢰 네트워크 데모 전용.** Grafana 는 편의를 위해 익명 Viewer 열람을 허용하고 admin 기본
+> 비번(`GRAFANA_ADMIN_PASSWORD` 미설정 시 `admin`)을 쓰며, `:3000`·`:9090` 을 호스트로 퍼블리시한다.
+> 공개망/공유 환경에 노출하지 말 것 — 노출이 필요하면 익명 열람 OFF, 강한 `GRAFANA_ADMIN_PASSWORD`,
+> `METRICS_SCRAPE_PASSWORD`(prod 는 `MetricsScrapeSecretGuard` 가 약한 값 거부), 포트 비공개로 하드닝한다.
