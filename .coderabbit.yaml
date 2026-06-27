@@ -21,26 +21,27 @@ reviews:
   path_instructions:
     - path: "backend/src/main/java/**/*.java"
       instructions: |
-        Spring Boot 4.0 / Java 21 코드 리뷰:
-        - Spring 컨벤션 및 레이어 분리 (Controller → Service → Repository) 준수
-        - JPA/Hibernate N+1 문제, 영속성 컨텍스트 경계 확인
-        - 트랜잭션 경계 및 롤백 정책 적절성
-        - ProblemDetail (RFC 7807) 기반 예외 응답 형식
-        - Lombok 남용 방지 (@Data 사용 지양, @Builder / @Value 선호)
-        - 보안: SQL injection, CSRF, 입력값 검증 (@Valid / @Validated)
-        - 하드코딩 금지: 매직 넘버는 상수 또는 설정값으로 분리
-        - 비공개 필드에 대한 불필요한 getter/setter 생성 방지
-    - path: "backend/src/main/java/**/controller/**/*.java"
+        Spring Boot 4.1 / Java 21 코드 리뷰:
+        - 패키지는 도메인 우선 수직 슬라이싱(com.groove.<도메인>.{api,application,domain}). Controller/Service/Repository 폴더 구조 아님 (ADR: docs/decisions/package-structure.md)
+        - 계층 순서 api → application → domain 준수, 역방향 의존 금지
+        - 도메인 간 단방향 직접 참조는 ADR 이 허용함(JPA 엔티티 연관 포함, 예 OrderItem→Album). cross-domain 참조 자체를 위반으로 지적하지 말 것. 단 역방향·순환 의존은 지적(순환 현황은 ADR "한계" 절·#349 에 기록됨)
+        - api.dto 는 경계 계약이라 application 이 참조해도 됨
+        - JPA/Hibernate N+1, 영속성 컨텍스트 경계, 트랜잭션 경계·롤백 정책
+        - ProblemDetail (RFC 7807) 예외 응답, GlobalExceptionHandler 의 ErrorCode 매핑
+        - Lombok 남용 방지(@Data 지양, @Builder/@Value 선호)
+        - 보안: SQL injection, 입력값 검증(@Valid/@Validated)
+        - 하드코딩 금지: 매직 넘버는 상수/설정값으로 분리
+    - path: "backend/src/main/java/**/api/**/*.java"
       instructions: |
-        Controller 레이어 추가 기준:
-        - 비즈니스 로직이 Controller에 포함되지 않도록 확인
+        api(표현) 레이어 추가 기준:
+        - 비즈니스 로직이 컨트롤러에 새지 않도록 확인(오케스트레이션은 application)
         - 요청/응답 DTO 분리 및 @Valid 적용 확인
-        - HTTP 상태 코드가 의미에 맞게 사용되는지 확인
-    - path: "backend/src/main/java/**/repository/**/*.java"
+        - HTTP 상태 코드가 의미에 맞는지 확인
+    - path: "backend/src/main/java/**/*Repository.java"
       instructions: |
-        Repository 레이어 추가 기준:
+        Repository 추가 기준:
         - JPQL/네이티브 쿼리의 성능 및 인덱스 활용 확인
-        - 불필요한 전체 컬럼 조회 지양 (Projection 활용 권장)
+        - 불필요한 전체 컬럼 조회 지양(Projection 활용 권장)
     - path: "backend/src/test/**/*.java"
       instructions: |
         테스트 코드 리뷰:
