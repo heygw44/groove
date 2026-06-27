@@ -43,14 +43,17 @@ class ModuleDependencyRulesTest {
                     .should().dependOnClassesThat().resideInAPackage("..api..")
                     .because("도메인 계층은 표현 계층(api)을 알아서는 안 된다 (package-structure ADR)");
 
+    // api.dto 는 요청/응답 경계 계약이라 application 이 참조해도 된다(컨트롤러·설정만 금지). 이 예외는
+    // 의도적으로 도메인을 가리지 않는다 — ADR 이 단방향 cross-domain 직접 참조를 허용하기 때문이다. 현재
+    // cross-domain api.dto 참조는 coupon→admin.api.dto 한 건뿐이며, 예외를 '같은 도메인'으로 좁히는 강화는
+    // 그 참조(coupon↔admin 순환) 정리와 함께 #349 로 미룬다.
     @ArchTest
     static final ArchRule application_은_api_컨트롤러에_의존하지_않는다 =
             noClasses()
                     .that().resideInAPackage("..application..")
                     .should().dependOnClassesThat(
                             resideInAPackage("..api..").and(not(resideInAPackage("..api.dto.."))))
-                    .because("application 은 api 의 컨트롤러·설정을 참조하면 안 된다. "
-                            + "단, 같은 도메인의 api.dto 는 요청/응답 경계 계약이라 허용한다 (예: OrderService 의 OrderCreateRequest/OrderResponse)");
+                    .because("application 은 api 의 컨트롤러·설정을 참조하면 안 된다 (api.dto 는 경계 계약이라 예외)");
 
     // ── (B) domain 패키지가 web/api 타입에 의존하지 않음 ─────────────────────────────
 
