@@ -1,6 +1,6 @@
 package com.groove.order.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.common.api.CursorCodec;
 import com.groove.common.api.KeysetSort;
 import com.groove.common.api.PageResponse;

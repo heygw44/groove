@@ -1,4 +1,4 @@
-package com.groove.common.seed;
+package com.groove.bootstrap;
 
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.application.AlbumService;
@@ -6,6 +6,8 @@ import com.groove.catalog.artist.application.ArtistService;
 import com.groove.catalog.artist.domain.ArtistRepository;
 import com.groove.catalog.genre.application.GenreService;
 import com.groove.catalog.genre.domain.GenreRepository;
+import com.groove.auth.domain.RefreshTokenRepository;
+import com.groove.cart.domain.CartRepository;
 import com.groove.catalog.label.application.LabelService;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.common.transaction.CommonTransactionConfig;
@@ -61,6 +63,8 @@ class LocalDataSeederIntegrationTest {
     @Autowired private CouponRepository couponRepository;
     @Autowired private MemberCouponRepository memberCouponRepository;
     @Autowired private OrderRepository orderRepository;
+    @Autowired private RefreshTokenRepository refreshTokenRepository;
+    @Autowired private CartRepository cartRepository;
 
     @Autowired private ArtistService artistService;
     @Autowired private GenreService genreService;
@@ -95,14 +99,20 @@ class LocalDataSeederIntegrationTest {
     }
 
     private void cleanAll() {
-        // FK 안전 순서: order_items→orders(DB CASCADE) → albums → artist/genre/label → member_coupon → coupon → member
+        // 공유 Testcontainer 라 앞선 @SpringBootTest 가 남긴 행이 FK 로 삭제를 막을 수 있다. RESTRICT FK 를
+        // 먼저 비워 안전 순서를 보장한다:
+        //   - cart_item → album 은 ON DELETE RESTRICT → cart(→cart_item CASCADE)를 album 보다 먼저 비운다.
+        //   - refresh_token → member 는 RESTRICT → member 보다 먼저 비운다.
+        // 나머지 member/album 참조(review·cart·member_coupon CASCADE, orders SET NULL)는 삭제를 막지 않는다.
         orderRepository.deleteAllInBatch();
+        cartRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
         artistRepository.deleteAllInBatch();
         genreRepository.deleteAllInBatch();
         labelRepository.deleteAllInBatch();
         memberCouponRepository.deleteAllInBatch();
         couponRepository.deleteAllInBatch();
+        refreshTokenRepository.deleteAllInBatch();
         memberRepository.deleteAllInBatch();
     }
 

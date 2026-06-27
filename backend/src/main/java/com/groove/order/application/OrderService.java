@@ -217,10 +217,12 @@ public class OrderService {
 
         Order persisted = orderRepository.save(order);
 
-        // 4) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다.
+        // 4) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다. 할인액 산정은 coupon 에 위임하되
+        //    주문 반영(applyDiscount)은 order 가 직접 수행한다(슬라이스 단방향, #349).
         if (request.memberCouponId() != null) {
             long discount = couponApplicationService.applyToOrder(
-                    request.memberCouponId(), memberId, persisted);
+                    request.memberCouponId(), memberId, persisted.getId(), persisted.getTotalAmount());
+            persisted.applyDiscount(discount);
             log.info("쿠폰 적용: orderId={}, memberCouponId={}, discount={}, payable={}",
                     persisted.getId(), request.memberCouponId(), discount, persisted.getPayableAmount());
         }

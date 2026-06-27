@@ -11,15 +11,6 @@ import com.groove.coupon.exception.CouponMinOrderNotMetException;
 import com.groove.coupon.exception.CouponNotFoundException;
 import com.groove.coupon.exception.CouponNotIssuableException;
 import com.groove.coupon.exception.CouponNotOwnedException;
-import com.groove.order.domain.Order;
-import com.groove.order.domain.OrderItem;
-import com.groove.order.domain.OrderShippingInfo;
-import com.groove.catalog.album.domain.Album;
-import com.groove.catalog.album.domain.AlbumFormat;
-import com.groove.catalog.album.domain.AlbumStatus;
-import com.groove.catalog.artist.domain.Artist;
-import com.groove.catalog.genre.domain.Genre;
-import com.groove.catalog.label.domain.Label;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,7 +33,8 @@ import static org.mockito.Mockito.when;
 /**
  * CouponApplicationService 단위 테스트 — 적용/복원의 검증 분기.
  *
- * <p>적용 트랜잭션 정합성 (재고 차감/쿠폰 USED 가 함께 롤백) 은 통합테스트가 담당한다.
+ * <p>적용은 주문 총액(primitive)만 받고 할인액을 반환한다 — Order 엔티티는 참조하지 않는다(#349).
+ * 적용 트랜잭션 정합성(재고 차감/쿠폰 USED 가 함께 롤백)은 통합테스트가 담당한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CouponApplicationService — 적용/복원 단위 (mocked repository)")
@@ -54,9 +46,6 @@ class CouponApplicationServiceTest {
     private static final long OTHER_MEMBER_ID = 99L;
     private static final long MEMBER_COUPON_ID = 7L;
     private static final long ORDER_ID = 1234L;
-
-    private static final OrderShippingInfo SHIPPING =
-            new OrderShippingInfo("김철수", "01012345678", "서울시 강남구", "101호", "06234", false);
 
     @Mock
     private MemberCouponRepository memberCouponRepository;
@@ -85,40 +74,18 @@ class CouponApplicationServiceTest {
         return mc;
     }
 
-    private Order memberOrder(long totalAmount) {
-        Album album = albumFixture(totalAmount);
-        Order order = Order.placeForMember("ORD-1", MEMBER_ID, SHIPPING);
-        order.addItem(OrderItem.create(album, 1));
-        ReflectionTestUtils.setField(order, "id", ORDER_ID);
-        return order;
-    }
-
-    private Album albumFixture(long price) {
-        Artist artist = Artist.create("A", null);
-        Genre genre = Genre.create("G");
-        Label label = Label.create("L");
-        Album album = Album.create("Title", artist, genre, label,
-                (short) 2020, AlbumFormat.LP_12, price, 100,
-                AlbumStatus.SELLING, false, null, null);
-        ReflectionTestUtils.setField(album, "id", 10L);
-        return album;
-    }
-
     // --- applyToOrder --------------------------------------------------------
 
     @Test
-    @DisplayName("정상 적용 — discount 계산, order.applyDiscount, memberCoupon.use(orderId)")
+    @DisplayName("정상 적용 — discount 계산, memberCoupon.use(orderId)")
     void apply_happyPath() {
         Coupon coupon = fixedCoupon(3_000L, 10_000L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
-        Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
-        long discount = service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order);
+        long discount = service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L);
 
         assertThat(discount).isEqualTo(3_000L);
-        assertThat(order.getDiscountAmount()).isEqualTo(3_000L);
-        assertThat(order.getPayableAmount()).isEqualTo(27_000L);
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.USED);
         assertThat(mc.getOrderId()).isEqualTo(ORDER_ID);
         assertThat(mc.getUsedAt()).isNotNull();
@@ -128,11 +95,9 @@ class CouponApplicationServiceTest {
     @DisplayName("미존재 memberCouponId → CouponNotFoundException")
     void apply_notFound() {
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.empty());
-        Order order = memberOrder(30_000L);
 
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L))
                 .isInstanceOf(CouponNotFoundException.class);
-        assertThat(order.getDiscountAmount()).isZero();
     }
 
     @Test
@@ -140,10 +105,9 @@ class CouponApplicationServiceTest {
     void apply_notOwned() {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, OTHER_MEMBER_ID);
-        Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L))
                 .isInstanceOf(CouponNotOwnedException.class)
                 .hasMessageNotContaining(String.valueOf(OTHER_MEMBER_ID));
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
@@ -155,10 +119,9 @@ class CouponApplicationServiceTest {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
         mc.use(999L, NOW);   // 다른 주문에 이미 사용된 상태
-        Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L))
                 .isInstanceOf(CouponAlreadyUsedException.class);
     }
 
@@ -168,10 +131,9 @@ class CouponApplicationServiceTest {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
         mc.expire();
-        Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L))
                 .isInstanceOf(CouponExpiredException.class);
     }
 
@@ -181,10 +143,9 @@ class CouponApplicationServiceTest {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
         mc.cancel();
-        Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L))
                 .isInstanceOf(CouponNotIssuableException.class);
     }
 
@@ -194,34 +155,28 @@ class CouponApplicationServiceTest {
         Coupon coupon = fixedCoupon(3_000L, 0L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
         ReflectionTestUtils.setField(mc, "expiresAt", NOW.minus(1, ChronoUnit.HOURS));
-        Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L))
                 .isInstanceOf(CouponExpiredException.class);
     }
 
     @Test
-    @DisplayName("최소 주문금액 미충족 → CouponMinOrderNotMetException, 주문 할인 미적용")
+    @DisplayName("최소 주문금액 미충족 → CouponMinOrderNotMetException, 쿠폰 미사용 유지")
     void apply_belowMinOrder() {
         Coupon coupon = fixedCoupon(3_000L, 50_000L);
         MemberCoupon mc = issued(coupon, MEMBER_ID);
-        Order order = memberOrder(30_000L);
         when(memberCouponRepository.findByIdForUpdate(MEMBER_COUPON_ID)).thenReturn(Optional.of(mc));
 
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, ORDER_ID, 30_000L))
                 .isInstanceOf(CouponMinOrderNotMetException.class);
-        assertThat(order.getDiscountAmount()).isZero();
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
     }
 
     @Test
-    @DisplayName("저장 전 order(id=null) → IllegalArgumentException (호출 규약 위반)")
-    void apply_unsavedOrder_rejected() {
-        Order order = Order.placeForMember("ORD-1", MEMBER_ID, SHIPPING);
-        order.addItem(OrderItem.create(albumFixture(10_000L), 1));   // id 미설정
-
-        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, order))
+    @DisplayName("orderId == null → IllegalArgumentException (호출 규약 위반)")
+    void apply_nullOrderId_rejected() {
+        assertThatThrownBy(() -> service.applyToOrder(MEMBER_COUPON_ID, MEMBER_ID, null, 10_000L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

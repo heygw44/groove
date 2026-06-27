@@ -1,7 +1,6 @@
 package com.groove.support;
 
-import com.groove.auth.security.AuthPrincipal;
-import com.groove.member.domain.MemberRole;
+import com.groove.security.AuthPrincipal;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +20,6 @@ public class TestSecuredController {
         return new MeResponse(principal.memberId(), principal.role());
     }
 
-    public record MeResponse(Long memberId, MemberRole role) {
+    public record MeResponse(Long memberId, String role) {
     }
 }

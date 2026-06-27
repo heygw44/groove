@@ -10,8 +10,6 @@ import com.groove.member.exception.MemberNotFoundException;
 import com.groove.member.exception.MemberWithdrawalBlockedException;
 import com.groove.member.security.EmailHashProperties;
 import com.groove.member.security.EmailHasher;
-import com.groove.order.domain.OrderRepository;
-import com.groove.order.domain.OrderStatus;
 import com.groove.support.MemberFixtures;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,15 +24,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -54,7 +49,7 @@ class MemberServiceTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private OrderRepository orderRepository;
+    private MemberOrderGuard memberOrderGuard;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -70,7 +65,7 @@ class MemberServiceTest {
     @BeforeEach
     void setUp() {
         memberService = new MemberService(
-                memberRepository, passwordEncoder, orderRepository, eventPublisher, emailHasher, clock);
+                memberRepository, passwordEncoder, memberOrderGuard, eventPublisher, emailHasher, clock);
     }
 
     /** signup 의 점유 검사 인자 — v1(HMAC)·legacy(SHA-256). */
@@ -212,7 +207,7 @@ class MemberServiceTest {
         String originalHash = member.getEmailHash();
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("P@ssw0rd!2024", "$2a$12$hash")).thenReturn(true);
-        when(orderRepository.existsByMemberIdAndStatusIn(eq(1L), any())).thenReturn(false);
+        when(memberOrderGuard.hasBlockingOrders(1L)).thenReturn(false);
 
         memberService.withdraw(1L, "P@ssw0rd!2024");
 
@@ -229,29 +224,12 @@ class MemberServiceTest {
     }
 
     @Test
-    @DisplayName("withdraw: 차단 상태 집합은 {PAID, PREPARING, SHIPPED} 으로 조회한다")
-    void withdraw_queriesBlockingStatuses() {
-        Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
-        when(passwordEncoder.matches(anyString(), eq("$2a$12$hash"))).thenReturn(true);
-        when(orderRepository.existsByMemberIdAndStatusIn(eq(1L), any())).thenReturn(false);
-
-        memberService.withdraw(1L, "P@ssw0rd!2024");
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Collection<OrderStatus>> captor = ArgumentCaptor.forClass(Collection.class);
-        verify(orderRepository).existsByMemberIdAndStatusIn(eq(1L), captor.capture());
-        assertThat(captor.getValue())
-                .containsExactlyInAnyOrder(OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.SHIPPED);
-    }
-
-    @Test
     @DisplayName("withdraw: 진행 중 주문 존재 → MemberWithdrawalBlockedException, soft delete·이벤트 없음")
     void withdraw_blockingOrder_throwsAndDoesNotWithdraw() {
         Member member = MemberFixtures.register("user@example.com", "$2a$12$hash", "김철수", "01012345678");
         when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("P@ssw0rd!2024", "$2a$12$hash")).thenReturn(true);
-        when(orderRepository.existsByMemberIdAndStatusIn(eq(1L), any())).thenReturn(true);
+        when(memberOrderGuard.hasBlockingOrders(1L)).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.withdraw(1L, "P@ssw0rd!2024"))
                 .isInstanceOf(MemberWithdrawalBlockedException.class);
@@ -273,7 +251,7 @@ class MemberServiceTest {
                 .isEqualTo(ErrorCode.MEMBER_PASSWORD_MISMATCH);
 
         assertThat(member.isWithdrawn()).isFalse();
-        verifyNoInteractions(orderRepository);
+        verifyNoInteractions(memberOrderGuard);
         verifyNoInteractions(eventPublisher);
     }
 
@@ -290,7 +268,7 @@ class MemberServiceTest {
         assertThat(member.getDeletedAt()).isEqualTo(Instant.parse("2026-05-01T00:00:00Z"));
         // 재탈퇴여도 비밀번호 재확인은 수행된다.
         verify(passwordEncoder).matches("P@ssw0rd!2024", "$2a$12$hash");
-        verifyNoInteractions(orderRepository);
+        verifyNoInteractions(memberOrderGuard);
         verifyNoInteractions(eventPublisher);
     }
 

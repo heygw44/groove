@@ -8,6 +8,7 @@ import com.groove.admin.api.dto.AdminMemberCouponResponse;
 import com.groove.common.api.PageResponse;
 import com.groove.common.api.SortValidator;
 import com.groove.coupon.application.AdminCouponService;
+import com.groove.coupon.application.CouponCreateCommand;
 import com.groove.coupon.domain.Coupon;
 import com.groove.coupon.domain.CouponStatus;
 import com.groove.coupon.domain.MemberCoupon;
@@ -66,8 +67,15 @@ public class AdminCouponController {
     @ApiResponse(responseCode = "403", description = "권한 부족 — ADMIN 권한이 없습니다")
     @PostMapping
     public ResponseEntity<AdminCouponSummary> create(@Valid @RequestBody AdminCouponCreateRequest request) {
-        Coupon created = adminCouponService.create(request);
+        Coupon created = adminCouponService.create(toCommand(request));
         return ResponseEntity.status(HttpStatus.CREATED).body(AdminCouponSummary.from(created));
+    }
+
+    private static CouponCreateCommand toCommand(AdminCouponCreateRequest request) {
+        return new CouponCreateCommand(
+                request.name(), request.discountType(), request.discountValue(),
+                request.maxDiscountAmount(), request.minOrderAmount(), request.totalQuantity(),
+                request.perMemberLimit(), request.validFrom(), request.validUntil());
     }
 
     @Operation(summary = "쿠폰 정책 목록 조회",

@@ -87,37 +87,39 @@ com.groove/
 
 **긍정적**
 
-기능을 고칠 때 손댈 코드가 해당 도메인 패키지에 모여 있어 찾고 바꾸기가 수월하다. 헥사고날의 장점 중 정작 필요한 것 — 외부 연동의 분리 — 만 `gateway` 로 취했기 때문에, PG 를 교체할 때도 어댑터만 갈아끼우면 된다(→ [payment-gateway-mock.md](./payment-gateway-mock.md)). 멀리 떨어진 협력은 이벤트·Outbox 로 끊어 결합을 줄였다. 다만 "순환 의존이 구조적으로 전혀 없다"는 보장은 아니다 — 가까운 도메인 간 가드 조회 등에서 실제 순환이 남아 있으며, 자세한 현황은 아래 ["ArchUnit 으로 강제하는 규칙과 한계"](#archunit-으로-강제하는-규칙과-한계-344) 를 참고한다.
+기능을 고칠 때 손댈 코드가 해당 도메인 패키지에 모여 있어 찾고 바꾸기가 수월하다. 헥사고날의 장점 중 정작 필요한 것 — 외부 연동의 분리 — 만 `gateway` 로 취했기 때문에, PG 를 교체할 때도 어댑터만 갈아끼우면 된다(→ [payment-gateway-mock.md](./payment-gateway-mock.md)). 멀리 떨어진 협력은 이벤트·Outbox 로 끊어 결합을 줄였다. 도메인 간 단방향(순환 없음)은 이제 슬라이스 단위 `beFreeOfCycles` 로 테스트가 강제한다 — 가까운 도메인 간 가드 조회의 역참조는 읽기 전용 포트 인버전으로, 시드의 역참조는 패키지 분리로 끊었다(#349, 아래 ["ArchUnit 으로 강제하는 규칙"](#archunit-으로-강제하는-규칙-344-349) 참고).
 
 **부정적 / 트레이드오프**
 
-단일 모듈이라 컴파일러가 잘못된 도메인 간 의존을 막아 주지 못한다. 결국 코드리뷰 규율에 기대게 되는데, 더 단단히 하려고 ArchUnit 의존성 테스트로 일부를 보강했다(#344 — 계층 순서와 도메인 모델의 표현 계층 비의존을 테스트로 고정). 다만 도메인 간 단방향(순환 없음)까지는 아직 강제하지 못한다(아래 한계 참고). 또 하나는 "어디까지가 공통인가"가 모호해지면 `common` 이 잡동사니로 비대해질 수 있다는 점이다. 그래서 공통은 "도메인과 무관한 인프라"로만 한정한다는 기준을 유지한다.
+단일 모듈이라 컴파일러가 잘못된 도메인 간 의존을 막아 주지 못한다. 결국 코드리뷰 규율에 기대게 되는데, 더 단단히 하려고 ArchUnit 의존성 테스트로 보강했다(#344 — 계층 순서와 도메인 모델의 표현 계층 비의존, #349 — 도메인 간 단방향까지 전역 `beFreeOfCycles` 로 고정). 또 하나는 "어디까지가 공통인가"가 모호해지면 `common` 이 잡동사니로 비대해질 수 있다는 점이다. 그래서 공통은 "도메인과 무관한 인프라"로만 한정한다는 기준을 유지하고, 도메인을 참조하는 부팅 시드는 `common` 이 아니라 `com.groove.bootstrap` 에 둔다(#349).
 
 ---
 
-## ArchUnit 으로 강제하는 규칙과 한계 (#344)
+## ArchUnit 으로 강제하는 규칙 (#344, #349)
 
 리뷰 규율로만 지키던 의존 방향을 테스트로 고정했다. 규칙은 `backend/src/test/java/com/groove/architecture/ModuleDependencyRulesTest.java` 에 있고 `./gradlew test` 로 검증된다.
 
 **강제하는 규칙**
 
-- 계층 순서(api → application → domain): `domain` 은 `application`·`api` 에 의존하지 않고, `application` 은 `api` 의 컨트롤러·설정에 의존하지 않는다(같은 도메인의 `api.dto` 는 요청/응답 경계 계약이라 예외 허용 — 예: `OrderService` 의 `OrderCreateRequest`/`OrderResponse`).
+- 계층 순서(api → application → domain): `domain` 은 `application`·`api` 에 의존하지 않고, `application` 은 `api` 의 컨트롤러·설정에 의존하지 않는다. 경계 계약인 `api.dto` 는 예외이되 **같은 도메인의 `api.dto` 로만** 좁힌다(예: `OrderService` 의 `OrderCreateRequest`/`OrderResponse`. 다른 도메인의 `api.dto` 참조는 금지 — #349).
 - 도메인 모델의 표현 계층 비의존: `domain` 은 `com.groove.web`·`api` 타입은 물론 `org.springframework.web`·`jakarta.servlet` 같은 웹 프레임워크 타입에도 의존하지 않는다.
+- 도메인 간 단방향(순환 없음): 슬라이스(`com.groove.(*)..`) 단위 `beFreeOfCycles` 로 양방향 순환을 금지한다(#349).
 
-**아직 강제하지 못하는 것 — 도메인 간 단방향(순환 없음)**
+**도메인 간 순환을 끊은 방법 (#349)**
 
-ADR 본문은 "의존이 단방향으로 흐른다"고 적었지만, 슬라이스 단위 `beFreeOfCycles` 를 켜 보면 실제로는 양방향 순환이 여럿 남아 있다.
+이전에는 가드 조회·시드·DTO 소유 위치에서 양방향 순환이 여럿 남아 `beFreeOfCycles` 를 켜지 못했다. 끊은 방식은 다음과 같다.
 
-| 순환 쌍 | 정방향 | 역방향(back-edge) |
-|---|---|---|
-| `order ↔ catalog` | order → catalog (재고 조회) | `AlbumService` → `order.domain.OrderRepository` (앨범 삭제 전 주문 존재 가드) |
-| `order ↔ coupon` | `CouponApplicationService` → order | order → coupon (쿠폰 적용) |
-| `order ↔ member` | order → member (회원 검증) | `MemberService` → `order.domain` (회원 탈퇴 전 주문 가드) |
-| `catalog ↔ cart` | `AlbumService` → `cart.domain.CartRepository` | cart → catalog (장바구니가 앨범 참조) |
-| `coupon ↔ admin` | `AdminCouponService` → `admin.api.dto.AdminCouponCreateRequest` | admin → coupon (`RefundSteps`) |
-| `common → 도메인` | `common.seed.LocalDataSeeder`/`ProductionSeedGuard` → coupon·order·catalog·member | (common 은 모두가 의존하는 인프라 sink 여야 하나 시드가 도메인을 역참조) |
+| 순환 | 끊은 방법 |
+|---|---|
+| `order ↔ catalog`, `catalog ↔ cart` | 앨범 삭제 가드를 `AlbumReferenceGuard`(catalog 소유) 포트로 역전 — order·cart 가 구현 |
+| `order ↔ member` | 탈퇴 가드를 `MemberOrderGuard`(member 소유) 포트로 역전 — order 가 구현(차단 상태셋 소유) |
+| `order ↔ coupon` | `CouponApplicationService.applyToOrder` 가 `Order` 대신 `(orderId, 총액)` 만 받고 할인액 반환; 보유목록 주문번호 조회는 `OrderNumberLookup`(coupon 소유) 포트로 역전 |
+| `catalog ↔ review` | 리뷰 평점 집계를 `AlbumRatingProvider`(catalog 소유) 포트로 역전 — review 가 구현 |
+| `coupon ↔ admin` | 쿠폰 생성 입력을 coupon 소유 `CouponCreateCommand` 로 — admin 컨트롤러가 자기 DTO 를 매핑 |
+| `auth ↔ member` | `AuthPrincipal` 을 도메인 무관 중립 슬라이스 `com.groove.security` 로 이전(role 은 문자열) — 모든 표현 계층이 의존하되 member 역참조 제거 |
+| `common → 도메인` | 도메인을 참조하는 부팅 시드(`LocalDataSeeder`·`ProductionSeedGuard`)를 `common` 밖 `com.groove.bootstrap` 으로 이전해 `common` 을 인프라 sink 로 회복 |
 
-대부분 "삭제/탈퇴 전 존재 여부 가드 조회"와 시드 코드에서 비롯한다. 전역 `beFreeOfCycles` 를 켜려면 이 참조들을 이벤트화하거나(가드를 도메인 이벤트/조회 전용 포트로 분리), `common.seed` 를 `common` 밖으로 옮겨 sink 를 회복하는 구조 변경이 선행돼야 한다. 테스트 전용 범위(#344)를 벗어나므로 별도 후속 작업으로 남긴다.
+가드는 동기 조회라 이벤트화 대신 **데이터가 필요한 도메인이 포트를 소유하고 데이터를 가진 도메인이 구현**하는 의존성 인버전으로 풀었다(인터페이스는 owner 의 `application` 계층, 구현은 provider 의 `application` 계층).
 
 ---
 

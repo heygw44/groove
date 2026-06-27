@@ -1,6 +1,7 @@
 package com.groove.auth.security;
 
 import com.groove.common.exception.AuthException;
+import com.groove.security.AuthPrincipal;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -66,7 +67,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void authenticate(JwtClaims claims) {
-        AuthPrincipal principal = new AuthPrincipal(claims.memberId(), claims.role());
+        AuthPrincipal principal = new AuthPrincipal(claims.memberId(), claims.role().name());
         var authority = new SimpleGrantedAuthority("ROLE_" + claims.role().name());
         var authentication = UsernamePasswordAuthenticationToken.authenticated(
                 principal, null, List.of(authority));

@@ -1,6 +1,6 @@
 package com.groove.cart.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.cart.api.dto.CartItemAddRequest;
 import com.groove.cart.api.dto.CartItemPatchRequest;
 import com.groove.cart.api.dto.CartResponse;

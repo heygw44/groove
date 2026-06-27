@@ -2,7 +2,7 @@ package com.groove.auth.api;
 
 import com.groove.auth.api.dto.ChangePasswordRequest;
 import com.groove.auth.application.AuthService;
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;

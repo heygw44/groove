@@ -6,15 +6,12 @@ import com.groove.coupon.domain.CouponRepository;
 import com.groove.coupon.domain.MemberCoupon;
 import com.groove.coupon.domain.MemberCouponRepository;
 import com.groove.coupon.domain.MemberCouponStatus;
-import com.groove.order.domain.OrderRepository;
-import com.groove.order.domain.OrderRepository.OrderNumberView;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -26,16 +23,16 @@ public class CouponQueryService {
 
     private final CouponRepository couponRepository;
     private final MemberCouponRepository memberCouponRepository;
-    private final OrderRepository orderRepository;
+    private final OrderNumberLookup orderNumberLookup;
     private final Clock clock;
 
     public CouponQueryService(CouponRepository couponRepository,
                               MemberCouponRepository memberCouponRepository,
-                              OrderRepository orderRepository,
+                              OrderNumberLookup orderNumberLookup,
                               Clock clock) {
         this.couponRepository = couponRepository;
         this.memberCouponRepository = memberCouponRepository;
-        this.orderRepository = orderRepository;
+        this.orderNumberLookup = orderNumberLookup;
         this.clock = clock;
     }
 
@@ -47,7 +44,7 @@ public class CouponQueryService {
 
     /**
      * 회원 보유 쿠폰 페이지 — status 가 null 이면 전체, 아니면 해당 상태만.
-     * USED 쿠폰의 orderNumber 는 페이지의 orderId 집합을 모아 findByIdIn 으로 한 번에 resolve 한다(복원된 쿠폰은 null).
+     * USED 쿠폰의 orderNumber 는 페이지의 orderId 집합을 모아 OrderNumberLookup 으로 한 번에 resolve 한다(복원된 쿠폰은 null).
      */
     @Transactional(readOnly = true)
     public Page<MemberCouponResponse> listForMember(Long memberId, MemberCouponStatus status, Pageable pageable) {
@@ -59,12 +56,8 @@ public class CouponQueryService {
                 .map(MemberCoupon::getOrderId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        // emptyMap()(Map.of() 아님): ISSUED 쿠폰은 orderId 가 null 이라 get(null) 호출이 필요한데,
-        // Map.of() 의 불변 맵은 null 키 조회 시 NPE 를 던진다.
-        Map<Long, String> orderNumbers = orderIds.isEmpty()
-                ? Collections.emptyMap()
-                : orderRepository.findByIdIn(orderIds).stream()
-                        .collect(Collectors.toMap(OrderNumberView::getId, OrderNumberView::getOrderNumber));
+        // ISSUED 쿠폰은 orderId 가 null 이라 get(null) 을 호출하므로, lookup 은 null 키를 허용하는 맵을 반환한다.
+        Map<Long, String> orderNumbers = orderNumberLookup.orderNumbersByIds(orderIds);
 
         return page.map(mc -> MemberCouponResponse.from(mc, orderNumbers.get(mc.getOrderId())));
     }

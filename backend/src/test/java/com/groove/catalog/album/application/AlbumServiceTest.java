@@ -18,10 +18,6 @@ import com.groove.catalog.album.api.dto.AlbumSummaryResponse;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.catalog.label.exception.LabelNotFoundException;
-import com.groove.cart.domain.CartRepository;
-import com.groove.order.domain.OrderRepository;
-import com.groove.review.domain.AlbumRatingView;
-import com.groove.review.domain.ReviewRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,12 +30,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -58,17 +54,19 @@ class AlbumServiceTest {
     @Mock
     private LabelRepository labelRepository;
     @Mock
-    private ReviewRepository reviewRepository;
+    private AlbumRatingProvider albumRatingProvider;
+    // 앨범 참조 가드(order·cart 도메인이 구현) — 단위 테스트에선 목으로 주입(#349).
     @Mock
-    private CartRepository cartRepository;
+    private AlbumReferenceGuard cartGuard;
     @Mock
-    private OrderRepository orderRepository;
+    private AlbumReferenceGuard orderGuard;
 
     private AlbumService albumService;
 
     @BeforeEach
     void setUp() {
-        albumService = new AlbumService(albumRepository, artistRepository, genreRepository, labelRepository, reviewRepository, cartRepository, orderRepository);
+        albumService = new AlbumService(albumRepository, artistRepository, genreRepository, labelRepository,
+                albumRatingProvider, List.of(cartGuard, orderGuard));
     }
 
     private Album sampleAlbum() {
@@ -237,25 +235,25 @@ class AlbumServiceTest {
     }
 
     @Test
-    @DisplayName("delete → 존재하고 참조 없으면 entity 로 delete 호출")
+    @DisplayName("delete → 존재하고 참조 가드 모두 false 면 entity 로 delete 호출")
     void delete_callsDeleteEntity() {
         Album existing = sampleAlbum();
         given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
 
         albumService.delete(1L);
 
-        then(cartRepository).should().existsByAlbumId(1L);
-        then(orderRepository).should().existsByAlbumId(1L);
+        then(cartGuard).should().isReferenced(1L);
+        then(orderGuard).should().isReferenced(1L);
         then(albumRepository).should().delete(existing);
         then(albumRepository).should().flush();
     }
 
     @Test
-    @DisplayName("delete → cart_item 이 참조 중이면 409 AlbumInUse (delete 호출 안 함)")
+    @DisplayName("delete → cart 참조 가드가 true 면 409 AlbumInUse (delete 호출 안 함)")
     void delete_throwsWhenReferencedByCart() {
         Album existing = sampleAlbum();
         given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
-        given(cartRepository.existsByAlbumId(1L)).willReturn(true);
+        given(cartGuard.isReferenced(1L)).willReturn(true);
 
         assertThatThrownBy(() -> albumService.delete(1L))
                 .isInstanceOf(AlbumInUseException.class);
@@ -263,11 +261,11 @@ class AlbumServiceTest {
     }
 
     @Test
-    @DisplayName("delete → order_item 이 참조 중이면 409 AlbumInUse (delete 호출 안 함)")
+    @DisplayName("delete → order 참조 가드가 true 면 409 AlbumInUse (delete 호출 안 함)")
     void delete_throwsWhenReferencedByOrder() {
         Album existing = sampleAlbum();
         given(albumRepository.findById(1L)).willReturn(Optional.of(existing));
-        given(orderRepository.existsByAlbumId(1L)).willReturn(true);
+        given(orderGuard.isReferenced(1L)).willReturn(true);
 
         assertThatThrownBy(() -> albumService.delete(1L))
                 .isInstanceOf(AlbumInUseException.class);
@@ -306,17 +304,17 @@ class AlbumServiceTest {
     }
 
     @Test
-    @DisplayName("search → 결과가 비면 리뷰 집계 쿼리를 호출하지 않는다 (빈 IN 절 회피)")
-    void search_emptyResult_doesNotQueryRatings() {
+    @DisplayName("search → 결과가 비면 평점 provider 가 빈 맵을 돌려 빈 페이지를 그대로 반환")
+    void search_emptyResult_returnsEmpty() {
         AlbumSearchCondition cond = new AlbumSearchCondition(
                 null, null, null, null, null, null, null, null, null, null, AlbumStatus.SELLING);
         given(albumRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .willReturn(Page.<Album>empty());
+        given(albumRatingProvider.ratingsByAlbumId(List.of())).willReturn(Map.of());
 
         Page<AlbumSummaryResponse> page = albumService.search(cond, PageRequest.of(0, 20));
 
         assertThat(page).isEmpty();
-        then(reviewRepository).should(never()).findRatingsByAlbumIds(anyCollection());
     }
 
     @Test
@@ -324,11 +322,8 @@ class AlbumServiceTest {
     void findDetail_fillsRatingFromAggregate() {
         Album album = albumWithAssociations();
         given(albumRepository.findById(1L)).willReturn(Optional.of(album));
-        AlbumRatingView view = org.mockito.Mockito.mock(AlbumRatingView.class);
-        given(view.getAlbumId()).willReturn(1L);
-        given(view.getAverageRating()).willReturn(4.75);
-        given(view.getReviewCount()).willReturn(4L);
-        given(reviewRepository.findRatingsByAlbumIds(List.of(1L))).willReturn(List.of(view));
+        given(albumRatingProvider.ratingsByAlbumId(List.of(1L)))
+                .willReturn(Map.of(1L, AlbumRating.of(4.75, 4L)));
 
         AlbumDetailResponse response = albumService.findDetail(1L);
 
@@ -341,7 +336,7 @@ class AlbumServiceTest {
     void findDetail_noReviews_returnsNullRating() {
         Album album = albumWithAssociations();
         given(albumRepository.findById(1L)).willReturn(Optional.of(album));
-        given(reviewRepository.findRatingsByAlbumIds(List.of(1L))).willReturn(List.of());
+        given(albumRatingProvider.ratingsByAlbumId(List.of(1L))).willReturn(Map.of());
 
         AlbumDetailResponse response = albumService.findDetail(1L);
 

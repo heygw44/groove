@@ -1,6 +1,5 @@
-package com.groove.common.seed;
+package com.groove.bootstrap;
 
-import com.groove.admin.api.dto.AdminCouponCreateRequest;
 import com.groove.catalog.album.application.AlbumCommand;
 import com.groove.catalog.album.application.AlbumService;
 import com.groove.catalog.album.domain.Album;
@@ -15,6 +14,7 @@ import com.groove.catalog.label.application.LabelCommand;
 import com.groove.catalog.label.application.LabelService;
 import com.groove.common.transaction.CommonTransactionConfig;
 import com.groove.coupon.application.AdminCouponService;
+import com.groove.coupon.application.CouponCreateCommand;
 import com.groove.coupon.domain.CouponDiscountType;
 import com.groove.member.application.MemberService;
 import com.groove.member.application.SignupCommand;
@@ -208,7 +208,7 @@ public class LocalDataSeeder implements ApplicationRunner {
     /** 한정 수량 선착순 쿠폰 1장. */
     private void seedLimitedCoupon() {
         Instant now = Instant.now();
-        adminCouponService.create(new AdminCouponCreateRequest(
+        adminCouponService.create(new CouponCreateCommand(
                 "데모 선착순 쿠폰 (5,000원)",
                 CouponDiscountType.FIXED_AMOUNT,
                 5_000L,

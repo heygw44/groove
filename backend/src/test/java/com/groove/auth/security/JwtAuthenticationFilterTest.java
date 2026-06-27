@@ -1,6 +1,7 @@
 package com.groove.auth.security;
 
 import com.groove.member.domain.MemberRole;
+import com.groove.security.AuthPrincipal;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,7 +73,7 @@ class JwtAuthenticationFilterTest {
         assertThat(auth.getPrincipal()).isInstanceOf(AuthPrincipal.class);
         AuthPrincipal principal = (AuthPrincipal) auth.getPrincipal();
         assertThat(principal.memberId()).isEqualTo(42L);
-        assertThat(principal.role()).isEqualTo(MemberRole.USER);
+        assertThat(principal.role()).isEqualTo(MemberRole.USER.name());
         assertThat(auth.getAuthorities()).extracting("authority").containsExactly("ROLE_USER");
         verify(chain, times(1)).doFilter(request, response);
     }

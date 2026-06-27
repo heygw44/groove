@@ -1,6 +1,6 @@
 package com.groove.coupon.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.common.api.PageResponse;
 import com.groove.common.api.SortValidator;
 import com.groove.coupon.api.dto.MemberCouponResponse;

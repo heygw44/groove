@@ -16,10 +16,6 @@ import com.groove.catalog.genre.exception.GenreNotFoundException;
 import com.groove.catalog.label.domain.Label;
 import com.groove.catalog.label.domain.LabelRepository;
 import com.groove.catalog.label.exception.LabelNotFoundException;
-import com.groove.cart.domain.CartRepository;
-import com.groove.order.domain.OrderRepository;
-import com.groove.review.domain.AlbumRatingView;
-import com.groove.review.domain.ReviewRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -33,10 +29,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 앨범 CRUD + 재고 조정 트랜잭션 경계. FK(artist/genre/label) 는 findById 로 로드하고 없으면
@@ -50,24 +44,21 @@ public class AlbumService {
     private final ArtistRepository artistRepository;
     private final GenreRepository genreRepository;
     private final LabelRepository labelRepository;
-    private final ReviewRepository reviewRepository;
-    private final CartRepository cartRepository;
-    private final OrderRepository orderRepository;
+    private final AlbumRatingProvider albumRatingProvider;
+    private final List<AlbumReferenceGuard> referenceGuards;
 
     public AlbumService(AlbumRepository albumRepository,
                         ArtistRepository artistRepository,
                         GenreRepository genreRepository,
                         LabelRepository labelRepository,
-                        ReviewRepository reviewRepository,
-                        CartRepository cartRepository,
-                        OrderRepository orderRepository) {
+                        AlbumRatingProvider albumRatingProvider,
+                        List<AlbumReferenceGuard> referenceGuards) {
         this.albumRepository = albumRepository;
         this.artistRepository = artistRepository;
         this.genreRepository = genreRepository;
         this.labelRepository = labelRepository;
-        this.reviewRepository = reviewRepository;
-        this.cartRepository = cartRepository;
-        this.orderRepository = orderRepository;
+        this.albumRatingProvider = albumRatingProvider;
+        this.referenceGuards = referenceGuards;
     }
 
     // 랜딩 목록 캐시를 비운다.
@@ -150,7 +141,7 @@ public class AlbumService {
         // 사전 검사~flush 사이 TOCTOU 경합 창이 있으나, cart_item/order_item 이 ON DELETE RESTRICT 라
         // 그 사이 새 참조가 생기면 flush 가 FK 위반→DataIntegrityViolationException→AlbumInUseException(409) 으로
         // 안전 변환한다. 이 안전망이 견고하므로 SELECT FOR UPDATE 행 락은 두지 않는다.
-        if (cartRepository.existsByAlbumId(id) || orderRepository.existsByAlbumId(id)) {
+        if (referenceGuards.stream().anyMatch(guard -> guard.isReferenced(id))) {
             throw new AlbumInUseException();
         }
         try {
@@ -171,7 +162,7 @@ public class AlbumService {
     @Transactional(readOnly = true)
     public Page<AlbumSummaryResponse> search(AlbumSearchCondition condition, Pageable pageable) {
         Page<Album> page = albumRepository.findAll(buildSpec(condition), pageable);
-        Map<Long, AlbumRating> ratings = ratingsByAlbumId(page.getContent().stream().map(Album::getId).toList());
+        Map<Long, AlbumRating> ratings = albumRatingProvider.ratingsByAlbumId(page.getContent().stream().map(Album::getId).toList());
         return page.map(album -> AlbumSummaryResponse.from(album, ratings.getOrDefault(album.getId(), AlbumRating.NONE)));
     }
 
@@ -185,7 +176,7 @@ public class AlbumService {
     public Window<AlbumSummaryResponse> searchKeyset(AlbumSearchCondition condition, int size, Sort sort, ScrollPosition position) {
         Specification<Album> spec = buildSpec(condition);
         Window<Album> window = albumRepository.findBy(spec, query -> query.sortBy(sort).limit(size).scroll(position));
-        Map<Long, AlbumRating> ratings = ratingsByAlbumId(window.getContent().stream().map(Album::getId).toList());
+        Map<Long, AlbumRating> ratings = albumRatingProvider.ratingsByAlbumId(window.getContent().stream().map(Album::getId).toList());
         return window.map(album -> AlbumSummaryResponse.from(album, ratings.getOrDefault(album.getId(), AlbumRating.NONE)));
     }
 
@@ -213,17 +204,8 @@ public class AlbumService {
     public AlbumDetailResponse findDetail(Long id) {
         Album album = albumRepository.findById(id)
                 .orElseThrow(AlbumNotFoundException::new);
-        AlbumRating rating = ratingsByAlbumId(List.of(id)).getOrDefault(id, AlbumRating.NONE);
+        AlbumRating rating = albumRatingProvider.ratingsByAlbumId(List.of(id)).getOrDefault(id, AlbumRating.NONE);
         return AlbumDetailResponse.from(initializeAssociations(album), rating);
-    }
-
-    /** 앨범 묶음의 리뷰 집계를 1회 쿼리로 가져와 albumId → AlbumRating 맵으로 만든다. 빈 묶음이면 빈 맵. */
-    private Map<Long, AlbumRating> ratingsByAlbumId(Collection<Long> albumIds) {
-        if (albumIds.isEmpty()) {
-            return Map.of();
-        }
-        return reviewRepository.findRatingsByAlbumIds(albumIds).stream()
-                .collect(Collectors.toMap(AlbumRatingView::getAlbumId, AlbumRating::from));
     }
 
     private Artist loadArtist(Long artistId) {
