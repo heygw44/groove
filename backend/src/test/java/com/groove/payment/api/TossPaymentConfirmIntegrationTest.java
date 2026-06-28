@@ -61,11 +61,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 토스 confirm 승인 흐름 통합 테스트 — checkout → successUrl/failUrl 콜백.
- *
- * <p>Testcontainers MySQL 위 MockMvc, test 프로파일이라 PaymentGateway 는 {@code MockPaymentGateway}(confirm 항상 PAID).
- * checkout 은 게이트웨이 호출 없이 PENDING(잠정 pgTx=orderNumber)을 만들고, success 콜백이 confirm→PAID 적용,
- * fail 콜백이 보상(재고·쿠폰 복원)을 적용한다.
+ * 토스 confirm 승인 흐름 통합 테스트 — checkout → successUrl/failUrl 콜백. test 프로파일이라 MockPaymentGateway 가
+ * confirm 을 항상 PAID 로 응답한다. checkout 은 게이트웨이 호출 없이 PENDING(잠정 pgTx=orderNumber)을 만들고,
+ * success 콜백이 confirm→PAID 를, fail 콜백이 보상(재고·쿠폰 복원)을 적용한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

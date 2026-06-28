@@ -28,9 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * MemberCouponRepository 통합 테스트 (Testcontainers MySQL).
- *
- * <p>회원당 1장을 보증하는 UNIQUE(coupon_id, member_id) 가 DB 레벨에서 강제되는지를 중복 INSERT 로 검증한다.
+ * MemberCouponRepository 통합 테스트 (Testcontainers MySQL). 회원당 1장을 보증하는
+ * UNIQUE(coupon_id, member_id) 가 DB 레벨에서 강제되는지를 중복 INSERT 로 검증한다.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = Replace.NONE)

@@ -57,9 +57,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 결제 요청·조회 API 통합 테스트.
- *
- * <p>Testcontainers MySQL 위 MockMvc 로 필터·서비스·DB 를 거친다. auto-webhook=false 라 결제는 PENDING 으로 관찰된다.
+ * 결제 요청·조회 API 통합 테스트. Testcontainers MySQL 위 MockMvc 로 필터·서비스·DB 를 거치며,
+ * auto-webhook=false 라 결제는 PENDING 으로 관찰된다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

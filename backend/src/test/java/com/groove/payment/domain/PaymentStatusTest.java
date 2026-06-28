@@ -13,10 +13,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * PaymentStatus 전이 매트릭스 전수 검증 (5×5 = 25 케이스).
- *
- * <p>합법 전이는 5종(PENDING→PAID, PENDING→FAILED, PAID→PARTIALLY_REFUNDED, PAID→REFUNDED,
- * PARTIALLY_REFUNDED→REFUNDED)이며, 나머지 셀은 모두 불법(자기 전이 포함)이다.
+ * PaymentStatus 전이 매트릭스 전수 검증 (5×5 = 25 케이스). 합법 전이는 5종(PENDING→PAID, PENDING→FAILED,
+ * PAID→PARTIALLY_REFUNDED, PAID→REFUNDED, PARTIALLY_REFUNDED→REFUNDED)이며 나머지 셀은 모두 불법(자기 전이 포함).
  */
 @DisplayName("PaymentStatus — 전이 매트릭스 전수")
 class PaymentStatusTest {

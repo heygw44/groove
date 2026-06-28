@@ -42,15 +42,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 주문 재고 차감 동시성 테스트.
- *
- * <ul>
- *   <li>concurrentOrders_withoutLock_produceOversell — 락 미적용(placeWithoutLock) baseline. @Disabled.</li>
- *   <li>concurrentOrders_withPessimisticLock_noOversell — 비관적 락(place). created ≤ 재고, lost-update 0 검증.</li>
- *   <li>concurrentOrders_singleStockRarity_exactlyOneSucceeds — 단일 재고(stock=1), 동시 100 주문 → 정확히 1 성공.</li>
- * </ul>
- *
- * <p>동시 출발·지연 수집은 ConcurrencyHarness 가 담당한다.
+ * 주문 재고 차감 동시성 테스트. 락 미적용 baseline(oversell, @Disabled) 대비 비관적 락이 created ≤ 재고로
+ * lost-update 0 을 보장하고, 단일 재고(stock=1)에 동시 100 주문이 정확히 1건만 성공함을 검증한다.
+ * 동시 출발·지연 수집은 ConcurrencyHarness 가 담당한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")

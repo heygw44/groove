@@ -48,15 +48,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 재고 복원 경로 동시성 테스트.
- *
- * <ul>
- *   <li>concurrentPlaceAndCancel_atomicRestore_noLostUpdate — 동시 place(−1, 비관락)와 cancel(+1, 원자적 복원)을
- *       같은 album 행에서 인터리브. finalStock == 시드후재고 − 성공한 place + 성공한 cancel 검증.</li>
- *   <li>concurrentAdminAdjust_singleStock_negativeGuard — 재고 1 에 동시 admin 조정(−1) 2건 →
- *       정확히 1 성공/1 거부, 최종 0, 음수 미진입.</li>
- *   <li>concurrentPlaceAndRmwRestore_baseline_producesLostUpdate — 락 없는 RMW 복원 baseline. @Disabled.</li>
- * </ul>
+ * 재고 복원 경로 동시성 테스트. 동시 place(−1)·cancel(+1)을 같은 album 행에서 인터리브해 원자적 복원이
+ * lost-update 없이 finalStock 을 맞추는지, 재고 1 에 동시 admin 조정 2건이 정확히 1 성공/1 거부로 음수에
+ * 진입하지 않는지를 검증한다(락 없는 RMW 복원 baseline 은 @Disabled).
  */
 @SpringBootTest
 @ActiveProfiles("test")

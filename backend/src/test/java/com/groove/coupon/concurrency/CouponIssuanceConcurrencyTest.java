@@ -35,14 +35,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 선착순 쿠폰 발급 동시성 테스트.
- *
- * <p>베이스라인(락 없음)은 초과발급을 재현(@Disabled 로 보존)하고, 비관적 락·원자적 조건부 UPDATE 경로는
- * 초과발급 0 을 증명한다.
- *
- * <p>회원당 1장 UNIQUE 때문에 초과발급 노출은 서로 다른 member_id 로 글로벌 카운터를 때려야 한다.
- *
- * <p>ConcurrencyHarness 가 wall-clock(elapsedMs)·요청별 지연을 수집해 TPS·p95 를 콘솔에 기록한다.
+ * 선착순 쿠폰 발급 동시성 테스트. 베이스라인(락 없음)은 초과발급을 재현(@Disabled 로 보존)하고, 비관적 락·
+ * 원자적 조건부 UPDATE 경로는 초과발급 0 을 증명한다. 회원당 1장 UNIQUE 때문에 초과발급 노출은 서로 다른
+ * member_id 로 글로벌 카운터를 때려야 한다. ConcurrencyHarness 가 TPS·p95 를 콘솔에 기록한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")

@@ -46,11 +46,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 토스 결제 웹훅 수신 통합 테스트.
- *
- * <p>Testcontainers MySQL 위 MockMvc, test 프로파일. test 에선 {@code MockPaymentGateway} 가 PaymentGateway 라
- * 결제 접수(POST /payments) 직후 query() 가 즉시 PAID 를 반환한다 → 재조회 검증 흐름이 PAID 로 합류한다.
- * 서명 헤더 없이 paymentKey 재조회만으로 신뢰하므로 본문 status 는 무시된다(위조 무력화).
+ * 토스 결제 웹훅 수신 통합 테스트. test 프로파일이라 MockPaymentGateway.query() 가 결제 접수 직후 즉시 PAID 를
+ * 반환해 재조회 검증 흐름이 PAID 로 합류한다. 서명 헤더 없이 paymentKey 재조회만 신뢰하므로 본문 status 는
+ * 무시된다(위조 무력화).
  */
 @SpringBootTest
 @AutoConfigureMockMvc

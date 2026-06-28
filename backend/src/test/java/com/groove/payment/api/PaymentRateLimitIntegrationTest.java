@@ -23,10 +23,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 결제 Rate Limit 통합 테스트 — 회원당 결제 생성 한도(post) 초과 시 429·회원 간 버킷 독립, 토스 웹훅 IP 한도(webhook) 초과 시 429 (#320).
- *
- * <p>post.capacity=3·webhook.capacity=2 로 override. 결제 생성은 미존재 주문번호로 호출해 토큰 소진 전까지는 404·소진 후 429 로 관찰하고,
- * 웹훅은 본문 없이 호출해 소진 전까지는 200(IGNORED)·소진 후 429 로 IP 버킷 한도를 관찰한다.
+ * 결제 Rate Limit 통합 테스트 — 회원당 결제 생성 한도(post)·회원 간 버킷 독립, 토스 웹훅 IP 한도(webhook) (#320).
+ * post.capacity=3·webhook.capacity=2 로 override 하고, 결제 생성은 미존재 주문번호로(소진 전 404·소진 후 429),
+ * 웹훅은 본문 없이 호출해(소진 전 200 IGNORED·소진 후 429) 한도를 관찰한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

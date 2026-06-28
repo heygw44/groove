@@ -27,11 +27,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * runAndCache() 의 결과 캐싱 단계(직렬화 / complete() 트랜잭션) 실패 시 IN_PROGRESS 마커가 정리되는지
- * 검증하는 단위 테스트 (이슈 #267 — 정리 경로 대칭화).
- *
- * <p>실패 주입을 위해 실제 TransactionTemplate + mock PlatformTransactionManager 로 executeWithoutResult
- * 콜백을 실제 실행시키고, ObjectMapper / repository 를 mock 으로 둔다.
+ * runAndCache() 의 결과 캐싱 단계(직렬화 / complete() 트랜잭션) 실패 시 IN_PROGRESS 마커가 정리되는지 검증하는
+ * 단위 테스트 (#267 — 정리 경로 대칭화). 실패 주입을 위해 실제 TransactionTemplate + mock PlatformTransactionManager 로
+ * 콜백을 실행시키고, ObjectMapper / repository 를 mock 으로 둔다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("IdempotencyService — 결과 캐싱 실패 시 마커 정리")

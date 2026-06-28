@@ -44,11 +44,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * LocalDataSeeder 통합 테스트.
- *
- * <p>시더는 @Profile("local") 이라 test 프로파일에선 빈으로 등록되지 않아, 협력자를 주입받아 직접 생성하고 run(null) 을 호출해 검증한다.
- *
- * <p>시더는 REQUIRES_NEW 단일 트랜잭션으로 커밋하므로 FK 안전 순서로 직접 정리한다.
+ * LocalDataSeeder 통합 테스트. 시더가 @Profile("local") 이라 test 에선 빈 미등록 → 협력자를 주입받아 직접
+ * 생성·run(null) 호출로 검증한다. REQUIRES_NEW 단일 트랜잭션으로 커밋하므로 FK 안전 순서로 직접 정리한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")

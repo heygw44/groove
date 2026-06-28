@@ -35,15 +35,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 배송 E2E 통합 테스트 — Testcontainers MySQL 위에서 실제 이벤트/트랜잭션/스케줄러를 돌린다.
- *
- * <ul>
- *   <li>OrderPaidEvent 가 아웃박스에 기록·커밋되면 릴레이(OutboxRelayScheduler)가
- *       OrderPaidOutboxHandler 로 디스패치해 PREPARING 배송을 만들고 운송장을 발급한다.</li>
- *   <li>같은 이벤트가 다시 발행돼도 배송은 1건.</li>
- *   <li>자동 진행 스케줄러가 PREPARING → SHIPPED → DELIVERED 로 한 단계씩 민다.</li>
- *   <li>GET /api/v1/shippings/{trackingNumber} 가 배송을 조회하고, 미존재/형식 위반은 404/400.</li>
- * </ul>
+ * 배송 E2E 통합 테스트 — Testcontainers MySQL 위에서 실제 이벤트/트랜잭션/스케줄러를 돌린다. OrderPaidEvent 가
+ * 아웃박스에 커밋되면 릴레이가 PREPARING 배송·운송장을 발급하고(같은 이벤트 재발행돼도 1건), 자동 진행
+ * 스케줄러가 PREPARING→SHIPPED→DELIVERED 로 민다. 배송 조회는 미존재/형식 위반 시 404/400.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

@@ -54,13 +54,9 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 결제 멱등성 — 실 HTTP 동시성 통합 테스트.
- *
- * <p>동시 동일 Idempotency-Key 결제 요청과 동시 중복 웹훅이 각각 단일 결제 생성·상태 전이 1회로 수렴함을 검증한다.
- *
- * <p>@SpringBootTest(RANDOM_PORT) 로 임베디드 서버를 띄우고 JDK HttpClient 로 동시 HTTP 를 발사한다.
- * 동시 출발/완료 집계는 ConcurrencyHarness 를 쓴다. @Transactional 이 아니라 셋업 save 가 커밋돼 서버 스레드에서 보인다.
- * auto-webhook=false 로 결제를 PENDING 으로 관찰하고, 웹훅은 POST /api/v1/payments/webhook 를 직접 동시 호출한다.
+ * 결제 멱등성 — 실 HTTP 동시성 통합 테스트. 동시 동일 Idempotency-Key 요청과 동시 중복 웹훅이 각각 단일
+ * 결제 생성·상태 전이 1회로 수렴함을 검증한다. RANDOM_PORT 임베디드 서버에 JDK HttpClient 로 동시 발사하고,
+ * @Transactional 이 아니라 셋업 save 가 커밋돼 서버 스레드에서 보인다(웹훅은 직접 동시 호출).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")

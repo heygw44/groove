@@ -37,14 +37,10 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 결제 콜백 적용의 비관락 직렬화 검증 — 멱등 계층(IdempotencyService)을 우회한 채
- * callbackService.applyResult 를 여러 스레드로 직접 동시 호출한다.
- *
- * <p>findByPgTransactionIdForUpdate(PESSIMISTIC_WRITE) 덕분에 동시 콜백은 직렬화되고,
- * 패자는 락 해제 후 종착 상태를 읽어 IllegalStateException 대신 ALREADY_PROCESSED 로 흡수된다.
- * 따라서 상태 전이·보상(재고 복원)은 정확히 1회만 일어난다.
- *
- * <p>@Transactional 이 아니라 셋업 save 가 커밋돼 동시 트랜잭션에서 보인다.
+ * 결제 콜백 적용의 비관락 직렬화 검증 — 멱등 계층을 우회한 채 applyResult 를 여러 스레드로 직접 동시 호출한다.
+ * findByPgTransactionIdForUpdate(PESSIMISTIC_WRITE) 로 동시 콜백이 직렬화되고 패자는 종착 상태를 읽어
+ * ALREADY_PROCESSED 로 흡수되므로, 상태 전이·보상(재고 복원)은 정확히 1회만 일어난다.
+ * @Transactional 이 아니라 셋업 save 가 커밋돼 동시 트랜잭션에서 보인다.
  */
 @SpringBootTest
 @ActiveProfiles("test")

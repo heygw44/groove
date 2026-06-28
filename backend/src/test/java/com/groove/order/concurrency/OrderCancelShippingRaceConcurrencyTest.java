@@ -56,17 +56,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 주문 취소·배송 자동진행 lost update 회귀 (#316) — 주문 행 비관적 락.
- *
- * <ul>
- *   <li>concurrentCancel_singlePendingOrder_restoresStockExactlyOnce — 동시 다중 취소가 한 PENDING 주문을
- *       두고 경합해도, 취소는 정확히 1건만 성공하고 재고는 1회만 복원된다(2배 복원 방지). 나머지는 락 후
- *       CANCELLED 를 읽어 IllegalStateTransitionException. 재고와 같은 트랜잭션의 쿠폰 복원도 함께 1회로 보장된다.</li>
- *   <li>concurrentAdvanceAndFullCancel_orderAndShippingStayConsistent — 배송 자동진행(advanceToShipped)과
- *       전량 취소(cancelPartially)가 동시에 들어와도 최종 상태가 (SHIPPED, 배송 SHIPPED) 또는
- *       (CANCELLED, 배송 CANCELLED) 중 하나로 정합. 결제는 환불됐는데 주문 SHIPPED·배송 CANCELLED 가 되는
- *       lost update 는 발생하지 않는다.</li>
- * </ul>
+ * 주문 취소·배송 자동진행 lost update 회귀 (#316) — 주문 행 비관적 락. 동시 다중 취소가 한 PENDING 주문을
+ * 경합해도 취소는 정확히 1건만 성공해 재고·쿠폰을 1회만 복원하고(2배 복원 방지), 배송 자동진행과 전량 취소가
+ * 동시에 들어와도 최종 상태가 (SHIPPED,SHIPPED) 또는 (CANCELLED,CANCELLED) 중 하나로 정합함을 검증한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")

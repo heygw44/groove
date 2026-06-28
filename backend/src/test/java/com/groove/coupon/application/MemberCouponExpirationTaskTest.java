@@ -26,10 +26,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * MemberCouponExpirationTask 통합 테스트 (Testcontainers MySQL).
- *
- * <p>expiration.batch-size=2 로 띄워 배치 루프와 만료 조건(ISSUED + 시각 경과)을 검증한다. 스케줄러 자동
- * 실행은 test 프로파일에서 꺼져 있으므로 태스크를 직접 호출한다.
+ * MemberCouponExpirationTask 통합 테스트 (Testcontainers MySQL). expiration.batch-size=2 로 띄워 배치 루프와 만료
+ * 조건(ISSUED + 시각 경과)을 검증한다. 스케줄러 자동 실행은 test 에서 꺼져 있으므로 태스크를 직접 호출한다.
  */
 @SpringBootTest(properties = "groove.coupon.expiration.batch-size=2")
 @ActiveProfiles("test")

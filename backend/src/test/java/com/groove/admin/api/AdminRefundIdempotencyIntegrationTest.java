@@ -49,17 +49,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 보상 트랜잭션 부분 실패 시 PG 환불 멱등 키의 효과를 검증하는 통합 테스트.
- *
- * <h2>시나리오</h2>
- * <ol>
- *   <li>앨범 재고를 Integer.MAX_VALUE 로 세팅 + PAID 주문(qty=2) + PAID 결제.</li>
- *   <li>1차 환불 호출: PG refund 성공 → markRefunded → CANCELLED 전이 후, restoreStock(+2)가 INT 오버플로로
- *       DataIntegrityViolationException → 트랜잭션 롤백. PG 측엔 첫 환불 응답이 캐시된다.</li>
- *   <li>재고를 정상 범위로 조정한다.</li>
- *   <li>2차 환불 호출(재시도): 같은 멱등 키 → MockPaymentGateway 가 캐시 응답을 반환(실호출 없음), DB 작업은 정상 완료.</li>
- *   <li>검증: PG 실호출 카운터 == 1, payment REFUNDED, order CANCELLED, 재고 복원 정상 반영.</li>
- * </ol>
+ * 보상 트랜잭션 부분 실패 시 PG 환불 멱등 키의 효과를 검증하는 통합 테스트. 1차 환불에서 PG 성공·CANCELLED
+ * 전이 후 restoreStock 이 INT 오버플로로 롤백되게 한 뒤, 재고를 정상화하고 같은 멱등 키로 재시도하면
+ * MockPaymentGateway 가 캐시 응답을 반환(PG 실호출 없음)하고 DB 는 정상 완료됨을 확인한다 — PG 실호출 == 1.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

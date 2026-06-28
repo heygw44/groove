@@ -38,15 +38,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 회원 탈퇴 크로스 도메인 E2E. 탈퇴가 트리거하는 모듈 간 정리(이벤트 기반)와 사후 인증 상태를 다룬다:
- * <ul>
- *   <li>정상 탈퇴 → 장바구니 삭제(cart) + 리프레시/로그인 차단(auth)</li>
- *   <li>진행 중 주문(PAID) 존재 시 409 차단 + 미탈퇴 유지</li>
- *   <li>탈퇴 회원 이메일 재가입 차단</li>
- * </ul>
- *
- * <p>cart·token 정리는 AFTER_COMMIT 리스너로 수행되므로 실제 커밋 경로를 쓰고, @BeforeEach 에서 자식 테이블부터
- * 정리한다.
+ * 회원 탈퇴 크로스 도메인 E2E. 정상 탈퇴 시 장바구니 삭제·인증 차단, 진행 중 주문(PAID) 존재 시 409 차단,
+ * 탈퇴 이메일 재가입 차단을 다룬다. cart·token 정리가 AFTER_COMMIT 리스너라 실제 커밋 경로를 쓴다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

@@ -59,10 +59,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 결제 웹훅 수신 + 보상 트랜잭션 + 폴링 동기화 통합 테스트.
- *
- * <p>Testcontainers MySQL 위 MockMvc. auto-webhook=false. 웹훅은 POST /api/v1/payments/webhook 를,
- * 폴링은 reconcilePendingPayments() 를 직접 호출한다. test 프로파일에선 MockPaymentGateway.query() 가 즉시 PAID 를 반환한다.
+ * 결제 웹훅 수신 + 보상 트랜잭션 + 폴링 동기화 통합 테스트. auto-webhook=false 로, 웹훅은 POST
+ * /api/v1/payments/webhook 를·폴링은 reconcilePendingPayments() 를 직접 호출한다. test 에선 MockPaymentGateway.query()
+ * 가 즉시 PAID 를 반환한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
