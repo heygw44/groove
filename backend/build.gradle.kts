@@ -51,8 +51,8 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.4")
     // 토스 외부 PG 호출 장애 격리 (#320). 프레임워크 무관 core 모듈을 프로그램적으로 사용한다 —
     // resilience4j-spring-boot 스타터는 Boot 4.x 호환이 불확실해 의존하지 않는다. Spring BOM 미관리라 버전 명시.
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.3.0")
-    implementation("io.github.resilience4j:resilience4j-retry:2.3.0")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
+    implementation("io.github.resilience4j:resilience4j-retry:2.4.0")
     implementation("io.jsonwebtoken:jjwt-api:0.13.0")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
@@ -71,7 +71,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     // 모듈 의존 규칙(계층 순서 api→application→domain·도메인 단방향)을 테스트로 고정 (#344).
     // Spring Boot BOM 미관리 의존성이라 버전을 명시한다.
-    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.0")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.2")
     testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
