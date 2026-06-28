@@ -18,6 +18,7 @@ import com.groove.coupon.domain.CouponRepository;
 import com.groove.coupon.domain.MemberCoupon;
 import com.groove.coupon.domain.MemberCouponRepository;
 import com.groove.coupon.domain.MemberCouponStatus;
+import com.groove.coupon.exception.CouponMinOrderNotMetException;
 import com.groove.coupon.exception.CouponNotApplicableException;
 import com.groove.member.domain.Member;
 import com.groove.member.domain.MemberRepository;
@@ -43,6 +44,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -244,5 +246,49 @@ class CouponOrderIntegrationTest {
         // 게스트+쿠폰 검증이 stock 차감 이전에 일어나므로 재고가 차감되지 않았어야 한다.
         Album album = albumRepository.findById(f.album.getId()).orElseThrow();
         assertThat(album.getStock()).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("정률(PERCENTAGE) 쿠폰 + maxDiscount 캡 → 실 계산으로 캡 적용된 할인 반영, payable·USED 검증")
+    void percentageCoupon_appliedWithMaxDiscountCap() {
+        // 정률 10%면 6,000 이지만 maxDiscount 로 4,000 에 걸린다.
+        Fixtures f = setupFixtures(30_000L, 10, CouponDiscountType.PERCENTAGE, 10L, 0L, 4_000L);
+
+        Order order = txTemplate.execute(s ->
+                orderService.place(f.member.getId(),
+                        orderRequest(f.album.getId(), 2, f.memberCoupon.getId())));
+
+        assertThat(order.getTotalAmount()).isEqualTo(60_000L);
+        assertThat(order.getDiscountAmount()).isEqualTo(4_000L);
+        assertThat(order.getPayableAmount()).isEqualTo(56_000L);
+
+        MemberCoupon afterApply = memberCouponRepository.findById(f.memberCoupon.getId()).orElseThrow();
+        assertThat(afterApply.getStatus()).isEqualTo(MemberCouponStatus.USED);
+        assertThat(afterApply.getOrderId()).isEqualTo(order.getId());
+
+        PaymentApiResponse payment = txTemplate.execute(s ->
+                paymentService.requestPayment(f.member.getId(),
+                        new PaymentCreateRequest(order.getOrderNumber(), PaymentMethod.CARD)));
+        assertThat(payment.amount()).isEqualTo(56_000L);
+    }
+
+    @Test
+    @DisplayName("최소주문금액 미달 쿠폰 → CouponMinOrderNotMetException, 주문 미생성·재고 미차감(트랜잭션 롤백)")
+    void minOrderNotMet_rejectsPlace() {
+        // minOrder 가 총액보다 커서 적용 단계(save 이후)에서 예외 → 트랜잭션 전체 롤백.
+        Fixtures f = setupFixtures(30_000L, 10, CouponDiscountType.FIXED_AMOUNT, 5_000L, 100_000L, null);
+
+        assertThatThrownBy(() -> txTemplate.executeWithoutResult(s ->
+                orderService.place(f.member.getId(),
+                        orderRequest(f.album.getId(), 2, f.memberCoupon.getId()))))
+                .isInstanceOf(CouponMinOrderNotMetException.class);
+
+        // 공유 DB 라 전역 조회 대신 이 회원 주문으로 좁혀 단언한다.
+        assertThat(orderRepository.findByMemberId(f.member.getId(), Pageable.unpaged())).isEmpty();
+        Album album = albumRepository.findById(f.album.getId()).orElseThrow();
+        assertThat(album.getStock()).isEqualTo(10);
+
+        MemberCoupon coupon = memberCouponRepository.findById(f.memberCoupon.getId()).orElseThrow();
+        assertThat(coupon.getStatus()).isEqualTo(MemberCouponStatus.ISSUED);
     }
 }

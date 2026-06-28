@@ -24,6 +24,7 @@ import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
+import com.groove.order.event.OrderPaidEvent;
 import com.groove.payment.application.PaymentReconciliationScheduler;
 import com.groove.payment.domain.PaymentRepository;
 import com.groove.payment.domain.PaymentStatus;
@@ -39,6 +40,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -206,6 +208,14 @@ class PaymentWebhookIntegrationTest {
         // 결제 확정 직후 주문은 PAID.
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getPaidAt()).isNotNull();
+
+        // 결제 확정이 ORDER_PAID 아웃박스 행을 남겼는지 확인. test 프로파일은 릴레이 스케줄러가 꺼져 있어 미발행으로 남는다.
+        assertThat(outboxEventRepository.findByPublishedAtIsNullOrderByIdAsc(Limit.of(10)))
+                .filteredOn(e -> e.getAggregateId() == c.orderId()
+                        && OrderPaidEvent.OUTBOX_EVENT_TYPE.equals(e.getEventType()))
+                .singleElement()
+                .satisfies(e -> assertThat(e.getAggregateType())
+                        .isEqualTo(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE));
     }
 
     @Test

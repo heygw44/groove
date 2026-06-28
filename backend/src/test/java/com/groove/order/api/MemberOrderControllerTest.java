@@ -32,6 +32,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,6 +81,7 @@ class MemberOrderControllerTest {
     private RefreshTokenRepository refreshTokenRepository;
 
     private String userBearer;
+    private Long memberId;
     private Long albumA;
     private Long albumB;
 
@@ -96,6 +98,7 @@ class MemberOrderControllerTest {
 
         Member member = memberRepository.saveAndFlush(
                 MemberFixtures.register("user@example.com", "$2a$10$dummy...", "User", "01000000000"));
+        memberId = member.getId();
 
         Artist artist = artistRepository.saveAndFlush(Artist.create("Artist", null));
         Genre genre = genreRepository.saveAndFlush(Genre.create("Rock"));
@@ -186,6 +189,22 @@ class MemberOrderControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, userBearer))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    @DisplayName("탈퇴 회원도 만료 전 토큰이면 본인 주문 목록 조회 200 (조회 경로엔 탈퇴 가드 없음)")
+    void list_withdrawnMember_stillReturnsOwnOrders() throws Exception {
+        // 주문 생성/취소는 활성 가드로 막히지만 조회 경로엔 가드가 없어, 만료 전 토큰이면 탈퇴 후에도 본인 주문을 읽는다.
+        placeOrder(List.of(item(albumA, 1)));
+
+        Member member = memberRepository.findById(memberId).orElseThrow();
+        member.withdraw(Instant.now());   // 토큰은 탈퇴 전 발급분이라 필터는 통과한다.
+        memberRepository.saveAndFlush(member);
+
+        mockMvc.perform(get("/api/v1/members/me/orders")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test

@@ -375,7 +375,7 @@ class OrderServiceTest {
         Order result = orderService.cancel(1L, "ORD-1", "단순 변심");
 
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-        assertThat(result.getCancelledAt()).isNotNull();
+        assertThat(result.getCancelledAt()).isEqualTo(CLOCK.instant());
         assertThat(result.getCancelledReason()).isEqualTo("단순 변심");
         verify(albumRepository).restoreStock(10L, 2);
         verify(albumRepository).restoreStock(11L, 3);
