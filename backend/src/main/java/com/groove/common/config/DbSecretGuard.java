@@ -7,16 +7,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * prod 전용 — 약한 DB 시크릿으로 기동하는 것을 거부하는 가드(이슈 #321). docker/local 데모는 약한
- * 데모 비밀번호(changeme/rootpw)를 정당하게 쓰므로 약한값 거부는 반드시 prod 전용이다(전역이면 데모 기동이
- * 깨진다). 부적합 시 afterPropertiesSet 에서 IllegalStateException 으로 fail-fast.
- *
- * 검사 대상:
- * - spring.datasource.password(=DB_PASSWORD) — blank·약한값·플레이스홀더 거부.
- * - MYSQL_ROOT_PASSWORD — docker-compose mysql 전용이라 부재(null)는 통과(관리형 DB 등)하되,
- *   존재하면 빈 값 포함 검사한다(시크릿 게이트 우회 방지).
- *
- * 런북은 docs/ARCHITECTURE.md §10.6.
+ * prod 전용 약한 DB 시크릿 거부 가드(#321) — afterPropertiesSet 에서 IllegalStateException fail-fast.
+ * 검사: DB_PASSWORD(blank·약한값·플레이스홀더 거부), MYSQL_ROOT_PASSWORD(부재는 관리형 DB 로 보고 통과하되
+ * 존재 시 빈 값 포함 검사 — 시크릿 게이트 우회 방지). prod 전용인 이유는 데모가 약한 비번을 정당하게 쓰기 때문.
+ * 런북: docs/ARCHITECTURE.md §10.6.
  */
 @Component
 @Profile("prod")

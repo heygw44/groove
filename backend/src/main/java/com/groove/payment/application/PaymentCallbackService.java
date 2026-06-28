@@ -25,13 +25,9 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * 결제 콜백 적용 트랜잭션 경계 — 웹훅·폴링(pgTransactionId 조회)과 토스 confirm(orderId 조회)이 공유한다.
- * - PAID: Payment PENDING→PAID(paidAt 기록), Order PENDING→PAID, OrderPaidEvent 아웃박스 기록.
- * - FAILED: Payment PENDING→FAILED, Order PENDING→PAYMENT_FAILED, 재고 복원, 쿠폰 USED→ISSUED.
- * - 알 수 없는 거래/이미 종착 상태: 무시.
- *
- * 진입점은 applyResult(웹훅/폴링/토스 만료 리퍼)·applyConfirmedPaid(토스 confirm 성공)·linkPendingPaymentKey(토스 비-PAID confirm)다.
- * PENDING 잠금·흡수는 lockPending, PAID/FAILED 적용 본문은 applyTo 로 일원화한다.
+ * 결제 콜백 적용 트랜잭션 경계 — 웹훅·폴링·토스 confirm 이 공유한다. PAID 는 주문 확정 + OrderPaidEvent 기록,
+ * FAILED 는 재고 복원 + 쿠폰 복구를 동반하며, 알 수 없는/종착 거래는 무시한다. 진입점은 applyResult·
+ * applyConfirmedPaid·linkPendingPaymentKey, PENDING 잠금은 lockPending, 적용 본문은 applyTo 로 일원화한다.
  */
 @Service
 public class PaymentCallbackService {

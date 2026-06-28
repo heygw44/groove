@@ -27,12 +27,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 결제 라이프사이클을 재현하는 Mock 게이트웨이.
- * - request() — 지연 후 거래 발급, 성공률로 최종 결과 결정, 웹훅 발사 시각 예약(auto-webhook 시), PENDING 응답.
- * - confirm() — 토스 동기 승인 흉내. paymentKey 거래를 즉시 PAID 로 기록하고 PAID 응답.
- * - query() — 발사 시각 전이면 PENDING, 이후면 최종 상태(환불 시 REFUNDED).
- * - refund() — 같은 idempotencyKey 는 첫 응답 재반환, 다른 키는 REFUNDED 새로 생성.
- * 거래 상태는 프로세스 메모리 보관, MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목 정리.
+ * 결제 라이프사이클(request/confirm/query/refund)을 재현하는 Mock 게이트웨이. 거래 상태는 프로세스 메모리에
+ * 보관하고 MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목을 정리한다.
  */
 @Component
 @Profile({"local", "test", "docker"})
