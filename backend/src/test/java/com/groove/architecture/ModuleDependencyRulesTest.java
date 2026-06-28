@@ -15,10 +15,10 @@ import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 /**
- * 모듈 의존 규칙을 테스트로 고정한다 (#344, #349).
+ * 모듈 의존 규칙을 테스트로 고정한다.
  *
  * 계층 순서(api → application → domain), 도메인 모델의 표현 계층 비의존, 그리고 도메인 간 단방향(순환 없음)을
- * 강제한다 (근거: docs/decisions/package-structure.md). 단일 모듈이라 컴파일러가 못 막는 경계를 보강한다.
+ * 강제한다. 단일 모듈이라 컴파일러가 못 막는 경계를 보강한다.
  */
 @AnalyzeClasses(packages = "com.groove", importOptions = ImportOption.DoNotIncludeTests.class)
 class ModuleDependencyRulesTest {
@@ -40,7 +40,7 @@ class ModuleDependencyRulesTest {
                     .because("도메인 계층은 표현 계층(api)을 알아서는 안 된다 (package-structure ADR)");
 
     // application 은 api 의 컨트롤러·설정을 참조하면 안 된다. 경계 계약인 api.dto 는 예외이되,
-    // 같은 도메인의 api.dto 로만 좁힌다(coupon→admin.api.dto 정리 완료, #349).
+    // 같은 도메인의 api.dto 로만 좁힌다(coupon→admin.api.dto 정리 완료).
     @ArchTest
     static final ArchRule application_은_같은_도메인_api_dto_외의_api_에_의존하지_않는다 =
             classes()
@@ -64,7 +64,7 @@ class ModuleDependencyRulesTest {
                     .should().dependOnClassesThat().resideInAnyPackage("org.springframework.web..", "jakarta.servlet..")
                     .because("도메인 계층에 웹 프레임워크(서블릿·Spring Web) 타입이 새어들면 안 된다 (package-structure ADR)");
 
-    // ── (C) 도메인 간 단방향: 슬라이스 순환 없음 (#349) ───────────────────────────────
+    // ── (C) 도메인 간 단방향: 슬라이스 순환 없음 ───────────────────────────────
 
     @ArchTest
     static final ArchRule 도메인_슬라이스는_순환이_없다 =

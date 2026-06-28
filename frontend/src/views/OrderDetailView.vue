@@ -19,7 +19,7 @@ import BaseSpinner from '@/components/base/BaseSpinner.vue'
 const route = useRoute()
 const ui = useUiStore()
 
-// 토스 결제 콜백 결과(#308) — 서버 302/가드가 보존한 ?payment 를 배너로 안내하고 표시 후 URL 에서 정리한다.
+// 토스 결제 콜백 결과. 서버 302/가드가 보존한 ?payment 를 배너로 안내하고 표시 후 URL 에서 정리한다.
 const { paymentResult } = usePaymentResultBanner()
 
 const order = ref(null)
@@ -137,7 +137,7 @@ function startTrackingWait(orderNumber, seq) {
   trackingPoller.start(
     async () => {
       const o = await getOrder(orderNumber)
-      // await 직후 시퀀스 재확인 — stale 응답 무시 후 폴링 종료
+      // await 직후 시퀀스 재확인. stale 응답은 무시하고 폴링 종료.
       if (seq !== reqSeq) return true
       order.value = o
       if (o.trackingNumber) {
@@ -160,7 +160,7 @@ function startTrackingWait(orderNumber, seq) {
 async function onCancel() {
   if (!window.confirm('주문을 취소하시겠습니까?')) return
   cancelling.value = true
-  // 진행 중 배송 폴링 중단 — stale 응답이 취소 결과를 덮어쓰지 않게
+  // 진행 중 배송 폴링 중단(stale 응답이 취소 결과를 덮어쓰지 않게)
   trackingPoller.stop()
   trackingPending.value = false
   try {

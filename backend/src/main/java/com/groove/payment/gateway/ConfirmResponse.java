@@ -5,9 +5,8 @@ import com.groove.payment.domain.PaymentStatus;
 
 /**
  * PG 동기 승인(confirm) 응답.
- *
- * pgTransactionId: 승인된 거래 식별자(토스 paymentKey). status: 확정 상태로 PENDING/PAID/FAILED 중 하나 — 환불 상태는 confirm 결과일 수 없다.
- * method: PG 가 알려준 실제 결제수단(수단 정합성 보정용). 미상이면 null(Mock·미지 수단)이고 호출부가 보정을 건너뛴다.
+ * status 는 PENDING/PAID/FAILED 중 하나다(환불 상태는 confirm 결과일 수 없다).
+ * method 는 PG 가 알려준 실제 결제수단(정합성 보정용). 미상이면 null 이고 호출부가 보정을 건너뛴다.
  */
 public record ConfirmResponse(String pgTransactionId, PaymentStatus status, PaymentMethod method) {
 

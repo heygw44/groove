@@ -25,17 +25,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 반품(claim) — 배송완료 후 변심 환불의 역물류 aggregate root.
- *
- * 주문/품목을 참조하되 ClaimStatus 별도 상태머신을 가진다. 상태 전이는 approve/startTransit/startInspecting/
- * markRefunded/reject 단일 진입점만 허용하고, 합법 전이는 ClaimStatus.canTransitionTo 가 판정한다 — 위반 시
- * ClaimInvalidStateTransitionException(409). ClaimItem 은 aggregate child(cascade=ALL + orphanRemoval=true).
+ * 반품(claim) aggregate root — 주문/품목을 참조하되 ClaimStatus 별도 상태머신을 가진다.
+ * 상태 전이는 transitionTo 를 거치며 불법 전이면 ClaimInvalidStateTransitionException(409).
  */
 @Entity
 @Table(name = "claim")
 public class Claim extends BaseTimeEntity {
 
-    /** DB reason/rejection_reason 컬럼 길이. */
     static final int MAX_REASON_LENGTH = 500;
 
     @Id
@@ -46,7 +42,7 @@ public class Claim extends BaseTimeEntity {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    /** 클레임 종류 — 취소(발송 전)/반품(발송 후). */
+    /** 취소(발송 전)/반품(발송 후). */
     @Enumerated(EnumType.STRING)
     @Column(name = "claim_type", nullable = false, length = 20)
     private ClaimType claimType;
@@ -61,7 +57,7 @@ public class Claim extends BaseTimeEntity {
     @Column(name = "rejection_reason", length = MAX_REASON_LENGTH)
     private String rejectionReason;
 
-    /** 확정 환불액 — REFUNDED 전이 시 기록, 그 전엔 0. */
+    /** REFUNDED 전이 시 기록, 그 전엔 0. */
     @Column(name = "refund_amount", nullable = false)
     private long refundAmount;
 
@@ -93,12 +89,12 @@ public class Claim extends BaseTimeEntity {
         this.refundAmount = 0L;
     }
 
-    /** 반품(RETURN) 접수 — 초기 상태 REQUESTED. 항목은 addItem 으로 붙인다. */
+    /** 항목은 addItem 으로 붙인다. */
     public static Claim request(Order order, String reason) {
         return create(order, ClaimType.RETURN, reason);
     }
 
-    /** 취소(CANCEL) 접수 — 발송 전 부분 취소. 초기 상태 REQUESTED. */
+    /** 발송 전 부분 취소. */
     public static Claim requestCancellation(Order order, String reason) {
         return create(order, ClaimType.CANCEL, reason);
     }
@@ -115,7 +111,7 @@ public class Claim extends BaseTimeEntity {
         return new Claim(order, claimType, reason);
     }
 
-    /** 반품 항목 추가 (접수 시점에만 호출). */
+    /** 접수 시점에만 호출. */
     public void addItem(ClaimItem item) {
         if (item == null) {
             throw new IllegalArgumentException("item must not be null");
@@ -124,25 +120,21 @@ public class Claim extends BaseTimeEntity {
         items.add(item);
     }
 
-    /** 반품 승인 (관리자) — REQUESTED → APPROVED. */
     public void approve(Instant now) {
         transitionTo(ClaimStatus.APPROVED);
         this.approvedAt = now;
     }
 
-    /** 회수 시작 (스케줄러 자동) — APPROVED → IN_TRANSIT. */
     public void startTransit(Instant now) {
         transitionTo(ClaimStatus.IN_TRANSIT);
         this.inTransitAt = now;
     }
 
-    /** 검수 시작 (스케줄러 자동) — IN_TRANSIT → INSPECTING. */
     public void startInspecting(Instant now) {
         transitionTo(ClaimStatus.INSPECTING);
         this.inspectingAt = now;
     }
 
-    /** 환불 확정 (검수 통과) — INSPECTING → REFUNDED. 확정 환불액과 종착 시각을 기록한다. */
     public void markRefunded(long refundAmount, Instant now) {
         if (refundAmount < 0) {
             throw new IllegalArgumentException("refundAmount must be non-negative: " + refundAmount);
@@ -152,10 +144,7 @@ public class Claim extends BaseTimeEntity {
         this.completedAt = now;
     }
 
-    /**
-     * 취소 환불 확정 — CANCEL 클레임의 REQUESTED → REFUNDED. 타입·상태를 직접 가드한다(위반 시
-     * ClaimInvalidStateTransitionException(409)). 확정 환불액과 종착 시각을 기록한다.
-     */
+    /** CANCEL 클레임 REQUESTED → REFUNDED 직행. 일반 상태머신 대신 타입·상태를 직접 가드. */
     public void markCancelRefunded(long refundAmount, Instant now) {
         if (claimType != ClaimType.CANCEL || status != ClaimStatus.REQUESTED) {
             throw new ClaimInvalidStateTransitionException(status, ClaimStatus.REFUNDED);
@@ -168,7 +157,7 @@ public class Claim extends BaseTimeEntity {
         this.completedAt = now;
     }
 
-    /** 반품 거부 (관리자) — REQUESTED 또는 INSPECTING(검수 불합격) → REJECTED. 사유와 종착 시각을 기록한다. */
+    /** REQUESTED 또는 INSPECTING(검수 불합격) → REJECTED. */
     public void reject(String reason, Instant now) {
         if (reason != null && reason.length() > MAX_REASON_LENGTH) {
             reason = reason.substring(0, MAX_REASON_LENGTH);
@@ -185,7 +174,7 @@ public class Claim extends BaseTimeEntity {
         this.status = next;
     }
 
-    /** 이 반품의 정가 합 — 항목별 getGross() 합. */
+    /** 항목별 정가 합. */
     public long getGross() {
         return items.stream().mapToLong(ClaimItem::getGross).sum();
     }

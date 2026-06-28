@@ -6,47 +6,44 @@ on:
   push:
     branches: [main]
 
-# PR당 이전 실행 취소 — 푸시 연타 시 러너 분 절약. group 에 github.ref 포함으로 PR/브랜치별 독립 취소.
+# PR/브랜치별 이전 실행 취소(푸시 연타 시 러너 분 절약). group 에 github.ref 포함으로 독립 취소.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# 최소 권한 — 명시하지 않은 스코프는 none. (커버리지 PR 코멘트 액션 도입 시에만 pull-requests: write 추가)
+# 최소 권한. 명시하지 않은 스코프는 none.
 permissions:
   contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-latest   # Docker 사전 설치 → Testcontainers MySQL 그대로 동작 (services: mysql 추가 금지)
-    timeout-minutes: 30      # 콜드 실행 시 MySQL 이미지 pull 여유 + 무한 hang 방지
+    runs-on: ubuntu-latest   # Docker 사전 설치라 Testcontainers MySQL 그대로 동작(services: mysql 추가 금지)
+    timeout-minutes: 30      # 콜드 MySQL 이미지 pull 여유 + 무한 hang 방지
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          persist-credentials: false   # 읽기 전용 CI — 토큰을 .git/config 에 남기지 않음 (무단 push 방지)
+          persist-credentials: false   # 읽기 전용 CI. 토큰을 .git/config 에 남기지 않음(무단 push 방지)
 
       - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
         with:
           distribution: temurin
           java-version: '21'
-          # 캐싱은 setup-gradle 가 전담 → 여기서 cache 옵션을 켜면 이중 캐시로 충돌. 의도적 생략.
+          # 캐싱은 setup-gradle 가 전담. 여기서 cache 옵션을 켜면 이중 캐시 충돌이라 의도적 생략.
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
       - name: Build, test & coverage gate
         # build → check → test(Testcontainers MySQL) → jacocoTestCoverageVerification 한 번에.
-        # 외부 시크릿 불필요: test 프로파일이 jwt.secret / payment.mock.webhook-secret 자급자족.
-        # --no-daemon 미사용: setup-gradle 가 daemon 수명·캐시 flush 를 관리한다.
-        # 백엔드는 backend/ 로 이동(#131). frontendBuild 는 ../frontend 를 읽으므로 전체 checkout 이면 동작.
+        # 외부 시크릿 불필요(test 프로파일이 jwt.secret/webhook-secret 자급자족).
+        # --no-daemon 미사용(setup-gradle 가 daemon 수명·캐시 flush 관리). frontendBuild 는 ../frontend 를 읽는다.
         working-directory: backend
         env:
-          # CI 러너는 job 종료 후 통째 폐기되어 컨테이너 누수가 없고, 본 프로젝트엔 Ryuk 가 긴 스위트에서
-          # 컨테이너를 회수한 전례가 있어(local 환경 gotcha) ephemeral CI 에선 Ryuk 를 끈다 — 부수 효과로
-          # 컨테이너 하나가 줄어 메모리 여유도 생긴다. (#222 CI 실패의 근본 원인은 Ryuk 가 아니라 캐시된
-          # @SpringBootTest 컨텍스트들의 Hikari idle 커넥션 누적 → MySQL max_connections 근접·OOM 이었고,
-          # 그 수정은 application-test.yaml 의 spring.datasource.hikari.minimum-idle=0 이다.)
+          # CI 러너는 job 종료 후 통째 폐기되어 컨테이너 누수가 없고, Ryuk 가 긴 스위트에서 컨테이너를 회수한
+          # 전례가 있어(local gotcha) ephemeral CI 에선 끈다(컨테이너 하나 줄어 메모리 여유도 생김).
+          # 과거 CI OOM 의 근본 원인은 Ryuk 가 아니라 Hikari idle 커넥션 누적이었고, 수정은 hikari.minimum-idle=0 이다.
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: ./gradlew build
 
@@ -60,18 +57,18 @@ jobs:
             backend/build/reports/jacoco/
           retention-days: 7
 
-  # 이미지 빌드 → 취약점 스캔 → (main push 시) GHCR 게시. test·커버리지 green 일 때만 돈다(#345).
+  # 이미지 빌드 → 취약점 스캔 → (main push 시) GHCR 게시. test·커버리지 green 일 때만 돈다.
   docker:
     runs-on: ubuntu-latest
-    needs: build             # 테스트·커버리지 통과 후에만 이미지 빌드/게시 (깨진 이미지 push 방지)
-    # 포크 PR 은 read-only 토큰이라 SARIF 업로드·gha 캐시 export 가 실패한다 → fork PR 에선 잡 자체를 건너뛴다.
-    # push(main) 는 항상, PR 은 head 가 같은 레포일 때만(= 포크 아님) 실행.
+    needs: build             # 테스트·커버리지 통과 후에만 빌드/게시(깨진 이미지 push 방지)
+    # 포크 PR 은 read-only 토큰이라 SARIF 업로드·gha 캐시 export 가 실패하므로 잡 자체를 건너뛴다.
+    # push(main) 는 항상, PR 은 head 가 같은 레포(= 포크 아님)일 때만 실행.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     timeout-minutes: 20
     permissions:
       contents: read
-      packages: write        # GHCR push — push(main) 이벤트에서만 실제 사용
-      security-events: write # Trivy SARIF 를 Security > Code scanning 으로 업로드
+      packages: write        # GHCR push(main 이벤트에서만 실제 사용)
+      security-events: write # Trivy SARIF 를 Code scanning 으로 업로드
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -85,14 +82,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
-          images: ghcr.io/${{ github.repository }}   # ghcr.io/heygw44/groove (소문자)
+          images: ghcr.io/${{ github.repository }}   # 소문자 필수
           tags: |
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build image (load to local daemon for scan)
-        # 빌드 컨텍스트 = 저장소 루트(.) — Dockerfile 이 backend/ ↔ ../frontend 형제 구조를 재현하기 때문(#131).
-        # load: true 로 로컬 daemon 에 적재해 먼저 스캔하고, push 는 main 에서만 별도 단계로 수행(게시 전 스캔).
+        # 컨텍스트 = 저장소 루트(Dockerfile 이 backend/ ↔ ../frontend 형제 구조를 재현).
+        # load: true 로 로컬 daemon 에 적재해 먼저 스캔하고, push 는 main 에서만 별도 단계로(게시 전 스캔).
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
@@ -104,9 +101,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy scan (SARIF → Security 탭, report-only)
-        # exit-code 0: 취약점 발견돼도 PR 을 막지 않는다 — Spring Boot 트랜지티브/베이스 OS CVE 는 상시 존재.
-        # cache: true → vuln DB 를 런 간 캐시(actions/cache). tags[0] = sha 태그(항상 존재·결정적).
-        # 이 스텝이 trivy 바이너리·DB 셋업을 담당하고, 아래 table 스텝은 이를 재사용한다.
+        # exit-code 0: 취약점 발견돼도 PR 을 막지 않는다(베이스 OS·트랜지티브 CVE 상시 존재).
+        # cache: true 로 vuln DB 를 런 간 캐시. tags[0]=sha 태그(항상 존재·결정적).
+        # 이 스텝이 trivy 바이너리·DB 셋업을 담당하고 아래 table 스텝이 재사용한다.
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
@@ -117,7 +114,7 @@ jobs:
           cache: 'true'
 
       - name: Trivy scan (table → 잡 로그)
-        # skip-setup-trivy: 위 스텝이 설치한 바이너리·공유 cache-dir 의 DB 를 재사용(중복 설치/다운로드 제거).
+        # skip-setup-trivy: 위 스텝의 바이너리·DB 재사용(중복 설치/다운로드 제거).
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
@@ -128,13 +125,13 @@ jobs:
           skip-setup-trivy: 'true'
 
       - name: Upload SARIF to code scanning
-        if: always()   # 스캔 단계가 실패해도 수집분은 올린다
+        if: always()   # 스캔 실패해도 수집분은 올린다
         uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
           sarif_file: trivy-results.sarif
 
       - name: Log in to GHCR
-        if: github.event_name == 'push'   # main push 에서만 — 포크 PR 은 시크릿 없이 빌드+스캔만
+        if: github.event_name == 'push'   # main push 에서만(포크 PR 은 시크릿 없이 빌드+스캔만)
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
@@ -143,6 +140,6 @@ jobs:
 
       - name: Push to GHCR (sha + latest)
         if: github.event_name == 'push'
-        # 재빌드하지 않고 위에서 load 해 스캔까지 끝낸 로컬 이미지를 그대로 push → 빌드 1회, 게시 == 스캔 이미지.
-        # --all-tags: 이 런이 만든 sha/latest 태그만 로컬에 존재(ephemeral 러너).
+        # 위에서 load·스캔한 로컬 이미지를 재빌드 없이 그대로 push(빌드 1회, 게시 == 스캔 이미지).
+        # --all-tags: 이 런이 만든 sha/latest 만 로컬에 존재(ephemeral 러너).
         run: docker push --all-tags ghcr.io/${{ github.repository }}

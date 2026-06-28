@@ -19,9 +19,6 @@ public class RefreshTokenAdmin {
         this.refreshTokenRepository = refreshTokenRepository;
     }
 
-    /**
-     * 같은 회원의 활성 refresh 토큰을 모두 revoke 한다. 외부 트랜잭션 롤백과 무관하게 즉시 커밋된다.
-     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int forceRevokeAllActiveSessions(Long memberId, Instant now) {
         return refreshTokenRepository.revokeAllActiveByMemberId(memberId, now);

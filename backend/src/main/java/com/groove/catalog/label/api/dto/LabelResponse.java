@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/** 레이블 응답 DTO. */
 public record LabelResponse(
         @Schema(description = "레이블 ID", example = "7") Long id,
         @Schema(description = "레이블 이름", example = "Columbia Records") String name,

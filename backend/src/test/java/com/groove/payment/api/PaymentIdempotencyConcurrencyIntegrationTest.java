@@ -54,21 +54,15 @@ import java.util.function.Consumer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 결제 멱등성 — 실 HTTP 동시성 통합 테스트.
- *
- * <p>동시 동일 Idempotency-Key 결제 요청과 동시 중복 웹훅이 각각 단일 결제 생성·상태 전이 1회로 수렴함을 검증한다.
- *
- * <p>@SpringBootTest(RANDOM_PORT) 로 임베디드 서버를 띄우고 JDK HttpClient 로 동시 HTTP 를 발사한다.
- * 동시 출발/완료 집계는 ConcurrencyHarness 를 쓴다. @Transactional 이 아니라 셋업 save 가 커밋돼 서버 스레드에서 보인다.
- * auto-webhook=false 로 결제를 PENDING 으로 관찰하고, 웹훅은 POST /api/v1/payments/webhook 를 직접 동시 호출한다.
+ * 결제 멱등성 실 HTTP 동시성 통합. 동시 동일 Idempotency-Key 요청과 중복 웹훅이 각각 단일 결제 생성·전이 1회로
+ * 수렴함을 검증한다. 셋업 save 는 비-@Transactional 로 커밋해야 RANDOM_PORT 서버 스레드에서 보인다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
         "payment.mock.auto-webhook=false",
-        // Hikari 풀을 동시성 한도의 2배로 명시한다.
+        // Hikari 풀·rate limit 을 동시성 한도보다 크게.
         "spring.datasource.hikari.maximum-pool-size=32",
-        // rate limit 한도를 동시성보다 크게 둔다.
         "groove.payment.rate-limit.post.capacity=100"
 })
 @Import(TestcontainersConfig.class)
@@ -82,7 +76,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
     private static final int CONCURRENT_REQUESTS = 16;
     private static final int THREAD_POOL_SIZE = 16;
 
-    private static final HttpClient HTTP = HttpClient.newHttpClient(); // 동시 요청에 공유
+    private static final HttpClient HTTP = HttpClient.newHttpClient();
 
     @LocalServerPort private int port;
 
@@ -97,7 +91,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
     @Autowired private IdempotencyRecordRepository idempotencyRecordRepository;
     @Autowired private JwtProvider jwtProvider;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
-    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행 정리
+    @Autowired private com.groove.common.outbox.OutboxEventRepository outboxEventRepository; // PAID 웹훅이 커밋하는 ORDER_PAID 행
 
     private int orderSeq;
     private Long memberId;
@@ -109,10 +103,10 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
     void setUp() {
         baseUrl = "http://localhost:" + port;
         orderSeq = 0;
-        // FK 의존 순서: payment → orders → album → artist/genre/label, member. (refresh_token → member 도 먼저)
+        // FK 의존 순서: payment → orders → album → artist/genre/label, member (refresh_token 도 member 전에).
         idempotencyRecordRepository.deleteAllInBatch();
         refreshTokenRepository.deleteAllInBatch();
-        outboxEventRepository.deleteAllInBatch(); // ORDER_PAID 행 정리
+        outboxEventRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
         albumRepository.deleteAllInBatch();
@@ -134,8 +128,6 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         bearer = "Bearer " + jwtProvider.issueAccessToken(memberId, MemberRole.USER);
     }
 
-    // ---- 시나리오 1: 동시 동일 Idempotency-Key 결제 요청 → 단일 결제 생성 ----
-
     @Test
     @DisplayName("동시 동일 Idempotency-Key 결제 요청 16건 → Payment 정확히 1건, 응답은 202/409 (5xx 0)")
     void concurrentSameIdempotencyKey_createsSinglePayment() throws Exception {
@@ -150,21 +142,18 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
                     builder.header(IDEMPOTENCY_HEADER, key);
                 })));
 
-        // 동시 요청이 몰려도 결제는 정확히 1건만 생성된다.
         assertThat(paymentRepository.count()).isEqualTo(1);
 
         long accepted = statuses.stream().filter(s -> s == 202).count();   // 생성 또는 캐시 replay
         long conflict = statuses.stream().filter(s -> s == 409).count();   // IDEMPOTENCY_IN_PROGRESS
         assertThat(statuses).hasSize(CONCURRENT_REQUESTS);
-        assertThat(accepted).isGreaterThanOrEqualTo(1);                    // 최소 한 요청은 처리/replay 성공
-        assertThat(accepted + conflict).isEqualTo(CONCURRENT_REQUESTS);    // 그 외(5xx)는 없다
+        assertThat(accepted).isGreaterThanOrEqualTo(1);
+        assertThat(accepted + conflict).isEqualTo(CONCURRENT_REQUESTS);
         assertThat(statuses.stream().noneMatch(s -> s >= 500)).isTrue();
 
         IdempotencyRecord record = idempotencyRecordRepository.findByIdempotencyKey(key).orElseThrow();
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
     }
-
-    // ---- 시나리오 2: 동시 중복 웹훅 → 상태 전이 1회 ----
 
     @Test
     @DisplayName("동시 중복 FAILED 웹훅 16건 → 결제 FAILED·재고 복원 1회·주문 PAYMENT_FAILED (5xx 0)")
@@ -174,7 +163,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
 
         ConcurrentLinkedQueue<Integer> statuses = fireConcurrentWebhooks(body);
 
-        // 상태 전이·보상은 정확히 1회: 재고가 INITIAL 로만 돌아온다.
+        // 전이·보상 1회: 재고가 INITIAL 로만 복원.
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.FAILED);
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAYMENT_FAILED);
         assertThat(currentStock()).isEqualTo(INITIAL_STOCK);
@@ -191,7 +180,6 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         ConcurrentLinkedQueue<Integer> statuses = fireConcurrentWebhooks(body);
 
         assertThat(paymentStatus(c.paymentId())).isEqualTo(PaymentStatus.PAID);
-        // 결제 확정 직후 주문은 PAID.
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PAID);
         assertThat(paymentRepository.findById(c.paymentId()).orElseThrow().getPaidAt()).isNotNull();
 
@@ -220,8 +208,6 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
     }
 
-    // ---- HTTP ----
-
     /** path 로 JSON POST 하고 응답 status code 를 반환한다. */
     private int post(String path, String body, Consumer<HttpRequest.Builder> headers) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
@@ -239,8 +225,6 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
         }
     }
 
-    // ---- 도메인 헬퍼 ----
-
     private record Created(Long paymentId, Long orderId, String orderNumber, String pgTransactionId) {
     }
 
@@ -251,7 +235,7 @@ class PaymentIdempotencyConcurrencyIntegrationTest {
     private Order persistPendingOrder() {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = Order.placeForMember(nextOrderNumber(), memberId, OrderFixtures.sampleShippingInfo());
-        order.addItem(OrderItem.create(album, 1)); // totalAmount = 35000
+        order.addItem(OrderItem.create(album, 1));
         return orderRepository.saveAndFlush(order);
     }
 

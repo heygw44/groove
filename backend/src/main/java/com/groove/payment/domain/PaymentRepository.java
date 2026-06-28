@@ -14,7 +14,7 @@ import java.util.Optional;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
-    /** 주문에 접수된 결제 조회 — order_id 는 UNIQUE 이므로 최대 1건. */
+    /** order_id 는 UNIQUE 이므로 최대 1건. */
     Optional<Payment> findByOrderId(Long orderId);
 
     /** findByOrderId + FOR UPDATE(PESSIMISTIC_WRITE) 로 결제 row 잠금. */
@@ -22,7 +22,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("SELECT p FROM Payment p WHERE p.order.id = :orderId")
     Optional<Payment> findByOrderIdForUpdate(@Param("orderId") Long orderId);
 
-    /** PG 거래 식별자로 가벼운 선조회(연관 fetch 없음). 웹훅이 outbound 재조회 전 로컬 존재·상태를 먼저 확인 — 미존재/종착은 재조회 없이 무해 처리. */
+    /** 가벼운 선조회(연관 fetch 없음). 웹훅이 outbound 재조회 전 로컬 존재·상태를 먼저 확인한다(미존재/종착은 무해 처리). */
     Optional<Payment> findByPgTransactionId(String pgTransactionId);
 
     /** PG 거래 식별자로 결제 + order/items/items.album 까지 한 번에 fetch. */
@@ -30,8 +30,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findWithOrderAndItemsByPgTransactionId(String pgTransactionId);
 
     /**
-     * PG 거래 식별자로 FOR UPDATE(PESSIMISTIC_WRITE) 잠금 — 콜백(웹훅/폴링) 동시 적용을 환불 경로(findByOrderIdForUpdate)와 대칭 직렬화.
-     * order/items 는 fetch join 하지 않는다 — album 행까지 잠그면 재고 차감/복원과 락 경합이 생기므로 같은 트랜잭션에서 lazy 로딩.
+     * FOR UPDATE(PESSIMISTIC_WRITE) 잠금. 콜백(웹훅/폴링) 동시 적용을 환불 경로(findByOrderIdForUpdate)와 대칭 직렬화한다.
+     * order/items 는 fetch join 하지 않는다. album 행까지 잠그면 재고 차감/복원과 락 경합이 생기므로 같은 트랜잭션에서 lazy 로딩.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.pgTransactionId = :pgTransactionId")

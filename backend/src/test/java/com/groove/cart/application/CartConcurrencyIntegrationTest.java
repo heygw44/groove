@@ -34,11 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 장바구니 동시 쓰기(#318) — 같은 회원·같은 album 을 동시에 addItem 했을 때 UNIQUE 경합이
- * 500 으로 새지 않고, CartService 의 1회 멱등 재시도가 누적으로 흡수하는지 실 DB 로 검증한다.
- * 타이밍에 무관한 불변식만 단언한다: (a) 예상 외 예외 0(UNIQUE 경합이 500 으로 새지 않음),
- * (b) cart·cart_item 각 1개, (c) 최종 quantity 는 [1, 성공 건수] 범위.
- * 누적 quantity 의 정확한 합산(read-modify-write lost update)은 #318 범위 밖이며 별개 동시성 과제다.
+ * 같은 회원·같은 album 을 동시에 addItem 할 때 UNIQUE 경합이 500 으로 새지 않고 CartService 의 1회 멱등
+ * 재시도가 흡수하는지 검증한다. 타이밍 무관 불변식만 단언: 예상 외 예외 0, cart·cart_item 각 1개,
+ * 최종 quantity ∈ [1, 성공 건수]. 누적 정확 합산(RMW lost update)은 범위 밖.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -88,7 +86,7 @@ class CartConcurrencyIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        // 공유 DB 오염 방지 — cart_item 잔존이 다른 테스트의 album 삭제(fk_cart_item_album RESTRICT)를 막지 않도록 정리.
+        // cart_item 잔존이 다른 테스트의 album 삭제(fk_cart_item_album RESTRICT)를 막지 않도록 정리.
         clearAll();
     }
 
@@ -132,7 +130,7 @@ class CartConcurrencyIntegrationTest {
         assertThat(success.get() + lostRace.get()).as("모든 요청은 성공 또는 409(DIVE)로 귀결").isEqualTo(CONCURRENT_ADDS);
         assertThat(cartRepository.count()).as("회원당 cart 정확히 1개 (uk_cart_member)").isEqualTo(1);
         assertThat(cart.getItems()).as("동일 album 행은 1개 (uk_cart_item_cart_album)").hasSize(1);
-        // 누적 정확합산(lost update)은 #318 범위 밖 — 1 이상이고 성공 건수를 넘지 않음만 보장.
+        // 누적 정확 합산(lost update)은 범위 밖. [1, 성공 건수]만 보장.
         assertThat(finalQuantity).as("최종 quantity ∈ [1, 성공 건수]")
                 .isBetween(1, success.get());
     }

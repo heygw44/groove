@@ -13,9 +13,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * MemberCouponStatus 상태 전이 매트릭스 전수 검증 (4×4 = 16 케이스).
- *
- * <p>합법 전이는 5종: ISSUED→{USED,EXPIRED,CANCELLED}, USED→{ISSUED,EXPIRED}. EXPIRED·CANCELLED 는 종착이다.
+ * MemberCouponStatus 상태 전이 매트릭스 전수 검증 (4×4 = 16 케이스). 합법 전이는 5종:
+ * ISSUED→{USED,EXPIRED,CANCELLED}, USED→{ISSUED,EXPIRED}. EXPIRED·CANCELLED 는 종착이다.
  */
 @DisplayName("MemberCouponStatus — 전이 매트릭스 전수")
 class MemberCouponStatusTest {

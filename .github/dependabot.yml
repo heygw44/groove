@@ -1,9 +1,8 @@
-# 의존성 보안 점검 — GitHub Dependabot (이슈 #260)
-# backend(Gradle) · frontend(npm) · CI(GitHub Actions) 의존성을 주간 스캔해
-# 취약점/업데이트 PR 을 자동 생성한다. minor/patch 는 한 PR 로 묶어 노이즈를 줄인다.
+# Dependabot 의존성 점검. backend(Gradle)·frontend(npm)·CI(Actions)를 주간 스캔해
+# 업데이트 PR 을 자동 생성한다. minor/patch 는 한 PR 로 묶어 노이즈를 줄인다.
 version: 2
 updates:
-  # 백엔드 — Spring Boot 4 / Gradle (Kotlin DSL)
+  # 백엔드 (Spring Boot 4 / Gradle)
   - package-ecosystem: "gradle"
     directory: "/backend"
     schedule:
@@ -20,7 +19,7 @@ updates:
           - "minor"
           - "patch"
 
-  # 프론트엔드 — Vue 3 / Vite (시연용 SPA)
+  # 프론트엔드 (Vue 3 / Vite)
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
@@ -37,7 +36,7 @@ updates:
           - "minor"
           - "patch"
 
-  # CI 워크플로우 — GitHub Actions 핀 버전
+  # CI 워크플로우 (GitHub Actions 핀 버전)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

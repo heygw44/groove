@@ -63,20 +63,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 회원가입부터 리뷰까지 도메인 경계를 가로지르는 구매 여정을 부팅된 컨텍스트(실 필터·서비스·이벤트·스케줄러·Testcontainers MySQL) 위에서 검증한다.
- *
- * <p>다루는 시나리오:
- * <ul>
- *   <li>회원 풀 여정 — 회원가입 → 로그인 → 장바구니 → 주문 → 결제 → PAID 웹훅 → 배송 생성
- *       → 자동 진행 DELIVERED → 리뷰 작성 → 앨범 평점 반영</li>
- *   <li>게스트 여정 — 게스트 주문 → 결제 → 웹훅 → 배송 생성 + guest-lookup 본인 조회, 리뷰 불가(403)</li>
- *   <li>결제 실패 보상 — FAILED 웹훅 → 주문 PAYMENT_FAILED + 재고 복원 + 배송 미생성</li>
- *   <li>멱등성 — 동일 Idempotency-Key 동시 결제 요청 → 단일 Payment</li>
- * </ul>
- *
- * <p>배송이 PREPARING→SHIPPED→DELIVERED 로 진행될 때 주문도 같은 트랜잭션에서 락스텝으로 전진한다.
- * 결제 확정은 payment.mock.auto-webhook=false 로 자동 웹훅을 끄고 POST /api/v1/payments/webhook 을 직접 호출하며,
- * 비동기 생성되는 배송은 Awaitility 로 폴링한다.
+ * 회원가입부터 리뷰까지 도메인 경계를 가로지르는 구매 여정을 부팅된 컨텍스트(실 필터·서비스·이벤트·스케줄러·
+ * Testcontainers MySQL) 위에서 검증한다. 시나리오: 회원 풀 여정(주문~리뷰·평점 반영), 게스트 여정(리뷰 403),
+ * 결제 실패 보상(재고 복원·배송 미생성), 멱등성(동일 Idempotency-Key 동시 요청 → 단일 Payment).
+ * 결제 확정은 auto-webhook=false 로 끄고 웹훅을 직접 호출하며, 비동기 생성 배송은 Awaitility 로 폴링한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

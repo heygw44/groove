@@ -8,11 +8,7 @@ import java.util.Set;
 
 /**
  * 결제 상태. 전이 규칙은 canTransitionTo(PaymentStatus) 가 판정한다(그 외는 모두 불법).
- * - PENDING → PAID, FAILED
- * - PAID → PARTIALLY_REFUNDED, REFUNDED
- * - PARTIALLY_REFUNDED → REFUNDED
- * - FAILED, REFUNDED → 종착
- * PARTIALLY_REFUNDED 는 일부 환불 상태로, 누적 환불액이 전액에 도달하면 REFUNDED 로 전이한다.
+ * PENDING→PAID/FAILED, PAID→PARTIALLY_REFUNDED/REFUNDED, PARTIALLY_REFUNDED→REFUNDED, FAILED·REFUNDED 는 종착.
  */
 public enum PaymentStatus {
     PENDING,

@@ -39,10 +39,8 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-// 카탈로그 조회 캐시 동작 가드.
-// spring.cache.type=caffeine 으로 켜서 Caffeine 캐시 동작을 검증한다.
-// ① findDetail 두 번째 호출이 캐시 서빙 ② admin 쓰기(update/adjustStock/delete)가 상세 캐시 즉시 evict
-// ③ 공개 기본 랜딩 목록 캐시 + 등록 시 clear ④ 필터가 있는 검색은 랜딩 캐시를 우회.
+// 카탈로그 조회 캐시 동작 가드(spring.cache.type=caffeine). findDetail 재호출의 캐시 서빙, admin
+// 쓰기(update/adjustStock/delete)의 상세 캐시 즉시 evict, 랜딩 목록 캐시 + 등록 시 clear, 필터 검색의 랜딩 캐시 우회를 검증한다.
 @SpringBootTest(properties = "spring.cache.type=caffeine")
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)

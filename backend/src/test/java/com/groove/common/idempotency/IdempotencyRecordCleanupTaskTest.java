@@ -17,9 +17,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * IdempotencyRecordCleanupTask 통합 테스트 (Testcontainers MySQL).
- * cleanup-batch-size=2 로 배치 루프를, expiresAt <= now 단일 기준 회수(status 무관)를 검증한다. 태스크를 직접 호출한다.
- * IN_PROGRESS 는 처리 타임아웃(짧게), COMPLETED 는 ttl(길게)로 expiresAt 이 분리되므로 단일 기준으로 충분하다.
+ * IdempotencyRecordCleanupTask 통합 테스트 (Testcontainers MySQL). cleanup-batch-size=2 로 배치 루프를,
+ * expiresAt <= now 단일 기준 회수(status 무관)를 검증한다. IN_PROGRESS=처리 타임아웃, COMPLETED=ttl 로
+ * expiresAt 이 분리되므로 단일 기준으로 충분하다.
  */
 @SpringBootTest(properties = {
         "groove.idempotency.cleanup-batch-size=2"
@@ -44,12 +44,12 @@ class IdempotencyRecordCleanupTaskTest {
     @DisplayName("expiresAt 지난 COMPLETED·IN_PROGRESS 를 status 무관 배치로 삭제, 미래 expiresAt 은 보존")
     void deletesExpiredRecords_inBatches() {
         for (int i = 0; i < 4; i++) {
-            saveCompleted(Instant.now().minus(Duration.ofHours(1)));   // 만료 캐시 → 삭제
+            saveCompleted(Instant.now().minus(Duration.ofHours(1)));   // 만료 캐시
         }
-        saveInProgress(Instant.now().minus(Duration.ofHours(2)));       // 처리 타임아웃 지난 마커 → 삭제
-        saveInProgress(Instant.now().minus(Duration.ofMinutes(30)));    // 처리 타임아웃 지난 마커 → 삭제
-        String freshCache = saveCompleted(Instant.now().plus(Duration.ofHours(1)));       // 유효 캐시 → 보존
-        String inFlight = saveInProgress(Instant.now().plus(Duration.ofMinutes(5)));      // 처리 중 마커 → 보존
+        saveInProgress(Instant.now().minus(Duration.ofHours(2)));       // 타임아웃 지난 마커
+        saveInProgress(Instant.now().minus(Duration.ofMinutes(30)));    // 타임아웃 지난 마커
+        String freshCache = saveCompleted(Instant.now().plus(Duration.ofHours(1)));       // 유효 캐시(보존)
+        String inFlight = saveInProgress(Instant.now().plus(Duration.ofMinutes(5)));      // 진행 중 마커(보존)
 
         int deleted = cleanupTask.deleteExpired(Instant.now());
 

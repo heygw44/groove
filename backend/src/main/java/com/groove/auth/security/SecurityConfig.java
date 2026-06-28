@@ -48,14 +48,12 @@ public class SecurityConfig {
             "/api/v1/shippings/**",
             // 발급 가능 쿠폰 목록만 공개. 와일드카드 없는 정확 경로라 하위 경로는 매칭되지 않는다.
             "/api/v1/coupons",
-            // 토스 successUrl/failUrl 브라우저 리다이렉트 타깃(#295). 인증 없이 confirm/보상 처리 후 SPA 로 302.
+            // 토스 successUrl/failUrl 브라우저 리다이렉트 타깃. 인증 없이 confirm/보상 처리 후 SPA 로 302.
             "/payments/toss/success",
             "/payments/toss/fail"
     };
 
-    /**
-     * 정적 SPA 프론트엔드 빌드 산출물 경로. GET 으로만 공개한다.
-     */
+    /** 정적 SPA 빌드 산출물 — GET 으로만 공개. */
     private static final String[] PUBLIC_STATIC_GET_PATTERNS = {
             "/",
             "/index.html",
@@ -72,9 +70,7 @@ public class SecurityConfig {
             "/error"
     };
 
-    /**
-     * SpringDoc OpenAPI/Swagger UI 정적 문서 경로. 인증 없이 공개한다.
-     */
+    /** SpringDoc OpenAPI/Swagger UI 문서 경로 — 인증 없이 공개. */
     private static final String[] SWAGGER_PATTERNS = {
             "/v3/api-docs/**",
             "/v3/api-docs.yaml",
@@ -113,13 +109,9 @@ public class SecurityConfig {
     }
 
     /**
-     * /actuator/prometheus 전용 Basic 인증 필터체인 (#343). nginx 가 /actuator/** 를 app 으로 위임해 외부에서도
-     * 도달하므로 이 메트릭 엔드포인트만 본 체인(JWT)보다 먼저(@Order) 가로채 Basic 인증으로 보호한다.
-     * <p>
-     * 자격증명은 체인 로컬 InMemoryUserDetailsManager + 전용 AuthenticationManager 로만 검증한다 — 전역 빈으로
-     * 노출하지 않아 본 API 의 JWT 인증 경로와 무간섭이다. 전역 PasswordEncoder 는 BCrypt(PasswordConfig)지만
-     * 이 체인은 위임 인코더({noop} 지원)를 명시 주입하므로 평문 데모 자격증명을 그대로 매칭한다.
-     * Prometheus 는 scrape_config 의 basic_auth 로 인증한다.
+     * /actuator/prometheus 전용 Basic 인증 필터체인. nginx 가 /actuator/** 를 외부로 위임하므로 이
+     * 엔드포인트만 본 체인(JWT)보다 먼저(@Order) 가로챈다. 자격증명은 체인 로컬 InMemoryUserDetailsManager 로만
+     * 검증해 JWT 경로와 무간섭이고, 위임 인코더({noop})로 평문 데모 자격증명을 매칭한다.
      */
     @Bean
     @Order(0)
@@ -190,9 +182,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * CORS 정책을 CorsProperties 로부터 구성한다.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
         CorsConfiguration configuration = new CorsConfiguration();

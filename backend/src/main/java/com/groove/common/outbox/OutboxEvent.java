@@ -22,26 +22,22 @@ import java.util.Objects;
         name = "outbox_event",
         indexes = {
                 // 릴레이 조회 published_at IS NULL AND attempt_count < N 를 위해 attempt_count 포함 — DLQ 격리 행을
-                // 인덱스 레벨에서 제외한다(V30, #268). 정리 쿼리는 published_at 선두를 활용.
+                // 인덱스 레벨에서 제외한다(V30). 정리 쿼리는 published_at 선두를 활용.
                 @Index(name = "idx_outbox_unpublished", columnList = "published_at, attempt_count, id")
         }
 )
 public class OutboxEvent extends BaseTimeEntity {
 
-    /** DB aggregate_type 컬럼 길이. */
     static final int MAX_AGGREGATE_TYPE_LENGTH = 50;
-    /** DB event_type 컬럼 길이. */
     static final int MAX_EVENT_TYPE_LENGTH = 100;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 이벤트를 일으킨 Aggregate 종류 (예: ORDER). */
     @Column(name = "aggregate_type", nullable = false, length = MAX_AGGREGATE_TYPE_LENGTH)
     private String aggregateType;
 
-    /** 이벤트를 일으킨 Aggregate 식별자 (예: orderId). */
     @Column(name = "aggregate_id", nullable = false)
     private long aggregateId;
 
@@ -49,7 +45,6 @@ public class OutboxEvent extends BaseTimeEntity {
     @Column(name = "event_type", nullable = false, length = MAX_EVENT_TYPE_LENGTH)
     private String eventType;
 
-    /** 이벤트 본문 JSON 직렬화. */
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
     private String payload;
 
@@ -59,7 +54,7 @@ public class OutboxEvent extends BaseTimeEntity {
 
     /**
      * 핸들러 실패 누적 횟수 — 릴레이 조회는 attempt_count < max-attempts 인 미발행 행만 대상으로 한다.
-     * 임계값에 도달한 이벤트는 DLQ(격리)로 더 이상 디스패치되지 않는다(#268).
+     * 임계값에 도달한 이벤트는 DLQ(격리)로 더 이상 디스패치되지 않는다.
      */
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
@@ -92,7 +87,6 @@ public class OutboxEvent extends BaseTimeEntity {
         return new OutboxEvent(aggregateType, aggregateId, eventType, payload);
     }
 
-    /** 발행 완료로 표시한다. */
     public void markPublished(Instant now) {
         this.publishedAt = Objects.requireNonNull(now, "now must not be null");
     }

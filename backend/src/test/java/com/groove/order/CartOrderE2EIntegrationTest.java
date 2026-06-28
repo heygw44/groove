@@ -47,15 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 장바구니 → 주문 통합 E2E. 두 도메인을 가로지르는 사용자 흐름을 다룬다:
- * <ul>
- *   <li>회원 cart → order 생성 → 단건 + 목록 조회</li>
- *   <li>게스트 직접 주문 생성 → guest-lookup 본인 조회</li>
- *   <li>PENDING 주문 취소 → album 재고 복원</li>
- *   <li>타인 주문 cancel 차단 시 재고 미복원</li>
- *   <li>한 요청에 SELLING+HIDDEN 라인 혼재 시 트랜잭션 롤백으로 SELLING 재고 미차감</li>
- *   <li>SOLD_OUT album 의 cart 추가 거부</li>
- * </ul>
+ * 장바구니 → 주문 통합 E2E. 회원/게스트 주문 생성·조회, PENDING 취소 시 재고 복원, 타인 주문 취소 차단,
+ * SELLING+HIDDEN 혼재 시 트랜잭션 롤백으로 재고 미차감, SOLD_OUT 앨범 cart 추가 거부를 다룬다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

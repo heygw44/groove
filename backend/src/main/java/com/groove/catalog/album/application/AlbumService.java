@@ -61,7 +61,6 @@ public class AlbumService {
         this.referenceGuards = referenceGuards;
     }
 
-    // 랜딩 목록 캐시를 비운다.
     @CacheEvict(cacheNames = AlbumCaches.LANDING_LIST, allEntries = true)
     @Transactional
     public Album create(AlbumCommand command, int initialStock) {
@@ -152,10 +151,7 @@ public class AlbumService {
         }
     }
 
-    /**
-     * 공개 검색/목록 (GET /albums). AlbumSpecs 동적 조건을 합쳐 페이징 조회하고, DTO 변환을
-     * 트랜잭션 내에서 수행한다. artist/genre/label 은 findAll 의 @EntityGraph 로 동반 페치한다.
-     */
+    // artist/genre/label 은 findAll 의 @EntityGraph 로 동반 페치한다.
     // 공개 기본 랜딩(필터 전무 + 기본 첫 페이지)만 단일 엔트리로 캐시. sync=true 로 키별 단일 로딩.
     @Cacheable(cacheNames = AlbumCaches.LANDING_LIST, key = AlbumCaches.LANDING_KEY,
             condition = AlbumCaches.LANDING_CONDITION, sync = true)
@@ -166,12 +162,8 @@ public class AlbumService {
         return page.map(album -> AlbumSummaryResponse.from(album, ratings.getOrDefault(album.getId(), AlbumRating.NONE)));
     }
 
-    /**
-     * 공개 검색/목록 — keyset(커서) 페이징 변형 (GET /albums/scroll). search 와 동일한 AlbumSpecs
-     * 동적 조건을 Spring Data Scroll API(findBy(...).scroll(position))로 Window 반환한다. fluent
-     * findBy 경로는 @EntityGraph 미적용이라 to-one 연관(artist/genre/label)은 각 대상 엔티티의 클래스 레벨
-     * @BatchSize 로 IN 쿼리 일괄 페치된다.
-     */
+    // keyset 변형. fluent findBy 경로는 @EntityGraph 미적용이라 to-one 연관(artist/genre/label)은
+    // 각 대상 엔티티 클래스 레벨 @BatchSize 로 IN 쿼리 일괄 페치된다.
     @Transactional(readOnly = true)
     public Window<AlbumSummaryResponse> searchKeyset(AlbumSearchCondition condition, int size, Sort sort, ScrollPosition position) {
         Specification<Album> spec = buildSpec(condition);
@@ -195,10 +187,7 @@ public class AlbumService {
         );
     }
 
-    /**
-     * 공개 상세 (GET /albums/{id}). 연관을 명시 초기화한 뒤 DTO 변환한다. 조회는 status 무관하게 허용.
-     */
-    // 상세는 id 별로 캐시. sync=true 로 동일 id 동시 미스 시 단일 로딩.
+    // 조회는 status 무관하게 허용. 상세는 id 별로 캐시, sync=true 로 동일 id 동시 미스 시 단일 로딩.
     @Cacheable(cacheNames = AlbumCaches.DETAIL, key = "#id", sync = true)
     @Transactional(readOnly = true)
     public AlbumDetailResponse findDetail(Long id) {

@@ -31,12 +31,10 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 
 /**
- * 토스페이먼츠 동기 confirm 승인 흐름 API(#295).
- *
+ * 토스페이먼츠 동기 confirm 승인 흐름 API.
  * success/fail 은 토스가 브라우저를 보내는 미인증 GET 콜백이다. orderNumber 만 알면 호출 가능하므로
  * 어떤 예외에도 JSON 을 노출하지 않고 항상 SPA 결과 라우트로 302 한다(교차 주문 조작 방어).
- * confirm 의 실제 관문은 콜백 토큰이 아니라 서버측 금액 위변조 검증과 유효 paymentKey 다 — 게스트
- * 주문은 토큰이 비밀이 아니기 때문. 콜백 토큰 신뢰 모델의 회원/게스트 비대칭은 #304/#306 참조.
+ * 게스트 주문은 토큰이 비밀이 아니라, confirm 의 실제 관문은 서버측 금액 위변조 검증과 유효 paymentKey 다.
  */
 @Tag(name = "결제(토스)", description = "토스페이먼츠 confirm 승인 흐름 — checkout · successUrl/failUrl 콜백")
 @RestController
@@ -91,14 +89,14 @@ public class TossPaymentController {
             @RequestParam(required = false) String token) {
         String status;
         try {
-            // in-method 가드로 경계 검증(@Validated 대신). 빈 검증 위반은 메서드 진입 전 던져져 JSON 400 이 나가
+            // @Validated 대신 in-method 가드로 경계 검증한다. 빈 검증 위반은 메서드 진입 전 JSON 400 을 던져
             // "어떤 예외도 JSON 누출 없이 항상 302 fail" 불변식을 깨므로, 가드를 catch 안으로 흘려보낸다.
             requireBoundedParams(paymentKey, orderId, amount, token);
-            // token 은 checkout 이 successUrl 에 박은 결제별 토큰 — confirm 이 저장 토큰과 일치를 검증한다(교차 주문 조작 차단, #304/#306).
+            // confirm 이 저장 토큰과 token 의 일치를 검증한다(교차 주문 조작 차단).
             PaymentCallbackResult result = tossPaymentService.confirm(paymentKey, orderId, Long.parseLong(amount), token);
             status = result.paymentStatus() == PaymentStatus.PAID ? "success" : "fail";
         } catch (RuntimeException e) {
-            // successUrl 은 브라우저 리다이렉트 타깃 — 위변조·토큰 불일치·만료·미확정·파라미터 오류·경계 초과 등 어떤 예외도 JSON 누출 없이 fail 안내한다.
+            // successUrl 은 브라우저 리다이렉트 타깃이라 어떤 예외도 JSON 누출 없이 fail 로 안내한다.
             log.warn("토스 confirm 처리 실패 — fail 리다이렉트: orderId={}, err={}", orderId, e.toString());
             status = "fail";
         }
@@ -114,17 +112,16 @@ public class TossPaymentController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String message,
             @RequestParam(required = false) String orderId) {
-        // failUrl 은 미인증 브라우저 GET 이라 orderNumber 만으로 호출 가능 — 여기서 FAILED 로 바꾸면 제3자가 타인의
-        // 결제를 강제 실패시킬 수 있다(CSRF, #295). 안내만 하고 보상은 폴링 리퍼의 만료 경로가 1회 수행한다.
-        // fail 은 상태 무변경이라 콜백 토큰을 싣지 않는다(#309).
+        // failUrl 은 미인증 브라우저 GET 이라 orderNumber 만으로 호출 가능하다. 여기서 FAILED 로 바꾸면
+        // 제3자가 타인의 결제를 강제 실패시킬 수 있다(CSRF). 안내만 하고 보상은 폴링 리퍼의 만료 경로가 1회 수행한다.
         log.info("토스 결제 실패/취소 안내: orderId={}, code={}", orderId, code);
         return redirect(orderId, "fail");
     }
 
-    /** 미인증 공개 콜백 파라미터(orderId·amount·token·paymentKey)의 최대 허용 길이. orderNumber 는 ~20자, 토큰은 UUID(36자). */
+    // 미인증 공개 콜백 파라미터의 최대 허용 길이. orderNumber 는 ~20자, 토큰은 UUID(36자).
     private static final int MAX_CALLBACK_PARAM_LENGTH = 64;
 
-    /** 콜백 파라미터 길이 경계 — 하나라도 초과하면 예외(success 의 catch 가 fail 302 로 흡수). */
+    /** 하나라도 초과하면 예외(success 의 catch 가 fail 302 로 흡수). */
     private static void requireBoundedParams(String... params) {
         for (String p : params) {
             if (p != null && p.length() > MAX_CALLBACK_PARAM_LENGTH) {
@@ -137,7 +134,7 @@ public class TossPaymentController {
     private static ResponseEntity<Void> redirect(String orderNumber, String status) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/orders");
         if (orderNumber != null && !orderNumber.isBlank() && orderNumber.length() <= MAX_CALLBACK_PARAM_LENGTH) {
-            builder.pathSegment(orderNumber); // 단일 세그먼트로 인코딩 — 경로/헤더 인젝션·과대 입력 방지.
+            builder.pathSegment(orderNumber); // 단일 세그먼트로 인코딩(경로/헤더 인젝션·과대 입력 방지).
         }
         URI location = builder.queryParam("payment", status).encode().build().toUri();
         return ResponseEntity.status(HttpStatus.FOUND).location(location).build();

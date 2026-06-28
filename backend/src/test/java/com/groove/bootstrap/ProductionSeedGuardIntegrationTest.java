@@ -22,11 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * ProductionSeedGuard 통합 테스트.
- *
- * <p>가드는 @Profile("!local & !test") 라 test 프로파일에선 빈으로 등록되지 않아, MemberRepository 를 주입받아 직접 생성하고 run(null) 으로 검증한다.
- *
- * <p>데모 계정은 공유 컨테이너에 커밋되므로 @BeforeEach/@AfterEach 에서 직접 정리한다.
+ * ProductionSeedGuard 통합 테스트. 가드가 @Profile("!local & !test") 라 test 에선 빈 미등록 → MemberRepository 를
+ * 주입받아 직접 생성·run(null) 로 검증한다. 데모 계정은 공유 컨테이너에 커밋되므로 @BeforeEach/@AfterEach 에서 직접 정리.
  */
 @SpringBootTest
 @ActiveProfiles("test")

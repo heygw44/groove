@@ -49,17 +49,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 보상 트랜잭션 부분 실패 시 PG 환불 멱등 키의 효과를 검증하는 통합 테스트.
- *
- * <h2>시나리오</h2>
- * <ol>
- *   <li>앨범 재고를 Integer.MAX_VALUE 로 세팅 + PAID 주문(qty=2) + PAID 결제.</li>
- *   <li>1차 환불 호출: PG refund 성공 → markRefunded → CANCELLED 전이 후, restoreStock(+2)가 INT 오버플로로
- *       DataIntegrityViolationException → 트랜잭션 롤백. PG 측엔 첫 환불 응답이 캐시된다.</li>
- *   <li>재고를 정상 범위로 조정한다.</li>
- *   <li>2차 환불 호출(재시도): 같은 멱등 키 → MockPaymentGateway 가 캐시 응답을 반환(실호출 없음), DB 작업은 정상 완료.</li>
- *   <li>검증: PG 실호출 카운터 == 1, payment REFUNDED, order CANCELLED, 재고 복원 정상 반영.</li>
- * </ol>
+ * 보상 트랜잭션 부분 실패 시 PG 환불 멱등 키 효과 검증. 1차 환불에서 PG 성공·CANCELLED 전이 후 restoreStock 이
+ * INT 오버플로로 롤백되게 한 뒤, 재고를 정상화하고 같은 멱등 키로 재시도하면 캐시 응답 반환(PG 실호출 == 1)·DB 정합.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -122,7 +113,7 @@ class AdminRefundIdempotencyIntegrationTest {
     }
 
     private void clearAll() {
-        // refresh_token → member FK 를 먼저 정리한다.
+        // refresh_token → member FK 먼저.
         refreshTokenRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -150,7 +141,7 @@ class AdminRefundIdempotencyIntegrationTest {
     @Test
     @DisplayName("PG 호출 후 재고 복원 실패 → 재시도 시 PG 실호출 1회 + 최종 DB 정합 (#72)")
     void compensatingFailure_thenRetry_pgCalledOnce() throws Exception {
-        // given — Integer.MAX_VALUE 재고 위에 qty=2 PAID 주문/결제
+        // Integer.MAX_VALUE 재고 위에 qty=2 PAID 주문/결제.
         String orderNumber = persistPaidOrderWithPayment();
         MockPaymentGateway mockGateway = (MockPaymentGateway) paymentGateway;
         int callsBefore = mockGateway.refundCallCount();
@@ -181,7 +172,7 @@ class AdminRefundIdempotencyIntegrationTest {
                         .content("{\"reason\":\"재시도\"}"))
                 .andExpect(status().isOk());
 
-        // 검증 — PG 실호출 카운터는 1차에서만 증가, DB 는 정상 완료 상태.
+        // PG 실호출 카운터는 1차에서만 증가, DB 는 정상 완료.
         assertThat(mockGateway.refundCallCount())
                 .as("같은 멱등 키 재호출 → PG 실호출 추가 없음")
                 .isEqualTo(callsBefore + 1);

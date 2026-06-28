@@ -149,7 +149,7 @@ class MockPaymentGatewayTest {
 
             GatewayQuery result = g.query(response.pgTransactionId());
             assertThat(result.status()).isEqualTo(PaymentStatus.PENDING);
-            // Mock 계약: 거래별 금액 미보유 → settledAmount 항상 null → 호출부 금액 검증 생략(#320).
+            // Mock 계약: 거래별 금액 미보유 → settledAmount 항상 null → 호출부 금액 검증 생략.
             assertThat(result.settledAmount()).isNull();
         }
 

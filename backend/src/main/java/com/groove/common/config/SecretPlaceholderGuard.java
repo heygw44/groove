@@ -14,7 +14,7 @@ import java.util.Set;
  *
  * DB 비밀번호는 위 플레이스홀더 검사에 더해 흔한 약한 기본/예시 값(rootpw 등)까지 거부하는
  * {@link #rejectWeakDbPassword}를 쓴다 — local/docker 데모는 약한 데모값을 정당하게 쓰므로
- * 이 메서드는 prod 전용({@code DbSecretGuard} @Profile("prod"))에서만 호출한다(이슈 #321).
+ * 이 메서드는 prod 전용({@code DbSecretGuard} @Profile("prod"))에서만 호출한다.
  */
 public final class SecretPlaceholderGuard {
 
@@ -56,7 +56,7 @@ public final class SecretPlaceholderGuard {
 
     /**
      * DB 비밀번호가 .env.example 플레이스홀더이거나 흔한 약한 기본값이면 IllegalStateException 을 던진다.
-     * prod 전용 — local/docker 데모는 약한 데모값(changeme/rootpw)을 정당하게 쓰므로 전역 호출 금지(이슈 #321).
+     * prod 전용 — local/docker 데모는 약한 데모값(changeme/rootpw)을 정당하게 쓰므로 전역 호출 금지.
      * password=검사 대상(non-null 전제, blank 검증은 호출측 책임).
      */
     public static void rejectWeakDbPassword(String propertyName, String password) {

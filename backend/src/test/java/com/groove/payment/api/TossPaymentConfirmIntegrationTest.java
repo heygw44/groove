@@ -61,11 +61,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 토스 confirm 승인 흐름 통합 테스트 — checkout → successUrl/failUrl 콜백.
- *
- * <p>Testcontainers MySQL 위 MockMvc, test 프로파일이라 PaymentGateway 는 {@code MockPaymentGateway}(confirm 항상 PAID).
- * checkout 은 게이트웨이 호출 없이 PENDING(잠정 pgTx=orderNumber)을 만들고, success 콜백이 confirm→PAID 적용,
- * fail 콜백이 보상(재고·쿠폰 복원)을 적용한다.
+ * 토스 confirm 승인 흐름 통합 테스트(checkout → successUrl/failUrl 콜백). test 프로파일이라 MockPaymentGateway 가
+ * confirm 을 항상 PAID 로 응답한다. checkout 은 게이트웨이 호출 없이 PENDING(잠정 pgTx=orderNumber)을 만든다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -103,7 +100,7 @@ class TossPaymentConfirmIntegrationTest {
     @BeforeEach
     void setUp() {
         refreshTokenRepository.deleteAllInBatch();
-        idempotencyRecordRepository.deleteAllInBatch(); // confirm/fail 멱등 키가 테스트 간 누수되지 않도록 정리
+        idempotencyRecordRepository.deleteAllInBatch(); // 멱등 키 테스트 간 누수 방지
         outboxEventRepository.deleteAllInBatch();
         paymentRepository.deleteAllInBatch();
         memberCouponRepository.deleteAllInBatch();
@@ -155,8 +152,7 @@ class TossPaymentConfirmIntegrationTest {
                 .andExpect(jsonPath("$.amount").value(UNIT_PRICE * quantity));
 
         Payment payment = paymentRepository.findByOrderId(orderId).orElseThrow();
-        // paymentKey 는 결제마다 고유 — 토스가 발급하는 paymentKey 가 고유하듯 멱등 키 충돌을 피한다.
-        // callbackToken: checkout 이 발급·저장한 결제별 토큰 — successUrl 콜백이 이 값을 round-trip 해야 confirm 이 통과한다.
+        // callbackToken: checkout 이 발급·저장한 결제별 토큰. successUrl 콜백이 round-trip 해야 confirm 통과.
         return new Checked(orderId, orderNumber, payment.getAmount(), "pk-" + orderNumber, payment.getCallbackToken());
     }
 
@@ -313,7 +309,7 @@ class TossPaymentConfirmIntegrationTest {
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("/orders/" + c.orderNumber() + "?payment=fail"));
 
-        // failUrl 은 보상하지 않는다 — 보상은 만료 리퍼의 신뢰 경로가 담당.
+        // failUrl 은 보상하지 않는다. 보상은 만료 리퍼의 신뢰 경로가 담당.
         assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.PENDING);
         assertThat(orderStatus(c.orderId())).isEqualTo(OrderStatus.PENDING);
         assertThat(currentStock()).isEqualTo(INITIAL_STOCK - 2); // 재고 미복원
@@ -327,7 +323,7 @@ class TossPaymentConfirmIntegrationTest {
         Long memberCouponId = applied.getId();
         assertThat(currentStock()).isEqualTo(INITIAL_STOCK - 2);
 
-        // test 프로파일: min-age·toss-pending-timeout 모두 PT0S → 갓 접수된 toss-pending 도 즉시 만료 대상.
+        // test 프로파일: min-age·toss-pending-timeout 모두 PT0S → 갓 접수돼도 즉시 만료 대상.
         reconciliationScheduler.reconcilePendingPayments();
 
         assertThat(paymentStatus(c.orderId())).isEqualTo(PaymentStatus.FAILED);

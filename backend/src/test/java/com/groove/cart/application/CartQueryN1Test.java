@@ -32,7 +32,7 @@ import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// album N+1 제거 회귀 가드 (#318).
+// album N+1 제거 회귀 가드.
 // GET /api/cart (CartService.find) 가 cart_item.album(LAZY)을 Album 클래스 @BatchSize 로 IN 일괄 페치하고,
 // album.artist 는 Artist 클래스 @BatchSize 로 흡수해 항목 수와 무관하게 쿼리 수가 상수임을 Statistics 로 고정한다.
 // 판정 기준: prepareStatementCount == 3 (cart+items 1 / album IN 배치 1 / artist IN 배치 1).

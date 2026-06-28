@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/** 아티스트 응답 DTO. */
 public record ArtistResponse(
         @Schema(description = "아티스트 ID", example = "1") Long id,
         @Schema(description = "아티스트 이름", example = "Daft Punk") String name,

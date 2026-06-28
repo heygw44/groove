@@ -42,15 +42,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 주문 재고 차감 동시성 테스트.
- *
- * <ul>
- *   <li>concurrentOrders_withoutLock_produceOversell — 락 미적용(placeWithoutLock) baseline. @Disabled.</li>
- *   <li>concurrentOrders_withPessimisticLock_noOversell — 비관적 락(place). created ≤ 재고, lost-update 0 검증.</li>
- *   <li>concurrentOrders_singleStockRarity_exactlyOneSucceeds — 단일 재고(stock=1), 동시 100 주문 → 정확히 1 성공.</li>
- * </ul>
- *
- * <p>동시 출발·지연 수집은 ConcurrencyHarness 가 담당한다.
+ * 주문 재고 차감 동시성. 비관적 락이 lost-update 0(created ≤ 재고)을 보장하고, 단일 재고(stock=1)에
+ * 동시 100 주문이 정확히 1건만 성공함을 검증한다. 락 미적용 oversell baseline 은 @Disabled.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -131,7 +124,7 @@ class OversellingBaselineTest {
     }
 
     private void cleanupAll() {
-        // FK 의존 순서대로 부모 repository 를 비운다.
+        // FK 의존 순서대로.
         refreshTokenRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         orderRepository.deleteAllInBatch();
@@ -168,7 +161,6 @@ class OversellingBaselineTest {
         long persistedOrders = orderRepository.countByMemberId(memberId);
         logMeasurement("비관적", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
 
-        // success == 재고, finalStock == 0, persistedOrders == 실제 차감량.
         assertThat(success.get()).as("정확히 재고만큼만 주문 성공").isEqualTo(INITIAL_STOCK);
         assertThat(insufficient.get()).as("나머지는 재고부족(409)으로 거절").isEqualTo(CONCURRENT_REQUESTS - INITIAL_STOCK);
         assertThat(finalStock).as("최종 재고 == 0 (음수 진입 없음)").isZero();
@@ -180,7 +172,6 @@ class OversellingBaselineTest {
     @Test
     @DisplayName("비관적 락 — 단일 재고(stock=1) 희귀반 / 동시 100 주문 → 정확히 1 성공, 99 재고부족, 오버셀 0 (#209)")
     void concurrentOrders_singleStockRarity_exactlyOneSucceeds() throws InterruptedException {
-        // 1장짜리 희귀반을 100명이 동시에 집어도 정확히 1명만 성공해야 한다.
         OrderCreateRequest request = singleAlbumOrder(rarityAlbumId);
 
         AtomicInteger success = new AtomicInteger();
@@ -204,7 +195,7 @@ class OversellingBaselineTest {
         long persistedOrders = orderRepository.countByMemberId(memberId);
         logMeasurement("단일재고", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
 
-        // 단일 행 FOR UPDATE 가 100 트랜잭션을 직렬화 → 1건만 차감·commit, 나머지 99건은 거절.
+        // 단일 행 FOR UPDATE 가 100 트랜잭션을 직렬화 → 1건만 commit.
         assertThat(success.get()).as("정확히 1건만 성공").isEqualTo(SINGLE_STOCK);
         assertThat(insufficient.get()).as("나머지 99건은 재고부족(409)으로 거절").isEqualTo(SINGLE_STOCK_REQUESTS - SINGLE_STOCK);
         assertThat(finalStock).as("최종 재고 == 0 (음수 진입 없음)").isZero();
@@ -225,7 +216,7 @@ class OversellingBaselineTest {
 
         LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, CONCURRENT_REQUESTS, i -> {
             try {
-                // 락 미적용 demo 경로 — 동시 read-modify-write.
+                // 락 미적용 demo 경로(동시 read-modify-write).
                 orderService.placeWithoutLock(memberId, request);
                 success.incrementAndGet();
             } catch (InsufficientStockException ex) {
@@ -240,10 +231,7 @@ class OversellingBaselineTest {
         long persistedOrders = orderRepository.countByMemberId(memberId);
         logMeasurement("baseline", success, insufficient, other, finalStock, actualDecrement, persistedOrders, result);
 
-        // 오버셀 증거 — 다음 중 하나 이상이 성립한다:
-        //   (1) successCount > INITIAL_STOCK
-        //   (2) finalStock < 0
-        //   (3) persistedOrders > actualDecrement
+        // 오버셀 증거: 성공>재고 / 음수재고 / 영속주문>차감량 중 하나라도 성립.
         boolean oversold = success.get() > INITIAL_STOCK
                 || finalStock < 0
                 || persistedOrders > actualDecrement;
@@ -265,7 +253,7 @@ class OversellingBaselineTest {
                 null);
     }
 
-    /** 측정 로그 — 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 한 줄. */
+    /** 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 측정 로그. */
     private void logMeasurement(String label, AtomicInteger success, AtomicInteger insufficient, AtomicInteger other,
                                 int finalStock, int actualDecrement, long persistedOrders, LoadResult result) {
         log.info("[#205 {}] success={}, insufficient={}, other={}, finalStock={}, actualDecrement={}, persistedOrders={}"

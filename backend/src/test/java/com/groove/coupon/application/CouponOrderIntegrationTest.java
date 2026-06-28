@@ -56,15 +56,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 쿠폰을 적용한 주문 → 결제 → 취소·환불 복원의 통합 E2E.
- *
- * <p>실 DB(Testcontainers MySQL) 위에서 검증한다:
- * <ul>
- *   <li>payment.amount == order.payableAmount — PG 청구액이 할인 반영된 금액인지</li>
- *   <li>cancel 과 refund 두 경로 모두 쿠폰을 ISSUED 로 복원하는지</li>
- * </ul>
- *
- * <p>서비스 빈을 직접 호출해 두 도메인을 가로지르는 결합 동작에 집중한다.
+ * 쿠폰을 적용한 주문 → 결제 → 취소·환불 복원의 통합 E2E. 실 DB(Testcontainers MySQL)에서 PG 청구액이 할인
+ * 반영된 금액인지(payment.amount == order.payableAmount), cancel·refund 두 경로 모두 쿠폰을 ISSUED 로
+ * 복원하는지를 서비스 빈 직접 호출로 검증한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")

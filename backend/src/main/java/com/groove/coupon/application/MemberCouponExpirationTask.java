@@ -13,9 +13,8 @@ import java.time.Clock;
 import java.time.Instant;
 
 /**
- * 회원 보유 쿠폰 만료 배치. groove.coupon.expiration.cron 으로 주기 실행(기본 매시 정각), expires_at 이 지난 ISSUED 행을
- * batch-size 개씩 독립 트랜잭션으로 EXPIRED 로 전환한다. 벌크 UPDATE 는 MemberCoupon.expire() 를 우회한다.
- * 배치 실패는 로깅만 하고 다음 주기에 재시도한다.
+ * 회원 보유 쿠폰 만료 배치. 만료된 ISSUED 행을 batch-size 개씩 독립 트랜잭션으로 EXPIRED 전환.
+ * 벌크 UPDATE 라 MemberCoupon.expire() 를 우회한다. 실패는 로깅만 하고 다음 주기 재시도.
  */
 @Component
 public class MemberCouponExpirationTask {
@@ -46,15 +45,12 @@ public class MemberCouponExpirationTask {
                 log.info("만료된 회원 쿠폰 {}건 EXPIRED 전환", total);
             }
         } catch (Exception e) {
-            // 스케줄러 스레드가 죽지 않도록 Exception 만 잡고 Error 는 전파시킨다. 다음 주기에 재시도.
+            // 스케줄러 스레드가 죽지 않도록 Exception 만 잡는다(Error 는 전파).
             log.warn("회원 쿠폰 만료 처리 실패 — 다음 주기에 재시도", e);
         }
     }
 
-    /**
-     * expires_at < cutoff 인 ISSUED 회원 쿠폰을 모두 EXPIRED 로 전환한다. 영향 행 수가 배치 크기 미만이 될
-     * 때까지 배치 단위로 반복하고, 전환된 총 행 수를 반환한다.
-     */
+    /** 영향 행 수가 배치 크기 미만이 될 때까지 배치 단위로 반복. */
     int expireOverdueAll(Instant cutoff) {
         int total = 0;
         int updated;

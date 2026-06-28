@@ -35,14 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 선착순 쿠폰 발급 동시성 테스트.
- *
- * <p>베이스라인(락 없음)은 초과발급을 재현(@Disabled 로 보존)하고, 비관적 락·원자적 조건부 UPDATE 경로는
- * 초과발급 0 을 증명한다.
- *
- * <p>회원당 1장 UNIQUE 때문에 초과발급 노출은 서로 다른 member_id 로 글로벌 카운터를 때려야 한다.
- *
- * <p>ConcurrencyHarness 가 wall-clock(elapsedMs)·요청별 지연을 수집해 TPS·p95 를 콘솔에 기록한다.
+ * 선착순 쿠폰 발급 동시성. 비관적 락·원자적 조건부 UPDATE 경로가 초과발급 0 을 증명하고, 락 없는 baseline 은
+ * 초과발급을 재현한다(@Disabled). 회원당 1장 UNIQUE 때문에 글로벌 카운터 경합은 서로 다른 member_id 로 때려야 한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -215,10 +209,7 @@ class CouponIssuanceConcurrencyTest {
         long persisted = memberCouponRepository.count();
         logMeasurement("baseline", success, soldOut, other, issuedCount, persisted, result);
 
-        // 초과발급 증거 — 다음 중 하나 이상:
-        //   (1) persisted > LIMIT          — 한정수량보다 많이 발급
-        //   (2) persisted > issuedCount    — 영속 발급 수가 카운터를 초과
-        //   (3) success > LIMIT            — 한정수량 초과 성공
+        // 초과발급 증거: persisted>LIMIT / persisted>issuedCount / success>LIMIT 중 하나라도 성립.
         boolean overIssued = persisted > LIMIT || persisted > issuedCount || success.get() > LIMIT;
         assertThat(overIssued)
                 .as("baseline 초과발급 — persisted(%d)>limit(%d) 또는 persisted>issuedCount(%d) 또는 success(%d)>limit",
@@ -246,7 +237,7 @@ class CouponIssuanceConcurrencyTest {
         return memberRepository.saveAll(members).stream().map(Member::getId).toList();
     }
 
-    /** 측정 로그 — 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 한 줄. */
+    /** 정확성 카운트 + 처리량(elapsedMs·TPS·p95) 측정 로그. */
     private void logMeasurement(String label, AtomicInteger success, AtomicInteger soldOut, AtomicInteger other,
                                 int issuedCount, long persisted, LoadResult result) {
         log.info("[#93 {}] success={}, soldOut={}, other={}, issuedCount={}, persisted={} (limit={})"

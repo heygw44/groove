@@ -97,7 +97,6 @@ public class Album extends BaseTimeEntity {
         this.description = description;
     }
 
-    /** 정적 팩토리. */
     public static Album create(String title, Artist artist, Genre genre, Label label,
                                short releaseYear, AlbumFormat format, long price, int stock,
                                AlbumStatus status, boolean limited, String coverImageUrl, String description) {
@@ -140,7 +139,6 @@ public class Album extends BaseTimeEntity {
         return title;
     }
 
-    /** artist.name 의 비정규화 복제본 (FULLTEXT 검색 전용, API 미노출). */
     public String getArtistName() {
         return artistName;
     }

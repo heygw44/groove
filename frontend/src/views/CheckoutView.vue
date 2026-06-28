@@ -71,7 +71,7 @@ function lineFromAlbum(a, quantity) {
 
 // 품절·판매중지 또는 일시 조회 실패 항목이 있으면 주문 차단
 const hasUnavailableLine = computed(() => lines.value.some((l) => !l.available))
-// 안내 메시지 분기 — 실제 품절·판매중지 vs 네트워크/5xx 일시 실패 구분
+// 안내 메시지 분기: 실제 품절·판매중지 vs 네트워크/5xx 일시 실패 구분
 const hasRealUnavailableLine = computed(() =>
   lines.value.some((l) => !l.available && l.unavailableReason !== 'temporary'),
 )
@@ -155,7 +155,7 @@ function couponLabel(c) {
   return `${c.name} (${couponDiscountLabel(c)})`
 }
 
-// BaseSelect 옵션 — '쿠폰 미적용' + 보유 쿠폰(최소주문금액 미달은 disabled)
+// BaseSelect 옵션: '쿠폰 미적용' + 보유 쿠폰(최소주문금액 미달은 disabled)
 const couponOptions = computed(() => [
   { value: '', label: '쿠폰 미적용' },
   ...coupons.value.map((c) => ({

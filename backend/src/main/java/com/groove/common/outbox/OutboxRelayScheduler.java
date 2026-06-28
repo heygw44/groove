@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  *
  * 영구 실패(poison) 격리: 핸들러 실패(예외/미등록) 시 attempt_count 를 증가시키고, 릴레이 조회는 attempt_count <
  * max-attempts 인 미발행 행만 대상으로 한다. 임계값을 채운 이벤트는 DLQ(격리)로 디스패치되지 않아 정상 슬롯을
- * 점유하지 않는다(#268). markPublished 실패는 카운터를 증가시키지 않는다(멱등 재전달).
+ * 점유하지 않는다. markPublished 실패는 카운터를 증가시키지 않는다(멱등 재전달).
  *
  * 주기/초기 지연=groove.outbox.relay.{interval,initial-delay}, 처리 상한=.batch-size, 재시도 상한=.max-attempts.
  */
@@ -84,7 +84,7 @@ public class OutboxRelayScheduler {
         OutboxEventHandler handler = handlers.get(event.getEventType());
         if (handler == null) {
             // 핸들러 미등록도 영구 실패로 간주해 카운터를 올린다 — 모든 핸들러는 부팅 시 생성자로 주입되므로
-            // 런타임 미등록은 구조적·영구 실패다. 격리하지 않으면 attempt_count 가 0 에 머물러 슬롯을 영구 점유한다(#268).
+            // 런타임 미등록은 구조적·영구 실패다. 격리하지 않으면 attempt_count 가 0 에 머물러 슬롯을 영구 점유한다.
             recordFailure(event, "핸들러 없음", null);
             return;
         }
@@ -119,7 +119,7 @@ public class OutboxRelayScheduler {
         if (attempts >= maxAttempts) {
             log.error("아웃박스 릴레이 DLQ 격리: eventType={}, id={}, attempts={}/{}, 사유={} — 재시도 중단(수동 조치 필요)",
                     event.getEventType(), event.getId(), attempts, maxAttempts, reason, cause);
-            // 릴레이 조회가 격리 행을 제외하므로 이 호출은 이벤트당 정확히 1회(상한 도달 전이) 실행된다 → 메트릭 중복 없음(#323).
+            // 릴레이 조회가 격리 행을 제외하므로 이 호출은 이벤트당 정확히 1회(상한 도달 전이) 실행된다 → 메트릭 중복 없음.
             // 에러 로그 뒤에 두고 실패를 삼켜, 메트릭 장애가 격리 로그 누락이나 배치(건별 격리)를 깨지 않게 한다.
             try {
                 metrics.recordQuarantined(event.getEventType());

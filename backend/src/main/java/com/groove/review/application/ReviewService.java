@@ -29,21 +29,9 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 리뷰 작성/조회/삭제 트랜잭션 경계.
- *
- * 작성(create) 검증 순서:
- * - 주문 존재 — 없으면 OrderNotFoundException (404)
- * - 본인 주문 — order.memberId == 인증 memberId 아니면 ReviewNotOwnedException (403)
- * - 배송 완료 — order.status ∈ {DELIVERED, COMPLETED} 아니면 ReviewOrderNotDeliveredException (422)
- * - 항목 포함 — order.items 중 albumId 가 없으면 AlbumNotInOrderException (422)
- * - 중복 없음 — (orderId, albumId) 리뷰가 이미 있으면 DuplicateReviewException (409). saveAndFlush 의
- *   uk_review_order_album 위반(DataIntegrityViolationException)도 같은 예외로 흡수
- * - 회원 활성 — 탈퇴(soft delete)·삭제된 회원이면 MemberNotFoundException (404)
- *
- * 조회(listByAlbum): 작성자명을 마스킹해 응답. 앨범이 없어도 빈 페이지를 돌려준다.
- *
- * 삭제(delete): 리뷰 미존재 시 ReviewNotFoundException (404), 작성자 ≠ 인증 회원이면 ReviewNotOwnedException (403),
- * 회원 활성 — 탈퇴(soft delete)된 회원이면 MemberNotFoundException (404). 탈퇴 후 만료 전 access 토큰 잔존 방어(#269).
+ * 리뷰 작성/조회/삭제 트랜잭션 경계. 작성 검증 순서: 주문 존재 → 본인 주문 → 배송 완료(DELIVERED 이상) →
+ * 항목 포함 → 중복 없음(uk_review_order_album 위반도 DuplicateReviewException 으로 흡수) → 회원 활성.
+ * 조회는 작성자명 마스킹. 삭제/작성 모두 탈퇴 회원을 거부해 탈퇴 후 만료 전 access 토큰 잔존을 방어한다.
  */
 @Service
 public class ReviewService {
@@ -120,7 +108,7 @@ public class ReviewService {
         if (!Objects.equals(review.getMember().getId(), memberId)) {
             throw new ReviewNotOwnedException();
         }
-        // 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 접근하는 것을 차단(#269).
+        // 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 접근하는 것을 차단.
         // findWithMemberById 가 member 를 fetch join 하므로 추가 조회 없이 로드된 엔티티로 검사한다.
         if (review.getMember().isWithdrawn()) {
             throw new MemberNotFoundException();

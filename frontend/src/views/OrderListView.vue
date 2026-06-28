@@ -15,7 +15,7 @@ import BaseSpinner from '@/components/base/BaseSpinner.vue'
 
 const route = useRoute()
 const { patchQuery } = useRouteQuery()
-// 토스 결제 취소 콜백(#308): 서버가 orderId 없이 /orders?payment=fail 로 302 할 때 회원에게 결과를 안내하고 URL 을 정리한다.
+// 토스 결제 취소 콜백: 서버가 orderId 없이 /orders?payment=fail 로 302 할 때 회원에게 결과를 안내하고 URL 을 정리한다.
 const { paymentResult } = usePaymentResultBanner()
 
 const page = ref(null)
@@ -56,7 +56,7 @@ function onStatusChange(value) {
   patchQuery({ status: value, page: undefined })
 }
 
-// 조회에 영향 주는 status·page 만 감시 — payment 등 무관 쿼리 정리(콜백 후 usePaymentResultBanner)로
+// 조회에 영향 주는 status·page 만 감시. payment 등 무관 쿼리 정리(콜백 후 usePaymentResultBanner)에
 // 중복 조회되지 않도록 소스별(getter 배열) 값 비교를 쓴다.
 watch(
   [() => firstStr(route.query.status), () => pageParam(route.query)],

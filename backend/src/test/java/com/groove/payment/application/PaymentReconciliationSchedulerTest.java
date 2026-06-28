@@ -242,7 +242,7 @@ class PaymentReconciliationSchedulerTest {
         assertThatCode(() -> scheduler.reconcilePendingPayments()).doesNotThrowAnyException();
 
         verify(settlementService).settle("mock-tx-1", PaymentStatus.PAID, null);
-        // 핵심: PAID 확정 결제가 settle 일시 오류로 FAILED 로 뒤집히면 안 된다(#299 리뷰).
+        // 핵심: PAID 확정 결제가 settle 일시 오류로 FAILED 로 뒤집히면 안 된다.
         verify(settlementService, never()).settle(eq("mock-tx-1"), eq(PaymentStatus.FAILED), any());
     }
 

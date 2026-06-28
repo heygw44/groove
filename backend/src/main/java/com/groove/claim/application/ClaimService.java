@@ -57,17 +57,14 @@ import java.util.stream.Collectors;
 /**
  * 반품(claim) 접수/승인/거부/환불 트랜잭션 경계.
  *
- * 접수(request) 검증 순서: 주문 존재(404) → 본인 주문(404) → 회원 활성(404, 탈퇴 토큰 잔존 방어 #269) → 반품 자격
- * {DELIVERED, COMPLETED}(422) → 반품 기한(422) → 항목 1개 이상(422) → 항목 소속·잔여 수량 가드(422 / 409).
- * 환불(completeRefund): Payment FOR UPDATE 락 → 멱등(INSPECTING 아니면 no-op) → PG refund(claim 별 멱등 키)
- * → Payment 부분/전액 환불 누적 → 검수 통과 항목 재입고 → 전량 반품 완성 시 쿠폰 복원 + 주문 반품 마커.
+ * 접수 검증 순서가 비자명: 주문 존재 → 본인 주문 → 회원 활성(탈퇴 토큰 방어) → 반품 자격 → 반품 기한 → 항목 가드.
+ * 환불은 Payment FOR UPDATE + INSPECTING 멱등 + claim 별 멱등 키로 다중 부분 반품을 직렬화한다.
  */
 @Service
 public class ClaimService {
 
     private static final Logger log = LoggerFactory.getLogger(ClaimService.class);
 
-    /** 부분 취소(CANCEL) 자격 주문 상태 — PAID/PREPARING. */
     private static final Set<OrderStatus> CANCELLABLE_ORDER_STATUSES =
             EnumSet.of(OrderStatus.PAID, OrderStatus.PREPARING);
 
@@ -80,7 +77,7 @@ public class ClaimService {
     private final AlbumRepository albumRepository;
     private final MemberRepository memberRepository;
     private final Clock clock;
-    /** 반품 가능 기한 — 배송완료 anchor 로부터 이 기간 내에만 접수 허용. 기본 P7D(7일), groove.claim.return-window 로 설정. */
+    /** 배송완료 anchor 로부터 이 기간 내에만 반품 접수 허용. */
     private final Duration returnWindow;
 
     public ClaimService(ClaimRepository claimRepository,
@@ -121,7 +118,7 @@ public class ClaimService {
         return saved;
     }
 
-    /** 주문 행을 PESSIMISTIC_WRITE 로 잠가 동시 접수를 직렬화하고 본인 주문임을 확인 — 부재·미소유(memberId null/불일치)면 404. */
+    /** 주문 행을 PESSIMISTIC_WRITE 로 잠가 동시 접수를 직렬화하고 본인 주문임을 확인. */
     private Order loadOwnedOrderForUpdate(ClaimCreateCommand command) {
         Order order = orderRepository.findByOrderNumberForUpdate(command.orderNumber())
                 .orElseThrow(OrderNotFoundException::new);
@@ -131,14 +128,13 @@ public class ClaimService {
         return order;
     }
 
-    /** 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 반품 접수하는 것을 차단(#269). */
+    /** 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 반품 접수하는 것을 차단. */
     private void requireActiveMember(Long memberId) {
         if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
             throw new MemberNotFoundException();
         }
     }
 
-    /** 반품 자격 — 주문이 {DELIVERED, COMPLETED} 가 아니면 422. */
     private void requireReturnableStatus(Order order) {
         if (!OrderStatus.DELIVERED_OR_COMPLETED.contains(order.getStatus())) {
             throw new OrderNotReturnableException(order.getStatus());
@@ -146,11 +142,8 @@ public class ClaimService {
     }
 
     /**
-     * 반품 기한 가드. anchor = 결정적 배송완료 시각. order.deliveredAt(DELIVERED 전이 시 기록)을 1차 기준으로
-     * 삼는다 — 정상 파이프라인·관리자 강제 전이·시드가 모두 Order.changeStatus 를 거치므로 배송 행 유무와
-     * 무관하게 채워진다. delivered_at 컬럼(V33) 도입 전 배송완료된 레거시 주문만 shipping.deliveredAt 로
-     * 보강하고, 그조차 없으면(배송 행 없는 과거 강제 전이) 결정 불가로 거부한다. updatedAt 폴백(비결정적)은
-     * 쓰지 않는다. anchor + returnWindow 를 넘기면 422.
+     * 기한 anchor 는 결정적 배송완료 시각이어야 한다. order.deliveredAt(changeStatus 가 항상 기록)을 1차로,
+     * delivered_at 컬럼 도입 전 레거시만 shipping.deliveredAt 로 보강한다. 둘 다 없으면 거부(updatedAt 폴백은 비결정적이라 배제).
      */
     private void requireWithinReturnWindow(Order order) {
         Instant deliveredAt = Optional.ofNullable(order.getDeliveredAt())
@@ -161,7 +154,6 @@ public class ClaimService {
         }
     }
 
-    /** 항목 1개 이상 — 비면 422. */
     private void requireNonEmptyLines(ClaimCreateCommand command) {
         if (command.lines() == null || command.lines().isEmpty()) {
             throw new EmptyClaimException();
@@ -171,13 +163,8 @@ public class ClaimService {
     /**
      * 관리자 발송 전 부분 취소 — CANCEL 클레임을 즉시 환불 확정한다(회수·검수 없음).
      *
-     * 흐름: 주문 FOR UPDATE → 자격(PAID/PREPARING) → 항목 소속·취소가능 수량 가드 → 결제 FOR
-     * UPDATE(PAID/PARTIALLY_REFUNDED) → CANCEL 클레임 저장 → 쿠폰 인지 환불액 산출 → (양수면) PG 환불 + 결제
-     * 부분/전액 누적 → 취소 수량 재입고 → 쿠폰 무효 시 복원 → 전량 취소면 주문 CANCELLED + 발송 전 배송 취소 →
-     * 클레임 REFUNDED 확정.
-     *
      * 쿠폰 정책: 부분취소 후 잔여 정가 ≥ 최소주문금액이면 할인 안분(쿠폰 USED 유지), 미만이면 쿠폰을 무효화해 적용
-     * 할인분을 환불에서 제외하고 쿠폰을 복원한다. 적용 할인이 취소 품목 정가를 초과하면 무효화하지 않고 안분으로 폴백한다.
+     * 할인분을 환불에서 제외하고 복원한다. 단 적용 할인이 취소 품목 정가를 초과하면 무효화 않고 안분으로 폴백.
      */
     @Transactional
     public Claim cancelPartially(OrderPartialCancelCommand command) {
@@ -191,7 +178,7 @@ public class ClaimService {
             throw new EmptyClaimException();
         }
 
-        // 항목 소속·취소가능 수량 검증을 결제 락 전에 먼저.
+        // 항목 검증을 결제 락 획득 전에 먼저.
         Map<Long, Integer> requested = mergeRequestedQuantities(command.lines());
         Map<Long, Integer> alreadyClaimed = claimedQuantitiesByOrderItem(order.getId());
         Claim claim = Claim.requestCancellation(order, command.reason());
@@ -205,12 +192,11 @@ public class ClaimService {
         }
         Claim saved = claimRepository.save(claim);
 
-        // 전량 취소 = 모든 OrderItem 의 (기클레임 + 이번 요청) 수량이 주문 수량에 도달.
+        // 전량 취소 = 모든 항목의 (기클레임 + 이번 요청) 수량이 주문 수량에 도달.
         boolean fullyCancelled = order.getItems().stream().allMatch(item ->
                 alreadyClaimed.getOrDefault(item.getId(), 0) + requested.getOrDefault(item.getId(), 0)
                         >= item.getQuantity());
 
-        // 쿠폰 인지 환불액 (allowCouponVoid=true).
         OptionalLong couponMinOrder = couponApplicationService.appliedCouponMinOrderAmount(order.getId());
         long cumCancelledGross = couponMinOrder.isPresent()
                 ? refundedGrossSoFar(order.getId()) + saved.getGross() : saved.getGross();
@@ -225,7 +211,6 @@ public class ClaimService {
             couponApplicationService.restoreForOrder(order.getId());
         }
         if (fullyCancelled) {
-            // 전량 취소 — 주문 CANCELLED + 발송 전 배송 취소.
             order.changeStatus(OrderStatus.CANCELLED, command.reason(), now);
             shippingService.cancelForOrder(order.getId());
         }
@@ -236,7 +221,6 @@ public class ClaimService {
         return saved;
     }
 
-    /** 관리자 승인 — REQUESTED → APPROVED. */
     @Transactional
     public Claim approve(Long claimId) {
         Claim claim = claimRepository.findByIdForUpdate(claimId).orElseThrow(ClaimNotFoundException::new);
@@ -245,17 +229,16 @@ public class ClaimService {
         return claim;
     }
 
-    /** 관리자 거부 — REQUESTED 또는 INSPECTING → REJECTED. 재입고·환불 없음. */
+    /** 거부는 재입고·환불 없음. FOR UPDATE 로 동시 completeRefund 와 직렬화. */
     @Transactional
     public Claim reject(Long claimId, String reason) {
-        // 반품 행 FOR UPDATE 로 동시 completeRefund 와 직렬화.
         Claim claim = claimRepository.findByIdForUpdate(claimId).orElseThrow(ClaimNotFoundException::new);
         claim.reject(reason, clock.instant());
         log.info("반품 거부 — claimId={}, status(before)={}", claimId, claim.getStatus());
         return claim;
     }
 
-    /** 스케줄러 위임 — APPROVED 인 반품을 IN_TRANSIT 으로. 상태 불일치면 무시. */
+    /** 스케줄러 위임. 상태 불일치면 무시. */
     @Transactional
     public void advanceToInTransit(Long claimId) {
         claimRepository.findByIdForUpdate(claimId).ifPresent(claim -> {
@@ -265,7 +248,7 @@ public class ClaimService {
         });
     }
 
-    /** 스케줄러 위임 — IN_TRANSIT 인 반품을 INSPECTING 으로. 상태 불일치면 무시. */
+    /** 스케줄러 위임. 상태 불일치면 무시. */
     @Transactional
     public void advanceToInspecting(Long claimId) {
         claimRepository.findByIdForUpdate(claimId).ifPresent(claim -> {
@@ -276,10 +259,8 @@ public class ClaimService {
     }
 
     /**
-     * 검수 통과 환불 (스케줄러 자동통과 또는 관리자 수동 complete) — INSPECTING → REFUNDED.
-     *
-     * INSPECTING 이 아니면 부수효과 없이 현재 상태를 반환한다(멱등). 부분 반품이면 결제는 PARTIALLY_REFUNDED,
-     * 누적 환불액이 결제 전액에 도달하면 REFUNDED 가 되고 그때만 쿠폰 복원 + 주문 반품 마커를 찍는다.
+     * 검수 통과 환불 (스케줄러 자동통과 또는 관리자 수동). INSPECTING 이 아니면 no-op 으로 멱등.
+     * 누적 환불액이 결제 전액에 도달할 때만 쿠폰 복원 + 주문 반품 마커.
      */
     @Transactional
     public Claim completeRefund(Long claimId) {
@@ -306,11 +287,9 @@ public class ClaimService {
                 claim.getGross(), cumReturnedGross, payment.getRefundedAmount(), couponMinOrder, false).amount();
         Instant now = clock.instant();
         settleClaimRefund(payment, claim, refundAmount, now);
-        // 검수 통과 항목 재입고.
         restoreClaimStock(claim);
         boolean fullyReturned = payment.getStatus() == PaymentStatus.REFUNDED;
         if (fullyReturned) {
-            // 전량 반품 — 쿠폰 복원 + 주문 전량 반품 마커.
             couponApplicationService.restoreForOrder(orderId);
             order.markReturned(now);
         }
@@ -346,14 +325,12 @@ public class ClaimService {
     }
 
     /**
-     * 비례 배분 환불 증분 = 이번 누적 목표 − 기환불액. 누적 반품 정가(cumGrossIncl)가 총정가(totalGross)에서
-     * 차지하는 비율만큼의 실결제액(payable)을 목표로 잡고, 기환불액을 뺀 증분을 이번 환불액으로 한다(BigInteger 곱셈/반올림).
+     * 비례 배분 환불 증분 = 이번 누적 목표 − 기환불액. 누적 반품 정가 비율만큼의 실결제액을 목표로 잡는다(BigInteger 반올림).
      */
     static long proportionalRefund(long payable, long totalGross, long cumGrossIncl, long alreadyRefunded) {
         long remaining = payable - alreadyRefunded;
         if (remaining <= 0) {
-            // 환불 가능액 소진 — 0 반환.
-            return 0;
+            return 0; // 환불 가능액 소진
         }
         long target = totalGross == 0 ? payable
                 : BigInteger.valueOf(payable).multiply(BigInteger.valueOf(cumGrossIncl))
@@ -361,16 +338,15 @@ public class ClaimService {
                         .divide(BigInteger.valueOf(totalGross))
                         .longValueExact();
         long increment = target - alreadyRefunded;
-        // 양수면 잔여 한도로 캡, 0 이하면 최소 1원으로 전진.
+        // 0 이하면 최소 1원으로 전진(정체 방지).
         return increment > 0 ? Math.min(increment, remaining) : 1;
     }
 
     /**
-     * 환불 증분 + 쿠폰 무효 여부 — 취소(allowCouponVoid=true)·반품(false) 공용 환불 계산. 세 분기:
-     * - 쿠폰 미적용(couponMinOrder.isEmpty()) → 이번 클레임 자기 정가(thisClaimGross)만 환불(잔여 한도 캡).
-     * - 취소 무효(allowCouponVoid 이고 부분취소 후 잔여 정가 < 최소주문금액) → 누적 환불 목표 = cumGrossIncl − discount,
-     *   호출 측이 쿠폰 복원. 증분 0 이하면 비례로 폴백.
-     * - 그 외 → proportionalRefund 비례 배분.
+     * 환불 증분 + 쿠폰 무효 여부 (취소/반품 공용). 세 분기:
+     * - 쿠폰 미적용 → 이번 클레임 정가만 환불.
+     * - 취소 무효(잔여 정가 < 최소주문금액) → 누적 목표 = cumGrossIncl − discount, 호출 측이 복원. 증분 0 이하면 비례 폴백.
+     * - 그 외 → 비례 배분.
      */
     static RefundComputation refundIncrement(long payable, long totalGross, long thisClaimGross,
                                              long cumGrossIncl, long alreadyRefunded,
@@ -388,23 +364,22 @@ public class ClaimService {
             if (increment > 0) {
                 return new RefundComputation(Math.min(increment, remaining), true);
             }
-            // 증분 0 이하 — 비례 폴백.
+            // 증분 0 이하 → 비례 폴백.
         }
         return new RefundComputation(proportionalRefund(payable, totalGross, cumGrossIncl, alreadyRefunded), false);
     }
 
-    /** 환불 산출 결과 — 이번 환불 증분과 쿠폰 무효(복원) 여부. */
     record RefundComputation(long amount, boolean voidCoupon) {
     }
 
     private void callGatewayRefund(Payment payment, Claim claim, long amount) {
-        // claim 별 결정적 멱등 키.
+        // claim 별 결정적 멱등 키로 PG 재시도 중복 환불 방지.
         RefundRequest request = new RefundRequest(
                 payment.getPgTransactionId(), amount, claim.getReason(), payment.refundIdempotencyKey(claim.getId()));
         GatewayRefunds.refund(paymentGateway, request);
     }
 
-    /** PG 환불 호출 + 결제 부분/전액 누적 — 환불액이 양수일 때만 (취소/반품 공용). */
+    /** 환불액이 양수일 때만 PG 호출 + 결제 누적 (취소/반품 공용). */
     private void settleClaimRefund(Payment payment, Claim claim, long amount, Instant now) {
         if (amount > 0) {
             callGatewayRefund(payment, claim, amount);
@@ -412,14 +387,13 @@ public class ClaimService {
         }
     }
 
-    /** 클레임 항목 수량을 재입고 (취소/반품 공용) — 원자적 가산 UPDATE(StockRestorer, albumId 오름차순). */
+    /** 원자적 가산 UPDATE 로 재입고 (취소/반품 공용). */
     private void restoreClaimStock(Claim claim) {
         StockRestorer.restore(albumRepository, claim.getItems().stream()
                 .collect(Collectors.groupingBy(item -> item.getOrderItem().getAlbum().getId(),
                         Collectors.summingInt(ClaimItem::getQuantity))));
     }
 
-    /** order_item_id → OrderItem 인덱스. */
     private static Map<Long, OrderItem> orderItemsById(Order order) {
         Map<Long, OrderItem> map = new HashMap<>();
         for (OrderItem item : order.getItems()) {
@@ -428,7 +402,6 @@ public class ClaimService {
         return map;
     }
 
-    /** 요청 라인을 orderItemId 별 수량으로 합산. */
     private static Map<Long, Integer> mergeRequestedQuantities(List<ClaimCreateCommand.Line> lines) {
         Map<Long, Integer> requested = new LinkedHashMap<>();
         for (ClaimCreateCommand.Line line : lines) {
@@ -437,10 +410,7 @@ public class ClaimService {
         return requested;
     }
 
-    /**
-     * 요청 항목을 검증해 claim 에 추가한다 (취소/반품 접수 공용) — 주문 소속(없으면 422)과 잔여 초과(409)를 가드한 뒤
-     * ClaimItem 으로 붙인다.
-     */
+    /** 주문 소속·잔여 초과를 가드한 뒤 ClaimItem 으로 추가 (취소/반품 공용). */
     private void addValidatedItems(Claim claim, Map<Long, OrderItem> orderItems,
                                    Map<Long, Integer> requested, Map<Long, Integer> alreadyClaimed) {
         for (Map.Entry<Long, Integer> entry : requested.entrySet()) {
@@ -458,9 +428,7 @@ public class ClaimService {
         }
     }
 
-    /**
-     * 한 주문에서 OrderItem 별 이미 클레임된 수량 — 거부(REJECTED)를 제외한 모든 클레임의 항목 수량 합.
-     */
+    /** OrderItem 별 기클레임 수량 — 거부(REJECTED)는 제외해 재요청을 허용. */
     private Map<Long, Integer> claimedQuantitiesByOrderItem(Long orderId) {
         Map<Long, Integer> map = new HashMap<>();
         for (Claim claim : claimRepository.findByOrder_IdAndStatusNot(orderId, ClaimStatus.REJECTED)) {

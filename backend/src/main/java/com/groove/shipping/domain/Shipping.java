@@ -105,14 +105,12 @@ public class Shipping extends BaseTimeEntity {
         return new Shipping(order, trackingNumber, shippingInfo);
     }
 
-    /** 발송 처리 — SHIPPED 로 전이하고 shippedAt 을 주입된 now 로 기록한다. */
     public void markShipped(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
         transitionTo(ShippingStatus.SHIPPED);
         this.shippedAt = now;
     }
 
-    /** 배송 완료 처리 — DELIVERED 로 전이하고 deliveredAt 을 주입된 now 로 기록한다. */
     public void markDelivered(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
         transitionTo(ShippingStatus.DELIVERED);

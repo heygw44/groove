@@ -6,17 +6,7 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * 주문 상태. 전이 규칙은 canTransitionTo 단일 메서드에서 판정한다.
- *
- * 합법 전이 (그 외는 모두 불법):
- *   PENDING        → PAID, PAYMENT_FAILED, CANCELLED
- *   PAID           → PREPARING, CANCELLED
- *   PREPARING      → SHIPPED, CANCELLED
- *   SHIPPED        → DELIVERED
- *   DELIVERED      → COMPLETED
- *   COMPLETED / CANCELLED / PAYMENT_FAILED → (종착)
- */
+/** 주문 상태. 합법 전이는 TRANSITIONS 가 정의하고 그 외는 모두 불법. */
 public enum OrderStatus {
     PENDING,
     PAID,
@@ -27,7 +17,6 @@ public enum OrderStatus {
     CANCELLED,
     PAYMENT_FAILED;
 
-    /** "배송완료 이상" 주문 상태 집합 — DELIVERED 또는 COMPLETED. */
     public static final Set<OrderStatus> DELIVERED_OR_COMPLETED = Collections.unmodifiableSet(
             EnumSet.of(DELIVERED, COMPLETED));
 

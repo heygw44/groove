@@ -24,19 +24,19 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
 
     /**
      * 릴레이 대상(미발행 + attempt_count < attemptCount)을 id 오름차순(FIFO)으로 최대 limit 개 조회한다.
-     * attempt_count 가 임계값에 도달한 DLQ(격리) 행은 제외해 정상 이벤트 슬롯을 점유하지 않게 한다 (#268).
+     * attempt_count 가 임계값에 도달한 DLQ(격리) 행은 제외해 정상 이벤트 슬롯을 점유하지 않게 한다.
      */
     List<OutboxEvent> findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(int attemptCount, Limit limit);
 
     /**
      * DLQ(격리) 건수 — 미발행 + attempt_count >= attemptCount(=max-attempts) 인 행 수를 센다.
-     * 격리 상태를 쿼리 가능한 형태로 노출하는 조건이며(#323), 메트릭 Gauge 의 backing 으로 쓴다.
+     * 격리 상태를 쿼리 가능한 형태로 노출하는 조건이며, 메트릭 Gauge 의 backing 으로 쓴다.
      * 릴레이 대상 조회와 대칭(LessThan 의 여집합)이고 idx_outbox_unpublished 범위 스캔으로 처리된다.
      */
     long countByPublishedAtIsNullAndAttemptCountGreaterThanEqual(int attemptCount);
 
     /**
-     * DLQ(격리) 행을 id 오름차순(FIFO)으로 최대 limit 개 조회한다 — 운영 진단용(#323).
+     * DLQ(격리) 행을 id 오름차순(FIFO)으로 최대 limit 개 조회한다 — 운영 진단용.
      * 미발행 + attempt_count >= attemptCount(=max-attempts) 인, 수동 조치가 필요한 poison 행이다.
      */
     List<OutboxEvent> findByPublishedAtIsNullAndAttemptCountGreaterThanEqualOrderByIdAsc(int attemptCount, Limit limit);

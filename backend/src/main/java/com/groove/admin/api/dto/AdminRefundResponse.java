@@ -7,9 +7,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/**
- * 관리자 환불 응답.
- */
 public record AdminRefundResponse(
         @Schema(description = "주문 번호 (ORD-YYYYMMDD-XXXXXX)", example = "ORD-20260606-A1B2C3")
         String orderNumber,

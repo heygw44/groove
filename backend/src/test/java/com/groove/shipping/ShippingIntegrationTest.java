@@ -35,15 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 배송 E2E 통합 테스트 — Testcontainers MySQL 위에서 실제 이벤트/트랜잭션/스케줄러를 돌린다.
- *
- * <ul>
- *   <li>OrderPaidEvent 가 아웃박스에 기록·커밋되면 릴레이(OutboxRelayScheduler)가
- *       OrderPaidOutboxHandler 로 디스패치해 PREPARING 배송을 만들고 운송장을 발급한다.</li>
- *   <li>같은 이벤트가 다시 발행돼도 배송은 1건.</li>
- *   <li>자동 진행 스케줄러가 PREPARING → SHIPPED → DELIVERED 로 한 단계씩 민다.</li>
- *   <li>GET /api/v1/shippings/{trackingNumber} 가 배송을 조회하고, 미존재/형식 위반은 404/400.</li>
- * </ul>
+ * 배송 E2E 통합 테스트 (Testcontainers MySQL). OrderPaidEvent 가 아웃박스에 커밋되면 릴레이가 PREPARING
+ * 배송·운송장을 발급하고(재발행돼도 1건), 자동 진행 스케줄러가 PREPARING→SHIPPED→DELIVERED 로 민다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -90,8 +83,8 @@ class ShippingIntegrationTest {
     }
 
     /**
-     * 결제 콜백을 재현한다 — 같은 트랜잭션에서 주문을 PAID 로 전이시키고 OrderPaidEvent 를 아웃박스에 기록한 뒤
-     * 릴레이를 돌려 컨슈머(OrderPaidOutboxHandler)에 디스패치한다. 이미 PENDING 이 아니면 전이를 건너뛴다.
+     * 결제 콜백 재현: 같은 트랜잭션에서 주문을 PAID 로 전이하고 OrderPaidEvent 를 아웃박스에 기록한 뒤
+     * 릴레이로 컨슈머에 디스패치한다. 이미 PENDING 이 아니면 전이를 건너뛴다.
      */
     private void publishOrderPaid(Order order) {
         tx.executeWithoutResult(s -> {
@@ -110,10 +103,7 @@ class ShippingIntegrationTest {
         return orderRepository.findById(orderId).orElseThrow().getStatus();
     }
 
-    /**
-     * 배송이 없는 "고아 주문"을 재현한다 — 이벤트를 발행하지 않고 주문만 PAID 로 전이시켜 paid_at 을 찍는다.
-     * reconciliation 의 보충 대상이 된다.
-     */
+    /** 배송 없는 고아 주문 재현: 이벤트 없이 주문만 PAID 로 전이(reconciliation 보충 대상). */
     private void markPaidWithoutEvent(Order order) {
         tx.executeWithoutResult(s -> {
             Order managed = orderRepository.findById(order.getId()).orElseThrow();
@@ -136,10 +126,10 @@ class ShippingIntegrationTest {
         assertThat(shipping.getRecipientName()).isEqualTo("김철수");
         assertThat(shipping.getZipCode()).isEqualTo("06234");
         assertThat(shipping.isSafePackagingRequested()).isFalse();
-        // 배송 생성에 맞춰 주문도 PREPARING 으로 락스텝 전진
+        // 배송 생성에 맞춰 주문도 PREPARING 으로 락스텝 전진.
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
 
-        // 같은 이벤트 재전달 → 여전히 1건, 주문도 PREPARING 유지
+        // 같은 이벤트 재전달해도 1건 유지.
         publishOrderPaid(order);
         assertThat(shippingRepository.findAll()).hasSize(1);
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
@@ -149,8 +139,7 @@ class ShippingIntegrationTest {
     @DisplayName("reconciliation — PAID 인데 배송이 없는 고아 주문을 보충 생성하고 PREPARING 으로 전진, 재실행은 무해 (이슈 #169)")
     void reconciliation_provisionsOrphanedPaidOrder() {
         Order order = persistGuestOrder();
-        // PAID 인데 배송 없음
-        markPaidWithoutEvent(order);
+        markPaidWithoutEvent(order); // PAID 인데 배송 없음
         assertThat(shippingRepository.findAll()).isEmpty();
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PAID);
 
@@ -161,10 +150,9 @@ class ShippingIntegrationTest {
         assertThat(shipping.getStatus()).isEqualTo(ShippingStatus.PREPARING);
         assertThat(shipping.getTrackingNumber()).isNotBlank();
         assertThat(shipping.getOrder().getId()).isEqualTo(order.getId());
-        // 보충 생성에 맞춰 주문도 PREPARING 으로 락스텝 전진
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
 
-        // 재실행해도 새로 만들지 않는다 (멱등)
+        // 재실행해도 새로 만들지 않는다(멱등).
         reconciliationScheduler.reconcileOrphanedOrders();
         assertThat(shippingRepository.findAll()).hasSize(1);
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
@@ -176,7 +164,6 @@ class ShippingIntegrationTest {
         Order order = persistGuestOrder();
         publishOrderPaid(order);
         Long shippingId = shippingRepository.findAll().get(0).getId();
-        // 배송·주문 모두 PREPARING
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.PREPARING);
 
         progressScheduler.progressShipments();
@@ -190,7 +177,6 @@ class ShippingIntegrationTest {
         Shipping afterSecond = shippingRepository.findById(shippingId).orElseThrow();
         assertThat(afterSecond.getStatus()).isEqualTo(ShippingStatus.DELIVERED);
         assertThat(afterSecond.getDeliveredAt()).isNotNull();
-        // 배송 완료 → 주문도 DELIVERED 에 도달
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.DELIVERED);
 
         progressScheduler.progressShipments();
@@ -209,7 +195,7 @@ class ShippingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trackingNumber").value(tracking))
                 .andExpect(jsonPath("$.status").value(ShippingStatus.PREPARING.name()))
-                // 공개 응답은 PII 부분 마스킹 (#322): 저장값은 "김철수"/전체 주소지만 노출은 마스킹된다.
+                // 공개 응답은 PII 마스킹: 저장값은 "김철수"/전체 주소지만 노출은 마스킹.
                 .andExpect(jsonPath("$.recipientName").value("김*수"))
                 .andExpect(jsonPath("$.address").value("서울시 강남구 ***"))
                 .andExpect(jsonPath("$.safePackagingRequested").value(false))
@@ -247,12 +233,12 @@ class ShippingIntegrationTest {
         publishOrderPaid(order); // PREPARING 배송 + 주문 PREPARING
         Long shippingId = shippingRepository.findAll().get(0).getId();
 
-        // 주문 CANCELLED + 배송 CANCELLED 동기화
+        // 주문·배송 모두 CANCELLED 로 동기화.
         cancelOrder(order);
         shippingService.cancelForOrder(order.getId());
         assertThat(shippingRepository.findById(shippingId).orElseThrow().getStatus()).isEqualTo(ShippingStatus.CANCELLED);
 
-        // 스케줄러를 여러 번 돌려도 CANCELLED 유지
+        // 여러 번 돌려도 CANCELLED 유지.
         progressScheduler.progressShipments();
         progressScheduler.progressShipments();
         progressScheduler.progressShipments();
@@ -268,13 +254,13 @@ class ShippingIntegrationTest {
         publishOrderPaid(order); // PREPARING 배송 + 주문 PREPARING
         Long shippingId = shippingRepository.findAll().get(0).getId();
 
-        // 주문만 CANCELLED, 배송은 PREPARING 유지
+        // 주문만 CANCELLED, 배송은 PREPARING 유지.
         cancelOrder(order);
 
         progressScheduler.progressShipments();
         progressScheduler.progressShipments();
 
-        // 종착 주문 가드가 advanceToShipped 를 막아 배송이 PREPARING 그대로
+        // 종착 주문 가드가 advanceToShipped 를 막아 PREPARING 그대로.
         assertThat(shippingRepository.findById(shippingId).orElseThrow().getStatus()).isEqualTo(ShippingStatus.PREPARING);
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.CANCELLED);
     }
@@ -283,7 +269,7 @@ class ShippingIntegrationTest {
     @DisplayName("이미 CANCELLED 된 주문에 OrderPaid 이벤트가 와도 배송을 만들지 않는다 (#233 프로비저닝 가드)")
     void cancelledOrder_noShippingProvisioned() {
         Order order = persistGuestOrder();
-        // 주문이 먼저 CANCELLED 된 뒤 늦게 도착한 OrderPaid 이벤트가 릴레이되는 상황
+        // 주문이 먼저 CANCELLED 된 뒤 늦게 도착한 OrderPaid 이벤트가 릴레이되는 상황.
         cancelOrder(order);
 
         tx.executeWithoutResult(s -> outboxEventPublisher.publish(OrderPaidEvent.OUTBOX_AGGREGATE_TYPE, order.getId(),
@@ -291,7 +277,7 @@ class ShippingIntegrationTest {
                 new OrderPaidEvent(order.getId(), order.getOrderNumber(), order.getMemberId(), 1L)));
         outboxRelayScheduler.relayPendingEvents();
 
-        // 프로비저닝 가드가 종착 주문에 배송을 만들지 않는다
+        // 프로비저닝 가드가 종착 주문엔 배송을 안 만든다.
         assertThat(shippingRepository.findByOrderId(order.getId())).isEmpty();
         assertThat(orderStatus(order.getId())).isEqualTo(OrderStatus.CANCELLED);
     }

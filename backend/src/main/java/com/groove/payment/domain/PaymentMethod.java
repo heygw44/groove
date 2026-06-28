@@ -1,8 +1,8 @@
 package com.groove.payment.domain;
 
 /**
- * 결제 수단. POST /payments 요청 본문의 method 로 전달되거나, 토스 confirm 응답의 실제 수단으로 보정된다.
- * 토스 위젯은 카드 외 수단도 선택 가능하므로 checkout 의 잠정 method 는 confirm 응답(TossMethodMapper)으로 보정된다.
+ * 결제 수단. 요청 본문의 method 로 전달되거나 토스 confirm 응답으로 보정된다.
+ * 토스 위젯은 카드 외 수단도 선택 가능하므로 checkout 의 잠정 method 는 confirm 응답(TossMethodMapper)으로 보정한다.
  */
 public enum PaymentMethod {
     /** 신용/체크카드 (토스 "카드"). */

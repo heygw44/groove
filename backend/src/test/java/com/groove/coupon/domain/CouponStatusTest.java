@@ -13,9 +13,8 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CouponStatus 상태 전이 매트릭스 전수 검증 (3×3 = 9 케이스).
- *
- * <p>합법 전이는 4종(ACTIVE↔SUSPENDED, 둘 다 →ENDED)이며, 매트릭스의 나머지 셀은 모두 불법이다.
+ * CouponStatus 상태 전이 매트릭스 전수 검증 (3×3 = 9 케이스). 합법 전이는 4종(ACTIVE↔SUSPENDED, 둘 다 →ENDED)
+ * 이며 나머지 셀은 모두 불법이다.
  */
 @DisplayName("CouponStatus — 전이 매트릭스 전수")
 class CouponStatusTest {

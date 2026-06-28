@@ -8,10 +8,10 @@ import { randomUuid } from '@/lib/uuid'
 const BASE_URL = '/api/v1'
 const REFRESH_URL = '/auth/refresh'
 
-// refresh 3-상태 결과 — 호출자가 logout/redirect 여부를 결정한다.
+// refresh 3-상태 결과. 호출자가 logout/redirect 여부를 결정한다.
 //  ok       : 갱신 성공(토큰 회전)
-//  invalid  : 세션 무효(401·비-401 4xx, 또는 hadSession 없음) → 진짜 logout
-//  transient: 일시 장애(네트워크 status 0·5xx) → logout 보류, 나중에 재시도 허용
+//  invalid  : 세션 무효(401·비-401 4xx, hadSession 없음) → logout
+//  transient: 일시 장애(네트워크 status 0·5xx) → logout 보류, 나중에 재시도
 export const REFRESH_OK = 'ok'
 export const REFRESH_INVALID = 'invalid'
 export const REFRESH_TRANSIENT = 'transient'
@@ -19,8 +19,7 @@ export const REFRESH_TRANSIENT = 'transient'
 // 일시 장애 1회 재시도 전 대기(ms).
 const RETRY_BACKOFF_MS = 500
 
-// withCredentials: same-origin 에서 HttpOnly refresh 쿠키 송수신
-// 공통 요청 인스턴스. 응답 에러는 ApiError 로 정규화된다.
+// 공통 요청 인스턴스. withCredentials 로 HttpOnly refresh 쿠키를 주고받고, 에러는 ApiError 로 정규화한다.
 const client = axios.create({ baseURL: BASE_URL, withCredentials: true })
 
 // refresh 전용 raw 인스턴스(인터셉터 재귀 차단)
@@ -31,8 +30,7 @@ let refreshInFlight = null
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// 일시 장애 판별 — 네트워크 끊김(status 0) 또는 5xx 만 transient.
-// 그 외 응답(401 포함 4xx)은 세션/요청 자체가 거부된 것이므로 transient 아님.
+// 네트워크 끊김(status 0)과 5xx 만 일시 장애. 401 포함 4xx 는 요청 자체가 거부된 것이라 아니다.
 function isTransientStatus(status) {
   return status === 0 || status >= 500
 }
@@ -46,15 +44,13 @@ async function attemptRefresh() {
     return REFRESH_OK
   } catch (error) {
     const status = error.response ? error.response.status : 0
-    // 네트워크/5xx → 일시 장애, 401(및 비-401 4xx) → 무효
     return isTransientStatus(status) ? REFRESH_TRANSIENT : REFRESH_INVALID
   }
 }
 
 /**
- * refresh 쿠키로 1회 갱신. REFRESH_OK | REFRESH_INVALID | REFRESH_TRANSIENT 반환.
- * hadSession 없으면 invalid(복원할 세션 없음). transient 면 backoff 후 1회만 재시도.
- * in-flight 프로미스를 공유해 동시 401 의 중복 refresh(재시도 포함)를 막는다.
+ * refresh 쿠키로 1회 갱신. hadSession 없으면 복원할 세션이 없어 invalid.
+ * transient 면 backoff 후 1회만 재시도하고, in-flight 프로미스를 공유해 동시 401 의 중복 refresh 를 막는다.
  */
 export function tryRefresh() {
   if (refreshInFlight) return refreshInFlight

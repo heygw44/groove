@@ -41,9 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 쿠폰 API 통합 테스트.
- *
- * <p>Testcontainers MySQL 위 MockMvc 로 실 필터(@Idempotent 인터셉터)·서비스·DB 를 모두 거친다.
+ * 쿠폰 API 통합 테스트. Testcontainers MySQL 위 MockMvc 로 실 필터(@Idempotent 인터셉터)·서비스·DB 를 거쳐
  * 발급/조회의 HTTP 계약(상태코드·에러코드·멱등 replay·인증)을 검증한다.
  */
 @SpringBootTest

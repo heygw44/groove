@@ -11,15 +11,11 @@ import org.springframework.stereotype.Component;
 import java.util.function.Supplier;
 
 /**
- * POST /api/v1/payments/toss/webhook IP 단위 Rate Limit 정책 (#320).
- *
- * 토스 웹훅은 permitAll·회원 토큰이 없어 회원 키잉 정책({@link PaymentRateLimitPolicy})에 넣으면 토스 IP 로 몰린
- * 정상 웹훅이 회원 한도(5/분)에 throttle 된다. 그래서 분리하고 IP 키잉한다(한도는 {@link PaymentRateLimitProperties#webhook()}).
- *
- * 한도 트레이드오프: 정상 웹훅은 소수의 토스 IP 로 집계되므로 피크 수용 + 단일 IP 증폭 제한 수준(기본 분당 60).
- * 위조 paymentKey 는 TossWebhookService 로컬 선조회가 outbound 없이 무해 무시하므로, 이 율제는 그 선조회(인덱스 SELECT)
- * 폭주를 캡하는 방어심층이다. 웹훅 유실의 실질 백스톱은 폴링 리퍼(PaymentReconciliationScheduler).
- * 목 웹훅(/api/v1/payments/webhook)은 HMAC 서명이 있고 비-prod 전용이라 제외한다.
+ * POST /api/v1/payments/toss/webhook IP 단위 Rate Limit 정책.
+ * 토스 웹훅은 회원 토큰이 없어 회원 키잉 정책에 넣으면 토스 IP 로 몰린 정상 웹훅이 회원 한도(5/분)에 throttle 된다.
+ * 그래서 분리하고 IP 키잉한다(한도는 {@link PaymentRateLimitProperties#webhook()}).
+ * 위조 paymentKey 는 TossWebhookService 선조회가 outbound 없이 무시하므로, 이 율제는 그 선조회(인덱스 SELECT) 폭주를 캡하는 방어심층이다.
+ * 웹훅 유실의 실질 백스톱은 폴링 리퍼. 목 웹훅은 HMAC 서명이 있고 비-prod 전용이라 제외한다.
  */
 @Component
 public class PaymentWebhookRateLimitPolicy implements RateLimitPolicy {

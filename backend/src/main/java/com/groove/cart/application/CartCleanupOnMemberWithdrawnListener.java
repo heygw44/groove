@@ -10,9 +10,8 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * MemberWithdrawnEvent 를 AFTER_COMMIT 으로 받아 해당 회원의 cart 를 삭제하는 리스너.
- * AFTER_COMMIT 시점에는 활성 트랜잭션이 없으므로 DB 쓰기는 REQUIRES_NEW 자체 트랜잭션으로 수행한다.
- * 정리 실패 시 예외는 ERROR 로그로 흡수한다.
+ * MemberWithdrawnEvent AFTER_COMMIT 리스너 — 회원 cart 삭제.
+ * AFTER_COMMIT 엔 활성 트랜잭션이 없어 REQUIRES_NEW 로 쓴다. 정리 실패는 ERROR 로그로 흡수.
  */
 @Component
 public class CartCleanupOnMemberWithdrawnListener {

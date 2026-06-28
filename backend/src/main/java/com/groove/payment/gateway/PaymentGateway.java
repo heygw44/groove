@@ -1,9 +1,9 @@
 package com.groove.payment.gateway;
 
 /**
- * PG 연동 추상화 (Strategy 패턴). 두 승인 모델을 함께 수용한다.
- * - 비동기(request): PENDING 즉시 응답, 최종 결과는 웹훅 콜백, query 로 폴링(Mock).
- * - 동기(confirm): 위젯이 발급한 paymentKey 로 서버가 즉시 승인하고 확정 상태를 응답으로 받음(토스).
+ * PG 연동 추상화(Strategy). 두 승인 모델을 함께 수용한다.
+ * 비동기(request): PENDING 즉시 응답, 최종 결과는 웹훅 콜백, query 로 폴링(Mock).
+ * 동기(confirm): 위젯이 발급한 paymentKey 로 서버가 즉시 승인하고 확정 상태를 응답으로 받는다(토스).
  */
 public interface PaymentGateway {
 
@@ -18,7 +18,7 @@ public interface PaymentGateway {
 
     /**
      * PG 측 현재 상태 + (보고됐다면) 권위 정산금액 조회. 처리 중이면 PENDING.
-     * 정산금액은 PAID 정산 전 저장 금액과 대조해 위변조를 차단(#320). 미보고면 null 이고 호출부는 검증을 생략한다.
+     * 정산금액은 PAID 정산 전 저장 금액과 대조해 위변조를 차단한다. 미보고면 null 이고 호출부는 검증을 생략한다.
      */
     GatewayQuery query(String pgTransactionId);
 

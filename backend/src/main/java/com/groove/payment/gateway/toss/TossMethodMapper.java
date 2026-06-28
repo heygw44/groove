@@ -7,10 +7,9 @@ import org.slf4j.LoggerFactory;
 import java.text.Normalizer;
 
 /**
- * 토스 결제수단 문자열(한글) → 도메인 {@link PaymentMethod} 매퍼.
- *
- * TossStatusMapper 와 달리 미지/누락 값을 예외 대신 null 반환(보정 스킵). status 는 결제 진행 필수라 미지값을 거부하지만,
- * method 는 기록·표시용이라 새 결제수단 라벨이 추가됐다고 이미 확정된 결제를 실패시키면 안 된다. 미지값은 경고만 남기고 잠정 method 를 유지한다.
+ * 토스 결제수단 문자열(한글)을 도메인 {@link PaymentMethod} 로 매핑한다.
+ * TossStatusMapper 와 달리 미지/누락 값은 예외 대신 null 반환(보정 스킵).
+ * method 는 기록·표시용이라 새 라벨이 추가됐다고 이미 확정된 결제를 실패시키면 안 된다. 미지값은 경고만 남기고 잠정 method 를 유지한다.
  */
 final class TossMethodMapper {
 
@@ -20,8 +19,8 @@ final class TossMethodMapper {
     }
 
     /**
-     * 토스 method 문자열을 도메인 수단으로 매핑. null/공백/미지값은 null(보정 스킵).
-     * 외부 PG 문자열이라 정확 일치 전에 strip + NFC 정규화한다 — 후행 공백·NFD 분해형 한글이 섞여도 매핑이 깨지지 않게.
+     * null/공백/미지값은 null(보정 스킵).
+     * 외부 PG 문자열이라 정확 일치 전에 strip + NFC 정규화한다(후행 공백·NFD 분해형 한글이 섞여도 매핑 유지).
      */
     static PaymentMethod toPaymentMethod(String tossMethod) {
         if (tossMethod == null || tossMethod.isBlank()) {

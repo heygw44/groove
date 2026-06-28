@@ -1,9 +1,8 @@
 spring:
   application:
     name: groove
-  # 활성 프로파일은 외부에서 주입한다 (SPRING_PROFILES_ACTIVE 또는 --spring.profiles.active). 기본값 폴백 없음(이슈 #128):
-  # 미설정 시 Spring 의 'default' 프로파일만 활성 → LocalDataSeeder(@Profile("local"))가 동작하지 않아 데모 계정/시드가
-  # 운영 DB 에 유입되지 않는다. 로컬 개발은 build.gradle.kts 의 bootRun 이 local 을 자동 주입한다.
+  # 활성 프로파일은 외부에서 주입한다(SPRING_PROFILES_ACTIVE). 폴백이 없어 미설정 시 default 만 활성된다.
+  # 그러면 LocalDataSeeder(@Profile("local"))가 안 돌아 데모 시드가 운영 DB 에 유입되지 않는다. 로컬은 bootRun 이 local 을 주입한다.
 
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:groove}?characterEncoding=UTF-8&serverTimezone=UTC
@@ -32,16 +31,13 @@ spring:
   data:
     web:
       pageable:
-        # 공개 페이징 엔드포인트 보호용. ?size 가 클라이언트 요청 그대로 적용되는 것을 방지.
-        # 카탈로그 규모(아티스트 1k~3k, ERD §4.3) 기준에서 한 번에 100건이면 충분.
+        # 공개 페이징 보호. ?size 남용을 막아 한 번에 최대 100건(카탈로그 규모상 충분).
         default-page-size: 20
         max-page-size: 100
 
-  # 카탈로그 조회 캐시 (#236). Caffeine in-process 캐시 — Redis 는 #210 컷, 단일 인스턴스라 충분.
-  # 캐시 대상: albumDetail(상세 단건, key=id) / albumLandingList(공개 기본 랜딩 첫 페이지 단일 엔트리).
-  # spec: maximumSize=2000(카탈로그 ~1k~3k 커버), expireAfterWrite=60s(주문 결제·리뷰가 바꾸는 stock·평점의
-  #       staleness 백스톱 — admin 쓰기는 @CacheEvict 로 즉시 무효화), recordStats(적중률 메트릭 노출).
-  # 테스트(application-test.yaml)는 type=none 으로 끄고, 캐시 통합 테스트만 caffeine 으로 override 한다.
+  # 카탈로그 조회 캐시(Caffeine in-process, 단일 인스턴스라 Redis 불필요).
+  # 대상은 albumDetail(단건), albumLandingList(랜딩 첫 페이지). 60s TTL 은 stock·평점 staleness 백스톱이고, admin 쓰기는 @CacheEvict 로 즉시 무효화한다.
+  # 테스트는 type=none 으로 끄고 캐시 통합 테스트만 caffeine 으로 override 한다.
   cache:
     type: caffeine
     cache-names: albumDetail,albumLandingList
@@ -55,11 +51,10 @@ spring:
 server:
   port: 8080
   forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:native}
-  # 신뢰 프록시(RemoteIpValve) — 이 대역에서 온 요청만 X-Forwarded-For 를 신뢰해 getRemoteAddr() 에 실 클라이언트 IP 를
-  # 채운다(#322). Rate Limit 키(클라이언트 IP)의 정확성에 직결. 기본값은 Tomcat RemoteIpValve 의 기본 사설 대역과
-  # 동일하게 유지한다(10/8·172.16/12·192.168/16·169.254/16·127/8 + CGNAT 100.64/10 + IPv6 ::1) — 100.64/10 은
-  # AWS NLB/ALB·GCP 등 클라우드 LB 가 쓰는 대역이라 누락 시 XFF 미신뢰로 전 사용자가 LB IP 단일 버킷을 공유한다.
-  # 운영 LB 가 이 대역 밖(공인 IP)이면 SERVER_TOMCAT_INTERNAL_PROXIES 에 실제 LB CIDR 정규식을 명시한다(배포 런북 참조).
+  # 신뢰 프록시(RemoteIpValve). 이 대역에서 온 요청만 X-Forwarded-For 를 신뢰해 getRemoteAddr() 에 실 클라이언트
+  # IP 를 채운다(Rate Limit 키 정확성에 직결). 기본값은 Tomcat 기본 사설 대역 + CGNAT 100.64/10. 100.64/10 은
+  # AWS NLB/ALB·GCP LB 대역이라 누락 시 전 사용자가 LB IP 단일 버킷을 공유한다.
+  # 운영 LB 가 공인 IP 면 SERVER_TOMCAT_INTERNAL_PROXIES 에 실제 LB CIDR 정규식을 명시한다.
   tomcat:
     remoteip:
       internal-proxies: ${SERVER_TOMCAT_INTERNAL_PROXIES:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|100\.6[4-9]\.\d{1,3}\.\d{1,3}|100\.[7-9]\d\.\d{1,3}\.\d{1,3}|100\.1[0-1]\d\.\d{1,3}\.\d{1,3}|100\.12[0-7]\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|0:0:0:0:0:0:0:1|::1}
@@ -75,20 +70,16 @@ management:
   endpoints:
     web:
       exposure:
-        # 기본은 health 만 노출(최소 노출 원칙, #162). 아웃박스 DLQ(#323)·캐시(#236) 메트릭을 Prometheus 로
-        # 긁으려면 MANAGEMENT_EXPOSURE=health,prometheus 로 opt-in 한다(docker 데모 프로파일은 기본 포함, #343).
-        # /actuator/prometheus 는 SecurityConfig 의 메트릭 전용 Basic 체인(metricsScrapeSecurityFilterChain)이
-        # 보호하므로 익명 접근은 401 이고, 스크레이퍼는 scrape_config 의 basic_auth(metrics.scrape.*)로 인증한다.
+        # 기본은 health 만 노출. 메트릭 스크레이프는 MANAGEMENT_EXPOSURE=health,prometheus 로 opt-in(docker 는 기본 포함).
+        # /actuator/prometheus 는 메트릭 전용 Basic 체인이 보호하므로 익명 접근은 401, 스크레이퍼는 metrics.scrape.* 로 인증.
         include: ${MANAGEMENT_EXPOSURE:health}
   endpoint:
     health:
       show-details: never
 
-# /actuator/prometheus 스크레이프 전용 Basic 인증 자격증명 (#343). SecurityConfig 의 메트릭 전용 체인이 검증한다.
-# /actuator/prometheus 는 nginx 가 외부로 위임해 도달 가능하므로 JWT 본 체인과 분리된 Basic 으로 보호한다.
-# password 는 jwt.secret 과 동일하게 폴백 없는 env 바인딩 — 공통 설정에 공개 데모 비번을 두지 않는다(운영/스테이징이
-# 알려진 값으로 폴백하는 것을 차단). 프로파일별 데모·테스트 값은 application-{local,test}.yaml 에, docker/dev/prod 는
-# env(.env)로 주입한다. prod 추가 방어는 MetricsScrapeSecretGuard(@Profile prod). username 은 비민감이라 기본값 유지.
+# /actuator/prometheus 스크레이프 전용 Basic 자격증명(nginx 가 외부로 위임하므로 JWT 본 체인과 분리).
+# password 는 폴백 없는 env 바인딩 — 운영/스테이징이 알려진 값으로 폴백하는 것을 차단한다. 데모·테스트 값은
+# application-{local,test}.yaml, docker/dev/prod 는 env(.env). prod 추가 방어는 MetricsScrapeSecretGuard.
 metrics:
   scrape:
     username: ${METRICS_SCRAPE_USERNAME:metrics}
@@ -99,10 +90,8 @@ logging:
     root: INFO
     com.groove: INFO
 
-# OpenAPI/Swagger UI (#156). 문서는 코드에서 자동 생성된다 — Swagger UI=/swagger-ui.html, OpenAPI JSON=/v3/api-docs.
-# local/test 프로파일에서는 노출되고, docker(배포) 프로파일은 #162 로 기본 비공개(application-docker.yaml 에서
-# enabled=${SPRINGDOC_ENABLED:false} 로 override)다 — 데모로 노출하려면 SPRINGDOC_ENABLED=true 로 토글한다.
-# 아래는 노출 시 적용되는 UI 옵션 — enabled 는 여기서 지정하지 않으므로(기본 true) 프로파일이 override 한다.
+# OpenAPI/Swagger UI(코드에서 자동 생성). local/test 는 노출, docker/prod 는 기본 비공개로 override 한다.
+# 아래는 노출 시 UI 옵션. enabled 는 여기서 지정하지 않아 기본 true 이고 프로파일이 override 한다.
 springdoc:
   swagger-ui:
     operations-sorter: method
@@ -110,25 +99,23 @@ springdoc:
     display-request-duration: true
 
 jwt:
-  # 시크릿은 프로파일별 설정 또는 환경 변수로 주입한다 — 미설정 시 기동 실패가 의도된 동작.
-  # 로컬 개발용 fallback 은 application-local.yaml, 테스트용은 application-test.yaml 에 정의.
+  # 시크릿은 env 로 주입(미설정 시 기동 실패가 의도된 동작). 폴백은 application-local/test.yaml.
   secret: ${JWT_SECRET}
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
 
-# 이메일 점유 해시 HMAC 키 (#186). JWT 와 분리된 전용 시크릿(키 1개=용도 1개) — 미설정 시 기동 실패가 의도된 동작.
-# 로컬 개발용 fallback 은 application-local.yaml, 테스트용은 application-test.yaml 에 정의.
+# 이메일 점유 해시 HMAC 키. JWT 와 분리된 전용 시크릿(키 1개=용도 1개). 폴백은 application-local/test.yaml.
 email:
   hash:
     secret: ${EMAIL_HASH_SECRET}
 
-# Refresh Token 쿠키 속성 (#163). refresh 토큰은 HttpOnly; Secure; SameSite=Strict 쿠키로 내려가
-# JS 접근을 차단한다. 운영(HTTPS)은 secure=true 가 기본이며, 로컬 개발(HTTP)은 profile 에서 false 로 override.
+# Refresh Token 쿠키. HttpOnly; Secure; SameSite=Strict 로 JS 접근을 차단한다.
+# 운영(HTTPS)은 secure=true 기본, 로컬 개발(HTTP)은 프로파일에서 false 로 override.
 auth:
   refresh-cookie:
     secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
 
-# 인증 엔드포인트 Rate Limit (#23). 정책 수치는 운영 측정 후 W10에서 재조정 가능.
+# 인증 엔드포인트 Rate Limit.
 groove:
   auth:
     rate-limit:
@@ -141,59 +128,58 @@ groove:
       password-change:
         capacity: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_CAPACITY:5}
         refill-period: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_REFILL_PERIOD:PT1M}
-  # 응답 보안 헤더 (#322). CSP 는 기본 Report-Only — 운영 관측 후 GROOVE_CSP_REPORT_ONLY=false 로 enforce 전환.
+  # 응답 보안 헤더. CSP 는 기본 Report-Only, 운영 관측 후 GROOVE_CSP_REPORT_ONLY=false 로 enforce.
   security:
     csp:
       enabled: ${GROOVE_CSP_ENABLED:true}
       report-only: ${GROOVE_CSP_REPORT_ONLY:true}
-      # Toss 결제 위젯(iframe·리소스)은 *.tosspayments.com 에서 로드된다. 미설정 시 코드 기본값을 쓴다.
+      # Toss 결제 위젯(iframe)은 *.tosspayments.com 에서 로드된다. 미설정 시 코드 기본값.
       policy: ${GROOVE_CSP_POLICY:}
-  # 선착순 쿠폰 발급 Rate Limit (#90). 회원당 분당 발급 횟수 제한 — JWT memberId 로 키잉(IP 폴백).
+  # 선착순 쿠폰 발급 Rate Limit. 회원당 발급 횟수 제한, JWT memberId 키잉(IP 폴백).
   coupon:
     rate-limit:
       issue:
         capacity: ${COUPON_RATE_LIMIT_ISSUE_CAPACITY:10}
         refill-period: ${COUPON_RATE_LIMIT_ISSUE_REFILL_PERIOD:PT1M}
-    # 만료 회원 쿠폰 배치 (#92). cron 을 "-" 로 두면 비활성화된다.
+    # 만료 회원 쿠폰 배치. cron="-" 면 비활성화.
     expiration:
       cron: ${COUPON_EXPIRATION_CRON:0 0 * * * *}
       batch-size: ${COUPON_EXPIRATION_BATCH_SIZE:1000}
-    # 취소/환불 복원 (#319). 복원 시점에 이미 만료된 쿠폰을 now + grace 로 연장해 되살린다.
+    # 취소/환불 복원. 복원 시점에 이미 만료된 쿠폰을 now + grace 로 연장해 되살린다.
     restore:
       grace: ${COUPON_RESTORE_GRACE:P7D}
-  # 멱등성 인프라 (#W7-2). cleanup-cron 을 "-" 로 두면 정리 스케줄러가 비활성화된다.
+  # 멱등성 인프라. cleanup-cron="-" 면 정리 스케줄러 비활성화.
   idempotency:
     ttl: ${IDEMPOTENCY_TTL:PT24H}
-    # IN_PROGRESS 마커 처리 타임아웃 — 이 시간이 지나도 complete 되지 않은 마커는 죽은 소유자가 남긴 것으로 보고
-    # 다음 동일 키 요청이 즉시 회수한다(고착 방지, #317). 반드시 정상 action 최대 소요(락 대기 ~50s·PG 5s)보다
-    # 충분히 크게 둬 진행 중인 살아있는 마커가 조기 회수돼 이중 실행되는 것을 막는다 (#160·#317).
+    # IN_PROGRESS 마커 타임아웃. 초과한 마커는 죽은 소유자가 남긴 것으로 보고 다음 동일 키 요청이 회수한다(고착 방지).
+    # 진행 중인 살아있는 마커가 조기 회수돼 이중 실행되지 않도록 정상 action 최대 소요(락 대기 ~50s·PG 5s)보다 크게 둔다.
     in-progress-timeout: ${IDEMPOTENCY_IN_PROGRESS_TIMEOUT:PT10M}
     cleanup-cron: ${IDEMPOTENCY_CLEANUP_CRON:0 0 * * * *}
     cleanup-batch-size: ${IDEMPOTENCY_CLEANUP_BATCH_SIZE:1000}
-  # 이벤트 아웃박스 (#237). 결제 완료 후속 처리(배송 생성 등)를 상태 변경과 같은 트랜잭션에서 outbox 에 기록하고,
-  # 릴레이가 미발행 이벤트를 멱등 컨슈머에 at-least-once 로 발행한다. cleanup.cron 을 "-" 로 두면 정리 비활성화.
+  # 이벤트 아웃박스. 결제 후속 처리(배송 생성 등)를 상태 변경과 같은 트랜잭션에서 기록하고, 릴레이가 미발행
+  # 이벤트를 멱등 컨슈머에 at-least-once 로 발행한다. cleanup.cron="-" 면 정리 비활성화.
   outbox:
     relay:
       interval: ${OUTBOX_RELAY_INTERVAL:PT2S}
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:PT5S}
-      # 한 주기에 발행할 최대 건수 — 적체 시에도 메모리를 바운드. 나머지는 다음 주기에 처리.
+      # 한 주기 최대 건수(적체 시 메모리 바운드). 나머지는 다음 주기.
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
-      # 핸들러 실패 재시도 상한 — 이 횟수를 채운 poison 이벤트는 DLQ(격리)로 제외해 정상 이벤트 슬롯 점유를 막는다 (#268).
+      # 재시도 상한. 초과한 poison 이벤트는 DLQ 로 격리해 정상 이벤트 슬롯 점유를 막는다.
       max-attempts: ${OUTBOX_RELAY_MAX_ATTEMPTS:5}
     cleanup:
       cron: ${OUTBOX_CLEANUP_CRON:0 0 * * * *}
-      # 발행 완료 후 이 기간이 지난 행을 정리(감사/디버깅 보관 기간).
+      # 발행 완료 후 보관 기간(감사/디버깅).
       retention: ${OUTBOX_CLEANUP_RETENTION:P7D}
       batch-size: ${OUTBOX_CLEANUP_BATCH_SIZE:1000}
-  # 게스트 주문 조회 Rate Limit (#208). POST /orders/{orderNumber}/guest-lookup — IP당 분당 10회로 orderNumber+email 무차별 대입을 억제한다.
+  # 게스트 주문 조회 Rate Limit(guest-lookup). IP 버킷으로 orderNumber+email 무차별 대입을 억제한다.
   order:
     rate-limit:
       guest-lookup:
         capacity: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_CAPACITY:10}
         refill-period: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_REFILL_PERIOD:PT1M}
   payment:
-    # 결제 Rate Limit (#208, #320). post=결제 생성(POST /payments + /toss/checkout) 회원당 분당 5회 — JWT memberId 키잉(게스트·토큰 부재 시 IP 폴백).
-    # webhook=토스 웹훅(POST /toss/webhook) IP당 분당 60회 — 회원 토큰 없는 공개 엔드포인트라 별도 IP 버킷으로 분리(#320). 토스 IP 피크 수용 + 단일 IP 증폭 캡.
+    # 결제 Rate Limit. post=결제 생성, JWT memberId 키잉(게스트·토큰 부재 시 IP 폴백).
+    # webhook=토스 웹훅, 회원 토큰 없는 공개 엔드포인트라 별도 IP 버킷으로 분리(토스 피크 수용 + 단일 IP 증폭 캡).
     rate-limit:
       post:
         capacity: ${PAYMENT_RATE_LIMIT_POST_CAPACITY:5}
@@ -201,74 +187,69 @@ groove:
       webhook:
         capacity: ${PAYMENT_RATE_LIMIT_WEBHOOK_CAPACITY:60}
         refill-period: ${PAYMENT_RATE_LIMIT_WEBHOOK_REFILL_PERIOD:PT1M}
-    # 결제 웹훅 유실 대비 폴링 동기화 (#W7-4). PENDING 결제를 interval 마다 PG query() 로 조회한다.
+    # 결제 웹훅 유실 대비 폴링 동기화. PENDING 결제를 interval 마다 PG query() 로 조회한다.
     reconciliation:
       interval: ${PAYMENT_RECONCILIATION_INTERVAL:PT1M}
       initial-delay: ${PAYMENT_RECONCILIATION_INITIAL_DELAY:PT1M}
-      # 갓 접수된 결제는 정상 웹훅이 곧 도착하므로 폴링 대상에서 제외한다 (created_at < now - min-age).
+      # 갓 접수된 결제는 정상 웹훅이 곧 도착하므로 폴링 대상에서 제외(created_at < now - min-age).
       min-age: ${PAYMENT_RECONCILIATION_MIN_AGE:PT1M}
-      # 토스(confirm 모델) 미확정 PENDING(toss-pending: 잠정 pgTx) 만료 한도 — 결제위젯 체류 시간 이상으로 길게 둔다.
-      # 초과 시 폴링 리퍼가 FAILED + 재고·쿠폰 보상으로 정리한다(failUrl 콜백은 상태를 바꾸지 않음).
+      # 토스 미확정 PENDING(잠정 pgTx) 만료 한도. 결제위젯 체류 시간 이상으로 길게 둔다.
+      # 초과 시 폴링 리퍼가 FAILED + 재고·쿠폰 보상으로 정리한다(failUrl 콜백은 상태 불변).
       toss-pending-timeout: ${PAYMENT_TOSS_PENDING_TIMEOUT:PT20M}
-      # generic PG 폴링 종결 한도 — query 가 응답하지 못하는 영구 해소 불가(예: 잔존 non-TOSS pgTx 404/502)만 max-age
-      # 초과 시 FAILED 로 종결해 무한 폴링/WARN/PG 호출을 끊는다. PG 가 정상 응답(PENDING 포함)하는 동안은 종결하지
-      # 않는다(느린 비동기 PG 오탐 방지). 일시 장애 오탐을 피하려 min-age 보다 충분히 크게(부팅 시 max-age>min-age 검증).
+      # generic PG 폴링 종결 한도. query 가 영구 해소 불가(예: non-TOSS pgTx 404/502)일 때만 초과 시 FAILED 로 종결해
+      # 무한 폴링을 끊는다. PG 가 정상 응답(PENDING 포함)하는 동안은 종결하지 않는다(느린 비동기 PG 오탐 방지).
+      # 일시 장애 오탐을 피하려 min-age 보다 크게(부팅 시 max-age>min-age 검증).
       max-age: ${PAYMENT_RECONCILIATION_MAX_AGE:PT1H}
-      # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리/PG 호출량을 바운드. 나머지는 다음 주기에 처리.
+      # 한 주기 최대 건수(적체 시 메모리/PG 호출량 바운드). 나머지는 다음 주기.
       batch-size: ${PAYMENT_RECONCILIATION_BATCH_SIZE:200}
-  # 배송 자동 진행 (#W7-6). 실 택배사 연동 없음 — interval 마다 PREPARING→SHIPPED→DELIVERED 를 한 단계씩 민다.
-  # 시연 시 prepare-delay/ship-delay 를 수 초 단위로 줄여 빠르게 진행시킨다.
+  # 배송 자동 진행. 실 택배사 연동 없음. interval 마다 PREPARING→SHIPPED→DELIVERED 를 한 단계씩 민다.
+  # 시연 시 prepare-delay/ship-delay 를 수 초로 줄여 빠르게 진행시킨다.
   shipping:
     progress:
       interval: ${SHIPPING_PROGRESS_INTERVAL:PT2S}
       initial-delay: ${SHIPPING_PROGRESS_INITIAL_DELAY:PT5S}
-      # PREPARING 으로 이 시간 이상 머문 배송을 SHIPPED 로 (created_at < now - prepare-delay).
+      # PREPARING 에 prepare-delay 이상 머문 배송을 SHIPPED 로(이하 *-delay 동일 패턴).
       prepare-delay: ${SHIPPING_PROGRESS_PREPARE_DELAY:PT5S}
-      # SHIPPED 로 이 시간 이상 머문 배송을 DELIVERED 로 (shipped_at < now - ship-delay).
       ship-delay: ${SHIPPING_PROGRESS_SHIP_DELAY:PT5S}
-      # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리를 바운드. 나머지는 다음 주기에 처리.
+      # 한 주기 최대 건수(적체 시 메모리 바운드). 나머지는 다음 주기.
       batch-size: ${SHIPPING_PROGRESS_BATCH_SIZE:200}
-    # 배송 생성 보충 안전망 (#169). AFTER_COMMIT 배송 생성이 실패해 PAID 인데 배송이 없는 고아 주문을
-    # interval 마다 스캔해 보충한다. 정상 흐름에선 대상이 비어 있는 저빈도 안전망.
+    # 배송 생성 보충 안전망. AFTER_COMMIT 배송 생성 실패로 PAID 인데 배송 없는 고아 주문을 스캔해 보충한다.
+    # 정상 흐름에선 대상이 비는 저빈도 안전망.
     reconciliation:
       interval: ${SHIPPING_RECONCILIATION_INTERVAL:PT5M}
       initial-delay: ${SHIPPING_RECONCILIATION_INITIAL_DELAY:PT5M}
-      # PAID 가 된 지 이 시간 이상 지난 주문만 대상 (paid_at < now - min-age) — 갓 결제된 건은 리스너가 곧 처리.
+      # PAID 된 지 min-age 이상 지난 주문만 대상(갓 결제된 건은 리스너가 곧 처리).
       min-age: ${SHIPPING_RECONCILIATION_MIN_AGE:PT2M}
-      # 한 주기에 보충할 최대 건수 — 메모리 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${SHIPPING_RECONCILIATION_BATCH_SIZE:200}
 
-  # 반품 자동 진행 (#239). 실 택배사 연동 없음 — interval 마다 APPROVED→IN_TRANSIT→INSPECTING→REFUNDED 를
-  # 한 단계씩 민다(검수 자동통과+환불 포함). 검수 불합격(REJECTED)만 관리자 수동. 시연 시 각 delay 를 수 초로 줄인다.
+  # 반품 자동 진행. 실 택배사 연동 없음. interval 마다 APPROVED→IN_TRANSIT→INSPECTING→REFUNDED 를 한 단계씩
+  # 민다(검수 자동통과+환불 포함). 검수 불합격(REJECTED)만 관리자 수동. 시연 시 각 delay 를 수 초로 줄인다.
   claim:
-    # 반품 가능 기한 — 배송완료(delivered_at) 후 이 기간 이내만 접수 (수령 후 N일).
+    # 반품 가능 기한. 배송완료(delivered_at) 후 이 기간 이내만 접수.
     return-window: ${CLAIM_RETURN_WINDOW:P7D}
     progress:
       interval: ${CLAIM_PROGRESS_INTERVAL:PT2S}
       initial-delay: ${CLAIM_PROGRESS_INITIAL_DELAY:PT5S}
-      # APPROVED 로 이 시간 이상 머문 반품을 IN_TRANSIT(회수 시작)으로 (approved_at < now - approve-delay).
+      # 각 상태에 해당 delay 이상 머문 반품을 다음 단계로(approve→IN_TRANSIT, transit→INSPECTING, inspect→REFUNDED).
       approve-delay: ${CLAIM_PROGRESS_APPROVE_DELAY:PT5S}
-      # IN_TRANSIT 로 이 시간 이상 머문 반품을 INSPECTING(검수)으로 (in_transit_at < now - transit-delay).
       transit-delay: ${CLAIM_PROGRESS_TRANSIT_DELAY:PT5S}
-      # INSPECTING 으로 이 시간 이상 머문 반품을 검수 자동통과+환불(REFUNDED)로 (inspecting_at < now - inspect-delay).
       inspect-delay: ${CLAIM_PROGRESS_INSPECT_DELAY:PT5S}
-      # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리/PG 호출량을 바운드. 나머지는 다음 주기에 처리.
+      # 한 주기 최대 건수(적체 시 메모리/PG 호출량 바운드). 나머지는 다음 주기.
       batch-size: ${CLAIM_PROGRESS_BATCH_SIZE:200}
 
-  # 주문/배송 PII 익명화 배치 (#170 Part B, GDPR/개인정보). 배송완료된 지 retention 이 지난 주문/배송의
-  # 수령인·주소·게스트 PII 를 interval 마다 마스킹한다. 회원 본인 PII 는 탈퇴 즉시 익명화되지만, 주문/배송
-  # 배송지 PII 는 분쟁 대응을 위해 보존기간 후 익명화한다(특히 게스트 주문은 이 배치가 유일한 익명화 경로).
+  # 주문/배송 PII 익명화 배치(GDPR/개인정보). 배송완료 후 retention 지난 주문/배송의 수령인·주소·게스트 PII 를
+  # 마스킹한다. 회원 본인 PII 는 탈퇴 즉시 익명화되지만, 배송지 PII 는 분쟁 대응 위해 보존기간 후 익명화한다
+  # (특히 게스트 주문은 이 배치가 유일한 익명화 경로).
   privacy:
     order-anonymization:
       interval: ${ORDER_ANONYMIZATION_INTERVAL:PT1H}
       initial-delay: ${ORDER_ANONYMIZATION_INITIAL_DELAY:PT10M}
-      # 배송완료(delivered_at) 후 이 기간이 지난 주문만 익명화 (delivered_at < now - retention).
+      # 배송완료 후 이 기간 지난 주문만 익명화.
       retention: ${ORDER_ANONYMIZATION_RETENTION:P90D}
-      # 한 주기에 익명화할 최대 건수 — 메모리 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${ORDER_ANONYMIZATION_BATCH_SIZE:200}
 
-# CORS default 는 모든 origin 차단. profile 별 yaml 또는 환경 변수로 override.
-# 운영 환경에서는 cors.allowed-origins 를 명시적 도메인 화이트리스트로 설정.
+# CORS 기본은 모든 origin 차단. 프로파일 yaml 또는 env 로 override 한다.
+# 운영은 allowed-origins 를 명시적 도메인 화이트리스트로 설정.
 cors:
   allowed-origin-patterns: []
   allowed-origins: []
@@ -278,10 +259,8 @@ cors:
   allow-credentials: false
   max-age-seconds: 3600
 
-# Mock PG 동작 파라미터 (#W7-1, ARCHITECTURE.md §7.2).
-# Mock 프로파일(local/dev/test/docker)에서만 바인딩된다. 실 PG 도입 시 prod 프로파일 구현체로 대체.
-# webhook-secret 은 jwt.secret 과 동일하게 fallback 없이 환경 변수로만 주입 — 미설정 시 기동 실패가 의도된 동작.
-# 로컬 fallback 은 application-local.yaml, 테스트 고정값은 application-test.yaml 에 정의.
+# Mock PG 동작 파라미터. Mock 프로파일(local/dev/test/docker)에서만 바인딩(prod 는 실 PG 구현체).
+# webhook-secret 은 폴백 없는 env 주입(미설정 시 기동 실패가 의도된 동작). 폴백/고정값은 application-local/test.yaml.
 payment:
   mock:
     success-rate: ${PAYMENT_MOCK_SUCCESS_RATE:0.95}
@@ -290,12 +269,11 @@ payment:
     webhook-delay-min: ${PAYMENT_MOCK_WEBHOOK_DELAY_MIN:1s}
     webhook-delay-max: ${PAYMENT_MOCK_WEBHOOK_DELAY_MAX:5s}
     webhook-secret: ${PAYMENT_MOCK_WEBHOOK_SECRET}
-    # request() 후 webhook-delay 만큼 뒤에 PaymentWebhookHandler 로 결과 콜백을 자동 발사한다 (#W7-4).
-    # 통합 테스트는 결정적 검증을 위해 false 로 끄고 HTTP 웹훅 엔드포인트/폴링을 직접 호출한다.
+    # request() 후 webhook-delay 만큼 뒤에 PaymentWebhookHandler 로 결과 콜백을 자동 발사한다.
+    # 통합 테스트는 결정적 검증을 위해 false 로 끄고 HTTP 웹훅/폴링을 직접 호출한다.
     auto-webhook: ${PAYMENT_MOCK_AUTO_WEBHOOK:true}
-  # 토스페이먼츠 테스트 연동(#293). dev/prod 프로파일에서만 바인딩된다(TossPaymentConfig @Profile).
-  # secret-key 는 webhook-secret 과 동일하게 fallback 없이 환경 변수로만 주입 — 미설정 시 기동 실패가 의도된 동작.
-  # dev fallback 은 application-dev.yaml 에 정의. test/local 은 Mock 을 쓰므로 이 키가 바인딩되지 않는다.
+  # 토스페이먼츠 테스트 연동. dev/prod 에서만 바인딩(TossPaymentConfig @Profile).
+  # secret-key 는 폴백 없는 env 주입(미설정 시 기동 실패가 의도된 동작). dev 폴백은 application-dev.yaml.
   toss:
     base-url: ${PAYMENT_TOSS_BASE_URL:https://api.tosspayments.com}
     client-key: ${PAYMENT_TOSS_CLIENT_KEY}
@@ -304,8 +282,8 @@ payment:
     fail-url: ${PAYMENT_TOSS_FAIL_URL}
     connect-timeout: ${PAYMENT_TOSS_CONNECT_TIMEOUT:2s}
     read-timeout: ${PAYMENT_TOSS_READ_TIMEOUT:5s}
-    # 외부 PG 호출 재시도·서킷브레이커 (#320). dev/prod 에서만 바인딩. 재시도는 일시 장애(5xx·연결 실패)만,
-    # 동기 confirm 워커 점유·UX 보호를 위해 보수적으로(2회·짧은 백오프). 서킷은 누적 실패율/느린호출율 임계 초과 시 OPEN.
+    # 외부 PG 호출 재시도·서킷브레이커. 재시도는 일시 장애(5xx·연결 실패)만, confirm 워커 점유·UX 보호 위해
+    # 보수적으로(2회·짧은 백오프). 서킷은 누적 실패율/느린호출율 임계 초과 시 OPEN.
     resilience:
       retry-max-attempts: ${PAYMENT_TOSS_RETRY_MAX_ATTEMPTS:2}
       retry-wait-duration: ${PAYMENT_TOSS_RETRY_WAIT:200ms}

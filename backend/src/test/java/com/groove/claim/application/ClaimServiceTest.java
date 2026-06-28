@@ -95,7 +95,7 @@ class ClaimServiceTest {
     void setUp() {
         claimService = new ClaimService(claimRepository, orderRepository, paymentRepository, paymentGateway,
                 couponApplicationService, shippingService, albumRepository, memberRepository, CLOCK, WINDOW);
-        // request 경로는 본인 주문 검증 직후 회원 활성(#269)을 확인한다 — 기본은 활성 회원으로 둔다.
+        // request 경로가 회원 활성을 확인하므로 기본은 활성으로.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(MEMBER_ID)).thenReturn(true);
     }
 
@@ -113,7 +113,7 @@ class ClaimServiceTest {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, MEMBER_ID);
         order.addItem(OrderItem.create(album(unitPrice), qty));
         if (discount > 0) {
-            order.applyDiscount(discount); // 상태 세팅 전에 호출
+            order.applyDiscount(discount); // 상태 세팅 전
         }
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
@@ -148,7 +148,7 @@ class ClaimServiceTest {
         Order order = OrderFixtures.memberOrder(ORDER_NUMBER, MEMBER_ID);
         order.addItem(OrderItem.create(album(unitPrice), qty));
         if (discount > 0) {
-            order.applyDiscount(discount); // 상태 세팅 전에 호출
+            order.applyDiscount(discount); // 상태 세팅 전
         }
         ReflectionTestUtils.setField(order, "id", ORDER_ID);
         ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
@@ -184,7 +184,7 @@ class ClaimServiceTest {
     @DisplayName("request: 배송행 없어도 order.deliveredAt 으로 기한 결정 — 관리자 강제 전이/시드 주문 반품 가능")
     void request_anchorsOnOrderDeliveredAtWithoutShippingRow() {
         Order order = deliveredOrder(15_000L, 2, 0);
-        // 배송 행 없이 DELIVERED 로 전이된 주문 — order.deliveredAt 이 결정적 anchor 가 된다.
+        // 배송 행 없이 DELIVERED. order.deliveredAt 이 결정적 anchor.
         ReflectionTestUtils.setField(order, "deliveredAt", CLOCK.instant().minus(Duration.ofDays(1)));
         given(orderRepository.findByOrderNumberForUpdate(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(claimRepository.findByOrder_IdAndStatusNot(ORDER_ID, ClaimStatus.REJECTED)).willReturn(List.of());
@@ -201,7 +201,7 @@ class ClaimServiceTest {
     @DisplayName("request: 배송행 deliveredAt 부재 시 order.updated_at 폴백은 제거됨 — 최근 updated_at 이라도 결정 불가로 거부")
     void request_ignoresOrderUpdatedAtWhenShippingMissing() {
         Order order = deliveredOrder(15_000L, 2, 0);
-        // updated_at 이 window 내(1일 전)라도 비결정적이므로 anchor 로 쓰지 않는다.
+        // updated_at 은 window 내라도 비결정적이라 anchor 로 안 씀.
         ReflectionTestUtils.setField(order, "updatedAt", CLOCK.instant().minus(Duration.ofDays(1)));
         given(orderRepository.findByOrderNumberForUpdate(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(shippingService.findDeliveredAt(ORDER_ID)).willReturn(Optional.empty());
@@ -286,7 +286,7 @@ class ClaimServiceTest {
         Order order = deliveredOrder(15_000L, 2, 0);
         given(orderRepository.findByOrderNumberForUpdate(ORDER_NUMBER)).willReturn(Optional.of(order));
         given(shippingService.findDeliveredAt(ORDER_ID)).willReturn(Optional.of(CLOCK.instant().minus(Duration.ofDays(1))));
-        // 이미 2개 반품된(비-REJECTED) 기존 claim → 잔여 0
+        // 이미 2개 반품된 기존 claim → 잔여 0.
         Claim prior = Claim.request(order, "이전");
         prior.addItem(ClaimItem.of(order.getItems().get(0), 2));
         given(claimRepository.findByOrder_IdAndStatusNot(ORDER_ID, ClaimStatus.REJECTED)).willReturn(List.of(prior));
@@ -417,11 +417,11 @@ class ClaimServiceTest {
         given(paymentRepository.findByOrderIdForUpdate(ORDER_ID)).willReturn(Optional.of(payment));
         given(claimRepository.save(any(Claim.class))).willAnswer(inv -> {
             Claim saved = inv.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", 7L); // DB IDENTITY 부여 모사
+            ReflectionTestUtils.setField(saved, "id", 7L); // DB IDENTITY 모사
             return saved;
         });
         given(couponApplicationService.appliedCouponMinOrderAmount(ORDER_ID)).willReturn(couponMinOrder);
-        // 누적 REFUNDED 정가 조회는 쿠폰 적용 시에만 발생 — 쿠폰 present 테스트에서만 스텁한다.
+        // 누적 REFUNDED 조회는 쿠폰 적용 시에만 발생.
         if (couponMinOrder.isPresent()) {
             given(claimRepository.findByOrder_IdAndStatus(ORDER_ID, ClaimStatus.REFUNDED)).willReturn(List.of());
         }

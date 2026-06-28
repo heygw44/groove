@@ -18,10 +18,8 @@ import java.time.Instant;
 import java.util.OptionalLong;
 
 /**
- * 회원 쿠폰을 주문에 적용/복원하는 조율 서비스. 두 진입점 모두 Propagation.MANDATORY — 호출자 트랜잭션 안에서 실행된다.
- *
- * 동시성: applyToOrder 는 findByIdForUpdate 로 회원 쿠폰 행을 잠근다(두 번째는 status=USED 를 본다).
- * restoreForOrder 는 단일 row 변경이라 추가 락이 없다.
+ * 회원 쿠폰을 주문에 적용/복원하는 조율 서비스. 모든 진입점 Propagation.MANDATORY — 호출자 트랜잭션 안에서 실행.
+ * applyToOrder 는 findByIdForUpdate 로 쿠폰 행을 잠가 동시 적용을 직렬화한다.
  */
 @Service
 public class CouponApplicationService {
@@ -38,11 +36,8 @@ public class CouponApplicationService {
     }
 
     /**
-     * 회원 쿠폰을 주문에 적용하고 할인액을 반환한다. fail-fast 검증:
-     * 존재(404) → 소유자(403) → ISSUED 상태(USED/EXPIRED/CANCELLED 별 매핑) → 만료(422) → 할인 계산 → use(ISSUED→USED).
-     *
-     * 할인액 산정에 필요한 주문 총액만 받고 Order 엔티티는 참조하지 않는다(슬라이스 단방향, #349) —
-     * 반환된 할인액을 주문에 반영하는 책임은 호출자(order)에게 둔다.
+     * 쿠폰을 적용하고 할인액을 반환. 검증 순서: 존재 → 소유자 → ISSUED → 만료 → 할인 계산 → use.
+     * Order 엔티티는 참조하지 않고 총액만 받는다(슬라이스 단방향). 반영은 호출자 책임.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public long applyToOrder(Long memberCouponId, Long memberId, Long orderId, long orderTotalAmount) {
@@ -78,10 +73,7 @@ public class CouponApplicationService {
         return discount;
     }
 
-    /**
-     * 주문에 적용된 쿠폰을 복원한다(USED → ISSUED). 쿠폰 미적용 주문은 no-op.
-     * MemberCoupon.restore 가 멱등이라 USED 가 아니면 no-op(무락 동시 복원 안전), 이미 만료된 쿠폰은 grace 만큼 연장해 되살린다.
-     */
+    /** 쿠폰 복원(USED → ISSUED). restore 가 멱등이라 무락 동시 복원에 안전. 만료된 쿠폰은 grace 만큼 연장해 되살린다. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void restoreForOrder(Long orderId) {
         if (orderId == null) {
@@ -108,8 +100,7 @@ public class CouponApplicationService {
             case USED -> new CouponAlreadyUsedException(memberCouponId);
             case EXPIRED -> new CouponExpiredException(memberCouponId, memberCoupon.getExpiresAt());
             case CANCELLED -> new CouponNotIssuableException(memberCouponId);
-            // ISSUED 는 위에서 통과시켰음 — 컴파일러 만족용
-            case ISSUED -> new IllegalStateException("unreachable");
+            case ISSUED -> new IllegalStateException("unreachable"); // 위에서 통과
         };
     }
 }
