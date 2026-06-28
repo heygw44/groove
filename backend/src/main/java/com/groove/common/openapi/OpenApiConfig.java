@@ -54,7 +54,6 @@ public class OpenApiConfig {
                                 .description("로그인(`POST /api/v1/auth/login`) 으로 발급받은 accessToken")));
     }
 
-    /** 고객용 API 그룹 (관리자 경로 제외). */
     @Bean
     public GroupedOpenApi storefrontApi() {
         return GroupedOpenApi.builder()
@@ -64,7 +63,6 @@ public class OpenApiConfig {
                 .build();
     }
 
-    /** 관리자 전용 API 그룹. */
     @Bean
     public GroupedOpenApi adminApi() {
         return GroupedOpenApi.builder()

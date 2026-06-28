@@ -53,9 +53,7 @@ public class SecurityConfig {
             "/payments/toss/fail"
     };
 
-    /**
-     * 정적 SPA 프론트엔드 빌드 산출물 경로. GET 으로만 공개한다.
-     */
+    /** 정적 SPA 빌드 산출물 — GET 으로만 공개. */
     private static final String[] PUBLIC_STATIC_GET_PATTERNS = {
             "/",
             "/index.html",
@@ -72,9 +70,7 @@ public class SecurityConfig {
             "/error"
     };
 
-    /**
-     * SpringDoc OpenAPI/Swagger UI 정적 문서 경로. 인증 없이 공개한다.
-     */
+    /** SpringDoc OpenAPI/Swagger UI 문서 경로 — 인증 없이 공개. */
     private static final String[] SWAGGER_PATTERNS = {
             "/v3/api-docs/**",
             "/v3/api-docs.yaml",
@@ -186,9 +182,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * CORS 정책을 CorsProperties 로부터 구성한다.
-     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
         CorsConfiguration configuration = new CorsConfiguration();

@@ -52,7 +52,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 반품 환불 전 과정 통합 테스트 — 부분→전량 누적 정합 + claim 별 PG 멱등(실호출 1회). 스케줄러 대신
+ * 반품 환불 전 과정 통합 테스트. 부분→전량 누적 정합 + claim 별 PG 멱등(실호출 1회).
  * ClaimService 단계 위임 메서드를 직접 호출해 INSPECTING 까지 민 뒤 환불을 검증한다.
  */
 @SpringBootTest
@@ -113,7 +113,7 @@ class ClaimRefundIntegrationTest {
     }
 
     private void clearAll() {
-        // 자식(FK 참조)부터 정리 — refresh_token/claim/shipping/payment → orders/member 순.
+        // 자식(FK 참조)부터: refresh_token/claim/shipping/payment → orders/member.
         refreshTokenRepository.deleteAllInBatch();
         claimRepository.deleteAllInBatch();
         shippingRepository.deleteAllInBatch();
@@ -134,7 +134,7 @@ class ClaimRefundIntegrationTest {
                 album, memberId, qty, (++seq) + "-" + System.nanoTime());
     }
 
-    /** 발송 전(PAID) 주문 + PAID 결제 (배송행 없음) — 부분 취소(CANCEL) 대상. */
+    /** 발송 전(PAID) 주문 + PAID 결제(배송행 없음). 부분 취소(CANCEL) 대상. */
     private Order persistPaidOrder(int qty) {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = OrderFixtures.memberOrder("ORD-CLM-" + (++seq) + "-" + System.nanoTime(), memberId);
@@ -277,8 +277,8 @@ class ClaimRefundIntegrationTest {
                 List.of(new ClaimCreateCommand.Line(orderItemId, 1))));
         assertThat(paymentRepository.findByOrderId(orderId).orElseThrow().getRefundedAmount()).isEqualTo(UNIT_PRICE);
 
-        // 2) 잔여 1개를 배송 진행 후 배송완료로 — 반품 자격(DELIVERED) 확보. 배송 행 없이 강제 전이해도
-        //    Order.changeStatus(DELIVERED) 가 order.deliveredAt 을 기록하므로 반품 기한 anchor 가 결정된다.
+        // 2) 잔여 1개를 배송완료까지 전이해 반품 자격(DELIVERED) 확보. 배송 행 없이 강제 전이해도
+        //    changeStatus(DELIVERED)가 order.deliveredAt 을 기록하므로 반품 기한 anchor 가 결정된다.
         Order live = orderRepository.findById(orderId).orElseThrow();
         live.changeStatus(OrderStatus.PREPARING, null, Instant.now());
         live.changeStatus(OrderStatus.SHIPPED, null, Instant.now());

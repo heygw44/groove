@@ -17,8 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 결제 요청 접수 오케스트레이터.
- * 상태 검증(readOnly tx) → PG request()(트랜잭션 밖) → Payment(PENDING) 영속화(tx) 의 세 단계를 협력 빈에 위임한다.
- * PG 호출 실패 시 PaymentGatewayException(502) 만 전파한다.
+ * 상태 검증(readOnly tx), PG request()(tx 밖), Payment(PENDING) 영속화(tx) 를 협력 빈에 위임한다.
+ * PG 호출 실패는 PaymentGatewayException(502) 으로 전파한다.
  */
 @Service
 public class PaymentService {
@@ -46,7 +46,7 @@ public class PaymentService {
         try {
             return steps.persist(prep, request.method(), pgResponse);
         } catch (DataIntegrityViolationException duplicate) {
-            // uk_payment_order 충돌 시 새 트랜잭션에서 기존 결제를 재조회해 주문 레벨 멱등으로 응답한다(mock 경로는 콜백 토큰 미사용).
+            // uk_payment_order 충돌 시 기존 결제를 재조회해 주문 레벨 멱등으로 응답한다.
             return steps.findExistingForOrder(prep.orderId())
                     .map(PaymentRequestPrep::existingResponse)
                     .orElseThrow(() -> duplicate);
@@ -64,7 +64,6 @@ public class PaymentService {
         return PaymentApiResponse.from(payment);
     }
 
-    /** 회원 본인이 소유한 주문인지 판정. */
     private boolean isOwnedByMember(Order order, Long memberId) {
         return !order.isGuestOrder() && order.getMemberId().equals(memberId);
     }

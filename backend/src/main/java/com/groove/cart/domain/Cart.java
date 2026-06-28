@@ -17,8 +17,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 회원 장바구니. 회원당 1개(uk_cart_member). member_id 는 연관 엔티티가 아닌 단순 long 컬럼으로 둔다.
- * cart_item 은 orphanRemoval=true + CascadeType.ALL 로 cart 를 통해서만 변경한다(별도 Repository 없음).
+ * 회원 장바구니. 회원당 1개(uk_cart_member). member_id 는 단순 long 컬럼(슬라이스 단방향).
+ * cart_item 은 cascade+orphanRemoval 로 cart 를 통해서만 변경(별도 Repository 없음).
  */
 @Entity
 @Table(name = "cart")
@@ -48,10 +48,7 @@ public class Cart extends BaseTimeEntity {
         return new Cart(memberId);
     }
 
-    /**
-     * 동일 albumId 행이 있으면 quantity 를 누적하고, 없으면 새 CartItem 을 추가한다.
-     * 누적 결과가 MAX_ITEM_QUANTITY 를 넘으면 CartQuantityLimitExceededException.
-     */
+    /** 동일 albumId 행이 있으면 누적, 없으면 새 항목. 누적 결과가 상한 초과면 예외. */
     public CartItem addOrAccumulate(Album album, int quantity) {
         return findItemByAlbumId(album.getId())
                 .map(existing -> {

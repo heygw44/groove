@@ -48,9 +48,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 재고 복원 경로 동시성 테스트. 동시 place(−1)·cancel(+1)을 같은 album 행에서 인터리브해 원자적 복원이
- * lost-update 없이 finalStock 을 맞추는지, 재고 1 에 동시 admin 조정 2건이 정확히 1 성공/1 거부로 음수에
- * 진입하지 않는지를 검증한다(락 없는 RMW 복원 baseline 은 @Disabled).
+ * 재고 복원 경로 동시성. 같은 album 행에 place(−1)·cancel(+1)을 인터리브해 원자적 복원이 lost-update 없이
+ * finalStock 을 맞추는지, 재고 1 에 동시 admin 조정 2건이 1 성공/1 거부로 음수에 안 빠지는지 검증한다.
+ * 락 없는 RMW 복원 baseline 은 @Disabled.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -146,7 +146,7 @@ class StockRestoreConcurrencyTest {
     @Test
     @DisplayName("원자적 복원 — 동시 place(−1)·cancel(+1) 인터리브 → lost-update 0 (finalStock == 기대치)")
     void concurrentPlaceAndCancel_atomicRestore_noLostUpdate() throws InterruptedException {
-        // 1) 선행: PENDING 주문 N 건 생성(각 −1) → 재고 = INITIAL_STOCK − N.
+        // 선행: PENDING 주문 N 건(각 −1) → 재고 = INITIAL_STOCK − N.
         List<String> orderNumbers = new ArrayList<>(PAIRS);
         for (int i = 0; i < PAIRS; i++) {
             Order seeded = orderService.place(memberId, singleAlbumOrder());
@@ -159,7 +159,7 @@ class StockRestoreConcurrencyTest {
         AtomicInteger cancelSuccess = new AtomicInteger();
         AtomicInteger other = new AtomicInteger();
 
-        // 2) 동시: 짝수 인덱스 = 신규 place(−1), 홀수 인덱스 = 선행 주문 cancel(+1).
+        // 동시: 짝수 = place(−1), 홀수 = 선행 주문 cancel(+1).
         LoadResult result = ConcurrencyHarness.runConcurrently(THREAD_POOL_SIZE, 2 * PAIRS, i -> {
             try {
                 if (i % 2 == 0) {
@@ -184,7 +184,6 @@ class StockRestoreConcurrencyTest {
                 placeSuccess.get(), cancelSuccess.get(), other.get(), stockAfterSeed, finalStock, expected,
                 result.elapsedMs(), String.format("%.1f", result.tps()), result.p95Millis());
 
-        // 최종 재고 == 시드후재고 − 성공한 place + 성공한 cancel.
         assertThat(finalStock).as("lost-update 0 — 최종 재고 == 시드후재고 − 성공한 place + 성공한 cancel").isEqualTo(expected);
         assertThat(finalStock).as("음수 재고 미진입").isGreaterThanOrEqualTo(0);
         assertThat(other.get()).as("충분한 초기 재고 → 재고부족/예외 0").isZero();
@@ -215,7 +214,7 @@ class StockRestoreConcurrencyTest {
         log.info("[#234 음수가드] success={}, rejected={}, other={}, finalStock={}",
                 success.get(), rejected.get(), other.get(), finalStock);
 
-        // FOR-UPDATE 직렬화 — 첫 트랜잭션이 1→0, 둘째는 0 을 읽고 음수 가드로 거절.
+        // FOR-UPDATE 직렬화: 첫 트랜잭션 1→0, 둘째는 0 을 읽고 음수 가드로 거절.
         assertThat(success.get()).as("정확히 1건 성공").isEqualTo(1);
         assertThat(rejected.get()).as("나머지 1건은 음수 가드로 거부").isEqualTo(1);
         assertThat(finalStock).as("최종 재고 == 0 (음수 미진입)").isZero();
@@ -256,7 +255,7 @@ class StockRestoreConcurrencyTest {
                 placeSuccess.get(), restoreSuccess.get(), other.get(), initialStock, finalStock, expected,
                 result.elapsedMs(), String.format("%.1f", result.tps()), result.p95Millis());
 
-        // 결함 증거 = lost-update(finalStock ≠ 기대치) 또는 락 경합 롤백(other > 0) 중 하나 이상 성립.
+        // 결함 증거: lost-update(finalStock ≠ 기대치) 또는 락 경합 롤백(other > 0).
         boolean defective = finalStock != expected || other.get() > 0;
         assertThat(defective)
                 .as("복원 baseline — finalStock(%d) ≠ expected(%d) 이거나 롤백 other(%d) > 0 중 하나는 성립",

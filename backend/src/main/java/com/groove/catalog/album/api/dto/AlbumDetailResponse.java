@@ -11,10 +11,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/**
- * 앨범 상세 응답 DTO. averageRating/reviewCount 는 AlbumRating 으로 채운다.
- * 인자 없는 from(Album) 은 AlbumRating.NONE 으로 위임한다.
- */
+/** averageRating/reviewCount 는 AlbumRating 으로 채운다. 인자 없는 from(Album) 은 AlbumRating.NONE. */
 public record AlbumDetailResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,
         @Schema(description = "앨범 제목", example = "Random Access Memories") String title,

@@ -70,7 +70,7 @@ public final class ConcurrencyHarness {
         return new LoadResult(requests, elapsedMs, new ArrayList<>(latenciesNanos));
     }
 
-    /** 부하 측정 결과 — 처리량(TPS)·p95 지연(ms)을 요청별 지연에서 파생한다. */
+    /** 부하 측정 결과. 처리량(TPS)·p95 지연(ms)을 요청별 지연에서 파생. */
     public record LoadResult(int requests, long elapsedMs, List<Long> latenciesNanos) {
 
         public double tps() {

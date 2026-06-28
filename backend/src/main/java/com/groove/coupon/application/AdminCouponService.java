@@ -25,12 +25,8 @@ import java.time.Clock;
 
 /**
  * 관리자 쿠폰 CRUD · 직접지급 트랜잭션 경계.
- *
- * 의미 검증(정률 1~100·validUntil>validFrom·정률 상한 필수)은 Coupon.Builder.build() 가 담당하고,
- * 도메인 IllegalArgumentException 을 ValidationException(400)으로 매핑한다.
- *
- * changeStatus·grant 는 행 락(findByIdForUpdate)으로 동시 변경 race 를 직렬화한다. grant 는 선착순 한정수량과
- * 독립적으로 member_coupon 1행을 INSERT 하며 issuedCount 를 증가시키지 않고, UNIQUE 충돌 race 도 같은 409 로 응답한다.
+ * 의미 검증은 Coupon.Builder.build() 가 담당하고 도메인 예외를 400 으로 매핑한다.
+ * changeStatus·grant 는 행 락으로 동시 변경 race 를 직렬화한다.
  */
 @Service
 public class AdminCouponService {
@@ -52,7 +48,7 @@ public class AdminCouponService {
         this.clock = clock;
     }
 
-    /** 쿠폰 정책 생성. 도메인 빌더 검증 실패는 400 VALIDATION_FAILED 로 매핑한다. */
+    /** 빌더 검증 실패는 400 으로 매핑. */
     @Transactional
     public Coupon create(CouponCreateCommand command) {
         Coupon.Builder builder = Coupon.builder(
@@ -73,7 +69,6 @@ public class AdminCouponService {
         return saved;
     }
 
-    /** 쿠폰 정책 목록 — status 가 주어지면 필터, 없으면 전체. */
     @Transactional(readOnly = true)
     public Page<Coupon> list(CouponStatus status, Pageable pageable) {
         return status == null
@@ -81,10 +76,7 @@ public class AdminCouponService {
                 : couponRepository.findByStatus(status, pageable);
     }
 
-    /**
-     * 쿠폰 정책 상태 변경. 행 락으로 동시 변경 race 를 직렬화한다.
-     * self-transition(from == target)은 현재 상태 그대로 반환(200), canTransitionTo 위반은 409(IllegalCouponStateTransitionException).
-     */
+    /** 행 락으로 동시 변경 직렬화. self-transition 은 현재 상태 그대로 반환. */
     @Transactional
     public Coupon changeStatus(Long couponId, CouponStatus target) {
         Coupon coupon = couponRepository.findByIdForUpdate(couponId)
@@ -101,17 +93,12 @@ public class AdminCouponService {
         return coupon;
     }
 
-    /**
-     * 특정 회원에게 쿠폰 직접지급. 선착순 한정수량과 독립 — issuedCount 비증가.
-     * 쿠폰 미존재 404, ACTIVE 아님·발급 기간 밖 422, 활성 회원 미존재 404, 이미 보유 409(UNIQUE 충돌 race 포함).
-     */
+    /** 회원에게 직접지급. 선착순 한정수량과 독립 — issuedCount 비증가. */
     @Transactional
     public MemberCoupon grant(Long couponId, Long memberId) {
-        // 행 락으로 상태 전이와 발급 가능성 검사를 직렬화한다.
         Coupon coupon = couponRepository.findByIdForUpdate(couponId)
                 .orElseThrow(() -> new CouponNotFoundException(couponId));
         if (!coupon.isIssuable(clock.instant())) {
-            // SUSPENDED/ENDED 또는 validUntil 경과.
             throw new CouponNotIssuableException(couponId);
         }
         memberRepository.findByIdAndDeletedAtIsNull(memberId)
@@ -123,7 +110,7 @@ public class AdminCouponService {
         try {
             granted = memberCouponRepository.saveAndFlush(MemberCoupon.issue(coupon, memberId, clock.instant()));
         } catch (DataIntegrityViolationException uniqueRace) {
-            // UNIQUE 충돌이면 409, 그 외 무결성 오류는 원예외를 재던진다.
+            // UNIQUE 충돌이면 409, 그 외 무결성 오류는 재던진다.
             if (memberCouponRepository.existsByCoupon_IdAndMemberId(couponId, memberId)) {
                 throw new CouponAlreadyIssuedException(couponId, memberId);
             }

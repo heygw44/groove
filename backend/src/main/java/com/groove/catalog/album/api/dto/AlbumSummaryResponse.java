@@ -9,10 +9,7 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.label.domain.Label;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/**
- * 앨범 목록 응답 DTO. averageRating/reviewCount 는 AlbumRating 으로 채우고, 리뷰가 없으면
- * averageRating=null, reviewCount=0. 인자 없는 from(Album) 은 AlbumRating.NONE 으로 위임한다.
- */
+/** averageRating/reviewCount 는 AlbumRating 으로 채운다. 인자 없는 from(Album) 은 AlbumRating.NONE. */
 public record AlbumSummaryResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,
         @Schema(description = "앨범 제목", example = "Random Access Memories") String title,

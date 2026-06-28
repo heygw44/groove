@@ -6,11 +6,9 @@ import com.groove.payment.domain.PaymentStatus;
 import org.springframework.stereotype.Service;
 
 /**
- * PG 종착 상태(PAID/FAILED)를 공유 멱등키로 1회 적용하는 정산 헬퍼.
- *
- * 웹훅·폴링·만료 리퍼가 공유하던 멱등 execute + applyResult 위임을 단일 진입점으로 모은다.
+ * PG 종착 상태(PAID/FAILED)를 공유 멱등키로 1회 적용하는 정산 헬퍼. 웹훅·폴링·만료 리퍼가 공유한다.
  * execute 는 열린 트랜잭션 밖에서 호출해야 하므로 비-트랜잭션이며, 별도 빈 {@link PaymentCallbackService#applyResult}
- * (자체 @Transactional)를 프록시 경유로 호출한다(자기호출 우회 금지).
+ * 을 프록시 경유로 호출한다(자기호출 우회 금지).
  */
 @Service
 public class PaymentSettlementService {
@@ -24,8 +22,7 @@ public class PaymentSettlementService {
     }
 
     /**
-     * PG 종착 상태를 공유 멱등키({@code payment-callback:{pgTransactionId}})로 1회 적용한다.
-     * {@code terminalStatus} 는 PAID/FAILED 여야 한다(검증은 {@link PaymentCallbackService#applyResult} 가 수행).
+     * PG 종착 상태를 공유 멱등키로 1회 적용한다. terminalStatus 는 PAID/FAILED 여야 한다(검증은 applyResult).
      * 중복 호출·동시 콜백은 캐시 재생 또는 비-PENDING 흡수로 무해하다.
      */
     public PaymentCallbackResult settle(String pgTransactionId, PaymentStatus terminalStatus, String failureReason) {

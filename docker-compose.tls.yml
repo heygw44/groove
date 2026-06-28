@@ -1,22 +1,17 @@
-# groove TLS(HTTPS) override — 기본 HTTP 데모(docker-compose.yml)를 깨지 않고
-# 443 종단을 별도 실행 경로로 얹는다.
-#
-#   ./scripts/up-tls.sh        # 권장: 인증서 보장 + NGINX_CONF 고정 + 두 compose 합성을 한번에
-#   # 수동: NGINX_CONF=nginx-tls.conf docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
-#
-# 동작: NGINX_CONF 가 conf 마운트 소스를 nginx-tls.conf 로 바꾸고(base 의 ${NGINX_CONF:-nginx.conf}),
-# 아래 override 가 443 포트 · certs 마운트를 append 하며, app 의 Secure 쿠키를 강제한다.
-# 주의: 수동 실행 시 NGINX_CONF 누락(→ 443 만 발행되고 리스너 없음)·인증서 미생성(→ ./certs 가 root
+# TLS(HTTPS) override. 기본 HTTP 데모를 깨지 않고 443 종단을 별도 경로로 얹는다.
+#   ./scripts/up-tls.sh  (권장: 인증서 보장 + NGINX_CONF 고정 + 두 compose 합성을 한번에)
+#   수동: NGINX_CONF=nginx-tls.conf docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+# NGINX_CONF 가 conf 마운트를 nginx-tls.conf 로 바꾸고, 아래 override 가 443 포트·certs 마운트를 append 하며
+# Secure 쿠키를 강제한다. 수동 실행 시 NGINX_CONF 누락(→ 443 리스너 없음)·인증서 미생성(→ ./certs 가 root
 # 소유 빈 디렉토리로 생성돼 cert 로드 실패)을 피하려면 래퍼(up-tls.sh)를 쓴다.
 services:
   nginx:
     ports:
-      - "443:443"                       # base 의 "80:80" 에 append(80→443 리다이렉트용으로 80 도 유지)
+      - "443:443"                       # base "80:80" 에 append(80 은 80→443 리다이렉트용 유지)
     volumes:
-      - ./certs:/etc/nginx/certs:ro     # 타깃 경로가 달라 base volumes 에 안전하게 append
+      - ./certs:/etc/nginx/certs:ro     # 타깃 경로가 달라 base volumes 에 append
 
   app:
     environment:
-      # env_file(.env) 보다 우선 — TLS 실행 시 .env 수정 없이 Secure refresh 쿠키 발급.
-      # nginx 443 이 X-Forwarded-Proto: https 를 전달하므로 app 이 Secure 쿠키/HSTS 를 발급한다.
+      # env_file(.env) 보다 우선. nginx 443 이 X-Forwarded-Proto: https 를 전달하므로 Secure 쿠키/HSTS 발급.
       AUTH_REFRESH_COOKIE_SECURE: "true"

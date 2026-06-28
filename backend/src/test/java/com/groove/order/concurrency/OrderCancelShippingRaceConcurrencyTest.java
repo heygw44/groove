@@ -56,9 +56,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 주문 취소·배송 자동진행 lost update 회귀 — 주문 행 비관적 락. 동시 다중 취소가 한 PENDING 주문을
- * 경합해도 취소는 정확히 1건만 성공해 재고·쿠폰을 1회만 복원하고(2배 복원 방지), 배송 자동진행과 전량 취소가
- * 동시에 들어와도 최종 상태가 (SHIPPED,SHIPPED) 또는 (CANCELLED,CANCELLED) 중 하나로 정합함을 검증한다.
+ * 주문 행 비관적 락의 lost update 회귀. 다중 취소 경합 시 1건만 성공해 재고를 1회만 복원하고,
+ * 배송 자동진행과 전량 취소가 동시에 와도 최종이 (SHIPPED,SHIPPED) 또는 (CANCELLED,CANCELLED) 로만 귀결됨을 확인한다.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -126,7 +125,7 @@ class OrderCancelShippingRaceConcurrencyTest {
     }
 
     private void clearAll() {
-        // 자식(FK 참조)부터 정리.
+        // 자식(FK 참조)부터.
         refreshTokenRepository.deleteAllInBatch();
         cartRepository.deleteAllInBatch();
         claimRepository.deleteAllInBatch();
@@ -225,7 +224,7 @@ class OrderCancelShippingRaceConcurrencyTest {
         assertThat(other.get()).as("데드락/기타 예외 0").isZero();
     }
 
-    /** PAID 결제 + PREPARING 주문 + PREPARING 배송행을 만든다. advanceToShipped 와 cancelPartially 양 경로의 자격을 동시에 만족. */
+    /** advanceToShipped·cancelPartially 양 경로 자격을 동시에 만족하는 PAID·PREPARING 주문+배송행. */
     private PreparingFixture persistPreparingOrderWithShipping(int qty) {
         Album album = albumRepository.findById(albumId).orElseThrow();
         Order order = OrderFixtures.memberOrder("ORD-RACE-" + (++seq) + "-" + System.nanoTime(), memberId);

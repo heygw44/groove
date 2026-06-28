@@ -1,14 +1,13 @@
-# groove 데모 Prometheus 스크레이프 설정.
-# docker compose --profile observability 로만 기동되는 데모 전용 스택이다(운영 모니터링 아님).
-# 앱 메트릭은 이미 생산 중(DLQ, 캐시) — 여기서는 /actuator/prometheus 를 긁어 Grafana 로 시각화한다.
+# 데모 전용 Prometheus 스크레이프 설정(--profile observability 로만 기동, 운영 모니터링 아님).
+# /actuator/prometheus 를 긁어 Grafana 로 시각화한다.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
 scrape_configs:
-  # groove 백엔드. app:8080 은 compose 의 groove-net 내부 주소(호스트 미발행).
-  # /actuator/prometheus 는 SecurityConfig 의 메트릭 전용 Basic 체인이 보호하므로 basic_auth 로 인증한다.
-  # 아래 자격증명은 데모 기본값(application.yaml 의 metrics.scrape.* 기본값과 일치) — 운영에선 절대 사용 금지.
+  # groove 백엔드. app:8080 은 groove-net 내부 주소(호스트 미발행).
+  # /actuator/prometheus 는 메트릭 전용 Basic 체인이 보호하므로 basic_auth 로 인증한다.
+  # ⚠️ 아래 자격증명은 데모 기본값. 운영에선 절대 사용 금지.
   - job_name: groove-app
     metrics_path: /actuator/prometheus
     basic_auth:

@@ -1,5 +1,4 @@
-# 빌드 컨텍스트 = 저장소 루트(docker-compose 의 context: .), dockerfile = backend/Dockerfile (#131).
-# 컨테이너 안에서도 backend/ ↔ ../frontend 형제 관계를 그대로 재현해 통합(UI 포함) JAR 을 만든다.
+# 빌드 컨텍스트 = 저장소 루트. 컨테이너 안에서도 backend/ ↔ ../frontend 형제 관계를 재현해 UI 포함 JAR 을 만든다.
 FROM eclipse-temurin:21-jdk AS builder
 WORKDIR /workspace
 
@@ -9,8 +8,7 @@ COPY backend/gradle/ backend/gradle/
 WORKDIR /workspace/backend
 RUN ./gradlew dependencies --no-daemon || true
 
-# 소스 + 프론트엔드 COPY 후 bootJar. processResources → frontendBuild(= ../frontend 에서 npm run build)가
-# Vite 산출물을 backend/src/main/resources/static 으로 출력해 단일 JAR 에 UI 가 포함된다.
+# 소스 + 프론트엔드 COPY 후 bootJar. frontendBuild 가 Vite 산출물을 backend static 으로 출력해 JAR 에 UI 포함.
 WORKDIR /workspace
 COPY backend/src/ backend/src/
 COPY frontend/ frontend/

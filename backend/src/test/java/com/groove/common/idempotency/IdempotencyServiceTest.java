@@ -76,8 +76,8 @@ class IdempotencyServiceTest {
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(record.getResponseType()).isEqualTo(SampleResult.class.getName());
         assertThat(record.getResponseBody()).contains("hello");
-        // complete 시 expiresAt 이 처리 타임아웃(짧음)에서 캐시 보관 기간(ttl, 길음)으로 연장된다.
-        // ttl 정확값(env 의존) 대신 처리 타임아웃(PT10M)을 넘는지로 단언해 CI 의 TTL 설정과 무관하게 둔다.
+        // complete 시 expiresAt 이 처리 타임아웃에서 ttl 로 연장. ttl 정확값(env 의존) 대신
+        // 처리 타임아웃(PT10M) 초과 여부로 단언해 CI TTL 설정과 무관하게 둔다.
         assertThat(record.getExpiresAt()).isAfter(Instant.now().plus(Duration.ofMinutes(11)));
     }
 
@@ -168,7 +168,7 @@ class IdempotencyServiceTest {
         assertThat(counter.get()).isEqualTo(1);
         assertThat(result).isEqualTo(new SampleResult("fresh", 2));
 
-        assertThat(repository.count()).isEqualTo(1);   // 만료 행은 교체됐고 중복 행이 남지 않는다
+        assertThat(repository.count()).isEqualTo(1);   // 만료 행 교체, 중복 행 없음
         IdempotencyRecord reloaded = repository.findByIdempotencyKey(key).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(reloaded.isExpired(Instant.now())).isFalse();
@@ -179,7 +179,7 @@ class IdempotencyServiceTest {
     @DisplayName("처리 타임아웃 지난 IN_PROGRESS 마커는 회수하고 action 재실행 후 캐싱(#317)")
     void expiredInProgressMarker_isReclaimed_andReprocessed() {
         String key = UUID.randomUUID().toString();
-        saveExpiredInProgress(key);   // 처리 타임아웃이 지난(죽은 소유자) 마커
+        saveExpiredInProgress(key);   // 처리 타임아웃 지난(죽은 소유자) 마커
         AtomicInteger counter = new AtomicInteger();
 
         SampleResult result = idempotencyService.execute(key, SampleResult.class, () -> {
@@ -190,7 +190,7 @@ class IdempotencyServiceTest {
         assertThat(counter.get()).isEqualTo(1);
         assertThat(result).isEqualTo(new SampleResult("fresh", 2));
 
-        assertThat(repository.count()).isEqualTo(1);   // 죽은 마커는 교체됐고 중복 행이 남지 않는다
+        assertThat(repository.count()).isEqualTo(1);   // 죽은 마커 교체, 중복 행 없음
         IdempotencyRecord reloaded = repository.findByIdempotencyKey(key).orElseThrow();
         assertThat(reloaded.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(reloaded.isExpired(Instant.now())).isFalse();

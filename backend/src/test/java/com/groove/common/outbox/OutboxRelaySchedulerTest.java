@@ -27,7 +27,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 아웃박스 릴레이 스케줄러 단위 테스트 — 디스패치 + 발행 완료 표시 + 실패 시 미표시(재시도) + 미등록 핸들러 보류.
+ * 아웃박스 릴레이 스케줄러 단위 테스트. 디스패치·발행 표시·실패 시 재시도(미표시)·미등록 핸들러 보류.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("OutboxRelayScheduler")
@@ -51,7 +51,7 @@ class OutboxRelaySchedulerTest {
     @BeforeEach
     void setUp() {
         when(handler.eventType()).thenReturn(EVENT_TYPE);
-        // 실제 TransactionTemplate + mock TM 으로 executeWithoutResult 콜백(markPublished)이 실행되게 한다 (도달 안 하는 케이스가 있어 lenient)
+        // 실제 TransactionTemplate + mock TM 으로 executeWithoutResult 콜백이 실행되게 (미도달 케이스 있어 lenient).
         lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
@@ -105,10 +105,10 @@ class OutboxRelaySchedulerTest {
 
         scheduler.relayPendingEvents();
 
-        // 실패 건: 카운터 증가, 발행 미표시
+        // 실패 건: 카운터 증가, 발행 미표시.
         verify(repository).incrementAttemptCount(1L);
         verify(repository, never()).markPublished(eq(1L), any());
-        // 정상 건: 발행 완료 표시, 카운터 미증가
+        // 정상 건: 발행 표시, 카운터 미증가.
         verify(repository).markPublished(2L, NOW);
         verify(repository, never()).incrementAttemptCount(2L);
     }
@@ -124,7 +124,7 @@ class OutboxRelaySchedulerTest {
 
         verify(repository).incrementAttemptCount(1L);
         verify(repository, never()).markPublished(any(), any());
-        // 상한 도달 전이 시점에 정확히 1회 격리 메트릭 기록
+        // 상한 도달 전이 시점에 1회만 격리 메트릭 기록.
         verify(metrics).recordQuarantined(EVENT_TYPE);
     }
 
@@ -161,12 +161,12 @@ class OutboxRelaySchedulerTest {
         given(repository.findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(anyInt(), any(Limit.class)))
                 .willReturn(List.of(poison, healthy));
         org.mockito.BDDMockito.willThrow(new RuntimeException("consumer down")).given(handler).handle(poison);
-        // 카운터 증가 트랜잭션이 실패하는 상황 재현
+        // 카운터 증가 트랜잭션 자체가 실패하는 상황.
         org.mockito.BDDMockito.willThrow(new RuntimeException("db down")).given(repository).incrementAttemptCount(1L);
 
-        scheduler.relayPendingEvents(); // 예외가 배치 밖으로 전파되지 않아야 한다
+        scheduler.relayPendingEvents(); // 예외가 배치 밖으로 전파되면 안 됨
 
-        verify(repository).markPublished(2L, NOW); // 정상 건은 계속 처리됨
+        verify(repository).markPublished(2L, NOW);
     }
 
     @Test

@@ -5,10 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 
-/**
- * Mock PG 동작 파라미터. payment.mock.* 키와 매핑되며 compact constructor 에서 검증한다.
- * successRate: 성공 비율(0.0~1.0). delayMin/Max: 호출 지연. webhookDelayMin/Max: 웹훅 발사 지연. webhookSecret: 웹훅 서명 값.
- */
+/** Mock PG 동작 파라미터. payment.mock.* 키와 매핑되며 compact constructor 에서 검증한다. */
 @ConfigurationProperties(prefix = "payment.mock")
 public record PaymentMockProperties(
         double successRate,

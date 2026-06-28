@@ -1,9 +1,6 @@
 package com.groove.coupon.domain;
 
-/**
- * 쿠폰 할인 방식. 할인액 산정을 각 상수의 행위로 위임한다.
- * Coupon.calculateDiscount 가 가드·불변식을 적용하기 전 단계의 "원시 할인액(raw)" 만 계산한다.
- */
+/** 쿠폰 할인 방식. 각 상수가 가드 적용 전 원시 할인액만 계산한다. */
 public enum CouponDiscountType {
 
     /** 정액 할인: min(discountValue, subtotal) — 소계보다 큰 정액은 소계로 캡된다. */
@@ -14,10 +11,7 @@ public enum CouponDiscountType {
         }
     },
 
-    /**
-     * 정률 할인: subtotal * discountValue / 100, 상한(maxDiscountAmount) 이 있으면 그 값으로 캡된다.
-     * discountValue 는 1~100 범위.
-     */
+    /** 정률 할인: subtotal * discountValue / 100, 상한이 있으면 캡. */
     PERCENTAGE {
         @Override
         long rawDiscount(long subtotal, long discountValue, Long maxDiscountAmount) {

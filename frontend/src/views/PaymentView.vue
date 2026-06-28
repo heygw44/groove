@@ -18,11 +18,11 @@ const route = useRoute()
 const auth = useAuthStore()
 const { isAuthenticated } = storeToRefs(auth)
 
-// 결제 모드 토글 — 'toss' 면 토스 결제위젯, 그 외(기본 mock)는 서버 비동기 + 폴링 흐름.
+// 결제 모드 토글. 'toss' 면 토스 결제위젯, 그 외(기본 mock)는 서버 비동기 + 폴링 흐름.
 const isToss = import.meta.env.VITE_PAYMENT_PROVIDER === 'toss'
 
 const orderNumber = route.params.orderNumber
-// 체크아웃이 전달한 결제 예정액(표시용) — NaN 만 null 처리
+// 체크아웃이 전달한 결제 예정액(표시용). NaN 이면 null.
 const queryAmount = Number(route.query.amount)
 const displayAmount = Number.isFinite(queryAmount) ? queryAmount : null
 
@@ -59,7 +59,7 @@ async function pollOnce() {
     return true
   }
   if (p.status === 'FAILED') {
-    // 종결 상태 — 재결제 불가
+    // 종결 상태. 재결제 불가.
     failureKind.value = 'status'
     phase.value = 'failed'
     return true
@@ -77,14 +77,14 @@ async function pay() {
   try {
     payment.value = await requestPayment(orderNumber, method.value, idempotencyKey.value) // 202 PENDING
   } catch (e) {
-    // 요청 자체 실패 — 같은 키로 재시도 가능
+    // 요청 자체 실패. 같은 키로 재시도 가능.
     failureKind.value = 'request'
     phase.value = 'failed'
     formError.value = errorMessage(e, '결제 요청에 실패했습니다.')
     return
   }
   if (!isAuthenticated.value) {
-    // 게스트는 폴링 불가 — 접수만 알리고 주문조회로 결과 확인
+    // 게스트는 폴링 불가. 접수만 알리고 주문조회로 결과 확인.
     phase.value = 'submitted-guest'
     return
   }

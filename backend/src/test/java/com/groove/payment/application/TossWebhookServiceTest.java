@@ -79,7 +79,7 @@ class TossWebhookServiceTest {
     @DisplayName("재조회 PAID 금액 불일치 → 정산 보류, 수동 확인 IGNORED (#320)")
     void handle_paidAmountMismatch_ignored() {
         given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(pendingPayment()));
-        // 저장 금액 35000 과 다른 정산금액을 토스가 알려줌 → 자동 전이하지 않는다.
+        // 저장 금액 35000 과 다른 정산금액 → 자동 전이 금지.
         given(paymentGateway.query(PAYMENT_KEY)).willReturn(new GatewayQuery(PaymentStatus.PAID, 999000L));
 
         PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));

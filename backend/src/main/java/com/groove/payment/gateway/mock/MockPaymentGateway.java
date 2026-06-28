@@ -27,17 +27,16 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 결제 라이프사이클(request/confirm/query/refund)을 재현하는 Mock 게이트웨이. 거래 상태는 프로세스 메모리에
- * 보관하고 MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목을 정리한다.
+ * 결제 라이프사이클(request/confirm/query/refund)을 재현하는 Mock 게이트웨이.
+ * 거래 상태는 프로세스 메모리에 보관하고 MAX_TRACKED_TRANSACTIONS 도달 시 오래된 항목을 정리한다.
  */
 @Component
 @Profile({"local", "test", "docker"})
 public class MockPaymentGateway implements PaymentGateway {
 
-    /** provider 식별자. */
     public static final String PROVIDER = "MOCK";
 
-    /** 추적 거래 수 상한 — 초과 시 PRUNE_AGE 보다 오래된 항목을 정리한다. */
+    /** 초과 시 PRUNE_AGE 보다 오래된 항목을 정리한다. */
     static final int MAX_TRACKED_TRANSACTIONS = 10_000;
     /** 발사 후 이 시간이 지난 거래는 정리 대상으로 삼는다. */
     static final Duration PRUNE_AGE = Duration.ofMinutes(10);
@@ -86,7 +85,7 @@ public class MockPaymentGateway implements PaymentGateway {
 
     @Override
     public ConfirmResponse confirm(String paymentKey, String orderId, long amount) {
-        // 상태 변경(transactions.put) 전에 입력을 검증한다 — blank 면 거래가 남지 않도록 ConfirmResponse 생성 전 거른다.
+        // 상태 변경(transactions.put) 전에 검증한다. blank 면 거래가 남지 않도록 ConfirmResponse 생성 전 거른다.
         if (paymentKey == null || paymentKey.isBlank()) {
             throw new IllegalArgumentException("paymentKey 는 비어 있을 수 없습니다");
         }
@@ -95,11 +94,11 @@ public class MockPaymentGateway implements PaymentGateway {
         Instant now = clock.instant();
         pruneStaleIfFull(now);
 
-        // confirm 은 동기 확정 — 즉시 PAID 거래로 기록(fireAt=now 라 이후 query 가 바로 PAID 를 반환).
+        // confirm 은 동기 확정이라 즉시 PAID 거래로 기록한다(fireAt=now 라 이후 query 가 바로 PAID 를 반환).
         transactions.put(paymentKey, new Transaction(PaymentStatus.PAID, now));
 
         log.info("Mock 결제 승인(confirm): paymentKey={}, order={}, amount={} → PAID", paymentKey, orderId, amount);
-        // Mock 은 실제 결제수단을 모른다 — method 는 null 로 두어 호출부가 잠정 method 를 유지하게 한다.
+        // Mock 은 실제 결제수단을 모르므로 method 는 null. 호출부가 잠정 method 를 유지한다.
         return new ConfirmResponse(paymentKey, PaymentStatus.PAID, null);
     }
 
@@ -108,7 +107,7 @@ public class MockPaymentGateway implements PaymentGateway {
         Objects.requireNonNull(pgTransactionId, "pgTransactionId");
         simulateProcessingLatency();
 
-        // Mock 은 거래별 금액을 보유하지 않으므로 정산금액은 항상 null 로 반환한다 — 호출부의 금액 검증은 생략된다.
+        // Mock 은 거래별 금액을 보유하지 않으므로 정산금액은 항상 null 이다(호출부의 금액 검증 생략).
         Transaction tx = transactions.get(pgTransactionId);
         if (tx == null) {
             log.warn("Mock 결제 조회: 알 수 없는 거래 pgTx={} — PENDING 으로 응답", pgTransactionId);

@@ -1,9 +1,6 @@
-# dev 프로파일 — 토스페이먼츠 테스트 연동 확인용. test/local 은 여전히 Mock 게이트웨이를 쓰고,
+# dev 프로파일 — 토스페이먼츠 테스트 연동 확인용. test/local 은 Mock 게이트웨이를 쓰고
 # dev/prod 에서만 TossPaymentConfig 의 RestClient 빈이 구성된다.
-#
-# 민감값(datasource.password·jwt.secret·email.hash.secret·payment.mock.webhook-secret·
-# payment.toss.client-key/secret-key)은 base application.yaml 의 env 바인딩(${VAR})을 그대로 상속한다.
-# 저장소에 하드코딩하지 않고, 로컬 개발 편의는 .env(VCS 제외)로 주입한다. 여기엔 비민감 dev 설정만 둔다.
+# 민감값(jwt.secret·toss 키 등)은 base 의 env 바인딩을 상속한다(.env 로 주입, VCS 제외). 여기엔 비민감 dev 설정만.
 payment:
   toss:
     # 리다이렉트 URL(비민감)만 dev 로컬 기본값 제공. client/secret 키는 base 의 ${PAYMENT_TOSS_*}(env)에서 바인딩.

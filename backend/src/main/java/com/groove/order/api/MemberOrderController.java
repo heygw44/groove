@@ -32,10 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Set;
 
-/**
- * 회원 본인 주문 목록 (GET /members/me/orders) — 항상 인증된 회원에게만 노출.
- * 정렬 화이트리스트: createdAt 만 허용.
- */
+/** 회원 본인 주문 목록. 정렬 화이트리스트는 createdAt 만 허용. */
 @Tag(name = "내 주문", description = "로그인한 회원 본인의 주문 목록 조회 (인증 필요)")
 @SecurityRequirement(name = "bearerAuth")
 @RestController

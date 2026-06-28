@@ -20,25 +20,25 @@ const loadError = ref('') // 초기화 실패(설정 누락·네트워크 등)
 const ready = ref(false) // 위젯 렌더 완료 → 결제 버튼 활성
 const payError = ref('') // requestPayment 실패/취소 안내(재시도 가능)
 const submitting = ref(false)
-const amount = ref(null) // 서버 payable — checkout 응답으로 채워지며, 버튼은 ready(렌더 완료) 후에만 보인다
+const amount = ref(null) // 서버 payable. checkout 응답으로 채워지고, 버튼은 ready(렌더 완료) 후에만 보인다.
 
 let widgets = null
 let checkout = null // { clientKey, orderId, amount, successUrl, failUrl }
 
 onMounted(async () => {
   try {
-    // 'CARD' 는 잠정 placeholder다 — 실제 결제수단은 아래 결제위젯(renderPaymentMethods)에서 사용자가 고르며,
-    // 백엔드가 confirm 응답의 실제 수단으로 Payment.method 를 보정한다(#307). 멱등 키는 주문번호로 스코프해
-    // sessionStorage 에 캐시한다 — checkout 재호출(재마운트·HMR·새로고침)이 같은 키를 재사용해 동일 PENDING 을 멱등 반환받는다(#309).
+    // 'CARD' 는 잠정 placeholder. 실제 결제수단은 결제위젯(renderPaymentMethods)에서 사용자가 고르고,
+    // 백엔드가 confirm 응답의 실제 수단으로 Payment.method 를 보정한다. 멱등 키는 주문번호로 스코프해
+    // sessionStorage 에 캐시한다(checkout 재호출이 같은 키를 재사용해 동일 PENDING 을 멱등 반환받는다).
     checkout = await tossCheckout(props.orderNumber, 'CARD', idempotencyKeyFor(props.orderNumber))
     if (!checkout.clientKey || !checkout.successUrl || !checkout.failUrl) {
-      // 백엔드가 토스 미설정(local/docker 등 mock 프로파일) — 토스 모드를 쓸 수 없다.
+      // 백엔드가 토스 미설정(local/docker 등 mock 프로파일). 토스 모드를 쓸 수 없다.
       loadError.value = '토스 결제가 구성되어 있지 않습니다. 백엔드를 dev/prod 프로파일(토스 테스트 키)로 실행해 주세요.'
       return
     }
     amount.value = checkout.amount
     const tossPayments = await loadTossPayments(checkout.clientKey)
-    // 데모는 비회원 결제도 허용 — ANONYMOUS customerKey 사용.
+    // 데모는 비회원 결제도 허용하므로 ANONYMOUS customerKey 사용.
     widgets = tossPayments.widgets({ customerKey: ANONYMOUS })
     await widgets.setAmount({ currency: 'KRW', value: checkout.amount }) // 서버 payable(위변조 검증 기준)
     await Promise.all([
@@ -66,7 +66,7 @@ async function pay() {
       failUrl: checkout.failUrl,
     })
   } catch (e) {
-    // 사용자가 결제창을 닫거나(USER_CANCEL) 요청 실패 — 인라인 안내 후 재시도 가능.
+    // 사용자가 결제창을 닫거나(USER_CANCEL) 요청 실패 시 인라인 안내 후 재시도 가능.
     // 토스 SDK 원문 message 는 노출하지 않고 console 로깅만, 사용자에겐 코드 매핑 한글 안내.
     console.error('[toss] requestPayment 실패', e)
     payError.value = tossErrorMessage(e)

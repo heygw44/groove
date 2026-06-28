@@ -34,20 +34,16 @@ import java.util.function.Supplier;
 
 /**
  * 토스페이먼츠 실 PG 어댑터. tossRestClient(Basic Auth)로 코어 API 를 호출한다.
- * dev/prod 에서만 로드(test/local/docker 는 MockPaymentGateway, 프로파일 택1).
- *
- * 승인 모델: 동기 confirm 모델이라 {@link #confirm}이 진입점. 비동기 {@link #request}에 대응하는 토스 API 가 없어 UnsupportedOperationException.
- * 멱등성: confirm/refund 는 Idempotency-Key 헤더로 재시도 중복을 막는다 — confirm 은 paymentKey, refund 는 RefundRequest#idempotencyKey()(같은 시도 → 같은 키 → 토스 dedup).
- * 502 매핑: tossRestClient 는 status handler 가 없어 4xx/5xx 를 RestClientResponseException 으로 전파한다.
- * - confirm/query — 공통 호출부 래퍼가 없어 어댑터가 직접 PaymentGatewayException(502)으로 래핑.
- * - refund — 호출부(AdminOrderService/ClaimService)가 GatewayRefunds 로 래핑하므로 raw RuntimeException 전파(더블래핑 방지).
- * 세 메서드 모두 실패 시 logTossError 로 토스 에러({code, message})를 진단 로깅한다.
+ * dev/prod 에서만 로드한다(그 외는 MockPaymentGateway, 프로파일 택1).
+ * 동기 confirm 모델이라 {@link #confirm}이 진입점. {@link #request}에 대응하는 토스 API 가 없어 UnsupportedOperationException.
+ * confirm/refund 는 Idempotency-Key 헤더로 재시도 중복을 막는다(confirm=paymentKey, refund=RefundRequest#idempotencyKey()).
+ * 502 매핑: confirm/query 는 공통 호출부 래퍼가 없어 어댑터가 직접 PaymentGatewayException(502)으로 래핑한다.
+ * refund 는 호출부가 GatewayRefunds 로 래핑하므로 raw RuntimeException 으로 전파한다(더블래핑 방지).
  */
 @Component
 @Profile({"dev", "prod"})
 public class TossPaymentGateway implements PaymentGateway {
 
-    /** provider 식별자. */
     public static final String PROVIDER = "TOSS";
 
     /** 환불 사유 미지정 시 토스 cancelReason(필수)에 채울 기본값. */
@@ -69,18 +65,17 @@ public class TossPaymentGateway implements PaymentGateway {
     }
 
     /**
-     * 토스 호출을 서킷브레이커(바깥)·재시도(안쪽)로 감싼다. 서킷이 OPEN 이면 호출 전 빠르게 실패
-     * (CallNotPermittedException)해 워커 점유를 끊고, 일시 장애는 재시도가 흡수한다. 서킷은 재시도까지 포함한
-     * 호출 단위 결과를 집계한다(재시도로 회복되면 실패로 세지 않음).
+     * 토스 호출을 서킷브레이커(바깥)·재시도(안쪽)로 감싼다. 서킷 OPEN 이면 호출 전 빠르게 실패해 워커 점유를 끊고,
+     * 일시 장애는 재시도가 흡수한다. 서킷은 재시도까지 포함한 호출 단위 결과를 집계한다(재시도로 회복되면 실패로 안 셈).
      */
     private <T> T callGuarded(Supplier<T> call) {
         return CircuitBreaker.decorateSupplier(circuitBreaker, Retry.decorateSupplier(retry, call)).get();
     }
 
     /**
-     * 재시도·서킷브레이커가 일시 장애로 간주할 예외 술어. 토스 5xx 와 연결 단계 실패(연결 거부·연결 타임아웃)만 일시 장애.
-     * 4xx·알 수 없는 상태(IllegalStateException)는 재시도/집계 안 함. 읽기 타임아웃은 이미 read-timeout 을 소모해 재시도 안 함
-     * (동기 confirm 워커 점유 증폭 방지). CallNotPermittedException 도 비대상이라 서킷 OPEN 시 즉시 전파된다.
+     * 재시도·서킷브레이커가 일시 장애로 간주할 예외 술어. 토스 5xx 와 연결 단계 실패(연결 거부·연결 타임아웃)만 일시 장애다.
+     * 4xx·알 수 없는 상태는 재시도/집계하지 않는다. 읽기 타임아웃은 이미 read-timeout 을 소모해 재시도하지 않는다(워커 점유 증폭 방지).
+     * CallNotPermittedException 도 비대상이라 서킷 OPEN 시 즉시 전파된다.
      */
     static boolean isRetryableTransient(Throwable throwable) {
         if (throwable instanceof RestClientResponseException response) {
@@ -103,7 +98,7 @@ public class TossPaymentGateway implements PaymentGateway {
     @Override
     public ConfirmResponse confirm(String paymentKey, String orderId, long amount) {
         try {
-            // paymentKey 는 confirm 의 자연 멱등 단위다 — 재시도·read-timeout 후 재호출에도 토스가 Idempotency-Key 로 dedup 한다.
+            // paymentKey 는 confirm 의 자연 멱등 단위다. 재호출에도 토스가 Idempotency-Key 로 dedup 한다.
             TossPayment payment = callGuarded(() -> tossRestClient.post()
                     .uri("/v1/payments/confirm")
                     .header("Idempotency-Key", paymentKey)
@@ -130,15 +125,15 @@ public class TossPaymentGateway implements PaymentGateway {
                     .uri("/v1/payments/{paymentKey}", pgTransactionId)
                     .retrieve()
                     .body(TossPayment.class));
-            // 토스가 알려준 권위 정산금액(totalAmount)을 함께 반환 — 웹훅/폴링이 PAID 정산 전 위변조 대조에 쓴다.
+            // 권위 정산금액(totalAmount)을 함께 반환한다. 웹훅/폴링이 PAID 정산 전 위변조 대조에 쓴다.
             PaymentStatus status = TossStatusMapper.toPaymentStatus(requireBody(payment).status());
             return new GatewayQuery(status, payment.totalAmount());
         } catch (CallNotPermittedException circuitOpen) {
-            // 서킷 OPEN 은 일시 백오프 상태다 — 502(영구 오류)로 정규화하지 않고 그대로 전파해, 폴링 스케줄러가 이를
-            // '영구 해소 불가'로 오인해 만료 PENDING 결제를 FAILED 로 종결하지 않도록 한다.
+            // 서킷 OPEN 은 일시 백오프다. 502(영구 오류)로 정규화하지 않고 그대로 전파해, 폴링 스케줄러가 이를
+            // '영구 해소 불가'로 오인해 만료 PENDING 결제를 FAILED 로 종결하지 않게 한다.
             throw circuitOpen;
         } catch (RuntimeException e) {
-            // query 도 호출부(폴링 스케줄러)가 502 로 변환하지 않으므로 어댑터가 직접 정규화한다.
+            // query 도 호출부가 502 로 변환하지 않으므로 어댑터가 직접 정규화한다.
             logTossError("결제 조회", e);
             throw new PaymentGatewayException(e);
         }
@@ -146,7 +141,7 @@ public class TossPaymentGateway implements PaymentGateway {
 
     @Override
     public RefundResponse refund(RefundRequest request) {
-        // 토스 cancelReason 은 필수다 — 포트 계약상 reason 은 선택이므로 비어 있으면 기본 사유로 채운다.
+        // 토스 cancelReason 은 필수다. 포트 계약상 reason 은 선택이므로 비어 있으면 기본 사유로 채운다.
         String cancelReason = (request.reason() == null || request.reason().isBlank())
                 ? DEFAULT_CANCEL_REASON : request.reason();
         try {
@@ -161,7 +156,7 @@ public class TossPaymentGateway implements PaymentGateway {
             log.info("토스 결제 취소: paymentKey={}, amount={} → {}", request.pgTransactionId(), request.amount(), status);
             return new RefundResponse(payment.paymentKey(), status, clock.instant());
         } catch (RuntimeException e) {
-            // GatewayRefunds 가 PaymentGatewayException(502)으로 정규화하므로 raw 로 재던진다(더블래핑 방지). 진단만 남긴다.
+            // GatewayRefunds 가 502 로 정규화하므로 raw 로 재던진다(더블래핑 방지). 진단만 남긴다.
             logTossError("결제 취소", e);
             throw e;
         }

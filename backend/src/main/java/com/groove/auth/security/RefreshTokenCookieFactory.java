@@ -5,15 +5,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-/**
- * Refresh Token 을 담는 HttpOnly 쿠키를 생성·만료시키는 팩토리.
- * create(String) 로 회전된 refresh 토큰 쿠키를, clear() 로 Max-Age=0 삭제 쿠키를 만든다.
- * 쿠키 Max-Age 는 refresh 토큰 TTL 과 동일하다.
- */
+/** Refresh Token HttpOnly 쿠키 팩토리. 쿠키 Max-Age 는 refresh 토큰 TTL 과 동일. */
 @Component
 public class RefreshTokenCookieFactory {
 
-    /** Refresh Token 쿠키 이름. */
     public static final String COOKIE_NAME = "refreshToken";
 
     private final RefreshCookieProperties properties;

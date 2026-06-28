@@ -18,7 +18,7 @@ const form = reactive({
 })
 const requiredError = ref('')
 
-// 게스트 토스 결제 콜백 결과(#308) — 라우터 가드가 order-detail 바운스 대신 ?payment= 를 보존해 이리로 보낸다.
+// 게스트 토스 결제 콜백 결과. 라우터 가드가 order-detail 바운스 대신 ?payment= 를 보존해 이리로 보낸다.
 const { paymentResult } = usePaymentResultBanner()
 
 const order = ref(null)

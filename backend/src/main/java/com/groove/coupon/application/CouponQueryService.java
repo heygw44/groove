@@ -42,10 +42,7 @@ public class CouponQueryService {
         return couponRepository.findIssuable(clock.instant(), pageable).map(CouponResponse::from);
     }
 
-    /**
-     * 회원 보유 쿠폰 페이지 — status 가 null 이면 전체, 아니면 해당 상태만.
-     * USED 쿠폰의 orderNumber 는 페이지의 orderId 집합을 모아 OrderNumberLookup 으로 한 번에 resolve 한다(복원된 쿠폰은 null).
-     */
+    /** USED 쿠폰의 orderNumber 는 orderId 집합을 모아 한 번에 resolve(N+1 회피, 복원된 쿠폰은 null). */
     @Transactional(readOnly = true)
     public Page<MemberCouponResponse> listForMember(Long memberId, MemberCouponStatus status, Pageable pageable) {
         Page<MemberCoupon> page = status == null

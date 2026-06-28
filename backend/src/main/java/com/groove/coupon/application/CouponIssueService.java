@@ -20,18 +20,14 @@ import java.time.Clock;
 import java.util.Locale;
 
 /**
- * 선착순 쿠폰 발급. 세 경로 제공 — issue(원자적 조건부 UPDATE 로 소진 검사+증가),
- * issueWithoutLock(락 없음, lost-update 로 초과발급 재현), issueWithPessimisticLock(FOR UPDATE 행 락).
+ * 선착순 쿠폰 발급. 세 경로 — issue(원자적 조건부 UPDATE), issueWithoutLock(lost-update 초과발급 재현),
+ * issueWithPessimisticLock(FOR UPDATE 행 락).
  *
- * 회원당 1장 보증: 사전 검사로 거르고, 통과한 동시 중복은 uk_member_coupon_coupon_member UNIQUE 가 잡는다 —
- * INSERT 충돌 시 트랜잭션이 롤백되며 증가시킨 카운터도 함께 되돌아간다.
- *
- * issue 는 @Transactional 자기완결 — @Idempotent 컨트롤러가 비트랜잭션으로 호출하고 커밋 후 멱등성 마커가 COMPLETED 로 갱신된다.
+ * 회원당 1장: 사전 검사로 거르고, 통과한 동시 중복은 UNIQUE 제약이 잡아 트랜잭션 롤백(증가시킨 카운터도 복원).
  */
 @Service
 public class CouponIssueService {
 
-    /** 회원당 1장 UNIQUE 제약명 (V14) — 소문자 비교용. */
     private static final String MEMBER_COUPON_UNIQUE_CONSTRAINT = "uk_member_coupon_coupon_member";
 
     private final CouponRepository couponRepository;
@@ -50,12 +46,11 @@ public class CouponIssueService {
     }
 
     /**
-     * 발급 경로 — 원자적 조건부 UPDATE. status + 발급 기간 + issued_count < total_quantity 검사와 증가를 단일 UPDATE 로
-     * 원자 처리한다(affected=1 성공 / 0 발급불가 → 재조회로 사유 판별). UPDATE 의 기간 조건이 만료 경계 TOCTOU 를 닫는다.
+     * 원자적 조건부 UPDATE — 검사와 증가를 단일 UPDATE 로(affected=1 성공 / 0 발급불가).
+     * UPDATE 의 기간 조건이 만료 경계 TOCTOU 를 닫는다.
      */
     @Transactional
     public MemberCouponResponse issue(Long memberId, Long couponId) {
-        // soft delete 된 회원이면 404.
         if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
             throw new MemberNotFoundException();
         }
@@ -63,15 +58,14 @@ public class CouponIssueService {
         requireNotYetIssued(couponId, memberId);
 
         if (couponRepository.incrementIssuedCount(couponId, clock.instant()) == 0) {
-            // 0행은 소진·SUSPENDED 전환·기간 밖. clearAutomatically 로 컨텍스트가 비었으니 재조회로 사유를 가린다.
-            throw resolveIssueFailure(couponId);
+            throw resolveIssueFailure(couponId); // 0행 — 재조회로 사유 판별
         }
-        // clearAutomatically 가 영속성 컨텍스트를 비우므로 managed 참조를 다시 얻는다.
+        // clearAutomatically 가 컨텍스트를 비우므로 managed 참조를 다시 얻는다.
         Coupon managed = couponRepository.getReferenceById(couponId);
         return persistIssuance(managed, memberId, couponId);
     }
 
-    /** 발급 UPDATE 0행의 사유 판별 — 없어짐(404)·비발급(422)·소진(409) 중 하나로 매핑한다. */
+    /** 발급 실패 사유를 없어짐(404)·비발급(422)·소진(409)으로 매핑. */
     private RuntimeException resolveIssueFailure(Long couponId) {
         return couponRepository.findById(couponId)
                 .map(coupon -> coupon.isIssuable(clock.instant())
@@ -94,9 +88,7 @@ public class CouponIssueService {
         return persistIssuance(coupon, memberId, couponId);
     }
 
-    /**
-     * 락 없는 read-check-increment. 동시 발급 시 lost-update 로 초과발급을 재현한다. 회원당 1장 사전 검사를 생략한다.
-     */
+    /** 락 없는 read-check-increment — lost-update 초과발급 재현. 회원당 1장 사전 검사 생략. */
     @Transactional
     public MemberCouponResponse issueWithoutLock(Long memberId, Long couponId) {
         Coupon coupon = couponRepository.findById(couponId)
@@ -141,10 +133,7 @@ public class CouponIssueService {
         }
     }
 
-    /**
-     * 예외 cause 체인에서 uk_member_coupon_coupon_member UNIQUE 위반인지 판별한다.
-     * ConstraintViolationException.getConstraintName() 을 우선 보고, null 이면 메시지 substring 으로 폴백한다.
-     */
+    /** cause 체인에서 회원당 1장 UNIQUE 위반 판별. 제약명 우선, null 이면 메시지 substring 폴백. */
     private boolean isMemberCouponUniqueViolation(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             if (cause instanceof ConstraintViolationException cve && containsConstraint(cve.getConstraintName())) {

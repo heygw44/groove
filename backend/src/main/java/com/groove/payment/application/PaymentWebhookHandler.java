@@ -11,8 +11,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * 인프로세스 웹훅 콜백 수신기 — WebhookNotification 의 서명을 검증하고 PaymentCallbackService 로 처리한다.
- * pgTransactionId 기반 키로 IdempotencyService 를 통해 멱등 처리한다.
+ * 인프로세스 웹훅 콜백 수신기. 서명을 검증하고 PaymentCallbackService 로 처리한다.
+ * pgTransactionId 기반 키로 멱등 처리한다.
  */
 @Component
 @Profile({"local", "dev", "test", "docker"})

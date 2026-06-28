@@ -19,13 +19,13 @@ services:
       - groove-net
 
   app:
-    # 백엔드는 backend/ 하위. 컨텍스트는 루트 유지 — Dockerfile 이 frontend/ 도 COPY 해 UI 통합 빌드.
-    # 단일 인스턴스 전제 — deploy.replicas 등으로 수평 확장하면 rate limit 버킷(인스턴스 로컬 Caffeine)이
-    # 인스턴스별로 분리돼 무력화된다. 확장 시 분산 버킷(bucket4j-redis) 필요.
+    # 컨텍스트는 루트(Dockerfile 이 frontend/ 도 COPY 해 UI 통합 빌드).
+    # 단일 인스턴스 전제. 수평 확장하면 rate limit 버킷(인스턴스 로컬 Caffeine)이 분리돼 무력화되므로
+    # 확장 시 분산 버킷(bucket4j-redis) 필요.
     build:
       context: .
       dockerfile: backend/Dockerfile
-    # 호스트 포트 미발행 — 외부 접근은 nginx(:80)를 통해서만. healthcheck 는 컨테이너 내부 localhost:8080.
+    # 호스트 포트 미발행. 외부 접근은 nginx(:80)를 통해서만.
     expose:
       - "8080"
     env_file:
@@ -46,8 +46,7 @@ services:
       - groove-net
 
   nginx:
-    # 리버스 프록시 — gzip · 정적 캐시 · Referrer-Policy 를 일괄 처리.
-    # 단일 upstream(app) 전제 — LB 아님. 고정 태그로 재현성 확보.
+    # 리버스 프록시. gzip·정적 캐시·Referrer-Policy 를 일괄 처리. 단일 upstream(app), LB 아님.
     # TLS 종단(:443)은 docker-compose.tls.yml override 로 활성화한다.
     image: nginx:1.27-alpine
     depends_on:
@@ -56,20 +55,16 @@ services:
     ports:
       - "80:80"
     volumes:
-      # 기본은 HTTP(nginx.conf). TLS 실행 시 NGINX_CONF=nginx-tls.conf 로 스왑(override 와 함께).
+      # 기본 HTTP(nginx.conf). TLS 실행 시 NGINX_CONF=nginx-tls.conf 로 스왑.
       - ./docker/nginx/${NGINX_CONF:-nginx.conf}:/etc/nginx/conf.d/default.conf:ro
       - ./docker/nginx/snippets:/etc/nginx/snippets:ro
     networks:
       - groove-net
 
-  # ── 관측 스택 — 데모 전용, 기본 비활성 ──────────────────────────────────
-  # profiles 키가 있어 기본 `docker compose up` 에선 기동되지 않는다.
-  # 활성화: docker compose --profile observability up
-  #   Grafana  http://localhost:3000  (익명 Viewer — groove 운영 가시성 대시보드 자동 로드)
-  #   Prometheus http://localhost:9090 (타깃 상태: /targets)
-  # ⚠️ 로컬 신뢰 네트워크 데모 전용 — 외부/공유 환경 노출 금지. Grafana 는 익명 Viewer 열람 + admin 기본 비번
-  #   (GRAFANA_ADMIN_PASSWORD 미설정 시 'admin') + :3000 호스트 퍼블리시 상태다. 공개망에 띄우려면 익명 OFF·
-  #   강한 GRAFANA_ADMIN_PASSWORD·포트 비공개로 하드닝할 것.
+  # 관측 스택 — 데모 전용, 기본 비활성(profiles 키). 활성화: docker compose --profile observability up
+  #   Grafana http://localhost:3000 (익명 Viewer), Prometheus http://localhost:9090
+  # ⚠️ 로컬 신뢰 네트워크 데모 전용, 외부/공유 환경 노출 금지. Grafana 는 익명 Viewer + admin 기본 비번
+  #   ('admin') + :3000 퍼블리시 상태다. 공개망에 띄우려면 익명 OFF·강한 GRAFANA_ADMIN_PASSWORD·포트 비공개로 하드닝.
   prometheus:
     image: prom/prometheus:v2.54.1
     profiles: ["observability"]
@@ -92,7 +87,7 @@ services:
     depends_on:
       - prometheus
     environment:
-      # 데모 편의: 익명 열람(Viewer) 허용 — 로그인 없이 대시보드 확인. admin 비번은 env 로 주입(기본 데모값).
+      # 데모 편의: 익명 Viewer 열람 허용(로그인 없이 대시보드 확인). admin 비번은 env 주입(기본 데모값).
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}

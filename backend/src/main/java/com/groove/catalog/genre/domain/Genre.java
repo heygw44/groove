@@ -32,7 +32,6 @@ public class Genre extends BaseTimeEntity {
         this.name = name;
     }
 
-    /** 정적 팩토리. */
     public static Genre create(String name) {
         return new Genre(name);
     }

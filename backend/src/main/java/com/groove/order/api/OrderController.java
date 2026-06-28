@@ -35,11 +35,8 @@ import tools.jackson.databind.ObjectMapper;
 import java.net.URI;
 
 /**
- * 주문 API — 생성, 단건 조회, 취소, 게스트 lookup.
- * 회원/게스트 분기는 @AuthenticationPrincipal(required = false) 로 토큰 유무를 받는다.
- *
- * POST /orders 는 Idempotency-Key 헤더를 검증(없으면 400)하고 같은 키당 한 번만 주문을 생성하며,
- * 재요청은 캐시된 응답을 replay 한다(타임아웃 후 재시도 시 중복 주문·재고 과차감 방지).
+ * 주문 API. 회원/게스트 분기는 토큰 유무로 가른다.
+ * POST /orders 는 Idempotency-Key 로 같은 키당 한 번만 생성, 재요청은 캐시 응답 replay(중복 주문·재고 과차감 방지).
  */
 @Tag(name = "주문", description = "주문 생성(회원/게스트, 멱등) · 본인 주문 단건 조회 · 취소 · 게스트 본인 조회")
 @RestController
@@ -90,9 +87,8 @@ public class OrderController {
     }
 
     /**
-     * 같은 멱등 키를 다른 소유자/본문으로 재사용하면 409(mismatch)로 막기 위한 요청 지문.
-     * 소유자 태그(게스트 email 은 최대 255자)와 본문을 합쳐 통째로 SHA-256 해시해, raw email 길이와 무관하게
-     * request_fingerprint 컬럼(255자) 한도 안에서 항상 고정 64자 hex 를 만든다.
+     * 같은 멱등 키를 다른 소유자/본문으로 재사용하면 409 로 막기 위한 요청 지문.
+     * 소유자 태그 + 본문을 SHA-256 해시해 raw email 길이와 무관하게 fingerprint 컬럼(255자) 안에 고정 64자 hex 로 담는다.
      */
     private String orderFingerprint(Long memberId, OrderCreateRequest request) {
         String owner = memberId != null
@@ -137,7 +133,7 @@ public class OrderController {
         return ResponseEntity.ok(OrderResponse.from(order));
     }
 
-    /** 게스트 본인 주문 조회 — orderNumber 와 email 매칭. IP 단위 Rate Limit 적용. */
+    /** IP 단위 Rate Limit 적용. */
     @Operation(summary = "게스트 본인 주문 조회",
             description = "비로그인 게스트가 주문번호와 주문 시 입력한 이메일을 함께 제시해 자신의 주문을 조회한다. "
                     + "이메일이 일치하지 않으면 404 로 응답한다(정보 노출 회피). (공개 엔드포인트)")

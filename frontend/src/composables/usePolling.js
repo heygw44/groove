@@ -1,7 +1,7 @@
 import { onUnmounted } from 'vue'
 
 /**
- * setTimeout 재귀 폴링 — 세대 가드로 언마운트/재시작 시 진행 중 콜백 취소.
+ * setTimeout 재귀 폴링. 세대 가드로 언마운트/재시작 시 진행 중 콜백을 취소한다.
  *  - fn(attempt): 매 틱 실행. true 반환 시 종료, throw 하면 미완료로 계속.
  *  - intervalMs: 틱 간격(기본 1500). maxAttempts: 최대 시도(기본 Infinity). immediate: 첫 틱 즉시 실행(기본 false).
  *  - onExhausted: maxAttempts 도달까지 완료 못 했을 때 1회 호출.

@@ -12,10 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-/**
- * 반품 항목 — 한 반품(claim)에서 특정 OrderItem 을 몇 개 반품하는지 나타내는 aggregate child. 단가는 주문 시점
- * 값으로 스냅샷(unitPriceSnapshot)한다.
- */
+/** 반품 항목 aggregate child. 단가는 주문 시점 값으로 스냅샷. */
 @Entity
 @Table(name = "claim_item")
 public class ClaimItem extends BaseTimeEntity {
@@ -47,7 +44,7 @@ public class ClaimItem extends BaseTimeEntity {
         this.unitPriceSnapshot = unitPriceSnapshot;
     }
 
-    /** 정적 팩토리. 반품할 OrderItem 과 수량을 받아 단가를 주문 시점 값으로 스냅샷한다. */
+    /** 단가를 주문 시점 값으로 스냅샷. */
     public static ClaimItem of(OrderItem orderItem, int quantity) {
         if (orderItem == null) {
             throw new IllegalArgumentException("orderItem must not be null");
@@ -62,7 +59,7 @@ public class ClaimItem extends BaseTimeEntity {
         this.claim = claim;
     }
 
-    /** 이 항목의 반품 정가 합 — unitPriceSnapshot × quantity. 오버플로는 Math.multiplyExact 로 ArithmeticException. */
+    /** 반품 정가 = unitPriceSnapshot × quantity. */
     public long getGross() {
         return Math.multiplyExact(unitPriceSnapshot, (long) quantity);
     }

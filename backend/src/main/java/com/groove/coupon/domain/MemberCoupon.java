@@ -20,9 +20,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 회원 보유 쿠폰 — 정책(Coupon) 의 발급 인스턴스. UNIQUE(coupon_id, member_id) 로 회원당 동일 쿠폰 1장을 DB 가 강제한다.
- * memberId·orderId 는 식별자 컬럼으로만 두고 coupon 만 ManyToOne 으로 매핑한다.
- * 상태 전이는 use/restore/expire/cancel 가드 메서드만 허용한다(위반 시 IllegalCouponStateTransitionException).
+ * 회원 보유 쿠폰 — 정책(Coupon)의 발급 인스턴스. UNIQUE(coupon_id, member_id)로 회원당 1장을 DB 가 강제한다.
+ * memberId·orderId 는 식별자 컬럼으로만 두고 coupon 만 ManyToOne 매핑(슬라이스 단방향).
  */
 @Entity
 @Table(name = "member_coupon", uniqueConstraints = {
@@ -69,7 +68,7 @@ public class MemberCoupon extends BaseTimeEntity {
         this.expiresAt = expiresAt;
     }
 
-    /** 발급. 초기 상태 ISSUED, issuedAt 은 주입된 now, expiresAt 은 발급 시점 coupon.validUntil 스냅샷이다. */
+    /** expiresAt 은 발급 시점 coupon.validUntil 스냅샷. */
     public static MemberCoupon issue(Coupon coupon, Long memberId, Instant now) {
         Objects.requireNonNull(coupon, "coupon must not be null");
         Objects.requireNonNull(memberId, "memberId must not be null");
@@ -77,7 +76,6 @@ public class MemberCoupon extends BaseTimeEntity {
         return new MemberCoupon(coupon, memberId, now, coupon.getValidUntil());
     }
 
-    /** 사용 (ISSUED → USED). 사용 주문 식별자와 사용 시각(주입된 now)을 기록한다. */
     public void use(Long orderId, Instant now) {
         Objects.requireNonNull(orderId, "orderId must not be null");
         Objects.requireNonNull(now, "now must not be null");
@@ -87,15 +85,14 @@ public class MemberCoupon extends BaseTimeEntity {
     }
 
     /**
-     * 복원 (USED → ISSUED). 주문 취소/환불 시 사용 흔적(usedAt·orderId)을 비운다. 복원 시점에 이미 만료됐어도
-     * 소멸시키지 않고 expiresAt 을 now + grace 로 연장해 되살린다(만료 직전 사용 후 취소로 쿠폰을 잃지 않게).
-     * 멱등: USED 가 아니면 no-op — 무락 동시 복원의 두 번째 호출이 트랜잭션을 롤백시키지 않도록 한다.
+     * 복원 (USED → ISSUED). 이미 만료됐어도 소멸 않고 expiresAt 을 now + grace 로 연장해 되살린다
+     * (만료 직전 사용 후 취소로 쿠폰을 잃지 않게). USED 아니면 no-op 으로 무락 동시 복원에 안전.
      */
     public void restore(Instant now, Duration grace) {
         Objects.requireNonNull(now, "now must not be null");
         Objects.requireNonNull(grace, "grace must not be null");
         if (status != MemberCouponStatus.USED) {
-            return; // 멱등: 이미 복원/소멸된 쿠폰은 건드리지 않는다.
+            return;
         }
         if (expiresAt.isBefore(now)) {
             this.expiresAt = now.plus(grace);
@@ -105,14 +102,11 @@ public class MemberCoupon extends BaseTimeEntity {
         this.orderId = null;
     }
 
-    /**
-     * 만료 (ISSUED → EXPIRED). 단건 만료 경로용 진입점 — 운영 만료 배치는 expireOverdueBatch 벌크 UPDATE 로 우회한다.
-     */
+    /** 단건 만료 경로 — 운영 배치는 expireOverdueBatch 벌크 UPDATE 로 우회. */
     public void expire() {
         transitionTo(MemberCouponStatus.EXPIRED);
     }
 
-    /** 발급 취소 (ISSUED → CANCELLED). */
     public void cancel() {
         transitionTo(MemberCouponStatus.CANCELLED);
     }

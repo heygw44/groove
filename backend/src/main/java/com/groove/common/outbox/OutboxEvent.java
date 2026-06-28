@@ -28,20 +28,16 @@ import java.util.Objects;
 )
 public class OutboxEvent extends BaseTimeEntity {
 
-    /** DB aggregate_type 컬럼 길이. */
     static final int MAX_AGGREGATE_TYPE_LENGTH = 50;
-    /** DB event_type 컬럼 길이. */
     static final int MAX_EVENT_TYPE_LENGTH = 100;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 이벤트를 일으킨 Aggregate 종류 (예: ORDER). */
     @Column(name = "aggregate_type", nullable = false, length = MAX_AGGREGATE_TYPE_LENGTH)
     private String aggregateType;
 
-    /** 이벤트를 일으킨 Aggregate 식별자 (예: orderId). */
     @Column(name = "aggregate_id", nullable = false)
     private long aggregateId;
 
@@ -49,7 +45,6 @@ public class OutboxEvent extends BaseTimeEntity {
     @Column(name = "event_type", nullable = false, length = MAX_EVENT_TYPE_LENGTH)
     private String eventType;
 
-    /** 이벤트 본문 JSON 직렬화. */
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
     private String payload;
 
@@ -92,7 +87,6 @@ public class OutboxEvent extends BaseTimeEntity {
         return new OutboxEvent(aggregateType, aggregateId, eventType, payload);
     }
 
-    /** 발행 완료로 표시한다. */
     public void markPublished(Instant now) {
         this.publishedAt = Objects.requireNonNull(now, "now must not be null");
     }

@@ -7,8 +7,8 @@ import java.time.Duration;
 
 /**
  * 토스페이먼츠 연동 파라미터. payment.toss.* 키와 매핑되며 compact constructor 에서 검증한다.
- * dev/prod 프로파일에서만 바인딩(TossPaymentConfig 의 @Profile) — test/local/docker 는 MockPaymentGateway 를 쓴다.
- * clientKey: 위젯용 공개 키(노출 전제라 시크릿 가드 제외). secretKey: 서버 API Basic Auth 비밀 키(플레이스홀더 기동 거부). connect/readTimeout: 호출 타임아웃.
+ * dev/prod 프로파일에서만 바인딩한다(그 외는 MockPaymentGateway).
+ * clientKey 는 위젯용 공개 키라 시크릿 가드를 제외한다. secretKey 는 Basic Auth 비밀 키라 플레이스홀더면 기동을 거부한다.
  */
 @ConfigurationProperties(prefix = "payment.toss")
 public record TossPaymentProperties(
@@ -26,7 +26,7 @@ public record TossPaymentProperties(
     private static final Duration DEFAULT_READ_TIMEOUT = Duration.ofSeconds(5);
 
     public TossPaymentProperties {
-        // env 주입 값에 섞인 앞뒤 공백(개행 등)을 정규화 — Basic Auth 헤더 불일치(401)·URL 오동작 방지.
+        // env 주입 값의 앞뒤 공백(개행 등)을 정규화한다(Basic Auth 헤더 불일치(401)·URL 오동작 방지).
         baseUrl = (baseUrl == null || baseUrl.isBlank()) ? DEFAULT_BASE_URL : baseUrl.strip();
         clientKey = clientKey == null ? null : clientKey.strip();
         secretKey = secretKey == null ? null : secretKey.strip();

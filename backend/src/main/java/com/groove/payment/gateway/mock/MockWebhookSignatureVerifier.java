@@ -10,10 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Objects;
 
-/**
- * Mock 웹훅 서명 검증 — 수신 서명이 공유 시크릿(payment.mock.webhook-secret)과 일치하는지
- * 상수 시간 비교(MessageDigest.isEqual)로 확인한다.
- */
+/** Mock 웹훅 서명 검증. 수신 서명이 공유 시크릿과 일치하는지 상수 시간 비교(MessageDigest.isEqual)로 확인한다. */
 @Component
 @Profile({"local", "dev", "test", "docker"})
 public class MockWebhookSignatureVerifier implements WebhookSignatureVerifier {

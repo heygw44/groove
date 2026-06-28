@@ -1,6 +1,6 @@
 <script setup>
-// 토스 결제 콜백 결과 배너(#308). 서버가 confirm/실패 처리 후 ?payment=success|fail 로 302 한 값을
-// 회원(OrderDetailView)·게스트(GuestLookupView) 양쪽에서 동일 문구로 안내한다.
+// 토스 결제 콜백 결과 배너. 서버가 confirm/실패 처리 후 ?payment=success|fail 로 302 한 값을
+// 회원/게스트 양쪽에서 동일 문구로 안내한다.
 defineProps({
   result: {
     type: String, // 'success' | 'fail'

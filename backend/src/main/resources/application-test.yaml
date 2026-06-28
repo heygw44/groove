@@ -3,22 +3,19 @@ spring:
     # Testcontainers ServiceConnection 이 실제 자격을 주입하므로 placeholder 통과용 더미.
     password: test
     hikari:
-      # 56개 @SpringBootTest 컨텍스트가 TestContext 캐시에 상주하며 각자 Hikari 풀의 idle 커넥션을
-      # 점유한다. 기본값(minimum-idle = maximum-pool-size = 10)이면 캐시된 비활성 컨텍스트들이 커넥션을
-      # 계속 물어 누적 동시 커넥션이 MySQL 기본 max_connections(151) 턱밑까지 찬다(로컬 실측 피크 143).
-      # 컨텍스트가 몇 개만 늘어도 한도를 넘겨 신규 컨텍스트 Flyway 연결이 거부되고, 커넥션·메모리 폭증으로
-      # 러너에서 MySQL 컨테이너가 OOM-kill(exit 137) → 이후 전 테스트가 연쇄 Connection refused 로 떨어진다.
-      # 비활성 컨텍스트가 idle 커넥션을 즉시(10s) 반납하도록 minimum-idle=0 으로 둔다. 활성 컨텍스트는
-      # maximum-pool-size 까지 그대로 버스트하므로 동시성 테스트(overselling·coupon·idempotency)는 영향 없다.
+      # 캐시된 @SpringBootTest 컨텍스트들이 각자 Hikari idle 커넥션을 점유한다. 기본값(minimum-idle=10)이면
+      # 누적 커넥션이 MySQL max_connections(151) 턱밑까지 차(실측 피크 143) Flyway 연결이 거부되고, 러너에서
+      # MySQL 이 OOM-kill(exit 137) 되며 전 테스트가 연쇄 Connection refused 로 떨어진다.
+      # minimum-idle=0 으로 비활성 컨텍스트가 idle 커넥션을 즉시 반납하게 한다. 활성 컨텍스트는 maximum-pool-size
+      # 까지 그대로 버스트하므로 동시성 테스트(overselling·coupon·idempotency)는 영향 없다.
       minimum-idle: 0
       idle-timeout: 10000
   flyway:
     enabled: true
-    # static 싱글턴 Testcontainers MySQL 을 @DataJpaTest 슬라이스와 @SpringBootTest 가 공유한다.
-    # member 의 V20__email_hash_hmac_backfill 은 @Component(EmailHasher 주입) Java 마이그레이션이라 전체
-    # 컨텍스트에서만 Flyway 에 등록되고 슬라이스에서는 resolve 되지 않는다. 공유 컨테이너 + 컨텍스트 생성
-    # 순서에 따라 V20 이 슬라이스엔 missing, 전체엔 (슬라이스가 더 높은 V21 을 먼저 적용한 경우) out-of-order
-    # 로 보인다. 프로덕션은 전체 빈이 모든 마이그레이션을 순서대로 resolve/적용하므로 무관 — 테스트 한정 완화.
+    # 싱글턴 Testcontainers MySQL 을 @DataJpaTest 슬라이스와 @SpringBootTest 가 공유한다. member 의
+    # V20__email_hash_hmac_backfill 은 @Component 주입 Java 마이그레이션이라 전체 컨텍스트에서만 resolve 되고
+    # 슬라이스에선 안 된다. 공유 컨테이너 + 컨텍스트 순서에 따라 V20 이 슬라이스엔 missing, 전체엔 out-of-order 로
+    # 보인다. 프로덕션은 전체 빈이 순서대로 적용하므로 무관한 테스트 한정 완화.
     out-of-order: true
     ignore-migration-patterns: "*:missing"
   jpa:
@@ -27,37 +24,33 @@ spring:
     properties:
       hibernate:
         show_sql: true
-  # AlbumQueryControllerTest#paging_sizeAboveCap_clampsToMax 의 캡 단언이
-  # application.yaml 의 운영 기본값에 묵시적으로 의존하지 않도록 테스트 프로파일에서 명시.
+  # paging 캡 단언이 application.yaml 운영 기본값에 묵시 의존하지 않도록 테스트에서 명시.
   data:
     web:
       pageable:
         max-page-size: 100
-  # 캐시는 기본 비활성(NoOpCacheManager) — 싱글턴 Testcontainers 공유 DB 에서 @SpringBootTest 컨텍스트들이
-  # 커밋한 데이터를 캐시가 가로채 교차오염을 일으키는 것을 막는다.
-  # 캐시 동작 검증(AlbumCacheTest)만 @SpringBootTest(properties="spring.cache.type=caffeine") 로 켠다.
+  # 캐시 기본 비활성(NoOpCacheManager). 공유 DB 에서 @SpringBootTest 가 커밋한 데이터를 캐시가 가로채
+  # 교차오염시키는 것을 막는다. 캐시 동작 검증(AlbumCacheTest)만 properties 로 caffeine 을 켠다.
   cache:
     type: none
 
-# 테스트 전용 JWT 시크릿 — 256bit 이상 필요 (JwtProperties 검증).
+# 테스트 전용 JWT 시크릿. 256bit 이상 필요(JwtProperties 검증).
 jwt:
   secret: test-only-secret-key-minimum-256-bits-long-for-jwt-signing
 
-# 테스트 전용 /actuator/prometheus 스크레이프 비번 — base 는 폴백 없는 ${METRICS_SCRAPE_PASSWORD}.
-# SecurityConfigIntegrationTest 의 httpBasic 자격증명과 일치해야 한다.
+# 테스트 전용 메트릭 스크레이프 비번(base 는 폴백 없는 env). SecurityConfigIntegrationTest 의 자격증명과 일치해야 한다.
 metrics:
   scrape:
     password: test-metrics-scrape-secret
 
-# 테스트 전용 이메일 점유 해시 HMAC 키 — 256bit 이상 필요 (EmailHashProperties 검증).
-# ⚠️ 이 값은 MemberFixtures.TEST_EMAIL_HASH_SECRET 과 byte-equal 이어야 한다 — @SpringBootTest 가 주입하는
-# EmailHasher 와 슬라이스/단위 테스트의 MemberFixtures 가 동일 해시를 내야 점유 단언이 일치한다.
+# 테스트 전용 이메일 점유 해시 HMAC 키. 256bit 이상 필요(EmailHashProperties 검증).
+# ⚠️ MemberFixtures.TEST_EMAIL_HASH_SECRET 과 byte-equal 이어야 한다. @SpringBootTest 의 EmailHasher 와
+# 슬라이스/단위 테스트의 MemberFixtures 가 동일 해시를 내야 점유 단언이 일치한다.
 email:
   hash:
     secret: test-only-secret-key-minimum-256-bits-long-for-email-hash
 
-# 테스트용 CORS — 브라우저 정책상 와일드카드 origin + credentials 조합은 동작하지 않으므로
-# 로컬 개발 origin 패턴(임의 포트) 으로 한정.
+# 테스트용 CORS. 와일드카드 origin + credentials 조합은 브라우저가 거부하므로 로컬 origin 패턴(임의 포트)으로 한정.
 cors:
   allowed-origin-patterns: ["http://localhost:[*]"]
   allow-credentials: true
@@ -67,8 +60,7 @@ logging:
     root: WARN
     com.groove: DEBUG
 
-# 테스트 기본값 — 단위/슬라이스 테스트가 동일 IP로 다회 호출해도 영향이 없도록 큰 한도.
-# 한도 검증 통합 테스트는 @TestPropertySource 로 별도 override.
+# Rate limit 테스트 기본값. 다회 호출 영향 없도록 큰 한도, 한도 검증은 @TestPropertySource 로 override.
 groove:
   auth:
     rate-limit:
@@ -81,42 +73,40 @@ groove:
       password-change:
         capacity: 100000
         refill-period: PT1M
-  # 발급 rate limit 도 다회 호출 영향 없도록 큰 한도 — 한도 검증은 @TestPropertySource 로 override.
   coupon:
     rate-limit:
       issue:
         capacity: 100000
         refill-period: PT1M
-    # 테스트 중 만료 스케줄러 자동 실행 차단 — 배치 동작은 태스크를 직접 호출해 검증한다.
+    # 만료 스케줄러 자동 실행 차단(cron "-"). 배치는 태스크를 직접 호출해 검증한다.
     expiration:
       cron: "-"
-    # 복원 유예기간 — 테스트 결정성을 위해 명시.
+    # 복원 유예기간. 테스트 결정성 위해 명시.
     restore:
       grace: P7D
-  # 테스트 중 정리 스케줄러 자동 실행 차단 — 정리 동작은 태스크를 직접 호출해 검증한다.
+  # 정리 스케줄러 자동 실행 차단. 정리는 태스크를 직접 호출해 검증한다.
   idempotency:
     cleanup-cron: "-"
-  # 아웃박스 릴레이/정리도 테스트 중 자동 실행하지 않는다 (interval/initial-delay 를 테스트 수명 밖으로,
-  # cleanup.cron "-") — relayPendingEvents()/cleanupPublished() 를 직접 호출해 검증한다.
+  # 아웃박스 릴레이/정리 자동 실행 차단(interval/initial-delay 를 테스트 수명 밖으로, cleanup.cron "-").
+  # relayPendingEvents()/cleanupPublished() 를 직접 호출해 검증한다.
   outbox:
     relay:
       interval: PT1H
       initial-delay: PT1H
     cleanup:
       cron: "-"
-  # 폴링 스케줄러도 테스트 중 자동 실행하지 않는다 (interval/initial-delay 를 테스트 수명 밖으로) —
-  # reconcilePendingPayments() 를 직접 호출해 검증한다. min-age 0 이면 갓 접수된 결제도 즉시 폴링 대상.
+  # 폴링 스케줄러 자동 실행 차단. reconcilePendingPayments() 를 직접 호출해 검증한다.
+  # min-age 0 이면 갓 접수된 결제도 즉시 폴링 대상.
   payment:
     reconciliation:
       interval: PT1H
       initial-delay: PT1H
       min-age: PT0S
-      # 토스 미확정 만료도 0 — 갓 접수된 toss-pending PENDING 도 리퍼 직접 호출 시 즉시 만료 처리 대상.
+      # 토스 미확정 만료 0. 갓 접수된 toss-pending PENDING 도 리퍼 직접 호출 시 즉시 만료 대상.
       toss-pending-timeout: PT0S
-      # max-age 는 query 영구 실패(404/502) 종결 한도. min-age(0) 보다 커야 하고(부팅 검증), 갓 접수된 결제가
-      # 일시 조회 오류로 종결되지 않도록 테스트 수명보다 길게 둔다.
+      # query 영구 실패 종결 한도. min-age(0) 보다 커야 하고(부팅 검증), 일시 조회 오류로 종결되지 않게 길게 둔다.
       max-age: PT1H
-  # 배송 자동 진행 스케줄러도 테스트 중 자동 실행하지 않는다 — progressShipments() 를 직접 호출해 검증한다.
+  # 배송 진행 스케줄러 자동 실행 차단. progressShipments() 를 직접 호출해 검증한다.
   # prepare-delay/ship-delay 0 이면 갓 생성/발송된 배송도 즉시 다음 단계 대상.
   shipping:
     progress:
@@ -124,23 +114,23 @@ groove:
       initial-delay: PT1H
       prepare-delay: PT0S
       ship-delay: PT0S
-    # 보충 스케줄러도 자동 실행하지 않는다 — reconcileOrphanedOrders() 를 직접 호출해 검증한다.
+    # 보충 스케줄러 자동 실행 차단. reconcileOrphanedOrders() 를 직접 호출해 검증한다.
     # min-age 0 이면 갓 PAID 된 고아 주문도 즉시 보충 대상.
     reconciliation:
       interval: PT1H
       initial-delay: PT1H
       min-age: PT0S
-  # PII 익명화 배치는 initial-delay 로 자동 실행을 막는다 — 배치 로직은 단위 테스트(Mockito)로 검증한다.
-  # retention 은 양수여야 하므로(스케줄러 생성자 검증) PT1H 로 둔다; 통합 테스트는 스케줄러를 직접 호출하지 않는다.
+  # PII 익명화 배치 자동 실행 차단(initial-delay). 배치 로직은 단위 테스트(Mockito)로 검증한다.
+  # retention 은 양수여야 하므로(생성자 검증) PT1H 로 둔다.
   privacy:
     order-anonymization:
       interval: PT1H
       initial-delay: PT1H
       retention: PT1H
 
-# Mock PG — 테스트에서는 결정적·즉시 동작. 성공률/실패 분기 검증은 단위 테스트에서 properties 를 직접 구성.
-# auto-webhook 은 기본값(true) 유지 — MockPaymentWiringTest 가 비동기 발사 경로를 검증한다. 결정적 검증이
-# 필요한 통합 테스트(PaymentApiIntegrationTest / PaymentWebhookIntegrationTest)는 @TestPropertySource 로 false.
+# Mock PG. 테스트에선 결정적·즉시 동작. 성공률/실패 분기는 단위 테스트에서 properties 를 직접 구성한다.
+# auto-webhook 은 기본값(true) 유지(MockPaymentWiringTest 가 비동기 발사 경로 검증). 결정적 검증이 필요한
+# 통합 테스트는 @TestPropertySource 로 false.
 payment:
   mock:
     success-rate: 1.0

@@ -36,7 +36,6 @@ public class Artist extends BaseTimeEntity {
         this.description = description;
     }
 
-    /** 정적 팩토리. */
     public static Artist create(String name, String description) {
         return new Artist(name, description);
     }
