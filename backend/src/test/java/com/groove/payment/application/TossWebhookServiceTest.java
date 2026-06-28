@@ -58,6 +58,12 @@ class TossWebhookServiceTest {
         return payment;
     }
 
+    private static Payment failedPayment() {
+        Payment payment = pendingPayment();
+        payment.markFailed("정산 타임아웃");   // reconciliation 이 timeout 으로 실패 처리한 결제
+        return payment;
+    }
+
     private PaymentCallbackResult applied(PaymentStatus status) {
         return new PaymentCallbackResult(PaymentCallbackResult.Outcome.APPLIED, 1L, PAYMENT_KEY, status);
     }
@@ -129,6 +135,18 @@ class TossWebhookServiceTest {
     @DisplayName("로컬 결제가 이미 종착 → 재조회·정산 없이 ALREADY_PROCESSED")
     void handle_localTerminal_alreadyProcessedWithoutQuery() {
         given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(paidPayment()));
+
+        PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));
+
+        verifyNoInteractions(paymentGateway, settlementService);
+        assertThat(result.outcome()).isEqualTo(PaymentCallbackResult.Outcome.ALREADY_PROCESSED);
+    }
+
+    @Test
+    @DisplayName("결제 timeout 으로 FAILED 종착된 뒤 늦은 PAID 웹훅 도착 → 재조회·정산 없이 ALREADY_PROCESSED")
+    void handle_lateWebhookAfterTimeoutFailure_alreadyProcessed() {
+        // 이미 종착(FAILED)이라 재조회 없이 그대로 둔다. 늦게 온 PAID 웹훅이 결제를 되살리면 안 된다.
+        given(paymentRepository.findByPgTransactionId(PAYMENT_KEY)).willReturn(Optional.of(failedPayment()));
 
         PaymentCallbackResult result = service.handle(webhook(PAYMENT_STATUS_CHANGED, PAYMENT_KEY));
 

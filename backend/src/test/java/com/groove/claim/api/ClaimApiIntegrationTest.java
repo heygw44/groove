@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -177,5 +178,29 @@ class ClaimApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value("MEMBER_NOT_FOUND"));
 
         assertThat(claimRepository.findByOrder_IdAndStatusNot(order.getId(), ClaimStatus.REJECTED)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("탈퇴 회원도 만료 전 토큰이면 본인 반품 조회 200 (조회 경로엔 탈퇴 가드 없음)")
+    void get_withdrawnMember_stillReturnsOwnClaim() throws Exception {
+        // 반품 접수는 활성 가드로 막히지만 조회 경로엔 가드가 없어, 만료 전 토큰이면 탈퇴 후에도 본인 반품을 읽는다.
+        Order order = persistDeliveredOrder(2);
+        mockMvc.perform(post("/api/v1/claims")
+                        .header(HttpHeaders.AUTHORIZATION, userBearer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(order, 1)))
+                .andExpect(status().isCreated());
+        Long claimId = claimRepository.findByOrder_IdAndStatusNot(order.getId(), ClaimStatus.REJECTED)
+                .get(0).getId();
+
+        // 토큰은 탈퇴 전 발급분이라 필터는 통과한다.
+        Member member = memberRepository.findById(memberId).orElseThrow();
+        member.withdraw(Instant.now());
+        memberRepository.saveAndFlush(member);
+
+        mockMvc.perform(get("/api/v1/claims/{claimId}", claimId)
+                        .header(HttpHeaders.AUTHORIZATION, userBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.claimId").value(claimId));
     }
 }

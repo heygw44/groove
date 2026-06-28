@@ -86,7 +86,7 @@ class CouponApplicationServiceTest {
         assertThat(discount).isEqualTo(3_000L);
         assertThat(mc.getStatus()).isEqualTo(MemberCouponStatus.USED);
         assertThat(mc.getOrderId()).isEqualTo(ORDER_ID);
-        assertThat(mc.getUsedAt()).isNotNull();
+        assertThat(mc.getUsedAt()).isEqualTo(NOW);
     }
 
     @Test
