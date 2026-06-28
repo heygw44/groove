@@ -1,6 +1,6 @@
 package com.groove.claim.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.claim.api.dto.ClaimCreateRequest;
 import com.groove.claim.api.dto.ClaimResponse;
 import com.groove.claim.application.ClaimService;

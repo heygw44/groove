@@ -1,6 +1,6 @@
 package com.groove.review.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.review.api.dto.ReviewCreateRequest;
 import com.groove.review.api.dto.ReviewResponse;
 import com.groove.review.application.ReviewService;

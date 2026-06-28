@@ -44,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -486,11 +487,11 @@ class OrderServiceTest {
                 .isInstanceOf(com.groove.coupon.exception.CouponNotApplicableException.class);
         verify(albumRepository, never()).findByIdForUpdate(any());
         verify(orderRepository, never()).save(any(Order.class));
-        verify(couponApplicationService, never()).applyToOrder(any(), any(), any());
+        verify(couponApplicationService, never()).applyToOrder(any(), any(), any(), anyLong());
     }
 
     @Test
-    @DisplayName("회원 주문 + memberCouponId → 저장 후 applyToOrder 호출")
+    @DisplayName("회원 주문 + memberCouponId → 저장 후 applyToOrder(orderId,총액) 호출, 반환 할인액을 주문에 반영")
     void place_memberWithCoupon_callsApply() {
         Album a = album(10L, AlbumStatus.SELLING, 10, 30000L);
         given(albumRepository.findByIdForUpdate(10L)).willReturn(Optional.of(a));
@@ -501,11 +502,15 @@ class OrderServiceTest {
             ReflectionTestUtils.setField(o, "id", 555L);  // 저장 시 id 부여 흉내
             return o;
         });
+        // 할인액 산정은 coupon 에 위임 — 반환값을 order 가 직접 반영한다(#349).
+        given(couponApplicationService.applyToOrder(7L, 1L, 555L, 30000L)).willReturn(5000L);
 
         Order order = orderService.place(1L, memberRequestWithCoupon(7L, new OrderItemRequest(10L, 1)));
 
         assertThat(order.getId()).isEqualTo(555L);
-        verify(couponApplicationService).applyToOrder(7L, 1L, order);
+        verify(couponApplicationService).applyToOrder(7L, 1L, 555L, 30000L);
+        assertThat(order.getDiscountAmount()).isEqualTo(5000L);
+        assertThat(order.getPayableAmount()).isEqualTo(25000L);
     }
 
     @Test
@@ -519,7 +524,7 @@ class OrderServiceTest {
 
         orderService.place(1L, memberRequest(new OrderItemRequest(10L, 1)));
 
-        verify(couponApplicationService, never()).applyToOrder(any(), any(), any());
+        verify(couponApplicationService, never()).applyToOrder(any(), any(), any(), anyLong());
     }
 
     @Test
@@ -553,14 +558,14 @@ class OrderServiceTest {
         });
         // applyToOrder 가 throw 하면 service 는 잡지 않고 그대로 전파해야 한다 — Spring 이 @Transactional 로 롤백.
         doThrow(new com.groove.coupon.exception.CouponAlreadyUsedException(7L))
-                .when(couponApplicationService).applyToOrder(any(), any(), any());
+                .when(couponApplicationService).applyToOrder(any(), any(), any(), anyLong());
 
         assertThatThrownBy(() -> orderService.place(1L,
                 memberRequestWithCoupon(7L, new OrderItemRequest(10L, 1))))
                 .isInstanceOf(com.groove.coupon.exception.CouponAlreadyUsedException.class);
 
         // applyToOrder 가 호출됐고, 그 위치는 save 이후이므로 호출 자체가 일어나야 한다.
-        verify(couponApplicationService).applyToOrder(any(), any(), any());
+        verify(couponApplicationService).applyToOrder(any(), any(), any(), anyLong());
         verify(orderRepository).save(any(Order.class));
     }
 }

@@ -1,7 +1,5 @@
 package com.groove.catalog.album.application;
 
-import com.groove.review.domain.AlbumRatingView;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -16,10 +14,11 @@ public record AlbumRating(Double averageRating, long reviewCount) {
     /** 리뷰가 한 건도 없는 앨범의 기본값. */
     public static final AlbumRating NONE = new AlbumRating(null, 0L);
 
-    public static AlbumRating from(AlbumRatingView view) {
-        double rounded = BigDecimal.valueOf(view.getAverageRating())
+    /** 리뷰 집계 원값(평균·개수)으로부터 노출용 AlbumRating 을 만든다(평균은 소수 1자리 반올림). */
+    public static AlbumRating of(double averageRating, long reviewCount) {
+        double rounded = BigDecimal.valueOf(averageRating)
                 .setScale(RATING_SCALE, RoundingMode.HALF_UP)
                 .doubleValue();
-        return new AlbumRating(rounded, view.getReviewCount());
+        return new AlbumRating(rounded, reviewCount);
     }
 }

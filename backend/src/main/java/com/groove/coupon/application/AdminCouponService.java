@@ -1,6 +1,5 @@
 package com.groove.coupon.application;
 
-import com.groove.admin.api.dto.AdminCouponCreateRequest;
 import com.groove.common.exception.ErrorCode;
 import com.groove.common.exception.ValidationException;
 import com.groove.coupon.domain.Coupon;
@@ -55,14 +54,14 @@ public class AdminCouponService {
 
     /** 쿠폰 정책 생성. 도메인 빌더 검증 실패는 400 VALIDATION_FAILED 로 매핑한다. */
     @Transactional
-    public Coupon create(AdminCouponCreateRequest request) {
+    public Coupon create(CouponCreateCommand command) {
         Coupon.Builder builder = Coupon.builder(
-                        request.name(), request.discountType(), request.discountValue(),
-                        request.validFrom(), request.validUntil())
-                .maxDiscountAmount(request.maxDiscountAmount())
-                .minOrderAmount(request.minOrderAmount())
-                .totalQuantity(request.totalQuantity())
-                .perMemberLimit(request.perMemberLimit());
+                        command.name(), command.discountType(), command.discountValue(),
+                        command.validFrom(), command.validUntil())
+                .maxDiscountAmount(command.maxDiscountAmount())
+                .minOrderAmount(command.minOrderAmount())
+                .totalQuantity(command.totalQuantity())
+                .perMemberLimit(command.perMemberLimit());
         Coupon coupon;
         try {
             coupon = builder.build();

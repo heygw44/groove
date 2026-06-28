@@ -8,7 +8,6 @@ import com.groove.coupon.exception.CouponExpiredException;
 import com.groove.coupon.exception.CouponNotFoundException;
 import com.groove.coupon.exception.CouponNotIssuableException;
 import com.groove.coupon.exception.CouponNotOwnedException;
-import com.groove.order.domain.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,16 +40,19 @@ public class CouponApplicationService {
     /**
      * 회원 쿠폰을 주문에 적용하고 할인액을 반환한다. fail-fast 검증:
      * 존재(404) → 소유자(403) → ISSUED 상태(USED/EXPIRED/CANCELLED 별 매핑) → 만료(422) → 할인 계산 → use(ISSUED→USED).
+     *
+     * 할인액 산정에 필요한 주문 총액만 받고 Order 엔티티는 참조하지 않는다(슬라이스 단방향, #349) —
+     * 반환된 할인액을 주문에 반영하는 책임은 호출자(order)에게 둔다.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public long applyToOrder(Long memberCouponId, Long memberId, Order order) {
+    public long applyToOrder(Long memberCouponId, Long memberId, Long orderId, long orderTotalAmount) {
         if (memberCouponId == null) {
             throw new IllegalArgumentException("memberCouponId must not be null");
         }
         if (memberId == null) {
             throw new IllegalArgumentException("memberId must not be null");
         }
-        if (order == null || order.getId() == null) {
+        if (orderId == null) {
             throw new IllegalArgumentException("order must be persisted before coupon application");
         }
 
@@ -71,9 +73,8 @@ public class CouponApplicationService {
             throw new CouponExpiredException(memberCouponId, memberCoupon.getExpiresAt());
         }
 
-        long discount = memberCoupon.getCoupon().calculateDiscount(order.getTotalAmount());
-        order.applyDiscount(discount);
-        memberCoupon.use(order.getId(), now);
+        long discount = memberCoupon.getCoupon().calculateDiscount(orderTotalAmount);
+        memberCoupon.use(orderId, now);
         return discount;
     }
 

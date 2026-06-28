@@ -1,6 +1,6 @@
 package com.groove.order.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.common.hash.Sha256Hasher;
 import com.groove.common.idempotency.IdempotencyService;
 import com.groove.common.idempotency.web.Idempotent;

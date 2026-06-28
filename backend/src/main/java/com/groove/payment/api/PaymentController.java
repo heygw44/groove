@@ -1,6 +1,6 @@
 package com.groove.payment.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.common.idempotency.IdempotencyService;
 import com.groove.common.idempotency.web.Idempotent;
 import com.groove.common.idempotency.web.IdempotencyKeyInterceptor;

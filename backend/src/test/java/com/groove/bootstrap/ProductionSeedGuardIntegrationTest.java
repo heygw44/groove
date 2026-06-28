@@ -1,4 +1,4 @@
-package com.groove.common.seed;
+package com.groove.bootstrap;
 
 import com.groove.member.application.MemberService;
 import com.groove.member.application.SignupCommand;

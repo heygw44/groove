@@ -9,8 +9,6 @@ import com.groove.member.exception.MemberEmailDuplicatedException;
 import com.groove.member.exception.MemberNotFoundException;
 import com.groove.member.exception.MemberWithdrawalBlockedException;
 import com.groove.member.security.EmailHasher;
-import com.groove.order.domain.OrderRepository;
-import com.groove.order.domain.OrderStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -20,34 +18,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.util.EnumSet;
-import java.util.Set;
 
 @Service
 public class MemberService {
 
     private static final Logger log = LoggerFactory.getLogger(MemberService.class);
 
-    /** 탈퇴를 차단하는 "진행 중" 주문 상태 — PAID/PREPARING/SHIPPED. */
-    private static final Set<OrderStatus> WITHDRAWAL_BLOCKING_STATUSES =
-            EnumSet.of(OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.SHIPPED);
-
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
-    private final OrderRepository orderRepository;
+    private final MemberOrderGuard memberOrderGuard;
     private final ApplicationEventPublisher eventPublisher;
     private final EmailHasher emailHasher;
     private final Clock clock;
 
     public MemberService(MemberRepository memberRepository,
                          PasswordEncoder passwordEncoder,
-                         OrderRepository orderRepository,
+                         MemberOrderGuard memberOrderGuard,
                          ApplicationEventPublisher eventPublisher,
                          EmailHasher emailHasher,
                          Clock clock) {
         this.memberRepository = memberRepository;
         this.passwordEncoder = passwordEncoder;
-        this.orderRepository = orderRepository;
+        this.memberOrderGuard = memberOrderGuard;
         this.eventPublisher = eventPublisher;
         this.emailHasher = emailHasher;
         this.clock = clock;
@@ -110,7 +102,7 @@ public class MemberService {
             return;
         }
 
-        if (orderRepository.existsByMemberIdAndStatusIn(memberId, WITHDRAWAL_BLOCKING_STATUSES)) {
+        if (memberOrderGuard.hasBlockingOrders(memberId)) {
             log.warn("회원 탈퇴 차단 - 진행 중 주문 존재 memberId={}", memberId);
             throw new MemberWithdrawalBlockedException();
         }

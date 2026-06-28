@@ -1,6 +1,6 @@
 package com.groove.member.api;
 
-import com.groove.auth.security.AuthPrincipal;
+import com.groove.security.AuthPrincipal;
 import com.groove.member.api.dto.MemberResponse;
 import com.groove.member.api.dto.UpdateProfileRequest;
 import com.groove.member.api.dto.WithdrawRequest;

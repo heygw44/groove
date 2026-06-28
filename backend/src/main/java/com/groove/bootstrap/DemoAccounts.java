@@ -1,4 +1,4 @@
-package com.groove.common.seed;
+package com.groove.bootstrap;
 
 /** 로컬 데모 시드가 생성하는 계정 식별자 단일 출처. LocalDataSeeder·ProductionSeedGuard 가 공유한다. */
 public final class DemoAccounts {
