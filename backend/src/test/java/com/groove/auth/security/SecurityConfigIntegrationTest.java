@@ -43,10 +43,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-// Spring Boot 는 테스트에서 메트릭 export 를 기본 비활성화한다 — prometheus 엔드포인트 검증(#343)을 위해 재활성화.
+// Spring Boot 는 테스트에서 메트릭 export 를 기본 비활성화한다 — prometheus 엔드포인트 검증을 위해 재활성화.
 @AutoConfigureMetrics
 @ActiveProfiles("test")
-// /actuator/prometheus 보안 체인(#343) 검증을 위해 test 에서 prometheus 엔드포인트를 노출한다(기본은 health 만).
+// /actuator/prometheus 보안 체인 검증을 위해 test 에서 prometheus 엔드포인트를 노출한다(기본은 health 만).
 @TestPropertySource(properties = "management.endpoints.web.exposure.include=health,prometheus")
 @Import({SecurityConfigIntegrationTest.SecuredPingController.class, TestcontainersConfig.class})
 @DisplayName("SecurityFilterChain 통합 동작")
@@ -127,7 +127,7 @@ class SecurityConfigIntegrationTest {
     @DisplayName("/actuator/prometheus 유효 Basic 자격증명 → 200 + DLQ 메트릭 본문 (#343 대시보드 쿼리명 일치)")
     void actuatorPrometheus_withValidCredentials_returnsMetrics() throws Exception {
         // username=metrics(base 기본값), password=application-test.yaml 의 metrics.scrape.password.
-        // groove_outbox_dlq_size 는 Grafana 대시보드가 쿼리하는 이름 — 노출 회귀 가드(#323 Gauge).
+        // groove_outbox_dlq_size 는 Grafana 대시보드가 쿼리하는 이름 — 노출 회귀 가드(Gauge).
         mockMvc.perform(get("/actuator/prometheus").with(httpBasic("metrics", "test-metrics-scrape-secret")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("groove_outbox_dlq_size")));

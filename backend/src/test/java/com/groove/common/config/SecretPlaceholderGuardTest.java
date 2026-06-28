@@ -60,7 +60,7 @@ class SecretPlaceholderGuardTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "rootpw",          // .env 실값 (이슈 #321 명시) — 마커엔 안 걸리는 약값
+            "rootpw",          // .env 실값 — 마커엔 안 걸리는 약값
             "changeme",        // .env 실값 (changeme 마커도 해당)
             "changeme-root",   // .env.example 실값
             "password",        // 흔한 약값

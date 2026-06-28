@@ -152,7 +152,7 @@ class OutboxIntegrationTest {
                 .stream().map(OutboxEvent::getId).toList();
         assertThat(unpublishedIds).contains(poison.getId());
 
-        // DLQ 가시성(#323): 격리 조회/카운트가 poison 행을 잡아낸다 — 운영자가 쿼리 가능
+        // DLQ 가시성: 격리 조회/카운트가 poison 행을 잡아낸다 — 운영자가 쿼리 가능
         var dlqIds = outboxEventRepository
                 .findByPublishedAtIsNullAndAttemptCountGreaterThanEqualOrderByIdAsc(maxAttempts, Limit.of(100))
                 .stream().map(OutboxEvent::getId).toList();

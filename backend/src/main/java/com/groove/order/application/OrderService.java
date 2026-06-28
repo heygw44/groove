@@ -170,7 +170,7 @@ public class OrderService {
     }
 
     /**
-     * 주문을 생성하고 응답 DTO 로 변환해 반환한다 — IdempotencyService.execute 래핑용 진입점(#317).
+     * 주문을 생성하고 응답 DTO 로 변환해 반환한다 — IdempotencyService.execute 래핑용 진입점.
      * execute 의 action 은 JSON 왕복 가능한 DTO 를 반환해야 하고, OrderResponse.from 이 items/shippingInfo 를
      * 즉시 초기화하므로 트랜잭션 경계 안에서 변환해 lazy 로딩 예외를 피한다.
      */
@@ -218,7 +218,7 @@ public class OrderService {
         Order persisted = orderRepository.save(order);
 
         // 4) 쿠폰 적용 — 저장 후 orderId 가 확보된 다음 호출한다. 할인액 산정은 coupon 에 위임하되
-        //    주문 반영(applyDiscount)은 order 가 직접 수행한다(슬라이스 단방향, #349).
+        //    주문 반영(applyDiscount)은 order 가 직접 수행한다(슬라이스 단방향).
         if (request.memberCouponId() != null) {
             long discount = couponApplicationService.applyToOrder(
                     request.memberCouponId(), memberId, persisted.getId(), persisted.getTotalAmount());

@@ -17,7 +17,7 @@ import java.util.function.Supplier;
 /**
  * 결제 생성(checkout) POST 회원 단위 Rate Limit 정책 (회원당 분당 5회).
  *
- * 대상은 POST /api/v1/payments 와 POST /api/v1/payments/toss/checkout 둘 다(#320). 토스 웹훅(/toss/webhook)은
+ * 대상은 POST /api/v1/payments 와 POST /api/v1/payments/toss/checkout 둘 다. 토스 웹훅(/toss/webhook)은
  * 회원 토큰이 없고 토스 IP 로 몰려 이 한도(5/분)에 throttle 되므로 제외하고 {@link PaymentWebhookRateLimitPolicy}(IP 키잉)로 분리한다.
  * 키잉은 회원이면 Bearer 토큰을 직접 디코드한 memberId, 토큰 없음/위조면 IP 폴백.
  * 한도/리필은 PaymentRateLimitProperties 주입, 초과 시 RateLimitFilter 가 429 + Retry-After.

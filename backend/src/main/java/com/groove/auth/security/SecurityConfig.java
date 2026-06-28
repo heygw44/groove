@@ -48,7 +48,7 @@ public class SecurityConfig {
             "/api/v1/shippings/**",
             // 발급 가능 쿠폰 목록만 공개. 와일드카드 없는 정확 경로라 하위 경로는 매칭되지 않는다.
             "/api/v1/coupons",
-            // 토스 successUrl/failUrl 브라우저 리다이렉트 타깃(#295). 인증 없이 confirm/보상 처리 후 SPA 로 302.
+            // 토스 successUrl/failUrl 브라우저 리다이렉트 타깃. 인증 없이 confirm/보상 처리 후 SPA 로 302.
             "/payments/toss/success",
             "/payments/toss/fail"
     };
@@ -113,7 +113,7 @@ public class SecurityConfig {
     }
 
     /**
-     * /actuator/prometheus 전용 Basic 인증 필터체인 (#343). nginx 가 /actuator/** 를 외부로 위임하므로 이
+     * /actuator/prometheus 전용 Basic 인증 필터체인. nginx 가 /actuator/** 를 외부로 위임하므로 이
      * 엔드포인트만 본 체인(JWT)보다 먼저(@Order) 가로챈다. 자격증명은 체인 로컬 InMemoryUserDetailsManager 로만
      * 검증해 JWT 경로와 무간섭이고, 위임 인코더({noop})로 평문 데모 자격증명을 매칭한다.
      */

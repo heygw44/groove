@@ -9,7 +9,7 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * 회원 탈퇴 차단 가드의 {@link MemberOrderGuard} 구현(member→order 역참조 차단, #349).
+ * 회원 탈퇴 차단 가드의 {@link MemberOrderGuard} 구현(member→order 역참조 차단).
  * 차단 대상 "진행 중" 상태 정의를 주문 도메인 안에 둔다.
  */
 @Component

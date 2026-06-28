@@ -44,7 +44,7 @@ public class OpenApiConfig {
 
                                 - 인증: `Authorization: Bearer {accessToken}` (우측 상단 Authorize 에 토큰 입력 후 try-out)
                                 - 에러 응답: RFC 7807 `application/problem+json`
-                                - 설계 의도/배경 명세는 `docs/API.md` 참고 (본 문서는 코드에서 자동 생성된 실행 문서)
+                                - 본 문서는 코드에서 자동 생성된 실행 문서
                                 """))
                 .components(new Components()
                         .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()

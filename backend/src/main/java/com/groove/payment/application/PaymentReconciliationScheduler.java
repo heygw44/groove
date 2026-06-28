@@ -94,7 +94,7 @@ public class PaymentReconciliationScheduler {
         for (Payment payment : stale) {
             // 토스(동기 confirm 모델)는 query 폴링 대상이 아니다 — query 는 무의미하다(매 주기 404 유발). 대신 미확정
             // PENDING(toss-pending: 잠정 pgTx)이 만료되면 FAILED + 보상으로 정리한다. 이게 보상의 '신뢰 가능한 경로'이며,
-            // 공개 미인증 GET 인 failUrl 콜백은 상태를 바꾸지 않는다(교차 주문 조작 차단, #295 리뷰).
+            // 공개 미인증 GET 인 failUrl 콜백은 상태를 바꾸지 않는다(교차 주문 조작 차단).
             if (TossPaymentGateway.PROVIDER.equals(payment.getPgProvider())) {
                 if (payment.getPgTransactionId().startsWith(TossPaymentService.PENDING_PG_TX_PREFIX)
                         && payment.getCreatedAt().isBefore(tossCutoff)) {
@@ -121,7 +121,7 @@ public class PaymentReconciliationScheduler {
      * - PAID/FAILED → 공유 정산 헬퍼로 동기화.
      * - REFUNDED/PARTIALLY_REFUNDED → PG 측 취소. 미캡처 결제라 환불이 아니라 FAILED 로 종결(나이 무관).
      * - query 예외 + expired → 영구 해소 불가(예: 잔존 pgTx 404/502). FAILED 종결해 폴링 중단.
-     * - query 가 PENDING 응답 → 종결 않고 다음 주기 재시도. PG 가 정상 응답하는 한 자동 실패 안 함(느린 비동기 PG 오탐 방지 — #299 리뷰 #2).
+     * - query 가 PENDING 응답 → 종결 않고 다음 주기 재시도. PG 가 정상 응답하는 한 자동 실패 안 함(느린 비동기 PG 오탐 방지).
      * - query 예외 + 만료 전 → 다음 주기 재시도.
      *
      * query 호출만 종결 게이트(catch)로 감싼다 — settle 실패가 query 실패로 오분류돼 PAID 확정 결제를 FAILED 로 뒤집는 것을
@@ -135,7 +135,7 @@ public class PaymentReconciliationScheduler {
             query = paymentGateway.query(pgTransactionId);
         } catch (CallNotPermittedException circuitOpen) {
             // 서킷 OPEN — 토스 일시 장애 백오프 중(영구 해소 불가가 아님). 만료 결제라도 종결하지 않고 다음 주기에 재시도해,
-            // 실제로는 PAID 일 수 있는 결제를 일시 단락만으로 FAILED 로 뒤집지 않는다(#332 리뷰).
+            // 실제로는 PAID 일 수 있는 결제를 일시 단락만으로 FAILED 로 뒤집지 않는다.
             log.warn("결제 폴링 조회 단락(서킷 OPEN): pgTx={} — 다음 주기에 재시도", pgTransactionId);
             return;
         } catch (RuntimeException queryError) {
@@ -151,7 +151,7 @@ public class PaymentReconciliationScheduler {
 
         PaymentStatus pgStatus = query.status();
         if (pgStatus == PaymentStatus.PAID || pgStatus == PaymentStatus.FAILED) {
-            // PAID 정산 전 금액 위변조 대조(#320) — PG 권위 금액이 저장 금액과 다르면 자동 정산하지 않고 PENDING 으로 둔다.
+            // PAID 정산 전 금액 위변조 대조 — PG 권위 금액이 저장 금액과 다르면 자동 정산하지 않고 PENDING 으로 둔다.
             // 다음 주기에 재시도되고, 끝내 해소되지 않으면 max-age 초과 시 terminateUnresolvable 가 FAILED+보상으로 종결한다.
             if (pgStatus == PaymentStatus.PAID && query.settledAmountMismatches(payment.getAmount())) {
                 log.warn("결제 폴링: PAID 정산금액 불일치 — 자동 정산 보류, 수동 확인 필요 pgTx={}, 저장={}, PG={}",
@@ -176,12 +176,12 @@ public class PaymentReconciliationScheduler {
             return;
         }
         // 여기 도달 = PENDING(아직 미확정). PG 가 '진행 중'이라 답한 상태이므로 강제 종결하지 않고 다음 주기로 둔다.
-        // max-age 종결은 query 가 응답하지 못하는 경우에만 적용한다(위 catch) — 느린 비동기 PG 의 정상 결제 오탐 방지(#299 리뷰 #2).
+        // max-age 종결은 query 가 응답하지 못하는 경우에만 적용한다(위 catch) — 느린 비동기 PG 의 정상 결제 오탐 방지.
     }
 
     /**
      * PG 종착 상태 정산을 시도한다. settle 실패는 강제 종결 없이 흡수하고(null 반환 + WARN) 다음 주기에 재시도한다.
-     * query 실패와 분리해 PAID 확정 결제가 settle 일시 오류로 FAILED 로 뒤집히는 것을 막는다(#299 리뷰).
+     * query 실패와 분리해 PAID 확정 결제가 settle 일시 오류로 FAILED 로 뒤집히는 것을 막는다.
      */
     private PaymentCallbackResult settleQuietly(String pgTransactionId, PaymentStatus terminalStatus, String failureReason) {
         try {

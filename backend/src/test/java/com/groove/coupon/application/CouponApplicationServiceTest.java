@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * CouponApplicationService 단위 테스트 — 적용/복원의 검증 분기. 적용은 주문 총액(primitive)만 받고 할인액을
- * 반환한다(Order 엔티티 미참조, #349). 적용 트랜잭션 정합성(재고/쿠폰 USED 동반 롤백)은 통합테스트가 담당한다.
+ * 반환한다(Order 엔티티 미참조). 적용 트랜잭션 정합성(재고/쿠폰 USED 동반 롤백)은 통합테스트가 담당한다.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CouponApplicationService — 적용/복원 단위 (mocked repository)")

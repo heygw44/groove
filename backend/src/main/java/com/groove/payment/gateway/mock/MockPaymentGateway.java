@@ -108,7 +108,7 @@ public class MockPaymentGateway implements PaymentGateway {
         Objects.requireNonNull(pgTransactionId, "pgTransactionId");
         simulateProcessingLatency();
 
-        // Mock 은 거래별 금액을 보유하지 않으므로 정산금액은 항상 null 로 반환한다 — 호출부의 금액 검증은 생략된다(#320).
+        // Mock 은 거래별 금액을 보유하지 않으므로 정산금액은 항상 null 로 반환한다 — 호출부의 금액 검증은 생략된다.
         Transaction tx = transactions.get(pgTransactionId);
         if (tx == null) {
             log.warn("Mock 결제 조회: 알 수 없는 거래 pgTx={} — PENDING 으로 응답", pgTransactionId);

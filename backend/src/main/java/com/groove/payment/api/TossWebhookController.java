@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 토스페이먼츠 웹훅 수신 API(#296).
+ * 토스페이먼츠 웹훅 수신 API.
  *
  * 토스가 결제 상태 변경을 POST /api/v1/payments/toss/webhook 으로 통보한다. PAYMENT_STATUS_CHANGED 는 서명 헤더가 없어
  * 본문을 신뢰하지 않고 paymentKey 로 결제 조회를 재호출해 권위 상태만 적용한다(위조 본문 무력화). permitAll 공개 엔드포인트.

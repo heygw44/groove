@@ -95,7 +95,7 @@ class ClaimServiceTest {
     void setUp() {
         claimService = new ClaimService(claimRepository, orderRepository, paymentRepository, paymentGateway,
                 couponApplicationService, shippingService, albumRepository, memberRepository, CLOCK, WINDOW);
-        // request 경로는 본인 주문 검증 직후 회원 활성(#269)을 확인한다 — 기본은 활성 회원으로 둔다.
+        // request 경로는 본인 주문 검증 직후 회원 활성을 확인한다 — 기본은 활성 회원으로 둔다.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(MEMBER_ID)).thenReturn(true);
     }
 

@@ -76,7 +76,7 @@ class IdempotencyServiceTest {
         assertThat(record.getStatus()).isEqualTo(IdempotencyStatus.COMPLETED);
         assertThat(record.getResponseType()).isEqualTo(SampleResult.class.getName());
         assertThat(record.getResponseBody()).contains("hello");
-        // complete 시 expiresAt 이 처리 타임아웃(짧음)에서 캐시 보관 기간(ttl, 길음)으로 연장된다 (#317).
+        // complete 시 expiresAt 이 처리 타임아웃(짧음)에서 캐시 보관 기간(ttl, 길음)으로 연장된다.
         // ttl 정확값(env 의존) 대신 처리 타임아웃(PT10M)을 넘는지로 단언해 CI 의 TTL 설정과 무관하게 둔다.
         assertThat(record.getExpiresAt()).isAfter(Instant.now().plus(Duration.ofMinutes(11)));
     }

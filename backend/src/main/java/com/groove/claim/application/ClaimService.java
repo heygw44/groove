@@ -57,7 +57,7 @@ import java.util.stream.Collectors;
 /**
  * 반품(claim) 접수/승인/거부/환불 트랜잭션 경계.
  *
- * 접수(request) 검증 순서: 주문 존재(404) → 본인 주문(404) → 회원 활성(404, 탈퇴 토큰 잔존 방어 #269) → 반품 자격
+ * 접수(request) 검증 순서: 주문 존재(404) → 본인 주문(404) → 회원 활성(404, 탈퇴 토큰 잔존 방어) → 반품 자격
  * {DELIVERED, COMPLETED}(422) → 반품 기한(422) → 항목 1개 이상(422) → 항목 소속·잔여 수량 가드(422 / 409).
  * 환불(completeRefund): Payment FOR UPDATE 락 → 멱등(INSPECTING 아니면 no-op) → PG refund(claim 별 멱등 키)
  * → Payment 부분/전액 환불 누적 → 검수 통과 항목 재입고 → 전량 반품 완성 시 쿠폰 복원 + 주문 반품 마커.
@@ -131,7 +131,7 @@ public class ClaimService {
         return order;
     }
 
-    /** 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 반품 접수하는 것을 차단(#269). */
+    /** 탈퇴(soft delete) 회원이 만료 전 access 토큰으로 반품 접수하는 것을 차단. */
     private void requireActiveMember(Long memberId) {
         if (!memberRepository.existsByIdAndDeletedAtIsNull(memberId)) {
             throw new MemberNotFoundException();

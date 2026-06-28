@@ -50,7 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 반품 접수 API 통합 — MockMvc 로 실 필터·서비스·DB 를 모두 거친다. 탈퇴 회원의 만료 전 access 토큰이
- * 서비스단 활성 가드(#269)에 막혀 보호 엔드포인트에 도달하지 못함을 검증한다.
+ * 서비스단 활성 가드에 막혀 보호 엔드포인트에 도달하지 못함을 검증한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

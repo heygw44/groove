@@ -56,7 +56,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 주문 취소·배송 자동진행 lost update 회귀 (#316) — 주문 행 비관적 락. 동시 다중 취소가 한 PENDING 주문을
+ * 주문 취소·배송 자동진행 lost update 회귀 — 주문 행 비관적 락. 동시 다중 취소가 한 PENDING 주문을
  * 경합해도 취소는 정확히 1건만 성공해 재고·쿠폰을 1회만 복원하고(2배 복원 방지), 배송 자동진행과 전량 취소가
  * 동시에 들어와도 최종 상태가 (SHIPPED,SHIPPED) 또는 (CANCELLED,CANCELLED) 중 하나로 정합함을 검증한다.
  */

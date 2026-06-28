@@ -61,7 +61,7 @@ public class IdempotencyRecord extends BaseTimeEntity {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
-    /** 마커 소유권 토큰(#317). 회수 race 에서 원소유자만 자기 마커를 finalize/삭제하도록 식별한다. */
+    /** 마커 소유권 토큰. 회수 race 에서 원소유자만 자기 마커를 finalize/삭제하도록 식별한다. */
     @Column(name = "owner_token", length = 36)
     private String ownerToken;
 
@@ -94,7 +94,7 @@ public class IdempotencyRecord extends BaseTimeEntity {
      * 처리 완료 + 결과 캐싱. IN_PROGRESS → COMPLETED 전이만 허용하며 expiresAt 을 결과 캐시 보관 기간
      * (newExpiresAt = now + ttl)으로 연장한다. 레코드는 시계에 의존하지 않아 호출자가 계산해 넘긴다.
      * expectedOwnerToken 이 행의 ownerToken 과 다르면(타임아웃 초과로 회수돼 다른 요청이 새 마커 생성)
-     * IllegalStateException — 원소유자가 남의 마커를 finalize 하지 못하게 한다(#317).
+     * IllegalStateException — 원소유자가 남의 마커를 finalize 하지 못하게 한다.
      */
     public void complete(String responseType, String responseBody, Instant newExpiresAt, String expectedOwnerToken) {
         if (status != IdempotencyStatus.IN_PROGRESS) {

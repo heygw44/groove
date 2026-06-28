@@ -1,4 +1,4 @@
-# dev 프로파일(#293) — 토스페이먼츠 테스트 연동 확인용. test/local 은 여전히 Mock 게이트웨이를 쓰고,
+# dev 프로파일 — 토스페이먼츠 테스트 연동 확인용. test/local 은 여전히 Mock 게이트웨이를 쓰고,
 # dev/prod 에서만 TossPaymentConfig 의 RestClient 빈이 구성된다.
 #
 # 민감값(datasource.password·jwt.secret·email.hash.secret·payment.mock.webhook-secret·

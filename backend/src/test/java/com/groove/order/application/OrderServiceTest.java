@@ -502,7 +502,7 @@ class OrderServiceTest {
             ReflectionTestUtils.setField(o, "id", 555L);  // 저장 시 id 부여 흉내
             return o;
         });
-        // 할인액 산정은 coupon 에 위임 — 반환값을 order 가 직접 반영한다(#349).
+        // 할인액 산정은 coupon 에 위임 — 반환값을 order 가 직접 반영한다.
         given(couponApplicationService.applyToOrder(7L, 1L, 555L, 30000L)).willReturn(5000L);
 
         Order order = orderService.place(1L, memberRequestWithCoupon(7L, new OrderItemRequest(10L, 1)));

@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * 토스페이먼츠 웹훅 처리(#296). 가상계좌 입금 등 confirm(#295) 시점에 즉시 확정되지 않은 PENDING 결제를
+ * 토스페이먼츠 웹훅 처리. 가상계좌 입금 등 confirm 시점에 즉시 확정되지 않은 PENDING 결제를
  * 사후 정산해 콜백 파이프({@link PaymentCallbackService#applyResult})에 합류시키는 것이 실질 가치다.
  *
  * 이벤트: PAYMENT_STATUS_CHANGED 만 처리(모든 결제수단 포괄, 가상계좌 입금 정산도 이 이벤트). 그 외 무시.
@@ -90,7 +90,7 @@ public class TossWebhookService {
             return PaymentCallbackResult.ignored(paymentKey);
         }
 
-        // PAID 정산 전 금액 위변조 대조(#320) — 토스가 알려준 권위 정산금액이 저장 금액과 다르면 자동 전이하지 않고
+        // PAID 정산 전 금액 위변조 대조 — 토스가 알려준 권위 정산금액이 저장 금액과 다르면 자동 전이하지 않고
         // 수동 확인 대상으로 남긴다(취소/환불 분기와 동일 패턴). 금액 미보고(null)면 검증을 생략한다.
         if (authoritative == PaymentStatus.PAID && query.settledAmountMismatches(payment.getAmount())) {
             log.warn("토스 웹훅: PAID 정산금액 불일치 — 자동 정산 보류, 수동 확인 필요 paymentKey={}, 저장={}, 토스={}",

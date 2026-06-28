@@ -1,6 +1,6 @@
-# groove 데모 Prometheus 스크레이프 설정 (#343).
+# groove 데모 Prometheus 스크레이프 설정.
 # docker compose --profile observability 로만 기동되는 데모 전용 스택이다(운영 모니터링 아님).
-# 앱 메트릭은 이미 생산 중(#323 DLQ, #236 캐시) — 여기서는 /actuator/prometheus 를 긁어 Grafana 로 시각화한다.
+# 앱 메트릭은 이미 생산 중(DLQ, 캐시) — 여기서는 /actuator/prometheus 를 긁어 Grafana 로 시각화한다.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s

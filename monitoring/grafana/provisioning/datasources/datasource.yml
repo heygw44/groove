@@ -1,4 +1,4 @@
-# Grafana 데이터소스 자동 프로비저닝 (#343). 데모 스택 기동 시 Prometheus 가 기본 소스로 등록된다.
+# Grafana 데이터소스 자동 프로비저닝. 데모 스택 기동 시 Prometheus 가 기본 소스로 등록된다.
 apiVersion: 1
 
 datasources:

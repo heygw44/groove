@@ -1,7 +1,7 @@
 package com.groove.common.util;
 
 /**
- * 개인식별정보(PII) 마스킹 헬퍼. 공개 응답에서 실명·주소를 부분 가린다(#322).
+ * 개인식별정보(PII) 마스킹 헬퍼. 공개 응답에서 실명·주소를 부분 가린다.
  * 저장값을 바꾸지 않고 표시 시점에만 마스킹한다(엔티티 익명화 anonymizePii 와 별개).
  */
 public final class PiiMasking {

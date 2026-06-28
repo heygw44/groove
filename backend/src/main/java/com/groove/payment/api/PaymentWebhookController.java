@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * PG 가 비동기 결제 결과를 POST /api/v1/payments/webhook 으로 통보한다. X-Mock-Signature 서명 검증(실패 시 401)·permitAll.
  * 멱등은 본문 pgTransactionId 키로 보장 — 웹훅·폴링 중복 수신에도 상태 전이는 1회.
  *
- * Mock 프로파일 전용(#321) — {@link WebhookSignatureVerifier} 유일 구현이 @Profile(local/dev/test/docker)라 prod 엔 빈이 없다.
+ * Mock 프로파일 전용 — {@link WebhookSignatureVerifier} 유일 구현이 @Profile(local/dev/test/docker)라 prod 엔 빈이 없다.
  * prod 실 결제 inbound 는 TossWebhookController 경로이므로, 이 수신기를 prod 에서 제외해 미충족 의존성 기동 실패를 막는다.
  */
 @Tag(name = "결제 웹훅", description = "PG 결제 결과 콜백 수신 (인증 토큰이 아니라 X-Mock-Signature 헤더 서명으로 검증)")

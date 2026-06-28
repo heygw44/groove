@@ -18,7 +18,7 @@ public interface PaymentGateway {
 
     /**
      * PG 측 현재 상태 + (보고됐다면) 권위 정산금액 조회. 처리 중이면 PENDING.
-     * 정산금액은 PAID 정산 전 저장 금액과 대조해 위변조를 차단(#320). 미보고면 null 이고 호출부는 검증을 생략한다.
+     * 정산금액은 PAID 정산 전 저장 금액과 대조해 위변조를 차단. 미보고면 null 이고 호출부는 검증을 생략한다.
      */
     GatewayQuery query(String pgTransactionId);
 

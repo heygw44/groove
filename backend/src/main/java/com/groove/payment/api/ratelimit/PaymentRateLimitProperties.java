@@ -6,7 +6,7 @@ import java.time.Duration;
 
 /**
  * 결제 엔드포인트 Rate Limit 설정. groove.payment.rate-limit.* 키와 매핑.
- * post: 결제 생성 회원 키잉 한도({@link PaymentRateLimitPolicy}). webhook: 토스 웹훅 IP 키잉 한도({@link PaymentWebhookRateLimitPolicy}, #320).
+ * post: 결제 생성 회원 키잉 한도({@link PaymentRateLimitPolicy}). webhook: 토스 웹훅 IP 키잉 한도({@link PaymentWebhookRateLimitPolicy}).
  */
 @ConfigurationProperties(prefix = "groove.payment.rate-limit")
 public record PaymentRateLimitProperties(Policy post, Policy webhook) {

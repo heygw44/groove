@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.function.Supplier;
 
 /**
- * POST /api/v1/payments/toss/webhook IP 단위 Rate Limit 정책 (#320).
+ * POST /api/v1/payments/toss/webhook IP 단위 Rate Limit 정책.
  *
  * 토스 웹훅은 permitAll·회원 토큰이 없어 회원 키잉 정책({@link PaymentRateLimitPolicy})에 넣으면 토스 IP 로 몰린
  * 정상 웹훅이 회원 한도(5/분)에 throttle 된다. 그래서 분리하고 IP 키잉한다(한도는 {@link PaymentRateLimitProperties#webhook()}).

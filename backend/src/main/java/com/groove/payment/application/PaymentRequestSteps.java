@@ -108,7 +108,7 @@ class PaymentRequestSteps {
 
     /**
      * 주문에 이미 접수된 결제를 새 트랜잭션에서 재조회한다(uk_payment_order 충돌 복원용).
-     * 콜백 토큰도 함께 실어, 토스 충돌 복원 경로가 토큰 재조회 없이 successUrl 을 재구성하게 한다(#309).
+     * 콜백 토큰도 함께 실어, 토스 충돌 복원 경로가 토큰 재조회 없이 successUrl 을 재구성하게 한다.
      */
     @Transactional(readOnly = true)
     Optional<PaymentRequestPrep> findExistingForOrder(long orderId) {
@@ -119,8 +119,8 @@ class PaymentRequestSteps {
     /**
      * 게스트 주문은 익명 호출자도 결제 시작 가능, 회원 주문은 본인만.
      *
-     * 게스트는 memberId 가 없어 본인 확인이 불가하므로 익명 checkout 을 허용한다 → orderNumber 만 알면 누구나 콜백 토큰(#304)을
-     * 받아 토큰이 비밀이 아니다(#306). 잔존 노출은 confirm 관문(금액 위변조 검증 + 유효 paymentKey 필수)이 한정 — 토큰만으로
+     * 게스트는 memberId 가 없어 본인 확인이 불가하므로 익명 checkout 을 허용한다 → orderNumber 만 알면 누구나 콜백 토큰을
+     * 받아 토큰이 비밀이 아니다. 잔존 노출은 confirm 관문(금액 위변조 검증 + 유효 paymentKey 필수)이 한정 — 토큰만으로
      * PAID 를 강제할 수 없다. 회원 주문은 memberId 일치를 요구해 토큰이 실제 비밀로 기능한다.
      */
     private boolean canRequestPaymentFor(Order order, Long callerMemberId) {

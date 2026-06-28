@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * 아웃박스 DLQ(격리) 운영 메트릭 (#323). groove.outbox.dlq.size(Gauge) 는 현재 격리 backlog 를 scrape 시점에
+ * 아웃박스 DLQ(격리) 운영 메트릭. groove.outbox.dlq.size(Gauge) 는 현재 격리 backlog 를 scrape 시점에
  * 조회하는 권위 값, groove.outbox.dlq.quarantined(Counter, eventType 태그) 는 격리 전이 누적 건수다.
  */
 @Component

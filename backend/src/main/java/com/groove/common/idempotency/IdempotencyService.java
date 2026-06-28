@@ -97,7 +97,7 @@ public class IdempotencyService {
                 // 처리 타임아웃이 지난 IN_PROGRESS — 죽은 소유자가 남긴 마커로 보고 조건부 삭제로 회수한 뒤 처음부터
                 // 재처리한다(스케줄러 정리를 기다리지 않음). 삭제 실패(DB 오류)는 전파한다.
                 // 트레이드오프: inProgressTimeout 을 정상 action 최대 소요보다 충분히 크게 잡아야(IdempotencyProperties 참고)
-                // 살아있는 마커를 회수하지 않는다 — 너무 짧으면 진행 중 action 의 마커가 회수돼 이중 실행된다(#317).
+                // 살아있는 마커를 회수하지 않는다 — 너무 짧으면 진행 중 action 의 마커가 회수돼 이중 실행된다.
                 requiresNewTx.executeWithoutResult(status -> repository.deleteExpiredInProgress(idempotencyKey, now));
                 continue;
             }
@@ -140,7 +140,7 @@ public class IdempotencyService {
             requiresNewTx.executeWithoutResult(status -> {
                 IdempotencyRecord record = repository.findByIdempotencyKey(idempotencyKey)
                         .orElseThrow(() -> new IllegalStateException("멱등성 마커가 사라졌습니다: " + idempotencyKey));
-                // ownerToken 으로 소유권 검증 — 마커가 회수되고 다른 요청이 새로 만든 행이면 complete 가 거부된다(#317).
+                // ownerToken 으로 소유권 검증 — 마커가 회수되고 다른 요청이 새로 만든 행이면 complete 가 거부된다.
                 record.complete(typeName, body, cacheExpiresAt, ownerToken);
             });
         } catch (RuntimeException cacheFailure) {
@@ -154,7 +154,7 @@ public class IdempotencyService {
     /**
      * 소유자가 처리 실패 시 자기 IN_PROGRESS 마커만 삭제한다. key+ownerToken+status=IN_PROGRESS 가드로,
      * 처리 타임아웃 초과로 마커가 회수돼 다른 요청이 같은 키로 만든 마커/COMPLETED 캐시는 파괴하지 않는다
-     * (#317 회수 race 방어). 회수 실패는 경고만 남긴다.
+     * (회수 race 방어). 회수 실패는 경고만 남긴다.
      */
     private void removeMarkerQuietly(String idempotencyKey, String ownerToken) {
         try {

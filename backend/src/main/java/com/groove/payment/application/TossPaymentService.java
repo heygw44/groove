@@ -33,7 +33,7 @@ import java.security.MessageDigest;
 import java.util.UUID;
 
 /**
- * 토스페이먼츠 동기 confirm 승인 흐름 오케스트레이터(#295).
+ * 토스페이먼츠 동기 confirm 승인 흐름 오케스트레이터.
  *
  * checkout 은 주문 검증 후 payable 을 PENDING 으로 저장(잠정 pgTx=toss-pending:{orderNumber})하고 위젯 초기화 값을 응답한다.
  * confirm(successUrl)은 금액 위변조 검증 → 게이트웨이 confirm → 성공 시 PaymentCallbackService 로 PAID 적용.
@@ -81,8 +81,8 @@ public class TossPaymentService {
      */
     public TossCheckoutResponse checkout(Long callerMemberId, PaymentCreateRequest request) {
         PaymentRequestPrep prep = steps.prepare(callerMemberId, request);
-        // 결제별 무작위 토큰 — successUrl 로만 round-trip 시켜 confirm 이 일치 검증한다(교차 주문 조작 차단, #304).
-        // fail 은 상태 무변경이라 토큰을 싣지 않고(#309), 게스트 주문은 토큰이 비밀이 아니다(#306 — 금액 검증·유효 paymentKey 가 실제 관문).
+        // 결제별 무작위 토큰 — successUrl 로만 round-trip 시켜 confirm 이 일치 검증한다(교차 주문 조작 차단).
+        // fail 은 상태 무변경이라 토큰을 싣지 않고, 게스트 주문은 토큰이 비밀이 아니다(금액 검증·유효 paymentKey 가 실제 관문).
         // 기존 결제 멱등 응답이면 새 토큰을 발급하지 않고 저장 토큰을 재사용한다(successUrl 일관성).
         if (prep.isExisting()) {
             // prepare 가 이미 로드한 기존 결제의 저장 토큰을 그대로 재사용한다(추가 조회 0건, 레거시 결제면 null).
@@ -99,7 +99,7 @@ public class TossPaymentService {
     private TossCheckoutResponse buildResponse(PaymentApiResponse persisted, String token) {
         TossPaymentProperties props = tossProperties.getIfAvailable();
         String clientKey = props != null ? props.clientKey() : null;
-        // 토큰은 confirm 이 검증하는 successUrl 에만 싣는다. failUrl 은 상태 무변경이라 토큰이 불필요하다(노출면 축소, #309).
+        // 토큰은 confirm 이 검증하는 successUrl 에만 싣는다. failUrl 은 상태 무변경이라 토큰이 불필요하다(노출면 축소).
         String successUrl = props != null ? appendToken(props.successUrl(), token) : null;
         String failUrl = props != null ? props.failUrl() : null;
         return new TossCheckoutResponse(clientKey, persisted.orderNumber(), persisted.amount(), successUrl, failUrl);
@@ -120,7 +120,7 @@ public class TossPaymentService {
     public PaymentCallbackResult confirm(String paymentKey, String orderId, long amount, String token) {
         Order order = orderRepository.findByOrderNumber(orderId).orElseThrow(OrderNotFoundException::new);
         Payment pending = paymentRepository.findByOrderId(order.getId()).orElseThrow(PaymentNotFoundException::new);
-        // 토큰 일치 검증을 최우선으로 — 미인증 콜백의 교차 주문 조작 차단(#304). 멱등 흡수/금액검증/confirm 모두 이 관문 뒤에서만.
+        // 토큰 일치 검증을 최우선으로 — 미인증 콜백의 교차 주문 조작 차단. 멱등 흡수/금액검증/confirm 모두 이 관문 뒤에서만.
         verifyCallbackToken(pending, token, orderId);
         if (pending.getStatus() != PaymentStatus.PENDING) {
             // 이미 PAID(새로고침) 또는 FAILED — 재승인 없이 현재 상태를 멱등 반환한다.

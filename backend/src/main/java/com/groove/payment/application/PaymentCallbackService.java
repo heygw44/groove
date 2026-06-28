@@ -111,7 +111,7 @@ public class PaymentCallbackService {
 
     /**
      * PENDING 결제의 잠정 pgTransactionId 를 실제 paymentKey 로 교체하고(환불 경로가 paymentKey 를 읽음) 잠정 method 를
-     * 실제 결제수단으로 보정한다(#307). confirmedMethod 가 null 이면 보정 생략. 토스 confirm 의 PAID·비-PAID 진입점이 공유한다.
+     * 실제 결제수단으로 보정한다. confirmedMethod 가 null 이면 보정 생략. 토스 confirm 의 PAID·비-PAID 진입점이 공유한다.
      */
     private static void linkAndCorrect(Payment payment, String paymentKey, PaymentMethod confirmedMethod) {
         payment.linkPgTransaction(paymentKey);

@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 
 /**
  * 앨범 묶음의 리뷰 집계를 1회 쿼리로 가져와 albumId → AlbumRating 으로 변환하는 {@link AlbumRatingProvider}
- * 구현(catalog→review 역참조 차단, #349). 빈 묶음이면 빈 맵.
+ * 구현(catalog→review 역참조 차단). 빈 묶음이면 빈 맵.
  */
 @Component
 public class ReviewAlbumRatingProvider implements AlbumRatingProvider {

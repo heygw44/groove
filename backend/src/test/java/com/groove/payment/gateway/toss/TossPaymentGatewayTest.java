@@ -375,7 +375,7 @@ class TossPaymentGatewayTest {
             assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(PaymentGatewayException.class);
             assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(PaymentGatewayException.class);
             // 세 번째는 서킷 OPEN → PG 미호출(기대 요청 없음). query 는 CallNotPermittedException 을 래핑하지 않고 전파해
-            // 폴링 스케줄러가 일시 단락을 영구 오류로 오인하지 않게 한다(#332 리뷰).
+            // 폴링 스케줄러가 일시 단락을 영구 오류로 오인하지 않게 한다.
             assertThatThrownBy(() -> gateway.query("pk_1")).isInstanceOf(CallNotPermittedException.class);
 
             server.verify(); // 정확히 두 요청만 소비됨(세 번째는 단락)

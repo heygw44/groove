@@ -33,7 +33,7 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 /**
- * 토스페이먼츠 실 PG 어댑터(#294). #293 의 tossRestClient(Basic Auth)로 코어 API 를 호출한다.
+ * 토스페이먼츠 실 PG 어댑터. tossRestClient(Basic Auth)로 코어 API 를 호출한다.
  * dev/prod 에서만 로드(test/local/docker 는 MockPaymentGateway, 프로파일 택1).
  *
  * 승인 모델: 동기 confirm 모델이라 {@link #confirm}이 진입점. 비동기 {@link #request}에 대응하는 토스 API 가 없어 UnsupportedOperationException.
@@ -69,7 +69,7 @@ public class TossPaymentGateway implements PaymentGateway {
     }
 
     /**
-     * 토스 호출을 서킷브레이커(바깥)·재시도(안쪽)로 감싼다(#320). 서킷이 OPEN 이면 호출 전 빠르게 실패
+     * 토스 호출을 서킷브레이커(바깥)·재시도(안쪽)로 감싼다. 서킷이 OPEN 이면 호출 전 빠르게 실패
      * (CallNotPermittedException)해 워커 점유를 끊고, 일시 장애는 재시도가 흡수한다. 서킷은 재시도까지 포함한
      * 호출 단위 결과를 집계한다(재시도로 회복되면 실패로 세지 않음).
      */
@@ -78,7 +78,7 @@ public class TossPaymentGateway implements PaymentGateway {
     }
 
     /**
-     * 재시도·서킷브레이커가 일시 장애로 간주할 예외 술어(#320). 토스 5xx 와 연결 단계 실패(연결 거부·연결 타임아웃)만 일시 장애.
+     * 재시도·서킷브레이커가 일시 장애로 간주할 예외 술어. 토스 5xx 와 연결 단계 실패(연결 거부·연결 타임아웃)만 일시 장애.
      * 4xx·알 수 없는 상태(IllegalStateException)는 재시도/집계 안 함. 읽기 타임아웃은 이미 read-timeout 을 소모해 재시도 안 함
      * (동기 confirm 워커 점유 증폭 방지). CallNotPermittedException 도 비대상이라 서킷 OPEN 시 즉시 전파된다.
      */
@@ -130,12 +130,12 @@ public class TossPaymentGateway implements PaymentGateway {
                     .uri("/v1/payments/{paymentKey}", pgTransactionId)
                     .retrieve()
                     .body(TossPayment.class));
-            // 토스가 알려준 권위 정산금액(totalAmount)을 함께 반환 — 웹훅/폴링이 PAID 정산 전 위변조 대조에 쓴다(#320).
+            // 토스가 알려준 권위 정산금액(totalAmount)을 함께 반환 — 웹훅/폴링이 PAID 정산 전 위변조 대조에 쓴다.
             PaymentStatus status = TossStatusMapper.toPaymentStatus(requireBody(payment).status());
             return new GatewayQuery(status, payment.totalAmount());
         } catch (CallNotPermittedException circuitOpen) {
             // 서킷 OPEN 은 일시 백오프 상태다 — 502(영구 오류)로 정규화하지 않고 그대로 전파해, 폴링 스케줄러가 이를
-            // '영구 해소 불가'로 오인해 만료 PENDING 결제를 FAILED 로 종결하지 않도록 한다(#332 리뷰).
+            // '영구 해소 불가'로 오인해 만료 PENDING 결제를 FAILED 로 종결하지 않도록 한다.
             throw circuitOpen;
         } catch (RuntimeException e) {
             // query 도 호출부(폴링 스케줄러)가 502 로 변환하지 않으므로 어댑터가 직접 정규화한다.

@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * 토스 외부 PG 호출의 재시도·서킷브레이커 파라미터 (#320). payment.toss.resilience.* 키와 매핑되며 compact constructor 에서
+ * 토스 외부 PG 호출의 재시도·서킷브레이커 파라미터. payment.toss.resilience.* 키와 매핑되며 compact constructor 에서
  * 기본값·검증을 적용한다. dev/prod 프로파일에서만 바인딩(TossPaymentConfig 의 @Profile).
  *
  * 재시도: 일시 장애(5xx·연결 실패)만. 동기 confirm 워커 점유·UX 보호로 maxAttempts 작게(기본 2)·waitDuration 짧게(기본 200ms 백오프).

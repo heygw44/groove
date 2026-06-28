@@ -1,5 +1,5 @@
-# groove TLS(HTTPS) override (이슈 #270) — 기본 HTTP 데모(docker-compose.yml)를 깨지 않고
-# 443 종단을 별도 실행 경로로 얹는다. 자세한 절차는 docs/ARCHITECTURE.md §10.6.
+# groove TLS(HTTPS) override — 기본 HTTP 데모(docker-compose.yml)를 깨지 않고
+# 443 종단을 별도 실행 경로로 얹는다.
 #
 #   ./scripts/up-tls.sh        # 권장: 인증서 보장 + NGINX_CONF 고정 + 두 compose 합성을 한번에
 #   # 수동: NGINX_CONF=nginx-tls.conf docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
@@ -17,6 +17,6 @@ services:
 
   app:
     environment:
-      # env_file(.env) 보다 우선 — TLS 실행 시 .env 수정 없이 Secure refresh 쿠키 발급(#163, #270).
+      # env_file(.env) 보다 우선 — TLS 실행 시 .env 수정 없이 Secure refresh 쿠키 발급.
       # nginx 443 이 X-Forwarded-Proto: https 를 전달하므로 app 이 Secure 쿠키/HSTS 를 발급한다.
       AUTH_REFRESH_COOKIE_SECURE: "true"

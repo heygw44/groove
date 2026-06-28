@@ -3,7 +3,7 @@ spring:
     # Testcontainers ServiceConnection 이 실제 자격을 주입하므로 placeholder 통과용 더미.
     password: test
     hikari:
-      # #222: 56개 @SpringBootTest 컨텍스트가 TestContext 캐시에 상주하며 각자 Hikari 풀의 idle 커넥션을
+      # 56개 @SpringBootTest 컨텍스트가 TestContext 캐시에 상주하며 각자 Hikari 풀의 idle 커넥션을
       # 점유한다. 기본값(minimum-idle = maximum-pool-size = 10)이면 캐시된 비활성 컨텍스트들이 커넥션을
       # 계속 물어 누적 동시 커넥션이 MySQL 기본 max_connections(151) 턱밑까지 찬다(로컬 실측 피크 143).
       # 컨텍스트가 몇 개만 늘어도 한도를 넘겨 신규 컨텍스트 Flyway 연결이 거부되고, 커넥션·메모리 폭증으로
@@ -14,7 +14,7 @@ spring:
       idle-timeout: 10000
   flyway:
     enabled: true
-    # #204: static 싱글턴 Testcontainers MySQL 을 @DataJpaTest 슬라이스와 @SpringBootTest 가 공유한다.
+    # static 싱글턴 Testcontainers MySQL 을 @DataJpaTest 슬라이스와 @SpringBootTest 가 공유한다.
     # member 의 V20__email_hash_hmac_backfill 은 @Component(EmailHasher 주입) Java 마이그레이션이라 전체
     # 컨텍스트에서만 Flyway 에 등록되고 슬라이스에서는 resolve 되지 않는다. 공유 컨테이너 + 컨텍스트 생성
     # 순서에 따라 V20 이 슬라이스엔 missing, 전체엔 (슬라이스가 더 높은 V21 을 먼저 적용한 경우) out-of-order
@@ -34,7 +34,7 @@ spring:
       pageable:
         max-page-size: 100
   # 캐시는 기본 비활성(NoOpCacheManager) — 싱글턴 Testcontainers 공유 DB 에서 @SpringBootTest 컨텍스트들이
-  # 커밋한 데이터를 캐시가 가로채 교차오염을 일으키는 것을 막는다(#236, [[project_test_shared_db_isolation]]).
+  # 커밋한 데이터를 캐시가 가로채 교차오염을 일으키는 것을 막는다.
   # 캐시 동작 검증(AlbumCacheTest)만 @SpringBootTest(properties="spring.cache.type=caffeine") 로 켠다.
   cache:
     type: none
@@ -43,13 +43,13 @@ spring:
 jwt:
   secret: test-only-secret-key-minimum-256-bits-long-for-jwt-signing
 
-# 테스트 전용 /actuator/prometheus 스크레이프 비번 (#343) — base 는 폴백 없는 ${METRICS_SCRAPE_PASSWORD}.
+# 테스트 전용 /actuator/prometheus 스크레이프 비번 — base 는 폴백 없는 ${METRICS_SCRAPE_PASSWORD}.
 # SecurityConfigIntegrationTest 의 httpBasic 자격증명과 일치해야 한다.
 metrics:
   scrape:
     password: test-metrics-scrape-secret
 
-# 테스트 전용 이메일 점유 해시 HMAC 키 (#186) — 256bit 이상 필요 (EmailHashProperties 검증).
+# 테스트 전용 이메일 점유 해시 HMAC 키 — 256bit 이상 필요 (EmailHashProperties 검증).
 # ⚠️ 이 값은 MemberFixtures.TEST_EMAIL_HASH_SECRET 과 byte-equal 이어야 한다 — @SpringBootTest 가 주입하는
 # EmailHasher 와 슬라이스/단위 테스트의 MemberFixtures 가 동일 해시를 내야 점유 단언이 일치한다.
 email:

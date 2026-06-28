@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 토스페이먼츠 웹훅 수신 본문(#296).
+ * 토스페이먼츠 웹훅 수신 본문.
  *
  * 토스가 PAYMENT_STATUS_CHANGED 를 POST 로 통보한다. 본문은 신뢰하지 않고 "상태가 바뀌었다"는 핑으로만 취급 —
  * 위조 방지·상태 판정은 data.paymentKey 로 결제 조회를 재호출한 권위 상태로 한다. 나머지 필드는 모두 무시(ignoreUnknown).

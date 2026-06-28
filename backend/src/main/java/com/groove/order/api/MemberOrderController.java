@@ -76,7 +76,7 @@ public class MemberOrderController {
     }
 
     @Operation(summary = "내 주문 목록 커서(keyset) 조회",
-            description = "내 주문을 keyset 커서 페이징으로 조회한다(#235). 정렬은 createdAt 최신순으로 고정되며, "
+            description = "내 주문을 keyset 커서 페이징으로 조회한다. 정렬은 createdAt 최신순으로 고정되며, "
                     + "깊은 페이지에서 offset 스캔 비용 없이 (member_id, created_at) 인덱스를 타고 전진한다. 첫 페이지는 "
                     + "cursor 없이 호출하고, 응답의 nextCursor 를 다음 요청 cursor 로 넘긴다.")
     @ApiResponse(responseCode = "200", description = "주문 목록 조회 성공 (다음 페이지 커서 포함)")

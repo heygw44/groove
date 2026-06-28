@@ -82,7 +82,7 @@ public class AlbumQueryController {
     }
 
     @Operation(summary = "앨범 목록 커서(keyset) 검색",
-            description = "GET /albums 와 동일한 필터·정렬을 keyset 커서 페이징으로 제공한다(#235). 깊은 페이지에서 "
+            description = "GET /albums 와 동일한 필터·정렬을 keyset 커서 페이징으로 제공한다. 깊은 페이지에서 "
                     + "offset 스캔 비용 없이 정렬 인덱스를 타고 전진한다. 첫 페이지는 cursor 없이 호출하고, 응답의 "
                     + "nextCursor 를 다음 요청 cursor 로 넘긴다. totalElements/totalPages 는 제공하지 않는다.")
     @ApiResponse(responseCode = "200", description = "앨범 목록 조회 성공 (다음 페이지 커서 포함)")

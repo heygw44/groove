@@ -124,7 +124,7 @@ class OutboxRelaySchedulerTest {
 
         verify(repository).incrementAttemptCount(1L);
         verify(repository, never()).markPublished(any(), any());
-        // 상한 도달 전이 시점에 정확히 1회 격리 메트릭 기록 (#323)
+        // 상한 도달 전이 시점에 정확히 1회 격리 메트릭 기록
         verify(metrics).recordQuarantined(EVENT_TYPE);
     }
 

@@ -55,7 +55,7 @@ class AlbumServiceTest {
     private LabelRepository labelRepository;
     @Mock
     private AlbumRatingProvider albumRatingProvider;
-    // 앨범 참조 가드(order·cart 도메인이 구현) — 단위 테스트에선 목으로 주입(#349).
+    // 앨범 참조 가드(order·cart 도메인이 구현) — 단위 테스트에선 목으로 주입.
     @Mock
     private AlbumReferenceGuard cartGuard;
     @Mock

@@ -39,7 +39,7 @@ import java.net.URI;
  * 회원/게스트 분기는 @AuthenticationPrincipal(required = false) 로 토큰 유무를 받는다.
  *
  * POST /orders 는 Idempotency-Key 헤더를 검증(없으면 400)하고 같은 키당 한 번만 주문을 생성하며,
- * 재요청은 캐시된 응답을 replay 한다(타임아웃 후 재시도 시 중복 주문·재고 과차감 방지, #317).
+ * 재요청은 캐시된 응답을 replay 한다(타임아웃 후 재시도 시 중복 주문·재고 과차감 방지).
  */
 @Tag(name = "주문", description = "주문 생성(회원/게스트, 멱등) · 본인 주문 단건 조회 · 취소 · 게스트 본인 조회")
 @RestController

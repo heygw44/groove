@@ -11,7 +11,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 쿠폰 보유 목록의 주문번호 표시를 위한 {@link OrderNumberLookup} 구현(coupon→order 역참조 차단, #349).
+ * 쿠폰 보유 목록의 주문번호 표시를 위한 {@link OrderNumberLookup} 구현(coupon→order 역참조 차단).
  * 빈 orderId 집합이거나 null orderId 조회를 위해 null 키를 허용하는 맵을 돌려준다.
  */
 @Component

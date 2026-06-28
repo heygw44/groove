@@ -1,7 +1,7 @@
 spring:
   application:
     name: groove
-  # 활성 프로파일은 외부에서 주입한다 (SPRING_PROFILES_ACTIVE 또는 --spring.profiles.active). 기본값 폴백 없음(이슈 #128):
+  # 활성 프로파일은 외부에서 주입한다 (SPRING_PROFILES_ACTIVE 또는 --spring.profiles.active). 기본값 폴백 없음:
   # 미설정 시 Spring 의 'default' 프로파일만 활성 → LocalDataSeeder(@Profile("local"))가 동작하지 않아 데모 계정/시드가
   # 운영 DB 에 유입되지 않는다. 로컬 개발은 build.gradle.kts 의 bootRun 이 local 을 자동 주입한다.
 
@@ -33,11 +33,11 @@ spring:
     web:
       pageable:
         # 공개 페이징 엔드포인트 보호용. ?size 가 클라이언트 요청 그대로 적용되는 것을 방지.
-        # 카탈로그 규모(아티스트 1k~3k, ERD §4.3) 기준에서 한 번에 100건이면 충분.
+        # 카탈로그 규모(아티스트 1k~3k) 기준에서 한 번에 100건이면 충분.
         default-page-size: 20
         max-page-size: 100
 
-  # 카탈로그 조회 캐시 (#236). Caffeine in-process 캐시 — Redis 는 #210 컷, 단일 인스턴스라 충분.
+  # 카탈로그 조회 캐시. Caffeine in-process 캐시 — Redis 는 컷, 단일 인스턴스라 충분.
   # 캐시 대상: albumDetail(상세 단건, key=id) / albumLandingList(공개 기본 랜딩 첫 페이지 단일 엔트리).
   # spec: maximumSize=2000(카탈로그 ~1k~3k 커버), expireAfterWrite=60s(주문 결제·리뷰가 바꾸는 stock·평점의
   #       staleness 백스톱 — admin 쓰기는 @CacheEvict 로 즉시 무효화), recordStats(적중률 메트릭 노출).
@@ -56,7 +56,7 @@ server:
   port: 8080
   forward-headers-strategy: ${SERVER_FORWARD_HEADERS_STRATEGY:native}
   # 신뢰 프록시(RemoteIpValve) — 이 대역에서 온 요청만 X-Forwarded-For 를 신뢰해 getRemoteAddr() 에 실 클라이언트 IP 를
-  # 채운다(#322). Rate Limit 키(클라이언트 IP)의 정확성에 직결. 기본값은 Tomcat RemoteIpValve 의 기본 사설 대역과
+  # 채운다. Rate Limit 키(클라이언트 IP)의 정확성에 직결. 기본값은 Tomcat RemoteIpValve 의 기본 사설 대역과
   # 동일하게 유지한다(10/8·172.16/12·192.168/16·169.254/16·127/8 + CGNAT 100.64/10 + IPv6 ::1) — 100.64/10 은
   # AWS NLB/ALB·GCP 등 클라우드 LB 가 쓰는 대역이라 누락 시 XFF 미신뢰로 전 사용자가 LB IP 단일 버킷을 공유한다.
   # 운영 LB 가 이 대역 밖(공인 IP)이면 SERVER_TOMCAT_INTERNAL_PROXIES 에 실제 LB CIDR 정규식을 명시한다(배포 런북 참조).
@@ -75,8 +75,8 @@ management:
   endpoints:
     web:
       exposure:
-        # 기본은 health 만 노출(최소 노출 원칙, #162). 아웃박스 DLQ(#323)·캐시(#236) 메트릭을 Prometheus 로
-        # 긁으려면 MANAGEMENT_EXPOSURE=health,prometheus 로 opt-in 한다(docker 데모 프로파일은 기본 포함, #343).
+        # 기본은 health 만 노출(최소 노출 원칙). 아웃박스 DLQ·캐시 메트릭을 Prometheus 로
+        # 긁으려면 MANAGEMENT_EXPOSURE=health,prometheus 로 opt-in 한다(docker 데모 프로파일은 기본 포함).
         # /actuator/prometheus 는 SecurityConfig 의 메트릭 전용 Basic 체인(metricsScrapeSecurityFilterChain)이
         # 보호하므로 익명 접근은 401 이고, 스크레이퍼는 scrape_config 의 basic_auth(metrics.scrape.*)로 인증한다.
         include: ${MANAGEMENT_EXPOSURE:health}
@@ -84,7 +84,7 @@ management:
     health:
       show-details: never
 
-# /actuator/prometheus 스크레이프 전용 Basic 인증 자격증명 (#343). SecurityConfig 의 메트릭 전용 체인이 검증한다.
+# /actuator/prometheus 스크레이프 전용 Basic 인증 자격증명. SecurityConfig 의 메트릭 전용 체인이 검증한다.
 # /actuator/prometheus 는 nginx 가 외부로 위임해 도달 가능하므로 JWT 본 체인과 분리된 Basic 으로 보호한다.
 # password 는 jwt.secret 과 동일하게 폴백 없는 env 바인딩 — 공통 설정에 공개 데모 비번을 두지 않는다(운영/스테이징이
 # 알려진 값으로 폴백하는 것을 차단). 프로파일별 데모·테스트 값은 application-{local,test}.yaml 에, docker/dev/prod 는
@@ -99,8 +99,8 @@ logging:
     root: INFO
     com.groove: INFO
 
-# OpenAPI/Swagger UI (#156). 문서는 코드에서 자동 생성된다 — Swagger UI=/swagger-ui.html, OpenAPI JSON=/v3/api-docs.
-# local/test 프로파일에서는 노출되고, docker(배포) 프로파일은 #162 로 기본 비공개(application-docker.yaml 에서
+# OpenAPI/Swagger UI. 문서는 코드에서 자동 생성된다 — Swagger UI=/swagger-ui.html, OpenAPI JSON=/v3/api-docs.
+# local/test 프로파일에서는 노출되고, docker(배포) 프로파일은 기본 비공개(application-docker.yaml 에서
 # enabled=${SPRINGDOC_ENABLED:false} 로 override)다 — 데모로 노출하려면 SPRINGDOC_ENABLED=true 로 토글한다.
 # 아래는 노출 시 적용되는 UI 옵션 — enabled 는 여기서 지정하지 않으므로(기본 true) 프로파일이 override 한다.
 springdoc:
@@ -116,19 +116,19 @@ jwt:
   access-token-ttl-seconds: ${JWT_ACCESS_TOKEN_TTL_SECONDS:1800}
   refresh-token-ttl-seconds: ${JWT_REFRESH_TOKEN_TTL_SECONDS:1209600}
 
-# 이메일 점유 해시 HMAC 키 (#186). JWT 와 분리된 전용 시크릿(키 1개=용도 1개) — 미설정 시 기동 실패가 의도된 동작.
+# 이메일 점유 해시 HMAC 키. JWT 와 분리된 전용 시크릿(키 1개=용도 1개) — 미설정 시 기동 실패가 의도된 동작.
 # 로컬 개발용 fallback 은 application-local.yaml, 테스트용은 application-test.yaml 에 정의.
 email:
   hash:
     secret: ${EMAIL_HASH_SECRET}
 
-# Refresh Token 쿠키 속성 (#163). refresh 토큰은 HttpOnly; Secure; SameSite=Strict 쿠키로 내려가
+# Refresh Token 쿠키 속성. refresh 토큰은 HttpOnly; Secure; SameSite=Strict 쿠키로 내려가
 # JS 접근을 차단한다. 운영(HTTPS)은 secure=true 가 기본이며, 로컬 개발(HTTP)은 profile 에서 false 로 override.
 auth:
   refresh-cookie:
     secure: ${AUTH_REFRESH_COOKIE_SECURE:true}
 
-# 인증 엔드포인트 Rate Limit (#23). 정책 수치는 운영 측정 후 W10에서 재조정 가능.
+# 인증 엔드포인트 Rate Limit. 정책 수치는 운영 측정 후 W10에서 재조정 가능.
 groove:
   auth:
     rate-limit:
@@ -141,36 +141,36 @@ groove:
       password-change:
         capacity: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_CAPACITY:5}
         refill-period: ${AUTH_RATE_LIMIT_PASSWORD_CHANGE_REFILL_PERIOD:PT1M}
-  # 응답 보안 헤더 (#322). CSP 는 기본 Report-Only — 운영 관측 후 GROOVE_CSP_REPORT_ONLY=false 로 enforce 전환.
+  # 응답 보안 헤더. CSP 는 기본 Report-Only — 운영 관측 후 GROOVE_CSP_REPORT_ONLY=false 로 enforce 전환.
   security:
     csp:
       enabled: ${GROOVE_CSP_ENABLED:true}
       report-only: ${GROOVE_CSP_REPORT_ONLY:true}
       # Toss 결제 위젯(iframe·리소스)은 *.tosspayments.com 에서 로드된다. 미설정 시 코드 기본값을 쓴다.
       policy: ${GROOVE_CSP_POLICY:}
-  # 선착순 쿠폰 발급 Rate Limit (#90). 회원당 분당 발급 횟수 제한 — JWT memberId 로 키잉(IP 폴백).
+  # 선착순 쿠폰 발급 Rate Limit. 회원당 분당 발급 횟수 제한 — JWT memberId 로 키잉(IP 폴백).
   coupon:
     rate-limit:
       issue:
         capacity: ${COUPON_RATE_LIMIT_ISSUE_CAPACITY:10}
         refill-period: ${COUPON_RATE_LIMIT_ISSUE_REFILL_PERIOD:PT1M}
-    # 만료 회원 쿠폰 배치 (#92). cron 을 "-" 로 두면 비활성화된다.
+    # 만료 회원 쿠폰 배치. cron 을 "-" 로 두면 비활성화된다.
     expiration:
       cron: ${COUPON_EXPIRATION_CRON:0 0 * * * *}
       batch-size: ${COUPON_EXPIRATION_BATCH_SIZE:1000}
-    # 취소/환불 복원 (#319). 복원 시점에 이미 만료된 쿠폰을 now + grace 로 연장해 되살린다.
+    # 취소/환불 복원. 복원 시점에 이미 만료된 쿠폰을 now + grace 로 연장해 되살린다.
     restore:
       grace: ${COUPON_RESTORE_GRACE:P7D}
   # 멱등성 인프라 (#W7-2). cleanup-cron 을 "-" 로 두면 정리 스케줄러가 비활성화된다.
   idempotency:
     ttl: ${IDEMPOTENCY_TTL:PT24H}
     # IN_PROGRESS 마커 처리 타임아웃 — 이 시간이 지나도 complete 되지 않은 마커는 죽은 소유자가 남긴 것으로 보고
-    # 다음 동일 키 요청이 즉시 회수한다(고착 방지, #317). 반드시 정상 action 최대 소요(락 대기 ~50s·PG 5s)보다
-    # 충분히 크게 둬 진행 중인 살아있는 마커가 조기 회수돼 이중 실행되는 것을 막는다 (#160·#317).
+    # 다음 동일 키 요청이 즉시 회수한다(고착 방지). 반드시 정상 action 최대 소요(락 대기 ~50s·PG 5s)보다
+    # 충분히 크게 둬 진행 중인 살아있는 마커가 조기 회수돼 이중 실행되는 것을 막는다.
     in-progress-timeout: ${IDEMPOTENCY_IN_PROGRESS_TIMEOUT:PT10M}
     cleanup-cron: ${IDEMPOTENCY_CLEANUP_CRON:0 0 * * * *}
     cleanup-batch-size: ${IDEMPOTENCY_CLEANUP_BATCH_SIZE:1000}
-  # 이벤트 아웃박스 (#237). 결제 완료 후속 처리(배송 생성 등)를 상태 변경과 같은 트랜잭션에서 outbox 에 기록하고,
+  # 이벤트 아웃박스. 결제 완료 후속 처리(배송 생성 등)를 상태 변경과 같은 트랜잭션에서 outbox 에 기록하고,
   # 릴레이가 미발행 이벤트를 멱등 컨슈머에 at-least-once 로 발행한다. cleanup.cron 을 "-" 로 두면 정리 비활성화.
   outbox:
     relay:
@@ -178,22 +178,22 @@ groove:
       initial-delay: ${OUTBOX_RELAY_INITIAL_DELAY:PT5S}
       # 한 주기에 발행할 최대 건수 — 적체 시에도 메모리를 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${OUTBOX_RELAY_BATCH_SIZE:200}
-      # 핸들러 실패 재시도 상한 — 이 횟수를 채운 poison 이벤트는 DLQ(격리)로 제외해 정상 이벤트 슬롯 점유를 막는다 (#268).
+      # 핸들러 실패 재시도 상한 — 이 횟수를 채운 poison 이벤트는 DLQ(격리)로 제외해 정상 이벤트 슬롯 점유를 막는다.
       max-attempts: ${OUTBOX_RELAY_MAX_ATTEMPTS:5}
     cleanup:
       cron: ${OUTBOX_CLEANUP_CRON:0 0 * * * *}
       # 발행 완료 후 이 기간이 지난 행을 정리(감사/디버깅 보관 기간).
       retention: ${OUTBOX_CLEANUP_RETENTION:P7D}
       batch-size: ${OUTBOX_CLEANUP_BATCH_SIZE:1000}
-  # 게스트 주문 조회 Rate Limit (#208). POST /orders/{orderNumber}/guest-lookup — IP당 분당 10회로 orderNumber+email 무차별 대입을 억제한다.
+  # 게스트 주문 조회 Rate Limit. POST /orders/{orderNumber}/guest-lookup — IP당 분당 10회로 orderNumber+email 무차별 대입을 억제한다.
   order:
     rate-limit:
       guest-lookup:
         capacity: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_CAPACITY:10}
         refill-period: ${ORDER_RATE_LIMIT_GUEST_LOOKUP_REFILL_PERIOD:PT1M}
   payment:
-    # 결제 Rate Limit (#208, #320). post=결제 생성(POST /payments + /toss/checkout) 회원당 분당 5회 — JWT memberId 키잉(게스트·토큰 부재 시 IP 폴백).
-    # webhook=토스 웹훅(POST /toss/webhook) IP당 분당 60회 — 회원 토큰 없는 공개 엔드포인트라 별도 IP 버킷으로 분리(#320). 토스 IP 피크 수용 + 단일 IP 증폭 캡.
+    # 결제 Rate Limit. post=결제 생성(POST /payments + /toss/checkout) 회원당 분당 5회 — JWT memberId 키잉(게스트·토큰 부재 시 IP 폴백).
+    # webhook=토스 웹훅(POST /toss/webhook) IP당 분당 60회 — 회원 토큰 없는 공개 엔드포인트라 별도 IP 버킷으로 분리. 토스 IP 피크 수용 + 단일 IP 증폭 캡.
     rate-limit:
       post:
         capacity: ${PAYMENT_RATE_LIMIT_POST_CAPACITY:5}
@@ -228,7 +228,7 @@ groove:
       ship-delay: ${SHIPPING_PROGRESS_SHIP_DELAY:PT5S}
       # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리를 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${SHIPPING_PROGRESS_BATCH_SIZE:200}
-    # 배송 생성 보충 안전망 (#169). AFTER_COMMIT 배송 생성이 실패해 PAID 인데 배송이 없는 고아 주문을
+    # 배송 생성 보충 안전망. AFTER_COMMIT 배송 생성이 실패해 PAID 인데 배송이 없는 고아 주문을
     # interval 마다 스캔해 보충한다. 정상 흐름에선 대상이 비어 있는 저빈도 안전망.
     reconciliation:
       interval: ${SHIPPING_RECONCILIATION_INTERVAL:PT5M}
@@ -238,7 +238,7 @@ groove:
       # 한 주기에 보충할 최대 건수 — 메모리 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${SHIPPING_RECONCILIATION_BATCH_SIZE:200}
 
-  # 반품 자동 진행 (#239). 실 택배사 연동 없음 — interval 마다 APPROVED→IN_TRANSIT→INSPECTING→REFUNDED 를
+  # 반품 자동 진행. 실 택배사 연동 없음 — interval 마다 APPROVED→IN_TRANSIT→INSPECTING→REFUNDED 를
   # 한 단계씩 민다(검수 자동통과+환불 포함). 검수 불합격(REJECTED)만 관리자 수동. 시연 시 각 delay 를 수 초로 줄인다.
   claim:
     # 반품 가능 기한 — 배송완료(delivered_at) 후 이 기간 이내만 접수 (수령 후 N일).
@@ -255,7 +255,7 @@ groove:
       # 한 주기에 처리할 최대 건수 — 적체 시에도 메모리/PG 호출량을 바운드. 나머지는 다음 주기에 처리.
       batch-size: ${CLAIM_PROGRESS_BATCH_SIZE:200}
 
-  # 주문/배송 PII 익명화 배치 (#170 Part B, GDPR/개인정보). 배송완료된 지 retention 이 지난 주문/배송의
+  # 주문/배송 PII 익명화 배치 (GDPR/개인정보). 배송완료된 지 retention 이 지난 주문/배송의
   # 수령인·주소·게스트 PII 를 interval 마다 마스킹한다. 회원 본인 PII 는 탈퇴 즉시 익명화되지만, 주문/배송
   # 배송지 PII 는 분쟁 대응을 위해 보존기간 후 익명화한다(특히 게스트 주문은 이 배치가 유일한 익명화 경로).
   privacy:
@@ -278,7 +278,7 @@ cors:
   allow-credentials: false
   max-age-seconds: 3600
 
-# Mock PG 동작 파라미터 (#W7-1, ARCHITECTURE.md §7.2).
+# Mock PG 동작 파라미터 (#W7-1).
 # Mock 프로파일(local/dev/test/docker)에서만 바인딩된다. 실 PG 도입 시 prod 프로파일 구현체로 대체.
 # webhook-secret 은 jwt.secret 과 동일하게 fallback 없이 환경 변수로만 주입 — 미설정 시 기동 실패가 의도된 동작.
 # 로컬 fallback 은 application-local.yaml, 테스트 고정값은 application-test.yaml 에 정의.
@@ -293,7 +293,7 @@ payment:
     # request() 후 webhook-delay 만큼 뒤에 PaymentWebhookHandler 로 결과 콜백을 자동 발사한다 (#W7-4).
     # 통합 테스트는 결정적 검증을 위해 false 로 끄고 HTTP 웹훅 엔드포인트/폴링을 직접 호출한다.
     auto-webhook: ${PAYMENT_MOCK_AUTO_WEBHOOK:true}
-  # 토스페이먼츠 테스트 연동(#293). dev/prod 프로파일에서만 바인딩된다(TossPaymentConfig @Profile).
+  # 토스페이먼츠 테스트 연동. dev/prod 프로파일에서만 바인딩된다(TossPaymentConfig @Profile).
   # secret-key 는 webhook-secret 과 동일하게 fallback 없이 환경 변수로만 주입 — 미설정 시 기동 실패가 의도된 동작.
   # dev fallback 은 application-dev.yaml 에 정의. test/local 은 Mock 을 쓰므로 이 키가 바인딩되지 않는다.
   toss:
@@ -304,7 +304,7 @@ payment:
     fail-url: ${PAYMENT_TOSS_FAIL_URL}
     connect-timeout: ${PAYMENT_TOSS_CONNECT_TIMEOUT:2s}
     read-timeout: ${PAYMENT_TOSS_READ_TIMEOUT:5s}
-    # 외부 PG 호출 재시도·서킷브레이커 (#320). dev/prod 에서만 바인딩. 재시도는 일시 장애(5xx·연결 실패)만,
+    # 외부 PG 호출 재시도·서킷브레이커. dev/prod 에서만 바인딩. 재시도는 일시 장애(5xx·연결 실패)만,
     # 동기 confirm 워커 점유·UX 보호를 위해 보수적으로(2회·짧은 백오프). 서킷은 누적 실패율/느린호출율 임계 초과 시 OPEN.
     resilience:
       retry-max-attempts: ${PAYMENT_TOSS_RETRY_MAX_ATTEMPTS:2}

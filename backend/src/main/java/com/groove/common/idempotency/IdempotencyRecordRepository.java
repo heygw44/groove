@@ -16,7 +16,7 @@ public interface IdempotencyRecordRepository extends JpaRepository<IdempotencyRe
     /**
      * 키+소유자 토큰으로 IN_PROGRESS 행만 삭제. 처리 실패 시 소유자가 자기 마커만 회수할 때 사용 —
      * 회수 race 로 마커가 회수되고 다른 요청이 같은 키로 새 마커/COMPLETED 캐시를 만든 경우, ownerToken 이
-     * 달라 그 행은 건드리지 않는다(#317 fencing).
+     * 달라 그 행은 건드리지 않는다(fencing).
      */
     @Modifying
     @Query("DELETE FROM IdempotencyRecord r WHERE r.idempotencyKey = :idempotencyKey "

@@ -72,7 +72,7 @@ public class AuthController {
 
     @Operation(summary = "로그인",
             description = "이메일·비밀번호로 인증하고 accessToken 을 발급한다. refresh 토큰은 응답 body 가 아닌 "
-                    + "HttpOnly 쿠키(refreshToken)로 내려가 JS 접근이 차단된다(#163). 발급된 accessToken 을 우측 "
+                    + "HttpOnly 쿠키(refreshToken)로 내려가 JS 접근이 차단된다. 발급된 accessToken 을 우측 "
                     + "상단 Authorize 에 넣으면 보호 엔드포인트를 try-out 할 수 있다.")
     @ApiResponse(responseCode = "200", description = "로그인 성공 — accessToken 발급 + refresh 토큰 HttpOnly 쿠키 설정")
     @ApiResponse(responseCode = "400", description = "입력 검증 실패")

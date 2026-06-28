@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * 토스페이먼츠 연동 파라미터(#293). payment.toss.* 키와 매핑되며 compact constructor 에서 검증한다.
+ * 토스페이먼츠 연동 파라미터. payment.toss.* 키와 매핑되며 compact constructor 에서 검증한다.
  * dev/prod 프로파일에서만 바인딩(TossPaymentConfig 의 @Profile) — test/local/docker 는 MockPaymentGateway 를 쓴다.
  * clientKey: 위젯용 공개 키(노출 전제라 시크릿 가드 제외). secretKey: 서버 API Basic Auth 비밀 키(플레이스홀더 기동 거부). connect/readTimeout: 호출 타임아웃.
  */

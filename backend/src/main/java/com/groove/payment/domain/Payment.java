@@ -68,7 +68,7 @@ public class Payment extends BaseTimeEntity {
     private String failureReason;
 
     /**
-     * 토스 successUrl/failUrl 콜백 검증용 결제별 무작위 토큰(#297/#304). checkout 에서 발급·저장하고
+     * 토스 successUrl/failUrl 콜백 검증용 결제별 무작위 토큰. checkout 에서 발급·저장하고
      * successUrl/failUrl 쿼리로 round-trip 시킨 뒤 콜백 핸들러가 일치 검증한다. 레거시(mock) 경로는 null.
      */
     @Column(name = "callback_token", length = MAX_CALLBACK_TOKEN_LENGTH)
@@ -151,7 +151,7 @@ public class Payment extends BaseTimeEntity {
     }
 
     /**
-     * 토스 confirm 이 알려준 실제 결제수단으로 checkout 시 받은 잠정 method 를 보정한다(정합성 #307).
+     * 토스 confirm 이 알려준 실제 결제수단으로 checkout 시 받은 잠정 method 를 보정한다(정합성).
      * 결제수단 선택은 토스 결제위젯이 담당하므로 checkout 의 method 는 잠정값이며, confirm 응답이 단일 진실원이다.
      * pgTransactionId 보정과 동일하게 PENDING 일 때만 허용한다.
      */
