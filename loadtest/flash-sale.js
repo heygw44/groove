@@ -126,7 +126,7 @@ export function setup() {
   const adminToken = loginAdmin();
   resetTargetStock(adminToken);
   const tokens = buildTokenPool({ baseUrl: BASE_URL, count: MEMBER_COUNT, password: PASSWORD, email });
-  return { tokens, targetAlbumId: TARGET_ALBUM_ID, initialStock: INITIAL_STOCK };
+  return { tokens, targetAlbumId: TARGET_ALBUM_ID, initialStock: INITIAL_STOCK, runTag: `${Date.now()}` };
 }
 
 export default function (data) {
@@ -136,7 +136,8 @@ export default function (data) {
   const body = buildSingleAlbumOrder(data.targetAlbumId, 1); // 모든 VU 가 동일 한정반 1개를 주문 → 재고 경합
 
   const res = http.post(`${BASE_URL}/api/v1/orders`, JSON.stringify(body), {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    // 주문 생성은 Idempotency-Key 필수 — 매 반복 고유 키(run 태그 + 전역 반복번호)로 중복 없이 신규 주문
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Idempotency-Key': `fs-${data.runTag}-${n}` },
     tags: { phase: 'flash' },
     // 201 생성·409 재고부족·422 구매불가는 정상 도메인 응답 → http_req_failed 에서 제외. 단일 행 경합으로 인한
     // 5xx(락 타임아웃·데드락 등)는 일부러 expected 에 넣지 않는다 — Before 의 실패 양상을 http_req_failed 로 드러낸다.

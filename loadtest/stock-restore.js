@@ -106,13 +106,14 @@ function resetTargetStock(adminToken) {
 
 // 동시 구간에서 취소할 선행 PENDING 주문 SEED_ORDERS 건을 만든다(각 −1). 취소는 본인만 가능하므로
 // {orderNumber, tokenIndex} 페어로 소유 토큰을 기록한다.
-function seedPendingOrders(tokens) {
+function seedPendingOrders(tokens, runTag) {
   const seeded = [];
   const body = buildSingleAlbumOrder(TARGET_ALBUM_ID, 1);
   for (let j = 0; j < SEED_ORDERS; j++) {
     const tokenIndex = j % tokens.length;
     const res = http.post(`${BASE_URL}/api/v1/orders`, JSON.stringify(body), {
-      headers: { Authorization: `Bearer ${tokens[tokenIndex]}`, 'Content-Type': 'application/json' },
+      // 주문 생성은 Idempotency-Key 필수 — 시드 주문마다 고유 키
+      headers: { Authorization: `Bearer ${tokens[tokenIndex]}`, 'Content-Type': 'application/json', 'Idempotency-Key': `sr-seed-${runTag}-${j}` },
       tags: { phase: 'setup-seed' },
     });
     if (res.status === 201 && res.json('orderNumber')) {
@@ -129,11 +130,12 @@ export function setup() {
   const adminToken = loginAdmin();
   resetTargetStock(adminToken);
   const tokens = buildTokenPool({ baseUrl: BASE_URL, count: MEMBER_COUNT, password: PASSWORD, email });
-  const seeded = seedPendingOrders(tokens);
+  const runTag = `${Date.now()}`;
+  const seeded = seedPendingOrders(tokens, runTag);
   const stockAfterSeed = http.get(`${BASE_URL}/api/v1/albums/${TARGET_ALBUM_ID}`).json('stock');
   stockAfterSeedGauge.add(stockAfterSeed); // == INITIAL_STOCK − SEED_ORDERS
   console.log(`시드 완료: 선행 주문 ${seeded.length}건, 시드후 재고 ${stockAfterSeed}`);
-  return { tokens, seeded, stockAfterSeed };
+  return { tokens, seeded, stockAfterSeed, runTag };
 }
 
 export default function (data) {
@@ -142,7 +144,8 @@ export default function (data) {
   if (n % 2 === 0) {
     const token = data.tokens[(n / 2) % data.tokens.length];
     const res = http.post(`${BASE_URL}/api/v1/orders`, JSON.stringify(buildSingleAlbumOrder(TARGET_ALBUM_ID, 1)), {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      // 주문 생성은 Idempotency-Key 필수 — place 마다 고유 키
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Idempotency-Key': `sr-place-${data.runTag}-${n}` },
       tags: { phase: 'place' },
       responseCallback: http.expectedStatuses(201, 409, 422),
     });
