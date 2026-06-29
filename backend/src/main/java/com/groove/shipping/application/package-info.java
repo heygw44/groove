@@ -3,6 +3,6 @@
  *
  * OrderPaidOutboxHandler 는 OrderPaidEvent 아웃박스 컨슈머로 자기 트랜잭션
  * (REQUIRES_NEW, ShippingProvisioner)에서 배송 행을 만든다. ShippingProgressScheduler 의
- * 상태 전이는 ShippingService 의 트랜잭션 메서드로 위임한다. 운송장 발급은 TrackingNumberGenerator 로 추상화한다.
+ * 상태 전이는 ShippingService 의 트랜잭션 메서드로 위임한다. 운송장 발급은 UuidTrackingNumberGenerator 가 맡는다.
  */
 package com.groove.shipping.application;

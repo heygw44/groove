@@ -28,12 +28,12 @@ public class ShippingProvisioner {
 
     private final ShippingRepository shippingRepository;
     private final OrderRepository orderRepository;
-    private final TrackingNumberGenerator trackingNumberGenerator;
+    private final UuidTrackingNumberGenerator trackingNumberGenerator;
     private final Clock clock;
 
     public ShippingProvisioner(ShippingRepository shippingRepository,
                                OrderRepository orderRepository,
-                               TrackingNumberGenerator trackingNumberGenerator,
+                               UuidTrackingNumberGenerator trackingNumberGenerator,
                                Clock clock) {
         this.shippingRepository = shippingRepository;
         this.orderRepository = orderRepository;

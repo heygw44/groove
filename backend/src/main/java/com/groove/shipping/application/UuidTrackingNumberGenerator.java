@@ -9,9 +9,8 @@ import java.util.UUID;
  * 충돌은 uk_shipping_tracking UNIQUE 제약이 잡는다.
  */
 @Component
-public class UuidTrackingNumberGenerator implements TrackingNumberGenerator {
+public class UuidTrackingNumberGenerator {
 
-    @Override
     public String generate() {
         return UUID.randomUUID().toString();
     }

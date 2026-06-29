@@ -57,14 +57,14 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final AlbumRepository albumRepository;
-    private final OrderNumberGenerator orderNumberGenerator;
+    private final RandomOrderNumberGenerator orderNumberGenerator;
     private final CouponApplicationService couponApplicationService;
     private final MemberRepository memberRepository;
     private final Clock clock;
 
     public OrderService(OrderRepository orderRepository,
                         AlbumRepository albumRepository,
-                        OrderNumberGenerator orderNumberGenerator,
+                        RandomOrderNumberGenerator orderNumberGenerator,
                         CouponApplicationService couponApplicationService,
                         MemberRepository memberRepository,
                         Clock clock) {

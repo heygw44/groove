@@ -60,7 +60,7 @@ class OrderServiceTest {
     @Mock
     private AlbumRepository albumRepository;
     @Mock
-    private OrderNumberGenerator orderNumberGenerator;
+    private RandomOrderNumberGenerator orderNumberGenerator;
     @Mock
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
     @Mock
