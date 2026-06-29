@@ -65,10 +65,10 @@ export const options = {
 
 const email = seedEmail(EMAIL_PREFIX, 3, EMAIL_DOMAIN); // loadtest001@groove.test ...
 
-// 시드된 회원 N명을 로그인시켜 토큰 풀을 만든다 (1회).
+// 시드된 회원 N명을 로그인시켜 토큰 풀을 만든다 (1회). runTag 는 결제 전 주문 생성 멱등키를 run 마다 가른다.
 export function setup() {
   const tokens = buildTokenPool({ baseUrl: BASE_URL, count: MEMBER_COUNT, password: PASSWORD, email });
-  return { tokens };
+  return { tokens, runTag: `${Date.now()}` };
 }
 
 export default function (data) {
@@ -81,7 +81,8 @@ export default function (data) {
     `${BASE_URL}/api/v1/orders`,
     JSON.stringify(buildOrderBody({ n, albumCount: ALBUM_COUNT, itemCount: 1 })),
     {
-      headers: authHeaders,
+      // 주문 생성도 Idempotency-Key 필수(@Idempotent) — order-setup 전용 키(결제 phase 의 idemKey 와 별개).
+      headers: { ...authHeaders, 'Idempotency-Key': `pay-order-${data.runTag}-${n}` },
       tags: { phase: 'order-setup' },
       responseCallback: http.expectedStatuses(201, 409, 422),
     },
