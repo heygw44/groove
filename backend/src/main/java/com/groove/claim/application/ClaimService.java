@@ -14,6 +14,7 @@ import com.groove.claim.exception.ReturnWindowExpiredException;
 import com.groove.claim.exception.ReturnWindowNotDeterminableException;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.StockRestorer;
+import com.groove.catalog.album.event.AlbumStockChangedEvent;
 import com.groove.coupon.application.CouponApplicationService;
 import com.groove.member.domain.MemberRepository;
 import com.groove.member.exception.MemberNotFoundException;
@@ -34,6 +35,7 @@ import com.groove.shipping.application.ShippingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -76,6 +78,7 @@ public class ClaimService {
     private final ShippingService shippingService;
     private final AlbumRepository albumRepository;
     private final MemberRepository memberRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     /** 배송완료 anchor 로부터 이 기간 내에만 반품 접수 허용. */
     private final Duration returnWindow;
@@ -88,6 +91,7 @@ public class ClaimService {
                         ShippingService shippingService,
                         AlbumRepository albumRepository,
                         MemberRepository memberRepository,
+                        ApplicationEventPublisher eventPublisher,
                         Clock clock,
                         @Value("${groove.claim.return-window:P7D}") Duration returnWindow) {
         this.claimRepository = claimRepository;
@@ -98,6 +102,7 @@ public class ClaimService {
         this.shippingService = shippingService;
         this.albumRepository = albumRepository;
         this.memberRepository = memberRepository;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
         this.returnWindow = returnWindow;
     }
@@ -389,9 +394,14 @@ public class ClaimService {
 
     /** 원자적 가산 UPDATE 로 재입고 (취소/반품 공용). */
     private void restoreClaimStock(Claim claim) {
-        StockRestorer.restore(albumRepository, claim.getItems().stream()
+        Map<Long, Integer> quantityByAlbumId = claim.getItems().stream()
                 .collect(Collectors.groupingBy(item -> item.getOrderItem().getAlbum().getId(),
-                        Collectors.summingInt(ClaimItem::getQuantity))));
+                        Collectors.summingInt(ClaimItem::getQuantity)));
+        StockRestorer.restore(albumRepository, quantityByAlbumId);
+        // 재입고된 album 들의 조회 캐시(상세/랜딩) 무효화.
+        if (!quantityByAlbumId.isEmpty()) {
+            eventPublisher.publishEvent(new AlbumStockChangedEvent(quantityByAlbumId.keySet()));
+        }
     }
 
     private static Map<Long, OrderItem> orderItemsById(Order order) {

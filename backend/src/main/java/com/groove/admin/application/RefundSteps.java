@@ -2,6 +2,7 @@ package com.groove.admin.application;
 
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.StockRestorer;
+import com.groove.catalog.album.event.AlbumStockChangedEvent;
 import com.groove.coupon.application.CouponApplicationService;
 import com.groove.order.domain.Order;
 import com.groove.order.domain.OrderItem;
@@ -17,10 +18,12 @@ import com.groove.payment.exception.PaymentNotRefundableException;
 import com.groove.shipping.application.ShippingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -41,17 +44,20 @@ class RefundSteps {
     private final CouponApplicationService couponApplicationService;
     private final ShippingService shippingService;
     private final AlbumRepository albumRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     RefundSteps(OrderRepository orderRepository,
                 PaymentRepository paymentRepository,
                 CouponApplicationService couponApplicationService,
                 ShippingService shippingService,
-                AlbumRepository albumRepository) {
+                AlbumRepository albumRepository,
+                ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
         this.couponApplicationService = couponApplicationService;
         this.shippingService = shippingService;
         this.albumRepository = albumRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -108,8 +114,13 @@ class RefundSteps {
         // 발송 전(PREPARING) 배송이 있으면 같은 트랜잭션에서 CANCELLED 로 동기화한다. 없거나 종착이면 no-op.
         shippingService.cancelForOrder(order.getId());
         // 재고 복원 — 원자적 가산 UPDATE(albumId 오름차순).
-        int restored = StockRestorer.restore(albumRepository, order.getItems().stream()
-                .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
+        Map<Long, Integer> quantityByAlbumId = order.getItems().stream()
+                .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity)));
+        int restored = StockRestorer.restore(albumRepository, quantityByAlbumId);
+        // 복원된 album 들의 조회 캐시(상세/랜딩) 무효화.
+        if (!quantityByAlbumId.isEmpty()) {
+            eventPublisher.publishEvent(new AlbumStockChangedEvent(quantityByAlbumId.keySet()));
+        }
         // 쿠폰 적용된 주문이면 USED→ISSUED 복원. 미적용 주문은 no-op.
         couponApplicationService.restoreForOrder(order.getId());
         log.info("관리자 환불 완료: order={}, paymentId={}, amount={}, 재고복원 {}건",
