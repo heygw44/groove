@@ -59,10 +59,10 @@ export const options = {
 
 const email = seedEmail(EMAIL_PREFIX, 3, EMAIL_DOMAIN); // loadtest001@groove.test ...
 
-// 시드된 회원 N명을 로그인시켜 토큰 풀을 만든다 (1회).
+// 시드된 회원 N명을 로그인시켜 토큰 풀을 만든다 (1회). runTag 는 멱등키를 run 마다 갈라 재실행 충돌을 막는다.
 export function setup() {
   const tokens = buildTokenPool({ baseUrl: BASE_URL, count: MEMBER_COUNT, password: PASSWORD, email });
-  return { tokens };
+  return { tokens, runTag: `${Date.now()}` };
 }
 
 export default function (data) {
@@ -72,7 +72,8 @@ export default function (data) {
   const body = buildOrderBody({ n, albumCount: ALBUM_COUNT, itemCount: ITEMS_PER_ORDER });
 
   const res = http.post(`${BASE_URL}/api/v1/orders`, JSON.stringify(body), {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    // 주문 생성은 Idempotency-Key 필수(@Idempotent) — run 태그 + 전역 반복번호로 매 주문 고유 키.
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Idempotency-Key': `order-${data.runTag}-${n}` },
     tags: { phase: 'order' },
     // 409 재고부족·422 구매불가는 정상 도메인 응답 → 실패 집계에서 제외(5xx/연결오류만 http_req_failed).
     // 404(앨범 없음)는 일부러 제외한다 — ALBUM_COUNT 가 실제 시드 앨범 수보다 크면 범위 밖 id 가 404 가 되고,
