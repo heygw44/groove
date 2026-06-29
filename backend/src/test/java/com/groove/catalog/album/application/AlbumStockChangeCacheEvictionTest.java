@@ -67,12 +67,17 @@ class AlbumStockChangeCacheEvictionTest {
     @DisplayName("트랜잭션 없이 발행 — evict 안 됨(AFTER_COMMIT 보장)")
     void withoutTransaction_doesNotEvict() {
         Cache detail = detailCache();
+        Cache landing = landingCache();
         detail.put(1L, "album-1");
+        landing.put("album-public-landing", "landing-page");
 
         eventPublisher.publishEvent(new AlbumStockChangedEvent(Set.of(1L)));
 
         assertThat(detail.get(1L))
                 .as("커밋이 없으면 AFTER_COMMIT 리스너가 실행되지 않아 캐시가 유지돼야 한다")
+                .isNotNull();
+        assertThat(landing.get("album-public-landing"))
+                .as("커밋이 없으면 랜딩 목록 캐시도 유지돼야 한다")
                 .isNotNull();
     }
 

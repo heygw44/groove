@@ -7,4 +7,8 @@ import java.util.Set;
  * catalog 가 @TransactionalEventListener(AFTER_COMMIT) 로 받아 albumDetail/albumLandingList 캐시를 무효화한다.
  */
 public record AlbumStockChangedEvent(Set<Long> albumIds) {
+    public AlbumStockChangedEvent {
+        // keySet() 등 가변 view 가 그대로 실리지 않게 발행 시점 스냅샷으로 고정.
+        albumIds = Set.copyOf(albumIds);
+    }
 }
