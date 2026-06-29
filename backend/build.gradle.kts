@@ -44,18 +44,18 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     // OpenAPI/Swagger UI 자동 생성 (#156). 3.x 가 Spring Boot 4.x 호환 라인(2.8.x 는 Boot 3.5 용).
-    // Spring Boot BOM 미관리 의존성이라 버전을 명시한다.
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
+    // Spring Boot BOM 미관리라 버전은 카탈로그에서 고정.
+    implementation(libs.springdoc.openapi.starter.webmvc.ui)
     implementation("org.flywaydb:flyway-mysql")
-    implementation("com.bucket4j:bucket4j_jdk17-core:8.19.0")
-    implementation("com.github.ben-manes.caffeine:caffeine:3.2.4")
+    implementation(libs.bucket4j.core)
+    implementation(libs.caffeine)
     // 토스 외부 PG 호출 장애 격리 (#320). 프레임워크 무관 core 모듈을 프로그램적으로 사용한다 —
-    // resilience4j-spring-boot 스타터는 Boot 4.x 호환이 불확실해 의존하지 않는다. Spring BOM 미관리라 버전 명시.
-    implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.4.0")
-    implementation("io.github.resilience4j:resilience4j-retry:2.4.0")
-    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
+    // resilience4j-spring-boot 스타터는 Boot 4.x 호환이 불확실해 의존하지 않는다. Spring BOM 미관리라 카탈로그에서 버전 고정.
+    implementation(libs.resilience4j.circuitbreaker)
+    implementation(libs.resilience4j.retry)
+    implementation(libs.jjwt.api)
+    runtimeOnly(libs.jjwt.impl)
+    runtimeOnly(libs.jjwt.jackson)
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     // 아웃박스 DLQ 가시성 메트릭을 Prometheus 로 노출 (#323). actuator 가 micrometer-core 를 제공하므로
@@ -70,9 +70,9 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     // 모듈 의존 규칙(계층 순서 api→application→domain·도메인 단방향)을 테스트로 고정 (#344).
-    // Spring Boot BOM 미관리 의존성이라 버전을 명시한다.
-    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.2")
-    testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
+    // Spring Boot BOM 미관리라 버전은 카탈로그에서 고정.
+    testImplementation(libs.archunit.junit5)
+    testImplementation(platform(libs.testcontainers.bom))
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-mysql")

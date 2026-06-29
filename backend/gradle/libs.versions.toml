@@ -1,0 +1,22 @@
+# Gradle 버전 카탈로그 (#357): Spring BOM 미관리 의존성의 명시 버전만 한곳에 모은다.
+# 버전 없는 starter 류는 build.gradle.kts 에서 BOM 위임을 유지한다(여기 등록하지 않는다).
+[versions]
+springdoc = "3.0.3"
+bucket4j = "8.19.0"
+caffeine = "3.2.4"
+resilience4j = "2.4.0"
+jjwt = "0.13.0"
+archunit = "1.4.2"
+testcontainers = "2.0.5"
+
+[libraries]
+springdoc-openapi-starter-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
+bucket4j-core = { module = "com.bucket4j:bucket4j_jdk17-core", version.ref = "bucket4j" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
+resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }
+jjwt-api = { module = "io.jsonwebtoken:jjwt-api", version.ref = "jjwt" }
+jjwt-impl = { module = "io.jsonwebtoken:jjwt-impl", version.ref = "jjwt" }
+jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
+archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
