@@ -1,0 +1,695 @@
+{
+  "root_group": {
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [],
+    "checks": [
+        {
+          "fails": 0,
+          "name": "cancel 200 또는 409",
+          "path": "::cancel 200 또는 409",
+          "id": "8775aa1f868450d35b31b809d4a22f39",
+          "passes": 100
+        },
+        {
+          "passes": 100,
+          "fails": 0,
+          "name": "place 201 또는 409/422",
+          "path": "::place 201 또는 409/422",
+          "id": "1f4a85a4ac5589d79615d2561a531a5c"
+        }
+      ]
+  },
+  "options": {
+    "noColor": false,
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "p(90)",
+      "p(95)",
+      "p(99)",
+      "max"
+    ],
+    "summaryTimeUnit": ""
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 9554.036
+  },
+  "metrics": {
+    "cancel_ok": {
+      "thresholds": {
+        "count>0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 100,
+        "rate": 10.466780740621031
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 731.641,
+        "avg": 190.25368051948053,
+        "min": 4.12,
+        "med": 101.052,
+        "p(90)": 500.34740000000005,
+        "p(95)": 541.6958,
+        "p(99)": 646.15332
+      }
+    },
+    "http_req_blocked": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 0.003,
+        "p(90)": 0.5762000000000002,
+        "p(95)": 1.5315999999999987,
+        "p(99)": 5.213639999999999,
+        "max": 6.674,
+        "avg": 0.28641818181818135,
+        "min": 0.001
+      }
+    },
+    "http_req_tls_handshaking": {
+      "contains": "time",
+      "values": {
+        "max": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0
+      },
+      "type": "trend"
+    },
+    "place_created": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 100,
+        "rate": 10.466780740621031
+      },
+      "thresholds": {
+        "count>0": {
+          "ok": true
+        }
+      }
+    },
+    "stock_after_seed": {
+      "contains": "default",
+      "values": {
+        "min": 200,
+        "max": 200,
+        "value": 200
+      },
+      "type": "gauge"
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 541.5941202,
+        "p(95)": 579.8214955,
+        "p(99)": 670.99093667,
+        "max": 732.051042,
+        "avg": 323.2295014699998,
+        "min": 68.409958,
+        "med": 275.3419995
+      }
+    },
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 200,
+        "rate": 20.933561481242062
+      }
+    },
+    "vus_max": {
+      "values": {
+        "value": 100,
+        "min": 100,
+        "max": 100
+      },
+      "type": "gauge",
+      "contains": "default"
+    },
+    "http_req_sending": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 0.08700000000000009,
+        "p(95)": 0.42379999999999923,
+        "p(99)": 4.252039999999998,
+        "max": 6.548,
+        "avg": 0.16304675324675336,
+        "min": 0.006,
+        "med": 0.012
+      }
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 100,
+        "min": 0,
+        "max": 100
+      }
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 195603,
+        "rate": 20473.33713207696
+      }
+    },
+    "op_latency": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 670.5403099999999,
+        "max": 731.641,
+        "avg": 322.5087349999999,
+        "min": 67.878,
+        "med": 273.8515,
+        "p(90)": 541.2261,
+        "p(95)": 578.5947
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 385,
+        "rate": 40.297105851390974
+      }
+    },
+    "http_req_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 646.15332,
+        "max": 731.641,
+        "avg": 190.25368051948053,
+        "min": 4.12,
+        "med": 101.052,
+        "p(90)": 500.34740000000005,
+        "p(95)": 541.6958
+      }
+    },
+    "http_req_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.20189350649350646,
+        "min": 0,
+        "med": 0,
+        "p(90)": 0.43720000000000026,
+        "p(95)": 1.1016000000000001,
+        "p(99)": 3.514319999999997,
+        "max": 6.635
+      }
+    },
+    "http_req_failed": {
+      "values": {
+        "fails": 385,
+        "rate": 0,
+        "passes": 0
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 3.045,
+        "avg": 0.1901402597402598,
+        "min": 0.025,
+        "med": 0.173,
+        "p(90)": 0.26520000000000005,
+        "p(95)": 0.31939999999999996,
+        "p(99)": 0.5132
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 200
+      }
+    },
+    "final_stock": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "max": 189,
+        "value": 189,
+        "min": 189
+      }
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 100.334,
+        "p(90)": 500.20660000000004,
+        "p(95)": 541.5246,
+        "p(99)": 645.932,
+        "max": 731.469,
+        "avg": 189.90049350649346,
+        "min": 3.977
+      }
+    },
+    "data_received": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 505912,
+        "rate": 52952.69978049067
+      }
+    }
+  },
+  "setup_data": {
+    "runTag": "1782703971976",
+    "seeded": [
+      {
+        "orderNumber": "ORD-20260629-JY932M",
+        "tokenIndex": 0
+      },
+      {
+        "orderNumber": "ORD-20260629-LK34R2",
+        "tokenIndex": 1
+      },
+      {
+        "orderNumber": "ORD-20260629-V48RG5",
+        "tokenIndex": 2
+      },
+      {
+        "orderNumber": "ORD-20260629-ZIYTND",
+        "tokenIndex": 3
+      },
+      {
+        "orderNumber": "ORD-20260629-I73D3I",
+        "tokenIndex": 4
+      },
+      {
+        "orderNumber": "ORD-20260629-UNQVW7",
+        "tokenIndex": 5
+      },
+      {
+        "tokenIndex": 6,
+        "orderNumber": "ORD-20260629-774YQH"
+      },
+      {
+        "orderNumber": "ORD-20260629-46JPO3",
+        "tokenIndex": 7
+      },
+      {
+        "orderNumber": "ORD-20260629-ZMWST7",
+        "tokenIndex": 8
+      },
+      {
+        "orderNumber": "ORD-20260629-SYZYXP",
+        "tokenIndex": 9
+      },
+      {
+        "orderNumber": "ORD-20260629-DCFMIY",
+        "tokenIndex": 10
+      },
+      {
+        "orderNumber": "ORD-20260629-1TN9GK",
+        "tokenIndex": 11
+      },
+      {
+        "orderNumber": "ORD-20260629-8XV3ZZ",
+        "tokenIndex": 12
+      },
+      {
+        "orderNumber": "ORD-20260629-58YHFI",
+        "tokenIndex": 13
+      },
+      {
+        "orderNumber": "ORD-20260629-GICNHN",
+        "tokenIndex": 14
+      },
+      {
+        "orderNumber": "ORD-20260629-Q0ZIGM",
+        "tokenIndex": 15
+      },
+      {
+        "orderNumber": "ORD-20260629-AI9UA6",
+        "tokenIndex": 16
+      },
+      {
+        "orderNumber": "ORD-20260629-6B8OOQ",
+        "tokenIndex": 17
+      },
+      {
+        "orderNumber": "ORD-20260629-PG4VNG",
+        "tokenIndex": 18
+      },
+      {
+        "orderNumber": "ORD-20260629-LWFW35",
+        "tokenIndex": 19
+      },
+      {
+        "orderNumber": "ORD-20260629-PZHZSF",
+        "tokenIndex": 20
+      },
+      {
+        "orderNumber": "ORD-20260629-YYMYGA",
+        "tokenIndex": 21
+      },
+      {
+        "orderNumber": "ORD-20260629-QJ09XV",
+        "tokenIndex": 22
+      },
+      {
+        "orderNumber": "ORD-20260629-KT2NPY",
+        "tokenIndex": 23
+      },
+      {
+        "orderNumber": "ORD-20260629-JA1ZDV",
+        "tokenIndex": 24
+      },
+      {
+        "orderNumber": "ORD-20260629-HMT3OD",
+        "tokenIndex": 25
+      },
+      {
+        "orderNumber": "ORD-20260629-PFPLG6",
+        "tokenIndex": 26
+      },
+      {
+        "orderNumber": "ORD-20260629-S6HXOS",
+        "tokenIndex": 27
+      },
+      {
+        "orderNumber": "ORD-20260629-HSMYF3",
+        "tokenIndex": 28
+      },
+      {
+        "orderNumber": "ORD-20260629-G9Q9VV",
+        "tokenIndex": 29
+      },
+      {
+        "orderNumber": "ORD-20260629-YRF3YI",
+        "tokenIndex": 30
+      },
+      {
+        "orderNumber": "ORD-20260629-R3RQ5F",
+        "tokenIndex": 31
+      },
+      {
+        "orderNumber": "ORD-20260629-OF67C1",
+        "tokenIndex": 32
+      },
+      {
+        "orderNumber": "ORD-20260629-5KVGPQ",
+        "tokenIndex": 33
+      },
+      {
+        "orderNumber": "ORD-20260629-ZAGW82",
+        "tokenIndex": 34
+      },
+      {
+        "orderNumber": "ORD-20260629-C56D76",
+        "tokenIndex": 35
+      },
+      {
+        "orderNumber": "ORD-20260629-L2XT6Q",
+        "tokenIndex": 36
+      },
+      {
+        "orderNumber": "ORD-20260629-RB17NG",
+        "tokenIndex": 37
+      },
+      {
+        "orderNumber": "ORD-20260629-FVU1PB",
+        "tokenIndex": 38
+      },
+      {
+        "orderNumber": "ORD-20260629-5ALXO8",
+        "tokenIndex": 39
+      },
+      {
+        "orderNumber": "ORD-20260629-WESJBA",
+        "tokenIndex": 40
+      },
+      {
+        "orderNumber": "ORD-20260629-AP67VA",
+        "tokenIndex": 41
+      },
+      {
+        "orderNumber": "ORD-20260629-64I9U9",
+        "tokenIndex": 42
+      },
+      {
+        "orderNumber": "ORD-20260629-3XYQ4E",
+        "tokenIndex": 43
+      },
+      {
+        "orderNumber": "ORD-20260629-V9GYYU",
+        "tokenIndex": 44
+      },
+      {
+        "orderNumber": "ORD-20260629-UIW8C7",
+        "tokenIndex": 45
+      },
+      {
+        "orderNumber": "ORD-20260629-1VIHVY",
+        "tokenIndex": 46
+      },
+      {
+        "orderNumber": "ORD-20260629-81005K",
+        "tokenIndex": 47
+      },
+      {
+        "orderNumber": "ORD-20260629-YBOQIZ",
+        "tokenIndex": 48
+      },
+      {
+        "orderNumber": "ORD-20260629-TYIXPM",
+        "tokenIndex": 49
+      },
+      {
+        "orderNumber": "ORD-20260629-WA6TXF",
+        "tokenIndex": 50
+      },
+      {
+        "orderNumber": "ORD-20260629-Z3MFWU",
+        "tokenIndex": 51
+      },
+      {
+        "orderNumber": "ORD-20260629-9GUHD6",
+        "tokenIndex": 52
+      },
+      {
+        "tokenIndex": 53,
+        "orderNumber": "ORD-20260629-995QSC"
+      },
+      {
+        "tokenIndex": 54,
+        "orderNumber": "ORD-20260629-GCBHJ6"
+      },
+      {
+        "orderNumber": "ORD-20260629-E3KENN",
+        "tokenIndex": 55
+      },
+      {
+        "tokenIndex": 56,
+        "orderNumber": "ORD-20260629-1ST6H9"
+      },
+      {
+        "orderNumber": "ORD-20260629-8X1VBJ",
+        "tokenIndex": 57
+      },
+      {
+        "orderNumber": "ORD-20260629-GSBL7G",
+        "tokenIndex": 58
+      },
+      {
+        "orderNumber": "ORD-20260629-A5CZT0",
+        "tokenIndex": 59
+      },
+      {
+        "orderNumber": "ORD-20260629-4O922Q",
+        "tokenIndex": 60
+      },
+      {
+        "tokenIndex": 61,
+        "orderNumber": "ORD-20260629-HCJXP5"
+      },
+      {
+        "orderNumber": "ORD-20260629-B4TPAM",
+        "tokenIndex": 62
+      },
+      {
+        "tokenIndex": 63,
+        "orderNumber": "ORD-20260629-LTJDA0"
+      },
+      {
+        "orderNumber": "ORD-20260629-CZJ6IP",
+        "tokenIndex": 64
+      },
+      {
+        "orderNumber": "ORD-20260629-WMB2E0",
+        "tokenIndex": 65
+      },
+      {
+        "orderNumber": "ORD-20260629-PBVL3O",
+        "tokenIndex": 66
+      },
+      {
+        "orderNumber": "ORD-20260629-PZ8XLD",
+        "tokenIndex": 67
+      },
+      {
+        "orderNumber": "ORD-20260629-AP9LHH",
+        "tokenIndex": 68
+      },
+      {
+        "orderNumber": "ORD-20260629-64N8OQ",
+        "tokenIndex": 69
+      },
+      {
+        "orderNumber": "ORD-20260629-RXTJPT",
+        "tokenIndex": 70
+      },
+      {
+        "orderNumber": "ORD-20260629-RNQC0U",
+        "tokenIndex": 71
+      },
+      {
+        "tokenIndex": 72,
+        "orderNumber": "ORD-20260629-8G5NKO"
+      },
+      {
+        "orderNumber": "ORD-20260629-JX3ETU",
+        "tokenIndex": 73
+      },
+      {
+        "orderNumber": "ORD-20260629-L0ENLM",
+        "tokenIndex": 74
+      },
+      {
+        "orderNumber": "ORD-20260629-4LSL6J",
+        "tokenIndex": 75
+      },
+      {
+        "orderNumber": "ORD-20260629-1EHTWQ",
+        "tokenIndex": 76
+      },
+      {
+        "orderNumber": "ORD-20260629-VJ0SVL",
+        "tokenIndex": 77
+      },
+      {
+        "orderNumber": "ORD-20260629-0YIQZB",
+        "tokenIndex": 78
+      },
+      {
+        "orderNumber": "ORD-20260629-58N9E9",
+        "tokenIndex": 79
+      },
+      {
+        "orderNumber": "ORD-20260629-LQLSW8",
+        "tokenIndex": 0
+      },
+      {
+        "orderNumber": "ORD-20260629-VIVIC0",
+        "tokenIndex": 1
+      },
+      {
+        "orderNumber": "ORD-20260629-RJKUGO",
+        "tokenIndex": 2
+      },
+      {
+        "orderNumber": "ORD-20260629-L7BEPP",
+        "tokenIndex": 3
+      },
+      {
+        "orderNumber": "ORD-20260629-WZ79RS",
+        "tokenIndex": 4
+      },
+      {
+        "orderNumber": "ORD-20260629-Y9CRN6",
+        "tokenIndex": 5
+      },
+      {
+        "orderNumber": "ORD-20260629-A8YZ7V",
+        "tokenIndex": 6
+      },
+      {
+        "tokenIndex": 7,
+        "orderNumber": "ORD-20260629-UIYQE6"
+      },
+      {
+        "orderNumber": "ORD-20260629-BKP7BE",
+        "tokenIndex": 8
+      },
+      {
+        "tokenIndex": 9,
+        "orderNumber": "ORD-20260629-E1YI1M"
+      },
+      {
+        "orderNumber": "ORD-20260629-HWB54H",
+        "tokenIndex": 10
+      },
+      {
+        "orderNumber": "ORD-20260629-V4LKBJ",
+        "tokenIndex": 11
+      },
+      {
+        "orderNumber": "ORD-20260629-X7EYVB",
+        "tokenIndex": 12
+      },
+      {
+        "orderNumber": "ORD-20260629-9726U8",
+        "tokenIndex": 13
+      },
+      {
+        "orderNumber": "ORD-20260629-KCFYWS",
+        "tokenIndex": 14
+      },
+      {
+        "orderNumber": "ORD-20260629-FWHF9F",
+        "tokenIndex": 15
+      },
+      {
+        "orderNumber": "ORD-20260629-7ION9C",
+        "tokenIndex": 16
+      },
+      {
+        "orderNumber": "ORD-20260629-Q63TFW",
+        "tokenIndex": 17
+      },
+      {
+        "orderNumber": "ORD-20260629-QKV0YG",
+        "tokenIndex": 18
+      },
+      {
+        "orderNumber": "ORD-20260629-FVY8SE",
+        "tokenIndex": 19
+      }
+    ],
+    "stockAfterSeed": 200,
+    "tokens": [
+      "<redacted:80>"
+    ]
+  }
+}
