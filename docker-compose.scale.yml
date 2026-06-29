@@ -1,0 +1,8 @@
+# 수평 확장 override. 기본 단일 데모를 깨지 않고 app 을 다중화한다.
+#   docker compose -f docker-compose.yml -f docker-compose.scale.yml up -d
+#   (빠른 검증: docker compose up --scale app=2)
+# 다중화 시 rate limit 버킷(인스턴스 로컬 Caffeine)이 분리돼 실효 한도가 N배가 된다.
+services:
+  app:
+    deploy:
+      replicas: 2
