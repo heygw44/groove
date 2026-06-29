@@ -4,6 +4,7 @@ import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
+import com.groove.catalog.album.event.AlbumStockChangedEvent;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.genre.domain.Genre;
@@ -39,6 +40,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,6 +67,8 @@ class OrderServiceTest {
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
     @Mock
     private MemberRepository memberRepository;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private static final Clock CLOCK = TestClocks.FIXED;
 
@@ -73,7 +77,7 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         orderService = new OrderService(orderRepository, albumRepository, orderNumberGenerator,
-                couponApplicationService, memberRepository, CLOCK);
+                couponApplicationService, memberRepository, eventPublisher, CLOCK);
         // 활성 회원 기본값 — 탈퇴 시나리오만 false 로 override 한다.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(1L)).thenReturn(true);
     }
@@ -133,6 +137,7 @@ class OrderServiceTest {
         assertThat(order.getItems().get(0).getUnitPrice()).isEqualTo(30000L);
         assertThat(a1.getStock()).isEqualTo(98);
         assertThat(a2.getStock()).isEqualTo(47);
+        verify(eventPublisher).publishEvent(new AlbumStockChangedEvent(Set.of(10L, 11L))); // 차감된 album 캐시 무효화
     }
 
     @Test
@@ -379,6 +384,7 @@ class OrderServiceTest {
         assertThat(result.getCancelledReason()).isEqualTo("단순 변심");
         verify(albumRepository).restoreStock(10L, 2);
         verify(albumRepository).restoreStock(11L, 3);
+        verify(eventPublisher).publishEvent(new AlbumStockChangedEvent(Set.of(10L, 11L))); // 복원된 album 캐시 무효화
     }
 
     @Test

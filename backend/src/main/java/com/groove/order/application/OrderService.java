@@ -3,6 +3,7 @@ package com.groove.order.application;
 import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.StockRestorer;
+import com.groove.catalog.album.event.AlbumStockChangedEvent;
 import com.groove.catalog.album.exception.AlbumNotFoundException;
 import com.groove.cart.exception.AlbumNotPurchasableException;
 import com.groove.coupon.application.CouponApplicationService;
@@ -31,6 +32,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.ScrollPosition;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Window;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -60,6 +63,7 @@ public class OrderService {
     private final RandomOrderNumberGenerator orderNumberGenerator;
     private final CouponApplicationService couponApplicationService;
     private final MemberRepository memberRepository;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public OrderService(OrderRepository orderRepository,
@@ -67,12 +71,14 @@ public class OrderService {
                         RandomOrderNumberGenerator orderNumberGenerator,
                         CouponApplicationService couponApplicationService,
                         MemberRepository memberRepository,
+                        ApplicationEventPublisher eventPublisher,
                         Clock clock) {
         this.orderRepository = orderRepository;
         this.albumRepository = albumRepository;
         this.orderNumberGenerator = orderNumberGenerator;
         this.couponApplicationService = couponApplicationService;
         this.memberRepository = memberRepository;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -138,8 +144,10 @@ public class OrderService {
         }
         order.changeStatus(OrderStatus.CANCELLED, reason, clock.instant());
         // 재고 복원. 락 조회는 items 를 fetch 안 하므로 이 순회가 응답 직렬화 전 lazy 초기화도 겸한다.
-        StockRestorer.restore(albumRepository, order.getItems().stream()
-                .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity))));
+        Map<Long, Integer> quantityByAlbumId = order.getItems().stream()
+                .collect(Collectors.groupingBy(item -> item.getAlbum().getId(), Collectors.summingInt(OrderItem::getQuantity)));
+        StockRestorer.restore(albumRepository, quantityByAlbumId);
+        publishStockChanged(quantityByAlbumId.keySet());
         couponApplicationService.restoreForOrder(order.getId()); // 미적용 주문이면 no-op
         return order;
     }
@@ -186,6 +194,9 @@ public class OrderService {
         }
 
         Order persisted = orderRepository.save(order);
+
+        // 차감된 album 들의 조회 캐시(상세/랜딩) 무효화.
+        publishStockChanged(lines.stream().map(line -> line.album.getId()).collect(Collectors.toSet()));
 
         // 쿠폰 적용은 orderId 확보 후. 할인액 산정은 coupon 에 위임하되 반영(applyDiscount)은 order 가 한다(슬라이스 단방향).
         if (request.memberCouponId() != null) {
@@ -281,5 +292,12 @@ public class OrderService {
             throw new InsufficientStockException(album.getId(), quantity, album.getStock());
         }
         album.adjustStock(-quantity);
+    }
+
+    /** 재고가 바뀐 album 들의 조회 캐시를 무효화하도록 이벤트 발행(AFTER_COMMIT 리스너가 evict). */
+    private void publishStockChanged(Set<Long> albumIds) {
+        if (!albumIds.isEmpty()) {
+            eventPublisher.publishEvent(new AlbumStockChangedEvent(albumIds));
+        }
     }
 }

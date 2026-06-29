@@ -80,6 +80,8 @@ class AdminOrderServiceTest {
     private com.groove.shipping.application.ShippingService shippingService;
     @Mock
     private AlbumRepository albumRepository;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private AdminOrderService service;
 
@@ -90,7 +92,7 @@ class AdminOrderServiceTest {
     void setUp() {
         // 실제 RefundSteps 를 mock 리포지토리로 조립해 주입하면 오케스트레이터(prepare→PG→apply) 전 구간을 단위로 검증한다.
         RefundSteps refundSteps = new RefundSteps(orderRepository, paymentRepository,
-                couponApplicationService, shippingService, albumRepository);
+                couponApplicationService, shippingService, albumRepository, eventPublisher);
         service = new AdminOrderService(orderRepository, paymentGateway, refundSteps, CLOCK);
     }
 
@@ -227,6 +229,8 @@ class AdminOrderServiceTest {
             assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
             assertThat(order.getCancelledReason()).isEqualTo("운영 환불");
             verify(albumRepository).restoreStock(ALBUM_ID, QTY);
+            verify(eventPublisher).publishEvent(
+                    new com.groove.catalog.album.event.AlbumStockChangedEvent(java.util.Set.of(ALBUM_ID))); // 복원된 album 캐시 무효화
             assertThat(result.alreadyRefunded()).isFalse();
             assertThat(result.refundedAt()).isEqualTo(refundedAt);
 

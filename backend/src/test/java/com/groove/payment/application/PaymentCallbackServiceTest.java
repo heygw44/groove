@@ -4,6 +4,7 @@ import com.groove.catalog.album.domain.Album;
 import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumRepository;
 import com.groove.catalog.album.domain.AlbumStatus;
+import com.groove.catalog.album.event.AlbumStockChangedEvent;
 import com.groove.catalog.artist.domain.Artist;
 import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.label.domain.Label;
@@ -29,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,6 +56,8 @@ class PaymentCallbackServiceTest {
     private com.groove.coupon.application.CouponApplicationService couponApplicationService;
     @Mock
     private AlbumRepository albumRepository;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private PaymentCallbackService service;
 
@@ -64,7 +68,7 @@ class PaymentCallbackServiceTest {
     @BeforeEach
     void setUp() {
         service = new PaymentCallbackService(paymentRepository, outboxEventPublisher, couponApplicationService,
-                albumRepository, CLOCK);
+                albumRepository, eventPublisher, CLOCK);
     }
 
     private static Album album(int stock) {
@@ -98,6 +102,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getPaidAt()).isNotNull();
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAID);
         verifyNoInteractions(albumRepository); // 성공 결제는 재고 미복원
+        verifyNoInteractions(eventPublisher); // 재고 불변이라 캐시 무효화 이벤트도 없음
 
         // 아웃박스에 ORDER_PAID 이벤트가 PAID 와 같은 트랜잭션에서 기록된다.
         ArgumentCaptor<OrderPaidEvent> event = ArgumentCaptor.forClass(OrderPaidEvent.class);
@@ -110,7 +115,7 @@ class PaymentCallbackServiceTest {
     }
 
     @Test
-    @DisplayName("FAILED: 보상 트랜잭션 — 결제 실패·주문 결제실패·재고 복원·쿠폰 복원, 이벤트 미발행")
+    @DisplayName("FAILED: 보상 트랜잭션 — 결제 실패·주문 결제실패·재고 복원·쿠폰 복원·재고 캐시 무효화, OrderPaidEvent 미발행")
     void applyResult_failed_compensates() {
         Album album = album(98); // 주문이 2개 차감했다고 가정
         Payment payment = pendingPayment(album, 2);
@@ -125,6 +130,7 @@ class PaymentCallbackServiceTest {
         assertThat(payment.getOrder().getStatus()).isEqualTo(OrderStatus.PAYMENT_FAILED);
         verify(albumRepository).restoreStock(ALBUM_ID, 2); // 2 복원
         verify(couponApplicationService).restoreForOrder(7L); // 적용 쿠폰 복원
+        verify(eventPublisher).publishEvent(new AlbumStockChangedEvent(Set.of(ALBUM_ID))); // 복원된 album 캐시 무효화
         verifyNoInteractions(outboxEventPublisher);
     }
 

@@ -86,6 +86,8 @@ class ClaimServiceTest {
     private AlbumRepository albumRepository;
     @Mock
     private MemberRepository memberRepository;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private ClaimService claimService;
 
@@ -94,7 +96,7 @@ class ClaimServiceTest {
     @BeforeEach
     void setUp() {
         claimService = new ClaimService(claimRepository, orderRepository, paymentRepository, paymentGateway,
-                couponApplicationService, shippingService, albumRepository, memberRepository, CLOCK, WINDOW);
+                couponApplicationService, shippingService, albumRepository, memberRepository, eventPublisher, CLOCK, WINDOW);
         // request 경로가 회원 활성을 확인하므로 기본은 활성으로.
         lenient().when(memberRepository.existsByIdAndDeletedAtIsNull(MEMBER_ID)).thenReturn(true);
     }
@@ -315,6 +317,8 @@ class ClaimServiceTest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIALLY_REFUNDED);
         assertThat(payment.getRefundedAmount()).isEqualTo(15_000L);
         verify(albumRepository).restoreStock(ALBUM_ID, 1); // 검수 통과 1개 재입고
+        verify(eventPublisher).publishEvent(
+                new com.groove.catalog.album.event.AlbumStockChangedEvent(java.util.Set.of(ALBUM_ID))); // 재입고된 album 캐시 무효화
         assertThat(order.getReturnedAt()).isNull();
         verify(paymentGateway).refund(any());
         verify(couponApplicationService, never()).restoreForOrder(any());
