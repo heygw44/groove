@@ -12,7 +12,7 @@ import java.time.format.DateTimeFormatter;
  * ORD-YYYYMMDD-XXXXXX — XXXXXX 는 [A-Z0-9]^6. 일자는 KST(Asia/Seoul) 기준으로 표기한다.
  */
 @Component
-public class RandomOrderNumberGenerator implements OrderNumberGenerator {
+public class RandomOrderNumberGenerator {
 
     private static final String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int SUFFIX_LENGTH = 6;
@@ -27,7 +27,6 @@ public class RandomOrderNumberGenerator implements OrderNumberGenerator {
         this.random = new SecureRandom();
     }
 
-    @Override
     public String generate() {
         String date = LocalDate.now(clock.withZone(KST)).format(DATE);
         StringBuilder suffix = new StringBuilder(SUFFIX_LENGTH);

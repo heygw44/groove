@@ -40,7 +40,7 @@ class ShippingProvisionerTest {
     @Mock
     private OrderRepository orderRepository;
     @Mock
-    private TrackingNumberGenerator trackingNumberGenerator;
+    private UuidTrackingNumberGenerator trackingNumberGenerator;
 
     private ShippingProvisioner provisioner;
 
