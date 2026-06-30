@@ -3,7 +3,7 @@ package com.groove.order.api.ratelimit;
 import com.groove.common.ratelimit.RateLimitKeyResolver;
 import com.groove.common.ratelimit.RateLimitPolicy;
 import com.groove.common.ratelimit.RequestPaths;
-import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
@@ -40,11 +40,8 @@ public class OrderGuestLookupRateLimitPolicy implements RateLimitPolicy {
     }
 
     @Override
-    public Supplier<Bucket> bucketFactory() {
-        long capacity = config.capacity();
-        return () -> Bucket.builder()
-                .addLimit(limit -> limit.capacity(capacity).refillGreedy(capacity, config.refillPeriod()))
-                .build();
+    public Supplier<BucketConfiguration> bucketFactory() {
+        return RateLimitPolicy.greedyBucket(config.capacity(), config.refillPeriod());
     }
 
     @Override

@@ -39,7 +39,7 @@ dependencies {
     // Caffeine(아래 ben-manes) 가 classpath 에 있으면 Caffeine provider 가 자동 선택된다.
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    // 수평 확장용 분산 인프라 토대. 아직 쓰는 코드는 없다(lettuce 전이 포함).
+    // 수평 확장 분산 인프라. 카탈로그 캐시(#377)·rate-limit 분산 버킷(#367)이 Redis 를 쓴다(lettuce 전이 포함).
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-security")
@@ -50,6 +50,10 @@ dependencies {
     implementation(libs.springdoc.openapi.starter.webmvc.ui)
     implementation("org.flywaydb:flyway-mysql")
     implementation(libs.bucket4j.core)
+    // rate-limit 분산 버킷 (#367). caffeine = 단일 인스턴스/로컬/테스트, lettuce = 다중 인스턴스(docker/prod)에서
+    // Redis 에 버킷 상태를 두어 노드 간 한도를 공유한다. lettuce-core 는 starter-data-redis 가 전이 제공.
+    implementation(libs.bucket4j.caffeine)
+    implementation(libs.bucket4j.lettuce)
     implementation(libs.caffeine)
     // 토스 외부 PG 호출 장애 격리 (#320). 프레임워크 무관 core 모듈을 프로그램적으로 사용한다 —
     // resilience4j-spring-boot 스타터는 Boot 4.x 호환이 불확실해 의존하지 않는다. Spring BOM 미관리라 카탈로그에서 버전 고정.

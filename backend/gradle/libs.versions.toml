@@ -13,6 +13,8 @@ shedlock = "7.7.0"
 [libraries]
 springdoc-openapi-starter-webmvc-ui = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui", version.ref = "springdoc" }
 bucket4j-core = { module = "com.bucket4j:bucket4j_jdk17-core", version.ref = "bucket4j" }
+bucket4j-caffeine = { module = "com.bucket4j:bucket4j_jdk17-caffeine", version.ref = "bucket4j" }
+bucket4j-lettuce = { module = "com.bucket4j:bucket4j_jdk17-lettuce", version.ref = "bucket4j" }
 caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
 resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
 resilience4j-retry = { module = "io.github.resilience4j:resilience4j-retry", version.ref = "resilience4j" }

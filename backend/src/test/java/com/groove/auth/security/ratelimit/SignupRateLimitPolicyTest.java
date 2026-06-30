@@ -1,5 +1,6 @@
 package com.groove.auth.security.ratelimit;
 
+import com.groove.support.RateLimitTestBuckets;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ class SignupRateLimitPolicyTest {
 
     @Test
     void bucketFactoryProducesBucketWithConfiguredSignupCapacity() {
-        Bucket bucket = policy.bucketFactory().get();
+        Bucket bucket = RateLimitTestBuckets.from(policy.bucketFactory().get());
         assertThat(bucket.getAvailableTokens()).isEqualTo(3L);
         assertThat(bucket.tryConsume(1)).isTrue();
         assertThat(bucket.tryConsume(1)).isTrue();

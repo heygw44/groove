@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 상태 | Accepted (부분 실행 — ② 스케줄러 분산락은 #365 로 구현, rate-limit 분산은 유보) |
-| 날짜 | 2026-06-18 (스케줄러 분산락 실행: 2026-06-30) |
-| 연관 이슈 | #274 (#270 §10.6 에서 분리), #210, #164, #365 (#364 수평 확장 셋업 후속) |
+| 상태 | Superseded (실행 완료 — ② 스케줄러 분산락 #365, ① rate-limit 분산 #367) |
+| 날짜 | 2026-06-18 (스케줄러 분산락 실행: 2026-06-30 · rate-limit 분산 실행: 2026-06-30) |
+| 연관 이슈 | #274 (#270 §10.6 에서 분리), #210, #164, #365, #367 (#364 수평 확장 셋업 후속) |
 | 작성자 | ParkGunWoo |
 | 관련 문서 | [concurrency-control.md](./concurrency-control.md), [ARCHITECTURE.md](../ARCHITECTURE.md) §10.5 · §11 · §12 |
 
@@ -78,7 +78,20 @@
 
 근거: [ShedLock](https://github.com/lukas-krecan/ShedLock) — `@EnableSchedulerLock` / `@SchedulerLock` / `JdbcTemplateLockProvider(.usingDbTime())` / 표준 `shedlock` 스키마.
 
-### ① rate-limit 분산 = Bucket4j-Lettuce (Redis) — 대안: 게이트웨이/WAF 이관
+### ① rate-limit 분산 = Bucket4j-Lettuce (Redis) — 대안: 게이트웨이/WAF 이관 — #367 로 구현 완료
+
+> **실행됨(2026-06-30, #367).** 아래 설계대로 도입했다. 구현 시점에 드러난 드리프트:
+> - **저장소 추상화 통일**: 두 경로를 모두 Bucket4j `ProxyManager<String>` 로 통일했다 — Caffeine 경로도
+>   원래의 손수 만든 `Cache<String,Bucket>` 대신 `CaffeineProxyManager`(bucket4j-caffeine)를 써서
+>   `getProxy(key, Supplier<BucketConfiguration>)` 한 줄로 양쪽이 같은 코드를 탄다. 토글은
+>   `groove.rate-limit.store`(caffeine 기본 · docker/prod=redis), 카탈로그 캐시의 `spring.cache.type` 와 동형.
+> - **아티팩트**: lettuce 모듈의 퍼블리시 아티팩트는 `bucket4j_jdk17-redis` 가 아니라 **`bucket4j_jdk17-lettuce`**
+>   (+ `bucket4j_jdk17-caffeine`). 진입점은 `Bucket4jLettuce.casBasedBuilder(StatefulRedisConnection<String,byte[]>)`
+>   / `Bucket4jCaffeine.builderFor(...)`, TTL 은 `ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax`.
+> - **정책 7종**(문서가 적은 6 + payment-webhook). `bucketFactory()` 는 `Supplier<BucketConfiguration>` 로 바꿨다.
+> - **원격 장애 정책(하이브리드)**: `RateLimitPolicy.failOpen()`(기본 true) 추가. auth·결제·주문·웹훅은 fail-open
+>   (Redis 장애 시 한도 미적용 통과 — 가용성 우선), **쿠폰 발급만 fail-closed**(429 — 한정 수량 사재기 억제 우선).
+> - 검증: 노드 간 공유는 `RateLimitRedisStoreTest`(단일 JVM 2-프록시), e2e 는 `loadtest/rate-limit-distributed.sh`(scale=2).
 
 §10.5·§11.1·§11.3이 지정한 경로. 이쪽이 **Redis 신규 인프라 도입 트리거**다.
 

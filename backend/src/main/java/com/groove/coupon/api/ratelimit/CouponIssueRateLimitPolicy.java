@@ -5,7 +5,7 @@ import com.groove.common.exception.AuthException;
 import com.groove.common.ratelimit.RateLimitKeyResolver;
 import com.groove.common.ratelimit.RateLimitPolicy;
 import com.groove.common.ratelimit.RequestPaths;
-import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -46,16 +46,21 @@ public class CouponIssueRateLimitPolicy implements RateLimitPolicy {
     }
 
     @Override
-    public Supplier<Bucket> bucketFactory() {
-        long capacity = config.capacity();
-        return () -> Bucket.builder()
-                .addLimit(limit -> limit.capacity(capacity).refillGreedy(capacity, config.refillPeriod()))
-                .build();
+    public Supplier<BucketConfiguration> bucketFactory() {
+        return RateLimitPolicy.greedyBucket(config.capacity(), config.refillPeriod());
     }
 
     @Override
     public RateLimitKeyResolver keyResolver() {
         return this::resolveMemberKey;
+    }
+
+    /**
+     * 쿠폰 발급은 fail-closed — Redis 장애 시에도 한정 수량 사재기를 막기 위해 429 로 차단한다(나머지 정책은 fail-open).
+     */
+    @Override
+    public boolean failOpen() {
+        return false;
     }
 
     /** 발급 요청자의 memberId 를 키로 반환한다. 토큰 부재/위조 시 IP 폴백. */

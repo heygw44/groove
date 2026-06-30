@@ -1,5 +1,6 @@
 package com.groove.auth.security.ratelimit;
 
+import com.groove.support.RateLimitTestBuckets;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,8 +52,8 @@ class LoginRateLimitPolicyTest {
 
     @Test
     void bucketFactoryProducesIndependentBucketsWithConfiguredCapacity() {
-        Bucket first = policy.bucketFactory().get();
-        Bucket second = policy.bucketFactory().get();
+        Bucket first = RateLimitTestBuckets.from(policy.bucketFactory().get());
+        Bucket second = RateLimitTestBuckets.from(policy.bucketFactory().get());
 
         ConsumptionProbe firstProbe = first.tryConsumeAndReturnRemaining(1);
         assertThat(firstProbe.isConsumed()).isTrue();
