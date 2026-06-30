@@ -1,6 +1,7 @@
 package com.groove.common.ratelimit;
 
-import io.github.bucket4j.Bucket;
+import com.groove.support.RateLimitTestBuckets;
+import io.github.bucket4j.BucketConfiguration;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.Ordered;
@@ -22,7 +23,7 @@ class RateLimitRegistryTest {
         RateLimitPolicy a = simplePolicy("dup");
         RateLimitPolicy b = simplePolicy("dup");
 
-        assertThatThrownBy(() -> new RateLimitRegistry(List.of(a, b)))
+        assertThatThrownBy(() -> new RateLimitRegistry(List.of(a, b), RateLimitTestBuckets.newProxyManager()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("dup");
     }
@@ -32,7 +33,8 @@ class RateLimitRegistryTest {
         RateLimitPolicy lowPriority = orderedPolicy("ip", Ordered.LOWEST_PRECEDENCE);
         RateLimitPolicy highPriority = orderedPolicy("user", Ordered.HIGHEST_PRECEDENCE);
 
-        RateLimitRegistry registry = new RateLimitRegistry(List.of(lowPriority, highPriority));
+        RateLimitRegistry registry = new RateLimitRegistry(List.of(lowPriority, highPriority),
+                RateLimitTestBuckets.newProxyManager());
 
         Optional<RateLimitRegistry.MatchedBucket> matched = registry.match(new MockHttpServletRequest());
 
@@ -54,8 +56,8 @@ class RateLimitRegistryTest {
             }
 
             @Override
-            public Supplier<Bucket> bucketFactory() {
-                return () -> Bucket.builder()
+            public Supplier<BucketConfiguration> bucketFactory() {
+                return () -> BucketConfiguration.builder()
                         .addLimit(l -> l.capacity(1).refillGreedy(1, Duration.ofMinutes(1)))
                         .build();
             }
@@ -66,7 +68,7 @@ class RateLimitRegistryTest {
             }
         };
 
-        RateLimitRegistry registry = new RateLimitRegistry(List.of(nonMatching));
+        RateLimitRegistry registry = new RateLimitRegistry(List.of(nonMatching), RateLimitTestBuckets.newProxyManager());
 
         assertThat(registry.match(new MockHttpServletRequest())).isEmpty();
     }
@@ -84,8 +86,8 @@ class RateLimitRegistryTest {
             }
 
             @Override
-            public Supplier<Bucket> bucketFactory() {
-                return () -> Bucket.builder()
+            public Supplier<BucketConfiguration> bucketFactory() {
+                return () -> BucketConfiguration.builder()
                         .addLimit(l -> l.capacity(1).refillGreedy(1, Duration.ofMinutes(1)))
                         .build();
             }
@@ -123,8 +125,8 @@ class RateLimitRegistryTest {
         }
 
         @Override
-        public Supplier<Bucket> bucketFactory() {
-            return () -> Bucket.builder()
+        public Supplier<BucketConfiguration> bucketFactory() {
+            return () -> BucketConfiguration.builder()
                     .addLimit(l -> l.capacity(1).refillGreedy(1, Duration.ofMinutes(1)))
                     .build();
         }
@@ -154,8 +156,8 @@ class RateLimitRegistryTest {
         }
 
         @Override
-        public Supplier<Bucket> bucketFactory() {
-            return () -> Bucket.builder()
+        public Supplier<BucketConfiguration> bucketFactory() {
+            return () -> BucketConfiguration.builder()
                     .addLimit(l -> l.capacity(1).refillGreedy(1, Duration.ofMinutes(1)))
                     .build();
         }

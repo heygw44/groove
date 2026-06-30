@@ -51,3 +51,9 @@ spring:
       key-prefix: "groove:cache:v1:"   # v1 = 직렬화 스키마 버전. 호환 깨짐 시 v2 로 올려 롤링 배포 cross-version 역직렬화 격리
       use-key-prefix: true
       cache-null-values: false         # DETAIL 미스(404) 미캐시 — base caffeine 거동 유지
+
+# 멀티노드 분산 rate-limit. base(단일 인스턴스)는 caffeine, docker/prod 다중화만 redis 로 노드 간 토큰 버킷 공유 →
+# 동일 IP/회원 한도가 인스턴스 수와 무관하게 유지. RATE_LIMIT_STORE 로 loadtest Before(caffeine=한도 N배)/After 토글.
+groove:
+  rate-limit:
+    store: ${RATE_LIMIT_STORE:redis}

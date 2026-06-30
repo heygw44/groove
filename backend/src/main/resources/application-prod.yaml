@@ -44,3 +44,9 @@ spring:
       key-prefix: "groove:cache:v1:"
       use-key-prefix: true
       cache-null-values: false
+
+# 멀티노드 분산 rate-limit. redis 고정 — env override 면 잘못된 값 하나로 node-local 버킷이 돼 노드 간 한도 공유가 깨진다.
+# (loadtest 토글은 docker 프로파일에만).
+groove:
+  rate-limit:
+    store: redis

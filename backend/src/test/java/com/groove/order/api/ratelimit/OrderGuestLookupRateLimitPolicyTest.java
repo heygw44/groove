@@ -1,5 +1,6 @@
 package com.groove.order.api.ratelimit;
 
+import com.groove.support.RateLimitTestBuckets;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,7 +61,7 @@ class OrderGuestLookupRateLimitPolicyTest {
     @Test
     @DisplayName("버킷 용량은 설정값(2)")
     void bucketFactoryUsesConfiguredCapacity() {
-        Bucket bucket = policy.bucketFactory().get();
+        Bucket bucket = RateLimitTestBuckets.from(policy.bucketFactory().get());
         assertThat(bucket.getAvailableTokens()).isEqualTo(2L);
         assertThat(bucket.tryConsume(1)).isTrue();
         assertThat(bucket.tryConsume(1)).isTrue();

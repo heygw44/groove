@@ -1,6 +1,10 @@
 package com.groove.common.ratelimit;
 
-import io.github.bucket4j.Bucket;
+import com.groove.support.RateLimitTestBuckets;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.distributed.BucketProxy;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
+import io.lettuce.core.RedisException;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,6 +18,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RateLimitFilterTest {
 
@@ -21,7 +30,7 @@ class RateLimitFilterTest {
 
     @Test
     void passesThroughWhenNoPolicyRegistered() throws Exception {
-        RateLimitRegistry registry = new RateLimitRegistry(List.of());
+        RateLimitRegistry registry = new RateLimitRegistry(List.of(), RateLimitTestBuckets.newProxyManager());
         RateLimitFilter filter = new RateLimitFilter(registry, objectMapper);
         AtomicInteger called = new AtomicInteger();
         FilterChain chain = (req, res) -> called.incrementAndGet();
@@ -33,8 +42,7 @@ class RateLimitFilterTest {
 
     @Test
     void allowsRequestsWithinBucketCapacityAndAddsRemainingHeader() throws Exception {
-        RateLimitPolicy policy = fixedPolicy("ip", 2);
-        RateLimitFilter filter = new RateLimitFilter(new RateLimitRegistry(List.of(policy)), objectMapper);
+        RateLimitFilter filter = filterWith(fixedPolicy("ip", 2));
         FilterChain chain = (req, res) -> {
         };
 
@@ -52,8 +60,7 @@ class RateLimitFilterTest {
 
     @Test
     void returnsTooManyRequestsWhenExceeded() throws Exception {
-        RateLimitPolicy policy = fixedPolicy("ip", 1);
-        RateLimitFilter filter = new RateLimitFilter(new RateLimitRegistry(List.of(policy)), objectMapper);
+        RateLimitFilter filter = filterWith(fixedPolicy("ip", 1));
         AtomicInteger downstream = new AtomicInteger();
         FilterChain chain = (req, res) -> downstream.incrementAndGet();
 
@@ -75,8 +82,7 @@ class RateLimitFilterTest {
 
     @Test
     void ignoresXForwardedForHeaderForKey() throws Exception {
-        RateLimitPolicy policy = fixedPolicy("ip", 1);
-        RateLimitFilter filter = new RateLimitFilter(new RateLimitRegistry(List.of(policy)), objectMapper);
+        RateLimitFilter filter = filterWith(fixedPolicy("ip", 1));
         FilterChain chain = (req, res) -> {};
 
         MockHttpServletRequest first = requestFrom("9.9.9.9");
@@ -95,8 +101,7 @@ class RateLimitFilterTest {
 
     @Test
     void appliesSeparateBucketPerKey() throws Exception {
-        RateLimitPolicy policy = fixedPolicy("ip", 1);
-        RateLimitFilter filter = new RateLimitFilter(new RateLimitRegistry(List.of(policy)), objectMapper);
+        RateLimitFilter filter = filterWith(fixedPolicy("ip", 1));
         FilterChain chain = (req, res) -> {
         };
 
@@ -109,6 +114,65 @@ class RateLimitFilterTest {
         assertThat(b.getStatus()).isEqualTo(200);
     }
 
+    @Test
+    void failOpenPolicyPassesThroughWhenStoreFails() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(
+                new RateLimitRegistry(List.of(fixedPolicy("ip", 1, true)),
+                        throwingProxyManager(new RedisException("redis down"))), objectMapper);
+        AtomicInteger downstream = new AtomicInteger();
+        FilterChain chain = (req, res) -> downstream.incrementAndGet();
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(requestFrom("5.5.5.5"), response, chain);
+
+        assertThat(downstream.get()).isEqualTo(1);
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void failClosedPolicyReturnsTooManyRequestsWhenStoreFails() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(
+                new RateLimitRegistry(List.of(fixedPolicy("ip", 1, false)),
+                        throwingProxyManager(new RedisException("redis down"))), objectMapper);
+        AtomicInteger downstream = new AtomicInteger();
+        FilterChain chain = (req, res) -> downstream.incrementAndGet();
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(requestFrom("6.6.6.6"), response, chain);
+
+        assertThat(downstream.get()).isZero();
+        assertThat(response.getStatus()).isEqualTo(429);
+        assertThat(response.getContentType()).contains("application/problem+json");
+    }
+
+    @Test
+    void nonStoreRuntimeExceptionPropagatesInsteadOfFailingOpen() {
+        RateLimitFilter filter = new RateLimitFilter(
+                new RateLimitRegistry(List.of(fixedPolicy("ip", 1, true)),
+                        throwingProxyManager(new IllegalStateException("bug, not a store failure"))), objectMapper);
+        FilterChain chain = (req, res) -> {
+        };
+
+        // fail-open 정책이라도 store 장애가 아닌 RuntimeException 은 삼키지 않고 그대로 전파한다.
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> filter.doFilter(requestFrom("7.7.7.7"), new MockHttpServletResponse(), chain))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    private RateLimitFilter filterWith(RateLimitPolicy policy) {
+        return new RateLimitFilter(
+                new RateLimitRegistry(List.of(policy), RateLimitTestBuckets.newProxyManager()), objectMapper);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ProxyManager<String> throwingProxyManager(RuntimeException failure) {
+        ProxyManager<String> proxyManager = mock(ProxyManager.class);
+        BucketProxy throwing = mock(BucketProxy.class);
+        when(proxyManager.getProxy(anyString(), any())).thenReturn(throwing);
+        when(throwing.tryConsumeAndReturnRemaining(anyLong())).thenThrow(failure);
+        return proxyManager;
+    }
+
     private MockHttpServletRequest requestFrom(String ip) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr(ip);
@@ -116,6 +180,10 @@ class RateLimitFilterTest {
     }
 
     private RateLimitPolicy fixedPolicy(String name, long capacity) {
+        return fixedPolicy(name, capacity, true);
+    }
+
+    private RateLimitPolicy fixedPolicy(String name, long capacity, boolean failOpen) {
         return new RateLimitPolicy() {
             @Override
             public String name() {
@@ -128,8 +196,8 @@ class RateLimitFilterTest {
             }
 
             @Override
-            public Supplier<Bucket> bucketFactory() {
-                return () -> Bucket.builder()
+            public Supplier<BucketConfiguration> bucketFactory() {
+                return () -> BucketConfiguration.builder()
                         .addLimit(limit -> limit.capacity(capacity).refillGreedy(capacity, Duration.ofMinutes(1)))
                         .build();
             }
@@ -137,6 +205,11 @@ class RateLimitFilterTest {
             @Override
             public RateLimitKeyResolver keyResolver() {
                 return RateLimitKeyResolver.clientIp();
+            }
+
+            @Override
+            public boolean failOpen() {
+                return failOpen;
             }
         };
     }
