@@ -4,7 +4,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 /**
- * 앨범 조회 캐시 상수 + 랜딩 판별. Caffeine 캐시 둘(DETAIL: 상세 단건, LANDING_LIST: 공개 기본 랜딩 목록)을 쓴다.
+ * 앨범 조회 캐시 상수 + 랜딩 판별. 캐시 둘(DETAIL: 상세 단건, LANDING_LIST: 공개 기본 랜딩 목록). 단일 인스턴스는 Caffeine, 멀티노드는 공유 Redis.
  */
 public final class AlbumCaches {
 

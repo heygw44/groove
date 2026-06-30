@@ -33,3 +33,14 @@ logging:
   level:
     root: WARN
     com.groove: INFO
+
+# 멀티노드 분산 캐시. type 은 redis 로 고정한다 — env override 면 잘못된 값 하나로 node-local 부팅돼 노드 간 무효화가 깨진다.
+# (loadtest 토글은 docker 프로파일에만). 직렬화는 Boot 기본 JDK, 호환 깨짐 시 key-prefix v1→v2 로 격리.
+spring:
+  cache:
+    type: redis
+    redis:
+      time-to-live: 60s
+      key-prefix: "groove:cache:v1:"
+      use-key-prefix: true
+      cache-null-values: false
