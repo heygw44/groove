@@ -3,6 +3,7 @@ package com.groove.common.idempotency;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.groove.common.transaction.CommonTransactionConfig;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -38,6 +39,9 @@ public class IdempotencyRecordCleanupTask {
     }
 
     @Scheduled(cron = "${groove.idempotency.cleanup-cron:0 0 * * * *}")
+    @SchedulerLock(name = "idempotencyCleanup",
+            lockAtMostFor = "${groove.idempotency.cleanup-lock-at-most-for:PT5M}",
+            lockAtLeastFor = "${groove.idempotency.cleanup-lock-at-least-for:PT30S}")
     public void cleanupExpired() {
         try {
             int deleted = deleteExpired(clock.instant());

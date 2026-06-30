@@ -2,6 +2,7 @@ package com.groove.shipping.application;
 
 import com.groove.order.domain.OrderRepository;
 import com.groove.order.domain.OrderStatus;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,6 +53,11 @@ public class ShippingReconciliationScheduler {
     @Scheduled(
             fixedDelayString = "${groove.shipping.reconciliation.interval:PT5M}",
             initialDelayString = "${groove.shipping.reconciliation.initial-delay:PT5M}")
+    @SchedulerLock(name = "reconcileOrphanedOrders",
+            lockAtMostFor = "${groove.shipping.reconciliation.lock-at-most-for:PT2M}",
+            // 인터벌(PT5M)보다 짧은 부분 차단. 보충은 uk_shipping_order·existsByOrderId 로 멱등이라 연속 중복은 무해(No-op),
+            // 동시 실행만 막으면 충분하다. 인터벌 전체 차단은 lockAtMostFor 를 PT5M+ 로 키워야 해 크래시 회수만 늦춘다.
+            lockAtLeastFor = "${groove.shipping.reconciliation.lock-at-least-for:PT30S}")
     public void reconcileOrphanedOrders() {
         Instant cutoff = clock.instant().minus(minAge);
         List<OrderRepository.OrderNumberView> orphans =

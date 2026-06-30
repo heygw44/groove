@@ -1,6 +1,7 @@
 package com.groove.common.outbox;
 
 import com.groove.common.transaction.CommonTransactionConfig;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -49,6 +50,9 @@ public class OutboxEventCleanupTask {
     }
 
     @Scheduled(cron = "${groove.outbox.cleanup.cron:0 0 * * * *}")
+    @SchedulerLock(name = "outboxCleanup",
+            lockAtMostFor = "${groove.outbox.cleanup.lock-at-most-for:PT5M}",
+            lockAtLeastFor = "${groove.outbox.cleanup.lock-at-least-for:PT30S}")
     public void cleanupPublished() {
         try {
             int deleted = deletePublished(clock.instant().minus(retention));

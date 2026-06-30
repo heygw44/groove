@@ -1,6 +1,7 @@
 package com.groove.common.outbox;
 
 import com.groove.common.transaction.CommonTransactionConfig;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -68,6 +69,10 @@ public class OutboxRelayScheduler {
     @Scheduled(
             fixedDelayString = "${groove.outbox.relay.interval:PT2S}",
             initialDelayString = "${groove.outbox.relay.initial-delay:PT5S}")
+    @SchedulerLock(name = "outboxRelay",
+            lockAtMostFor = "${groove.outbox.relay.lock-at-most-for:PT2M}",
+            // 인터벌(기본 PT2S) 만큼 락을 잡아 다른 노드의 틱을 차단한다 — 0 이면 ~20ms 만에 풀려 같은 이벤트를 연속 재디스패치한다.
+            lockAtLeastFor = "${groove.outbox.relay.lock-at-least-for:PT2S}")
     public void relayPendingEvents() {
         List<OutboxEvent> pending =
                 repository.findByPublishedAtIsNullAndAttemptCountLessThanOrderByIdAsc(maxAttempts, batchLimit);
