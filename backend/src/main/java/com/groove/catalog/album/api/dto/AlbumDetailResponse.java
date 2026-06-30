@@ -9,8 +9,12 @@ import com.groove.catalog.genre.domain.Genre;
 import com.groove.catalog.label.domain.Label;
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 
+// Serializable: albumDetail 캐시가 분산 Redis 일 때 JDK 직렬화 대상(#366). 중첩 ref 도 함께 직렬화된다.
+// serialVersionUID 를 고정해 필드 추가 시 자동 UID 변동(역직렬화 깨짐)을 막고, 호환 깨짐은 캐시 key-prefix 버전으로 격리한다.
 /** averageRating/reviewCount 는 AlbumRating 으로 채운다. 인자 없는 from(Album) 은 AlbumRating.NONE. */
 public record AlbumDetailResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,
@@ -29,7 +33,10 @@ public record AlbumDetailResponse(
         @Schema(description = "평균 평점 (리뷰 없으면 null)", example = "4.5") Double averageRating,
         @Schema(description = "리뷰 수", example = "128") long reviewCount,
         @Schema(description = "등록 일시 (ISO-8601)", example = "2026-01-15T09:30:00Z") Instant createdAt
-) {
+) implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     public static AlbumDetailResponse from(Album album) {
         return from(album, AlbumRating.NONE);
@@ -59,7 +66,10 @@ public record AlbumDetailResponse(
     public record ArtistRef(
             @Schema(description = "아티스트 ID", example = "1") Long id,
             @Schema(description = "아티스트 이름", example = "Daft Punk") String name,
-            @Schema(description = "아티스트 설명", example = "프랑스의 일렉트로닉 듀오") String description) {
+            @Schema(description = "아티스트 설명", example = "프랑스의 일렉트로닉 듀오") String description) implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         static ArtistRef from(Artist artist) {
             return new ArtistRef(artist.getId(), artist.getName(), artist.getDescription());
         }
@@ -67,7 +77,10 @@ public record AlbumDetailResponse(
 
     public record GenreRef(
             @Schema(description = "장르 ID", example = "3") Long id,
-            @Schema(description = "장르 이름", example = "Electronic") String name) {
+            @Schema(description = "장르 이름", example = "Electronic") String name) implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         static GenreRef from(Genre genre) {
             return new GenreRef(genre.getId(), genre.getName());
         }
@@ -75,7 +88,10 @@ public record AlbumDetailResponse(
 
     public record LabelRef(
             @Schema(description = "레이블 ID", example = "7") Long id,
-            @Schema(description = "레이블 이름", example = "Columbia Records") String name) {
+            @Schema(description = "레이블 이름", example = "Columbia Records") String name) implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         static LabelRef from(Label label) {
             return label == null ? null : new LabelRef(label.getId(), label.getName());
         }

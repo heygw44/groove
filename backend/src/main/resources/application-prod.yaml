@@ -33,3 +33,14 @@ logging:
   level:
     root: WARN
     com.groove: INFO
+
+# 멀티노드 분산 캐시(#366). 운영은 redis 가 필수 인프라(노드 간 @CacheEvict 일관). value 직렬화는 Boot 기본 JDK.
+# 호환 깨짐 배포 시 key-prefix 의 v1 을 v2 로 올려 롤링 중 신·구 버전의 cross-version 역직렬화를 격리한다.
+spring:
+  cache:
+    type: ${SPRING_CACHE_TYPE:redis}
+    redis:
+      time-to-live: 60s
+      key-prefix: "groove:cache:v1:"
+      use-key-prefix: true
+      cache-null-values: false

@@ -152,7 +152,7 @@ public class AlbumService {
     }
 
     // artist/genre/label 은 findAll 의 @EntityGraph 로 동반 페치한다.
-    // 공개 기본 랜딩(필터 전무 + 기본 첫 페이지)만 단일 엔트리로 캐시. sync=true 로 키별 단일 로딩.
+    // 공개 기본 랜딩(필터 전무 + 기본 첫 페이지)만 단일 엔트리로 캐시. sync=true 는 이 노드 로컬의 동시 미스만 단일 로딩으로 합친다(Redis 분산 single-flight 아님 — #366).
     @Cacheable(cacheNames = AlbumCaches.LANDING_LIST, key = AlbumCaches.LANDING_KEY,
             condition = AlbumCaches.LANDING_CONDITION, sync = true)
     @Transactional(readOnly = true)
@@ -187,7 +187,7 @@ public class AlbumService {
         );
     }
 
-    // 조회는 status 무관하게 허용. 상세는 id 별로 캐시, sync=true 로 동일 id 동시 미스 시 단일 로딩.
+    // 조회는 status 무관하게 허용. 상세는 id 별로 캐시. sync=true 는 이 노드 로컬의 동일 id 동시 미스만 단일 로딩으로 합친다(Redis 분산 single-flight 아님 — #366).
     @Cacheable(cacheNames = AlbumCaches.DETAIL, key = "#id", sync = true)
     @Transactional(readOnly = true)
     public AlbumDetailResponse findDetail(Long id) {
