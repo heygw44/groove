@@ -39,6 +39,8 @@ dependencies {
     // Caffeine(아래 ben-manes) 가 classpath 에 있으면 Caffeine provider 가 자동 선택된다.
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    // 수평 확장용 분산 인프라 토대. 아직 쓰는 코드는 없다(lettuce 전이 포함).
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")

@@ -18,14 +18,26 @@ services:
     networks:
       - groove-net
 
+  redis:
+    # 기본 데모에도 항상 띄운다 — app health 에 Redis 가 포함돼 미기동 시 app 이 unhealthy.
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - groove-net
+
   app:
     # 컨텍스트는 루트(Dockerfile 이 frontend/ 도 COPY 해 UI 통합 빌드).
-    # 단일 인스턴스 전제. 수평 확장하면 rate limit 버킷(인스턴스 로컬 Caffeine)이 분리돼 무력화되므로
-    # 확장 시 분산 버킷(bucket4j-redis) 필요.
+    # 기본은 단일 인스턴스. 수평 확장은 docker-compose.scale.yml 또는 --scale app=2.
+    # 확장 시 rate limit 버킷(인스턴스 로컬 Caffeine)이 인스턴스마다 분리돼 실효 한도가 N배가 된다.
     build:
       context: .
       dockerfile: backend/Dockerfile
-    # 호스트 포트 미발행. 외부 접근은 nginx(:80)를 통해서만.
+    # 호스트 포트 미발행(scale 시 충돌 회피). 외부 접근은 nginx(:80)를 통해서만.
     expose:
       - "8080"
     env_file:
@@ -33,8 +45,11 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       DB_HOST: mysql
+      REDIS_HOST: redis
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
