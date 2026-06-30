@@ -111,5 +111,5 @@ run_mysql -N -e "
 
 cat <<'EOF'
 ✅ 완료. 테스트 계정: loadtest001@groove.test … (USER) / loadtest-admin@groove.test (ADMIN), 비밀번호 'Test1234!'
-   슬로우 쿼리 확인: EXPLAIN SELECT * FROM album WHERE title LIKE '%love%';  → type=ALL(풀 스캔)
+   검색 계획 확인: EXPLAIN SELECT * FROM album WHERE status='SELLING' AND MATCH(title, artist_name) AGAINST('"love"' IN BOOLEAN MODE) > 0 LIMIT 20;  → type=fulltext (ft_album_keyword)
 EOF

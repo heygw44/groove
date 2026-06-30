@@ -1,8 +1,9 @@
 // 앨범 검색 부하 테스트 (#192, W9) — GET /api/v1/albums 의 필터 조합·키워드 검색을 ramping-vus 로 측정한다.
 //
-// 검색 경로는 N+1·풀스캔 LIKE 슬로우 쿼리가 W10 시연용으로 의도 보존된 상태 — 본 부하는 그 Before(개선 전)
-// 베이스라인을 박제하는 것이 목적이다. 엔드포인트는 public 이지만, 현실적 '로그인 유저 탐색'(JWT 검증 비용 포함)
-// 을 측정하고자 토큰 풀의 Bearer 를 부착한다.
+// 검색 경로는 V21 에서 FULLTEXT(ft_album_keyword, ngram BOOLEAN MODE) + @EntityGraph 로 전환돼 풀스캔·N+1 이
+// 해소됐다 — 본 부하는 그 개선 후 경로의 SLO(p95)·정확성을 측정한다. V21 이전 LIKE 풀스캔·N+1 의 Before
+// 베이스라인은 loadtest/README.md 결과 표에 박제돼 있다. 엔드포인트는 public 이지만, 현실적 '로그인 유저 탐색'
+// (JWT 검증 비용 포함)을 측정하고자 토큰 풀의 Bearer 를 부착한다.
 //
 // 선행: 앱 기동 + scripts/seed.sh 로 메인 시드 적용(앨범 + loadtest001..080@groove.test / Test1234!).
 //       setup 의 로그인 버스트가 throttle 되지 않도록 AUTH_RATE_LIMIT_LOGIN_CAPACITY 를 크게 주입한다.
@@ -49,7 +50,7 @@ export const options = {
   summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
 };
 
-// 시드 앨범 제목 공통 토큰(generate_seed.py COMMON_TOKENS) — LIKE '%kw%' 가 실제로 매칭된다.
+// 시드 앨범 제목 공통 토큰(generate_seed.py COMMON_TOKENS) — FULLTEXT MATCH 가 실제로 매칭된다.
 const KEYWORDS = ['Love', 'Night', 'Blue', 'Dream', 'Fire'];
 const FORMATS = ['LP_12', 'LP_DOUBLE', 'EP', 'SINGLE_7']; // AlbumFormat enum
 const SORTS = ['createdAt,desc', 'price,asc', 'releaseYear,desc']; // 정렬 화이트리스트 내

@@ -125,8 +125,9 @@ backend/src/main/java/com.groove
 │   ├── album/                  (AlbumAdminController·AlbumQueryController, AlbumSpecs(JPA Specification), AlbumStatus·AlbumFormat)
 │   ├── artist/ · genre/ · label/   (각 api/·application/·domain/·exception/)
 │   │
-│   │   ※ 의도적 N+1 보존 (W10 시연 자료): AlbumSpecs.keyword() 는 artist 와 LEFT JOIN 만 사용(fetch 조인 없음).
-│   │     변환 단계에서 lazy proxy 가 풀리며 N+1 발생. ERD §5 [W10] 인덱스 누락도 함께 보존.
+│   │   ※ 검색: AlbumSpecs.keyword() 는 FULLTEXT MATCH(title, artist_name) AGAINST(... BOOLEAN MODE)
+│   │     (V21 ft_album_keyword, artist_name 비정규화), 목록은 @EntityGraph(artist,genre,label) 로 일괄 fetch
+│   │     → 옛 풀스캔·N+1 박제는 해제됨. 인덱스 상세는 ERD §5.2.
 │
 ├── cart/                       (장바구니) — 구현 완료
 │   └── application/            (CartService, CartCleanupOnMemberWithdrawnListener)

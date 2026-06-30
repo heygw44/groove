@@ -76,9 +76,10 @@ rate limit 계층 때문에 인프로세스 직접 호출(~450 TPS)보다 처리
 
 # 검색 부하 (search.js)
 
-앨범 검색(`GET /api/v1/albums`)의 필터 조합·키워드 검색을 부하 측정한다. 검색 경로는 N+1·풀스캔 LIKE
-슬로우 쿼리가 W10 시연용으로 **의도 보존**된 상태이며, 본 부하는 그 **Before(개선 전) 베이스라인**을 박제하는 것이
-목적이다. 토큰 풀 로그인은 W9 공통 하네스 `lib/auth.js` 로 추출했고 후속 시나리오(order/payment 등)가 재사용한다.
+앨범 검색(`GET /api/v1/albums`)의 필터 조합·키워드 검색을 부하 측정한다. 검색 경로는 V21 에서
+**FULLTEXT(`ft_album_keyword`, ngram BOOLEAN MODE) + `@EntityGraph`** 로 전환돼 풀스캔·N+1 이 해소됐고, 본 부하는
+그 **개선 후 경로**의 SLO(p95)·정확성을 측정한다(V21 이전 Before 베이스라인은 아래 결과 표에 박제). 토큰 풀 로그인은
+W9 공통 하네스 `lib/auth.js` 로 추출했고 후속 시나리오(order/payment 등)가 재사용한다.
 
 > 검색은 public 이지만 현실적 '로그인 유저 탐색'(JWT 검증 비용 포함)을 측정하고자 Bearer 토큰을 부착한다.
 
@@ -106,9 +107,9 @@ DB_PASSWORD=changeme ./scripts/seed.sh --docker --yes
 # 4) k6 실행 (COUPON_ID 같은 사전 조회 불필요 — 검색은 시드 데이터에 바로 의존)
 k6 run loadtest/search.js
 
-# 5) (선택) 슬로우 쿼리 가시화 — 풀스캔(type=ALL) 확인 (groove 유저, .env DB_PASSWORD)
+# 5) (선택) 검색 실행계획 가시화 — FULLTEXT(type=fulltext, key=ft_album_keyword) 확인 (groove 유저, .env DB_PASSWORD)
 docker exec groove-mysql-1 mysql -ugroove -pchangeme groove \
-  -e "EXPLAIN SELECT * FROM album WHERE title LIKE '%love%';"
+  -e "EXPLAIN SELECT * FROM album WHERE status='SELLING' AND MATCH(title, artist_name) AGAINST('\"love\"' IN BOOLEAN MODE) > 0 ORDER BY created_at DESC LIMIT 20;"
 ```
 
 env 오버라이드: `BASE_URL`(기본 `http://localhost:8080`), `MEMBER_COUNT`(기본 80), `PASSWORD`(기본 `Test1234!`),
@@ -117,11 +118,13 @@ env 오버라이드: `BASE_URL`(기본 `http://localhost:8080`), `MEMBER_COUNT`(
 결과 해석: `checks` rate(토큰 발급·검색 200 검증) > 0.99, `search_latency` p95·p99(검색 요청만, setup 로그인 제외),
 `http_req_failed{phase:search}`, 그리고 종료 시 저장되는 `loadtest/search-summary.json`.
 
-> 슬로우 쿼리로 `search_latency` p95 threshold(800ms)가 breach 되면 k6 는 비정상 종료 코드(99)로 끝난다 —
-> 이는 **의도된 Before 측정 결과**이며 `abortOnFail` 을 쓰지 않아 테스트는 끝까지 돌고 요약 JSON 도 항상 생성된다.
+> `search_latency` p95 threshold(800ms)는 검색 SLO **회귀 가드**다 — FULLTEXT 전환 후 breach 되면 회귀 신호로
+> 보면 된다. breach 시 k6 는 비정상 종료 코드(99)로 끝나지만, `abortOnFail` 을 쓰지 않아 테스트는 끝까지 돌고
+> 요약 JSON 도 항상 생성된다.
 
-## 결과 (실측)
+## 결과 (실측) — V21/#204 이전 Before 베이스라인
 
+아래 표는 **V21 FULLTEXT 전환 이전**의 LIKE 풀스캔·N+1 경로를 박제한 Before 수치다.
 로컬 1머신(Apple Silicon, Docker MySQL 8.4). 절대 수치는 머신 종속이며 **추세·정확성**이 핵심이다.
 
 **k6 검색 부하 — 앨범 50,000건, 회원 80, 50 VU 60s 지속 탐색**:
@@ -133,8 +136,9 @@ env 오버라이드: `BASE_URL`(기본 `http://localhost:8080`), `MEMBER_COUNT`(
 | http_req_failed{phase:search} | **0%** |
 | search p50 / p95 / p99 / max | 674 ms / **930 ms** / 1.00 s / 1.36 s |
 
-→ checks·실패율은 건전하지만 **search p95 930 ms** 로 SLO(800 ms)를 초과. 원인은 의도 보존된 **N+1·`title LIKE
-'%kw%'` 풀스캔**(`EXPLAIN` 시 type=ALL)이며, 본 수치가 W10 개선의 **Before 베이스라인**이다.
+→ checks·실패율은 건전하지만 **search p95 930 ms** 로 SLO(800 ms)를 초과. 당시 원인은 **N+1·`title LIKE
+'%kw%'` 풀스캔**(`EXPLAIN` 시 type=ALL)이었고, 본 수치가 W10 개선의 **Before 베이스라인**이다. 현 코드 경로는
+FULLTEXT(`ft_album_keyword`)+`@EntityGraph` 로 개선됐다(ERD §5.2) — 개선 후 실측 갱신은 #363 에서 다룬다.
 
 ---
 
