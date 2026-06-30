@@ -36,9 +36,8 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-// 분산 Redis 캐시(spring.cache.type=redis) 직렬화 왕복 가드(#366). RedisCacheManager 는 put/get 마다 값을
-// Redis 바이트로 직렬화/역직렬화하므로, 캐시 적중은 곧 JDK 직렬화 왕복이 성공했다는 증거다. 핵심은 랜딩의
-// Page<AlbumSummaryResponse>(= PageImpl) — JSON default-typing 으론 역직렬화가 깨지지만 JDK 직렬화로는 안전함을 박는다.
+// 분산 Redis 캐시(spring.cache.type=redis) 직렬화 왕복 가드. 캐시 적중 = JDK 직렬화 왕복 성공.
+// 핵심은 랜딩의 Page(PageImpl) — JSON 으론 역직렬화가 깨지지만 JDK 로는 안전함을 박는다.
 @SpringBootTest(properties = "spring.cache.type=redis")
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
@@ -72,8 +71,7 @@ class AlbumRedisCacheTest {
 
     @BeforeEach
     void clearCaches() {
-        // 이 클래스가 쓰는 두 캐시만 비운다 — 공유(reuse) Redis 컨테이너라 flushDb 로 전부 지우면 다른 테스트까지 날린다.
-        // RedisCache.clear() 는 캐시 이름 프리픽스 SCAN+DEL 이라 범위가 좁고 커넥션도 매니저가 닫는다.
+        // 두 캐시만 비운다 — 공유 reuse 컨테이너라 flushDb 면 다른 테스트까지 날아간다(RedisCache.clear 는 이름 프리픽스만 DEL).
         Objects.requireNonNull(cacheManager.getCache(AlbumCaches.DETAIL)).clear();
         Objects.requireNonNull(cacheManager.getCache(AlbumCaches.LANDING_LIST)).clear();
         clearInvocations(albumRepository);

@@ -41,14 +41,13 @@ logging:
     root: WARN
     com.groove: INFO
 
-# 멀티노드 분산 캐시(#366). 단일 인스턴스(local/dev)는 base 의 caffeine 그대로, docker/prod 다중화만 redis override.
-# 노드 A write 의 @CacheEvict 가 공유 redis 를 비워 노드 B 가 즉시 일관해진다(caffeine 은 노드 로컬이라 최대 TTL 동안 stale).
-# value 직렬화는 Boot 기본 JDK(Page<…>=PageImpl 안전). SPRING_CACHE_TYPE 으로 loadtest Before/After 토글 보존(none/caffeine/redis).
+# 멀티노드 분산 캐시. base(단일 인스턴스)는 caffeine, docker/prod 다중화만 redis 로 노드 간 @CacheEvict 일관.
+# 직렬화는 Boot 기본 JDK. SPRING_CACHE_TYPE 으로 loadtest Before/After 토글(none/caffeine/redis).
 spring:
   cache:
     type: ${SPRING_CACHE_TYPE:redis}
     redis:
-      time-to-live: 60s                # base caffeine 의 expireAfterWrite=60s 와 동일한 staleness 백스톱
-      key-prefix: "groove:cache:v1:"   # v1 = 직렬화 스키마 버전. 호환 깨짐 변경 시 v2 로 올려 롤링 배포 중 cross-version 역직렬화를 격리
+      time-to-live: 60s                # base caffeine 의 expireAfterWrite=60s 와 동일 백스톱
+      key-prefix: "groove:cache:v1:"   # v1 = 직렬화 스키마 버전. 호환 깨짐 시 v2 로 올려 롤링 배포 cross-version 역직렬화 격리
       use-key-prefix: true
-      cache-null-values: false         # DETAIL 미스(404)는 캐시하지 않음 — base caffeine 거동 유지
+      cache-null-values: false         # DETAIL 미스(404) 미캐시 — base caffeine 거동 유지

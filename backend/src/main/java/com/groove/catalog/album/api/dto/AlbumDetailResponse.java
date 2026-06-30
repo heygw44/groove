@@ -13,8 +13,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
 
-// Serializable: albumDetail 캐시가 분산 Redis 일 때 JDK 직렬화 대상(#366). 중첩 ref 도 함께 직렬화된다.
-// serialVersionUID 를 고정해 필드 추가 시 자동 UID 변동(역직렬화 깨짐)을 막고, 호환 깨짐은 캐시 key-prefix 버전으로 격리한다.
+// Serializable: 분산 Redis 캐시 JDK 직렬화 대상. serialVersionUID 고정 — 필드 변경 시 자동 UID 가 흔들려 역직렬화가 깨지지 않게.
 /** averageRating/reviewCount 는 AlbumRating 으로 채운다. 인자 없는 from(Album) 은 AlbumRating.NONE. */
 public record AlbumDetailResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,

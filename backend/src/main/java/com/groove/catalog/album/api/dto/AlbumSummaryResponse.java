@@ -12,8 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.io.Serial;
 import java.io.Serializable;
 
-// Serializable: albumLandingList 캐시(Page<AlbumSummaryResponse>)가 분산 Redis 일 때 JDK 직렬화 대상(#366).
-// serialVersionUID 를 고정해 필드 추가 시 자동 UID 변동(역직렬화 깨짐)을 막고, 호환 깨짐은 캐시 key-prefix 버전으로 격리한다.
+// Serializable: 분산 Redis 캐시(Page) JDK 직렬화 대상. serialVersionUID 고정 — 필드 변경 시 자동 UID 가 흔들려 역직렬화가 깨지지 않게.
 /** averageRating/reviewCount 는 AlbumRating 으로 채운다. 인자 없는 from(Album) 은 AlbumRating.NONE. */
 public record AlbumSummaryResponse(
         @Schema(description = "앨범 ID", example = "1") Long id,
