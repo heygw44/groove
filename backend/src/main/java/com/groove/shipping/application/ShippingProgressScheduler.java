@@ -3,6 +3,7 @@ package com.groove.shipping.application;
 import com.groove.shipping.domain.Shipping;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,6 +57,10 @@ public class ShippingProgressScheduler {
     @Scheduled(
             fixedDelayString = "${groove.shipping.progress.interval:PT2S}",
             initialDelayString = "${groove.shipping.progress.initial-delay:PT5S}")
+    @SchedulerLock(name = "progressShipments",
+            lockAtMostFor = "${groove.shipping.progress.lock-at-most-for:PT1M}",
+            // 인터벌(기본 PT2S) 만큼 락을 잡아 다른 노드의 틱을 차단한다 — 0 이면 ~20ms 만에 풀려 연속 중복 실행이 샌다.
+            lockAtLeastFor = "${groove.shipping.progress.lock-at-least-for:PT2S}")
     public void progressShipments() {
         Instant now = clock.instant();
         advance("PREPARING→SHIPPED",

@@ -3,6 +3,7 @@ package com.groove.shipping.application;
 import com.groove.order.domain.OrderRepository;
 import com.groove.shipping.domain.ShippingRepository;
 import com.groove.shipping.domain.ShippingStatus;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -63,6 +64,9 @@ public class OrderPiiAnonymizationScheduler {
     @Scheduled(
             fixedDelayString = "${groove.privacy.order-anonymization.interval:PT1H}",
             initialDelayString = "${groove.privacy.order-anonymization.initial-delay:PT10M}")
+    @SchedulerLock(name = "anonymizeDeliveredOrders",
+            lockAtMostFor = "${groove.privacy.order-anonymization.lock-at-most-for:PT5M}",
+            lockAtLeastFor = "${groove.privacy.order-anonymization.lock-at-least-for:PT30S}")
     public void anonymizeDeliveredOrders() {
         Instant now = clock.instant();
         Instant cutoff = now.minus(retention);
@@ -93,6 +97,9 @@ public class OrderPiiAnonymizationScheduler {
     @Scheduled(
             fixedDelayString = "${groove.privacy.order-anonymization.interval:PT1H}",
             initialDelayString = "${groove.privacy.order-anonymization.initial-delay:PT10M}")
+    @SchedulerLock(name = "anonymizeTerminalNonShippingOrders",
+            lockAtMostFor = "${groove.privacy.order-anonymization.lock-at-most-for:PT5M}",
+            lockAtLeastFor = "${groove.privacy.order-anonymization.lock-at-least-for:PT30S}")
     public void anonymizeTerminalNonShippingOrders() {
         Instant now = clock.instant();
         Instant cutoff = now.minus(retention);

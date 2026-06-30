@@ -8,6 +8,7 @@ import com.groove.payment.gateway.GatewayQuery;
 import com.groove.payment.gateway.PaymentGateway;
 import com.groove.payment.gateway.toss.TossPaymentGateway;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -79,6 +80,10 @@ public class PaymentReconciliationScheduler {
     @Scheduled(
             fixedDelayString = "${groove.payment.reconciliation.interval:PT1M}",
             initialDelayString = "${groove.payment.reconciliation.initial-delay:PT1M}")
+    @SchedulerLock(name = "reconcilePendingPayments",
+            lockAtMostFor = "${groove.payment.reconciliation.lock-at-most-for:PT2M}",
+            // 인터벌(기본 PT1M) 만큼 락을 잡아 다른 노드의 틱을 차단한다 — PG 폴링 중복 호출을 막는다.
+            lockAtLeastFor = "${groove.payment.reconciliation.lock-at-least-for:PT1M}")
     public void reconcilePendingPayments() {
         Instant now = clock.instant();
         Instant cutoff = now.minus(minAge);

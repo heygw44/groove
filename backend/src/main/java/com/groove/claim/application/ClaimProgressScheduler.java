@@ -3,6 +3,7 @@ package com.groove.claim.application;
 import com.groove.claim.domain.Claim;
 import com.groove.claim.domain.ClaimRepository;
 import com.groove.claim.domain.ClaimStatus;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,6 +57,10 @@ public class ClaimProgressScheduler {
     @Scheduled(
             fixedDelayString = "${groove.claim.progress.interval:PT2S}",
             initialDelayString = "${groove.claim.progress.initial-delay:PT5S}")
+    @SchedulerLock(name = "progressClaims",
+            lockAtMostFor = "${groove.claim.progress.lock-at-most-for:PT1M}",
+            // 인터벌(기본 PT2S) 만큼 락을 잡아 다른 노드의 틱을 차단한다 — 0 이면 ~20ms 만에 풀려 연속 중복 실행이 샌다.
+            lockAtLeastFor = "${groove.claim.progress.lock-at-least-for:PT2S}")
     public void progressClaims() {
         Instant now = clock.instant();
         advance("APPROVED→IN_TRANSIT",

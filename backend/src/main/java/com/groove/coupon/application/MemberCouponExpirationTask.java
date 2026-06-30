@@ -2,6 +2,7 @@ package com.groove.coupon.application;
 
 import com.groove.common.transaction.CommonTransactionConfig;
 import com.groove.coupon.domain.MemberCouponRepository;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -38,6 +39,9 @@ public class MemberCouponExpirationTask {
     }
 
     @Scheduled(cron = "${groove.coupon.expiration.cron:0 0 * * * *}")
+    @SchedulerLock(name = "couponExpiration",
+            lockAtMostFor = "${groove.coupon.expiration.lock-at-most-for:PT5M}",
+            lockAtLeastFor = "${groove.coupon.expiration.lock-at-least-for:PT30S}")
     public void expireOverdue() {
         try {
             int total = expireOverdueAll(clock.instant());

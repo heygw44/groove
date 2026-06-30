@@ -55,6 +55,10 @@ dependencies {
     // resilience4j-spring-boot 스타터는 Boot 4.x 호환이 불확실해 의존하지 않는다. Spring BOM 미관리라 카탈로그에서 버전 고정.
     implementation(libs.resilience4j.circuitbreaker)
     implementation(libs.resilience4j.retry)
+    // 스케줄러 분산락 (#365). 다중 인스턴스에서 @Scheduled 배치가 노드마다 중복 실행되는 것을 기존 MySQL 로 차단한다.
+    // Spring BOM 미관리라 버전은 카탈로그에서 고정. 7.x 가 Spring Boot 4.x 호환 라인.
+    implementation(libs.shedlock.spring)
+    implementation(libs.shedlock.provider.jdbc.template)
     implementation(libs.jjwt.api)
     runtimeOnly(libs.jjwt.impl)
     runtimeOnly(libs.jjwt.jackson)
