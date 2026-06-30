@@ -5,16 +5,22 @@ import io.github.bucket4j.caffeine.Bucket4jCaffeine;
 import io.github.bucket4j.distributed.ExpirationAfterWriteStrategy;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import io.github.bucket4j.redis.lettuce.Bucket4jLettuce;
+import io.lettuce.core.ClientOptions;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
+import io.lettuce.core.SslOptions;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.codec.ByteArrayCodec;
 import io.lettuce.core.codec.RedisCodec;
 import io.lettuce.core.codec.StringCodec;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.data.redis.autoconfigure.DataRedisConnectionDetails;
+import org.springframework.boot.ssl.SslBundle;
+import org.springframework.boot.ssl.SslManagerBundle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
 
 import java.time.Duration;
 
@@ -59,10 +65,12 @@ public class RateLimitStoreConfig {
                 throw new IllegalStateException(
                         "rate-limit Redis 저장소는 standalone 토폴로지만 지원한다(sentinel/cluster 미지원)");
             }
+            SslBundle sslBundle = connectionDetails.getSslBundle();
             RedisURI.Builder uri = RedisURI.builder()
                     .withHost(standalone.getHost())
                     .withPort(standalone.getPort())
-                    .withDatabase(standalone.getDatabase());
+                    .withDatabase(standalone.getDatabase())
+                    .withSsl(sslBundle != null);
             String password = connectionDetails.getPassword();
             if (password != null) {
                 String username = connectionDetails.getUsername();
@@ -72,11 +80,29 @@ public class RateLimitStoreConfig {
                     uri.withPassword(password.toCharArray());
                 }
             }
-            // SSL 켜짐(공인 CA 기준). 사설 CA 트러스트스토어 번들은 RedisClient 에 별도 SslOptions 배선이 추가로 필요하다.
-            if (connectionDetails.getSslBundle() != null) {
-                uri.withSsl(true);
+            RedisClient client = RedisClient.create(uri.build());
+            // withSsl(true)는 TLS 사용만 알릴 뿐 trust material 을 싣지 않는다 — 사설 CA 번들이면
+            // RedisClient 에 SslBundle 의 key/trust 매니저를 직접 배선해야 공인 CA 밖 인증서가 검증된다.
+            if (sslBundle != null) {
+                client.setOptions(ClientOptions.builder().sslOptions(toLettuceSsl(sslBundle)).build());
             }
-            return RedisClient.create(uri.build());
+            return client;
+        }
+
+        /** Spring {@link SslBundle} 의 key/trust 매니저·프로토콜·암호스위트를 Lettuce {@link SslOptions} 로 옮긴다. */
+        private static SslOptions toLettuceSsl(SslBundle bundle) {
+            SslManagerBundle managers = bundle.getManagers();
+            SslOptions.Builder ssl = SslOptions.builder()
+                    .keyManager(managers.getKeyManagerFactory())
+                    .trustManager(managers.getTrustManagerFactory());
+            org.springframework.boot.ssl.SslOptions options = bundle.getOptions();
+            if (options.getEnabledProtocols() != null) {
+                ssl.protocols(options.getEnabledProtocols());
+            }
+            if (options.getCiphers() != null) {
+                ssl.cipherSuites(options.getCiphers());
+            }
+            return ssl.build();
         }
 
         // connect()는 빈 생성(부팅) 시점에 Redis 에 실제로 연결한다 — 분산 저장소가 필수인 redis 모드에서
@@ -93,6 +119,24 @@ public class RateLimitStoreConfig {
             return Bucket4jLettuce.casBasedBuilder(connection)
                     .expirationAfterWrite(ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax(BUCKET_TTL))
                     .build();
+        }
+    }
+
+    /**
+     * prod 는 store=redis 고정이지만 env/CLI 가 yaml 값을 덮을 수 있다. node-local(caffeine) 버킷으로 내려가면
+     * 노드 간 한도 공유가 조용히 깨지므로(보안 약화), prod 에선 resolved 값이 redis 가 아니면 부팅에서 막는다.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @Profile("prod")
+    static class RateLimitStoreProdGuard {
+
+        RateLimitStoreProdGuard(Environment environment) {
+            String store = environment.getProperty("groove.rate-limit.store");
+            if (!"redis".equals(store)) {
+                throw new IllegalStateException(
+                        "prod 에서는 groove.rate-limit.store=redis 여야 한다(현재=" + store
+                                + ") — node-local 버킷은 노드 간 한도 공유가 깨진다");
+            }
         }
     }
 }

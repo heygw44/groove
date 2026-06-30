@@ -19,6 +19,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class RateLimitFilter extends OncePerRequestFilter {
 
@@ -29,9 +30,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
     /** 분산 저장소 장애로 probe 가 없는 fail-closed 차단 시 응답에 실을 Retry-After(초). */
     private static final long STORE_FAILURE_RETRY_SECONDS = 1L;
+    /** 저장소 장애 스택트레이스 로그 최소 간격 — 장애 동안 요청마다 찍어 로그 폭탄이 되는 것을 막는다. */
+    private static final long STORE_FAILURE_LOG_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(10);
 
     private final RateLimitRegistry registry;
     private final ObjectMapper objectMapper;
+    private final AtomicLong lastStoreFailureLogNanos = new AtomicLong(Long.MIN_VALUE);
 
     public RateLimitFilter(RateLimitRegistry registry, ObjectMapper objectMapper) {
         this.registry = registry;
@@ -82,12 +86,27 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private void handleStoreFailure(RateLimitPolicy policy, HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain, RuntimeException ex) throws ServletException, IOException {
         if (policy.failOpen()) {
-            log.warn("rate-limit 저장소 장애 — fail-open 통과 policy={}", policy.name(), ex);
+            logStoreFailure("fail-open 통과", policy, ex);
             filterChain.doFilter(request, response);
             return;
         }
-        log.warn("rate-limit 저장소 장애 — fail-closed 차단 policy={}", policy.name(), ex);
+        logStoreFailure("fail-closed 차단", policy, ex);
         writeTooManyRequests(response, STORE_FAILURE_RETRY_SECONDS);
+    }
+
+    /**
+     * 저장소 장애 로그를 주기 제한한다. 장애 구간엔 rate-limit 대상 요청마다 이 경로를 타므로, 스택트레이스를
+     * 매번 찍으면 로그 I/O 가 fail-open/closed 처리보다 먼저 병목이 된다. 스택 포함 warn 은 간격당 1회만,
+     * 나머지는 debug 로 낮춘다.
+     */
+    private void logStoreFailure(String mode, RateLimitPolicy policy, RuntimeException ex) {
+        long now = System.nanoTime();
+        long last = lastStoreFailureLogNanos.get();
+        if (now - last >= STORE_FAILURE_LOG_INTERVAL_NANOS && lastStoreFailureLogNanos.compareAndSet(last, now)) {
+            log.warn("rate-limit 저장소 장애 — {} policy={}", mode, policy.name(), ex);
+        } else {
+            log.debug("rate-limit 저장소 장애 — {} policy={}", mode, policy.name());
+        }
     }
 
     /** Redis(Lettuce) 원격 장애만 store 장애로 인정한다 — 그 외 RuntimeException(설정·코덱·프로그래밍 오류)은 표면화. */
