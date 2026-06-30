@@ -25,7 +25,8 @@ DELTA="${DELTA:-7}"          # 노드1 에서 더할 재고 증분(0 아님)
 POLL_SECONDS="${POLL_SECONDS:-3}"   # 노드2 stale 지속 관측 시간
 
 # 컨테이너 내부에서 curl 실행(app:8080). $1=replica index, 나머지=curl 인자.
-node() { local idx="$1"; shift; $COMPOSE exec -T --index="$idx" app curl -sS "$@"; }
+# -f: 4xx/5xx 면 curl 이 non-zero 로 종료 → set -e/pipefail 이 잡아 에러 바디를 stock 으로 오파싱하지 않는다.
+node() { local idx="$1"; shift; $COMPOSE exec -T --index="$idx" app curl -fsS "$@"; }
 
 json() { grep -oE "\"$1\":[^,}\"]+" | head -1 | cut -d: -f2; }       # 숫자 필드
 jstr() { grep -oE "\"$1\":\"[^\"]*\"" | head -1 | cut -d: -f2 | tr -d '"'; }  # 문자열 필드
@@ -58,6 +59,11 @@ NEW1=$(node 1 -X PATCH "http://localhost:8080/api/v1/admin/albums/$ALBUM_ID/stoc
   -d "{\"delta\":$DELTA}" | json stock)
 EXPECTED=$((OLD1 + DELTA))
 echo "  노드1 변경 후 stock=$NEW1 (기대=$EXPECTED)"
+# write 결과를 baseline 으로 쓰기 전에 검증한다 — 누락/불일치면 이후 일관성 판정이 무의미하므로 중단.
+if [ -z "${NEW1:-}" ] || [ "$NEW1" != "$EXPECTED" ]; then
+  echo "✗ 노드1 adjustStock 결과 불일치(NEW1='${NEW1:-}', 기대=$EXPECTED) — 측정 중단" >&2
+  exit 1
+fi
 
 echo "▶ 즉시 노드2 재조회(${POLL_SECONDS}s 동안 반복) — 노드2 가 새 stock 을 보는가?"
 deadline=$((SECONDS + POLL_SECONDS))

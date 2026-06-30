@@ -17,16 +17,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.CacheManager;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,17 +68,19 @@ class AlbumRedisCacheTest {
     private LabelRepository labelRepository;
 
     @Autowired
-    private RedisConnectionFactory redisConnectionFactory;
+    private CacheManager cacheManager;
 
     @BeforeEach
-    void flushRedis() {
-        // 공유(reuse) Redis 컨테이너의 캐시 키를 비워 테스트 클래스 간 누수를 막는다(TestcontainersConfig 주석 참조).
-        redisConnectionFactory.getConnection().serverCommands().flushDb();
+    void clearCaches() {
+        // 이 클래스가 쓰는 두 캐시만 비운다 — 공유(reuse) Redis 컨테이너라 flushDb 로 전부 지우면 다른 테스트까지 날린다.
+        // RedisCache.clear() 는 캐시 이름 프리픽스 SCAN+DEL 이라 범위가 좁고 커넥션도 매니저가 닫는다.
+        Objects.requireNonNull(cacheManager.getCache(AlbumCaches.DETAIL)).clear();
+        Objects.requireNonNull(cacheManager.getCache(AlbumCaches.LANDING_LIST)).clear();
         clearInvocations(albumRepository);
     }
 
     @Test
-    @DisplayName("findDetail — Redis 왕복 후 두 번째 호출 캐시 서빙(findById 1회만)")
+    @DisplayName("상세 — Redis 왕복 후 두 번째 호출 캐시 서빙(findById 1회만)")
     void findDetail_roundTripsThroughRedis() {
         Long id = seedSellingAlbum("Redis Detail", 5).getId();
         clearInvocations(albumRepository);
@@ -91,7 +94,7 @@ class AlbumRedisCacheTest {
     }
 
     @Test
-    @DisplayName("공개 랜딩 목록 — Page<AlbumSummaryResponse>(PageImpl) Redis 왕복(findAll 1회만)")
+    @DisplayName("랜딩 목록 — Page(PageImpl) Redis 왕복(findAll 1회만)")
     void landingList_pageRoundTripsThroughRedis() {
         seedSellingAlbum("Redis Landing", 5);
         clearInvocations(albumRepository);

@@ -23,9 +23,12 @@ public class CacheConfig implements CachingConfigurer {
     private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
 
     /**
-     * 캐시 장애를 가용성 위로 끌어올리지 않는다 — Redis 일시 단절이나 역직렬화 실패(롤링 배포 중 클래스 스큐 등)를
-     * 캐시 미스로 강등한다. get 실패는 DB 폴백, put/evict/clear 실패는 로깅 후 무시한다(가용성 > 캐시 적중).
-     * evict 실패로 남는 stale 은 TTL(60s) 백스톱과 재고 변경 TransactionalEventListener 가 이중으로 정리한다.
+     * read-side(get/put) 와 write-side(evict/clear) 를 분리한다.
+     * - get 실패(Redis 단절·역직렬화 스큐 등)는 캐시 미스로 강등 → DB 폴백(가용성).
+     * - put 실패는 무시 — 적재만 건너뛰므로 다음 미스에서 자가복구되고 stale 을 남기지 않는다.
+     * - evict/clear 실패는 전파한다 — 쓰기 경로(create/update/delete/adjustStock)의 무효화 실패를 삼키면
+     *   기존 albumDetail/albumLandingList 엔트리가 Redis 에 남아 TTL 만료 전까지 노드 간 stale 이 재발한다.
+     *   호출자에게 표면화해 운영자가 감지하게 하고, 무효화되지 않은 stale 을 적중으로 재서빙하지 않는다.
      */
     @Override
     public CacheErrorHandler errorHandler() {
@@ -37,17 +40,20 @@ public class CacheConfig implements CachingConfigurer {
 
             @Override
             public void handleCachePutError(RuntimeException exception, Cache cache, Object key, Object value) {
-                log.warn("캐시 put 실패 무시 cache={} key={}", cache.getName(), key, exception);
+                log.warn("캐시 put 실패 무시(다음 미스에서 재적재) cache={} key={}", cache.getName(), key, exception);
             }
 
             @Override
             public void handleCacheEvictError(RuntimeException exception, Cache cache, Object key) {
-                log.warn("캐시 evict 실패 무시 cache={} key={}", cache.getName(), key, exception);
+                // 무효화 실패는 stale 을 남기므로 삼키지 않고 전파한다(쓰기 경로 표면화).
+                log.error("캐시 evict 실패 → 전파(stale 방지) cache={} key={}", cache.getName(), key, exception);
+                throw exception;
             }
 
             @Override
             public void handleCacheClearError(RuntimeException exception, Cache cache) {
-                log.warn("캐시 clear 실패 무시 cache={}", cache.getName(), exception);
+                log.error("캐시 clear 실패 → 전파(stale 방지) cache={}", cache.getName(), exception);
+                throw exception;
             }
         };
     }
