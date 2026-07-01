@@ -73,7 +73,7 @@
 | 테이블 | `album` |
 | 정의 | 판매 단위가 되는 LP(바이닐) 상품. 단일 SKU(컨디션·옵션 없음)이며, 아티스트·장르·레이블에 연결된다. |
 | 핵심 필드 | `title`, `artist_id`, `genre_id`, `label_id`, `release_year`, `format`, `price`, `stock`, `status`, `is_limited` |
-| 비고 | "상품"이라는 일반 용어 대신 본 프로젝트 전반에서 **Album**으로 통일. 한정반 시연의 핵심 엔티티. |
+| 비고 | "상품"이라는 일반 용어 대신 본 프로젝트 전반에서 Album으로 통일. 한정반의 핵심 엔티티. |
 
 ### 2.3 Artist — 아티스트
 
@@ -178,11 +178,11 @@
 | 영문 | Coupon |
 | 한글 | 쿠폰 |
 | 테이블 | `coupon`(정책), `member_coupon`(회원 발급분) |
-| 정의 | 주문 금액에 정액/정률 할인을 적용하는 혜택 정책. 정책(`coupon`)과 회원 보유 인스턴스(`member_coupon`)를 분리한다. 발급은 **선착순 한정수량**(대용량 동시성 시연 핵심) 또는 **관리자/이벤트 직접지급**. |
+| 정의 | 주문 금액에 정액/정률 할인을 적용하는 혜택 정책. 정책(`coupon`)과 회원 보유 인스턴스(`member_coupon`)를 분리한다. 발급은 **선착순 한정수량**(대용량 동시성 처리의 핵심) 또는 **관리자/이벤트 직접지급**. |
 | 할인 종류 | `CouponDiscountType` 2값 — §3.9 참조 |
 | 정책 상태 | `CouponStatus` 3값 — §3.10 / 보유 상태 `MemberCouponStatus` 4값 — §3.11 |
 | 적용 | 회원 주문에만 적용(게스트 불가). **payable = total_amount − discount_amount**, 결제는 payable 청구. 주문 취소/환불 시 쿠폰 복원(USED→ISSUED). |
-| 비고 | §8 v2 후보였던 `coupon`/`coupon_issue` 를 W7 완료 후 확장 도메인으로 승격. 동시성 결정 [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md). |
+| 비고 | §8 v2 후보였던 `coupon`/`coupon_issue` 를 이후 확장 도메인으로 승격. 동시성 결정 [decisions/coupon-concurrency.md](decisions/coupon-concurrency.md). |
 
 ---
 
@@ -238,7 +238,7 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | `PENDING` | 주문 생성됨, 결제 대기 | 주문 생성 시 (재고 차감 완료) |
 | `PAID` | 결제 완료 | PG 웹훅 성공 콜백 |
 | `PREPARING` | 배송 준비 중 | 결제 완료 → 배송 엔트리 생성 |
-| `SHIPPED` | 출고 완료 | 스케줄러 자동 전환 (시연용) |
+| `SHIPPED` | 출고 완료 | 스케줄러 자동 전환 |
 | `DELIVERED` | 배송 완료 | 스케줄러 자동 전환 |
 | `COMPLETED` | 거래 종료 (확정) | 배송 완료 후 N일 경과 |
 | `CANCELLED` | 주문 취소 | 사용자(PAID 이전) 또는 관리자(PREPARING까지) |
@@ -263,8 +263,8 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 
 | 값 | 의미 |
 |---|---|
-| `CARD` | 신용/체크카드 (Mock 시연용 분기) |
-| `BANK_TRANSFER` | 계좌이체 (Mock 시연용 분기) |
+| `CARD` | 신용/체크카드 (Mock 분기) |
+| `BANK_TRANSFER` | 계좌이체 (Mock 분기) |
 | `MOCK` | Mock PG 기본값 (수단 미특정) |
 
 ### 3.7 ShippingStatus — 배송 상태
@@ -333,13 +333,13 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 
 | 용어 | 정의 |
 |---|---|
-| 한정반 (Limited Edition) | 발행 수량이 제한된 LP. `album.is_limited=true` 플래그로 표시. 동시성 시연(§PRD 8.1)의 핵심 트리거. |
+| 한정반 (Limited Edition) | 발행 수량이 제한된 LP. `album.is_limited=true` 플래그로 표시. 동시성 처리의 핵심 트리거. |
 | 단일 SKU | 한 Album에 옵션·컨디션 분기가 없음(v1). 색상·픽처디스크 등은 v2 후보. |
 | 게스트 주문 (Guest Order) | 회원가입 없이 진행하는 주문. `member_id IS NULL`, 조회는 (주문번호 + 이메일) 매칭 인증. |
 | 주문 번호 (Order Number) | 외부 노출용 주문 식별자. 형식 `ORD-YYYYMMDD-XXXX`. 내부 PK(`orders.id`)와 분리. |
 | 운송장 번호 (Tracking Number) | UUID 기반으로 자체 발급. 외부 택배사 API 미연동(v1). |
-| 단일 재고 희귀반 | `stock=1`인 Album. 정합성 시연의 보너스 시나리오(§PRD 8.5). |
-| 선착순 발급 (First-Come Issuance) | 한정수량(`coupon.total_quantity`) 쿠폰을 회원이 먼저 요청한 순서대로 발급. 대용량 동시성 시연의 핵심 — 재고 오버셀과 동형 문제. *(확장 M13)* |
+| 단일 재고 희귀반 | `stock=1`인 Album. 재고 정합성의 경계 시나리오. |
+| 선착순 발급 (First-Come Issuance) | 한정수량(`coupon.total_quantity`) 쿠폰을 회원이 먼저 요청한 순서대로 발급. 대용량 동시성 처리의 핵심 — 재고 오버셀과 동형 문제. *(확장 M13)* |
 | 정액 할인 (Fixed Amount) | 고정 금액 할인. `CouponDiscountType.FIXED_AMOUNT`. *(확장 M13)* |
 | 정률 할인 (Percentage) | 비율 할인 + 상한 캡(`max_discount_amount`). `CouponDiscountType.PERCENTAGE`. *(확장 M13)* |
 | 최소 주문금액 (Min Order Amount) | 쿠폰 적용 가능한 주문 총액 하한(`coupon.min_order_amount`). 미달 시 적용 거부. *(확장 M13)* |
@@ -354,7 +354,7 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | Refresh Token Rotation | 리프레시 토큰 사용 시마다 새 토큰 발급 + 기존 토큰 폐기. 폐기된 토큰 재사용 시 해당 사용자의 모든 활성 토큰 무효화(탈취 감지). |
 | 보상 트랜잭션 (Compensating Transaction) | 실패한 작업의 부수 효과를 되돌리는 후속 트랜잭션. 예: 결제 실패 시 재고 복원. |
 | 비관적 락 (Pessimistic Lock) | `SELECT ... FOR UPDATE`로 행 단위 잠금. v1 동시성 처리 기본. 정합성 확실, TPS 측정에 사용. |
-| 낙관적 락 (Optimistic Lock) | 버전 컬럼 기반 충돌 감지. 비관적 락과의 비교 시연 후보. |
+| 낙관적 락 (Optimistic Lock) | 버전 컬럼 기반 충돌 감지. 비관적 락의 대안 후보. |
 | 원자적 조건부 UPDATE (Atomic Conditional Update) | `UPDATE ... SET cnt=cnt+1 WHERE id=? AND cnt<limit` 처럼 조건과 증가를 단일 DB 문으로 처리. 영향 행 수(0/1)로 성공 판정. 행 락을 길게 잡지 않아 비관적 락보다 처리량이 높다. 선착순 쿠폰 발급의 최종 채택안. *(확장 M13)* |
 | 핫 로우 (Hot Row) | 다수 트랜잭션이 동시에 갱신하는 단일 행(예: `coupon.issued_count`). 원자적 UPDATE 로도 남는 병목 — 극한 트래픽에서 Redis 카운터 전환의 근거. *(확장 M13)* |
 | N+1 문제 | 연관 엔티티를 개별 쿼리로 조회하여 1+N개 쿼리가 발생하는 현상. 페치 조인 / `@EntityGraph`로 해결. |
@@ -371,7 +371,7 @@ ERD §6 기준. DB는 `VARCHAR(30)`, JPA는 `@Enumerated(EnumType.STRING)`.
 | Strategy 패턴 | PG 결제 모듈 추상화에 사용. `PaymentGateway` 인터페이스 + `MockPaymentGateway` 구현체. |
 | Mock PG | 자체 모킹 결제 게이트웨이. 지연 시뮬레이션(100~500ms) + 비동기 웹훅 콜백(1~5초). |
 | TPS (Transactions Per Second) | 초당 처리 트랜잭션 수. 부하 테스트(k6) 핵심 지표. Before/After 비교 단위. |
-| 베이스라인 (Baseline) | 개선 전 측정 기준값. 모든 시연(§PRD 8)에서 Before/After 비교의 기준. |
+| 베이스라인 (Baseline) | 개선 전/후 비교의 기준값. |
 | ADR (Architecture Decision Record) | 아키텍처 결정 기록. 결정·근거·대안을 표 형태로 보존. |
 | SoT (Single Source of Truth) | 단일 출처. 본 프로젝트는 도메인별로 정본 우선순위(§1.3) 명시. |
 

@@ -20,7 +20,8 @@
 |---|---|---|
 | [payment-gateway-mock.md](./payment-gateway-mock.md) | PG 연동 모킹 — 인터페이스 + 콜백형 Mock(실 PG 교체 가능) | Accepted |
 | [concurrency-control.md](./concurrency-control.md) | 동시성 제어(상위) — 원자적 UPDATE·비관적 락·원자적 가산 혼용, Redis 미도입 | Accepted |
-| [horizontal-scaling.md](./horizontal-scaling.md) | 수평 확장 대비 — 스케줄러 분산락(ShedLock/MySQL)·rate-limit 분산(Bucket4j-Redis) 유보 + 실행 설계 | Accepted (유보) |
+| [horizontal-scaling.md](./horizontal-scaling.md) | 수평 확장 — 스케줄러 분산락(ShedLock/MySQL, #365)·rate-limit 분산(Bucket4j-Redis, #367) | Accepted |
+| [catalog-cache-distributed.md](./catalog-cache-distributed.md) | 카탈로그 캐시 분산 전환 — 멀티 인스턴스 Caffeine→Redis 토글(#366), `CacheErrorHandler` 장애 강등 | Accepted |
 | [coupon-concurrency.md](./coupon-concurrency.md) | 선착순 쿠폰 발급 동시성 — 베이스라인→비관적 락→원자적 조건부 UPDATE | Accepted |
 | [domain-events-and-outbox.md](./domain-events-and-outbox.md) | 비동기 처리 — 인메모리 이벤트 + Outbox(vs Kafka/RabbitMQ) | Accepted |
 | [package-structure.md](./package-structure.md) | 패키지 구조 — 도메인 우선 + 경량 레이어(vs 레이어 우선/헥사고날) | Accepted |

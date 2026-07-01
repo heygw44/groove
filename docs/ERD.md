@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 1.9 |
+| 버전 | 2.0 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-18 |
-| 변경 내용 | v1.9 (V29~V30 반영 — 아웃박스 재시도 상한/DLQ): 영구 실패(poison) 이벤트가 릴레이 슬롯을 영구 점유하는 문제를 막기 위해 `outbox_event.attempt_count`(V29) 컬럼을 추가하고, 릴레이 조회를 `published_at IS NULL AND attempt_count < N`(기본 5)으로 제한해 임계값 초과 이벤트를 DLQ(격리)로 자동 제외. `idx_outbox_unpublished` 를 `(published_at, attempt_count, id)`(V30)로 재구성해 격리 행을 인덱스 레벨에서 제외(#268). §7 마이그레이션 표를 V30 까지 현행화. v1.8 (V23~V28 반영 — 클레임/아웃박스 확장): 취소(CANCEL)/반품(RETURN) 통합 클레임을 위한 `claim`(§4.17)·`claim_item`(§4.18) 테이블과 `ClaimType`(CANCEL/RETURN)·`ClaimStatus`(REQUESTED→APPROVED→IN_TRANSIT→INSPECTING→REFUNDED/REJECTED) enum 신설. 트랜잭셔널 아웃박스 `outbox_event`(§4.19, V26) 추가. `payment.refunded_amount`(V24)·`orders.returned_at`(V24) 컬럼과 `PaymentStatus.PARTIALLY_REFUNDED` 반영, `payment.pg_transaction_id` 를 `idx_payment_pg_tx` → `uk_payment_pg_tx` UNIQUE 로 승격(V28). §2 테이블 목록 15→18개, §3 ER 다이어그램에 claim 관계 추가, §6 enum·§7 마이그레이션 표를 V28 까지 현행화, §9.1 FK CASCADE·CHECK 제약 보강. v1.7 (V18~V22 반영): 회원 PII 익명화·재가입 차단 해시를 위한 `member.email_hash`(V18 CHAR(64) → V19 VARCHAR(72), #170/#186)·`uk_member_email_hash` UNIQUE, `phone` NULL 허용(탈퇴 익명화), `orders`/`shipping` 의 `anonymized_at` 마커(V18) 반영. 검색 인덱스(`artist_name` 비정규화 + FULLTEXT, V21/#204)를 §4.6 컬럼 표에 정식 편입하고, 주문/리뷰 목록 복합 인덱스(`idx_orders_member_created`·`idx_orders_status_created`·`idx_review_album_created`, V22/#225)를 "예정/후속"에서 "적용 완료"로 갱신. §7 마이그레이션 표를 V1~V22 로 현행화하고 V20(member HMAC 백필 Java 마이그레이션)을 명시. DB 표기를 실제 이미지(MySQL 8.4)에 맞춤. v1.6 (M13 쿠폰 구현 완료 반영): §4.15 `coupon`·§4.16 `member_coupon` 을 **계획 → 구현 완료**(V14/V16)로 갱신, `orders.discount_amount`(V15)·`tracking_number`(V17, 배송 운송장 비정규화) 반영. 선착순 발급 동시성은 원자적 조건부 UPDATE 로 구현([decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md)). §7 마이그레이션 표를 실제 적용분(V1~V17)으로 현행화. 백엔드 소스 경로를 `backend/` 이동에 맞춰 정정. v1.5 (확장: 쿠폰 시스템 — V14/V15 계획 반영): `coupon`·`member_coupon` 2개 테이블 신설(§4.15/§4.16) — §8 v2 후보였던 `coupon`/`coupon_issue` 를 정식 도메인으로 승격. `orders` 에 `discount_amount` 컬럼 추가(주문 총액 대비 할인액, payable = total_amount − discount_amount 파생) — `applied_member_coupon_id` 대신 `member_coupon.order_id` 역참조로 순환 FK 회피. 선착순 발급 동시성은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md) ADR(DB 단계적: 베이스라인→비관적 락→원자적 조건부 UPDATE)에 따른다. 본 변경은 **계획 단계** — 구현/마이그레이션 적용 시점에 상태 갱신. v1.4 (W7-6 / V12 반영): `orders` 에 배송지 스냅샷 6개 컬럼 추가(주문 생성 요청 `shipping` 블록 → 결제 완료 후 `shipping` 행으로 복사). `shipping` 의 `idx_shipping_status` 를 (status, created_at) 복합으로 자동 진행 스케줄러와 함께 선반영(원래 [W10] 표기). v1.3 (W5 완료 반영): 카탈로그 4개 테이블(genre/label/artist/album)의 실제 마이그레이션(V4/V5/V6) 반영 — 컬럼 길이·NULL·CHECK·FK·기본 인덱스 명시. §4.6 album 비즈니스 룰의 `AlbumStatus.canTransitionTo()` 는 W5-3 범위 미포함이며 W6+ 도입 예정으로 표기 정정. v1.2 (W4 완료 반영): refresh_token 실제 스키마(`issued_at` 추가, `revoked` 컬럼 제거 — `revoked_at NULL` 단일 컬럼으로 표현), `idx_refresh_member_revoked` 복합 인덱스 명시, Flyway 마이그레이션 파일 계획을 실제 분리 적용 방식(V1 placeholder + V2 member + V3 refresh_token)으로 정정. v1.1 (Issue #2): W5/W10 인덱스 단계 표기 확정, [DB]/[APP] 비즈니스 룰 위치 명시, orders 상태 추적 컬럼 추가. |
+| 최종 수정일 | 2026-06-30 |
+| 변경 내용 | v2.0 — 분산 전환·실 PG(V31~V34): `shedlock` 인프라 테이블(§4.20, V34/#365) 신설, V31 `payment.callback_token`(#297/#304)·V32 `idempotency_record.owner_token`(#317)·V33 `orders.delivered_at`(#326) 반영, §7 마이그레이션 표 V34 현행화. v1.9 — 아웃박스 재시도 상한/DLQ(V29~V30, #268): `outbox_event.attempt_count` + 릴레이 조회 제한·인덱스 재구성. v1.8 — 클레임/아웃박스(V23~V28): `claim`·`claim_item`·`outbox_event` 테이블, `ClaimType`/`ClaimStatus` enum, 부분 환불 컬럼. v1.7 — 회원 PII 익명화 해시(V18~V19)·검색 인덱스(FULLTEXT, V21)·주문/리뷰 목록 인덱스(V22). v1.6~v1.5 — 쿠폰 시스템(`coupon`·`member_coupon`, V14~V16)·주문 할인/운송장 컬럼. v1.4~v1.1 — 배송지 스냅샷, 카탈로그 4개 테이블, refresh_token 스키마, 초기 인덱스 단계 확정. |
 | DB | MySQL 8.4 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | ARCHITECTURE.md |
@@ -30,8 +30,8 @@
 ### 인덱스 표기 규칙
 - PK 외 인덱스는 `idx_{table}_{column[_column...]}` 형식
 - 유니크 제약: `uk_{table}_{column[_column...]}`
-- **[W5]** — 초기 마이그레이션(W4~W7)에서 적용되는 필수 인덱스
-- **[W10]** — W9 슬로우 쿼리 측정 후 W10 시연 시 추가하는 성능 인덱스
+- **기본 인덱스** — 초기 마이그레이션에서 적용되는 필수 인덱스(PK·FK·UK)
+- **성능 인덱스** — 슬로우 쿼리 측정 후 추가한 검색·정렬·목록 인덱스(§5.2)
 
 ### 비즈니스 룰 위치 표기
 - **[DB]** — DB 제약(CHECK, UNIQUE, FK ON DELETE RESTRICT)으로 강제
@@ -40,9 +40,9 @@
 
 ---
 
-## 2. 테이블 목록 (전체 18개)
+## 2. 테이블 목록 (도메인 18개 + 인프라 1개)
 
-> 13개(W1~W7) + 쿠폰 확장 2개(`coupon`, `member_coupon`, M13 — V14) + 클레임/아웃박스 확장 3개(`claim`, `claim_item`, `outbox_event`, M16 — V23~V27). 확장 5개 모두 **구현 완료**.
+> 핵심 도메인 13개 + 쿠폰 확장 2개(`coupon`, `member_coupon`, V14) + 클레임/아웃박스 확장 3개(`claim`, `claim_item`, `outbox_event`, V23~V27). 도메인 외 인프라 테이블 1개(`shedlock`, V34)는 ShedLock 라이브러리가 관리한다.
 
 | 도메인 | 테이블 | 용도 |
 |---|---|---|
@@ -65,6 +65,7 @@
 | 클레임 | `claim` | 취소(CANCEL)/반품(RETURN) 통합 클레임 (M16) |
 | 클레임 | `claim_item` | 클레임 항목 (취소·반품 대상 주문 항목 + 수량) |
 | 이벤트 | `outbox_event` | 트랜잭셔널 아웃박스 (결제 후속 처리 at-least-once 발행) |
+| 인프라 | `shedlock` | ShedLock 분산락 (다중 인스턴스 배치 중복 실행 차단, M16 분산 전환 — V34) |
 
 ---
 
@@ -129,14 +130,14 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_member_email` UNIQUE (email)
 - `idx_member_role` (role) — ADMIN 필터링용
 
 [V18]:
 - `uk_member_email_hash` UNIQUE (email_hash) — 탈퇴 익명화 후 재가입 차단(평문 email 은 마스킹되지만 해시는 점유 유지)
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -165,11 +166,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_refresh_token_hash` UNIQUE (token_hash)
 - `idx_refresh_member_revoked` (member_id, revoked_at) — 회원 활성 토큰 조회·일괄 폐기용 복합 인덱스
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -200,10 +201,10 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - (PK만 — 동명이인 존재 가능, UNIQUE 미적용)
 
-[W10] (슬로우 쿼리 측정 후 추가):
+[슬로우 쿼리 측정 후 추가]:
 - `idx_artist_name` (name) — 아티스트 이름 검색용
 
 **비즈니스 룰**
@@ -225,10 +226,10 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_genre_name` UNIQUE (name)
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -249,10 +250,10 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_label_name` UNIQUE (name)
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -264,7 +265,7 @@ erDiagram
 
 ### 4.6 `album` — LP 상품 ★
 
-가장 핵심 테이블. 검색·시연이 모두 이 테이블 기준으로 이루어진다.
+가장 핵심 테이블. 검색이 이 테이블 기준으로 이루어진다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -279,7 +280,7 @@ erDiagram
 | price | BIGINT | NOT NULL, CHECK (price >= 0) | 원 단위 |
 | stock | INT | NOT NULL, DEFAULT 0, CHECK (stock >= 0) | |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'SELLING' | enum: SELLING, SOLD_OUT, HIDDEN |
-| is_limited | BOOLEAN | NOT NULL, DEFAULT FALSE | 한정반 여부 — 시연 시나리오 핵심 플래그 |
+| is_limited | BOOLEAN | NOT NULL, DEFAULT FALSE | 한정반 여부 |
 | cover_image_url | VARCHAR(500) | NULL | |
 | description | TEXT | NULL | |
 | created_at | DATETIME(6) | NOT NULL | |
@@ -287,12 +288,12 @@ erDiagram
 
 **인덱스**
 
-[W5] (FK 기본 인덱스만):
+기본 인덱스 (FK 만):
 - `idx_album_artist` (artist_id)
 - `idx_album_genre` (genre_id)
 - `idx_album_label` (label_id)
 
-[W10] **도입 완료 (V21, #204)** — 슬로우 쿼리 측정(#196) 후 추가:
+**도입 완료 (V21, #204)** — 슬로우 쿼리 측정(#196) 후 추가:
 - `ft_album_keyword` FULLTEXT (title, artist_name) WITH PARSER ngram — 키워드 검색. `idx_album_title`(단일 B-Tree) 대신 FULLTEXT 채택: 선행 와일드카드(`%k%`) 부분일치는 B-Tree 로 해소 불가하고, title·artist.name 의 cross-table OR 가 인덱스를 무력화하므로 artist 이름을 `artist_name` 으로 비정규화해 단일 테이블 FULLTEXT 로 구동(`type=ALL → fulltext`).
 - `idx_album_search` (genre_id, status, price) — 카테고리 + 상태 + 가격 필터
 - `idx_album_status_created` (status, created_at) — 기본 목록(SELLING + createdAt 정렬) 조기 종료
@@ -307,10 +308,10 @@ erDiagram
 |---|---|---|
 | stock ≥ 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(0) |
 | price ≥ 0 | [DB+APP] | CHECK CONSTRAINT (MySQL 8) + @Min(0) |
-| status 전이 (SELLING→SOLD_OUT 등) | [APP] | W5-3 범위 미포함 — `AlbumStatus.canTransitionTo()` 는 W6+ 주문/재고 흐름 도입 시 추가 예정. 현재는 단순 set 만 허용 |
+| status 전이 (SELLING→SOLD_OUT 등) | [APP] | `AlbumStatus.canTransitionTo()` 는 주문/재고 흐름 도입과 함께 추가. 초기에는 단순 set 만 허용 |
 | FK 참조 무결성 (artist, genre, label) | [DB] | ON DELETE RESTRICT |
 | Public 검색에서 status=HIDDEN 거부 | [APP] | `AlbumQueryController.rejectHiddenStatusFromPublic()` — 단건 GET 은 status 무관 허용 |
-| 정렬 키 화이트리스트 | [APP] | `id, createdAt, price, releaseYear` 만 허용 — 인덱스 없는 컬럼 정렬로 인한 부하 차단. `salesCount` 는 W7 주문 도메인 도입 후 활성화 |
+| 정렬 키 화이트리스트 | [APP] | `id, createdAt, price, releaseYear` 만 허용 — 인덱스 없는 컬럼 정렬로 인한 부하 차단. `salesCount` 는 주문 도메인 도입 후 활성화 |
 
 ---
 
@@ -325,10 +326,10 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_cart_member` UNIQUE (member_id)
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -351,11 +352,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_cart_item_cart_album` UNIQUE (cart_id, album_id) — 동일 상품 중복 방지
 - `idx_cart_item_album` (album_id) — FK 기본
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -401,11 +402,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_orders_number` UNIQUE (order_number)
 - `idx_orders_guest_email` (guest_email) — 게스트 주문 조회
 
-[W10] **도입 완료 (V22, #225)** — 슬로우 쿼리 측정 후 추가:
+**도입 완료 (V22, #225)** — 슬로우 쿼리 측정 후 추가:
 - `idx_orders_member_created` (member_id, created_at) — 회원 주문 목록(member_id ref + created_at 정렬 커버, filesort 제거)
 - `idx_orders_status_created` (status, created_at) — 관리자 상태별 조회(status 인덱스 부재로 인한 풀스캔 + filesort 제거)
 
@@ -443,11 +444,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `idx_order_item_order` (order_id) — 주문 상세 조회용
 - `idx_order_item_album` (album_id) — FK 기본
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -481,11 +482,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_payment_order` UNIQUE (order_id)
 - ~~`idx_payment_pg_tx` (pg_transaction_id)~~ → **`uk_payment_pg_tx` UNIQUE (pg_transaction_id)** 로 승격 (V28, #252) — PG 거래 1:1 결제 불변식을 DB 레벨에서 강제
 
-[W7-4] (폴링 스케줄러 도입과 함께 추가, V11):
+성능 인덱스 (폴링 스케줄러 도입과 함께 추가, V11):
 - `idx_payment_status_created` (status, created_at) — 폴링 스케줄러용 (PENDING 결제 `created_at < cutoff` 조회)
 
 **비즈니스 룰**
@@ -517,11 +518,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_idempotency_key` UNIQUE (idempotency_key)
 - `idx_idempotency_created` (created_at) — 만료된 레코드 정리용 (TTL 스케줄러)
 
-[W10] 추가 후보 없음.
+추가 인덱스 없음
 
 **비즈니스 룰**
 
@@ -559,11 +560,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_shipping_order` UNIQUE (order_id)
 - `uk_shipping_tracking` UNIQUE (tracking_number)
 
-[W12] (자동 진행 스케줄러와 함께 선반영 — 원래 [W10] 표기였으나 V11 `idx_payment_status_created` 와 같은 결정):
+성능 인덱스 (자동 진행 스케줄러와 함께 선반영 — V11 `idx_payment_status_created` 와 같은 결정):
 - `idx_shipping_status` (status, created_at) — PREPARING→SHIPPED 스캔(created_at 필터)을 받치고, SHIPPED→DELIVERED 스캔은 status 프리픽스로 좁힌다
 
 **비즈니스 룰**
@@ -593,11 +594,11 @@ erDiagram
 
 **인덱스**
 
-[W5]:
+기본 인덱스:
 - `uk_review_order_album` UNIQUE (order_id, album_id) — 1주문-1상품-1리뷰
 - `idx_review_member` (member_id) — 내 리뷰 목록용
 
-[W10] **도입 완료 (V22, #225)** — 슬로우 쿼리 측정 후 추가:
+**도입 완료 (V22, #225)** — 슬로우 쿼리 측정 후 추가:
 - `idx_review_album_created` (album_id, created_at) — 상품별 리뷰 조회(album_id ref + created_at 정렬 커버, filesort 제거)
 
 **비즈니스 룰**
@@ -614,7 +615,7 @@ erDiagram
 
 ### 4.15 `coupon` — 쿠폰 정책/캠페인 ★ (확장 M13, V14)
 
-할인 규칙 + 발급 제약을 정의하는 **정책** 엔티티. 회원이 실제 보유하는 인스턴스는 `member_coupon`(§4.16). 선착순 동시성 시연의 핵심 테이블 — `issued_count` 가 핫 카운터다.
+할인 규칙 + 발급 제약을 정의하는 **정책** 엔티티. 회원이 실제 보유하는 인스턴스는 `member_coupon`(§4.16). 선착순 동시성의 핵심 테이블 — `issued_count` 가 핫 카운터다.
 
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
@@ -654,7 +655,7 @@ erDiagram
 | 발급 가능 = ACTIVE & now ∈ [valid_from, valid_until] & (무제한 OR issued_count<total_quantity) | [APP] | CouponIssueService |
 
 **비고**
-- **선착순 동시성**: 발급은 `UPDATE coupon SET issued_count = issued_count + 1 WHERE id = ? AND (total_quantity IS NULL OR issued_count < total_quantity)` 원자적 조건부 UPDATE(affected rows=1 → 성공)로 처리한다. 베이스라인(락 없음)→비관적 락→원자적 UPDATE 단계적 시연은 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md). `재고`(album.stock)와 동일한 오버셀 베이스라인 서사의 쿠폰판.
+- **선착순 동시성**: 발급은 `UPDATE coupon SET issued_count = issued_count + 1 WHERE id = ? AND (total_quantity IS NULL OR issued_count < total_quantity)` 원자적 조건부 UPDATE(affected rows=1 → 성공)로 처리한다. 동시성 제어 비교(락 없음·비관적 락·원자적 UPDATE)는 [decisions/coupon-concurrency.md](./decisions/coupon-concurrency.md). 재고(album.stock) 오버셀 제어와 같은 구조다.
 - `total_quantity` NULL = 무제한: 관리자/이벤트 직접지급 전용 쿠폰. 선착순 쿠폰은 양수 한정수량 지정.
 
 ---
@@ -807,9 +808,32 @@ erDiagram
 
 ---
 
+### 4.20 `shedlock` — ShedLock 분산락 (인프라, 분산 전환 V34)
+
+다중 인스턴스에서 `@Scheduled` 배치 10종이 노드마다 동시에 실행되는 것을 막는다. 각 배치는 `@SchedulerLock(name)` 으로 이 테이블에 행 락을 잡아 노드 간 1회만 실행된다(#365). 새 인프라 없이 기존 MySQL 에 둔다. **스키마는 JdbcTemplateLockProvider 가 요구하는 고정 형태**(테이블/컬럼명 변경 불가)이며 애플리케이션 도메인과 무관하다. `.usingDbTime()` 을 쓰므로 시각 컬럼은 DB 서버 클록 기준이라 노드 간 시계 오차에 영향받지 않는다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|---|---|---|---|
+| name | VARCHAR(64) | PK | 락 이름 = `@SchedulerLock(name)` (배치별 고유) |
+| lock_until | TIMESTAMP(3) | NOT NULL | 락 만료 시각(DB 클록). 이 시각까지 다른 노드 획득 차단 |
+| locked_at | TIMESTAMP(3) | NOT NULL, DEFAULT CURRENT_TIMESTAMP(3) | 락 획득 시각 |
+| locked_by | VARCHAR(255) | NOT NULL | 락 보유 노드 식별자 |
+
+**비즈니스 룰**
+
+| 규칙 | 위치 | 비고 |
+|---|---|---|
+| 배치 노드 간 1회 실행 | [APP] | `@SchedulerLock(name, lockAtMostFor, lockAtLeastFor)` — `SchedulingConfig` `@EnableSchedulerLock` |
+| 락 자동 해제 | [DB+APP] | 배치 종료 시 또는 `lockAtMostFor`(노드 다운 대비 상한) 경과 시 |
+| 고빈도 틱 겹침 차단 | [APP] | `lockAtLeastFor` 를 인터벌 수준으로 — 짧은 배치가 즉시 락 풀어 다른 노드 재실행하는 것 방지 |
+
+> 락 저장소를 Redis 가 아닌 MySQL 에 둔 이유·실행 설계는 [decisions/horizontal-scaling.md](./decisions/horizontal-scaling.md), 개선 노트는 `docs/improvements/scheduler-shedlock.md`(로컬).
+
+---
+
 ## 5. 인덱스 전략 요약
 
-### 5.1 W5 시점 (W10 시연을 위한 의도적 최소 인덱스 — 현재는 §5.2 로 해소됨)
+### 5.1 초기 인덱스 (성능 인덱스 도입 전 — 현재는 §5.2 로 해소됨)
 
 | 테이블 | 인덱스 |
 |---|---|
@@ -827,9 +851,9 @@ erDiagram
 | `shipping` | `uk_shipping_order`, `uk_shipping_tracking`, `idx_shipping_status` (status, created_at) (V12) |
 | `review` | `uk_review_order_album`, `idx_review_member` |
 
-검색·정렬·필터 인덱스를 **의도적으로 누락**시켰고 → W9 측정에서 슬로우 쿼리로 재현됐다 → **§5.2 의 V21/V22 인덱스로 해소(박제 해제)**.
+초기 스키마에는 검색·정렬·필터 인덱스가 없어 풀스캔이 발생했고, 측정으로 슬로우 쿼리를 확인한 뒤 §5.2 의 V21/V22 인덱스로 해소했다.
 
-### 5.2 W10 시점 추가 인덱스 (시연 산출물 — 검색 V21/#204 + 주문·리뷰 목록 V22/#225 적용 완료)
+### 5.2 성능 인덱스 (검색 V21/#204 + 주문·리뷰 목록 V22/#225)
 
 키워드 풀스캔(`type=ALL`)은 단일 B-Tree 로 해소 불가(선행 와일드카드 + cross-table OR)라 artist 이름을 비정규화한 단일 테이블 FULLTEXT 로 전환했다.
 
@@ -849,7 +873,7 @@ ALTER TABLE album ADD INDEX idx_album_limited (is_limited, status);
 ALTER TABLE orders ADD INDEX idx_orders_member_created (member_id, created_at), ALGORITHM=INPLACE, LOCK=NONE;
 ALTER TABLE orders ADD INDEX idx_orders_status_created (status, created_at),     ALGORITHM=INPLACE, LOCK=NONE;
 
--- (idx_payment_status_created 는 W7-4 / V11, idx_shipping_status 는 W7-6 / V12 에서 이미 추가)
+-- (idx_payment_status_created 는 V11, idx_shipping_status 는 V12 에서 이미 추가)
 
 -- (V22, #225) 상품별 리뷰 목록
 ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at), ALGORITHM=INPLACE, LOCK=NONE;
@@ -883,23 +907,23 @@ ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at), AL
 
 ## 7. Flyway 마이그레이션 파일
 
-실제 적용 파일은 `backend/src/main/resources/db/migration/`(SQL)과 `backend/src/main/java/com/groove/member/migration/`(Java). 현재 V1~V30 적용 완료.
+실제 적용 파일은 `backend/src/main/resources/db/migration/`(SQL)과 `backend/src/main/java/com/groove/member/migration/`(Java). 현재 V1~V34 적용 완료.
 
 | 버전 | 파일명 | 내용 | 적용 시점 | 상태 |
 |---|---|---|---|---|
-| V1 | `V1__init.sql` | 스키마 초기화 placeholder (`SELECT 1`) | W3 | 적용 완료 |
-| V2 | `V2__member.sql` | member | W4 | 적용 완료 |
-| V3 | `V3__refresh_token.sql` | refresh_token (self-FK 포함) | W4 | 적용 완료 |
-| V4 | `V4__init_catalog.sql` | genre, label | W5-1 | 적용 완료 |
-| V5 | `V5__init_artist.sql` | artist (UNIQUE 미적용) | W5-2 | 적용 완료 |
-| V6 | `V6__init_album.sql` | album | W5-3 | 적용 완료 |
-| V7 | `V7__init_cart.sql` | cart, cart_item | W6 | 적용 완료 |
-| V8 | `V8__init_order.sql` | orders, order_item | W6 | 적용 완료 |
-| V9 | `V9__idempotency_record.sql` | idempotency_record | W7 | 적용 완료 |
-| V10 | `V10__init_payment.sql` | payment | W7 | 적용 완료 |
-| V11 | `V11__payment_status_idx.sql` | payment 상태 인덱스 | W7 | 적용 완료 |
-| V12 | `V12__init_shipping.sql` | shipping (+ orders 배송지 스냅샷 6컬럼) | W7 | 적용 완료 |
-| V13 | `V13__init_review.sql` | review | W7 | 적용 완료 |
+| V1 | `V1__init.sql` | 스키마 초기화 placeholder (`SELECT 1`) | 초기 | 적용 완료 |
+| V2 | `V2__member.sql` | member | 회원/인증 | 적용 완료 |
+| V3 | `V3__refresh_token.sql` | refresh_token (self-FK 포함) | 회원/인증 | 적용 완료 |
+| V4 | `V4__init_catalog.sql` | genre, label | 카탈로그 | 적용 완료 |
+| V5 | `V5__init_artist.sql` | artist (UNIQUE 미적용) | 카탈로그 | 적용 완료 |
+| V6 | `V6__init_album.sql` | album | 카탈로그 | 적용 완료 |
+| V7 | `V7__init_cart.sql` | cart, cart_item | 주문 흐름 | 적용 완료 |
+| V8 | `V8__init_order.sql` | orders, order_item | 주문 흐름 | 적용 완료 |
+| V9 | `V9__idempotency_record.sql` | idempotency_record | 결제 흐름 | 적용 완료 |
+| V10 | `V10__init_payment.sql` | payment | 결제 흐름 | 적용 완료 |
+| V11 | `V11__payment_status_idx.sql` | payment 상태 인덱스 | 결제 흐름 | 적용 완료 |
+| V12 | `V12__init_shipping.sql` | shipping (+ orders 배송지 스냅샷 6컬럼) | 결제 흐름 | 적용 완료 |
+| V13 | `V13__init_review.sql` | review | 결제 흐름 | 적용 완료 |
 | V14 | `V14__init_coupon.sql` | coupon, member_coupon (확장) | 확장 M13 | 적용 완료 |
 | V15 | `V15__order_coupon_columns.sql` | orders `discount_amount` ALTER + CHECK | 확장 M13 | 적용 완료 |
 | V16 | `V16__member_coupon_expiration_index.sql` | member_coupon 만료 배치·coupon 정렬 인덱스 | 확장 M13 | 적용 완료 |
@@ -907,8 +931,8 @@ ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at), AL
 | V18 | `V18__member_email_hash_and_pii_anonymization.sql` | member `email_hash`(CHAR(64)) + `uk_member_email_hash`, `phone` NULL 허용, orders/shipping `anonymized_at` (#170) | 보안/익명화 | 적용 완료 |
 | V19 | `V19__widen_email_hash_column.sql` | member `email_hash` 폭 확장 CHAR(64) → VARCHAR(72) — HMAC 키버전 prefix 수용 (#186) | 보안/익명화 | 적용 완료 |
 | V20 | `V20__email_hash_hmac_backfill.java` (Java 마이그레이션) | 활성 회원 `email_hash` 를 HMAC 으로 재계산·백필 — MySQL 내장 HMAC 부재로 `EmailHasher` DI 사용 (#186) | 보안/익명화 | 적용 완료 |
-| V21 | `V21__add_search_indexes.sql` | album `artist_name` 비정규화 + `ft_album_keyword` FULLTEXT(ngram) + 필터/정렬 복합 인덱스 4종 (#204) | W10 | 적용 완료 |
-| V22 | `V22__add_order_review_list_indexes.sql` | orders/review 목록 복합 인덱스 3종 — V8/V13 의 [W10] 누락분 보완 (#225) | W10 | 적용 완료 |
+| V21 | `V21__add_search_indexes.sql` | album `artist_name` 비정규화 + `ft_album_keyword` FULLTEXT(ngram) + 필터/정렬 복합 인덱스 4종 (#204) | 성능 | 적용 완료 |
+| V22 | `V22__add_order_review_list_indexes.sql` | orders/review 목록 복합 인덱스 3종 — V8/V13 의 누락분 보완 (#225) | 성능 | 적용 완료 |
 | V23 | `V23__init_claim.sql` | claim, claim_item (반품 역물류 상태머신, #239) | 확장 M16 | 적용 완료 |
 | V24 | `V24__claim_refund_support.sql` | payment `refunded_amount` + orders `returned_at` (부분 환불 지원, #239) | 확장 M16 | 적용 완료 |
 | V25 | `V25__keyset_covering_indexes.sql` | album `(status,price)`·`(status,release_year)` + orders `(member_id,status,created_at)` keyset 커버링 인덱스 (#244) | M16 | 적용 완료 |
@@ -917,13 +941,17 @@ ALTER TABLE review ADD INDEX idx_review_album_created (album_id, created_at), AL
 | V28 | `V28__payment_pg_tx_unique.sql` | payment `idx_payment_pg_tx` → `uk_payment_pg_tx` UNIQUE 승격 (#252) | M16 | 적용 완료 |
 | V29 | `V29__outbox_attempt_count.sql` | outbox_event `attempt_count` 추가 — 릴레이 재시도 상한·DLQ 격리(조회를 `published_at IS NULL AND attempt_count < N` 으로 제한, ALGORITHM=INSTANT) (#268) | M16 | 적용 완료 |
 | V30 | `V30__outbox_relay_index.sql` | `idx_outbox_unpublished` → `(published_at, attempt_count, id)` 재구성 — DLQ 격리 행을 인덱스 레벨에서 제외 (#268) | M16 | 적용 완료 |
+| V31 | `V31__payment_callback_token.sql` | payment `callback_token`(VARCHAR(64) NULL) — 토스 successUrl/failUrl 토큰 바인딩으로 교차 주문 콜백 조작 차단 (#297/#304) | M17 | 적용 완료 |
+| V32 | `V32__idempotency_owner_token.sql` | idempotency_record `owner_token`(VARCHAR(36) NULL) — 마커 회수 race fencing(원소유자만 finalize/삭제) (#317) | M17 | 적용 완료 |
+| V33 | `V33__order_delivered_at.sql` | orders `delivered_at` — 반품 기한 anchor 의 결정적 기준(배송 행 없는 강제 전이 경로 보강) (#326) | M17 | 적용 완료 |
+| V34 | `V34__init_shedlock.sql` | shedlock 테이블 — ShedLock 분산락(다중 인스턴스 배치 중복 실행 차단, JdbcTemplateLockProvider 기본 스키마) (#365) | 분산 전환 | 적용 완료 |
 
-> **W10 검색·목록 인덱스**: §5의 카탈로그 검색·정렬 인덱스(`idx_album_*`·`ft_album_keyword`)는 슬로우 쿼리 Before/After 시연(W10)을 위해 V6 시점에 의도적으로 누락해 두었다가 V21(#204)에서 도입했고, 주문/리뷰 목록 복합 인덱스는 V8/V13 헤더가 약속했으나 누락돼 있던 것을 V22(#225)에서 보완했다. 한 번 적용된 마이그레이션은 수정 금지 원칙을 유지한다(V8/V13 본문은 손대지 않고 V22 와 본 표에만 기록).
+> **검색·목록 인덱스**: §5의 카탈로그 검색·정렬 인덱스(`idx_album_*`·`ft_album_keyword`)는 초기 스키마(V6)에는 없었고, 슬로우 쿼리를 측정한 뒤 V21(#204)에서 도입했다. 주문/리뷰 목록 복합 인덱스는 V8/V13 헤더가 약속했으나 누락돼 있던 것을 V22(#225)에서 보완했다. 한 번 적용된 마이그레이션은 수정 금지 원칙을 유지한다(V8/V13 본문은 손대지 않고 V22 와 본 표에만 기록).
 
-> **V4 범위**: 당초 1회로 묶었던 catalog 마이그레이션을 W5-1(genre/label, V4) → W5-2(artist, V5) → W5-3(album, V6) 으로 분리 도입(#31). 모두 적용 완료.
+> **V4 범위**: 당초 1회로 묶었던 catalog 마이그레이션을 V4(genre/label) → V5(artist) → V6(album) 으로 분리 도입(#31). 모두 적용 완료.
 
 마이그레이션 원칙:
-- 운영 DB가 없는 단계여도 Flyway로 관리. 시연 때 "초기 스키마부터 인덱스 추가까지의 진화 과정"이 그대로 남음
+- 운영 DB가 없는 단계여도 Flyway로 관리. 초기 스키마부터 인덱스 추가까지 변경 이력이 그대로 남는다
 - 한 번 적용된 마이그레이션은 수정 금지 (필요 시 새 버전 추가)
 
 ---
@@ -940,7 +968,7 @@ ERD에 미리 자리만 잡아두는 후보:
 | `point_history` | 적립금 이력 | v2 |
 | `wish_list` | 위시리스트 | v2 |
 
-v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재. 단 `coupon`/`member_coupon` 은 W7 완료 후 **확장 도메인으로 승격**되어 §4.15/§4.16 에 정식 스키마로 편입되었다(테이블명은 `coupon_issue` → `member_coupon` 으로 정정).
+v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재했다. 이 중 `coupon`/`member_coupon` 은 이후 **확장 도메인으로 승격**되어 §4.15/§4.16 에 정식 스키마로 편입되었다(테이블명은 `coupon_issue` → `member_coupon` 으로 정정).
 
 ---
 
@@ -965,16 +993,16 @@ v1 단계에서는 만들지 않고, ERD 문서에 후보로만 기재. 단 `cou
 
 ---
 
-## 10. 시드 데이터 계획 (W8)
+## 10. 시드 데이터 계획
 
 | 테이블 | 건수 | 비고 |
 |---|---|---|
 | genre | 10~15개 | Rock, Jazz, Classical, K-Pop, Hip-Hop, Electronic, Indie, R&B, Folk, Country, Soul, Reggae, World, Metal, Pop |
 | label | 50~100개 | 가상 레이블 또는 실제 레이블명 |
 | artist | 1,000~3,000명 | |
-| album | 50,000~100,000건 | 검색 시연 임팩트 확보 |
+| album | 50,000~100,000건 | 검색 부하 테스트용 규모 |
 | 한정반 | 30~50건 | `is_limited=true` |
-| 단일 재고(stock=1) | 5~10건 | 보너스 시연용 |
+| 단일 재고(stock=1) | 5~10건 | 엣지 케이스 검증용 |
 | member (테스트) | 50~100명 | 부하 테스트 시 다중 사용자 시뮬레이션 |
 | ADMIN 계정 | 1개 | seed에 포함 |
 
