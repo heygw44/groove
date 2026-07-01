@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 |---|---|
-| 버전 | 2.0 |
+| 버전 | 2.1 |
 | 최초 작성일 | 2026-05-05 |
-| 최종 수정일 | 2026-06-30 |
-| 변경 내용 | v2.0 — 분산 전환·실 PG(V31~V34): `shedlock` 인프라 테이블(§4.20, V34/#365) 신설, V31 `payment.callback_token`(#297/#304)·V32 `idempotency_record.owner_token`(#317)·V33 `orders.delivered_at`(#326) 반영, §7 마이그레이션 표 V34 현행화. v1.9 — 아웃박스 재시도 상한/DLQ(V29~V30, #268): `outbox_event.attempt_count` + 릴레이 조회 제한·인덱스 재구성. v1.8 — 클레임/아웃박스(V23~V28): `claim`·`claim_item`·`outbox_event` 테이블, `ClaimType`/`ClaimStatus` enum, 부분 환불 컬럼. v1.7 — 회원 PII 익명화 해시(V18~V19)·검색 인덱스(FULLTEXT, V21)·주문/리뷰 목록 인덱스(V22). v1.6~v1.5 — 쿠폰 시스템(`coupon`·`member_coupon`, V14~V16)·주문 할인/운송장 컬럼. v1.4~v1.1 — 배송지 스냅샷, 카탈로그 4개 테이블, refresh_token 스키마, 초기 인덱스 단계 확정. |
+| 최종 수정일 | 2026-07-01 |
+| 변경 내용 | v2.1 — §4.12 `idempotency_record` 현행화: 옛 서술(`endpoint`·`response_status_code`·status PROCESSING/FAILED·VARCHAR(100))을 실제 스키마(`request_fingerprint`·`response_type`·`expires_at`·`owner_token`·status IN_PROGRESS/COMPLETED·VARCHAR(255), `idx_idempotency_expires`)로 교정. v2.0 — 분산 전환·실 PG(V31~V34): `shedlock` 인프라 테이블(§4.20, V34/#365) 신설, V31 `payment.callback_token`(#297/#304)·V32 `idempotency_record.owner_token`(#317)·V33 `orders.delivered_at`(#326) 반영, §7 마이그레이션 표 V34 현행화. v1.9 — 아웃박스 재시도 상한/DLQ(V29~V30, #268): `outbox_event.attempt_count` + 릴레이 조회 제한·인덱스 재구성. v1.8 — 클레임/아웃박스(V23~V28): `claim`·`claim_item`·`outbox_event` 테이블, `ClaimType`/`ClaimStatus` enum, 부분 환불 컬럼. v1.7 — 회원 PII 익명화 해시(V18~V19)·검색 인덱스(FULLTEXT, V21)·주문/리뷰 목록 인덱스(V22). v1.6~v1.5 — 쿠폰 시스템(`coupon`·`member_coupon`, V14~V16)·주문 할인/운송장 컬럼. v1.4~v1.1 — 배송지 스냅샷, 카탈로그 4개 테이블, refresh_token 스키마, 초기 인덱스 단계 확정. |
 | DB | MySQL 8.4 (InnoDB, utf8mb4) |
 | 마이그레이션 도구 | Flyway |
 | 관련 문서 | ARCHITECTURE.md |
@@ -505,14 +505,18 @@ erDiagram
 
 ### 4.12 `idempotency_record` — 멱등성 키 저장
 
+한 행이 처리 소유권 마커(IN_PROGRESS)와 결과 캐시(COMPLETED + response_body)를 겸한다.
+
 | 컬럼 | 타입 | 제약 | 설명 |
 |---|---|---|---|
 | id | BIGINT | PK, AUTO_INCREMENT | |
-| idempotency_key | VARCHAR(100) | NOT NULL, UNIQUE | 클라이언트 발급 키 |
-| endpoint | VARCHAR(200) | NOT NULL | 적용된 API 경로 |
-| status | VARCHAR(20) | NOT NULL | enum: PROCESSING, COMPLETED, FAILED |
-| response_status_code | INT | NULL | 응답 HTTP 상태 |
+| idempotency_key | VARCHAR(255) | NOT NULL, UNIQUE | 클라이언트 발급 키 |
+| status | VARCHAR(20) | NOT NULL | enum: IN_PROGRESS, COMPLETED (실패는 마커 행 삭제) |
+| request_fingerprint | VARCHAR(255) | NULL | 요청 페이로드 지문(권장 SHA-256 hex) — replay 시 동일 요청 검증 |
+| response_type | VARCHAR(255) | NULL | 캐시 응답 타입 메타(역직렬화·디버깅용) |
 | response_body | TEXT | NULL | 응답 바디 스냅샷 (JSON 직렬화) |
+| owner_token | VARCHAR(36) | NULL | 마커 소유권 토큰 — 회수 race fencing(원소유자만 finalize/삭제, V32/#317) |
+| expires_at | DATETIME(6) | NOT NULL | 만료 시각(IN_PROGRESS=처리 타임아웃, COMPLETED=결과 캐시 TTL) |
 | created_at | DATETIME(6) | NOT NULL | |
 | updated_at | DATETIME(6) | NOT NULL | |
 
@@ -520,7 +524,7 @@ erDiagram
 
 기본 인덱스:
 - `uk_idempotency_key` UNIQUE (idempotency_key)
-- `idx_idempotency_created` (created_at) — 만료된 레코드 정리용 (TTL 스케줄러)
+- `idx_idempotency_expires` (expires_at) — 만료된 레코드 정리용 (TTL 스케줄러)
 
 추가 인덱스 없음
 
@@ -528,13 +532,14 @@ erDiagram
 
 | 규칙 | 위치 | 비고 |
 |---|---|---|
-| 멱등성 키 중복 불가 | [DB] | uk_idempotency_key UNIQUE |
-| TTL 24시간 만료 처리 | [APP] | 스케줄러 cron으로 expired 레코드 삭제 |
-| 동시 요청 처리 | [DB+APP] | INSERT IGNORE + 조회 패턴 또는 SELECT FOR UPDATE |
+| 멱등성 키 중복 불가 | [DB] | uk_idempotency_key UNIQUE — 마커 INSERT 경쟁의 1차 방어선 |
+| IN_PROGRESS → COMPLETED 전이 | [APP] | owner_token 소유 스레드만 finalize (IdempotencyService) |
+| TTL 만료 레코드 삭제 | [APP] | IdempotencyRecordCleanupTask (@Scheduled) |
+| request_fingerprint 일치 검증 | [APP] | replay 시 동일 요청 여부 확인 |
 
 **비고**
-- TTL: 24시간 (스케줄러로 정리). v1은 cron 기반.
-- 동시 요청에 안전하게 처리하기 위해 INSERT IGNORE + 조회 패턴 또는 SELECT FOR UPDATE 사용.
+- 실패 시 마커 행은 삭제된다(재시도 허용) — status 는 IN_PROGRESS / COMPLETED 두 값만 존재한다.
+- 처리 타임아웃 초과로 마커가 회수된 뒤 뒤늦게 끝난 원소유자가 남의 행을 finalize/삭제하지 못하도록 owner_token 으로 fencing 한다.
 
 ---
 
