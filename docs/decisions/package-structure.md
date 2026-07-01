@@ -4,7 +4,7 @@
 |---|---|
 | 상태 | Accepted |
 | 날짜 | 2026-06-17 |
-| 연관 이슈 | #257 (W12-2 ADR 정리) |
+| 연관 이슈 | #257 |
 | 작성자 | ParkGunWoo |
 | 관련 문서 | [ARCHITECTURE.md](../ARCHITECTURE.md) |
 

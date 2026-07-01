@@ -4,23 +4,23 @@
 |---|---|
 | 상태 | Accepted (구현 전 결정) |
 | 날짜 | 2026-05-26 |
-| 연관 이슈 | 쿠폰 확장 P2 (선착순 발급) — 도입 시 이슈 번호 기재 |
-| 후속 작업 | 쿠폰 시스템 P2 구현, P5 k6 측정 |
+| 연관 이슈 | 쿠폰 확장 선착순 발급 — 도입 시 이슈 번호 기재 |
+| 후속 작업 | 선착순 발급 구현, k6 부하 측정 |
 | 관련 문서 | [ERD.md §4.15](../ERD.md) |
 
 ---
 
 ## Context
 
-선착순 한정수량 쿠폰은 단일 행(`coupon.issued_count`)을 여러 요청이 동시에 증가시키는, 동시성 경합의 교과서 같은 문제다. 정확성 목표는 "정확히 `total_quantity` 만 발급"(초과발급 금지)이고, 비기능 목표는 스파이크 트래픽에서의 처리량을 시연하는 것이다.
+선착순 한정수량 쿠폰은 단일 행(`coupon.issued_count`)을 여러 요청이 동시에 증가시키는, 동시성 경합의 전형적인 문제다. 정확성 목표는 "정확히 `total_quantity` 만 발급"(초과발급 금지)이고, 비기능 목표는 스파이크 트래픽에서 처리량을 확보하는 것이다.
 
-여기엔 몇 가지 제약과 선례가 깔려 있다. 우선 현재 인프라에 Redis 도 메시지 브로커도 없다(rate limit 은 Bucket4j 인메모리, 캐시는 Caffeine). 환불 경로(`PaymentRepository`)가 이미 `@Lock(PESSIMISTIC_WRITE)` 를 쓰고 있어 DB 락 패턴의 선례는 있다. 재고 차감은 일부러 락 없이 두어 오버셀 baseline 을 박제했고, W10 에서 비관적 락으로 개선하는 Before/After 서사가 이미 프로젝트에 깔려 있다. PRD §11 의 DoD #4(k6 부하테스트)와 #5(Before/After 개선 사례)도 아직 미충족이다.
+제약과 선례를 먼저 짚는다. 현재 인프라에 Redis 도 메시지 브로커도 없다(rate limit 은 Bucket4j 인메모리, 캐시는 Caffeine). 환불 경로(`PaymentRepository`)가 이미 `@Lock(PESSIMISTIC_WRITE)` 를 쓰고 있어 DB 락 패턴의 선례는 있다. 운영은 단일 MySQL + 단일 앱 인스턴스를 가정한다.
 
-그래서 이 결정은 단순히 "어떻게 정확히 발급하나"가 아니다. **학습·시연 가치를 살리면서, 새 인프라 없이 정확성과 처리량을 어떻게 동시에 달성하나**가 진짜 질문이다.
+핵심 질문은 새 인프라 없이 정확성과 처리량을 어떻게 동시에 달성하느냐다.
 
 ## Decision
 
-DB 안에서 단계적(progressive)으로 끌고 가는 전략을 택한다. 베이스라인(락 없음)에서 시작해 비관적 락을 거쳐 **원자적 조건부 UPDATE** 를 최종안으로 삼는다. 새 인프라는 도입하지 않고, Redis 기반은 "극한 트래픽을 위한 미래안"으로 이 문서에 기록만 해 둔다.
+새 인프라를 들이지 않고 DB 안에서 푼다. 최종안은 **원자적 조건부 UPDATE** 다. 비관적 락도 정확성은 만족하지만 락 보유 구간이 길어 처리량에서 손해라 채택하지 않았다. Redis 기반은 극한 트래픽용 미래안으로 기록만 해 둔다. 도입 전후를 비교할 수 있도록 락 미적용 상태의 초과발급은 측정해 두었다.
 
 최종 발급 경로는 이렇다.
 
@@ -37,17 +37,17 @@ UPDATE coupon
 
 ## Considered Options
 
-### Option A — 베이스라인 (락 없음) ❌ (Before 시연 전용)
+### Option A — 락 없음 ❌ (도입 전 측정용)
 
-`read issued_count → check < total → insert → increment` 를 보호 없이 수행한다. lost-update 로 초과발급이 난다. 운영에 쓰려는 게 아니라, `@Disabled` 동시성 테스트로 "Before" 를 박제하는 용도다.
+`read issued_count → check < total → insert → increment` 를 보호 없이 수행한다. lost-update 로 초과발급이 난다. 운영에 쓰지 않고, 락 도입 전후 비교를 위한 측정 기준으로만 둔다.
 
 | 항목 | 내용 |
 |---|---|
 | 방식 | `read → check → insert → increment` |
-| 정확성 | **초과발급 발생** (lost-update) |
-| 용도 | Before 박제용 (운영 채택 아님) |
+| 정확성 | 초과발급 발생 (lost-update) |
+| 용도 | 도입 전 측정 기준 (운영 채택 아님) |
 
-### Option B — 비관적 락 (`SELECT ... FOR UPDATE`) ⚠️ (중간 단계)
+### Option B — 비관적 락 (`SELECT ... FOR UPDATE`) ⚠️
 
 `@Lock(PESSIMISTIC_WRITE)` 로 coupon 행을 잠그고 검사·증가한다. 직렬화되니 정확하고, `PaymentRepository` 환불 패턴과 같아 재사용도 쉽다. 다만 행 락을 로직 구간 내내 쥐고 있어 발급이 사실상 직렬화되고, 그만큼 처리량에 상한이 생긴다.
 
@@ -71,7 +71,7 @@ UPDATE coupon
 
 ### Option D — Redis 카운터 (`RAtomicLong`/Lua) + 비동기 영속화 ❌ (미래안)
 
-Redis 의 원자적 DECR 로 슬롯을 선점하고, 큐나 비동기로 `member_coupon` 을 DB 에 영속화하는 방식이다. DB 핫 로우를 우회하니 처리량은 최고다. 그러나 Redis 와 비동기 파이프라인을 새로 들여야 하고, 최종 일관성·정합성 보강(Outbox·재처리)의 복잡도가 따라온다. 단일 인스턴스·시연 규모에는 과투자라, 멀티 인스턴스나 극한 스파이크에 도달하면 그때 다시 본다.
+Redis 의 원자적 DECR 로 슬롯을 선점하고, 큐나 비동기로 `member_coupon` 을 DB 에 영속화하는 방식이다. DB 핫 로우를 우회하니 처리량은 최고다. 그러나 Redis 와 비동기 파이프라인을 새로 들여야 하고, 최종 일관성·정합성 보강(Outbox·재처리)의 복잡도가 따라온다. 단일 인스턴스 규모에는 과투자라, 멀티 인스턴스나 극한 스파이크에 도달하면 그때 다시 본다.
 
 | 항목 | 내용 |
 |---|---|
@@ -81,24 +81,23 @@ Redis 의 원자적 DECR 로 슬롯을 선점하고, 큐나 비동기로 `member
 
 ## 비교 요약
 
-| 기준 | A 베이스라인 | B 비관적 락 | **C 원자적 UPDATE** | D Redis |
+| 기준 | A 락 없음 | B 비관적 락 | **C 원자적 UPDATE** | D Redis |
 |---|---|---|---|---|
 | 정확성(초과발급 방지) | ✗ | ✓ | **✓** | ✓ |
 | 처리량 | — | 낮음 | **중상** | 높음 |
 | 신규 인프라 | 없음 | 없음 | **없음** | Redis+큐 |
 | 기존 패턴 재사용 | — | PaymentRepository | **PaymentRepository(비교)** | — |
-| 시연/학습 가치 | Before | 중간 단계 | **최종(After)** | 미래안 |
 
 ## Consequences
 
 **긍정적**
 - 새 인프라 없이 정확성과 준수한 처리량을 함께 얻는다.
-- 베이스라인→비관적 락→원자적 UPDATE 의 3 단계가 그대로 k6 Before/After 측정 자료(DoD #4·#5)가 된다 — 재고 오버셀 baseline 과 짝을 이루는 두 번째 동시성 개선 사례다.
+- 락 미적용 상태와 원자적 UPDATE 의 처리량·정확성 차이가 k6 부하 측정으로 그대로 드러난다.
 - `member_coupon` UNIQUE 와 `@Idempotent` 로 중복발급 방어선이 이중으로 깔린다.
 
 **부정적 / 트레이드오프**
-- **핫 로우 천장**: 단일 `issued_count` 행 경합은 원자적 UPDATE 로도 남는다. 단일 인스턴스·시연 규모에선 충분하지만, 멀티 인스턴스·초대형 스파이크에서는 Redis 카운터(Option D)로 전환해야 하고, 그 시점에 이 ADR 을 Superseded 처리한다.
-- **전액 할인(payable=0)**: 결제 도메인은 `amount > 0` 계약(`Payment.initiate`/`PaymentRequest`/DB CHECK)을 유지한다. 그래서 v1 은 할인액이 주문 총액보다 작도록 운영하고, payable=0 자동결제(PG 우회 자동 PAID)는 결제 도메인 침습이 커 후속 과제로 분리한다. `orders.discount_amount ≤ total_amount` CHECK 로 음수 payable 은 원천 차단한다.
+- 핫 로우 천장: 단일 `issued_count` 행 경합은 원자적 UPDATE 로도 남는다. 단일 인스턴스 규모에선 충분하지만, 멀티 인스턴스·초대형 스파이크에서는 Redis 카운터(Option D)로 전환해야 하고, 그 시점에 이 ADR 을 Superseded 처리한다.
+- 전액 할인(payable=0): 결제 도메인은 `amount > 0` 계약(`Payment.initiate`/`PaymentRequest`/DB CHECK)을 유지한다. 그래서 할인액이 주문 총액보다 작도록 운영하고, payable=0 자동결제(PG 우회 자동 PAID)는 결제 도메인 침습이 커 후속 과제로 분리한다. `orders.discount_amount ≤ total_amount` CHECK 로 음수 payable 은 원천 차단한다.
 
 ## References
 

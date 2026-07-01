@@ -4,7 +4,7 @@
 |---|---|
 | 상태 | Accepted |
 | 날짜 | 2026-06-17 |
-| 연관 이슈 | #257 (W12-2 ADR 정리) |
+| 연관 이슈 | #257 (ADR 정리) |
 | 작성자 | ParkGunWoo |
 | 관련 문서 | [coupon-concurrency.md](./coupon-concurrency.md) |
 
@@ -14,13 +14,13 @@
 
 커머스 백엔드에서 정합성을 가장 위협하는 건 여러 요청이 같은 행을 동시에 갱신하는 상황이다. 이 프로젝트에서는 세 군데서 그 문제가 나타난다.
 
-- **선착순 쿠폰 발급** — 단일 카운터(`coupon.issued_count`)에 요청이 한꺼번에 몰린다. 전형적인 핫 로우다.
-- **재고 차감** — 주문 생성 트랜잭션 안에서 `album.stock` 을 읽고 검사한 뒤 차감하는데, 그 사이 다른 요청이 끼어들면 lost-update 로 오버셀이 난다.
-- **결제 콜백** — 웹훅과 폴링이 같은 결제에 동시에 도착해, 자칫 결과를 두 번 적용하거나 보상을 두 번 돌릴 수 있다.
+- 선착순 쿠폰 발급: 단일 카운터(`coupon.issued_count`)에 요청이 한꺼번에 몰린다. 전형적인 핫 로우다.
+- 재고 차감: 주문 생성 트랜잭션 안에서 `album.stock` 을 읽고 검사한 뒤 차감하는데, 그 사이 다른 요청이 끼어들면 lost-update 로 오버셀이 난다.
+- 결제 콜백: 웹훅과 폴링이 같은 결제에 동시에 도착해, 자칫 결과를 두 번 적용하거나 보상을 두 번 돌릴 수 있다.
 
-전제도 분명하다. 인프라에 Redis 도 메시지 브로커도 없다(rate limit 은 Bucket4j 인메모리, 캐시는 Caffeine). [coupon-concurrency.md](./coupon-concurrency.md) 에서 이미 "새 인프라 없이 DB 로 푼다"는 방침을 세웠고, 운영은 단일 MySQL + 단일 앱 인스턴스를 가정한다. 재고 오버셀은 락 없는 Before 상태를 박제해 두고 비관적 락으로 개선하는 서사가 이미 깔려 있다.
+전제도 분명하다. 인프라에 Redis 도 메시지 브로커도 없다(rate limit 은 Bucket4j 인메모리, 캐시는 Caffeine). [coupon-concurrency.md](./coupon-concurrency.md) 에서 이미 "새 인프라 없이 DB 로 푼다"는 방침을 세웠고, 운영은 단일 MySQL + 단일 앱 인스턴스를 가정한다.
 
-이 문서는 도메인마다 흩어진 결정을 한데 모아 **"어떤 경합에 어떤 DB 메커니즘을 왜 골랐는가"** 의 상위 원칙을 남긴다. 쿠폰 발급을 베이스라인→비관적 락→원자적 UPDATE 로 단계적으로 끌고 간 세부 과정은 [coupon-concurrency.md](./coupon-concurrency.md) 에 맡긴다.
+이 문서는 도메인마다 흩어진 결정을 한데 모아 어떤 경합에 어떤 DB 메커니즘을 왜 골랐는지의 상위 원칙을 남긴다. 쿠폰 발급의 세부 과정은 [coupon-concurrency.md](./coupon-concurrency.md) 에 맡긴다.
 
 ---
 
@@ -54,9 +54,9 @@ int incrementIssuedCount(@Param("id") Long id);   // 1=성공, 0=소진/비ACTIV
 
 ## Considered Options
 
-### Option A — 락 없음 ❌ (Before 시연 전용)
+### Option A — 락 없음 ❌ (도입 전 측정용)
 
-`read → check → write` 를 아무 보호 없이 한다. lost-update 로 오버셀·초과발급이 그대로 난다. 운영에 쓸 수는 없고, 오버셀 baseline 의 Before 를 박제하는 용도로만 남겨 둔다.
+`read → check → write` 를 아무 보호 없이 한다. lost-update 로 오버셀·초과발급이 그대로 난다. 운영에 쓸 수는 없고, 락 도입 전후 비교를 위한 측정 기준으로만 둔다.
 
 ### Option B — 낙관적 락(`@Version`) ⚠️
 
@@ -72,7 +72,7 @@ int incrementIssuedCount(@Param("id") Long id);   // 1=성공, 0=소진/비ACTIV
 
 ### Option E — Redis 분산락 ❌ (미래안)
 
-Redisson 의 `RLock`/`RAtomicLong` 으로 슬롯을 선점하는 방식이다. 멀티 인스턴스로 가거나 DB 핫 로우가 천장에 닿는 극한 스파이크라면 답이 될 수 있다. 다만 Redis 도입과 함께 만료·재처리 같은 정합성 보강 복잡도가 따라온다. 단일 인스턴스·시연 규모에는 과투자라, 그 단계에 도달하면 다시 검토한다.
+Redisson 의 `RLock`/`RAtomicLong` 으로 슬롯을 선점하는 방식이다. 멀티 인스턴스로 가거나 DB 핫 로우가 천장에 닿는 극한 스파이크라면 답이 될 수 있다. 다만 Redis 도입과 함께 만료·재처리 같은 정합성 보강 복잡도가 따라온다. 단일 인스턴스 규모에는 과투자라, 그 단계에 도달하면 다시 검토한다.
 
 ---
 
