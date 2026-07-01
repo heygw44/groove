@@ -1,6 +1,9 @@
 package com.groove.bootstrap;
 
+import com.groove.catalog.album.domain.Album;
+import com.groove.catalog.album.domain.AlbumFormat;
 import com.groove.catalog.album.domain.AlbumRepository;
+import com.groove.catalog.album.domain.AlbumStatus;
 import com.groove.catalog.album.application.AlbumService;
 import com.groove.catalog.artist.application.ArtistService;
 import com.groove.catalog.artist.domain.ArtistRepository;
@@ -118,8 +121,22 @@ class LocalDataSeederIntegrationTest {
     void seedsAllDemoData() {
         seeder.run(null);
 
-        // 카탈로그: LP 12장
-        assertThat(albumRepository.count()).isEqualTo(12);
+        // 카탈로그: 앨범 24장, 장르 9·아티스트 12·레이블 8
+        assertThat(albumRepository.count()).isEqualTo(24);
+        assertThat(genreRepository.count()).isEqualTo(9);
+        assertThat(artistRepository.count()).isEqualTo(12);
+        assertThat(labelRepository.count()).isEqualTo(8);
+
+        // 필터 축 커버: 비-LP_12 포맷·SOLD_OUT·한정반이 실제로 존재 (빈 필터 회귀 방지)
+        List<Album> albums = albumRepository.findAll();
+        assertThat(albums).anyMatch(a -> a.getFormat() == AlbumFormat.LP_DOUBLE);
+        assertThat(albums).anyMatch(a -> a.getFormat() == AlbumFormat.EP);
+        assertThat(albums).anyMatch(a -> a.getFormat() == AlbumFormat.SINGLE_7);
+        assertThat(albums).anyMatch(a -> a.getStatus() == AlbumStatus.SOLD_OUT);
+        assertThat(albums).anyMatch(Album::isLimited);
+        // SOLD_OUT 은 재고 0 으로 시드된다
+        assertThat(albums).filteredOn(a -> a.getStatus() == AlbumStatus.SOLD_OUT)
+                .allMatch(a -> a.getStock() == 0);
 
         // 데모 USER — role USER, BCrypt 검증
         Member demoUser = memberRepository.findByEmailAndDeletedAtIsNull("demo@groove.dev").orElseThrow();

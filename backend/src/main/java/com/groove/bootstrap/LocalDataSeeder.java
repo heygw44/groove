@@ -120,7 +120,7 @@ public class LocalDataSeeder implements ApplicationRunner {
         }
         log.info("[seed] 로컬 데모 데이터 시드 시작");
         txTemplate.executeWithoutResult(status -> seedAll());
-        log.info("[seed] 완료: 앨범 12, 데모계정 2(USER/ADMIN), 유저풀 {}, 한정쿠폰 1, DELIVERED 주문 1",
+        log.info("[seed] 완료: 앨범 24, 데모계정 2(USER/ADMIN), 유저풀 {}, 한정쿠폰 1, DELIVERED 주문 1",
                 DemoAccounts.USER_POOL_SIZE);
     }
 
@@ -133,38 +133,69 @@ public class LocalDataSeeder implements ApplicationRunner {
         seedDeliveredOrder(demoUser, albums);
     }
 
-    /** 장르·레이블·아티스트 + LP 12장 생성. */
+    /**
+     * 장르 9·레이블 8·아티스트 12 + 앨범 24장 생성. 카탈로그 필터 전 축(포맷·상태·한정반·장르·
+     * 아티스트·레이블·가격/연도 범위)이 실제로 결과를 내도록 값을 고르게 분산한다.
+     */
     private List<Album> seedCatalog() {
         Long rock = genreService.create(new GenreCommand("Rock")).getId();
         Long jazz = genreService.create(new GenreCommand("Jazz")).getId();
         Long pop = genreService.create(new GenreCommand("Pop")).getId();
         Long electronic = genreService.create(new GenreCommand("Electronic")).getId();
         Long hipHop = genreService.create(new GenreCommand("Hip-Hop")).getId();
+        Long soul = genreService.create(new GenreCommand("Soul")).getId();
+        Long classical = genreService.create(new GenreCommand("Classical")).getId();
+        Long folk = genreService.create(new GenreCommand("Folk")).getId();
+        Long metal = genreService.create(new GenreCommand("Metal")).getId();
 
         Long blueNote = labelService.create(new LabelCommand("Blue Note")).getId();
         Long motown = labelService.create(new LabelCommand("Motown")).getId();
         Long subPop = labelService.create(new LabelCommand("Sub Pop")).getId();
         Long verve = labelService.create(new LabelCommand("Verve")).getId();
+        Long defJam = labelService.create(new LabelCommand("Def Jam")).getId();
+        Long domino = labelService.create(new LabelCommand("Domino")).getId();
+        Long ecm = labelService.create(new LabelCommand("ECM")).getId();
+        Long fourAd = labelService.create(new LabelCommand("4AD")).getId();
 
         Long velvetEchoes = artist("The Velvet Echoes", "몽환적 사운드의 4인조 인디 록 밴드");
         Long milesQuartet = artist("Miles Foster Quartet", "정통 하드밥 재즈 콰르텟");
         Long neonDistrict = artist("Neon District", "신스웨이브/일렉트로닉 듀오");
         Long ariaSol = artist("Aria Sol", "감성 팝 싱어송라이터");
         Long gravelGold = artist("Gravel & Gold", "사우스 힙합 크루");
+        Long rubySutton = artist("Ruby Sutton", "60~70년대 클래식 소울 보컬리스트");
+        Long kestrelEnsemble = artist("Kestrel String Ensemble", "현대 실내악 앙상블");
+        Long willowPines = artist("Willow & the Pines", "포크/어쿠스틱 5인조");
+        Long ironclad = artist("Ironclad", "정통 헤비메탈 밴드");
+        Long staticBloom = artist("Static Bloom", "슈게이즈/노이즈 팝 밴드");
+        Long lateBloom = artist("Late Bloom", "베드룸 인디 팝 프로젝트");
+        Long deepCurrent = artist("Deep Current", "덥/앰비언트 일렉트로닉 프로듀서");
 
-        List<Album> albums = new ArrayList<>(12);
+        // 첫 앨범은 seedDeliveredOrder 가 주문 대상으로 쓰므로 SELLING + 재고 있음이어야 한다.
+        List<Album> albums = new ArrayList<>(24);
         albums.add(album("Midnight Reverie", velvetEchoes, rock, subPop, 2019, 32_000L, 25, false));
-        albums.add(album("Echo Chamber", velvetEchoes, rock, subPop, 2021, 35_000L, 12, true));
+        albums.add(album("Echo Chamber", velvetEchoes, rock, subPop, AlbumFormat.LP_DOUBLE, 2021, 35_000L, 12, AlbumStatus.SELLING, true));
         albums.add(album("Blue Modes", milesQuartet, jazz, blueNote, 1998, 41_000L, 8, false));
-        albums.add(album("After Hours Session", milesQuartet, jazz, blueNote, 2003, 38_000L, 5, true));
+        albums.add(album("After Hours Session", milesQuartet, jazz, blueNote, AlbumFormat.EP, 2003, 24_000L, 5, AlbumStatus.SELLING, true));
         albums.add(album("Verve Standards Vol. 1", milesQuartet, jazz, verve, 2010, 36_000L, 18, false));
         albums.add(album("Neon Skyline", neonDistrict, electronic, null, 2022, 29_000L, 40, false));
-        albums.add(album("Analog Dreams", neonDistrict, electronic, null, 2020, 31_000L, 15, true));
-        albums.add(album("Golden Hour", ariaSol, pop, motown, 2023, 27_000L, 50, false));
+        albums.add(album("Analog Dreams", neonDistrict, electronic, null, AlbumFormat.LP_DOUBLE, 2020, 31_000L, 15, AlbumStatus.SELLING, true));
+        albums.add(album("Golden Hour", ariaSol, pop, motown, AlbumFormat.SINGLE_7, 2023, 19_000L, 50, AlbumStatus.SELLING, false));
         albums.add(album("Paper Hearts", ariaSol, pop, motown, 2021, 26_000L, 30, false));
-        albums.add(album("Heavy Rotation", gravelGold, hipHop, null, 2022, 33_000L, 20, false));
-        albums.add(album("Concrete Bloom", gravelGold, hipHop, null, 2024, 34_000L, 10, true));
+        albums.add(album("Heavy Rotation", gravelGold, hipHop, defJam, 2022, 33_000L, 20, false));
+        albums.add(album("Concrete Bloom", gravelGold, hipHop, defJam, AlbumFormat.LP_DOUBLE, 2024, 34_000L, 10, AlbumStatus.SELLING, true));
         albums.add(album("Live at the Riverside", velvetEchoes, rock, verve, 2018, 45_000L, 6, true));
+        albums.add(album("Southern Comfort", rubySutton, soul, motown, AlbumFormat.LP_12, 1972, 38_000L, 0, AlbumStatus.SOLD_OUT, false));
+        albums.add(album("Velvet Voice", rubySutton, soul, motown, AlbumFormat.SINGLE_7, 1969, 22_000L, 14, AlbumStatus.SELLING, false));
+        albums.add(album("Nocturnes in Blue", kestrelEnsemble, classical, ecm, 1985, 42_000L, 9, false));
+        albums.add(album("Chamber Sessions", kestrelEnsemble, classical, ecm, AlbumFormat.EP, 2016, 28_000L, 11, AlbumStatus.SELLING, false));
+        albums.add(album("Cabin Songs", willowPines, folk, domino, 2015, 25_000L, 22, false));
+        albums.add(album("Winter Field", willowPines, folk, domino, AlbumFormat.LP_12, 1978, 30_000L, 0, AlbumStatus.SOLD_OUT, true));
+        albums.add(album("Iron Will", ironclad, metal, null, 2013, 37_000L, 16, false));
+        albums.add(album("Molten Core", ironclad, metal, null, AlbumFormat.SINGLE_7, 2024, 20_000L, 13, AlbumStatus.SELLING, true));
+        albums.add(album("Static Halo", staticBloom, rock, fourAd, AlbumFormat.EP, 2019, 27_000L, 0, AlbumStatus.SOLD_OUT, false));
+        albums.add(album("Fuzz & Fog", staticBloom, rock, fourAd, 2022, 33_000L, 18, true));
+        albums.add(album("Slow Burn", lateBloom, pop, fourAd, 2024, 24_000L, 35, false));
+        albums.add(album("Undertow", deepCurrent, electronic, null, 1988, 55_000L, 7, true));
         return albums;
     }
 
@@ -172,13 +203,21 @@ public class LocalDataSeeder implements ApplicationRunner {
         return artistService.create(new ArtistCommand(name, description)).getId();
     }
 
+    /** LP_12 · SELLING 편의 오버로드 — 다수를 차지하는 판매 중 LP 행용. */
     private Album album(String title, Long artistId, Long genreId, Long labelId,
                         int releaseYear, long price, int stock, boolean limited) {
+        return album(title, artistId, genreId, labelId, AlbumFormat.LP_12,
+                releaseYear, price, stock, AlbumStatus.SELLING, limited);
+    }
+
+    private Album album(String title, Long artistId, Long genreId, Long labelId,
+                        AlbumFormat format, int releaseYear, long price, int stock,
+                        AlbumStatus status, boolean limited) {
         String cover = "https://placehold.co/300x300?text="
                 + URLEncoder.encode(title, StandardCharsets.UTF_8);
         AlbumCommand command = new AlbumCommand(
                 title, artistId, genreId, labelId, (short) releaseYear,
-                AlbumFormat.LP_12, price, AlbumStatus.SELLING, limited, cover,
+                format, price, status, limited, cover,
                 title + " — 데모 시드 LP");
         return albumService.create(command, stock);
     }
