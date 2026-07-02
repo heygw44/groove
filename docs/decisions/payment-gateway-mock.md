@@ -2,11 +2,13 @@
 
 | 항목 | 값 |
 |---|---|
-| 상태 | Accepted |
+| 상태 | Accepted (부분 대체 — dev/prod 실 PG 경로는 [payment-gateway-toss.md](./payment-gateway-toss.md), Mock 은 local/test/docker 유지) |
 | 날짜 | 2026-06-17 |
 | 연관 이슈 | #257 (ADR 정리) |
 | 작성자 | ParkGunWoo |
-| 관련 문서 | [ERD.md §payment](../ERD.md), [API.md §payments](../API.md) |
+| 관련 문서 | [payment-gateway-toss.md](./payment-gateway-toss.md), [ERD.md §payment](../ERD.md), [API.md §payments](../API.md) |
+
+> 후속: 실 토스 어댑터 도입(#294~) 후 Mock 은 **local/test/docker 전용 결정적 대역**으로 존속한다. dev/prod 는 실 PG 를 쓴다 — [payment-gateway-toss.md](./payment-gateway-toss.md).
 
 ---
 
@@ -52,7 +54,7 @@ return new PaymentResponse(pgTransactionId, PaymentStatus.PENDING, PROVIDER);
 
 예약된 웹훅은 전용 `TaskScheduler`(`paymentTaskScheduler`) 위에서 `fireAt` 에 일회성으로 실행돼 `WebhookDispatcher` 로 결제 결과를 통보한다. 실 PG 의 서버 간 콜백과 같은 모양이다. 환불은 `idempotencyKey → 첫 응답` 캐시(`refundCache.computeIfAbsent`)로 처리해서, 같은 키로 다시 부르면 처음 만든 응답을 그대로 돌려준다.
 
-운영 환경과는 프로파일로 분리한다. Mock 은 `@Profile({"local","dev","test","docker"})` 에서만 올라오므로, 실 PG 어댑터가 필요해지면 `prod` 프로파일용 `@Component` 로 따로 추가하면 된다.
+운영 환경과는 프로파일로 분리한다. Mock 은 `@Profile({"local","test","docker"})` 에서만 올라오고, 실 PG 어댑터(`TossPaymentGateway`)는 `dev/prod` 로 도입했다 — 프로파일 택1 이라 도메인·서비스는 그대로다([payment-gateway-toss.md](./payment-gateway-toss.md)).
 
 상태와 전이 규칙은 도메인이 보증한다. `PaymentStatus` 가 합법 전이만 허용하고(`PENDING→{PAID,FAILED}`, `PAID→{PARTIALLY_REFUNDED,REFUNDED}`, 그 외는 종착), `payment.pg_transaction_id` 에 건 **UNIQUE** 제약이 거래 단위 멱등성의 최종 방어선이 된다.
 
@@ -102,7 +104,7 @@ return new PaymentResponse(pgTransactionId, PaymentStatus.PENDING, PROVIDER);
 
 **부정적 / 트레이드오프**
 
-모킹인 이상 충실도에는 한계가 있다. 실 PG 의 망취소·부분취소·중복 정산이나 서명 스킴 차이는 Mock 으로 잡히지 않으므로, 실 PG 를 도입하는 시점에 그 어댑터를 대상으로 한 통합 테스트가 따로 필요하다. 그때 이 ADR 은 Superseded 로 넘어간다. 또 Mock 의 거래 상태는 프로세스 메모리(`ConcurrentHashMap`)에만 있어 재기동하면 사라지고 `MAX_TRACKED_TRANSACTIONS`(10k) 상한에서 정리되는데, 로컬·테스트 용도라 문제 삼지 않았다.
+모킹인 이상 충실도에는 한계가 있다. 실 PG 의 망취소·부분취소·중복 정산이나 서명 스킴 차이는 Mock 으로 잡히지 않으므로, 실 PG 를 도입하는 시점에 그 어댑터를 대상으로 한 통합 테스트가 따로 필요하다 — 이는 [payment-gateway-toss.md](./payment-gateway-toss.md)(토스 실연동)로 이어졌고, 이 ADR 은 그 dev/prod 경로에 한해 대체됐다(Mock 은 local/test/docker 로 존속). 또 Mock 의 거래 상태는 프로세스 메모리(`ConcurrentHashMap`)에만 있어 재기동하면 사라지고 `MAX_TRACKED_TRANSACTIONS`(10k) 상한에서 정리되는데, 로컬·테스트 용도라 문제 삼지 않았다.
 
 ---
 
