@@ -18,7 +18,8 @@
 
 | ADR | 주제 | 상태 |
 |---|---|---|
-| [payment-gateway-mock.md](./payment-gateway-mock.md) | PG 연동 모킹 — 인터페이스 + 콜백형 Mock(실 PG 교체 가능) | Accepted |
+| [payment-gateway-mock.md](./payment-gateway-mock.md) | PG 연동 모킹 — 인터페이스 + 콜백형 Mock(local/test/docker) | Accepted (부분 대체 → toss) |
+| [payment-gateway-toss.md](./payment-gateway-toss.md) | PG 실연동 — 토스페이먼츠 어댑터(confirm·웹훅 재조회·서킷브레이커, dev/prod) | Accepted |
 | [concurrency-control.md](./concurrency-control.md) | 동시성 제어(상위) — 원자적 UPDATE·비관적 락·원자적 가산 혼용, Redis 미도입 | Accepted |
 | [horizontal-scaling.md](./horizontal-scaling.md) | 수평 확장 — 스케줄러 분산락(ShedLock/MySQL, #365)·rate-limit 분산(Bucket4j-Redis, #367) | Accepted |
 | [catalog-cache-distributed.md](./catalog-cache-distributed.md) | 카탈로그 캐시 분산 전환 — 멀티 인스턴스 Caffeine→Redis 토글(#366), `CacheErrorHandler` 장애 강등 | Accepted |

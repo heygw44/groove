@@ -36,7 +36,7 @@
 | ADR-4 | RFC 7807 ProblemDetail | Spring 6+ 표준, 클라이언트 호환성 | 자체 ErrorResponse |
 | ADR-5 | JWT (Access + Refresh Rotation) | 무상태, 확장 용이 | 세션 기반 |
 | ADR-6 | Spring Application Event (v1) | 외부 의존 없이 도메인 분리 | Kafka / Redis Stream (조건부 후보) |
-| ADR-7 | 결제 PG: Strategy 패턴 + Mock | 확장 포인트 확보 | 직접 호출 |
+| ADR-7 | 결제 PG: Strategy 패턴 + Mock(local/test/docker) | 확장 포인트 확보 — 실연동은 어댑터 교체로(ADR-18) | 직접 호출 |
 | ADR-8 | 트랜잭션 경계: Service 레이어 | 표준 관례, 명확 | 도메인 레이어 |
 | ADR-9 | DB 마이그레이션: Flyway | 스키마 버저닝 표준 | Liquibase / 수동 |
 | ADR-10 | 동시성(재고): 비관적 락 (v1) | 단순·확실 | 낙관적 락 / Redis 분산락 (조건부) |
@@ -47,13 +47,14 @@
 | ADR-15 | 결제 후속 발행: 트랜잭셔널 아웃박스(M16 #237) | 상태 변경과 같은 트랜잭션에 이벤트를 기록(원자 커밋)하고 릴레이가 at-least-once 발행 — AFTER_COMMIT 인프로세스 리스너의 커밋-후 유실 제거. 컨슈머 멱등 | 인프로세스 `@TransactionalEventListener` (비핵심 이벤트는 유지) / Kafka |
 | ADR-16 | 수평 확장(스케줄러 분산락·rate-limit 분산) — ShedLock(#365/PR #376)·Bucket4j-Lettuce(#367/PR #378), 멀티 인스턴스 토대 #375 | 다중화 시 배치 중복 실행·rate-limit 한도 N배를 막는다([decisions/horizontal-scaling.md](./decisions/horizontal-scaling.md)) | (대안: rate-limit 게이트웨이·WAF 이관) |
 | ADR-17 | 카탈로그 캐시 분산 전환: Caffeine→Redis `spring.cache.type` 토글(#366/PR #377) | 다중화 시 노드 로컬 Caffeine 은 `@CacheEvict` 가 자기 노드만 비워 노드 간 최대 TTL 만큼 stale — 공유 Redis 로 노드 간 무효화 일관. `CacheErrorHandler` 장애 강등·DTO JDK 직렬화·key-prefix `v1` ([decisions/catalog-cache-distributed.md](./decisions/catalog-cache-distributed.md)) | Caffeine 유지(노드 간 stale 감수) / 무캐시 |
+| ADR-18 | 결제 PG 실연동: 토스페이먼츠 어댑터(dev/prod), Mock 유지(local/test/docker) | `PaymentGateway` 경계 뒤 어댑터 교체로 도메인·서비스 무변경 전환 — 위젯 confirm 동기 승인·웹훅 재조회 신뢰·콜백 토큰/금액 검증·서킷브레이커([decisions/payment-gateway-toss.md](./decisions/payment-gateway-toss.md)) | Mock 유지(실 승인·망취소 검증 불가) / 전 환경 real(CI 비결정) |
 
 ---
 
 ## 3. 시스템 컨텍스트
 
 ### 3.1 외부 시스템
-**없음.** 모든 외부 의존(PG, 메일, 운송장)은 내부 모킹 컴포넌트로 처리한다. 단, Mock PG는 "외부 시스템처럼 동작"하도록 설계한다 (비동기 콜백, 지연 시뮬레이션 포함).
+**결제 PG — 토스페이먼츠(dev/prod).** 결제는 `dev/prod` 에서 토스페이먼츠 실 PG 를 연동한다(ADR-18, [decisions/payment-gateway-toss.md](./decisions/payment-gateway-toss.md)). `local/test/docker` 는 Mock PG 가 "외부 시스템처럼 동작"하도록(비동기 콜백·지연 시뮬레이션) 대역한다. PG 외 나머지 외부 의존(메일·운송장)은 내부 모킹 컴포넌트로 처리한다.
 
 ### 3.2 액터
 - **USER** — 인증된 회원
@@ -374,11 +375,15 @@ public interface PaymentGateway {
 }
 
 @Component
-@Profile({"local", "dev", "test", "docker"})
+@Profile({"local", "test", "docker"})
 public class MockPaymentGateway implements PaymentGateway { ... }
+
+@Component
+@Profile({"dev", "prod"})
+public class TossPaymentGateway implements PaymentGateway { ... }   // 실 PG (ADR-18)
 ```
 
-실 PG 도입 시 `@Profile("prod")` 구현체만 추가하면 끝.
+프로파일 택1 — `local/test/docker` 는 Mock, `dev/prod` 는 토스 실 PG. 인터페이스가 `request()`(비동기 Mock)와 `confirm()`(동기 토스)를 모두 수용해 두 승인 모델이 한 포트에 공존한다. 실 PG 연동은 §7.5, 근거는 [decisions/payment-gateway-toss.md](./decisions/payment-gateway-toss.md).
 
 ### 7.2 Mock 설정 파라미터
 - `payment.mock.success-rate=0.95`
@@ -387,7 +392,7 @@ public class MockPaymentGateway implements PaymentGateway { ... }
 - `payment.mock.webhook-delay-min-sec=1`
 - `payment.mock.webhook-delay-max-sec=5`
 
-### 7.3 결제 처리 시퀀스
+### 7.3 결제 처리 시퀀스 (Mock 경로 — local/test/docker)
 
 ```mermaid
 sequenceDiagram
@@ -423,6 +428,38 @@ sequenceDiagram
 ### 7.4 실패 / 보상 흐름
 - **PG 응답 실패 시**: Payment FAILED 저장 → OrderService 호출 → Order PAYMENT_FAILED 전환 → 재고 복원 (단일 트랜잭션 내)
 - **웹훅 미수신 시**: 별도 스케줄러가 PENDING 상태 결제를 N분마다 폴링하여 PG `query()` 호출 → 결과 동기화
+
+### 7.5 실 PG(토스페이먼츠) 연동 — dev/prod
+
+`dev/prod` 는 `TossPaymentGateway`(RestClient + `Authorization: Basic`)가 코어 API 를 실제 호출한다. 토스는 결제위젯이 `paymentKey` 를 발급하는 **확인형(confirm) 동기 승인** 모델이라 Mock 의 비동기 `request()` 대신 `confirm()` 이 진입점이다. 상세 근거는 [decisions/payment-gateway-toss.md](./decisions/payment-gateway-toss.md).
+
+```mermaid
+sequenceDiagram
+    participant C as Client(위젯)
+    participant PC as TossPaymentController
+    participant PS as TossPaymentService
+    participant TG as TossPaymentGateway
+    participant T as 토스 API
+    participant DB as MySQL
+
+    C->>PC: POST /payments/toss/checkout (Idempotency-Key)
+    PC->>PS: checkout()
+    PS->>DB: PENDING 저장 + 콜백 토큰(UUID)
+    PS-->>C: clientKey · successUrl(+token) · failUrl
+    Note over C: 위젯 결제 → paymentKey 발급
+    C->>PC: GET /payments/toss/success?paymentKey&orderId&amount&token
+    PC->>PS: confirm()
+    PS->>PS: 콜백 토큰 상수시간 비교 · 저장금액 대조
+    PS->>TG: confirm(paymentKey, orderId, amount)
+    TG->>T: POST /v1/payments/confirm (Idempotency-Key)
+    T-->>TG: 확정 상태(PAID / 가상계좌 PENDING)
+    PS->>DB: PAID → OrderPaidEvent (또는 paymentKey 연결 후 후속 대기)
+    PC-->>C: 302 /orders/{no}?payment=success|fail
+```
+
+- **웹훅(위조 방어)**: `POST /payments/toss/webhook` 은 본문 status 를 무시하고 `query(paymentKey)` 로 **권위 재조회**한 값만 반영한다. confirm·폴링·웹훅이 `payment-callback:{paymentKey}` 멱등 키를 공유해 동시 콜백에도 1회만 전이한다.
+- **외부 장애 격리**: 토스 호출을 서킷브레이커(바깥)·재시도(안쪽)로 감싸고(5xx·연결 실패만 재시도), `query()` 의 서킷 OPEN 은 502 로 정규화하지 않고 전파해 폴링 스케줄러의 만료 종결 오판을 막는다.
+- **배포 게이트**: 실 PG 시크릿(`PAYMENT_TOSS_*`)은 env 주입, prod 는 플레이스홀더 시크릿으로 기동 불가(`SecretPlaceholderGuard`).
 
 ---
 
