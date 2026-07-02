@@ -207,7 +207,7 @@ groove:
       # 한 주기 최대 건수(적체 시 메모리/PG 호출량 바운드). 나머지는 다음 주기.
       batch-size: ${PAYMENT_RECONCILIATION_BATCH_SIZE:200}
   # 배송 자동 진행. 실 택배사 연동 없음. interval 마다 PREPARING→SHIPPED→DELIVERED 를 한 단계씩 민다.
-  # 시연 시 prepare-delay/ship-delay 를 수 초로 줄여 빠르게 진행시킨다.
+  # 데모 환경에선 prepare-delay/ship-delay 를 수 초로 줄여 빠르게 진행시킨다.
   shipping:
     progress:
       interval: ${SHIPPING_PROGRESS_INTERVAL:PT2S}
@@ -227,7 +227,7 @@ groove:
       batch-size: ${SHIPPING_RECONCILIATION_BATCH_SIZE:200}
 
   # 반품 자동 진행. 실 택배사 연동 없음. interval 마다 APPROVED→IN_TRANSIT→INSPECTING→REFUNDED 를 한 단계씩
-  # 민다(검수 자동통과+환불 포함). 검수 불합격(REJECTED)만 관리자 수동. 시연 시 각 delay 를 수 초로 줄인다.
+  # 민다(검수 자동통과+환불 포함). 검수 불합격(REJECTED)만 관리자 수동. 데모 환경에선 각 delay 를 수 초로 줄인다.
   claim:
     # 반품 가능 기한. 배송완료(delivered_at) 후 이 기간 이내만 접수.
     return-window: ${CLAIM_RETURN_WINDOW:P7D}

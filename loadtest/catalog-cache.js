@@ -1,6 +1,6 @@
 // 카탈로그 조회 캐시 부하 테스트 (#236, M16) — GET /api/v1/albums/{id}(상세)와 GET /api/v1/albums(공개
 // 기본 랜딩 목록)를 ramping-vus 로 측정한다. 두 경로 모두 Caffeine 캐시(@Cacheable, key=id / 단일 랜딩
-// 엔트리)로 서빙되므로, 캐시 ON/OFF 앱을 상대로 같은 스크립트를 돌려 Before/After p95 를 박제한다.
+// 엔트리)로 서빙되므로, 캐시 ON/OFF 앱을 상대로 같은 스크립트를 돌려 Before/After p95 를 측정·기록한다.
 //
 // Before(캐시 OFF): 앱을 -e CACHE_ALBUM_CAFFEINE_SPEC 미적용 + SPRING_CACHE_TYPE=none 로 기동(또는 캐시 도입 전 커밋).
 // After(캐시 ON):   기본 기동(local 프로파일, spring.cache.type=caffeine, recordStats).

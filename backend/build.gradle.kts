@@ -133,7 +133,7 @@ tasks.jacocoTestReport {
 }
 
 // 인증/회원/카탈로그/쿠폰/주문/결제 도메인 라인 커버리지 80% 게이트 + 전체 라인 60% 게이트(#139).
-// 인증·회원: #24 DoD. 카탈로그: #31 에서 W4 와 동일 정책으로 게이트 확장. 쿠폰: #93 (k6 부하·Before/After 와 함께 편입).
+// 인증·회원: #24 DoD. 카탈로그: #31 에서 동일 정책으로 게이트 확장. 쿠폰: #93 (k6 부하·Before/After 와 함께 편입).
 // 주문·결제: #139 (통합 테스트 보강과 함께 편입, 전체 60% BUNDLE 룰 동반).
 // `check` 가 트리거하므로 ./gradlew check 가 임계값 위반 시 실패한다.
 tasks.jacocoTestCoverageVerification {

@@ -42,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import(TestcontainersConfig.class)
-@DisplayName("배송 E2E — 이벤트 구독 / 자동 진행 / 운송장 조회 (#W7-6)")
+@DisplayName("배송 E2E — 이벤트 구독 / 자동 진행 / 운송장 조회")
 class ShippingIntegrationTest {
 
     @Autowired

@@ -2,7 +2,7 @@
 """측정용 대규모 시드 데이터 생성기 (이슈 #140).
 
 Faker 합성으로 카탈로그(genre/label/artist/album)와 테스트 회원을 만들어
-멀티로우 INSERT SQL(seed.sql)을 출력한다. W9 측정(검색 슬로우 쿼리·flash-sale)용이며,
+멀티로우 INSERT SQL(seed.sql)을 출력한다. 부하 측정(검색 슬로우 쿼리·flash-sale)용이며,
 데모 시더 ``LocalDataSeeder``(@Profile("local"))와는 완전히 별개 경로다.
 
 핵심 결정

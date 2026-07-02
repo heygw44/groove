@@ -222,7 +222,7 @@ class StockRestoreConcurrencyTest {
     }
 
     @Test
-    @Disabled("복원 lost-update baseline 시연용 — 락 없는 RMW 복원의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#234)")
+    @Disabled("복원 lost-update baseline 재현용 — 락 없는 RMW 복원의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#234)")
     @DisplayName("베이스라인(RMW 복원) — 동시 placeWithoutLock(−1)·RMW 복원(+1) → lost-update 재현")
     void concurrentPlaceAndRmwRestore_baseline_producesLostUpdate() throws InterruptedException {
         TransactionTemplate tx = new TransactionTemplate(transactionManager);

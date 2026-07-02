@@ -182,7 +182,7 @@ class CouponIssuanceConcurrencyTest {
     }
 
     @Test
-    @Disabled("초과발급 baseline 시연용 — 락 없는 read-modify-write 의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#90)")
+    @Disabled("초과발급 baseline 재현용 — 락 없는 read-modify-write 의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#90)")
     @DisplayName("베이스라인(락 없음) — 동시 발급 시 lost-update 로 초과발급 재현")
     void baseline_withoutLock_overIssues() throws InterruptedException {
         Long couponId = persistLimitedCoupon(LIMIT);

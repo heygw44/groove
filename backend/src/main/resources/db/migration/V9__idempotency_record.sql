@@ -1,9 +1,9 @@
--- V9: 멱등성 레코드 — idempotency_record (#W7-2, ARCHITECTURE.md §7).
+-- V9: 멱등성 레코드 — idempotency_record (ARCHITECTURE.md §7).
 --
 -- 결제 요청·웹훅 수신 등 중복 호출에 안전해야 하는 연산을 위한 멱등성 인프라.
 -- 클라이언트가 보낸 Idempotency-Key 로 동일 요청을 1회만 처리하고 결과를 캐싱한다.
 -- 본 이슈는 인프라만 도입한다 — 실제로 @Idempotent / IdempotencyService 를 소비하는
--- 결제 API 엔드포인트는 #W7-3 에서 붙는다.
+-- 결제 API 엔드포인트는 후속 마이그레이션에서 붙는다.
 --
 -- 인덱스:
 --   - uk_idempotency_key       UNIQUE (idempotency_key)  -- "1회만 처리"의 1차 방어선 (마커 INSERT 경쟁)

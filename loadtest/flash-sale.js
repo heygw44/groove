@@ -1,11 +1,11 @@
-// 한정반 동시 주문 오버셀 재현 부하 테스트 (#194, W9 측정) — 재고 100인 단일 앨범에 동시 주문을 몰아
-// 오버셀(oversell)을 HTTP 부하 계층에서 재현한다(W10 동시성 개선의 Before).
+// 한정반 동시 주문 오버셀 재현 부하 테스트 (#194) — 재고 100인 단일 앨범에 동시 주문을 몰아
+// 오버셀(oversell)을 HTTP 부하 계층에서 재현한다(동시성 개선의 Before).
 //
 // 현재 OrderService.place() 의 재고 차감은 락 없는 read-modify-write 다: loadPurchasable() 가 SELECT 로
 // stock 을 읽고, decreaseStock() 이 인메모리로 검사·adjustStock(-qty) 한 뒤, 트랜잭션 커밋 시점에 dirty-check
-// 가 UPDATE 를 flush 한다. 이 구간에 DB 락도 앱 동기화도 없어 lost-update 가 발생한다(W6 의도적 미적용,
+// 가 UPDATE 를 flush 한다. 이 구간에 DB 락도 앱 동기화도 없어 lost-update 가 발생한다(락 없는 baseline,
 // OversellingBaselineTest 가 단위테스트로 입증). 본 스크립트는 이를 부하로 재현하고 결과 JSON 을 보존한다.
-// 백엔드는 수정하지 않는다. W10-3(비관적 락) 적용 후 동일 스크립트로 After 측정한다.
+// 백엔드는 수정하지 않는다. 비관적 락 적용 후 동일 스크립트로 After 측정한다.
 //
 // 오버셀 판정(handleSummary 가 자동 계산):
 //   (1) order_created(201) > INITIAL_STOCK(100)                 — 재고보다 많이 팔린 주문(이슈 DoD)

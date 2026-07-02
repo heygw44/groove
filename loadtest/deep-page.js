@@ -1,7 +1,7 @@
 // 커서(keyset) vs offset 깊은 페이지 응답시간 비교 (#235, M16) — 같은 "깊이"의 페이지를 offset
 // (LIMIT … OFFSET N) 과 keyset(cursor) 두 경로로 요청해 지연을 맞대어 본다. offset 은 깊이에 비례해
 // 건너뛸 행을 스캔하므로 깊은 페이지일수록 느려지지만, keyset 은 정렬 인덱스(V21)를 타고 위치를 바로
-// 짚어 깊이와 무관하게 상수에 가깝다 — 그 격차를 박제하는 것이 목적이다(이슈 AC: deep-offset 대비 개선 측정).
+// 짚어 깊이와 무관하게 상수에 가깝다 — 그 격차를 측정하는 것이 목적이다(이슈 AC: deep-offset 대비 개선 측정).
 //
 // 선행: 앱 기동 + db/seed 적재(ALBUM_COUNT=50000 기본). 토큰 풀은 search.js 와 동일한 시드 회원
 //       (loadtest001..080@groove.test / Test1234!)을 쓴다. setup 로그인 버스트가 throttle 되지 않도록
@@ -107,7 +107,7 @@ export default function (data) {
 }
 
 export function handleSummary(data) {
-  // offset vs keyset p95 격차를 산출해 로그로 박제(k6 threshold 는 두 메트릭 비교가 불가하므로 여기서 판정).
+  // offset vs keyset p95 격차를 산출해 로그로 기록(k6 threshold 는 두 메트릭 비교가 불가하므로 여기서 판정).
   const offsetP95 = data.metrics.offset_deep_latency?.values?.['p(95)'] || 0;
   const keysetP95 = data.metrics.keyset_deep_latency?.values?.['p(95)'] || 0;
   const improvement = offsetP95 > 0 ? (1 - keysetP95 / offsetP95) * 100 : 0;

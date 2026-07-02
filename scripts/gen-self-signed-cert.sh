@@ -3,7 +3,7 @@
 # self-signed TLS 인증서 생성 (이슈 #270) — TLS(HTTPS :443) 데모용.
 #
 #   nginx-tls.conf 가 참조하는 certs/cert.pem · certs/key.pem 을 생성한다. 운영에서는 Let's Encrypt/
-#   certbot 발급 인증서를 같은 경로에 두면 된다(이 스크립트는 로컬·시연 전용 self-signed).
+#   certbot 발급 인증서를 같은 경로에 두면 된다(이 스크립트는 로컬·개발 전용 self-signed).
 #
 # 사용법:
 #   ./scripts/gen-self-signed-cert.sh                # CN/SAN=localhost, 825일

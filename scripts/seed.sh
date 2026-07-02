@@ -3,7 +3,7 @@
 # 측정용 대규모 시드 적재 (이슈 #140).
 #
 #   db/seed/generate_seed.py 로 seed.sql 을 합성한 뒤, FK-safe TRUNCATE + 멀티로우 INSERT 로 MySQL 에 적재한다.
-#   데모 시더(LocalDataSeeder)와 별개 경로이며, W9 측정(검색 슬로우 쿼리·flash-sale)용 데이터셋을 만든다.
+#   데모 시더(LocalDataSeeder)와 별개 경로이며, 부하 측정(검색 슬로우 쿼리·flash-sale)용 데이터셋을 만든다.
 #
 # 사용법:
 #   ./scripts/seed.sh --yes            # 로컬 MySQL (DB_HOST=localhost:3306)

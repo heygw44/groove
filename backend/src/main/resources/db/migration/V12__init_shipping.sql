@@ -1,6 +1,6 @@
 -- V12: 배송 — orders 배송지 스냅샷 컬럼 추가 + shipping 테이블 (ERD §4.9, §4.13).
 --
--- W7-6 (#58) 범위. 결제 완료 시 OrderPaidEvent 의 AFTER_COMMIT 리스너가 배송 행을 PREPARING 으로
+-- #58 범위. 결제 완료 시 OrderPaidEvent 의 AFTER_COMMIT 리스너가 배송 행을 PREPARING 으로
 -- 생성하고, 자동 진행 스케줄러가 PREPARING→SHIPPED→DELIVERED 로 한 단계씩 민다. 운송장 번호는 UUID.
 --
 -- 1) orders 에 배송지 컬럼 추가
@@ -19,11 +19,11 @@ ALTER TABLE orders
 
 -- 2) shipping 테이블 (ERD §4.13)
 --
--- [W5] (UNIQUE 만):
+-- 초기 인덱스 (UNIQUE 만):
 --   - uk_shipping_order    UNIQUE (order_id)          -- 주문당 배송 1건
 --   - uk_shipping_tracking UNIQUE (tracking_number)   -- 운송장 번호 중복 불가
 --
--- idx_shipping_status (ERD 상 [W10] 표기였음): 자동 진행 스케줄러가 status 기준으로 주기 조회하므로 그 소비처와
+-- idx_shipping_status (ERD 상 후속 추가 대상이었음): 자동 진행 스케줄러가 status 기준으로 주기 조회하므로 그 소비처와
 --   함께 선반영한다 (V11 의 idx_payment_status_created 와 같은 결정). (status, created_at) 복합으로 두어
 --   PREPARING→SHIPPED 스캔(created_at 필터)을 받치고, SHIPPED→DELIVERED 스캔은 status 프리픽스로 좁힌다.
 --

@@ -45,9 +45,9 @@ WHERE deleted_at IS NOT NULL;
 
 -- 3) orders / shipping 익명화 마커. 배치가 'DELIVERED + 보존기간 경과 + anonymized_at IS NULL' 을
 --    대상으로 잡고, 익명화 후 anonymized_at 을 찍어 다음 주기에서 제외(멱등)한다.
---    전용 인덱스(delivered_at/anonymized_at)는 프로젝트 컨벤션(V8/V12)대로 슬로우 쿼리 측정 후 W10 으로
+--    전용 인덱스(delivered_at/anonymized_at)는 프로젝트 컨벤션(V8/V12)대로 슬로우 쿼리 측정 후로
 --    연기한다 — 기존 idx_shipping_status(status, created_at) 의 status 프리픽스가 1차로 좁힌다. 단
---    reconciliation 의 '과도 상태 소량' 과 달리 익명화 미처리분은 누적될 수 있으므로 W10 측정 1순위 후보다.
+--    reconciliation 의 '과도 상태 소량' 과 달리 익명화 미처리분은 누적될 수 있으므로 측정 1순위 후보다.
 ALTER TABLE orders
     ADD COLUMN anonymized_at DATETIME(6) NULL,
     ALGORITHM=INSTANT;

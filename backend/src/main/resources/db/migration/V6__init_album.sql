@@ -1,23 +1,23 @@
 -- V6: 카탈로그 — album (ERD §4.6 ★).
 --
--- W5-3 (#33) 범위로 album 도입. artist/genre/label 을 FK 로 묶고 ON DELETE RESTRICT 로
+-- #33 범위로 album 도입. artist/genre/label 을 FK 로 묶고 ON DELETE RESTRICT 로
 -- 참조 무결성을 보장한다. 본 마이그레이션은 의도적으로 최소 인덱스만 둔다.
 --
--- [W5] (FK 기본 인덱스만):
+-- 초기 인덱스 (FK 기본만):
 --   - idx_album_artist (artist_id)
 --   - idx_album_genre  (genre_id)
 --   - idx_album_label  (label_id)
 --
--- [W10] **의도적 누락** — W10 슬로우 쿼리 측정 / 인덱스 튜닝 시연용 (ERD §4.6).
+-- 후속 추가 예정 — 슬로우 쿼리 측정 후 인덱스 튜닝 Before/After 측정용 (ERD §4.6).
 --   - idx_album_search (genre_id, status, price)
 --   - idx_album_year   (release_year)
 --   - idx_album_title  (title)  — FULLTEXT 검토 후보
 --   - idx_album_limited (is_limited, status)
--- 위 인덱스를 본 V6 에서 추가하지 말 것. (PR 리뷰 시 누락이 아니라 의도 — 본 헤더가 근거)
+-- 위 인덱스는 본 V6 에서 추가하지 않는다 — 후속 마이그레이션에서 측정 후 반영(본 헤더가 근거).
 --
 -- 비즈니스 룰 위치:
 --   - stock ≥ 0 / price ≥ 0 : DB CHECK + 도메인 메서드 이중 방어선
---   - status 전이 룰        : APP (AlbumStatus.canTransitionTo) — W5-3 범위 미포함, 후속 이슈
+--   - status 전이 룰        : APP (AlbumStatus.canTransitionTo) — 본 범위 미포함, 후속 이슈
 --   - FK 참조 무결성        : DB ON DELETE RESTRICT
 CREATE TABLE album (
     id              BIGINT       NOT NULL AUTO_INCREMENT,
