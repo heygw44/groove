@@ -1,4 +1,4 @@
-// 결제·멱등성 부하 테스트 (#193, W9) — 결제 요청(POST /api/v1/payments)을 ramping-vus 로 측정하고,
+// 결제·멱등성 부하 테스트 (#193) — 결제 요청(POST /api/v1/payments)을 ramping-vus 로 측정하고,
 // 동일 Idempotency-Key 재요청이 중복 결제를 만들지 않음을 부하 상황에서 check 로 검증한다.
 //
 // 한 iteration = (1) 결제 대상 PENDING 주문 1건 생성(phase:order-setup, 측정 제외)

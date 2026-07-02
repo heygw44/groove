@@ -1,4 +1,4 @@
-// W9 측정 시나리오 공통 하네스 (#192) — 시드 회원 로그인 → access token 풀.
+// 부하 측정 시나리오 공통 하네스 (#192) — 시드 회원 로그인 → access token 풀.
 //
 // coupon-issuance.js 의 setup 로직을 일반화해 추출한 모듈. search/order/payment 등 후속
 // 시나리오가 import 해 재사용한다. (coupon-issuance.js 는 기존 동작 보존 위해 그대로 자체 포함.)

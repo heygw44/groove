@@ -1,6 +1,6 @@
 # 측정용 시드 데이터 (이슈 #140)
 
-W9 측정(검색 슬로우 쿼리 재현·flash-sale 부하)을 위한 **대규모 합성 데이터셋** 생성기다.
+부하 측정(검색 슬로우 쿼리 재현·flash-sale 부하)을 위한 **대규모 합성 데이터셋** 생성기다.
 데모 프론트용 시더 `LocalDataSeeder`(`@Profile("local")`, 12장)와는 **완전히 별개 경로**이며,
 이 디렉토리는 Python + [Faker](https://faker.readthedocs.io/)로 카탈로그/회원을 합성한다.
 

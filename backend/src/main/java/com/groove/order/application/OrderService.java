@@ -167,7 +167,7 @@ public class OrderService {
         return OrderResponse.from(placeInternal(memberId, request, true));
     }
 
-    /** 락 없는 baseline 경로 — 동시성 시연/테스트 전용. 프로덕션 호출 금지. */
+    /** 락 없는 baseline 경로 — 동시성 재현/테스트 전용. 프로덕션 호출 금지. */
     @Transactional
     public Order placeWithoutLock(Long memberId, OrderCreateRequest request) {
         return placeInternal(memberId, request, false);

@@ -1,7 +1,7 @@
 // 선착순 쿠폰 발급 부하 테스트 (#93) — 프로덕션 원자적 조건부 UPDATE 경로(POST /coupons/{id}/issue) 스파이크.
 //
 // 측정: TPS·p95 지연·소진 시점·정확성(발급 성공 == 한정수량). 3종 전략 정확성/처리량 비교는 인프로세스
-// JUnit(CouponIssuanceConcurrencyTest)이 담당하고, 본 스크립트는 HTTP 계층의 현실적 처리량을 박제한다.
+// JUnit(CouponIssuanceConcurrencyTest)이 담당하고, 본 스크립트는 HTTP 계층의 현실적 처리량을 측정한다.
 //
 // 선행: 앱 기동 + loadtest/seed-coupon-loadtest.sql 적용(쿠폰 1건 + 회원 600명). rate limit 은
 //       COUPON_RATE_LIMIT_ISSUE_CAPACITY / AUTH_RATE_LIMIT_LOGIN_CAPACITY 를 크게 주입해 간섭을 제거한다.

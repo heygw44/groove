@@ -87,7 +87,7 @@ class AlbumQueryN1Test {
 
         // artist/genre/label 이 본 쿼리에 OUTER JOIN 으로 인라인 → lazy fetch 0
         assertThat(statistics.getEntityFetchCount())
-                .as("@EntityGraph 동반 페치로 추가 lazy resolve 가 없어야 한다 (W9 베이스라인 15 → 0)")
+                .as("@EntityGraph 동반 페치로 추가 lazy resolve 가 없어야 한다 (베이스라인 15 → 0)")
                 .isZero();
         // 본 쿼리 1 + 평점집계 1. 단일 페이지(5 < 20)라 count 쿼리는 스킵된다.
         assertThat(statistics.getPrepareStatementCount())

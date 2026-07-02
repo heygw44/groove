@@ -1,11 +1,11 @@
--- V21: 검색 인덱스 추가 (#204) — W10 슬로우쿼리 Before/After 의 After 단계.
+-- V21: 검색 인덱스 추가 (#204) — 검색 슬로우쿼리 Before/After 의 After 단계.
 -- (버전 20 은 member 의 Java 마이그레이션 V20__email_hash_hmac_backfill 이 선점 → V21 배정)
 --
--- 베이스라인 #196 (docs/measurement/baseline.md §5) 에서 박제: 키워드 검색이
+-- 베이스라인 #196 (docs/measurement/baseline.md §5) 에 기록: 키워드 검색이
 --   WHERE status='SELLING' AND (LOWER(title) LIKE '%kw%' OR LOWER(artist.name) LIKE '%kw%')
 -- 로 선행 와일드카드 + LOWER() 래핑 + 인덱스 부재가 겹쳐 album 50,000건을 매번 풀스캔
--- (EXPLAIN type=ALL, rows≈49,803, search p95 930ms > SLO 800ms). V6 헤더의 [W10] 의도적
--- 누락 인덱스를 본 마이그레이션에서 도입한다. ERD §4.6 후보를 따른다.
+-- (EXPLAIN type=ALL, rows≈49,803, search p95 930ms > SLO 800ms). V6 헤더가 후속 추가
+-- 대상으로 남겨둔 인덱스를 본 마이그레이션에서 도입한다. ERD §4.6 후보를 따른다.
 --
 -- 키워드 경로는 단일 B-Tree 로 해소 불가(선행 와일드카드)하고, title 과 artist.name 이 서로
 -- 다른 테이블이라 MATCH(title) OR MATCH(artist.name) 의 cross-table OR 는 옵티마이저가 단일

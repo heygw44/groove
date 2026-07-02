@@ -205,7 +205,7 @@ class OversellingBaselineTest {
     }
 
     @Test
-    @Disabled("오버셀 baseline 시연용 — 락 없는 read-modify-write 의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#46)")
+    @Disabled("오버셀 baseline 재현용 — 락 없는 read-modify-write 의 결함 재현. 일반 CI 빌드에서는 실행하지 않는다 (#46)")
     @DisplayName("베이스라인(락 없음) — 재고 100 / 동시 200 주문 → lost-update 로 오버셀 재현")
     void concurrentOrders_withoutLock_produceOversell() throws InterruptedException {
         OrderCreateRequest request = singleAlbumOrder();

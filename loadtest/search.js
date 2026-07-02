@@ -1,8 +1,8 @@
-// 앨범 검색 부하 테스트 (#192, W9) — GET /api/v1/albums 의 필터 조합·키워드 검색을 ramping-vus 로 측정한다.
+// 앨범 검색 부하 테스트 (#192) — GET /api/v1/albums 의 필터 조합·키워드 검색을 ramping-vus 로 측정한다.
 //
 // 검색 경로는 V21 에서 FULLTEXT(ft_album_keyword, ngram BOOLEAN MODE) + @EntityGraph 로 전환돼 풀스캔·N+1 이
 // 해소됐다 — 본 부하는 그 개선 후 경로의 SLO(p95)·정확성을 측정한다. V21 이전 LIKE 풀스캔·N+1 의 Before
-// 베이스라인은 loadtest/README.md 결과 표에 박제돼 있다. 엔드포인트는 public 이지만, 현실적 '로그인 유저 탐색'
+// 베이스라인은 loadtest/README.md 결과 표에 기록돼 있다. 엔드포인트는 public 이지만, 현실적 '로그인 유저 탐색'
 // (JWT 검증 비용 포함)을 측정하고자 토큰 풀의 Bearer 를 부착한다.
 //
 // 선행: 앱 기동 + scripts/seed.sh 로 메인 시드 적용(앨범 + loadtest001..080@groove.test / Test1234!).
@@ -42,7 +42,7 @@ export const options = {
     // 요청(phase:search)만 게이트한다 — 안 그러면 setup 의 429·로그인 지연이 글로벌 지표를 오염시킨다.
     'http_req_failed{phase:search}': ['rate<0.01'],
     // search_latency 는 default() 의 검색 요청만 집계(setup 제외). 목표 SLO 초깃값 — Before 측정에서
-    // 슬로우 쿼리로 breach 될 수 있고, 그 breach 자체가 W9 발견 사항이다. (http_req_duration 과 동일분포라 중복 임계값 제거.)
+    // 슬로우 쿼리로 breach 될 수 있고, 그 breach 자체가 부하 측정의 발견 사항이다. (http_req_duration 과 동일분포라 중복 임계값 제거.)
     search_latency: ['p(95)<800', 'p(99)<1500'],
     checks: ['rate>0.99'],
   },

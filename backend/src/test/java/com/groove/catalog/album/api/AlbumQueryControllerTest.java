@@ -416,7 +416,7 @@ class AlbumQueryControllerTest {
         }
 
         @Test
-        @DisplayName("응답에 averageRating(null) / reviewCount(0) placeholder 포함 (W7 도입 전)")
+        @DisplayName("응답에 averageRating(null) / reviewCount(0) placeholder 포함 (리뷰 집계 도입 전)")
         void response_includesReviewPlaceholderFields() throws Exception {
             persistAlbum("A", beatles, rock, apple, (short) 1969, 30000L, AlbumFormat.LP_12, false, AlbumStatus.SELLING);
 

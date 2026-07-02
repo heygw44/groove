@@ -87,3 +87,11 @@ backend/src/main/resources/static/
 # 루트 package.json 은 Newman(컬렉션 검증) devDependency 만 담는다. 설치물·리포트는 커밋 제외.
 node_modules/
 reports/
+
+### Conductor ###
+# 워크스페이스 도구 설정 — 로컬 개발 편의용이라 레포 비노출.
+.conductor/
+
+### Load test artifacts ###
+# k6 end-of-test 요약 산출물(실행마다 갱신). 시나리오/시드는 추적, 결과 JSON 은 제외.
+loadtest/*summary*.json
