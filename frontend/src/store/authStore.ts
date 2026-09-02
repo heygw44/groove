@@ -1,19 +1,13 @@
 import { create } from 'zustand';
 
-export type MemberRole = 'USER' | 'ADMIN';
-
-export interface AuthMember {
-  id: number;
-  email: string;
-  nickname: string;
-  role: MemberRole;
-}
+import type { Member } from '@/types/member';
 
 interface AuthState {
   accessToken: string | null;
-  member: AuthMember | null;
-  setAuth: (accessToken: string, member: AuthMember) => void;
+  member: Member | null;
+  setAuth: (accessToken: string, member: Member) => void;
   setAccessToken: (accessToken: string) => void;
+  setMember: (member: Member) => void;
   clearAuth: () => void;
 }
 
@@ -22,5 +16,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   member: null,
   setAuth: (accessToken, member) => set({ accessToken, member }),
   setAccessToken: (accessToken) => set({ accessToken }),
+  setMember: (member) => set({ member }),
   clearAuth: () => set({ accessToken: null, member: null }),
 }));

@@ -12,7 +12,8 @@ export function PrivateRoute({ children }: PrivateRouteProps) {
   const location = useLocation();
 
   if (!accessToken) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+    return <Navigate to={`/login?redirect=${redirect}`} replace />;
   }
 
   return children;
