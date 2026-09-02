@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Optional;
 
+import org.hibernate.Hibernate;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -150,24 +153,93 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 	}
 
 	@Nested
-	@DisplayName("findWithArtistAndLabelById()")
-	class FindWithArtistAndLabelById {
+	@DisplayName("findDetailById()")
+	class FindDetailById {
 
 		@Test
-		@DisplayName("label 없이 저장해도 조회되고 artist 이름이 일치한다")
+		@DisplayName("label 없이 저장해도 조회되고 artist·label·genre 연관관계가 초기화된다")
+		void findsProductWithArtistLabelAndGenres() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create("Bill Evans-PRT-1"));
+			Label label = labelRepository.save(LabelFixture.create());
+			Genre jazz = genreRepository.save(GenreFixture.create("Jazz-PRT-1"));
+			Genre soul = genreRepository.save(GenreFixture.create("Soul-PRT-1"));
+			Product product = ProductFixture.create(artist, label);
+			product.addGenre(jazz);
+			product.addGenre(soul);
+			product.addImage("https://cdn.groove.com/PRT-1-0.jpg", 0);
+			product.addImage("https://cdn.groove.com/PRT-1-1.jpg", 1);
+			Product saved = productRepository.save(product);
+			flushAndClear();
+
+			// when
+			Optional<Product> found = productRepository.findDetailById(saved.getId());
+
+			// then
+			assertThat(found).isPresent();
+			Product loaded = found.get();
+			assertThat(Hibernate.isInitialized(loaded.getArtist())).isTrue();
+			assertThat(Hibernate.isInitialized(loaded.getLabel())).isTrue();
+			assertThat(Hibernate.isInitialized(loaded.getProductGenres())).isTrue();
+			assertThat(loaded.getProductGenres()).allMatch(pg -> Hibernate.isInitialized(pg.getGenre()));
+			assertThat(loaded.getArtist().getName()).isEqualTo("Bill Evans-PRT-1");
+			assertThat(loaded.getLabel().getId()).isEqualTo(label.getId());
+			assertThat(loaded.getProductGenres()).extracting(pg -> pg.getGenre().getName())
+					.containsExactlyInAnyOrder("Jazz-PRT-1", "Soul-PRT-1");
+		}
+
+		@Test
+		@DisplayName("label 없이 저장하면 label 은 null 로 조회된다")
 		void findsProductWithoutLabel() {
 			// given
-			Artist artist = artistRepository.save(ArtistFixture.create("Bill Evans"));
+			Artist artist = artistRepository.save(ArtistFixture.create("Miles Davis-PRT-2"));
 			Product saved = productRepository.save(ProductFixture.create(artist));
 			flushAndClear();
 
 			// when
-			Optional<Product> found = productRepository.findWithArtistAndLabelById(saved.getId());
+			Optional<Product> found = productRepository.findDetailById(saved.getId());
 
 			// then
 			assertThat(found).isPresent();
-			assertThat(found.get().getArtist().getName()).isEqualTo("Bill Evans");
+			assertThat(found.get().getArtist().getName()).isEqualTo("Miles Davis-PRT-2");
 			assertThat(found.get().getLabel()).isNull();
+		}
+
+		@Test
+		@DisplayName("상세 조회에 필요한 데이터 접근이 SQL 3건 이하로 끝난다")
+		void resolvesDetailWithinThreeStatements() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create("Herbie Hancock-PRT-3"));
+			Genre jazz = genreRepository.save(GenreFixture.create("Jazz-PRT-3"));
+			Product product = ProductFixture.create(artist);
+			product.addGenre(jazz);
+			product.addImage("https://cdn.groove.com/PRT-3-0.jpg", 0);
+			product.addImage("https://cdn.groove.com/PRT-3-1.jpg", 1);
+			Product saved = productRepository.save(product);
+			stockRepository.save(Stock.create(saved, 9));
+			flushAndClear();
+
+			SessionFactory sessionFactory = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class);
+			Statistics statistics = sessionFactory.getStatistics();
+			statistics.clear();
+
+			// when
+			Product loaded = productRepository.findDetailById(saved.getId()).orElseThrow();
+			List<ProductImage> images = productImageRepository.findAllByProductIdOrderBySortOrderAsc(saved.getId());
+			int stockQuantity = stockRepository.findByProductId(saved.getId())
+					.map(Stock::getQuantity)
+					.orElse(0);
+			String artistName = loaded.getArtist().getName();
+			List<String> genreNames = loaded.getProductGenres().stream()
+					.map(pg -> pg.getGenre().getName())
+					.toList();
+
+			// then
+			assertThat(artistName).isEqualTo("Herbie Hancock-PRT-3");
+			assertThat(genreNames).containsExactly("Jazz-PRT-3");
+			assertThat(stockQuantity).isEqualTo(9);
+			assertThat(images).extracting(ProductImage::getSortOrder).containsExactly(0, 1);
+			assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(3);
 		}
 	}
 

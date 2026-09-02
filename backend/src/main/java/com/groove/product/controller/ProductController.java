@@ -2,11 +2,13 @@ package com.groove.product.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
+import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchRequest;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.service.ProductService;
@@ -31,5 +33,12 @@ public class ProductController {
 	public ApiResponse<PageResponse<ProductSummaryResponse>> search(
 			@Valid @ModelAttribute ProductSearchRequest request) {
 		return ApiResponse.ok(productService.search(request));
+	}
+
+	@Operation(summary = "상품 상세 조회")
+	@SecurityRequirements
+	@GetMapping("/{id}")
+	public ApiResponse<ProductDetailResponse> getDetail(@PathVariable Long id) {
+		return ApiResponse.ok(productService.getDetail(id));
 	}
 }

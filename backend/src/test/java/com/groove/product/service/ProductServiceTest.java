@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,14 +19,27 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.GenreFixture;
+import com.groove.fixture.ProductFixture;
+import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.inventory.entity.Stock;
+import com.groove.inventory.repository.StockRepository;
+import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSearchRequest;
 import com.groove.product.dto.ProductSortType;
 import com.groove.product.dto.ProductSummaryResponse;
+import com.groove.product.entity.Artist;
+import com.groove.product.entity.Genre;
+import com.groove.product.entity.Product;
+import com.groove.product.entity.ProductImage;
 import com.groove.product.mapper.ProductSearchMapper;
+import com.groove.product.repository.ProductImageRepository;
+import com.groove.product.repository.ProductRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
@@ -33,11 +47,21 @@ class ProductServiceTest {
 	@Mock
 	private ProductSearchMapper productSearchMapper;
 
+	@Mock
+	private ProductRepository productRepository;
+
+	@Mock
+	private ProductImageRepository productImageRepository;
+
+	@Mock
+	private StockRepository stockRepository;
+
 	private ProductService productService;
 
 	@BeforeEach
 	void setUp() {
-		productService = new ProductService(productSearchMapper);
+		productService = new ProductService(productSearchMapper, productRepository, productImageRepository,
+				stockRepository);
 	}
 
 	@Nested
@@ -110,6 +134,91 @@ class ProductServiceTest {
 			assertThat(result.totalElements()).isEqualTo(45L);
 			assertThat(result.totalPages()).isEqualTo(3);
 			verify(productSearchMapper).searchProducts(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("getDetail()")
+	class GetDetail {
+
+		@Test
+		@DisplayName("존재하고 판매 중인 상품이면 이미지·재고·장르를 포함한 상세를 반환한다")
+		void returnsDetailWithImagesAndStock() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			Genre genre = GenreFixture.create("Jazz");
+			product.addGenre(genre);
+			ProductImage first = ProductImage.of(product, "https://cdn.groove.com/0.jpg", 0);
+			ProductImage second = ProductImage.of(product, "https://cdn.groove.com/1.jpg", 1);
+			Stock stock = StockFixture.create(product, 5);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L))
+					.willReturn(List.of(first, second));
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.of(stock));
+
+			// when
+			ProductDetailResponse response = productService.getDetail(10L);
+
+			// then
+			assertThat(response.id()).isEqualTo(10L);
+			assertThat(response.images()).extracting(ProductDetailResponse.ImageSummary::sortOrder)
+					.containsExactly(0, 1);
+			assertThat(response.stockQuantity()).isEqualTo(5);
+			assertThat(response.genres()).extracting(ProductDetailResponse.GenreSummary::name)
+					.containsExactly("Jazz");
+			assertThat(response.averageRating()).isNull();
+			assertThat(response.reviewCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("존재하지 않으면 PRODUCT_NOT_FOUND 예외를 던진다")
+		void throwsWhenNotFound() {
+			// given
+			given(productRepository.findDetailById(99L)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> productService.getDetail(99L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("HIDDEN 상품이면 PRODUCT_HIDDEN 예외를 던진다")
+		void throwsWhenHidden() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 11L);
+			product.hide();
+			given(productRepository.findDetailById(11L)).willReturn(Optional.of(product));
+
+			// when & then
+			assertThatThrownBy(() -> productService.getDetail(11L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_HIDDEN);
+		}
+
+		@Test
+		@DisplayName("재고가 없으면 stockQuantity 를 0 으로 반환한다")
+		void returnsZeroStockWhenStockMissing() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 12L);
+			given(productRepository.findDetailById(12L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(12L)).willReturn(List.of());
+			given(stockRepository.findByProductId(12L)).willReturn(Optional.empty());
+
+			// when
+			ProductDetailResponse response = productService.getDetail(12L);
+
+			// then
+			assertThat(response.stockQuantity()).isZero();
+		}
+
+		private Artist artist() {
+			return ArtistFixture.create();
 		}
 	}
 }
