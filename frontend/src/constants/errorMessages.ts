@@ -16,10 +16,19 @@ export const ERROR_MESSAGES: Record<string, string> = {
   ARTIST_NOT_FOUND: '존재하지 않는 아티스트입니다.',
   LABEL_NOT_FOUND: '존재하지 않는 레이블입니다.',
   GENRE_NOT_FOUND: '존재하지 않는 장르입니다.',
+  STOCK_NOT_FOUND: '존재하지 않는 재고입니다.',
+  STOCK_INSUFFICIENT: '재고가 부족합니다.',
+  STOCK_CONFLICT: '다른 요청과 충돌했습니다. 다시 시도해주세요.',
+  FILE_EMPTY: '빈 파일은 업로드할 수 없습니다.',
+  FILE_INVALID_FORMAT: 'jpg, png, webp 형식만 업로드할 수 있습니다.',
+  FILE_SIZE_EXCEEDED: '파일 용량은 5MB를 넘을 수 없습니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
 export const ERROR_CODE_FIELD: Record<string, string> = {
   MEMBER_EMAIL_DUPLICATE: 'email',
   MEMBER_PASSWORD_MISMATCH: 'currentPassword',
+  ARTIST_NOT_FOUND: 'artistId',
+  LABEL_NOT_FOUND: 'labelId',
+  GENRE_NOT_FOUND: 'genreIds',
 };

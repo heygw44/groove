@@ -1,4 +1,4 @@
-import type { ProductListParams } from '@/types/product';
+import type { AdminProductListParams, ProductListParams } from '@/types/product';
 
 export const memberKeys = {
   me: ['member', 'me'] as const,
@@ -12,6 +12,11 @@ export const productKeys = {
   all: ['products'] as const,
   list: (params: ProductListParams) => ['products', params] as const,
   detail: (id: number) => ['product', id] as const,
+};
+
+export const adminProductKeys = {
+  all: ['adminProducts'] as const,
+  list: (params: AdminProductListParams) => ['adminProducts', params] as const,
 };
 
 export const referenceKeys = {
