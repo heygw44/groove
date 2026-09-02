@@ -24,6 +24,10 @@ public final class MemberFixture {
 		return Member.create(email, ENCODED_PASSWORD, nickname);
 	}
 
+	public static Member createAdmin() {
+		return Member.createAdmin("admin@groove.com", ENCODED_PASSWORD, "관리자");
+	}
+
 	public static Member createWithdrawn() {
 		Member member = create();
 		member.withdraw();

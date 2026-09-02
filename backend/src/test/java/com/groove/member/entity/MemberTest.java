@@ -29,6 +29,22 @@ class MemberTest {
 	}
 
 	@Nested
+	@DisplayName("createAdmin()")
+	class CreateAdmin {
+
+		@Test
+		@DisplayName("ADMIN 권한과 ACTIVE 상태로 생성한다")
+		void createsMemberWithAdminRole() {
+			// when
+			Member member = Member.createAdmin("admin@groove.com", "$2a$10$encodedpassword", "관리자");
+
+			// then
+			assertThat(member.getRole()).isEqualTo(MemberRole.ADMIN);
+			assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+		}
+	}
+
+	@Nested
 	@DisplayName("changeNickname()")
 	class ChangeNickname {
 
