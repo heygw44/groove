@@ -33,8 +33,8 @@ springdoc:
 
 jwt:
   secret: ${JWT_SECRET}            # 환경변수 필수, 최소 256bit (32바이트 이상)
-  access-token-expire-minutes: 30
-  refresh-token-expire-days: 14
+  access-token-expiry: 30m
+  refresh-token-expiry: 14d
 
 toss:
   client-key: ${TOSS_CLIENT_KEY:}

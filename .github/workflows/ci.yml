@@ -28,6 +28,13 @@ jobs:
         with:
           name: backend-test-report
           path: backend/build/reports/tests/test
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jacoco-report
+          path: backend/build/reports/jacoco/test/html
+          if-no-files-found: ignore
 
   frontend:
     name: Frontend lint & build

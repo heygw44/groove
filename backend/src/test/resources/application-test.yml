@@ -5,10 +5,11 @@ spring:
     show-sql: false
     open-in-view: false
 
+# 만료 시나리오 테스트는 @TestPropertySource 로 개별 override 한다(전역을 초 단위로 줄이면 다른 통합 테스트가 깨진다).
 jwt:
   secret: test-secret-key-for-jwt-signing-must-be-long-enough-000000
-  access-token-expire-minutes: 30
-  refresh-token-expire-days: 14
+  access-token-expiry: 1m
+  refresh-token-expiry: 10m
 
 toss:
   client-key: test_ck_dummy

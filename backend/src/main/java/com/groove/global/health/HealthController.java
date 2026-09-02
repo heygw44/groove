@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.groove.global.common.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "Health", description = "서버 상태 확인")
@@ -18,6 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class HealthController {
 
 	@Operation(summary = "헬스체크", description = "서버 기동 여부와 서버 시각을 반환한다.")
+	@SecurityRequirements
 	@GetMapping
 	public ApiResponse<Map<String, Object>> health() {
 		return ApiResponse.ok(Map.of(
