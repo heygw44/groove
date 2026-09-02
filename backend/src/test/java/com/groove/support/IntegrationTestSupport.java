@@ -19,16 +19,16 @@ import org.testcontainers.utility.DockerImageName;
 @SpringBootTest
 public abstract class IntegrationTestSupport {
 
-    @Container
-    @ServiceConnection
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
-            .withDatabaseName("groove")
-            .withUsername("groove")
-            .withPassword("groove1234")
-            .withCommand("--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci");
+	@Container
+	@ServiceConnection
+	static final MySQLContainer<?> MYSQL = new MySQLContainer<>(DockerImageName.parse("mysql:8.0"))
+			.withDatabaseName("groove")
+			.withUsername("groove")
+			.withPassword("groove1234")
+			.withCommand("--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci");
 
-    @Container
-    @ServiceConnection(name = "redis")
-    static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+	@Container
+	@ServiceConnection(name = "redis")
+	static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+			.withExposedPorts(6379);
 }

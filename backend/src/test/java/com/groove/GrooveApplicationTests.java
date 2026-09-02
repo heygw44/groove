@@ -1,11 +1,12 @@
 package com.groove;
 
-import com.groove.support.IntegrationTestSupport;
 import org.junit.jupiter.api.Test;
+
+import com.groove.support.IntegrationTestSupport;
 
 class GrooveApplicationTests extends IntegrationTestSupport {
 
-    @Test
-    void contextLoads() {
-    }
+	@Test
+	void contextLoads() {
+	}
 }

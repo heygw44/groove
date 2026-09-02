@@ -29,3 +29,6 @@ frontend/.vite/
 
 # Claude
 .claude/
+
+# Claude 작업 지침 (개인용, 비공개)
+CLAUDE.md
