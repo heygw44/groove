@@ -21,6 +21,8 @@ export const client = axios.create({ baseURL, withCredentials: true });
  */
 export const refreshClient = axios.create({ baseURL, withCredentials: true });
 
+const PUBLIC_PATHS = ['/auth/signup', '/auth/login', '/auth/reissue'];
+
 /**
  * ApiResponse 껍데기를 벗겨 data 만 돌려준다. 성공 응답에는 data 가 반드시
  * 있지만 타입상 optional 이라(반환값 없는 API 때문에) 여기서 한 번만 단언한다.
@@ -92,8 +94,14 @@ client.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    /* /auth/** 자체는 재발급 대상이 아니다. 로그인 실패도 401 이다. */
-    if (config.url?.startsWith('/auth/')) {
+    /*
+     * 비로그인 엔드포인트(백엔드 SecurityConfig.PUBLIC_PATHS 와 같은 목록)만
+     * 재발급 대상에서 뺀다. 로그인 실패도 401 이라 이걸 안 빼면 재발급을 물고
+     * 들어간다. logout 은 인증이 필요한 엔드포인트라 여기 넣지 않는다 -
+     * 만료 상태에서 로그아웃이 401 로 끝나면 서버가 쿠키와 Redis 토큰을 지우지
+     * 못해, 로그아웃했는데 새로고침하면 부팅 재발급으로 되살아난다.
+     */
+    if (PUBLIC_PATHS.some((path) => config.url?.startsWith(path))) {
       return Promise.reject(error);
     }
 
