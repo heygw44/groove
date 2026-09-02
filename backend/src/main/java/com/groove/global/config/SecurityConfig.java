@@ -60,6 +60,7 @@ public class SecurityConfig {
 						.accessDeniedHandler(accessDeniedHandler))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(PUBLIC_PATHS).permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
 						.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 						.requestMatchers(HttpMethod.POST, "/api/v1/files/**").hasRole("ADMIN")
 						.anyRequest().authenticated())
