@@ -33,6 +33,14 @@ public final class ProductFixture {
 		return create(artist, null, title);
 	}
 
+	public static Product create(Artist artist, String title, BigDecimal price) {
+		return create(artist, null, title, price);
+	}
+
+	public static Product create(Artist artist, Label label, String title, BigDecimal price) {
+		return Product.create(title, artist, label, RELEASE_DATE, "180g", "Black", price, "설명");
+	}
+
 	private static Product create(Artist artist, Label label, String title) {
 		return Product.create(title, artist, label, RELEASE_DATE, "180g", "Black", PRICE, "설명");
 	}

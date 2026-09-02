@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.product.mapper.ProductSearchMapper">
+
+	<resultMap id="productSummaryMap" type="com.groove.product.dto.ProductSummaryResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="title" javaType="java.lang.String"/>
+			<arg column="artist_name" javaType="java.lang.String"/>
+			<arg column="label_name" javaType="java.lang.String"/>
+			<arg column="price" javaType="java.math.BigDecimal"/>
+			<arg column="color_variant" javaType="java.lang.String"/>
+			<arg column="pressing_info" javaType="java.lang.String"/>
+			<arg column="status" javaType="com.groove.product.entity.ProductStatus"/>
+			<arg column="thumbnail_url" javaType="java.lang.String"/>
+			<arg column="average_rating" javaType="java.lang.Double"/>
+			<arg column="review_count" javaType="_long"/>
+		</constructor>
+	</resultMap>
+
+	<sql id="searchFrom">
+		FROM product p
+		JOIN artist a ON a.id = p.artist_id
+		LEFT JOIN label l ON l.id = p.label_id
+	</sql>
+
+	<sql id="searchWhere">
+		<where>
+			p.status &lt;&gt; 'HIDDEN'
+			<if test="keyword != null and keyword != ''">
+				AND (p.title LIKE CONCAT('%', #{keyword}, '%') OR a.name LIKE CONCAT('%', #{keyword}, '%'))
+			</if>
+			<if test="artistId != null">
+				AND p.artist_id = #{artistId}
+			</if>
+			<if test="labelId != null">
+				AND p.label_id = #{labelId}
+			</if>
+			<if test="genreId != null">
+				AND EXISTS (
+					SELECT 1 FROM product_genre pg
+					WHERE pg.product_id = p.id AND pg.genre_id = #{genreId}
+				)
+			</if>
+			<if test="minPrice != null">
+				AND p.price &gt;= #{minPrice}
+			</if>
+			<if test="maxPrice != null">
+				AND p.price &lt;= #{maxPrice}
+			</if>
+		</where>
+	</sql>
+
+	<!-- averageRating/reviewCount 는 리뷰 도입 전까지 상수 컬럼이라 정렬은 별칭 기준이며, 이후 review 조인으로만 바꾸면 된다. -->
+	<select id="searchProducts" parameterType="com.groove.product.dto.ProductSearchCondition"
+			resultMap="productSummaryMap">
+		SELECT
+			p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+			p.color_variant, p.pressing_info, p.status,
+			(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0) AS thumbnail_url,
+			NULL AS average_rating,
+			0 AS review_count
+		<include refid="searchFrom"/>
+		<include refid="searchWhere"/>
+		<choose>
+			<when test="sort.name() == 'PRICE_ASC'">
+				ORDER BY p.price ASC, p.id DESC
+			</when>
+			<when test="sort.name() == 'PRICE_DESC'">
+				ORDER BY p.price DESC, p.id DESC
+			</when>
+			<when test="sort.name() == 'RATING'">
+				ORDER BY average_rating DESC, p.created_at DESC, p.id DESC
+			</when>
+			<when test="sort.name() == 'POPULAR'">
+				ORDER BY review_count DESC, p.created_at DESC, p.id DESC
+			</when>
+			<otherwise>
+				ORDER BY p.created_at DESC, p.id DESC
+			</otherwise>
+		</choose>
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countProducts" parameterType="com.groove.product.dto.ProductSearchCondition" resultType="long">
+		SELECT COUNT(*)
+		<include refid="searchFrom"/>
+		<include refid="searchWhere"/>
+	</select>
+
+</mapper>
