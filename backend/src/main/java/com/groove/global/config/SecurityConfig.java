@@ -11,15 +11,18 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import com.groove.auth.jwt.JwtAuthenticationFilter;
+import com.groove.auth.jwt.JwtProvider;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * 1주차 기본 보안 설정.
+ * 기본 보안 설정.
  * - 무상태(STATELESS), CSRF/폼로그인/HTTP Basic 비활성화
  * - 공개 경로: 헬스체크, Swagger, Actuator health
  * - 인증 실패 401 / 권한 없음 403 은 공통 ApiResponse JSON 으로 응답
- * - JWT 필터(JwtAuthenticationFilter)는 2주차에 추가한다.
  */
 @Configuration
 @EnableWebSecurity
@@ -29,6 +32,7 @@ public class SecurityConfig {
 
 	private final RestAuthenticationEntryPoint authenticationEntryPoint;
 	private final RestAccessDeniedHandler accessDeniedHandler;
+	private final JwtProvider jwtProvider;
 
 	private static final String[] PUBLIC_PATHS = {
 		"/api/v1/health",
@@ -52,7 +56,8 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(PUBLIC_PATHS).permitAll()
 						.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-						.anyRequest().authenticated());
+						.anyRequest().authenticated())
+				.addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class);
 		return http.build();
 	}
 
