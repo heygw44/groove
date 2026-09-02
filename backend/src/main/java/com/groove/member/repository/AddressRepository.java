@@ -13,6 +13,8 @@ public interface AddressRepository extends JpaRepository<Address, Long> {
 
 	List<Address> findAllByMemberIdOrderByIdAsc(Long memberId);
 
+	List<Address> findAllByMemberIdOrderByIsDefaultDescIdAsc(Long memberId);
+
 	Optional<Address> findByIdAndMemberId(Long id, Long memberId);
 
 	long countByMemberId(Long memberId);
