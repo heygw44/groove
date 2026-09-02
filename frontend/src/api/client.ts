@@ -8,7 +8,8 @@ interface RetryableRequestConfig extends InternalAxiosRequestConfig {
 }
 
 export const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  // 폴백은 Vite 프록시(dev)와 Nginx 리버스 프록시(운영) 양쪽에서 맞는 경로다.
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
   withCredentials: true,
 });
 
@@ -38,7 +39,13 @@ client.interceptors.response.use(
     const config = error.config as RetryableRequestConfig | undefined;
     const status = error.response?.status;
 
-    if (status === 401 && config && !config._retry) {
+    /*
+     * /auth/** 는 재발급 대상이 아니다. 로그인 실패(401)로 재발급을 부르면
+     * 그 재발급도 401 이라 인터셉터가 자기 자신에 다시 들어가 요청이 매달린다.
+     */
+    const isAuthRequest = config?.url?.startsWith('/auth/') ?? false;
+
+    if (status === 401 && config && !config._retry && !isAuthRequest) {
       config._retry = true;
 
       if (isRefreshing) {
