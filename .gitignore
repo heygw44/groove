@@ -32,6 +32,9 @@ frontend/.vite/
 backend/bin/
 .DS_Store
 
+# k6 결과
+scripts/k6/results/
+
 # Claude
 .claude/
 
