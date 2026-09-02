@@ -47,6 +47,24 @@ class MemberTest {
 	}
 
 	@Nested
+	@DisplayName("changePassword()")
+	class ChangePassword {
+
+		@Test
+		@DisplayName("비밀번호를 변경하면 인코딩된 값으로 교체된다")
+		void replacesEncodedPassword() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+
+			// when
+			member.changePassword("$2a$10$newencodedpassword");
+
+			// then
+			assertThat(member.getPassword()).isEqualTo("$2a$10$newencodedpassword");
+		}
+	}
+
+	@Nested
 	@DisplayName("withdraw()")
 	class Withdraw {
 

@@ -2,6 +2,8 @@ package com.groove.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -111,6 +113,48 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(new LoginRequest(email, "wrong-password"))))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_INVALID_CREDENTIALS")));
+		}
+	}
+
+	@Nested
+	@DisplayName("내 정보 조회 → 탈퇴 흐름")
+	class GetMyInfoAndWithdrawFlow {
+
+		@Test
+		@DisplayName("탈퇴 후에는 내 정보 접근과 로그인을 거부한다")
+		void rejectsAccessAndLoginAfterWithdraw() throws Exception {
+			// given
+			String email = "flow-" + UUID.randomUUID() + "@groove.com";
+			String password = "password1";
+			MvcResult signupResult = signup(email, password);
+			Long memberId = objectMapper.readTree(signupResult.getResponse().getContentAsString())
+					.path("data").path("id").asLong();
+			MvcResult loginResult = login(email, password);
+			String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+					.path("data").path("accessToken").asText();
+
+			// when & then
+			mockMvc.perform(get("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.email", is(email)))
+					.andExpect(jsonPath("$.data.status", is("ACTIVE")));
+
+			mockMvc.perform(delete("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isOk());
+			assertThat(refreshTokenRepository.findByMemberId(memberId)).isEmpty();
+
+			mockMvc.perform(get("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("MEMBER_WITHDRAWN")));
+
+			mockMvc.perform(post("/api/v1/auth/login")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new LoginRequest(email, password))))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("MEMBER_WITHDRAWN")));
 		}
 	}
 
