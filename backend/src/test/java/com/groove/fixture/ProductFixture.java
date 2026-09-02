@@ -2,9 +2,12 @@ package com.groove.fixture;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.groove.product.dto.ProductCreateRequest;
+import com.groove.product.dto.ProductUpdateRequest;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
@@ -37,5 +40,19 @@ public final class ProductFixture {
 	public static Product withId(Product product, Long id) {
 		ReflectionTestUtils.setField(product, "id", id);
 		return product;
+	}
+
+	public static ProductCreateRequest createRequest(Long artistId, Long labelId, List<Long> genreIds) {
+		return new ProductCreateRequest(TITLE, artistId, labelId, genreIds, RELEASE_DATE, "180g", "Black", PRICE,
+				"설명", List.of("https://cdn.groove.com/0.jpg", "https://cdn.groove.com/1.jpg"), 10);
+	}
+
+	public static ProductUpdateRequest updateRequest(Long artistId, Long labelId, List<Long> genreIds) {
+		return new ProductUpdateRequest("A Love Supreme", artistId, labelId, genreIds, RELEASE_DATE, "180g", "Black",
+				PRICE, "수정된 설명", List.of("https://cdn.groove.com/updated.jpg"));
+	}
+
+	public static ProductUpdateRequest emptyUpdateRequest() {
+		return new ProductUpdateRequest(null, null, null, null, null, null, null, null, null, null);
 	}
 }

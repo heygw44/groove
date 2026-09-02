@@ -2,13 +2,30 @@ package com.groove.product.repository;
 
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.entity.Product;
+import com.groove.product.entity.ProductStatus;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
 	@EntityGraph(attributePaths = {"artist", "label"})
 	Optional<Product> findWithArtistAndLabelById(Long id);
+
+	@Query(value = """
+			SELECT new com.groove.product.dto.AdminProductSummaryResponse(
+				p.id, p.title, a.name, l.name, p.price, p.status,
+				(SELECT MIN(i.imageUrl) FROM ProductImage i WHERE i.product = p AND i.sortOrder = 0),
+				s.quantity, p.createdAt)
+			FROM Product p JOIN p.artist a LEFT JOIN p.label l LEFT JOIN Stock s ON s.product = p
+			WHERE (:status IS NULL OR p.status = :status)
+			""",
+			countQuery = "SELECT COUNT(p) FROM Product p WHERE (:status IS NULL OR p.status = :status)")
+	Page<AdminProductSummaryResponse> findAdminSummaries(@Param("status") ProductStatus status, Pageable pageable);
 }
