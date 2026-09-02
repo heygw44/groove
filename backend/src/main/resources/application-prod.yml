@@ -45,6 +45,10 @@ management:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS}
 
+auth:
+  cookie:
+    secure: true
+
 file:
   upload-path: ${FILE_UPLOAD_PATH}
   base-url: ${FILE_BASE_URL}

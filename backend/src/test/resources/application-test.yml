@@ -11,6 +11,10 @@ jwt:
   access-token-expiry: 1m
   refresh-token-expiry: 10m
 
+auth:
+  cookie:
+    secure: false
+
 toss:
   client-key: test_ck_dummy
   secret-key: test_sk_dummy

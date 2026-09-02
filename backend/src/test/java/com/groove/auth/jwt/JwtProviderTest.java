@@ -45,6 +45,22 @@ class JwtProviderTest {
 	}
 
 	@Nested
+	@DisplayName("createRefreshToken()")
+	class CreateRefreshToken {
+
+		@Test
+		@DisplayName("연속으로 호출해도 서로 다른 토큰을 발급한다")
+		void issuesDifferentTokensOnConsecutiveCalls() {
+			// when
+			String first = jwtProvider.createRefreshToken(MEMBER_ID);
+			String second = jwtProvider.createRefreshToken(MEMBER_ID);
+
+			// then
+			assertThat(first).isNotEqualTo(second);
+		}
+	}
+
+	@Nested
 	@DisplayName("parseAccessToken()")
 	class ParseAccessToken {
 

@@ -2,6 +2,7 @@ package com.groove.auth.jwt;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 import javax.crypto.SecretKey;
 
@@ -52,6 +53,7 @@ public class JwtProvider {
 		Date now = new Date();
 		Date expiration = new Date(now.getTime() + jwtProperties.refreshTokenExpiry().toMillis());
 		return Jwts.builder()
+				.id(UUID.randomUUID().toString())
 				.subject(String.valueOf(memberId))
 				.claim(CLAIM_TYPE, TYPE_REFRESH)
 				.issuedAt(now)
