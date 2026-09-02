@@ -12,6 +12,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import lombok.extern.slf4j.Slf4j;
@@ -38,9 +40,18 @@ public class GlobalExceptionHandler {
 				.body(ApiResponse.error(code.name(), code.getMessage(), fieldErrors));
 	}
 
-	@ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+	@ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
+		MissingServletRequestPartException.class})
 	public ResponseEntity<ApiResponse<Void>> handleInvalidInput(Exception ex) {
 		ErrorCode code = ErrorCode.COMMON_INVALID_INPUT;
+		return ResponseEntity.status(code.getStatus())
+				.body(ApiResponse.error(code.name(), code.getMessage()));
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+		log.warn("MaxUploadSizeExceededException: {}", ex.getMessage());
+		ErrorCode code = ErrorCode.FILE_SIZE_EXCEEDED;
 		return ResponseEntity.status(code.getStatus())
 				.body(ApiResponse.error(code.name(), code.getMessage()));
 	}
