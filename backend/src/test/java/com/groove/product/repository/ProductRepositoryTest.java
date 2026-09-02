@@ -9,11 +9,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
 import com.groove.fixture.ProductFixture;
+import com.groove.inventory.entity.Stock;
+import com.groove.inventory.repository.StockRepository;
+import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
@@ -44,6 +49,9 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 
 	@Autowired
 	private ProductGenreRepository productGenreRepository;
+
+	@Autowired
+	private StockRepository stockRepository;
 
 	@Autowired
 	private EntityManager entityManager;
@@ -160,6 +168,63 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			assertThat(found).isPresent();
 			assertThat(found.get().getArtist().getName()).isEqualTo("Bill Evans");
 			assertThat(found.get().getLabel()).isNull();
+		}
+	}
+
+	@Nested
+	@DisplayName("findAdminSummaries()")
+	class FindAdminSummaries {
+
+		@Test
+		@DisplayName("HIDDEN 상품도 포함되고 재고 수량과 sortOrder 0 썸네일이 매핑된다")
+		void mapsStockQuantityAndThumbnail() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product product = ProductFixture.create(artist, "Admin Summary Product");
+			product.addImage("https://cdn.groove.com/thumb.jpg", 0);
+			product.addImage("https://cdn.groove.com/sub.jpg", 1);
+			product.hide();
+			Product saved = productRepository.save(product);
+			Stock stock = stockRepository.save(Stock.create(saved, 7));
+			flushAndClear();
+
+			// when
+			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null,
+					PageRequest.of(0, 100));
+
+			// then
+			AdminProductSummaryResponse found = page.getContent().stream()
+					.filter(summary -> summary.id().equals(saved.getId()))
+					.findFirst()
+					.orElseThrow();
+			assertThat(found.status()).isEqualTo(ProductStatus.HIDDEN);
+			assertThat(found.thumbnailUrl()).isEqualTo("https://cdn.groove.com/thumb.jpg");
+			assertThat(found.stockQuantity()).isEqualTo(stock.getQuantity());
+		}
+
+		@Test
+		@DisplayName("status 로 필터링하면 해당 상태의 자기 상품만 조회된다")
+		void filtersByStatus() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product onSale = productRepository.save(ProductFixture.create(artist, "Admin Filter On Sale"));
+			stockRepository.save(Stock.create(onSale, 5));
+			Product hidden = ProductFixture.create(artist, "Admin Filter Hidden");
+			hidden.hide();
+			Product savedHidden = productRepository.save(hidden);
+			stockRepository.save(Stock.create(savedHidden, 3));
+			flushAndClear();
+
+			// when
+			Page<AdminProductSummaryResponse> hiddenPage = productRepository.findAdminSummaries(
+					ProductStatus.HIDDEN, PageRequest.of(0, 100));
+
+			// then
+			List<Long> hiddenIds = hiddenPage.getContent().stream()
+					.map(AdminProductSummaryResponse::id)
+					.toList();
+			assertThat(hiddenIds).contains(savedHidden.getId());
+			assertThat(hiddenIds).doesNotContain(onSale.getId());
 		}
 	}
 
