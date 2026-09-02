@@ -21,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 기본 보안 설정.
  * - 무상태(STATELESS), CSRF/폼로그인/HTTP Basic 비활성화
- * - 공개 경로: 헬스체크, Swagger, Actuator health
+ * - 공개 경로: 헬스체크, 회원가입, Swagger, Actuator health
  * - 인증 실패 401 / 권한 없음 403 은 공통 ApiResponse JSON 으로 응답
  */
 @Configuration
@@ -36,6 +36,7 @@ public class SecurityConfig {
 
 	private static final String[] PUBLIC_PATHS = {
 		"/api/v1/health",
+		"/api/v1/auth/signup",
 		"/actuator/health",
 		"/swagger-ui.html",
 		"/swagger-ui/**",

@@ -1,5 +1,7 @@
 package com.groove.fixture;
 
+import org.springframework.test.util.ReflectionTestUtils;
+
 import com.groove.member.entity.Member;
 
 public final class MemberFixture {
@@ -16,5 +18,24 @@ public final class MemberFixture {
 
 	public static Member create(String email) {
 		return Member.create(email, ENCODED_PASSWORD, NICKNAME);
+	}
+
+	public static Member create(String email, String nickname) {
+		return Member.create(email, ENCODED_PASSWORD, nickname);
+	}
+
+	public static Member createWithdrawn() {
+		Member member = create();
+		member.withdraw();
+		return member;
+	}
+
+	public static Member withId(Member member, Long id) {
+		ReflectionTestUtils.setField(member, "id", id);
+		return member;
+	}
+
+	public static String encodedPassword() {
+		return ENCODED_PASSWORD;
 	}
 }

@@ -103,7 +103,8 @@ jacocoTestReport {
 }
 
 jacocoTestCoverageVerification {
-    // 2주차 이후 service 클래스가 생기면 check 에 연결해 게이트를 활성화한다(현재는 대상 0개).
+    // service 클래스 라인 커버리지 70% 게이트. check 에 연결되어 위반 시 빌드가 실패한다.
+    dependsOn test
     violationRules {
         rule {
             element = 'CLASS'
@@ -116,3 +117,5 @@ jacocoTestCoverageVerification {
         }
     }
 }
+
+check.dependsOn jacocoTestCoverageVerification
