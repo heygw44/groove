@@ -25,6 +25,11 @@ frontend/.vite/
 .idea/
 *.iml
 .vscode/
+.classpath
+.factorypath
+.project
+.settings/
+backend/bin/
 .DS_Store
 
 # Claude
