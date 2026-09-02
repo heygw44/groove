@@ -14,7 +14,7 @@ Java 17 / Spring Boot 3.5 + React 18 풀스택 포트폴리오 프로젝트.
 ## 로컬 실행
 
 ```bash
-# 1. 인프라 (MySQL → localhost:3307, Redis → localhost:6380)
+# 1. 인프라 (MySQL → localhost:3306, Redis → localhost:6379)
 docker compose up -d
 
 # 2. 백엔드 (http://localhost:8080, Swagger: /swagger-ui.html)

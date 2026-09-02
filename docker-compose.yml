@@ -12,7 +12,7 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     ports:
-      - "${MYSQL_PORT:-3307}:3306"   # 호스트 3306은 다른 프로젝트가 쓸 수 있어 기본 3307
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -25,7 +25,7 @@ services:
     image: redis:7-alpine
     container_name: groove-redis
     ports:
-      - "${REDIS_PORT:-6380}:6379"   # 기본 6380
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
