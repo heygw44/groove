@@ -1,0 +1,31 @@
+# 내부 문서 (외부 비공개)
+docs/
+
+# 환경/시크릿
+.env
+.env.*
+!.env.example
+
+# Java / Gradle
+backend/build/
+backend/.gradle/
+backend/out/
+backend/uploads/
+backend/logs/
+*.class
+*.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Claude
+.claude/
