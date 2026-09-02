@@ -1,6 +1,6 @@
 import { client, unwrap } from '@/api/client';
 import type { ApiResponse, PageResponse } from '@/types/api';
-import type { ProductListParams, ProductSummary } from '@/types/product';
+import type { ProductDetail, ProductListParams, ProductSummary } from '@/types/product';
 
 export const getProducts = (params: ProductListParams) =>
   unwrap(
@@ -8,3 +8,6 @@ export const getProducts = (params: ProductListParams) =>
       params,
     }),
   );
+
+export const getProduct = (id: number) =>
+  unwrap(client.get<ApiResponse<ProductDetail>>(`/products/${id}`));
