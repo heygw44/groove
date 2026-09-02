@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -61,6 +62,14 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(AccessDeniedException.class)
 	public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
 		ErrorCode code = ErrorCode.AUTH_FORBIDDEN;
+		return ResponseEntity.status(code.getStatus())
+				.body(ApiResponse.error(code.name(), code.getMessage()));
+	}
+
+	@ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+	public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+		log.warn("ObjectOptimisticLockingFailureException: {}", ex.getMessage());
+		ErrorCode code = ErrorCode.STOCK_CONFLICT;
 		return ResponseEntity.status(code.getStatus())
 				.body(ApiResponse.error(code.name(), code.getMessage()));
 	}

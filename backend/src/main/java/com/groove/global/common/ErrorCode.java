@@ -39,7 +39,12 @@ public enum ErrorCode {
 
 	// ===== PRODUCT =====
 	PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
-	PRODUCT_HIDDEN(HttpStatus.NOT_FOUND, "판매 중지된 상품입니다.");
+	PRODUCT_HIDDEN(HttpStatus.NOT_FOUND, "판매 중지된 상품입니다."),
+
+	// ===== STOCK =====
+	STOCK_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
+	STOCK_INSUFFICIENT(HttpStatus.CONFLICT, "재고가 부족합니다."),
+	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 처리 중 충돌이 발생했습니다. 다시 시도해주세요.");
 
 	private final HttpStatus status;
 	private final String message;
