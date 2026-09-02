@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 
+import { MyPageLayout } from '@/components/layout/MyPageLayout';
 import { RootLayout } from '@/components/layout/RootLayout';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 import LoginPage from '@/pages/auth/LoginPage';
@@ -8,6 +9,7 @@ import CartPage from '@/pages/cart/CartPage';
 import HomePage from '@/pages/HomePage';
 import LimitedDropDetailPage from '@/pages/limited/LimitedDropDetailPage';
 import LimitedDropListPage from '@/pages/limited/LimitedDropListPage';
+import AddressListPage from '@/pages/mypage/AddressListPage';
 import MyPage from '@/pages/mypage/MyPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ProductDetailPage from '@/pages/product/ProductDetailPage';
@@ -39,9 +41,13 @@ export const router = createBrowserRouter([
         path: 'mypage',
         element: (
           <PrivateRoute>
-            <MyPage />
+            <MyPageLayout />
           </PrivateRoute>
         ),
+        children: [
+          { index: true, element: <MyPage /> },
+          { path: 'addresses', element: <AddressListPage /> },
+        ],
       },
       {
         path: 'admin',
