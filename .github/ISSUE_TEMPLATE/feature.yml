@@ -1,0 +1,57 @@
+name: "✨ 기능 개발"
+description: "새로운 기능 또는 작업 단위를 등록합니다."
+title: "[FEAT] "
+labels: ["feat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 기능 개발 이슈
+        하나의 이슈는 하나의 PR로 닫힐 수 있는 크기로 잘라 주세요.
+  - type: textarea
+    id: background
+    attributes:
+      label: "📌 배경 및 목적"
+      description: "왜 이 작업이 필요한가요? 어떤 문제를 해결하나요?"
+      placeholder: "예) 회원이 JWT로 로그인하고 만료 시 재발급 받을 수 있어야 한다."
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: "✅ 작업 내용"
+      description: "구현할 항목을 체크리스트로 작성해 주세요."
+      value: |
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: "🎯 완료 조건 (Acceptance Criteria)"
+      description: "어떤 상태가 되면 이 이슈를 닫을 수 있나요? 테스트/동작 기준으로 적어 주세요."
+      placeholder: |
+        - Swagger에서 API 호출 시 200 응답
+        - 서비스 단위 테스트 통과
+  - type: dropdown
+    id: area
+    attributes:
+      label: "🧩 영역"
+      options:
+        - backend
+        - frontend
+        - infra
+        - backend + frontend
+    validations:
+      required: true
+  - type: input
+    id: fr
+    attributes:
+      label: "🔗 관련 요구사항 ID"
+      placeholder: "예) FR-02"
+  - type: textarea
+    id: reference
+    attributes:
+      label: "📎 참고 자료"
+      description: "관련 문서, 디자인, 레퍼런스 링크"

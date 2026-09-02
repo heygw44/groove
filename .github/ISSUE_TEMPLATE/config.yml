@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 프로젝트 문서
+    url: https://github.com/heygw44/groove#readme
+    about: 프로젝트 개요, 실행 방법은 README를 먼저 확인해 주세요.
