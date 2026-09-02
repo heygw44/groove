@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 export function Header() {
   const member = useAuthStore((s) => s.member);
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const logoutMutation = useLogout();
 
   return (
@@ -35,7 +36,10 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-3 text-sm">
-          {isLoggedIn ? (
+          {/* 부팅 중에는 로그인 여부를 모른다. 자리만 잡아 레이아웃이 튀지 않게 한다. */}
+          {isBootstrapping ? (
+            <div className="h-8 w-40 animate-pulse rounded-md bg-surface-muted" />
+          ) : isLoggedIn ? (
             <>
               <Link to="/mypage" className="text-content-muted hover:text-content">
                 마이페이지
