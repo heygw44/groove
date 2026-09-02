@@ -39,3 +39,14 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
+
+@layer base {
+  a {
+    color: var(--color-accent);
+  }
+
+  a:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+  }
+}
