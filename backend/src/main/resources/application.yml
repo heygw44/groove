@@ -36,6 +36,10 @@ jwt:
   access-token-expiry: 30m
   refresh-token-expiry: 14d
 
+auth:
+  cookie:
+    secure: false   # 로컬 HTTP. 운영은 application-prod.yml 에서 true
+
 toss:
   client-key: ${TOSS_CLIENT_KEY:}
   secret-key: ${TOSS_SECRET_KEY:}
