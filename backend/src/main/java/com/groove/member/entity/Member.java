@@ -80,6 +80,10 @@ public class Member extends BaseTimeEntity {
 		this.nickname = nickname;
 	}
 
+	public void changePassword(String encodedPassword) {
+		this.password = encodedPassword;
+	}
+
 	public void withdraw() {
 		if (isWithdrawn()) {
 			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
