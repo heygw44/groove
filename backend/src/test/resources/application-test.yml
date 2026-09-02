@@ -4,6 +4,9 @@ spring:
       ddl-auto: create-drop
     show-sql: false
     open-in-view: false
+    properties:
+      hibernate:
+        generate_statistics: true
 
 # 만료 시나리오 테스트는 @TestPropertySource 로 개별 override 한다(전역을 초 단위로 줄이면 다른 통합 테스트가 깨진다).
 jwt:

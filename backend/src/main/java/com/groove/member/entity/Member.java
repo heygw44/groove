@@ -76,6 +76,16 @@ public class Member extends BaseTimeEntity {
 				.build();
 	}
 
+	public static Member createAdmin(String email, String encodedPassword, String nickname) {
+		return Member.builder()
+				.email(email)
+				.password(encodedPassword)
+				.nickname(nickname)
+				.role(MemberRole.ADMIN)
+				.status(MemberStatus.ACTIVE)
+				.build();
+	}
+
 	public void changeNickname(String nickname) {
 		this.nickname = nickname;
 	}
