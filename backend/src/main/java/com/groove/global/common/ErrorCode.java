@@ -44,7 +44,13 @@ public enum ErrorCode {
 	// ===== STOCK =====
 	STOCK_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
 	STOCK_INSUFFICIENT(HttpStatus.CONFLICT, "재고가 부족합니다."),
-	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 처리 중 충돌이 발생했습니다. 다시 시도해주세요.");
+	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 처리 중 충돌이 발생했습니다. 다시 시도해주세요."),
+
+	// ===== FILE =====
+	FILE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다."),
+	FILE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "파일 크기가 제한을 초과했습니다."),
+	FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 업로드에 실패했습니다."),
+	FILE_EMPTY(HttpStatus.BAD_REQUEST, "업로드할 파일이 없습니다.");
 
 	private final HttpStatus status;
 	private final String message;
