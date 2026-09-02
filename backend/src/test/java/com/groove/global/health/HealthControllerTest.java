@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.groove.global.config.RestAccessDeniedHandler;
@@ -21,6 +22,7 @@ import com.groove.global.config.WebConfig;
 
 @WebMvcTest(HealthController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+@ActiveProfiles("test")
 class HealthControllerTest {
 
 	@Autowired
