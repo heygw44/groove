@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.openapitools.jackson.nullable.JsonNullable;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
@@ -219,6 +220,66 @@ class AdminProductServiceTest {
 			assertThat(response.genres()).extracting(AdminProductResponse.GenreSummary::name)
 					.containsExactly("Jazz");
 			verify(genreRepository, never()).findAllById(any());
+		}
+
+		@Test
+		@DisplayName("labelId 가 명시적으로 null 이면 레이블을 해제한다")
+		void clearsLabelWhenLabelIdIsExplicitNull() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist, LabelFixture.create()),
+					PRODUCT_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithLabel(JsonNullable.of(null));
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.label()).isNull();
+			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_UPDATE,
+					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "label");
+			verify(labelRepository, never()).findById(any());
+		}
+
+		@Test
+		@DisplayName("labelId 키가 없으면 기존 레이블을 유지한다")
+		void keepsLabelWhenLabelIdUndefined() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Label label = LabelFixture.create();
+			Product product = ProductFixture.withId(ProductFixture.create(artist, label), PRODUCT_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.label().name()).isEqualTo(label.getName());
+			verify(labelRepository, never()).findById(any());
+		}
+
+		@Test
+		@DisplayName("labelId 에 값이 있으면 레이블을 교체한다")
+		void replacesLabelWhenLabelIdGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist, LabelFixture.create()),
+					PRODUCT_ID);
+			Label newLabel = LabelFixture.withId(LabelFixture.create("Impulse!"), LABEL_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			given(labelRepository.findById(LABEL_ID)).willReturn(Optional.of(newLabel));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithLabel(JsonNullable.of(LABEL_ID));
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.label().name()).isEqualTo("Impulse!");
 		}
 	}
 

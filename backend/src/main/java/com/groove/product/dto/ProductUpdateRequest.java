@@ -4,19 +4,24 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.openapitools.jackson.nullable.JsonNullable;
+
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/** 부분 수정 요청. 필드가 null 이면 기존 값을 유지한다. genreIds/imageUrls 는 null=유지, 빈 리스트=전부 제거. */
+/**
+ * 부분 수정 요청. 필드가 null 이면 기존 값을 유지한다. genreIds/imageUrls 는 null=유지, 빈 리스트=전부 제거.
+ * labelId 는 키 생략=유지, null=해제, 값=교체.
+ */
 public record ProductUpdateRequest(
 		@Size(max = 200, message = "제목은 200자 이하여야 합니다.")
 		String title,
 
 		Long artistId,
 
-		Long labelId,
+		JsonNullable<Long> labelId,
 
 		List<Long> genreIds,
 

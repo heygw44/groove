@@ -40,6 +40,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
 
     // --- MyBatis (Boot 3.2~3.5 / Java 17+) ---
     implementation "org.mybatis.spring.boot:mybatis-spring-boot-starter:${mybatisVersion}"

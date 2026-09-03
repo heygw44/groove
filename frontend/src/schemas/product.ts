@@ -86,7 +86,8 @@ export const toCreatePayload = (values: ProductFormValues): AdminProductCreateRe
 export const toUpdatePayload = (values: ProductFormValues): AdminProductUpdateRequest => ({
   title: values.title,
   artistId: Number(values.artistId),
-  labelId: values.labelId ? Number(values.labelId) : undefined,
+  // 서버는 null=레이블 해제, 키 생략=유지로 구분하므로 값이 없으면 항상 null 을 보낸다.
+  labelId: values.labelId ? Number(values.labelId) : null,
   genreIds: values.genreIds,
   releaseDate: values.releaseDate || undefined,
   pressingInfo: values.pressingInfo || undefined,

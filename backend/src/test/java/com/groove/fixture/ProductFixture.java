@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.product.dto.ProductCreateRequest;
@@ -56,11 +57,17 @@ public final class ProductFixture {
 	}
 
 	public static ProductUpdateRequest updateRequest(Long artistId, Long labelId, List<Long> genreIds) {
-		return new ProductUpdateRequest("A Love Supreme", artistId, labelId, genreIds, RELEASE_DATE, "180g", "Black",
+		JsonNullable<Long> label = labelId == null ? JsonNullable.undefined() : JsonNullable.of(labelId);
+		return new ProductUpdateRequest("A Love Supreme", artistId, label, genreIds, RELEASE_DATE, "180g", "Black",
 				PRICE, "수정된 설명", List.of("https://cdn.groove.com/updated.jpg"));
 	}
 
 	public static ProductUpdateRequest emptyUpdateRequest() {
-		return new ProductUpdateRequest(null, null, null, null, null, null, null, null, null, null);
+		return new ProductUpdateRequest(null, null, JsonNullable.undefined(), null, null, null, null, null, null,
+				null);
+	}
+
+	public static ProductUpdateRequest updateRequestWithLabel(JsonNullable<Long> labelId) {
+		return new ProductUpdateRequest(null, null, labelId, null, null, null, null, null, null, null);
 	}
 }
