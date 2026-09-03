@@ -61,6 +61,18 @@ public class AdminProductController {
 		return ApiResponse.ok();
 	}
 
+	@Operation(summary = "상품 숨김 해제")
+	@PatchMapping("/{id}/restore")
+	public ApiResponse<AdminProductResponse> restore(@AuthMember LoginMember loginMember, @PathVariable Long id) {
+		return ApiResponse.ok(adminProductService.restore(loginMember.id(), id));
+	}
+
+	@Operation(summary = "관리자 상품 단건 조회")
+	@GetMapping("/{id}")
+	public ApiResponse<AdminProductResponse> getDetail(@PathVariable Long id) {
+		return ApiResponse.ok(adminProductService.getDetail(id));
+	}
+
 	@Operation(summary = "상품 목록 조회")
 	@GetMapping
 	public ApiResponse<PageResponse<AdminProductSummaryResponse>> getList(

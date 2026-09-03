@@ -5,10 +5,8 @@ import { ProductForm } from '@/components/admin/ProductForm';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
-import { useProduct } from '@/hooks/queries/useProduct';
+import { useAdminProduct } from '@/hooks/queries/useAdminProduct';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-
-const NOT_FOUND_CODES = new Set(['PRODUCT_NOT_FOUND', 'PRODUCT_HIDDEN']);
 
 const ID_PATTERN = /^\d+$/;
 
@@ -17,7 +15,7 @@ export default function AdminProductEditPage() {
   const isValidId = idParam !== undefined && ID_PATTERN.test(idParam);
   const id = isValidId ? Number(idParam) : -1;
 
-  const { data: product, isPending, isError, error, refetch } = useProduct(id);
+  const { data: product, isPending, isError, error, refetch } = useAdminProduct(id);
 
   if (!isValidId) {
     return <p className="text-sm text-danger">존재하지 않는 상품입니다.</p>;
@@ -32,10 +30,10 @@ export default function AdminProductEditPage() {
   }
 
   const isNotFoundStatus = axios.isAxiosError(error) && error.response?.status === 404;
-  if (isError && (isNotFoundStatus || NOT_FOUND_CODES.has(getErrorCode(error) ?? ''))) {
+  if (isError && (isNotFoundStatus || getErrorCode(error) === 'PRODUCT_NOT_FOUND')) {
     return (
       <EmptyState
-        title="숨김 처리된 상품은 수정할 수 없습니다."
+        title="상품을 찾을 수 없습니다."
         action={
           <Link to="/admin/products" className="no-underline hover:no-underline">
             <Button variant="secondary">상품 목록으로</Button>

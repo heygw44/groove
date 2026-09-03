@@ -14,6 +14,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import com.groove.global.common.BaseTimeEntity;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -129,6 +131,14 @@ public class Product extends BaseTimeEntity {
 
 	public void resume() {
 		this.status = ProductStatus.ON_SALE;
+	}
+
+	public void restore(int stockQuantity) {
+		if (!isHidden()) {
+			throw new BusinessException(ErrorCode.PRODUCT_NOT_HIDDEN);
+		}
+		// 숨기기 전 상태를 저장하지 않으므로 재고 기준으로 되돌린다(Stock.syncProductStatus 와 같은 규칙).
+		this.status = stockQuantity > 0 ? ProductStatus.ON_SALE : ProductStatus.SOLD_OUT;
 	}
 
 	public boolean isHidden() {

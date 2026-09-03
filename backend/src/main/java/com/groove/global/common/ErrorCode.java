@@ -40,6 +40,7 @@ public enum ErrorCode {
 	// ===== PRODUCT =====
 	PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
 	PRODUCT_HIDDEN(HttpStatus.NOT_FOUND, "판매 중지된 상품입니다."),
+	PRODUCT_NOT_HIDDEN(HttpStatus.CONFLICT, "숨김 상태가 아닌 상품입니다."),
 	ARTIST_NOT_FOUND(HttpStatus.NOT_FOUND, "아티스트를 찾을 수 없습니다."),
 	LABEL_NOT_FOUND(HttpStatus.NOT_FOUND, "레이블을 찾을 수 없습니다."),
 	GENRE_NOT_FOUND(HttpStatus.NOT_FOUND, "장르를 찾을 수 없습니다."),

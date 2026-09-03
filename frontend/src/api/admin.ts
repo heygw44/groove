@@ -26,6 +26,12 @@ export const updateAdminProduct = (id: number, payload: AdminProductUpdateReques
 export const hideAdminProduct = (id: number) =>
   unwrap(client.delete<ApiResponse<void>>(`/admin/products/${id}`));
 
+export const getAdminProduct = (id: number) =>
+  unwrap(client.get<ApiResponse<AdminProductResponse>>(`/admin/products/${id}`));
+
+export const restoreAdminProduct = (id: number) =>
+  unwrap(client.patch<ApiResponse<AdminProductResponse>>(`/admin/products/${id}/restore`));
+
 export const adjustStock = (id: number, payload: StockAdjustRequest) =>
   unwrap(
     client.patch<ApiResponse<StockAdjustResponse>>(`/admin/products/${id}/stock`, payload),

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type {
   AdminProductCreateRequest,
   AdminProductUpdateRequest,
-  ProductDetail,
+  ProductFormSource,
 } from '@/types/product';
 
 /*
@@ -54,7 +54,7 @@ export const EMPTY_PRODUCT_FORM_VALUES: ProductFormValues = {
   initialStock: '',
 };
 
-export const toFormValues = (product: ProductDetail): ProductFormValues => ({
+export const toFormValues = (product: ProductFormSource): ProductFormValues => ({
   title: product.title,
   artistId: String(product.artist.id),
   labelId: product.label ? String(product.label.id) : '',

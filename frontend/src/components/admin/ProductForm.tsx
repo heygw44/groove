@@ -24,12 +24,12 @@ import {
   toUpdatePayload,
   type ProductFormValues,
 } from '@/schemas/product';
-import type { Genre, Label, ProductDetail } from '@/types/product';
+import type { Genre, Label, ProductFormSource } from '@/types/product';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
 
 interface ProductFormProps {
   /** 있으면 수정, 없으면 등록. 페이지가 등록/수정으로 분리되어 있어 이 값은 마운트 중 바뀌지 않는다. */
-  product?: ProductDetail;
+  product?: ProductFormSource;
 }
 
 interface ProductFormBodyProps extends ProductFormProps {

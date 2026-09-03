@@ -200,4 +200,53 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(jsonPath("$.data.label").doesNotExist());
 		}
 	}
+
+	@Nested
+	@DisplayName("숨김 → 복구 흐름")
+	class HideAndRestore {
+
+		@Test
+		@DisplayName("숨긴 상품을 복구하면 다시 노출된다")
+		void hidesAndRestoresProduct() throws Exception {
+			// given
+			Member admin = memberRepository.save(
+					Member.create("admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+			Artist artist = artistRepository.save(Artist.create("Herbie Hancock", "Herbie Hancock", "설명"));
+
+			ProductCreateRequest createRequest = new ProductCreateRequest("Maiden Voyage", artist.getId(), null,
+					List.of(), LocalDate.of(1965, 3, 17), "180g", "Black", new BigDecimal("42000.00"), "설명",
+					List.of(), 5);
+			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isCreated())
+					.andReturn();
+			Long productId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+					.path("data").path("id").asLong();
+
+			// when
+			mockMvc.perform(delete("/api/v1/admin/products/{id}", productId)
+							.header(HttpHeaders.AUTHORIZATION, adminToken))
+					.andExpect(status().isOk());
+
+			mockMvc.perform(get("/api/v1/products/{id}", productId))
+					.andExpect(status().isNotFound());
+
+			mockMvc.perform(get("/api/v1/admin/products/{id}", productId)
+							.header(HttpHeaders.AUTHORIZATION, adminToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("HIDDEN")));
+
+			mockMvc.perform(patch("/api/v1/admin/products/{id}/restore", productId)
+							.header(HttpHeaders.AUTHORIZATION, adminToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("ON_SALE")));
+
+			// then
+			mockMvc.perform(get("/api/v1/products/{id}", productId))
+					.andExpect(status().isOk());
+		}
+	}
 }

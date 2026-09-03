@@ -132,6 +132,30 @@ public class AdminProductService {
 				null);
 	}
 
+	public AdminProductResponse getDetail(Long productId) {
+		Product product = productRepository.findById(productId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+		Stock stock = stockRepository.findByProductId(productId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
+
+		return AdminProductResponse.from(product, stock.getQuantity());
+	}
+
+	@Transactional
+	public AdminProductResponse restore(Long adminId, Long productId) {
+		Product product = productRepository.findById(productId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+		Stock stock = stockRepository.findByProductId(productId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
+
+		product.restore(stock.getQuantity());
+
+		adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_RESTORE, AdminAuditTargetType.PRODUCT,
+				productId, product.getStatus().name());
+
+		return AdminProductResponse.from(product, stock.getQuantity());
+	}
+
 	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Pageable pageable) {
 		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, pageable);
 		return PageResponse.from(page);

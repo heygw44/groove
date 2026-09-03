@@ -1,6 +1,7 @@
 package com.groove.product.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -14,6 +15,8 @@ import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
 import com.groove.fixture.ProductFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 
 class ProductTest {
 
@@ -76,6 +79,52 @@ class ProductTest {
 
 			// then
 			assertThat(product.isOnSale()).isTrue();
+		}
+	}
+
+	@Nested
+	@DisplayName("restore()")
+	class Restore {
+
+		@Test
+		@DisplayName("재고가 남아 있으면 ON_SALE 로 복구한다")
+		void restoresToOnSaleWhenStockRemains() {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+			product.hide();
+
+			// when
+			product.restore(5);
+
+			// then
+			assertThat(product.getStatus()).isEqualTo(ProductStatus.ON_SALE);
+		}
+
+		@Test
+		@DisplayName("재고가 0 이면 SOLD_OUT 으로 복구한다")
+		void restoresToSoldOutWhenStockIsZero() {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+			product.hide();
+
+			// when
+			product.restore(0);
+
+			// then
+			assertThat(product.getStatus()).isEqualTo(ProductStatus.SOLD_OUT);
+		}
+
+		@Test
+		@DisplayName("HIDDEN 상태가 아니면 PRODUCT_NOT_HIDDEN 예외를 던진다")
+		void throwsWhenNotHidden() {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+
+			// when & then
+			assertThatThrownBy(() -> product.restore(5))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_HIDDEN);
 		}
 	}
 
