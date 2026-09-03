@@ -8,6 +8,7 @@ import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCa
 import { ProductFilterPanel } from '@/components/product/ProductFilterPanel';
 import { ProductSortSelect } from '@/components/product/ProductSortSelect';
 import { useProducts } from '@/hooks/queries/useProducts';
+import { useArtist } from '@/hooks/queries/useReferences';
 import { useProductFilters } from '@/hooks/useProductFilters';
 import { toProductListParams } from '@/utils/productFilters';
 
@@ -20,11 +21,7 @@ export default function ProductListPage() {
   const { data, isPending, isError, isPlaceholderData, refetch } = useProducts(
     toProductListParams(filters),
   );
-
-  /* artistId 는 URL 로만 들어올 수도 있는데 /artists 엔 id 단건 조회가 없다.
-     목록 첫 항목의 이름으로 대신 유도하고, 그마저 없으면 ArtistSearchSelect 가 #id 로 폴백한다. */
-  const artistSelectedName =
-    !isPlaceholderData && filters.artistId !== undefined ? data?.content[0]?.artistName : undefined;
+  const { data: selectedArtist } = useArtist(filters.artistId);
 
   const handlePageChange = (page: number) => {
     setPage(page);
@@ -35,7 +32,7 @@ export default function ProductListPage() {
     <ProductFilterPanel
       filters={filters}
       onUpdate={update}
-      artistSelectedName={artistSelectedName}
+      artistSelectedName={selectedArtist?.name}
     />
   );
 
