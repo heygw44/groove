@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,8 +51,9 @@ public class MemberCouponService {
 		MemberCoupon saved;
 		try {
 			saved = memberCouponRepository.saveAndFlush(MemberCoupon.issue(member, coupon));
-		} catch (DataIntegrityViolationException ex) {
+		} catch (DataIntegrityViolationException | CannotAcquireLockException ex) {
 			// REPEATABLE READ 스냅샷 때문에 선검사만으로는 경합을 못 막아 유니크 제약 위반을 여기서 한 번 더 잡는다.
+			// InnoDB 는 같은 유니크 키로 INSERT 가 몰리면 중복키 대신 데드락을 내므로 락 획득 실패도 같이 잡는다.
 			throw new BusinessException(ErrorCode.COUPON_ALREADY_ISSUED);
 		}
 

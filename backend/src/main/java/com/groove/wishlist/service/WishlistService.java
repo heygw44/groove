@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -84,7 +85,8 @@ public class WishlistService {
 		try {
 			// 동시 요청은 unique 제약으로 막고 409 로 변환
 			saved = wishlistRepository.saveAndFlush(Wishlist.create(member, product));
-		} catch (DataIntegrityViolationException e) {
+		} catch (DataIntegrityViolationException | CannotAcquireLockException e) {
+			// InnoDB 는 같은 유니크 키로 INSERT 가 몰리면 중복키 대신 데드락을 내므로 락 획득 실패도 같이 잡는다.
 			throw new BusinessException(ErrorCode.WISHLIST_ALREADY_EXISTS);
 		}
 

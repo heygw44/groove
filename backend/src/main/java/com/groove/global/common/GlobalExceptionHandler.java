@@ -1,7 +1,9 @@
 package com.groove.global.common;
 
+import java.sql.SQLException;
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -22,6 +24,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	/** MySQL 이 유니크 제약 위반에 쓰는 에러 코드. 같은 SQLException 계열의 FK·NOT NULL 위반과 갈라내는 기준. */
+	private static final int MYSQL_DUPLICATE_ENTRY = 1062;
 
 	@ExceptionHandler(BusinessException.class)
 	public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
@@ -89,6 +94,27 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiResponse<Void>> handlePessimisticLock(PessimisticLockingFailureException ex) {
 		log.warn("PessimisticLockingFailureException: {}", ex.getMessage());
 		return stockConflict();
+	}
+
+	/**
+	 * 서비스 계층이 도메인 코드로 변환하지 못하고 새어 나온 제약 위반의 안전망.
+	 * 중복키만 재시도로 풀릴 수 있는 경합으로 보고 409 로 낮춘다. NOT NULL·FK·길이 초과는
+	 * 사용자가 다시 시도해도 달라지지 않는 서버 결함이라 500 경로에 그대로 남겨 로그와 알림에 걸리게 한다.
+	 */
+	@ExceptionHandler(DataIntegrityViolationException.class)
+	public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+		if (!isDuplicateKey(ex)) {
+			return handleUnexpected(ex);
+		}
+		log.warn("DataIntegrityViolationException(duplicate key): {}", ex.getMostSpecificCause().getMessage());
+		ErrorCode code = ErrorCode.COMMON_CONFLICT;
+		return ResponseEntity.status(code.getStatus())
+				.body(ApiResponse.error(code.name(), code.getMessage()));
+	}
+
+	private boolean isDuplicateKey(DataIntegrityViolationException ex) {
+		return ex.getMostSpecificCause() instanceof SQLException cause
+				&& cause.getErrorCode() == MYSQL_DUPLICATE_ENTRY;
 	}
 
 	private ResponseEntity<ApiResponse<Void>> stockConflict() {
