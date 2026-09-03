@@ -76,6 +76,9 @@ public enum ErrorCode {
 	COUPON_ALREADY_USED(HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
 	COUPON_NOT_USED(HttpStatus.CONFLICT, "사용하지 않은 쿠폰입니다."),
 	COUPON_MIN_ORDER_AMOUNT_NOT_MET(HttpStatus.BAD_REQUEST, "최소 주문 금액을 충족하지 않습니다."),
+	COUPON_CODE_DUPLICATE(HttpStatus.CONFLICT, "이미 존재하는 쿠폰 코드입니다."),
+	COUPON_DISCOUNT_LOCKED(HttpStatus.CONFLICT, "발급이 시작된 쿠폰의 할인 조건은 변경할 수 없습니다."),
+	COUPON_QUANTITY_BELOW_ISSUED(HttpStatus.BAD_REQUEST, "총 수량은 발급 수 이상이어야 합니다."),
 
 	// ===== FILE =====
 	FILE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다."),

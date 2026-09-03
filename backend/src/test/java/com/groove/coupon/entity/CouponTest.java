@@ -348,4 +348,170 @@ class CouponTest {
 			assertThat(coupon.getStatus()).isEqualTo(CouponStatus.DISABLED);
 		}
 	}
+
+	@Nested
+	@DisplayName("disableAndExpire()")
+	class DisableAndExpire {
+
+		@Test
+		@DisplayName("호출하면 DISABLED 로 바뀌고 만료 시각이 현재 이전으로 당겨진다")
+		void setsDisabledAndExpiresImmediately() {
+			// given
+			Coupon coupon = CouponFixture.fixed("EXPIRE1", BigDecimal.valueOf(1000));
+
+			// when
+			coupon.disableAndExpire();
+
+			// then
+			assertThat(coupon.getStatus()).isEqualTo(CouponStatus.DISABLED);
+			assertThat(coupon.isExpired()).isTrue();
+		}
+
+		@Test
+		@DisplayName("이미 만료된 쿠폰이면 만료 시각을 그대로 둔다")
+		void keepsExpiresAtWhenAlreadyExpired() {
+			// given
+			Coupon coupon = CouponFixture.expired(CouponFixture.fixed("EXPIRE2", BigDecimal.valueOf(1000)));
+			LocalDateTime originalExpiresAt = coupon.getExpiresAt();
+
+			// when
+			coupon.disableAndExpire();
+
+			// then
+			assertThat(coupon.getExpiresAt()).isEqualTo(originalExpiresAt);
+		}
+	}
+
+	@Nested
+	@DisplayName("activate()")
+	class Activate {
+
+		@Test
+		@DisplayName("호출하면 상태가 ACTIVE 로 바뀐다")
+		void changesStatusToActive() {
+			// given
+			Coupon coupon = CouponFixture.fixed("ACTIVATE1", BigDecimal.valueOf(1000));
+			coupon.disable();
+
+			// when
+			coupon.activate();
+
+			// then
+			assertThat(coupon.getStatus()).isEqualTo(CouponStatus.ACTIVE);
+		}
+
+		@Test
+		@DisplayName("만료된 쿠폰이면 COUPON_EXPIRED 예외를 던진다")
+		void throwsWhenExpired() {
+			// given
+			Coupon coupon = CouponFixture.expired(CouponFixture.fixed("ACTIVATEEXP", BigDecimal.valueOf(1000)));
+			coupon.disable();
+
+			// when & then
+			assertThatThrownBy(coupon::activate)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_EXPIRED);
+		}
+	}
+
+	@Nested
+	@DisplayName("updateInfo()")
+	class UpdateInfo {
+
+		@Test
+		@DisplayName("이름, 만료일, 총 수량을 갱신한다")
+		void updatesNameExpiresAtAndTotalQuantity() {
+			// given
+			Coupon coupon = CouponFixture.fixed("UPDATEINFO1", BigDecimal.valueOf(1000));
+			LocalDateTime newExpiresAt = LocalDateTime.now().plusDays(30);
+
+			// when
+			coupon.updateInfo("새 이름", newExpiresAt, 100);
+
+			// then
+			assertThat(coupon.getName()).isEqualTo("새 이름");
+			assertThat(coupon.getExpiresAt()).isEqualTo(newExpiresAt);
+			assertThat(coupon.getTotalQuantity()).isEqualTo(100);
+		}
+
+		@Test
+		@DisplayName("총 수량이 발급 수보다 적으면 COUPON_QUANTITY_BELOW_ISSUED 예외를 던진다")
+		void throwsWhenTotalQuantityBelowIssuedCount() {
+			// given
+			Coupon coupon = CouponFixture.withIssuedCount(
+					CouponFixture.withTotalQuantity("UPDATEINFO2", 10), 5);
+
+			// when & then
+			assertThatThrownBy(() -> coupon.updateInfo(coupon.getName(), coupon.getExpiresAt(), 4))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_QUANTITY_BELOW_ISSUED);
+		}
+
+		@Test
+		@DisplayName("만료일이 현재보다 이전이면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenExpiresAtInPast() {
+			// given
+			Coupon coupon = CouponFixture.fixed("UPDATEINFO3", BigDecimal.valueOf(1000));
+
+			// when & then
+			assertThatThrownBy(() -> coupon.updateInfo(coupon.getName(), LocalDateTime.now().minusDays(1),
+					coupon.getTotalQuantity()))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+	}
+
+	@Nested
+	@DisplayName("updateDiscount()")
+	class UpdateDiscount {
+
+		@Test
+		@DisplayName("발급 수가 0이면 할인 조건을 갱신한다")
+		void updatesDiscountWhenNotYetIssued() {
+			// given
+			Coupon coupon = CouponFixture.fixed("UPDATEDISCOUNT1", BigDecimal.valueOf(1000));
+
+			// when
+			coupon.updateDiscount(DiscountType.RATE, BigDecimal.valueOf(10), BigDecimal.valueOf(5000),
+					BigDecimal.valueOf(3000));
+
+			// then
+			assertThat(coupon.getDiscountType()).isEqualTo(DiscountType.RATE);
+			assertThat(coupon.getDiscountValue()).isEqualByComparingTo(BigDecimal.valueOf(10));
+			assertThat(coupon.getMinOrderAmount()).isEqualByComparingTo(BigDecimal.valueOf(5000));
+			assertThat(coupon.getMaxDiscountAmount()).isEqualByComparingTo(BigDecimal.valueOf(3000));
+		}
+
+		@Test
+		@DisplayName("FIXED 로 바꾸면 최대 할인 한도는 null 로 저장된다")
+		void clearsMaxDiscountAmountWhenChangedToFixed() {
+			// given
+			Coupon coupon = CouponFixture.rate("UPDATEDISCOUNT2", BigDecimal.valueOf(10), BigDecimal.valueOf(3000));
+
+			// when
+			coupon.updateDiscount(DiscountType.FIXED, BigDecimal.valueOf(2000), BigDecimal.ZERO,
+					BigDecimal.valueOf(3000));
+
+			// then
+			assertThat(coupon.getMaxDiscountAmount()).isNull();
+		}
+
+		@Test
+		@DisplayName("발급 수가 0보다 크면 COUPON_DISCOUNT_LOCKED 예외를 던진다")
+		void throwsWhenAlreadyIssued() {
+			// given
+			Coupon coupon = CouponFixture.withIssuedCount(
+					CouponFixture.fixed("UPDATEDISCOUNT3", BigDecimal.valueOf(1000)), 1);
+
+			// when & then
+			assertThatThrownBy(() -> coupon.updateDiscount(DiscountType.RATE, BigDecimal.valueOf(10),
+					BigDecimal.ZERO, null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_DISCOUNT_LOCKED);
+		}
+	}
 }

@@ -155,6 +155,49 @@ public class Coupon extends BaseTimeEntity {
 		this.status = CouponStatus.DISABLED;
 	}
 
+	public void disableAndExpire() {
+		this.status = CouponStatus.DISABLED;
+		if (!isExpired()) {
+			this.expiresAt = LocalDateTime.now();
+		}
+	}
+
+	public void activate() {
+		if (isExpired()) {
+			throw new BusinessException(ErrorCode.COUPON_EXPIRED);
+		}
+		this.status = CouponStatus.ACTIVE;
+	}
+
+	public void updateInfo(String name, LocalDateTime expiresAt, Integer totalQuantity) {
+		if (!expiresAt.equals(this.expiresAt)) {
+			validateExpiresAt(expiresAt);
+		}
+		if (totalQuantity != null && totalQuantity < this.issuedCount) {
+			throw new BusinessException(ErrorCode.COUPON_QUANTITY_BELOW_ISSUED);
+		}
+		validateTotalQuantity(totalQuantity);
+
+		this.name = name;
+		this.expiresAt = expiresAt;
+		this.totalQuantity = totalQuantity;
+	}
+
+	public void updateDiscount(DiscountType discountType, BigDecimal discountValue, BigDecimal minOrderAmount,
+			BigDecimal maxDiscountAmount) {
+		if (this.issuedCount > 0) {
+			throw new BusinessException(ErrorCode.COUPON_DISCOUNT_LOCKED);
+		}
+		validateDiscountValue(discountType, discountValue);
+		BigDecimal resolvedMinOrderAmount = resolveMinOrderAmount(minOrderAmount);
+		BigDecimal resolvedMaxDiscountAmount = resolveMaxDiscountAmount(discountType, maxDiscountAmount);
+
+		this.discountType = discountType;
+		this.discountValue = discountValue;
+		this.minOrderAmount = resolvedMinOrderAmount;
+		this.maxDiscountAmount = resolvedMaxDiscountAmount;
+	}
+
 	public boolean isExpired() {
 		return this.expiresAt.isBefore(LocalDateTime.now());
 	}
