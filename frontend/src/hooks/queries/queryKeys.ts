@@ -8,6 +8,10 @@ export const addressKeys = {
   all: ['addresses'] as const,
 };
 
+export const cartKeys = {
+  all: ['cart'] as const,
+};
+
 export const productKeys = {
   all: ['products'] as const,
   list: (params: ProductListParams) => ['products', params] as const,

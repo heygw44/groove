@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { useLogout } from '@/hooks/mutations/useAuthMutations';
+import { useCart } from '@/hooks/queries/useCart';
 import { useAuthStore } from '@/store/authStore';
 
 export function Header() {
@@ -9,6 +10,9 @@ export function Header() {
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const logoutMutation = useLogout();
+  // enabled 가 로그인 여부로 이미 걸려 있어 비로그인일 때는 호출만 되고 요청은 나가지 않는다.
+  const { data: cart } = useCart();
+  const cartItemCount = cart?.items.length ?? 0;
 
   return (
     <header className="border-b border-line bg-surface">
@@ -25,8 +29,17 @@ export function Header() {
             한정반
           </Link>
           {/* 장바구니는 비로그인에도 노출한다. 눌렀을 때 PrivateRoute 가 로그인으로 보낸다. */}
-          <Link to="/cart" className="text-content-muted hover:text-content">
+          <Link
+            to="/cart"
+            aria-label={isLoggedIn && cartItemCount > 0 ? `장바구니 ${cartItemCount}개` : undefined}
+            className="relative text-content-muted hover:text-content"
+          >
             장바구니
+            {isLoggedIn && cartItemCount > 0 && (
+              <span className="ml-1 rounded-full bg-accent px-1.5 text-[11px] text-accent-content">
+                {cartItemCount}
+              </span>
+            )}
           </Link>
           {member?.role === 'ADMIN' && (
             <Link to="/admin" className="text-content-muted hover:text-content">

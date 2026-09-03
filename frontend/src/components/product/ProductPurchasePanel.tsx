@@ -1,9 +1,14 @@
 import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
+import { useToast } from '@/components/common/toastContext';
 import { QuantitySelector } from '@/components/product/QuantitySelector';
+import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
+import { useAuthStore } from '@/store/authStore';
 import type { ProductDetail } from '@/types/product';
+import { getErrorMessage } from '@/utils/apiError';
 import { formatPrice } from '@/utils/formatPrice';
 
 const LOW_STOCK_THRESHOLD = 5;
@@ -15,6 +20,26 @@ interface ProductPurchasePanelProps {
 export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
   const isSoldOut = product.status === 'SOLD_OUT' || product.stockQuantity <= 0;
   const [quantity, setQuantity] = useState(1);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { showToast } = useToast();
+  const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
+  const addCartItemMutation = useAddCartItem();
+
+  const handleAddToCart = () => {
+    if (!isLoggedIn) {
+      const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+      navigate(`/login?redirect=${redirect}`);
+      return;
+    }
+    addCartItemMutation.mutate(
+      { productId: product.id, quantity },
+      {
+        onSuccess: () => showToast('success', '장바구니에 담았습니다.'),
+        onError: (error) => showToast('error', getErrorMessage(error)),
+      },
+    );
+  };
 
   return (
     <div className="mt-6 flex flex-col gap-4 border-t border-line pt-6">
@@ -37,20 +62,22 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
       )}
 
       <div className="flex gap-2">
-        <span title="장바구니·위시리스트는 이후 이슈에서 연결됩니다." className="flex-1">
-          <Button className="w-full" disabled>
+        <span className="flex-1">
+          <Button
+            className="w-full"
+            disabled={isSoldOut || addCartItemMutation.isPending}
+            onClick={handleAddToCart}
+          >
             장바구니
           </Button>
         </span>
-        <span title="장바구니·위시리스트는 이후 이슈에서 연결됩니다." className="flex-1">
+        <span title="위시리스트는 곧 연결됩니다." className="flex-1">
           <Button variant="secondary" className="w-full" disabled>
             위시리스트
           </Button>
         </span>
       </div>
-      <p className="text-xs text-content-muted">
-        장바구니·위시리스트는 이후 이슈에서 연결됩니다.
-      </p>
+      <p className="text-xs text-content-muted">위시리스트는 곧 연결됩니다.</p>
     </div>
   );
 }
