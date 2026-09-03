@@ -144,7 +144,7 @@ class AdminProductControllerTest {
 		void returnsBadRequestWhenTitleBlank() throws Exception {
 			// given
 			ProductCreateRequest request = new ProductCreateRequest("", 10L, null, List.of(),
-					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000.00"), "설명", List.of(), 10);
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(), 10);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")
@@ -161,7 +161,7 @@ class AdminProductControllerTest {
 		void returnsBadRequestWhenInitialStockNegative() throws Exception {
 			// given
 			ProductCreateRequest request = new ProductCreateRequest("Kind of Blue", 10L, null, List.of(),
-					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000.00"), "설명", List.of(), -1);
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(), -1);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")
@@ -174,11 +174,28 @@ class AdminProductControllerTest {
 		}
 
 		@Test
+		@DisplayName("가격에 소수가 있으면 400 과 필드 에러를 반환한다")
+		void returnsBadRequestWhenPriceHasFraction() throws Exception {
+			// given
+			ProductCreateRequest request = new ProductCreateRequest("Kind of Blue", 10L, null, List.of(),
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000.5"), "설명", List.of(), 10);
+
+			// when & then
+			mockMvc.perform(post("/api/v1/admin/products")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("price")));
+		}
+
+		@Test
 		@DisplayName("imageUrls 원소가 비어 있으면 400 과 필드 에러를 반환한다")
 		void returnsBadRequestWhenImageUrlBlank() throws Exception {
 			// given
 			ProductCreateRequest request = new ProductCreateRequest("Kind of Blue", 10L, null, List.of(),
-					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000.00"), "설명", List.of(""), 10);
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(""), 10);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")

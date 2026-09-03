@@ -25,7 +25,7 @@ export const productFormSchema = z.object({
   price: z
     .string()
     .min(1, '가격을 입력해주세요.')
-    .regex(/^\d{1,8}(\.\d{1,2})?$/, '0 이상, 소수점 둘째 자리까지 입력해주세요.'),
+    .regex(/^\d{1,8}$/, '0 이상의 정수로 입력해주세요.'),
   description: z.string().trim(),
   imageUrls: z.array(z.string().max(500)).max(10, '이미지는 10장까지 등록할 수 있습니다.'),
   initialStock: z.string(),
@@ -62,7 +62,8 @@ export const toFormValues = (product: ProductFormSource): ProductFormValues => (
   releaseDate: product.releaseDate ?? '',
   pressingInfo: product.pressingInfo ?? '',
   colorVariant: product.colorVariant ?? '',
-  price: String(product.price),
+  // 원 단위 정수만 허용하므로, 이전에 저장된 소수 가격이 폼 검증에 걸려 수정을 막지 않도록 반올림해 넣는다.
+  price: String(Math.round(product.price)),
   description: product.description ?? '',
   imageUrls: [...product.images].sort((a, b) => a.sortOrder - b.sortOrder).map((image) => image.url),
   initialStock: '',

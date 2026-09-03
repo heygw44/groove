@@ -58,6 +58,14 @@ describe('productFormSchema', () => {
     );
   });
 
+  it.each(['45000.5', '-1', '1e5', ''])('정수가 아닌 가격(%s) 은 거부한다', (price) => {
+    // given
+    const values = formValues({ price });
+
+    // when & then
+    expect(productFormSchema.safeParse(values).success).toBe(false);
+  });
+
   it('등록 스키마는 초기 재고를 요구한다', () => {
     // given
     const values = formValues({ initialStock: '' });
@@ -89,6 +97,14 @@ describe('toFormValues()', () => {
 
     // when & then
     expect(toFormValues(product).labelId).toBe('');
+  });
+
+  it('저장된 소수 가격은 반올림해서 폼에 넣는다', () => {
+    // given
+    const product = source({ price: 45000.5 });
+
+    // when & then
+    expect(toFormValues(product).price).toBe('45001');
   });
 
   it('초기 재고는 수정 폼에서 쓰지 않으므로 비워 둔다', () => {
