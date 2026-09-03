@@ -1,5 +1,6 @@
 package com.groove.review.service;
 
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
@@ -51,8 +52,9 @@ public class ReviewService {
 		Review saved;
 		try {
 			saved = reviewRepository.saveAndFlush(review);
-		} catch (DataIntegrityViolationException e) {
+		} catch (DataIntegrityViolationException | CannotAcquireLockException e) {
 			// 선검사만으로는 동시 작성 레이스를 못 막아 유니크 제약 위반을 여기서 한 번 더 잡는다.
+			// InnoDB 는 같은 유니크 키로 INSERT 가 몰리면 중복키 대신 데드락을 내므로 락 획득 실패도 같이 잡는다.
 			throw new BusinessException(ErrorCode.REVIEW_ALREADY_EXISTS);
 		}
 
