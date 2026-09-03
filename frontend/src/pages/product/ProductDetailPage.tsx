@@ -119,7 +119,7 @@ export default function ProductDetailPage() {
               {product.genres.map((genre) => (
                 <Link
                   key={genre.id}
-                  to={`/products?genreId=${genre.id}`}
+                  to={`/products?genreIds=${genre.id}`}
                   className="no-underline hover:no-underline"
                 >
                   <Badge variant="accent">{genre.name}</Badge>

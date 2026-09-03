@@ -11,7 +11,12 @@ interface RetryableRequestConfig extends InternalAxiosRequestConfig {
 // 폴백은 Vite 프록시(dev)와 Nginx 리버스 프록시(운영) 양쪽에서 맞는 경로다.
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
-export const client = axios.create({ baseURL, withCredentials: true });
+// indexes: null 로 배열은 genreIds=1&genreIds=3 형태로 직렬화한다(axios 기본값인 genreIds[]=1 은 백엔드가 못 받는다).
+export const client = axios.create({
+  baseURL,
+  withCredentials: true,
+  paramsSerializer: { indexes: null },
+});
 
 /**
  * 재발급 전용 인스턴스. 인터셉터를 달지 않는 것이 핵심이다.

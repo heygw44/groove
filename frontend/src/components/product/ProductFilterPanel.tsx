@@ -152,22 +152,26 @@ export function ProductFilterPanel({
         <div className="flex flex-col gap-1.5">
           <label className="flex items-center gap-2 text-sm">
             <input
-              type="radio"
-              name={uid}
+              type="checkbox"
               className="accent-content"
-              checked={filters.genreId === undefined}
-              onChange={() => onUpdate({ genreId: undefined })}
+              checked={filters.genreIds === undefined}
+              onChange={() => onUpdate({ genreIds: undefined })}
             />
             전체
           </label>
           {genres?.map((genre) => (
             <label key={genre.id} className="flex items-center gap-2 text-sm">
               <input
-                type="radio"
-                name={uid}
+                type="checkbox"
                 className="accent-content"
-                checked={filters.genreId === genre.id}
-                onChange={() => onUpdate({ genreId: genre.id })}
+                checked={filters.genreIds?.includes(genre.id) ?? false}
+                onChange={(event) => {
+                  const current = filters.genreIds ?? [];
+                  const next = event.target.checked
+                    ? [...current, genre.id]
+                    : current.filter((id) => id !== genre.id);
+                  onUpdate({ genreIds: next.length > 0 ? next : undefined });
+                }}
               />
               {genre.name}
             </label>

@@ -95,7 +95,7 @@ CASES=(
 	"/api/v1/products"
 	"/api/v1/products?keyword=Perf"
 	"/api/v1/products?sort=priceAsc&minPrice=30000&maxPrice=50000"
-	"/api/v1/products?genreId=${PERF_JAZZ_ID}&sort=rating"
+	"/api/v1/products?genreIds=${PERF_JAZZ_ID}&sort=rating"
 	"/api/v1/products?keyword=Album&sort=popular&page=1&size=10"
 )
 

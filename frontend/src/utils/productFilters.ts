@@ -4,7 +4,7 @@ import type { ProductListParams, ProductSort } from '@/types/product';
 export interface ProductListFilters {
   keyword?: string;
   artistId?: number;
-  genreId?: number;
+  genreIds?: number[];
   labelId?: number;
   minPrice?: number;
   maxPrice?: number;
@@ -28,10 +28,21 @@ const parseNonNegativeInt = (value: string | null): number | undefined => {
 const parseSort = (value: string | null): ProductSort =>
   SORT_VALUES.includes(value as ProductSort) ? (value as ProductSort) : DEFAULT_SORT;
 
+/** 자연수 문자열만 통과시켜 숫자로 바꾸고, 중복 제거 후 오름차순 정렬한다(안정적인 쿼리 키를 위해). */
+const parseIdList = (values: string[]): number[] | undefined => {
+  const ids = values
+    .filter((value) => /^\d+$/.test(value))
+    .map(Number);
+  if (ids.length === 0) {
+    return undefined;
+  }
+  return Array.from(new Set(ids)).sort((a, b) => a - b);
+};
+
 export const parseProductFilters = (searchParams: URLSearchParams): ProductListFilters => ({
   keyword: searchParams.get('keyword')?.trim() || undefined,
   artistId: parseNonNegativeInt(searchParams.get('artistId')),
-  genreId: parseNonNegativeInt(searchParams.get('genreId')),
+  genreIds: parseIdList(searchParams.getAll('genreIds')),
   labelId: parseNonNegativeInt(searchParams.get('labelId')),
   minPrice: parseNonNegativeInt(searchParams.get('minPrice')),
   maxPrice: parseNonNegativeInt(searchParams.get('maxPrice')),
@@ -49,8 +60,8 @@ export const serializeProductFilters = (filters: ProductListFilters): URLSearchP
   if (filters.artistId !== undefined) {
     params.set('artistId', String(filters.artistId));
   }
-  if (filters.genreId !== undefined) {
-    params.set('genreId', String(filters.genreId));
+  if (filters.genreIds && filters.genreIds.length > 0) {
+    filters.genreIds.forEach((id) => params.append('genreIds', String(id)));
   }
   if (filters.labelId !== undefined) {
     params.set('labelId', String(filters.labelId));
@@ -74,7 +85,7 @@ export const serializeProductFilters = (filters: ProductListFilters): URLSearchP
 export const toProductListParams = (filters: ProductListFilters): ProductListParams => ({
   keyword: filters.keyword,
   artistId: filters.artistId,
-  genreId: filters.genreId,
+  genreIds: filters.genreIds,
   labelId: filters.labelId,
   minPrice: filters.minPrice,
   maxPrice: filters.maxPrice,

@@ -38,10 +38,12 @@
 			<if test="labelId != null">
 				AND p.label_id = #{labelId}
 			</if>
-			<if test="genreId != null">
+			<if test="genreIds != null and !genreIds.isEmpty()">
 				AND EXISTS (
 					SELECT 1 FROM product_genre pg
-					WHERE pg.product_id = p.id AND pg.genre_id = #{genreId}
+					WHERE pg.product_id = p.id
+					AND pg.genre_id IN
+					<foreach collection="genreIds" item="genreId" open="(" separator="," close=")">#{genreId}</foreach>
 				)
 			</if>
 			<if test="minPrice != null">

@@ -85,14 +85,15 @@ export default function (data) {
     { name: 'list-default', query: () => '' },
     { name: 'list-page', query: () => 'page=1&size=20' },
     { name: 'list-keyword', query: () => `keyword=${encodeURIComponent(pick(data.keywords))}` },
-    { name: 'list-genre', query: () => `genreId=${pick(data.genreIds)}` },
+    { name: 'list-genre', query: () => `genreIds=${pick(data.genreIds)}` },
+    { name: 'list-genre-multi', query: () => `genreIds=${pick(data.genreIds)}&genreIds=${pick(data.genreIds)}` },
     { name: 'list-artist', query: () => `artistId=${pick(data.artistIds)}` },
     { name: 'list-price', query: () => 'minPrice=20000&maxPrice=50000' },
     { name: 'list-sort', query: () => `sort=${pick(SORT_OPTIONS)}` },
     {
       name: 'list-combined',
       query: () =>
-        `keyword=${encodeURIComponent(pick(data.keywords))}&genreId=${pick(data.genreIds)}&sort=priceAsc`,
+        `keyword=${encodeURIComponent(pick(data.keywords))}&genreIds=${pick(data.genreIds)}&sort=priceAsc`,
     },
   ];
 
