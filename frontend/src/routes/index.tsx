@@ -20,7 +20,9 @@ import LimitedDropListPage from '@/pages/limited/LimitedDropListPage';
 import AddressListPage from '@/pages/mypage/AddressListPage';
 import MyPage from '@/pages/mypage/MyPage';
 import NotFoundPage from '@/pages/NotFoundPage';
+import OrderDetailPage from '@/pages/order/OrderDetailPage';
 import OrderFormPage from '@/pages/order/OrderFormPage';
+import OrderListPage from '@/pages/order/OrderListPage';
 import ProductDetailPage from '@/pages/product/ProductDetailPage';
 import ProductListPage from '@/pages/product/ProductListPage';
 import { AdminRoute } from '@/routes/AdminRoute';
@@ -49,6 +51,22 @@ export const router = createBrowserRouter([
         element: (
           <PrivateRoute>
             <OrderFormPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'orders',
+        element: (
+          <PrivateRoute>
+            <OrderListPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'orders/:id',
+        element: (
+          <PrivateRoute>
+            <OrderDetailPage />
           </PrivateRoute>
         ),
       },
