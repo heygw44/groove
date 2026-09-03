@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
 import { Select } from '@/components/common/Select';
 import { Spinner } from '@/components/common/Spinner';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { useHideProduct, useRestoreProduct } from '@/hooks/mutations/useAdminProductMutations';
 import { useAdminProducts } from '@/hooks/queries/useAdminProducts';
 import type { AdminProductSummary, ProductStatus } from '@/types/product';

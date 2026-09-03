@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Spinner } from '@/components/common/Spinner';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { AddressCard } from '@/components/mypage/AddressCard';
 import { AddressFormModal } from '@/components/mypage/AddressFormModal';
 import { useDeleteAddress, useSetDefaultAddress } from '@/hooks/mutations/useAddressMutations';

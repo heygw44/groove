@@ -6,7 +6,7 @@ import { Button } from '@/components/common/Button';
 import { Field } from '@/components/common/Field';
 import { FormError } from '@/components/common/FormError';
 import { Input } from '@/components/common/Input';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { useSignup } from '@/hooks/mutations/useAuthMutations';
 import { signupSchema, type SignupFormValues } from '@/schemas/auth';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
