@@ -52,6 +52,8 @@ import lombok.NoArgsConstructor;
 		})
 public class Order extends BaseTimeEntity {
 
+	public static final int PENDING_EXPIRATION_MINUTES = 10;
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -85,6 +87,9 @@ public class Order extends BaseTimeEntity {
 	@Embedded
 	private ShippingAddress shippingAddress;
 
+	@Column(name = "expires_at", nullable = false)
+	private LocalDateTime expiresAt;
+
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
 
@@ -100,6 +105,7 @@ public class Order extends BaseTimeEntity {
 		this.member = member;
 		this.shippingAddress = shippingAddress;
 		this.status = OrderStatus.PENDING;
+		this.expiresAt = LocalDateTime.now().plusMinutes(PENDING_EXPIRATION_MINUTES);
 		this.totalAmount = BigDecimal.ZERO;
 		this.discountAmount = BigDecimal.ZERO;
 		this.finalAmount = BigDecimal.ZERO;
