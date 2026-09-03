@@ -29,7 +29,11 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 쿠폰. 할인 계산 규칙을 엔티티에 두어 서비스마다 흩어지지 않게 하고, 발급 수량 경합은 {@code version} 낙관적 락으로 방어한다. */
+/**
+ * 쿠폰. 할인 계산 규칙을 엔티티에 두어 서비스마다 흩어지지 않게 한다.
+ * 발급 수량 경합은 {@code CouponRepository#findByCodeForUpdate} 의 행 락으로 직렬화하고,
+ * {@code version} 은 락 없이 읽고 고치는 관리자 수정 경합을 막는다.
+ */
 @Entity
 @Getter
 @NoArgsConstructor(access = PROTECTED)
