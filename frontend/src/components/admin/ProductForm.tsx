@@ -169,12 +169,7 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
       </Field>
 
       <Field htmlFor="price" label="가격" required error={errors.price?.message}>
-        <Input
-          id="price"
-          inputMode="decimal"
-          invalid={Boolean(errors.price)}
-          {...register('price')}
-        />
+        <Input id="price" inputMode="numeric" invalid={Boolean(errors.price)} {...register('price')} />
       </Field>
 
       <Field htmlFor="description" label="설명" error={errors.description?.message}>

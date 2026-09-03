@@ -34,7 +34,7 @@ public record ProductUpdateRequest(
 		String colorVariant,
 
 		@DecimalMin(value = "0", message = "가격은 0 이상이어야 합니다.")
-		@Digits(integer = 8, fraction = 2, message = "가격 형식이 올바르지 않습니다.")
+		@Digits(integer = 8, fraction = 0, message = "가격은 원 단위 정수여야 합니다.")
 		BigDecimal price,
 
 		String description,

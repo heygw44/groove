@@ -15,7 +15,7 @@ import com.groove.product.entity.Product;
 
 public final class ProductFixture {
 
-	private static final BigDecimal PRICE = new BigDecimal("45000.00");
+	private static final BigDecimal PRICE = new BigDecimal("45000");
 	private static final LocalDate RELEASE_DATE = LocalDate.of(2024, 1, 1);
 	private static final String TITLE = "Kind of Blue";
 

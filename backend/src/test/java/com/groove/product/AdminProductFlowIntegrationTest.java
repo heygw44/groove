@@ -87,7 +87,7 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 
 			ProductCreateRequest createRequest = new ProductCreateRequest("Kind of Blue", artist.getId(),
 					label.getId(), List.of(genre.getId()), LocalDate.of(1959, 8, 17), "180g", "Black",
-					new BigDecimal("45000.00"), "설명",
+					new BigDecimal("45000"), "설명",
 					List.of("https://cdn.groove.com/0.jpg", "https://cdn.groove.com/1.jpg"), 10);
 
 			// when
@@ -101,7 +101,7 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 					.path("data").path("id").asLong();
 
 			ProductUpdateRequest updateRequest = new ProductUpdateRequest("A Love Supreme", null,
-					JsonNullable.undefined(), null, null, null, null, new BigDecimal("58000.00"), null,
+					JsonNullable.undefined(), null, null, null, null, new BigDecimal("58000"), null,
 					List.of("https://cdn.groove.com/updated.jpg"));
 			mockMvc.perform(patch("/api/v1/admin/products/{id}", productId)
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
@@ -109,7 +109,7 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(updateRequest)))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.title", is("A Love Supreme")))
-					.andExpect(jsonPath("$.data.price", is(58000.0)))
+					.andExpect(jsonPath("$.data.price", is(58000)))
 					.andExpect(jsonPath("$.data.images[0].url", is("https://cdn.groove.com/updated.jpg")));
 
 			mockMvc.perform(delete("/api/v1/admin/products/{id}", productId)
@@ -148,7 +148,7 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 			String userToken = "Bearer " + jwtProvider.createAccessToken(user.getId(), MemberRole.USER);
 			Artist artist = artistRepository.save(Artist.create("Bill Evans", "Bill Evans", "설명"));
 			ProductCreateRequest request = new ProductCreateRequest("Waltz for Debby", artist.getId(), null,
-					List.of(), LocalDate.of(1961, 6, 25), "180g", "Black", new BigDecimal("40000.00"), "설명",
+					List.of(), LocalDate.of(1961, 6, 25), "180g", "Black", new BigDecimal("40000"), "설명",
 					List.of(), 5);
 
 			// when & then
@@ -177,7 +177,7 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 
 			ProductCreateRequest createRequest = new ProductCreateRequest("Blue Train", artist.getId(),
 					label.getId(), List.of(), LocalDate.of(1957, 9, 15), "180g", "Black",
-					new BigDecimal("40000.00"), "설명", List.of(), 5);
+					new BigDecimal("40000"), "설명", List.of(), 5);
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -215,7 +215,7 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 			Artist artist = artistRepository.save(Artist.create("Herbie Hancock", "Herbie Hancock", "설명"));
 
 			ProductCreateRequest createRequest = new ProductCreateRequest("Maiden Voyage", artist.getId(), null,
-					List.of(), LocalDate.of(1965, 3, 17), "180g", "Black", new BigDecimal("42000.00"), "설명",
+					List.of(), LocalDate.of(1965, 3, 17), "180g", "Black", new BigDecimal("42000"), "설명",
 					List.of(), 5);
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
@@ -265,7 +265,7 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 			Genre genre = genreRepository.save(Genre.create("Jazz-" + UUID.randomUUID()));
 
 			ProductCreateRequest createRequest = new ProductCreateRequest("Blue Train", artist.getId(), null,
-					List.of(genre.getId()), LocalDate.of(1957, 9, 15), "180g", "Black", new BigDecimal("40000.00"),
+					List.of(genre.getId()), LocalDate.of(1957, 9, 15), "180g", "Black", new BigDecimal("40000"),
 					"설명", List.of(), 5);
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
