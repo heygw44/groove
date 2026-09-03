@@ -24,4 +24,5 @@ export const referenceKeys = {
   genres: ['genres'] as const,
   labels: ['labels'] as const,
   artists: (keyword?: string) => ['artists', keyword] as const,
+  artist: (id: number) => ['artist', id] as const,
 };

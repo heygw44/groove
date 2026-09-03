@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 import com.groove.product.dto.ArtistResponse;
 import com.groove.product.dto.GenreResponse;
 import com.groove.product.dto.LabelResponse;
@@ -45,5 +47,11 @@ public class ProductReferenceService {
 		return artistRepository.searchByKeyword(normalizedKeyword, PageRequest.of(0, ARTIST_LIMIT)).stream()
 				.map(ArtistResponse::from)
 				.toList();
+	}
+
+	public ArtistResponse getArtist(Long id) {
+		return artistRepository.findById(id)
+				.map(ArtistResponse::from)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ARTIST_NOT_FOUND));
 	}
 }

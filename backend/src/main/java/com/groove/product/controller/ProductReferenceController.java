@@ -3,6 +3,7 @@ package com.groove.product.controller;
 import java.util.List;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,5 +46,12 @@ public class ProductReferenceController {
 	@GetMapping("/artists")
 	public ApiResponse<List<ArtistResponse>> searchArtists(@RequestParam(required = false) String keyword) {
 		return ApiResponse.ok(productReferenceService.searchArtists(keyword));
+	}
+
+	@Operation(summary = "아티스트 단건 조회")
+	@SecurityRequirements
+	@GetMapping("/artists/{id}")
+	public ApiResponse<ArtistResponse> getArtist(@PathVariable Long id) {
+		return ApiResponse.ok(productReferenceService.getArtist(id));
 	}
 }

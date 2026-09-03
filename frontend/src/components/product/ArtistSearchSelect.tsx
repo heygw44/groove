@@ -8,7 +8,7 @@ import type { Artist } from '@/types/product';
 
 interface ArtistSearchSelectProps {
   value?: number;
-  /** 목록 데이터 등에서 유도한 이름. 방금 고른 아티스트(로컬 state)가 이보다 우선한다. */
+  /** `GET /artists/{id}` 조회로 얻은 이름. 방금 고른 아티스트(로컬 state)가 이보다 우선한다. */
   selectedName?: string;
   onChange: (artist: Artist | undefined) => void;
   id?: string;

@@ -1,12 +1,14 @@
 package com.groove.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +24,8 @@ import org.springframework.data.domain.Pageable;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 import com.groove.product.dto.ArtistResponse;
 import com.groove.product.dto.GenreResponse;
 import com.groove.product.dto.LabelResponse;
@@ -135,6 +139,39 @@ class ProductReferenceServiceTest {
 
 			// then
 			assertThat(result).extracting(ArtistResponse::name).containsExactly("Miles Davis");
+		}
+	}
+
+	@Nested
+	@DisplayName("getArtist()")
+	class GetArtist {
+
+		@Test
+		@DisplayName("존재하는 아티스트 id 면 아티스트 정보를 반환한다")
+		void returnsArtist() {
+			// given
+			Artist artist = ArtistFixture.withId(1L);
+			given(artistRepository.findById(1L)).willReturn(Optional.of(artist));
+
+			// when
+			ArtistResponse result = productReferenceService.getArtist(1L);
+
+			// then
+			assertThat(result.id()).isEqualTo(artist.getId());
+			assertThat(result.name()).isEqualTo(artist.getName());
+			assertThat(result.nameEn()).isEqualTo(artist.getNameEn());
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 아티스트 id 면 ARTIST_NOT_FOUND 예외를 던진다")
+		void throwsWhenArtistNotFound() {
+			// given
+			given(artistRepository.findById(1L)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> productReferenceService.getArtist(1L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode").isEqualTo(ErrorCode.ARTIST_NOT_FOUND);
 		}
 	}
 }
