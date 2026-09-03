@@ -164,17 +164,22 @@ public class Product extends BaseTimeEntity {
 	public void addGenre(Genre genre) {
 		boolean alreadyLinked = this.productGenres.stream()
 				.map(ProductGenre::getGenre)
-				.anyMatch(linked -> linked == genre
-						|| (genre.getId() != null && genre.getId().equals(linked.getId())));
+				.anyMatch(linked -> isSameGenre(genre, linked));
 		if (alreadyLinked) {
 			return;
 		}
 		this.productGenres.add(ProductGenre.of(this, genre));
 	}
 
+	/** clear() 후 다시 add 하면 Hibernate 가 INSERT 를 삭제보다 먼저 flush 해 남아 있는 장르에서 유니크 키가 깨진다. */
 	public void replaceGenres(List<Genre> genres) {
-		this.productGenres.clear();
+		this.productGenres.removeIf(link -> genres.stream()
+				.noneMatch(genre -> isSameGenre(genre, link.getGenre())));
 		genres.forEach(this::addGenre);
+	}
+
+	private boolean isSameGenre(Genre genre, Genre linked) {
+		return linked == genre || (genre.getId() != null && genre.getId().equals(linked.getId()));
 	}
 
 	public void addImage(String imageUrl, int sortOrder) {

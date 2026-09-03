@@ -249,4 +249,41 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isOk());
 		}
 	}
+
+	@Nested
+	@DisplayName("PATCH /admin/products/{id} 장르 유지")
+	class UpdateWithSameGenres {
+
+		@Test
+		@DisplayName("기존 장르를 그대로 담아 보내도 200 으로 수정된다")
+		void updatesWhenGenreIdsUnchanged() throws Exception {
+			// given
+			Member admin = memberRepository.save(
+					Member.create("admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+			Artist artist = artistRepository.save(Artist.create("John Coltrane", "John Coltrane", "설명"));
+			Genre genre = genreRepository.save(Genre.create("Jazz-" + UUID.randomUUID()));
+
+			ProductCreateRequest createRequest = new ProductCreateRequest("Blue Train", artist.getId(), null,
+					List.of(genre.getId()), LocalDate.of(1957, 9, 15), "180g", "Black", new BigDecimal("40000.00"),
+					"설명", List.of(), 5);
+			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isCreated())
+					.andReturn();
+			Long productId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+					.path("data").path("id").asLong();
+
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/products/{id}", productId)
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"title\":\"Blue Train (Remaster)\",\"genreIds\":[" + genre.getId() + "]}"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.genres.length()", is(1)))
+					.andExpect(jsonPath("$.data.title", is("Blue Train (Remaster)")));
+		}
+	}
 }
