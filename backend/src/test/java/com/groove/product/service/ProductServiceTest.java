@@ -40,6 +40,7 @@ import com.groove.product.entity.ProductImage;
 import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.wishlist.repository.WishlistRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
@@ -56,12 +57,15 @@ class ProductServiceTest {
 	@Mock
 	private StockRepository stockRepository;
 
+	@Mock
+	private WishlistRepository wishlistRepository;
+
 	private ProductService productService;
 
 	@BeforeEach
 	void setUp() {
 		productService = new ProductService(productSearchMapper, productRepository, productImageRepository,
-				stockRepository);
+				stockRepository, wishlistRepository);
 	}
 
 	@Nested
@@ -78,7 +82,7 @@ class ProductServiceTest {
 			ArgumentCaptor<ProductSearchCondition> captor = ArgumentCaptor.forClass(ProductSearchCondition.class);
 
 			// when
-			productService.search(request);
+			productService.search(request, null);
 
 			// then
 			verify(productSearchMapper).countProducts(captor.capture());
@@ -95,7 +99,7 @@ class ProductServiceTest {
 					null, null);
 
 			// when & then
-			assertThatThrownBy(() -> productService.search(request))
+			assertThatThrownBy(() -> productService.search(request, null))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
@@ -110,7 +114,7 @@ class ProductServiceTest {
 			given(productSearchMapper.countProducts(any())).willReturn(0L);
 
 			// when
-			PageResponse<ProductSummaryResponse> result = productService.search(request);
+			PageResponse<ProductSummaryResponse> result = productService.search(request, null);
 
 			// then
 			assertThat(result.content()).isEmpty();
@@ -128,12 +132,29 @@ class ProductServiceTest {
 			given(productSearchMapper.searchProducts(any())).willReturn(List.of());
 
 			// when
-			PageResponse<ProductSummaryResponse> result = productService.search(request);
+			PageResponse<ProductSummaryResponse> result = productService.search(request, null);
 
 			// then
 			assertThat(result.totalElements()).isEqualTo(45L);
 			assertThat(result.totalPages()).isEqualTo(3);
 			verify(productSearchMapper).searchProducts(any());
+		}
+
+		@Test
+		@DisplayName("memberId 를 검색 조건에 그대로 전달한다")
+		void passesMemberIdIntoCondition() {
+			// given
+			ProductSearchRequest request = new ProductSearchRequest(null, null, null, null, null, null, null, null,
+					null);
+			given(productSearchMapper.countProducts(any())).willReturn(0L);
+			ArgumentCaptor<ProductSearchCondition> captor = ArgumentCaptor.forClass(ProductSearchCondition.class);
+
+			// when
+			productService.search(request, 7L);
+
+			// then
+			verify(productSearchMapper).countProducts(captor.capture());
+			assertThat(captor.getValue().memberId()).isEqualTo(7L);
 		}
 	}
 
@@ -158,7 +179,7 @@ class ProductServiceTest {
 			given(stockRepository.findByProductId(10L)).willReturn(Optional.of(stock));
 
 			// when
-			ProductDetailResponse response = productService.getDetail(10L);
+			ProductDetailResponse response = productService.getDetail(10L, null);
 
 			// then
 			assertThat(response.id()).isEqualTo(10L);
@@ -172,13 +193,49 @@ class ProductServiceTest {
 		}
 
 		@Test
+		@DisplayName("memberId 가 있으면 wishlisted 를 조회해 내려준다")
+		void returnsWishlistedWhenMemberIdPresent() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 13L);
+			given(productRepository.findDetailById(13L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(13L)).willReturn(List.of());
+			given(stockRepository.findByProductId(13L)).willReturn(Optional.empty());
+			given(wishlistRepository.existsByMemberIdAndProductId(1L, 13L)).willReturn(true);
+
+			// when
+			ProductDetailResponse response = productService.getDetail(13L, 1L);
+
+			// then
+			assertThat(response.wishlisted()).isTrue();
+		}
+
+		@Test
+		@DisplayName("memberId 가 없으면 wishlisted 가 null 이고 위시리스트를 조회하지 않는다")
+		void skipsWishlistLookupWhenMemberIdAbsent() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 14L);
+			given(productRepository.findDetailById(14L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(14L)).willReturn(List.of());
+			given(stockRepository.findByProductId(14L)).willReturn(Optional.empty());
+
+			// when
+			ProductDetailResponse response = productService.getDetail(14L, null);
+
+			// then
+			assertThat(response.wishlisted()).isNull();
+			verify(wishlistRepository, never()).existsByMemberIdAndProductId(any(), any());
+		}
+
+		@Test
 		@DisplayName("존재하지 않으면 PRODUCT_NOT_FOUND 예외를 던진다")
 		void throwsWhenNotFound() {
 			// given
 			given(productRepository.findDetailById(99L)).willReturn(Optional.empty());
 
 			// when & then
-			assertThatThrownBy(() -> productService.getDetail(99L))
+			assertThatThrownBy(() -> productService.getDetail(99L, null))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
@@ -194,7 +251,7 @@ class ProductServiceTest {
 			given(productRepository.findDetailById(11L)).willReturn(Optional.of(product));
 
 			// when & then
-			assertThatThrownBy(() -> productService.getDetail(11L))
+			assertThatThrownBy(() -> productService.getDetail(11L, null))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_HIDDEN);
@@ -211,7 +268,7 @@ class ProductServiceTest {
 			given(stockRepository.findByProductId(12L)).willReturn(Optional.empty());
 
 			// when
-			ProductDetailResponse response = productService.getDetail(12L);
+			ProductDetailResponse response = productService.getDetail(12L, null);
 
 			// then
 			assertThat(response.stockQuantity()).isZero();

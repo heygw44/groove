@@ -9,4 +9,7 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface AuthMember {
+
+	/** false 면 비로그인 요청일 때 예외 대신 {@code null} 을 주입한다. */
+	boolean required() default true;
 }

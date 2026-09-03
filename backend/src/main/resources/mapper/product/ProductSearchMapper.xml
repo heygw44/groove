@@ -17,6 +17,7 @@
 			<arg column="thumbnail_url" javaType="java.lang.String"/>
 			<arg column="average_rating" javaType="java.lang.Double"/>
 			<arg column="review_count" javaType="_long"/>
+			<arg column="wishlisted" javaType="java.lang.Boolean"/>
 		</constructor>
 	</resultMap>
 
@@ -63,7 +64,14 @@
 			p.color_variant, p.pressing_info, p.status,
 			(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0) AS thumbnail_url,
 			NULL AS average_rating,
-			0 AS review_count
+			0 AS review_count,
+			<!-- 비로그인(memberId null)은 NULL 이라 응답에서 키가 생략된다. -->
+			<choose>
+				<when test="memberId != null">
+					EXISTS (SELECT 1 FROM wishlist w WHERE w.product_id = p.id AND w.member_id = #{memberId})
+				</when>
+				<otherwise>NULL</otherwise>
+			</choose> AS wishlisted
 		<include refid="searchFrom"/>
 		<include refid="searchWhere"/>
 		<choose>

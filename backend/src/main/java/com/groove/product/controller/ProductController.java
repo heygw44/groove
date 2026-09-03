@@ -6,6 +6,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.groove.auth.LoginMember;
+import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
 import com.groove.product.dto.ProductDetailResponse;
@@ -27,18 +29,24 @@ public class ProductController {
 
 	private final ProductService productService;
 
-	@Operation(summary = "상품 목록 검색")
+	@Operation(summary = "상품 목록 검색", description = "로그인 시 wishlisted 포함")
 	@SecurityRequirements
 	@GetMapping
 	public ApiResponse<PageResponse<ProductSummaryResponse>> search(
-			@Valid @ModelAttribute ProductSearchRequest request) {
-		return ApiResponse.ok(productService.search(request));
+			@Valid @ModelAttribute ProductSearchRequest request,
+			@AuthMember(required = false) LoginMember loginMember) {
+		return ApiResponse.ok(productService.search(request, memberIdOf(loginMember)));
 	}
 
-	@Operation(summary = "상품 상세 조회")
+	@Operation(summary = "상품 상세 조회", description = "로그인 시 wishlisted 포함")
 	@SecurityRequirements
 	@GetMapping("/{id}")
-	public ApiResponse<ProductDetailResponse> getDetail(@PathVariable Long id) {
-		return ApiResponse.ok(productService.getDetail(id));
+	public ApiResponse<ProductDetailResponse> getDetail(@PathVariable Long id,
+		@AuthMember(required = false) LoginMember loginMember) {
+		return ApiResponse.ok(productService.getDetail(id, memberIdOf(loginMember)));
+	}
+
+	private static Long memberIdOf(LoginMember loginMember) {
+		return loginMember == null ? null : loginMember.id();
 	}
 }

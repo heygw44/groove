@@ -24,10 +24,12 @@ public record ProductDetailResponse(
 		List<ImageSummary> images,
 		int stockQuantity,
 		Double averageRating,
-		long reviewCount
+		long reviewCount,
+		Boolean wishlisted
 ) {
 
-	public static ProductDetailResponse from(Product product, List<ProductImage> images, int stockQuantity) {
+	public static ProductDetailResponse from(Product product, List<ProductImage> images, int stockQuantity,
+		Boolean wishlisted) {
 		LabelSummary label = product.getLabel() == null
 				? null
 				: new LabelSummary(product.getLabel().getId(), product.getLabel().getName());
@@ -55,7 +57,8 @@ public record ProductDetailResponse(
 				stockQuantity,
 				// 리뷰 미구현이라 고정값
 				null,
-				0L);
+				0L,
+				wishlisted);
 	}
 
 	public record ArtistSummary(Long id, String name) {

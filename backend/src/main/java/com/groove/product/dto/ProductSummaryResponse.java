@@ -15,6 +15,7 @@ public record ProductSummaryResponse(
 		ProductStatus status,
 		String thumbnailUrl,
 		Double averageRating,
-		long reviewCount
+		long reviewCount,
+		Boolean wishlisted
 ) {
 }

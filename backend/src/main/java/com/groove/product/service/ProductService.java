@@ -19,6 +19,7 @@ import com.groove.product.entity.ProductImage;
 import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.wishlist.repository.WishlistRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,9 +33,10 @@ public class ProductService {
 	private final ProductRepository productRepository;
 	private final ProductImageRepository productImageRepository;
 	private final StockRepository stockRepository;
+	private final WishlistRepository wishlistRepository;
 
-	public PageResponse<ProductSummaryResponse> search(ProductSearchRequest request) {
-		ProductSearchCondition condition = request.toCondition();
+	public PageResponse<ProductSummaryResponse> search(ProductSearchRequest request, Long memberId) {
+		ProductSearchCondition condition = request.toCondition(memberId);
 		long totalElements = productSearchMapper.countProducts(condition);
 		if (totalElements == 0) {
 			return PageResponse.of(List.of(), condition.page(), condition.size(), 0);
@@ -43,7 +45,7 @@ public class ProductService {
 		return PageResponse.of(content, condition.page(), condition.size(), totalElements);
 	}
 
-	public ProductDetailResponse getDetail(Long id) {
+	public ProductDetailResponse getDetail(Long id, Long memberId) {
 		Product product = productRepository.findDetailById(id)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 		if (product.isHidden()) {
@@ -53,6 +55,7 @@ public class ProductService {
 		int stockQuantity = stockRepository.findByProductId(id)
 				.map(Stock::getQuantity)
 				.orElse(0);
-		return ProductDetailResponse.from(product, images, stockQuantity);
+		Boolean wishlisted = memberId == null ? null : wishlistRepository.existsByMemberIdAndProductId(memberId, id);
+		return ProductDetailResponse.from(product, images, stockQuantity, wishlisted);
 	}
 }
