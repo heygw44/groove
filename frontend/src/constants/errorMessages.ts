@@ -28,6 +28,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   CART_EMPTY: '장바구니가 비어 있습니다.',
   ORDER_NOT_FOUND: '존재하지 않는 주문입니다.',
   ORDER_CANNOT_CANCEL: '취소할 수 없는 상태의 주문입니다.',
+  ORDER_INVALID_STATUS_TRANSITION: '허용되지 않는 상태 변경입니다. 주문 상태를 다시 확인해주세요.',
   WISHLIST_ALREADY_EXISTS: '이미 위시리스트에 있는 상품입니다.',
   WISHLIST_NOT_FOUND: '위시리스트에 없는 상품입니다.',
 };

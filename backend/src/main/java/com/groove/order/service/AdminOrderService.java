@@ -11,11 +11,11 @@ import com.groove.admin.service.AdminAuditLogService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSearchRequest;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
-import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
@@ -45,9 +45,15 @@ public class AdminOrderService {
 		return PageResponse.of(content, condition.page(), condition.size(), totalElements);
 	}
 
+	public AdminOrderDetailResponse getDetail(Long orderId) {
+		Order order = orderRepository.findWithItemsAndMemberById(orderId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		return AdminOrderDetailResponse.from(order);
+	}
+
 	@Transactional
-	public OrderDetailResponse changeStatus(Long adminId, Long orderId, AdminOrderStatusChangeRequest request) {
-		Order order = orderRepository.findWithItemsById(orderId)
+	public AdminOrderDetailResponse changeStatus(Long adminId, Long orderId, AdminOrderStatusChangeRequest request) {
+		Order order = orderRepository.findWithItemsAndMemberById(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		OrderStatus previous = order.getStatus();
 		OrderStatus next = request.status();
@@ -62,6 +68,6 @@ public class AdminOrderService {
 
 		adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
 				orderId, previous.name() + "->" + next.name());
-		return OrderDetailResponse.from(order);
+		return AdminOrderDetailResponse.from(order);
 	}
 }

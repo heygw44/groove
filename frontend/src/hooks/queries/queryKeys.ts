@@ -1,4 +1,4 @@
-import type { OrderListParams } from '@/types/order';
+import type { AdminOrderListParams, OrderListParams } from '@/types/order';
 import type { AdminProductListParams, ProductListParams } from '@/types/product';
 import type { WishlistListParams } from '@/types/wishlist';
 
@@ -31,6 +31,14 @@ export const orderKeys = {
   all: ['orders'] as const,
   list: (params: OrderListParams) => ['orders', params] as const,
   detail: (id: number) => ['order', id] as const,
+};
+
+// list 를 'list' sub-prefix 로 분리해 상태 변경 후 상세는 건드리지 않고 목록만 무효화한다.
+export const adminOrderKeys = {
+  all: ['adminOrders'] as const,
+  lists: ['adminOrders', 'list'] as const,
+  list: (params: AdminOrderListParams) => ['adminOrders', 'list', params] as const,
+  detail: (id: number) => ['adminOrders', 'detail', id] as const,
 };
 
 export const wishlistKeys = {
