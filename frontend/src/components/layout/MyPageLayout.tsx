@@ -51,6 +51,25 @@ const NAV_ITEMS: MyPageNavItem[] = [
     ),
   },
   {
+    to: '/mypage/wishlist',
+    label: '위시리스트',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M10 17s-6.2-3.8-8.3-7.7C.5 6.7 1.8 3.8 4.6 3.1c1.7-.4 3.4.3 4.4 1.7.3.4.6.9.8 1.4.2-.5.5-1 .8-1.4 1-1.4 2.7-2.1 4.4-1.7 2.8.7 4.1 3.6 2.9 5.9-2.1 3.9-8.3 7.7-8.3 7.7Z" />
+      </svg>
+    ),
+  },
+  {
     to: '/mypage/addresses',
     label: '배송지 관리',
     icon: (

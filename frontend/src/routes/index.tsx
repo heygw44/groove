@@ -19,6 +19,7 @@ import LimitedDropDetailPage from '@/pages/limited/LimitedDropDetailPage';
 import LimitedDropListPage from '@/pages/limited/LimitedDropListPage';
 import AddressListPage from '@/pages/mypage/AddressListPage';
 import MyPage from '@/pages/mypage/MyPage';
+import WishlistPage from '@/pages/mypage/WishlistPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import OrderDetailPage from '@/pages/order/OrderDetailPage';
 import OrderFormPage from '@/pages/order/OrderFormPage';
@@ -82,6 +83,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <MyPage /> },
           { path: 'addresses', element: <AddressListPage /> },
+          { path: 'wishlist', element: <WishlistPage /> },
         ],
       },
       {

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
 import { Skeleton } from '@/components/common/Skeleton';
+import { WishButton } from '@/components/product/WishButton';
 import type { ProductSummary } from '@/types/product';
 import { formatPrice } from '@/utils/formatPrice';
 
@@ -56,6 +57,12 @@ export function ProductCard({ product }: ProductCardProps) {
             품절
           </Badge>
         )}
+        <WishButton
+          size="sm"
+          productId={product.id}
+          wishlisted={product.wishlisted}
+          className="absolute right-2 top-2"
+        />
       </div>
       <p className="mt-2.5 line-clamp-2 text-sm font-medium">{product.title}</p>
       <p className="mt-0.5 text-xs text-content-muted">{product.artistName}</p>

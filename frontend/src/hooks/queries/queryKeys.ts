@@ -1,5 +1,6 @@
 import type { OrderListParams } from '@/types/order';
 import type { AdminProductListParams, ProductListParams } from '@/types/product';
+import type { WishlistListParams } from '@/types/wishlist';
 
 export const memberKeys = {
   me: ['member', 'me'] as const,
@@ -30,6 +31,11 @@ export const orderKeys = {
   all: ['orders'] as const,
   list: (params: OrderListParams) => ['orders', params] as const,
   detail: (id: number) => ['order', id] as const,
+};
+
+export const wishlistKeys = {
+  all: ['wishlist'] as const,
+  list: (params: WishlistListParams) => ['wishlist', params] as const,
 };
 
 export const referenceKeys = {
