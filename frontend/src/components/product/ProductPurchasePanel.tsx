@@ -26,10 +26,17 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
   const addCartItemMutation = useAddCartItem();
 
+  const requireLogin = () => {
+    if (isLoggedIn) {
+      return true;
+    }
+    const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
+    navigate(`/login?redirect=${redirect}`);
+    return false;
+  };
+
   const handleAddToCart = () => {
-    if (!isLoggedIn) {
-      const redirect = encodeURIComponent(`${location.pathname}${location.search}`);
-      navigate(`/login?redirect=${redirect}`);
+    if (!requireLogin()) {
       return;
     }
     addCartItemMutation.mutate(
@@ -39,6 +46,13 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
         onError: (error) => showToast('error', getErrorMessage(error)),
       },
     );
+  };
+
+  const handleBuyNow = () => {
+    if (!requireLogin()) {
+      return;
+    }
+    navigate('/orders/new', { state: { productId: product.id, quantity } });
   };
 
   return (
@@ -63,7 +77,13 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
 
       <div className="flex gap-2">
         <span className="flex-1">
+          <Button className="w-full" disabled={isSoldOut} onClick={handleBuyNow}>
+            바로 구매
+          </Button>
+        </span>
+        <span className="flex-1">
           <Button
+            variant="secondary"
             className="w-full"
             disabled={isSoldOut || addCartItemMutation.isPending}
             onClick={handleAddToCart}

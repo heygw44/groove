@@ -25,6 +25,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   FILE_SIZE_EXCEEDED: '파일 용량은 5MB를 넘을 수 없습니다.',
   CART_ITEM_NOT_FOUND: '이미 삭제된 장바구니 항목입니다.',
   CART_QUANTITY_EXCEEDED: '한 상품은 최대 10개까지 담을 수 있습니다.',
+  CART_EMPTY: '장바구니가 비어 있습니다.',
+  ORDER_NOT_FOUND: '존재하지 않는 주문입니다.',
+  ORDER_CANNOT_CANCEL: '취소할 수 없는 상태의 주문입니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
