@@ -28,12 +28,21 @@ describe('Pagination', () => {
     expect(screen.queryByText('…')).not.toBeInTheDocument();
   });
 
-  it('건너뛰는 페이지가 하나뿐이어도 생략 표시로 접는다', () => {
+  it('건너뛰는 페이지가 하나뿐이면 접지 않고 번호로 보여준다', () => {
     // given & when
     render(<Pagination page={0} totalPages={4} onChange={vi.fn()} />);
 
     // then
-    expect(pageButtonLabels()).toEqual(['1', '2', '4']);
+    expect(pageButtonLabels()).toEqual(['1', '2', '3', '4']);
+    expect(screen.queryByText('…')).not.toBeInTheDocument();
+  });
+
+  it('건너뛰는 페이지가 둘 이상이면 생략 표시로 접는다', () => {
+    // given & when
+    render(<Pagination page={0} totalPages={5} onChange={vi.fn()} />);
+
+    // then
+    expect(pageButtonLabels()).toEqual(['1', '2', '5']);
     expect(screen.getAllByText('…')).toHaveLength(1);
   });
 
