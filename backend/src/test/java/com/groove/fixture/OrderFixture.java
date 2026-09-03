@@ -7,6 +7,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.product.entity.Product;
 
@@ -37,6 +38,11 @@ public final class OrderFixture {
 
 	public static Order withId(Order order, Long id) {
 		ReflectionTestUtils.setField(order, "id", id);
+		return order;
+	}
+
+	public static Order markShipped(Order order) {
+		ReflectionTestUtils.setField(order, "status", OrderStatus.SHIPPED);
 		return order;
 	}
 

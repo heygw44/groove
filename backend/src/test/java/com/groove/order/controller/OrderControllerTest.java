@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -30,6 +31,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.auth.jwt.JwtProvider;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
@@ -37,6 +41,9 @@ import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
+import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderSummaryResponse;
+import com.groove.order.entity.OrderStatus;
 import com.groove.order.service.OrderService;
 
 @WebMvcTest(OrderController.class)
@@ -65,6 +72,11 @@ class OrderControllerTest {
 
 	private OrderCreateResponse sampleResponse() {
 		return new OrderCreateResponse(1L, "20260903-TESTAB12", new BigDecimal("90000"));
+	}
+
+	private OrderDetailResponse sampleDetailResponse(OrderStatus status) {
+		return new OrderDetailResponse(1L, "20260903-TESTAB12", status, new BigDecimal("90000"), BigDecimal.ZERO,
+				new BigDecimal("90000"), List.of(), null, null, null, null, null);
 	}
 
 	@Nested
@@ -168,6 +180,84 @@ class OrderControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(orderService, never()).create(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/orders")
+	class GetMyOrders {
+
+		@Test
+		@DisplayName("유효한 요청이면 200 과 주문 목록을 반환한다")
+		void returnsOrderList() throws Exception {
+			// given
+			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
+					new BigDecimal("90000"), "Kind of Blue", 1, null, null);
+			given(orderService.getMyOrders(eq(1L), any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
+
+			// when & then
+			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.content[0].orderNumber", is("20260903-TESTAB12")))
+					.andExpect(jsonPath("$.data.totalElements", is(1)));
+		}
+
+		@Test
+		@DisplayName("size 가 100 을 넘으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenSizeTooLarge() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, bearer()).param("size", "101"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(orderService, never()).getMyOrders(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/orders/{id}")
+	class GetDetail {
+
+		@Test
+		@DisplayName("유효한 요청이면 200 과 주문 상세를 반환한다")
+		void returnsOrderDetail() throws Exception {
+			// given
+			given(orderService.getDetail(eq(1L), eq(1L))).willReturn(sampleDetailResponse(OrderStatus.PENDING));
+
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/1").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")));
+		}
+
+		@Test
+		@DisplayName("존재하지 않거나 타인 주문이면 404 ORDER_NOT_FOUND 를 반환한다")
+		void returnsNotFound() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND))
+					.given(orderService).getDetail(eq(1L), eq(999L));
+
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/999").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isNotFound())
+					.andExpect(jsonPath("$.error.code", is("ORDER_NOT_FOUND")));
+		}
+	}
+
+	@Nested
+	@DisplayName("POST /api/v1/orders/{id}/cancel")
+	class Cancel {
+
+		@Test
+		@DisplayName("바디 없이 요청해도 200 과 취소된 주문을 반환한다")
+		void cancelsWithoutBody() throws Exception {
+			// given
+			given(orderService.cancel(eq(1L), eq(1L), eq(null)))
+					.willReturn(sampleDetailResponse(OrderStatus.CANCELED));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/1/cancel").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
 		}
 	}
 }
