@@ -1,8 +1,16 @@
 import { createBrowserRouter } from 'react-router-dom';
 
+import { AdminLayout } from '@/components/layout/AdminLayout';
 import { MyPageLayout } from '@/components/layout/MyPageLayout';
 import { RootLayout } from '@/components/layout/RootLayout';
+import AdminCouponsPage from '@/pages/admin/AdminCouponsPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
+import AdminLimitedDropsPage from '@/pages/admin/AdminLimitedDropsPage';
+import AdminMembersPage from '@/pages/admin/AdminMembersPage';
+import AdminOrdersPage from '@/pages/admin/AdminOrdersPage';
+import AdminProductCreatePage from '@/pages/admin/AdminProductCreatePage';
+import AdminProductEditPage from '@/pages/admin/AdminProductEditPage';
+import AdminProductListPage from '@/pages/admin/AdminProductListPage';
 import LoginPage from '@/pages/auth/LoginPage';
 import SignupPage from '@/pages/auth/SignupPage';
 import CartPage from '@/pages/cart/CartPage';
@@ -53,9 +61,19 @@ export const router = createBrowserRouter([
         path: 'admin',
         element: (
           <AdminRoute>
-            <AdminDashboardPage />
+            <AdminLayout />
           </AdminRoute>
         ),
+        children: [
+          { index: true, element: <AdminDashboardPage /> },
+          { path: 'products', element: <AdminProductListPage /> },
+          { path: 'products/new', element: <AdminProductCreatePage /> },
+          { path: 'products/:id/edit', element: <AdminProductEditPage /> },
+          { path: 'orders', element: <AdminOrdersPage /> },
+          { path: 'coupons', element: <AdminCouponsPage /> },
+          { path: 'limited-drops', element: <AdminLimitedDropsPage /> },
+          { path: 'members', element: <AdminMembersPage /> },
+        ],
       },
       { path: '*', element: <NotFoundPage /> },
     ],

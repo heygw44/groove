@@ -63,3 +63,71 @@ export interface ProductListParams {
   page?: number;
   size?: number;
 }
+
+export interface AdminProductSummary {
+  id: number;
+  title: string;
+  artistName: string;
+  price: number;
+  status: ProductStatus;
+  thumbnailUrl?: string;
+  stockQuantity?: number;
+  createdAt: string;
+}
+
+export interface AdminProductResponse {
+  id: number;
+  title: string;
+  artist: Artist;
+  label?: Label;
+  genres: Genre[];
+  images: ProductImage[];
+  price: number;
+  status: ProductStatus;
+  stockQuantity: number;
+  releaseDate?: string;
+  pressingInfo?: string;
+  colorVariant?: string;
+  description?: string;
+  averageRating?: number;
+  reviewCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminProductListParams {
+  status?: ProductStatus;
+  page?: number;
+  size?: number;
+  sort?: string;
+}
+
+export interface AdminProductCreateRequest {
+  title: string;
+  artistId: number;
+  labelId?: number;
+  genreIds?: number[];
+  releaseDate?: string;
+  pressingInfo?: string;
+  colorVariant?: string;
+  price: number;
+  description?: string;
+  imageUrls?: string[];
+  initialStock: number;
+}
+
+export type AdminProductUpdateRequest = Partial<Omit<AdminProductCreateRequest, 'initialStock'>>;
+
+export type StockChangeType = 'IN' | 'OUT' | 'ADJUST';
+
+export interface StockAdjustRequest {
+  changeType: StockChangeType;
+  quantity: number;
+  reason?: string;
+}
+
+export interface StockAdjustResponse {
+  productId: number;
+  quantity: number;
+  productStatus: ProductStatus;
+}
