@@ -18,9 +18,13 @@ import org.springframework.data.domain.PageRequest;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
+import com.groove.fixture.MemberFixture;
 import com.groove.fixture.ProductFixture;
+import com.groove.fixture.ReviewFixture;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.member.entity.Member;
+import com.groove.member.repository.MemberRepository;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
@@ -29,6 +33,8 @@ import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductGenre;
 import com.groove.product.entity.ProductImage;
 import com.groove.product.entity.ProductStatus;
+import com.groove.review.entity.Review;
+import com.groove.review.repository.ReviewRepository;
 import com.groove.support.DataJpaTestSupport;
 
 import jakarta.persistence.EntityManager;
@@ -55,6 +61,12 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 
 	@Autowired
 	private StockRepository stockRepository;
+
+	@Autowired
+	private MemberRepository memberRepository;
+
+	@Autowired
+	private ReviewRepository reviewRepository;
 
 	@Autowired
 	private EntityManager entityManager;
@@ -297,6 +309,59 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 					.toList();
 			assertThat(hiddenIds).contains(savedHidden.getId());
 			assertThat(hiddenIds).doesNotContain(onSale.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("refreshReviewStats()")
+	class RefreshReviewStats {
+
+		@Test
+		@DisplayName("리뷰 평점을 반영해 평균과 개수를 갱신하고, 삭제하면 다시 계산된다")
+		void recalculatesAverageAndCountAsReviewsChange() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product product = productRepository.save(ProductFixture.create(artist));
+			Member reviewer1 = memberRepository.save(MemberFixture.create("refresh-stats-1@groove.com"));
+			Member reviewer2 = memberRepository.save(MemberFixture.create("refresh-stats-2@groove.com"));
+			Member reviewer3 = memberRepository.save(MemberFixture.create("refresh-stats-3@groove.com"));
+			reviewRepository.save(ReviewFixture.create(product, reviewer1, 5));
+			reviewRepository.save(ReviewFixture.create(product, reviewer2, 4));
+			Review lowestRatedReview = reviewRepository.save(ReviewFixture.create(product, reviewer3, 3));
+			flushAndClear();
+
+			// when
+			productRepository.refreshReviewStats(product.getId());
+			entityManager.clear();
+			Product afterThreeReviews = productRepository.findById(product.getId()).orElseThrow();
+
+			// then
+			assertThat(afterThreeReviews.getAverageRating()).isEqualByComparingTo("4.0");
+			assertThat(afterThreeReviews.getReviewCount()).isEqualTo(3);
+
+			// when: 평점 3점 리뷰를 삭제하면 평균이 다시 계산된다
+			reviewRepository.delete(reviewRepository.findById(lowestRatedReview.getId()).orElseThrow());
+			flushAndClear();
+			productRepository.refreshReviewStats(product.getId());
+			entityManager.clear();
+			Product afterDeletingOne = productRepository.findById(product.getId()).orElseThrow();
+
+			// then
+			assertThat(afterDeletingOne.getAverageRating()).isEqualByComparingTo("4.5");
+			assertThat(afterDeletingOne.getReviewCount()).isEqualTo(2);
+
+			// when: 남은 리뷰를 모두 삭제하면 null·0 으로 되돌아간다
+			reviewRepository.deleteAll(reviewRepository.findAll().stream()
+					.filter(review -> review.getProduct().getId().equals(product.getId()))
+					.toList());
+			flushAndClear();
+			productRepository.refreshReviewStats(product.getId());
+			entityManager.clear();
+			Product afterDeletingAll = productRepository.findById(product.getId()).orElseThrow();
+
+			// then
+			assertThat(afterDeletingAll.getAverageRating()).isNull();
+			assertThat(afterDeletingAll.getReviewCount()).isZero();
 		}
 	}
 

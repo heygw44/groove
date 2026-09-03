@@ -1,6 +1,7 @@
 package com.groove.review;
 
 import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -105,6 +106,12 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 			long reviewId = objectMapper.readTree(createResult.getResponse().getContentAsString())
 					.path("data").path("id").asLong();
 
+			// then: 상품 상세의 평점 집계가 방금 작성한 리뷰로 갱신된다
+			mockMvc.perform(get("/api/v1/products/{id}", product.getId()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.averageRating", is(5.0)))
+					.andExpect(jsonPath("$.data.reviewCount", is(1)));
+
 			// then: 목록 조회에서 mine 이 true 로 보인다
 			mockMvc.perform(get("/api/v1/products/{productId}/reviews", product.getId())
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken))
@@ -136,6 +143,16 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(new ReviewUpdateRequest(3, "수정", "수정 시도"))))
 					.andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.error.code", is("REVIEW_NOT_FOUND")));
+
+			// when & then: 작성자 본인이 리뷰를 삭제하면 평점 집계가 초기화된다
+			mockMvc.perform(delete("/api/v1/reviews/{id}", reviewId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken))
+					.andExpect(status().isOk());
+
+			mockMvc.perform(get("/api/v1/products/{id}", product.getId()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.averageRating").doesNotExist())
+					.andExpect(jsonPath("$.data.reviewCount", is(0)));
 		}
 	}
 

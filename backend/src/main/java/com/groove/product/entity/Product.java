@@ -85,6 +85,13 @@ public class Product extends BaseTimeEntity {
 	@Column(columnDefinition = "TEXT")
 	private String description;
 
+	@Column(name = "avg_rating", precision = 2, scale = 1)
+	private BigDecimal averageRating;
+
+	@Column(name = "review_count", nullable = false)
+	@ColumnDefault("0")
+	private int reviewCount;
+
 	@OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<ProductGenre> productGenres = new ArrayList<>();
 
@@ -104,6 +111,7 @@ public class Product extends BaseTimeEntity {
 		this.price = price;
 		this.status = status;
 		this.description = description;
+		this.reviewCount = 0;
 	}
 
 	public static Product create(String title, Artist artist, Label label, LocalDate releaseDate,

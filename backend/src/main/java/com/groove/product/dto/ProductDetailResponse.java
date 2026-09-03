@@ -55,9 +55,8 @@ public record ProductDetailResponse(
 				product.getDescription(),
 				imageSummaries,
 				stockQuantity,
-				// 리뷰 미구현이라 고정값
-				null,
-				0L,
+				product.getAverageRating() == null ? null : product.getAverageRating().doubleValue(),
+				product.getReviewCount(),
 				wishlisted);
 	}
 

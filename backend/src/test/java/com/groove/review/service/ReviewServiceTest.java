@@ -102,6 +102,7 @@ class ReviewServiceTest {
 			// then
 			assertThat(response.id()).isEqualTo(REVIEW_ID);
 			assertThat(response.mine()).isTrue();
+			verify(productRepository).refreshReviewStats(PRODUCT_ID);
 		}
 
 		@Test
@@ -120,6 +121,7 @@ class ReviewServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.REVIEW_PURCHASE_REQUIRED);
 			verify(reviewRepository, never()).saveAndFlush(any());
+			verify(productRepository, never()).refreshReviewStats(any());
 		}
 
 		@Test
@@ -139,6 +141,7 @@ class ReviewServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.REVIEW_ALREADY_EXISTS);
 			verify(reviewRepository, never()).saveAndFlush(any());
+			verify(productRepository, never()).refreshReviewStats(any());
 		}
 
 		@Test
@@ -158,6 +161,7 @@ class ReviewServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.REVIEW_ALREADY_EXISTS);
+			verify(productRepository, never()).refreshReviewStats(any());
 		}
 
 		@Test
@@ -174,6 +178,7 @@ class ReviewServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
 			verify(reviewRepository, never()).saveAndFlush(any());
+			verify(productRepository, never()).refreshReviewStats(any());
 		}
 
 		@Test
@@ -189,6 +194,7 @@ class ReviewServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+			verify(productRepository, never()).refreshReviewStats(any());
 		}
 	}
 
@@ -322,6 +328,7 @@ class ReviewServiceTest {
 			// then
 			assertThat(response.rating()).isEqualTo(request.rating());
 			assertThat(response.title()).isEqualTo(request.title());
+			verify(productRepository).refreshReviewStats(PRODUCT_ID);
 		}
 
 		@Test
@@ -336,6 +343,7 @@ class ReviewServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.REVIEW_NOT_FOUND);
+			verify(productRepository, never()).refreshReviewStats(any());
 		}
 	}
 
@@ -355,6 +363,7 @@ class ReviewServiceTest {
 
 			// then
 			verify(reviewRepository).delete(review);
+			verify(productRepository).refreshReviewStats(PRODUCT_ID);
 		}
 
 		@Test
@@ -369,6 +378,7 @@ class ReviewServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.REVIEW_NOT_FOUND);
 			verify(reviewRepository, never()).delete(any(Review.class));
+			verify(productRepository, never()).refreshReviewStats(any());
 		}
 	}
 }

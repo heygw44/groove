@@ -1,30 +1,42 @@
 package com.groove.global.init;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.groove.fixture.MemberFixture;
+import com.groove.fixture.ProductFixture;
 import com.groove.inventory.service.StockService;
+import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Genre;
+import com.groove.product.entity.Product;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.review.entity.Review;
+import com.groove.review.repository.ReviewRepository;
 
 @ExtendWith(MockitoExtension.class)
 class LocalDataInitializerTest {
@@ -50,6 +62,9 @@ class LocalDataInitializerTest {
 	@Mock
 	StockService stockService;
 
+	@Mock
+	ReviewRepository reviewRepository;
+
 	@Nested
 	@DisplayName("run()")
 	class Run {
@@ -60,6 +75,7 @@ class LocalDataInitializerTest {
 			// given
 			LocalDataInitializer initializer = newInitializer();
 			given(productRepository.count()).willReturn(1L);
+			given(reviewRepository.count()).willReturn(1L);
 
 			// when
 			initializer.run(null);
@@ -76,6 +92,7 @@ class LocalDataInitializerTest {
 			LocalDataInitializer initializer = newInitializer();
 			given(memberRepository.existsByEmail(anyString())).willReturn(true);
 			given(productRepository.count()).willReturn(1L);
+			given(reviewRepository.count()).willReturn(1L);
 
 			// when
 			initializer.run(null);
@@ -90,6 +107,7 @@ class LocalDataInitializerTest {
 			// given
 			LocalDataInitializer initializer = newInitializer();
 			given(productRepository.count()).willReturn(0L);
+			given(reviewRepository.count()).willReturn(1L);
 			given(genreRepository.findByName(anyString())).willReturn(Optional.empty());
 			given(genreRepository.save(any(Genre.class))).willAnswer(invocation -> invocation.getArgument(0));
 			given(labelRepository.saveAll(any())).willAnswer(invocation -> invocation.getArgument(0));
@@ -104,10 +122,52 @@ class LocalDataInitializerTest {
 			verify(stockService, times(50)).create(any(), anyInt());
 			verify(memberRepository, times(3)).save(any());
 		}
+
+		@Test
+		@DisplayName("리뷰 데이터가 이미 있으면 리뷰 시딩을 건너뛴다")
+		void skipsReviewsWhenReviewsExist() {
+			// given
+			LocalDataInitializer initializer = newInitializer();
+			given(productRepository.count()).willReturn(1L);
+			given(reviewRepository.count()).willReturn(1L);
+
+			// when
+			initializer.run(null);
+
+			// then
+			verify(reviewRepository, never()).saveAll(any());
+			verify(memberRepository, never()).findByEmail(anyString());
+		}
+
+		@Test
+		@DisplayName("리뷰 데이터가 비어 있으면 회원 2명 × 상품 50개의 리뷰 100건을 시딩한다")
+		void seedsHundredReviewsWhenEmpty() {
+			// given
+			LocalDataInitializer initializer = newInitializer();
+			given(productRepository.count()).willReturn(1L);
+			given(reviewRepository.count()).willReturn(0L);
+			Member user1 = MemberFixture.withId(MemberFixture.create("user1@groove.com"), 1L);
+			Member user2 = MemberFixture.withId(MemberFixture.create("user2@groove.com"), 2L);
+			given(memberRepository.findByEmail("user1@groove.com")).willReturn(Optional.of(user1));
+			given(memberRepository.findByEmail("user2@groove.com")).willReturn(Optional.of(user2));
+			List<Product> products = IntStream.range(0, 50)
+					.mapToObj(i -> ProductFixture.withId(ProductFixture.create(null), (long) (i + 1)))
+					.toList();
+			given(productRepository.findAll(any(Sort.class))).willReturn(products);
+
+			// when
+			initializer.run(null);
+
+			// then
+			ArgumentCaptor<List<Review>> captor = ArgumentCaptor.forClass(List.class);
+			verify(reviewRepository).saveAll(captor.capture());
+			assertThat(captor.getValue()).hasSize(100);
+			verify(productRepository, times(50)).refreshReviewStats(anyLong());
+		}
 	}
 
 	private LocalDataInitializer newInitializer() {
 		return new LocalDataInitializer(memberRepository, passwordEncoder, genreRepository, labelRepository,
-				artistRepository, productRepository, stockService);
+				artistRepository, productRepository, stockService, reviewRepository);
 	}
 }
