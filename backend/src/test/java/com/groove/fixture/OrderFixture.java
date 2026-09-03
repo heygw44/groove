@@ -1,8 +1,11 @@
 package com.groove.fixture;
 
+import java.util.List;
+
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.member.entity.Member;
+import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.product.entity.Product;
@@ -35,5 +38,13 @@ public final class OrderFixture {
 	public static Order withId(Order order, Long id) {
 		ReflectionTestUtils.setField(order, "id", id);
 		return order;
+	}
+
+	public static OrderCreateRequest cartRequest(List<Long> cartItemIds, Long addressId) {
+		return new OrderCreateRequest(cartItemIds, null, null, addressId, null);
+	}
+
+	public static OrderCreateRequest directRequest(Long productId, int quantity, Long addressId) {
+		return new OrderCreateRequest(null, productId, quantity, addressId, null);
 	}
 }

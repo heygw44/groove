@@ -1,5 +1,6 @@
 package com.groove.cart.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,9 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
 
 	@EntityGraph(attributePaths = {"product", "product.artist"})
 	Optional<CartItem> findByIdAndCartMemberId(Long id, Long memberId);
+
+	@EntityGraph(attributePaths = "product")
+	List<CartItem> findAllByIdInAndCartMemberId(Collection<Long> ids, Long memberId);
 
 	@Modifying(clearAutomatically = true)
 	@Query("delete from CartItem ci where ci.cart.id = :cartId")

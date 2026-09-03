@@ -2,8 +2,11 @@ package com.groove.order.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -46,6 +49,8 @@ class OrderTest {
 			assertThat(order.getDiscountAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getFinalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getShippingAddress()).isEqualTo(shippingAddress);
+			LocalDateTime expectedExpiresAt = LocalDateTime.now().plusMinutes(Order.PENDING_EXPIRATION_MINUTES);
+			assertThat(order.getExpiresAt()).isCloseTo(expectedExpiresAt, within(5, ChronoUnit.SECONDS));
 		}
 	}
 

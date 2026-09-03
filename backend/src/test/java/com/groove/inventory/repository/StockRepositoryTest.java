@@ -3,8 +3,10 @@ package com.groove.inventory.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
 import java.util.Optional;
 
+import org.hibernate.Hibernate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -67,6 +69,38 @@ class StockRepositoryTest extends DataJpaTestSupport {
 
 			// then
 			assertThat(found).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("findAllWithProductByProductIdInForUpdate()")
+	class FindAllWithProductByProductIdInForUpdate {
+
+		@Test
+		@DisplayName("여러 상품을 조회하면 productId 오름차순으로 정렬되고 product 가 즉시 로딩된다")
+		void returnsOrderedStocksWithProductInitialized() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product first = productRepository.save(ProductFixture.create(artist, "First"));
+			Product second = productRepository.save(ProductFixture.create(artist, "Second"));
+			Stock firstStock = stockRepository.save(StockFixture.create(first, 5));
+			Stock secondStock = stockRepository.save(StockFixture.create(second, 5));
+			flushAndClear();
+
+			List<Long> productIds = second.getId() < first.getId()
+					? List.of(second.getId(), first.getId())
+					: List.of(first.getId(), second.getId());
+
+			// when
+			List<Stock> found = stockRepository.findAllWithProductByProductIdInForUpdate(productIds);
+
+			// then
+			assertThat(found).hasSize(2);
+			assertThat(found.get(0).getProduct().getId()).isLessThan(found.get(1).getProduct().getId());
+			assertThat(Hibernate.isInitialized(found.get(0).getProduct())).isTrue();
+			assertThat(Hibernate.isInitialized(found.get(1).getProduct())).isTrue();
+			assertThat(found).extracting(Stock::getId)
+					.containsExactlyInAnyOrder(firstStock.getId(), secondStock.getId());
 		}
 	}
 

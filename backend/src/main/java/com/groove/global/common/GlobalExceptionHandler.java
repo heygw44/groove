@@ -2,6 +2,7 @@ package com.groove.global.common;
 
 import java.util.List;
 
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -80,6 +81,17 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(ObjectOptimisticLockingFailureException.class)
 	public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
 		log.warn("ObjectOptimisticLockingFailureException: {}", ex.getMessage());
+		return stockConflict();
+	}
+
+	// 비관적 락 대기 실패(타임아웃·데드락 희생)도 재고 충돌로 보고 클라이언트 재시도에 맡긴다.
+	@ExceptionHandler(PessimisticLockingFailureException.class)
+	public ResponseEntity<ApiResponse<Void>> handlePessimisticLock(PessimisticLockingFailureException ex) {
+		log.warn("PessimisticLockingFailureException: {}", ex.getMessage());
+		return stockConflict();
+	}
+
+	private ResponseEntity<ApiResponse<Void>> stockConflict() {
 		ErrorCode code = ErrorCode.STOCK_CONFLICT;
 		return ResponseEntity.status(code.getStatus())
 				.body(ApiResponse.error(code.name(), code.getMessage()));
