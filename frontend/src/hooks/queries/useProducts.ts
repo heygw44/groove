@@ -1,2 +1,12 @@
-// TODO: TanStack Query 기반 상품 목록 훅 구현 (1주차 셋업 플레이스홀더)
-export {};
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+
+import { getProducts } from '@/api/product';
+import { productKeys } from '@/hooks/queries/queryKeys';
+import type { ProductListParams } from '@/types/product';
+
+export const useProducts = (params: ProductListParams) =>
+  useQuery({
+    queryKey: productKeys.list(params),
+    queryFn: () => getProducts(params),
+    placeholderData: keepPreviousData,
+  });

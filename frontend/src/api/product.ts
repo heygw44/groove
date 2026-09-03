@@ -1,2 +1,10 @@
-// TODO: product 도메인 API 구현 (1주차 셋업 플레이스홀더)
-export {};
+import { client, unwrap } from '@/api/client';
+import type { ApiResponse, PageResponse } from '@/types/api';
+import type { ProductListParams, ProductSummary } from '@/types/product';
+
+export const getProducts = (params: ProductListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<ProductSummary>>>('/products', {
+      params,
+    }),
+  );

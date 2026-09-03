@@ -11,6 +11,11 @@ export const ERROR_MESSAGES: Record<string, string> = {
   MEMBER_ADDRESS_NOT_FOUND: '이미 삭제된 배송지입니다.',
   MEMBER_ADDRESS_LIMIT_EXCEEDED: '배송지는 최대 10개까지 등록할 수 있습니다.',
   COMMON_INTERNAL_ERROR: '잠시 후 다시 시도해주세요.',
+  PRODUCT_NOT_FOUND: '존재하지 않는 상품입니다.',
+  PRODUCT_HIDDEN: '판매가 중지된 상품입니다.',
+  ARTIST_NOT_FOUND: '존재하지 않는 아티스트입니다.',
+  LABEL_NOT_FOUND: '존재하지 않는 레이블입니다.',
+  GENRE_NOT_FOUND: '존재하지 않는 장르입니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
