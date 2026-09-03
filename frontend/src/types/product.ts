@@ -55,7 +55,7 @@ export interface ProductDetail {
 export interface ProductListParams {
   keyword?: string;
   artistId?: number;
-  genreId?: number;
+  genreIds?: number[];
   labelId?: number;
   minPrice?: number;
   maxPrice?: number;

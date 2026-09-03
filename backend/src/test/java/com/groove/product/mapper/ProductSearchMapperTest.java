@@ -69,6 +69,7 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 		loveSupreme = ProductFixture.create(johnColtrane, "SMT A Love Supreme", new BigDecimal("45000.00"));
 		loveSupreme.addGenre(jazz);
+		loveSupreme.addGenre(rock);
 		loveSupreme.addImage("https://cdn.groove.com/love-supreme-0.jpg", 0);
 
 		roundMidnight = ProductFixture.create(milesDavis, blueNote, "SMT Round Midnight", new BigDecimal("60000.00"));
@@ -92,9 +93,9 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		em.clear();
 	}
 
-	private static ProductSearchCondition condition(String keyword, Long artistId, Long genreId, Long labelId,
+	private static ProductSearchCondition condition(String keyword, Long artistId, List<Long> genreIds, Long labelId,
 			BigDecimal minPrice, BigDecimal maxPrice, ProductSortType sort, int page, int size) {
-		return new ProductSearchCondition(keyword, artistId, genreId, labelId, minPrice, maxPrice, sort, page, size);
+		return new ProductSearchCondition(keyword, artistId, genreIds, labelId, minPrice, maxPrice, sort, page, size);
 	}
 
 	private static ProductSearchCondition scopedCondition(ProductSortType sort, int page, int size) {
@@ -176,10 +177,10 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
-		@DisplayName("genreId 로 필터링하면 해당 장르의 상품만 반환한다")
-		void filtersByGenreId() {
+		@DisplayName("genreIds 로 필터링하면 해당 장르의 상품만 반환한다")
+		void filtersByGenreIds() {
 			// given
-			ProductSearchCondition cond = condition(KEYWORD, null, jazz.getId(), null, null, null,
+			ProductSearchCondition cond = condition(KEYWORD, null, List.of(jazz.getId()), null, null, null,
 					ProductSortType.LATEST, 0, 20);
 
 			// when
@@ -188,6 +189,38 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(result).extracting(ProductSummaryResponse::id)
 					.containsExactlyInAnyOrder(kindOfBlue.getId(), loveSupreme.getId());
+		}
+
+		@Test
+		@DisplayName("genreIds 를 여러 개 지정하면 하나라도 포함된 상품을 중복 없이 반환한다")
+		void filtersByMultipleGenreIdsWithoutDuplicates() {
+			// given
+			ProductSearchCondition cond = condition(KEYWORD, null, List.of(jazz.getId(), rock.getId()), null, null,
+					null, ProductSortType.LATEST, 0, 20);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id)
+					.containsExactlyInAnyOrder(kindOfBlue.getId(), loveSupreme.getId(), roundMidnight.getId(),
+							cheapRecord.getId());
+		}
+
+		@Test
+		@DisplayName("genreIds 가 비어있으면 장르 필터 없이 전체 상품을 반환한다")
+		void returnsAllWhenGenreIdsEmpty() {
+			// given
+			ProductSearchCondition cond = condition(KEYWORD, null, List.of(), null, null, null,
+					ProductSortType.LATEST, 0, 20);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id)
+					.containsExactlyInAnyOrder(kindOfBlue.getId(), loveSupreme.getId(), roundMidnight.getId(),
+							cheapRecord.getId());
 		}
 
 		@Test
@@ -206,11 +239,11 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
-		@DisplayName("keyword·genreId·가격대를 조합하면 모든 조건을 만족하는 상품만 반환한다")
+		@DisplayName("keyword·genreIds·가격대를 조합하면 모든 조건을 만족하는 상품만 반환한다")
 		void filtersByCombinedConditions() {
 			// given
-			ProductSearchCondition cond = condition("SMT Kind", null, jazz.getId(), null, new BigDecimal("20000"),
-					new BigDecimal("40000"), ProductSortType.LATEST, 0, 20);
+			ProductSearchCondition cond = condition("SMT Kind", null, List.of(jazz.getId()), null,
+					new BigDecimal("20000"), new BigDecimal("40000"), ProductSortType.LATEST, 0, 20);
 
 			// when
 			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
@@ -343,7 +376,7 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		@DisplayName("동일 조건의 searchProducts 결과 개수와 일치한다")
 		void matchesSearchResultSize() {
 			// given
-			ProductSearchCondition cond = condition(KEYWORD, null, jazz.getId(), null, null, null,
+			ProductSearchCondition cond = condition(KEYWORD, null, List.of(jazz.getId()), null, null, null,
 					ProductSortType.LATEST, 0, 20);
 
 			// when
@@ -352,6 +385,20 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(count).isEqualTo(result.size());
+		}
+
+		@Test
+		@DisplayName("genreIds 를 여러 개 지정해도 중복 없이 카운트한다")
+		void matchesSearchResultSizeForMultipleGenres() {
+			// given
+			ProductSearchCondition cond = condition(KEYWORD, null, List.of(jazz.getId(), rock.getId()), null, null,
+					null, ProductSortType.LATEST, 0, 20);
+
+			// when
+			long count = productSearchMapper.countProducts(cond);
+
+			// then
+			assertThat(count).isEqualTo(4);
 		}
 	}
 }

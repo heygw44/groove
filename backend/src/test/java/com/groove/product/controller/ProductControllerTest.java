@@ -105,7 +105,8 @@ class ProductControllerTest {
 			// when
 			mockMvc.perform(get("/api/v1/products")
 							.param("keyword", "Kind of Blue")
-							.param("genreId", "3")
+							.param("genreIds", "1")
+							.param("genreIds", "3")
 							.param("sort", "priceAsc"))
 					.andExpect(status().isOk());
 
@@ -113,7 +114,7 @@ class ProductControllerTest {
 			verify(productService).search(captor.capture());
 			ProductSearchRequest captured = captor.getValue();
 			assertThat(captured.keyword()).isEqualTo("Kind of Blue");
-			assertThat(captured.genreId()).isEqualTo(3L);
+			assertThat(captured.genreIds()).isEqualTo(List.of(1L, 3L));
 			assertThat(captured.sort()).isEqualTo("priceAsc");
 		}
 	}
