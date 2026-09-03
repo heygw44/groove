@@ -95,6 +95,22 @@ export interface AdminProductResponse {
   updatedAt: string;
 }
 
+/** ProductForm 이 폼 초기값을 채울 때 필요한 필드만 뽑은 형태. ProductDetail/AdminProductResponse 모두 만족한다. */
+export type ProductFormSource = Pick<
+  AdminProductResponse,
+  | 'id'
+  | 'title'
+  | 'artist'
+  | 'label'
+  | 'genres'
+  | 'releaseDate'
+  | 'pressingInfo'
+  | 'colorVariant'
+  | 'price'
+  | 'description'
+  | 'images'
+>;
+
 export interface AdminProductListParams {
   status?: ProductStatus;
   page?: number;

@@ -10,7 +10,7 @@ import { Pagination } from '@/components/common/Pagination';
 import { Select } from '@/components/common/Select';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/Toast';
-import { useHideProduct } from '@/hooks/mutations/useAdminProductMutations';
+import { useHideProduct, useRestoreProduct } from '@/hooks/mutations/useAdminProductMutations';
 import { useAdminProducts } from '@/hooks/queries/useAdminProducts';
 import type { AdminProductSummary, ProductStatus } from '@/types/product';
 import { getErrorMessage } from '@/utils/apiError';
@@ -47,6 +47,7 @@ export default function AdminProductListPage() {
 
   const [adjusting, setAdjusting] = useState<AdminProductSummary | undefined>(undefined);
   const [hiding, setHiding] = useState<AdminProductSummary | undefined>(undefined);
+  const [restoring, setRestoring] = useState<AdminProductSummary | undefined>(undefined);
 
   const { showToast } = useToast();
   const { data, isPending, isError, isPlaceholderData, refetch } = useAdminProducts({
@@ -55,6 +56,7 @@ export default function AdminProductListPage() {
     size: PAGE_SIZE,
   });
   const hideMutation = useHideProduct();
+  const restoreMutation = useRestoreProduct();
 
   const updateStatus = (next: ProductStatus | '') => {
     setSearchParams((prev) => {
@@ -92,6 +94,22 @@ export default function AdminProductListPage() {
       },
       onError: (error) => {
         setHiding(undefined);
+        showToast('error', getErrorMessage(error));
+      },
+    });
+  };
+
+  const handleRestore = () => {
+    if (!restoring) {
+      return;
+    }
+    restoreMutation.mutate(restoring.id, {
+      onSuccess: () => {
+        showToast('success', '상품을 복구했습니다.');
+        setRestoring(undefined);
+      },
+      onError: (error) => {
+        setRestoring(undefined);
         showToast('error', getErrorMessage(error));
       },
     });
@@ -153,7 +171,8 @@ export default function AdminProductListPage() {
             products={data.content}
             onAdjustStock={setAdjusting}
             onHide={setHiding}
-            disabled={hideMutation.isPending}
+            onRestore={setRestoring}
+            disabled={hideMutation.isPending || restoreMutation.isPending}
           />
 
           <div className="mt-6">
@@ -175,11 +194,26 @@ export default function AdminProductListPage() {
         title="상품을 숨길까요?"
         description={
           hiding
-            ? `'${hiding.title}' 상품이 판매 목록에서 사라집니다. 숨긴 상품은 되돌리거나 수정할 수 없습니다.`
+            ? `'${hiding.title}' 상품이 판매 목록에서 사라집니다. 숨긴 상품은 목록에서 복구할 수 있습니다.`
             : ''
         }
         confirmLabel="숨김"
         pending={hideMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={Boolean(restoring)}
+        onClose={() => setRestoring(undefined)}
+        onConfirm={handleRestore}
+        title="상품을 복구할까요?"
+        description={
+          restoring
+            ? `'${restoring.title}' 상품이 다시 노출됩니다. 재고가 있으면 판매중, 없으면 품절 상태로 돌아갑니다.`
+            : ''
+        }
+        confirmLabel="복구"
+        variant="primary"
+        pending={restoreMutation.isPending}
       />
     </div>
   );

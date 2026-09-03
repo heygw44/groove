@@ -40,6 +40,7 @@ import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
+import com.groove.product.entity.ProductStatus;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
@@ -312,6 +313,115 @@ class AdminProductServiceTest {
 
 			// when & then
 			assertThatThrownBy(() -> adminProductService.hide(ADMIN_ID, PRODUCT_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("getDetail()")
+	class GetDetail {
+
+		@Test
+		@DisplayName("HIDDEN 상품도 조회할 수 있다")
+		void returnsHiddenProduct() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			product.hide();
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+
+			// when
+			AdminProductResponse response = adminProductService.getDetail(PRODUCT_ID);
+
+			// then
+			assertThat(response.status()).isEqualTo(product.getStatus());
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 상품이면 PRODUCT_NOT_FOUND 예외를 던진다")
+		void throwsWhenProductNotFound() {
+			// given
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.getDetail(PRODUCT_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("restore()")
+	class Restore {
+
+		@Test
+		@DisplayName("재고가 남아 있으면 ON_SALE 로 복구하고 감사 로그를 남긴다")
+		void restoresAndRecordsAudit() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			product.hide();
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID))
+					.willReturn(Optional.of(StockFixture.create(product, 10)));
+
+			// when
+			AdminProductResponse response = adminProductService.restore(ADMIN_ID, PRODUCT_ID);
+
+			// then
+			assertThat(response.status()).isEqualTo(ProductStatus.ON_SALE);
+			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_RESTORE,
+					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "ON_SALE");
+		}
+
+		@Test
+		@DisplayName("재고가 0 이면 SOLD_OUT 으로 복구한다")
+		void restoresToSoldOutWhenStockIsZero() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			product.hide();
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID))
+					.willReturn(Optional.of(StockFixture.create(product, 0)));
+
+			// when
+			AdminProductResponse response = adminProductService.restore(ADMIN_ID, PRODUCT_ID);
+
+			// then
+			assertThat(response.status()).isEqualTo(ProductStatus.SOLD_OUT);
+			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_RESTORE,
+					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "SOLD_OUT");
+		}
+
+		@Test
+		@DisplayName("HIDDEN 상태가 아니면 PRODUCT_NOT_HIDDEN 예외를 던진다")
+		void throwsWhenProductNotHidden() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.restore(ADMIN_ID, PRODUCT_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_HIDDEN);
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 상품이면 PRODUCT_NOT_FOUND 예외를 던진다")
+		void throwsWhenProductNotFound() {
+			// given
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.restore(ADMIN_ID, PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);

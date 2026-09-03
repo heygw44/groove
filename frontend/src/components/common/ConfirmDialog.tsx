@@ -9,6 +9,7 @@ interface ConfirmDialogProps {
   description: string;
   confirmLabel?: string;
   pending?: boolean;
+  variant?: 'danger' | 'primary';
 }
 
 export function ConfirmDialog({
@@ -19,6 +20,7 @@ export function ConfirmDialog({
   description,
   confirmLabel = '삭제',
   pending = false,
+  variant = 'danger',
 }: ConfirmDialogProps) {
   return (
     <Modal
@@ -32,7 +34,7 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={onClose} disabled={pending}>
             취소
           </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={pending}>
+          <Button variant={variant} onClick={onConfirm} disabled={pending}>
             {confirmLabel}
           </Button>
         </>

@@ -10,6 +10,7 @@ interface AdminProductTableProps {
   products: AdminProductSummary[];
   onAdjustStock: (product: AdminProductSummary) => void;
   onHide: (product: AdminProductSummary) => void;
+  onRestore: (product: AdminProductSummary) => void;
   disabled?: boolean;
 }
 
@@ -17,6 +18,7 @@ export function AdminProductTable({
   products,
   onAdjustStock,
   onHide,
+  onRestore,
   disabled = false,
 }: AdminProductTableProps) {
   return (
@@ -73,14 +75,25 @@ export function AdminProductTable({
                   >
                     재고
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onHide(product)}
-                    disabled={disabled || product.status === 'HIDDEN'}
-                  >
-                    숨김
-                  </Button>
+                  {product.status === 'HIDDEN' ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onRestore(product)}
+                      disabled={disabled}
+                    >
+                      복구
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onHide(product)}
+                      disabled={disabled}
+                    >
+                      숨김
+                    </Button>
+                  )}
                 </div>
               </td>
             </tr>

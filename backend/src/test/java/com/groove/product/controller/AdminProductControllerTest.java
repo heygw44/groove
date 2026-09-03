@@ -376,4 +376,96 @@ class AdminProductControllerTest {
 			verify(adminProductService, never()).getList(any(), any());
 		}
 	}
+
+	@Nested
+	@DisplayName("GET /api/v1/admin/products/{id}")
+	class GetDetail {
+
+		@Test
+		@DisplayName("관리자면 200 과 상품 정보를 반환한다")
+		void returnsProductWhenAdmin() throws Exception {
+			// given
+			given(adminProductService.getDetail(PRODUCT_ID)).willReturn(sampleResponse());
+
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products/{id}", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.id", is(PRODUCT_ID.intValue())));
+		}
+
+		@Test
+		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
+		void returnsForbiddenWhenNotAdmin() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products/{id}", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, userToken()))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(adminProductService, never()).getDetail(any());
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products/{id}", PRODUCT_ID))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(adminProductService, never()).getDetail(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("PATCH /api/v1/admin/products/{id}/restore")
+	class Restore {
+
+		@Test
+		@DisplayName("관리자면 200 과 복구된 상품 정보를 반환한다")
+		void restoresProductWhenAdmin() throws Exception {
+			// given
+			given(adminProductService.restore(1L, PRODUCT_ID)).willReturn(sampleResponse());
+
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/products/{id}/restore", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.id", is(PRODUCT_ID.intValue())));
+		}
+
+		@Test
+		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
+		void returnsForbiddenWhenNotAdmin() throws Exception {
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/products/{id}/restore", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, userToken()))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(adminProductService, never()).restore(any(), any());
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/products/{id}/restore", PRODUCT_ID))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(adminProductService, never()).restore(any(), any());
+		}
+
+		@Test
+		@DisplayName("HIDDEN 상태가 아니면 409 PRODUCT_NOT_HIDDEN 을 반환한다")
+		void returnsConflictWhenProductNotHidden() throws Exception {
+			// given
+			given(adminProductService.restore(1L, PRODUCT_ID))
+					.willThrow(new BusinessException(ErrorCode.PRODUCT_NOT_HIDDEN));
+
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/products/{id}/restore", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("PRODUCT_NOT_HIDDEN")));
+		}
+	}
 }

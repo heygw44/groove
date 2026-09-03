@@ -17,6 +17,7 @@ export const productKeys = {
 export const adminProductKeys = {
   all: ['adminProducts'] as const,
   list: (params: AdminProductListParams) => ['adminProducts', params] as const,
+  detail: (id: number) => ['adminProducts', 'detail', id] as const,
 };
 
 export const referenceKeys = {

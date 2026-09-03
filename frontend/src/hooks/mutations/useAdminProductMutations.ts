@@ -1,6 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { adjustStock, createAdminProduct, hideAdminProduct, updateAdminProduct } from '@/api/admin';
+import {
+  adjustStock,
+  createAdminProduct,
+  hideAdminProduct,
+  restoreAdminProduct,
+  updateAdminProduct,
+} from '@/api/admin';
 import { adminProductKeys, productKeys } from '@/hooks/queries/queryKeys';
 import type {
   AdminProductCreateRequest,
@@ -47,6 +53,15 @@ export const useHideProduct = () => {
 
   return useMutation({
     mutationFn: (id: number) => hideAdminProduct(id),
+    onSuccess: (_data, id) => invalidate(id),
+  });
+};
+
+export const useRestoreProduct = () => {
+  const invalidate = useInvalidateProducts();
+
+  return useMutation({
+    mutationFn: (id: number) => restoreAdminProduct(id),
     onSuccess: (_data, id) => invalidate(id),
   });
 };

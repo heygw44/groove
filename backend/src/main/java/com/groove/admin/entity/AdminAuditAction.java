@@ -4,5 +4,6 @@ package com.groove.admin.entity;
 public enum AdminAuditAction {
 	PRODUCT_CREATE,
 	PRODUCT_UPDATE,
-	PRODUCT_HIDE
+	PRODUCT_HIDE,
+	PRODUCT_RESTORE
 }
