@@ -3,10 +3,12 @@ package com.groove.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -18,12 +20,18 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.groove.admin.entity.AdminAuditAction;
+import com.groove.admin.entity.AdminAuditLog;
+import com.groove.admin.repository.AdminAuditLogRepository;
 import com.groove.auth.dto.LoginRequest;
 import com.groove.auth.dto.SignupRequest;
+import com.groove.auth.jwt.JwtProvider;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.MemberFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.inventory.entity.Stock;
@@ -31,9 +39,14 @@ import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
+import com.groove.member.entity.MemberRole;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.OrderCreateRequest;
+import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderStatus;
+import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductStatus;
@@ -67,6 +80,15 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	StockHistoryRepository stockHistoryRepository;
+
+	@Autowired
+	OrderRepository orderRepository;
+
+	@Autowired
+	AdminAuditLogRepository adminAuditLogRepository;
+
+	@Autowired
+	JwtProvider jwtProvider;
 
 	@Nested
 	@DisplayName("생성 → 목록/상세 조회 → 취소 흐름")
@@ -125,6 +147,62 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(productAfterCancel.getStatus()).isEqualTo(ProductStatus.ON_SALE);
 			assertThat(stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stockAfterCancel.getId()))
 					.hasSize(2);
+		}
+	}
+
+	@Nested
+	@DisplayName("관리자 주문 상태 전이")
+	class AdminStatusChange {
+
+		@Test
+		@DisplayName("PAID→PREPARING→SHIPPED→DELIVERED 는 순서대로 성공하고 DELIVERED→CANCELED 는 거부된다")
+		void transitionsThroughAllowedStatusesAndRejectsInvalidTransition() throws Exception {
+			// given: 결제 완료(PAID) 상태의 주문과 관리자 토큰을 준비한다
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderCreateRequest createRequest = new OrderCreateRequest(null, product.getId(), 1, address.getId(),
+					null);
+			MvcResult createResult = mockMvc.perform(post("/api/v1/orders")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isCreated())
+					.andReturn();
+			long orderId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+					.path("data").path("orderId").asLong();
+			Order order = orderRepository.findById(orderId).orElseThrow();
+			order.markPaid();
+			orderRepository.save(order);
+
+			Member admin = memberRepository.save(
+					MemberFixture.createAdmin("order-flow-admin-" + UUID.randomUUID() + "@groove.com"));
+			String adminBearer = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+
+			// when & then: 허용된 전이는 순서대로 200 을 반환한다
+			changeStatus(orderId, adminBearer, OrderStatus.PREPARING).andExpect(status().isOk());
+			changeStatus(orderId, adminBearer, OrderStatus.SHIPPED).andExpect(status().isOk());
+			changeStatus(orderId, adminBearer, OrderStatus.DELIVERED).andExpect(status().isOk());
+
+			// when & then: DELIVERED→CANCELED 는 허용되지 않는 전이라 400 을 반환한다
+			changeStatus(orderId, adminBearer, OrderStatus.CANCELED)
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("ORDER_INVALID_STATUS_TRANSITION")));
+
+			// then: 감사 로그가 전이 횟수만큼 쌓인다
+			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
+			assertThat(logs).extracting(AdminAuditLog::getAction).containsExactly(
+					AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditAction.ORDER_STATUS_CHANGE,
+					AdminAuditAction.ORDER_STATUS_CHANGE);
+		}
+
+		private ResultActions changeStatus(long orderId, String adminBearer, OrderStatus status) throws Exception {
+			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(status);
+			return mockMvc.perform(patch("/api/v1/admin/orders/" + orderId + "/status")
+					.header(HttpHeaders.AUTHORIZATION, adminBearer)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(request)));
 		}
 	}
 

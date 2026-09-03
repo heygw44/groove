@@ -54,6 +54,8 @@ public class Order extends BaseTimeEntity {
 
 	public static final int PENDING_EXPIRATION_MINUTES = 10;
 
+	private static final String ADMIN_CANCEL_REASON = "관리자 취소";
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -145,6 +147,18 @@ public class Order extends BaseTimeEntity {
 		this.status = OrderStatus.CANCELED;
 		this.canceledAt = LocalDateTime.now();
 		this.cancelReason = reason;
+	}
+
+	/** 관리자 상태 전이(PATCH /admin/orders/{id}/status)용. 허용되지 않는 전이는 예외를 던진다. */
+	public void changeStatus(OrderStatus next) {
+		if (!this.status.canTransitionTo(next)) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
+		}
+		this.status = next;
+		if (next == OrderStatus.CANCELED) {
+			this.canceledAt = LocalDateTime.now();
+			this.cancelReason = ADMIN_CANCEL_REASON;
+		}
 	}
 
 	public List<OrderItem> getItems() {

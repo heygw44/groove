@@ -49,4 +49,52 @@
 		<include refid="myOrdersWhere"/>
 	</select>
 
+	<resultMap id="adminOrderSummaryMap" type="com.groove.order.dto.AdminOrderSummaryResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="order_number" javaType="java.lang.String"/>
+			<arg column="member_email" javaType="java.lang.String"/>
+			<arg column="status" javaType="com.groove.order.entity.OrderStatus"/>
+			<arg column="final_amount" javaType="java.math.BigDecimal"/>
+			<arg column="item_count" javaType="_int"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+		</constructor>
+	</resultMap>
+
+	<sql id="adminOrdersWhere">
+		<where>
+			<if test="status != null">
+				AND o.status = #{status}
+			</if>
+			<if test="keyword != null and keyword != ''">
+				AND (m.email LIKE CONCAT('%', #{keyword}, '%') OR o.order_number LIKE CONCAT('%', #{keyword}, '%'))
+			</if>
+			<if test="fromAt != null">
+				AND o.created_at &gt;= #{fromAt}
+			</if>
+			<if test="toExclusiveAt != null">
+				AND o.created_at &lt; #{toExclusiveAt}
+			</if>
+		</where>
+	</sql>
+
+	<select id="findAdminOrders" parameterType="com.groove.order.dto.AdminOrderSearchCondition"
+			resultMap="adminOrderSummaryMap">
+		SELECT
+			o.id, o.order_number, m.email AS member_email, o.status, o.final_amount, o.created_at,
+			(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count
+		FROM orders o
+		JOIN member m ON m.id = o.member_id
+		<include refid="adminOrdersWhere"/>
+		ORDER BY o.created_at DESC, o.id DESC
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countAdminOrders" parameterType="com.groove.order.dto.AdminOrderSearchCondition" resultType="long">
+		SELECT COUNT(*)
+		FROM orders o
+		JOIN member m ON m.id = o.member_id
+		<include refid="adminOrdersWhere"/>
+	</select>
+
 </mapper>
