@@ -2,6 +2,7 @@ package com.groove.order.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -11,7 +12,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.groove.coupon.entity.Coupon;
+import com.groove.coupon.entity.MemberCoupon;
 import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.CouponFixture;
+import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
@@ -208,6 +213,52 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result.thumbnailUrl()).isNull();
+		}
+
+		@Test
+		@DisplayName("쿠폰을 적용한 주문은 할인 금액과 쿠폰명을 함께 반환한다")
+		void returnsDiscountAmountAndCouponNameWhenCouponApplied() {
+			// given
+			Coupon coupon = CouponFixture.fixed("OQM-COUPON", new BigDecimal("5000"));
+			em.persist(coupon);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(owner, coupon);
+			em.persist(memberCoupon);
+			Order order = OrderFixture.create(owner, "20260903-OQM00016");
+			order.addItem(kindOfBlue, 1);
+			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			OrderSummaryResponse result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), null, 0, 20)).stream()
+					.filter(summary -> summary.id().equals(order.getId()))
+					.findFirst()
+					.orElseThrow();
+
+			// then
+			assertThat(result.discountAmount()).isEqualByComparingTo(new BigDecimal("5000"));
+			assertThat(result.couponName()).isEqualTo("테스트 쿠폰");
+		}
+
+		@Test
+		@DisplayName("쿠폰이 없는 주문은 할인 금액 0 과 쿠폰명 null 을 반환한다")
+		void returnsZeroDiscountAndNullCouponNameWhenNoCoupon() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQM00017", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			OrderSummaryResponse result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), null, 0, 20)).stream()
+					.filter(summary -> summary.id().equals(order.getId()))
+					.findFirst()
+					.orElseThrow();
+
+			// then
+			assertThat(result.discountAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+			assertThat(result.couponName()).isNull();
 		}
 	}
 

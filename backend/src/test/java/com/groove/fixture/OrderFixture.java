@@ -53,4 +53,9 @@ public final class OrderFixture {
 	public static OrderCreateRequest directRequest(Long productId, int quantity, Long addressId) {
 		return new OrderCreateRequest(null, productId, quantity, addressId, null);
 	}
+
+	public static OrderCreateRequest directRequestWithCoupon(Long productId, int quantity, Long addressId,
+			Long memberCouponId) {
+		return new OrderCreateRequest(null, productId, quantity, addressId, memberCouponId);
+	}
 }

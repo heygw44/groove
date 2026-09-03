@@ -21,13 +21,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.cart.entity.Cart;
 import com.groove.cart.entity.CartItem;
 import com.groove.cart.repository.CartItemRepository;
+import com.groove.coupon.entity.Coupon;
+import com.groove.coupon.entity.DiscountType;
+import com.groove.coupon.entity.MemberCoupon;
+import com.groove.coupon.repository.MemberCouponRepository;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.CartFixture;
+import com.groove.fixture.CouponFixture;
+import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
@@ -59,6 +66,7 @@ class OrderServiceTest {
 	private static final Long ADDRESS_ID = 10L;
 	private static final Long PRODUCT_ID = 100L;
 	private static final Long CART_ITEM_ID = 1000L;
+	private static final Long MEMBER_COUPON_ID = 10000L;
 
 	@Mock
 	MemberRepository memberRepository;
@@ -71,6 +79,9 @@ class OrderServiceTest {
 
 	@Mock
 	CartItemRepository cartItemRepository;
+
+	@Mock
+	MemberCouponRepository memberCouponRepository;
 
 	@Mock
 	OrderStockService orderStockService;
@@ -95,8 +106,14 @@ class OrderServiceTest {
 	void setUp() {
 		OrderNumberGenerator orderNumberGenerator = mock(OrderNumberGenerator.class);
 		lenient().when(orderNumberGenerator.generate()).thenReturn("20260903-TESTAB12");
+		lenient().when(orderRepository.save(any())).thenAnswer(invocation -> {
+			Order savedOrder = invocation.getArgument(0);
+			ReflectionTestUtils.setField(savedOrder, "id", 999L);
+			return savedOrder;
+		});
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, cartItemRepository,
-				orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper, paymentCancelHook);
+				memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper,
+				paymentCancelHook);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -238,6 +255,145 @@ class OrderServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
 		}
+
+		@Test
+		@DisplayName("정액 쿠폰을 적용하면 할인 금액만큼 최종 금액이 줄고 쿠폰이 사용 처리된다")
+		void appliesFixedCouponDiscount() {
+			// given
+			MemberCoupon memberCoupon = MemberCouponFixture.withId(
+					MemberCouponFixture.create(member, CouponFixture.fixed("FIXED5000", new BigDecimal("5000"))),
+					MEMBER_COUPON_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(memberCouponRepository.findWithCouponByIdAndMemberIdForUpdate(MEMBER_COUPON_ID, MEMBER_ID))
+					.willReturn(Optional.of(memberCoupon));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, MEMBER_COUPON_ID);
+
+			// when
+			OrderCreateResponse response = orderService.create(MEMBER_ID, request);
+
+			// then
+			assertThat(response.discountAmount()).isEqualByComparingTo(new BigDecimal("5000"));
+			assertThat(response.finalAmount()).isEqualByComparingTo(product.getPrice().subtract(
+					new BigDecimal("5000")));
+			assertThat(memberCoupon.isUsed()).isTrue();
+		}
+
+		@Test
+		@DisplayName("정률 쿠폰을 적용하면 최대 할인 한도가 적용된다")
+		void appliesRateCouponDiscountWithCap() {
+			// given
+			MemberCoupon memberCoupon = MemberCouponFixture.withId(
+					MemberCouponFixture.create(member,
+							CouponFixture.rate("RATE50", new BigDecimal("50"), new BigDecimal("10000"))),
+					MEMBER_COUPON_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(memberCouponRepository.findWithCouponByIdAndMemberIdForUpdate(MEMBER_COUPON_ID, MEMBER_ID))
+					.willReturn(Optional.of(memberCoupon));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, MEMBER_COUPON_ID);
+
+			// when
+			OrderCreateResponse response = orderService.create(MEMBER_ID, request);
+
+			// then: 상품가 45000 의 50% 는 22500 이지만 한도 10000 이 적용된다
+			assertThat(response.discountAmount()).isEqualByComparingTo(new BigDecimal("10000"));
+		}
+
+		@Test
+		@DisplayName("만료된 쿠폰이면 COUPON_EXPIRED 예외를 던지고 재고와 주문을 저장하지 않는다")
+		void throwsWhenCouponExpired() {
+			// given
+			MemberCoupon memberCoupon = MemberCouponFixture.withId(
+					MemberCouponFixture.create(member,
+							CouponFixture.expired(CouponFixture.fixed("EXPIRED", new BigDecimal("5000")))),
+					MEMBER_COUPON_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(memberCouponRepository.findWithCouponByIdAndMemberIdForUpdate(MEMBER_COUPON_ID, MEMBER_ID))
+					.willReturn(Optional.of(memberCoupon));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, MEMBER_COUPON_ID);
+
+			// when & then
+			assertThatThrownBy(() -> orderService.create(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_EXPIRED);
+			verify(orderStockService, never()).deduct(any());
+			verify(orderRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("이미 사용한 쿠폰이면 COUPON_ALREADY_USED 예외를 던진다")
+		void throwsWhenCouponAlreadyUsed() {
+			// given
+			Coupon coupon = CouponFixture.fixed("USED5000", new BigDecimal("5000"));
+			MemberCoupon memberCoupon = MemberCouponFixture.withId(
+					MemberCouponFixture.used(MemberCouponFixture.create(member, coupon), 999L), MEMBER_COUPON_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(memberCouponRepository.findWithCouponByIdAndMemberIdForUpdate(MEMBER_COUPON_ID, MEMBER_ID))
+					.willReturn(Optional.of(memberCoupon));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, MEMBER_COUPON_ID);
+
+			// when & then
+			assertThatThrownBy(() -> orderService.create(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_ALREADY_USED);
+			verify(orderStockService, never()).deduct(any());
+		}
+
+		@Test
+		@DisplayName("본인 소유가 아닌 쿠폰이면 COUPON_NOT_FOUND 예외를 던진다")
+		void throwsWhenCouponNotOwned() {
+			// given
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(memberCouponRepository.findWithCouponByIdAndMemberIdForUpdate(MEMBER_COUPON_ID, MEMBER_ID))
+					.willReturn(Optional.empty());
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, MEMBER_COUPON_ID);
+
+			// when & then
+			assertThatThrownBy(() -> orderService.create(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_NOT_FOUND);
+			verify(orderStockService, never()).deduct(any());
+		}
+
+		@Test
+		@DisplayName("최소 주문 금액을 충족하지 못하면 COUPON_MIN_ORDER_AMOUNT_NOT_MET 예외를 던진다")
+		void throwsWhenMinOrderAmountNotMet() {
+			// given
+			Coupon coupon = CouponFixture.withMinOrderAmount("MIN100000", DiscountType.FIXED,
+					new BigDecimal("5000"), new BigDecimal("100000"));
+			MemberCoupon memberCoupon = MemberCouponFixture.withId(
+					MemberCouponFixture.create(member, coupon), MEMBER_COUPON_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(memberCouponRepository.findWithCouponByIdAndMemberIdForUpdate(MEMBER_COUPON_ID, MEMBER_ID))
+					.willReturn(Optional.of(memberCoupon));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, MEMBER_COUPON_ID);
+
+			// when & then
+			assertThatThrownBy(() -> orderService.create(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_MIN_ORDER_AMOUNT_NOT_MET);
+			verify(orderStockService, never()).deduct(any());
+		}
 	}
 
 	@Nested
@@ -265,7 +421,7 @@ class OrderServiceTest {
 		void returnsOrdersWhenPresent() {
 			// given
 			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
-					new BigDecimal("30000"), "Kind of Blue", 1, null, null);
+					new BigDecimal("30000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, null);
 			given(orderQueryMapper.countMyOrders(any())).willReturn(1L);
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(summary));
 			OrderSearchRequest request = new OrderSearchRequest(null, null, null);
@@ -375,6 +531,43 @@ class OrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("쿠폰을 적용한 주문을 취소하면 쿠폰이 미사용 상태로 복구된다")
+		void restoresCouponOnCancel() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 503L);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member,
+					CouponFixture.fixed("CANCEL5000", new BigDecimal("5000")));
+			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+			memberCoupon.use(order.getId());
+			given(orderRepository.findWithItemsByIdAndMemberId(503L, MEMBER_ID)).willReturn(Optional.of(order));
+
+			// when
+			orderService.cancel(MEMBER_ID, 503L, null);
+
+			// then
+			assertThat(memberCoupon.isUsed()).isFalse();
+		}
+
+		@Test
+		@DisplayName("만료된 쿠폰을 적용한 주문도 취소하면 쿠폰이 복구된다")
+		void restoresExpiredCouponOnCancel() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 504L);
+			Coupon coupon = CouponFixture.fixed("CANCELEXPIRED", new BigDecimal("5000"));
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, coupon);
+			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+			memberCoupon.use(order.getId());
+			CouponFixture.expired(coupon);
+			given(orderRepository.findWithItemsByIdAndMemberId(504L, MEMBER_ID)).willReturn(Optional.of(order));
+
+			// when
+			orderService.cancel(MEMBER_ID, 504L, null);
+
+			// then
+			assertThat(memberCoupon.isUsed()).isFalse();
 		}
 	}
 }

@@ -14,6 +14,7 @@ import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import com.groove.coupon.entity.MemberCoupon;
 import com.groove.global.common.BaseTimeEntity;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -40,7 +41,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 주문. member_coupon_id 는 MemberCoupon 엔티티(5주차 예정) 도입 전까지 FK 없이 단순 컬럼으로만 둔다. */
+/** 주문. 쿠폰을 적용하면 해당 MemberCoupon 을 참조하고 할인 금액을 반영한다. */
 @Entity
 @Getter
 @NoArgsConstructor(access = PROTECTED)
@@ -67,8 +68,9 @@ public class Order extends BaseTimeEntity {
 	@JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "fk_orders_member"))
 	private Member member;
 
-	@Column(name = "member_coupon_id")
-	private Long memberCouponId;
+	@ManyToOne(fetch = LAZY)
+	@JoinColumn(name = "member_coupon_id", foreignKey = @ForeignKey(name = "fk_orders_member_coupon"))
+	private MemberCoupon memberCoupon;
 
 	@Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
 	private BigDecimal totalAmount;
@@ -122,11 +124,31 @@ public class Order extends BaseTimeEntity {
 	}
 
 	public void addItem(Product product, int quantity) {
+		if (this.memberCoupon != null) {
+			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+		}
 		if (quantity <= 0) {
 			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
 		}
 		this.items.add(OrderItem.of(this, product, quantity));
 		calculateAmounts();
+	}
+
+	public void applyCoupon(MemberCoupon memberCoupon, BigDecimal discountAmount) {
+		if (this.items.isEmpty()) {
+			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+		}
+		if (discountAmount == null || discountAmount.compareTo(BigDecimal.ZERO) < 0
+				|| discountAmount.compareTo(this.totalAmount) > 0) {
+			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+		}
+		this.memberCoupon = memberCoupon;
+		this.discountAmount = discountAmount;
+		calculateAmounts();
+	}
+
+	public String getCouponName() {
+		return this.memberCoupon == null ? null : this.memberCoupon.getCoupon().getName();
 	}
 
 	public void markPaid() {

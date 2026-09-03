@@ -26,7 +26,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
+import com.groove.coupon.entity.MemberCoupon;
 import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.CouponFixture;
+import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
@@ -239,6 +242,25 @@ class AdminOrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("쿠폰을 적용한 주문을 CANCELED 로 바꾸면 쿠폰이 미사용 상태로 복구된다")
+		void restoresCouponWhenCanceling() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member,
+					CouponFixture.fixed("ADMIN5000", new BigDecimal("5000")));
+			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+			memberCoupon.use(order.getId());
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
+
+			// when
+			adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
+
+			// then
+			assertThat(memberCoupon.isUsed()).isFalse();
 		}
 	}
 

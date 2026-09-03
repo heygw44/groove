@@ -19,11 +19,6 @@ public record OrderCreateRequest(
 		return isFromCart() ^ isDirect();
 	}
 
-	@AssertTrue(message = "memberCouponId 는 아직 지원하지 않습니다.")
-	public boolean isCouponNotSupported() {
-		return this.memberCouponId == null;
-	}
-
 	public boolean isFromCart() {
 		return this.cartItemIds != null && !this.cartItemIds.isEmpty();
 	}

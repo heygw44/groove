@@ -13,12 +13,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
 	Optional<Order> findByIdAndMemberId(Long id, Long memberId);
 
-	@EntityGraph(attributePaths = {"items", "items.product"})
+	@EntityGraph(attributePaths = {"items", "items.product", "memberCoupon", "memberCoupon.coupon"})
 	Optional<Order> findWithItemsById(Long id);
 
-	@EntityGraph(attributePaths = {"items", "items.product"})
+	@EntityGraph(attributePaths = {"items", "items.product", "memberCoupon", "memberCoupon.coupon"})
 	Optional<Order> findWithItemsByIdAndMemberId(Long id, Long memberId);
 
-	@EntityGraph(attributePaths = {"items", "items.product", "member"})
+	@EntityGraph(attributePaths = {"items", "items.product", "member", "memberCoupon", "memberCoupon.coupon"})
 	Optional<Order> findWithItemsAndMemberById(Long id);
 }

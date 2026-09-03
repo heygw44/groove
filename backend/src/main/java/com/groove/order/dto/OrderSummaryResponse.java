@@ -10,6 +10,8 @@ public record OrderSummaryResponse(
 		String orderNumber,
 		OrderStatus status,
 		BigDecimal finalAmount,
+		BigDecimal discountAmount,
+		String couponName,
 		String representativeProductName,
 		int itemCount,
 		String thumbnailUrl,

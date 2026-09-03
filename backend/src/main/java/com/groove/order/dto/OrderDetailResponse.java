@@ -14,6 +14,7 @@ public record OrderDetailResponse(
 		BigDecimal totalAmount,
 		BigDecimal discountAmount,
 		BigDecimal finalAmount,
+		String couponName,
 		List<OrderItemResponse> items,
 		ShippingAddressResponse shippingAddress,
 		LocalDateTime createdAt,
@@ -27,8 +28,8 @@ public record OrderDetailResponse(
 				.map(OrderItemResponse::from)
 				.toList();
 		return new OrderDetailResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
-				order.getTotalAmount(), order.getDiscountAmount(), order.getFinalAmount(), items,
-				ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(), order.getExpiresAt(),
-				order.getCanceledAt(), order.getCancelReason());
+				order.getTotalAmount(), order.getDiscountAmount(), order.getFinalAmount(), order.getCouponName(),
+				items, ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(),
+				order.getExpiresAt(), order.getCanceledAt(), order.getCancelReason());
 	}
 }
