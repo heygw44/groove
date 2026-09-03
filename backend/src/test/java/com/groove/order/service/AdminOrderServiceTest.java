@@ -34,10 +34,10 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
+import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchRequest;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
-import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
@@ -121,6 +121,41 @@ class AdminOrderServiceTest {
 	}
 
 	@Nested
+	@DisplayName("getDetail()")
+	class GetDetail {
+
+		@Test
+		@DisplayName("주문이 있으면 회원 정보와 상품·배송지를 포함한 상세를 반환한다")
+		void returnsDetailWithMemberEmail() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), ORDER_ID);
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+
+			// when
+			AdminOrderDetailResponse response = adminOrderService.getDetail(ORDER_ID);
+
+			// then
+			assertThat(response.memberId()).isEqualTo(member.getId());
+			assertThat(response.memberEmail()).isEqualTo(member.getEmail());
+			assertThat(response.items()).hasSize(1);
+			assertThat(response.shippingAddress().recipientName()).isEqualTo("김그루브");
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 주문이면 ORDER_NOT_FOUND 예외를 던진다")
+		void throwsWhenOrderNotFound() {
+			// given
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminOrderService.getDetail(ORDER_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+	}
+
+	@Nested
 	@DisplayName("changeStatus()")
 	class ChangeStatus {
 
@@ -129,14 +164,15 @@ class AdminOrderServiceTest {
 		void changesStatusAndRecordsAuditLog() {
 			// given
 			Order order = orderWithStatus(OrderStatus.PAID);
-			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
 
 			// when
-			OrderDetailResponse response = adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
+			AdminOrderDetailResponse response = adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
 
 			// then
 			assertThat(response.status()).isEqualTo(OrderStatus.PREPARING);
+			assertThat(response.memberEmail()).isEqualTo(member.getEmail());
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
 					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("PAID->PREPARING"));
 		}
@@ -147,7 +183,7 @@ class AdminOrderServiceTest {
 		void restoresStockAndCallsHookWhenCancelingPaidOrPreparing(OrderStatus previous) {
 			// given
 			Order order = orderWithStatus(previous);
-			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
 
 			// when
@@ -163,7 +199,7 @@ class AdminOrderServiceTest {
 		void throwsWhenTransitionNotAllowed() {
 			// given
 			Order order = orderWithStatus(OrderStatus.SHIPPED);
-			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
 
 			// when & then
@@ -180,7 +216,7 @@ class AdminOrderServiceTest {
 		void skipsStockRestoreAndHookWhenNotCanceling() {
 			// given
 			Order order = orderWithStatus(OrderStatus.PREPARING);
-			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.SHIPPED);
 
 			// when
@@ -195,7 +231,7 @@ class AdminOrderServiceTest {
 		@DisplayName("존재하지 않는 주문이면 ORDER_NOT_FOUND 예외를 던진다")
 		void throwsWhenOrderNotFound() {
 			// given
-			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.empty());
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.empty());
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
 
 			// when & then

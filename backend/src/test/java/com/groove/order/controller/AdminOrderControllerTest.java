@@ -36,9 +36,11 @@ import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
+import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
-import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderItemResponse;
+import com.groove.order.dto.ShippingAddressResponse;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.service.AdminOrderService;
 
@@ -70,9 +72,14 @@ class AdminOrderControllerTest {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
 	}
 
-	private OrderDetailResponse sampleDetailResponse(OrderStatus status) {
-		return new OrderDetailResponse(1L, "20260903-TESTAB12", status, new BigDecimal("90000"), BigDecimal.ZERO,
-				new BigDecimal("90000"), List.of(), null, null, null, null, null);
+	private AdminOrderDetailResponse sampleDetailResponse(OrderStatus status) {
+		OrderItemResponse item = new OrderItemResponse(100L, "그루브 앨범", new BigDecimal("30000"), 1,
+				new BigDecimal("30000"));
+		ShippingAddressResponse shippingAddress = new ShippingAddressResponse("김그루브", "010-1234-5678", "06236",
+				"서울시 강남구 테헤란로 1", "101동 1001호");
+		return new AdminOrderDetailResponse(1L, "20260903-TESTAB12", 1L, "buyer@groove.com", status,
+				new BigDecimal("90000"), BigDecimal.ZERO, new BigDecimal("90000"), List.of(item), shippingAddress,
+				null, null, null, null);
 	}
 
 	@Nested
@@ -124,6 +131,57 @@ class AdminOrderControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(adminOrderService, never()).getList(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/admin/orders/{id}")
+	class GetDetail {
+
+		@Test
+		@DisplayName("관리자면 200 과 주문 상세를 반환한다")
+		void returnsOrderDetailForAdmin() throws Exception {
+			// given
+			given(adminOrderService.getDetail(1L)).willReturn(sampleDetailResponse(OrderStatus.PAID));
+
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/1").header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.memberEmail", is("buyer@groove.com")))
+					.andExpect(jsonPath("$.data.items[0].productName", is("그루브 앨범")))
+					.andExpect(jsonPath("$.data.shippingAddress.recipientName", is("김그루브")));
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 주문이면 404 ORDER_NOT_FOUND 를 반환한다")
+		void returnsNotFound() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND)).given(adminOrderService).getDetail(999L);
+
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/999").header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isNotFound())
+					.andExpect(jsonPath("$.error.code", is("ORDER_NOT_FOUND")));
+		}
+
+		@Test
+		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
+		void returnsForbiddenForUser() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/1").header(HttpHeaders.AUTHORIZATION, userToken()))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(adminOrderService, never()).getDetail(any());
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/1"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(adminOrderService, never()).getDetail(any());
 		}
 	}
 

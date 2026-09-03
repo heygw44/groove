@@ -12,10 +12,10 @@ import com.groove.auth.LoginMember;
 import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
+import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchRequest;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
-import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.service.AdminOrderService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,9 +38,15 @@ public class AdminOrderController {
 		return ApiResponse.ok(adminOrderService.getList(request));
 	}
 
+	@Operation(summary = "관리자 주문 상세 조회")
+	@GetMapping("/{id}")
+	public ApiResponse<AdminOrderDetailResponse> getDetail(@PathVariable Long id) {
+		return ApiResponse.ok(adminOrderService.getDetail(id));
+	}
+
 	@Operation(summary = "주문 상태 전이")
 	@PatchMapping("/{id}/status")
-	public ApiResponse<OrderDetailResponse> changeStatus(@AuthMember LoginMember admin, @PathVariable Long id,
+	public ApiResponse<AdminOrderDetailResponse> changeStatus(@AuthMember LoginMember admin, @PathVariable Long id,
 			@Valid @RequestBody AdminOrderStatusChangeRequest request) {
 		return ApiResponse.ok(adminOrderService.changeStatus(admin.id(), id, request));
 	}

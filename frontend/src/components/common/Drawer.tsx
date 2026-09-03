@@ -7,6 +7,7 @@ interface DrawerProps {
   title: string;
   children: ReactNode;
   side?: 'left' | 'right';
+  size?: 'sm' | 'lg';
 }
 
 const SIDE_CLASS = {
@@ -14,7 +15,19 @@ const SIDE_CLASS = {
   right: 'right-0',
 } as const;
 
-export function Drawer({ open, onClose, title, children, side = 'left' }: DrawerProps) {
+const SIZE_CLASS = {
+  sm: 'max-w-xs',
+  lg: 'max-w-lg',
+} as const;
+
+export function Drawer({
+  open,
+  onClose,
+  title,
+  children,
+  side = 'left',
+  size = 'sm',
+}: DrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -59,7 +72,7 @@ export function Drawer({ open, onClose, title, children, side = 'left' }: Drawer
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`absolute top-0 h-full w-[85vw] max-w-xs overflow-y-auto bg-surface shadow-2xl outline-none ${SIDE_CLASS[side]}`}
+        className={`absolute top-0 h-full w-[85vw] overflow-y-auto bg-surface shadow-2xl outline-none ${SIDE_CLASS[side]} ${SIZE_CLASS[size]}`}
       >
         <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3.5">
           <h2 id={titleId} className="text-base font-bold tracking-tight">

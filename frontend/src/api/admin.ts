@@ -1,6 +1,12 @@
 import { client, unwrap } from '@/api/client';
 import type { ApiResponse, PageResponse } from '@/types/api';
 import type {
+  AdminOrderDetail,
+  AdminOrderListParams,
+  AdminOrderStatusChangeRequest,
+  AdminOrderSummary,
+} from '@/types/order';
+import type {
   AdminProductCreateRequest,
   AdminProductListParams,
   AdminProductResponse,
@@ -33,6 +39,17 @@ export const restoreAdminProduct = (id: number) =>
   unwrap(client.patch<ApiResponse<AdminProductResponse>>(`/admin/products/${id}/restore`));
 
 export const adjustStock = (id: number, payload: StockAdjustRequest) =>
+  unwrap(client.patch<ApiResponse<StockAdjustResponse>>(`/admin/products/${id}/stock`, payload));
+
+export const getAdminOrders = (params: AdminOrderListParams) =>
   unwrap(
-    client.patch<ApiResponse<StockAdjustResponse>>(`/admin/products/${id}/stock`, payload),
+    client.get<ApiResponse<PageResponse<AdminOrderSummary>>>('/admin/orders', {
+      params,
+    }),
   );
+
+export const getAdminOrder = (orderId: number) =>
+  unwrap(client.get<ApiResponse<AdminOrderDetail>>(`/admin/orders/${orderId}`));
+
+export const changeAdminOrderStatus = (orderId: number, payload: AdminOrderStatusChangeRequest) =>
+  unwrap(client.patch<ApiResponse<AdminOrderDetail>>(`/admin/orders/${orderId}/status`, payload));

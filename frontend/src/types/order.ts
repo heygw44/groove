@@ -66,3 +66,43 @@ export interface OrderListParams {
 export interface OrderCancelRequest {
   reason?: string;
 }
+
+export interface AdminOrderSummary {
+  id: number;
+  orderNumber: string;
+  memberEmail: string;
+  status: OrderStatus;
+  finalAmount: number;
+  itemCount: number;
+  createdAt: string;
+}
+
+export interface AdminOrderDetail {
+  id: number;
+  orderNumber: string;
+  memberId: number;
+  memberEmail: string;
+  status: OrderStatus;
+  totalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+  items: OrderItem[];
+  shippingAddress: ShippingAddress;
+  createdAt: string;
+  expiresAt: string;
+  canceledAt?: string;
+  cancelReason?: string;
+}
+
+export interface AdminOrderListParams {
+  status?: OrderStatus;
+  keyword?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  size?: number;
+}
+
+export interface AdminOrderStatusChangeRequest {
+  status: OrderStatus;
+}
