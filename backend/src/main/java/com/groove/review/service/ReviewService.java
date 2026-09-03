@@ -56,7 +56,9 @@ public class ReviewService {
 			throw new BusinessException(ErrorCode.REVIEW_ALREADY_EXISTS);
 		}
 
-		return ReviewResponse.from(saved, memberId);
+		ReviewResponse response = ReviewResponse.from(saved, memberId);
+		productRepository.refreshReviewStats(productId);
+		return response;
 	}
 
 	public PageResponse<ReviewResponse> getReviews(Long productId, Long memberId, ReviewListRequest request) {
@@ -85,13 +87,18 @@ public class ReviewService {
 	public ReviewResponse update(Long reviewId, Long memberId, ReviewUpdateRequest request) {
 		Review review = findOwnedReview(reviewId, memberId);
 		review.update(request.rating(), request.title(), request.content());
-		return ReviewResponse.from(review, memberId);
+		Long productId = review.getProduct().getId();
+		ReviewResponse response = ReviewResponse.from(review, memberId);
+		productRepository.refreshReviewStats(productId);
+		return response;
 	}
 
 	@Transactional
 	public void delete(Long reviewId, Long memberId) {
 		Review review = findOwnedReview(reviewId, memberId);
+		Long productId = review.getProduct().getId();
 		reviewRepository.delete(review);
+		productRepository.refreshReviewStats(productId);
 	}
 
 	private Review findOwnedReview(Long reviewId, Long memberId) {

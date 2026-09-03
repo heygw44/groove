@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
@@ -190,6 +192,26 @@ class ProductServiceTest {
 					.containsExactly("Jazz");
 			assertThat(response.averageRating()).isNull();
 			assertThat(response.reviewCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("평점 집계가 채워져 있으면 평균 평점과 리뷰 개수를 그대로 내려준다")
+		void returnsAverageRatingAndReviewCountWhenAggregated() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 11L);
+			ReflectionTestUtils.setField(product, "averageRating", new BigDecimal("4.5"));
+			ReflectionTestUtils.setField(product, "reviewCount", 3);
+			given(productRepository.findDetailById(11L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(11L)).willReturn(List.of());
+			given(stockRepository.findByProductId(11L)).willReturn(Optional.empty());
+
+			// when
+			ProductDetailResponse response = productService.getDetail(11L, null);
+
+			// then
+			assertThat(response.averageRating()).isEqualTo(4.5);
+			assertThat(response.reviewCount()).isEqualTo(3L);
 		}
 
 		@Test
