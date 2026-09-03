@@ -67,6 +67,16 @@ public enum ErrorCode {
 	WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 등록된 상품입니다."),
 	WISHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "위시리스트에 없는 상품입니다."),
 
+	// ===== COUPON =====
+	COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "쿠폰을 찾을 수 없습니다."),
+	COUPON_EXPIRED(HttpStatus.BAD_REQUEST, "만료된 쿠폰입니다."),
+	COUPON_DISABLED(HttpStatus.BAD_REQUEST, "사용 중지된 쿠폰입니다."),
+	COUPON_SOLD_OUT(HttpStatus.CONFLICT, "쿠폰 발급이 모두 소진되었습니다."),
+	COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급받은 쿠폰입니다."),
+	COUPON_ALREADY_USED(HttpStatus.CONFLICT, "이미 사용한 쿠폰입니다."),
+	COUPON_NOT_USED(HttpStatus.CONFLICT, "사용하지 않은 쿠폰입니다."),
+	COUPON_MIN_ORDER_AMOUNT_NOT_MET(HttpStatus.BAD_REQUEST, "최소 주문 금액을 충족하지 않습니다."),
+
 	// ===== FILE =====
 	FILE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다."),
 	FILE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "파일 크기가 제한을 초과했습니다."),
