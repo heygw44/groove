@@ -87,9 +87,8 @@ public class AdminProductService {
 			changedFields.add("artist");
 		}
 		Label label = product.getLabel();
-		if (request.labelId() != null) {
-			label = labelRepository.findById(request.labelId())
-					.orElseThrow(() -> new BusinessException(ErrorCode.LABEL_NOT_FOUND));
+		if (request.labelId() != null && request.labelId().isPresent()) {
+			label = findLabelOrNull(request.labelId().get());
 			changedFields.add("label");
 		}
 		LocalDate releaseDate = coalesce(request.releaseDate(), product.getReleaseDate(), "releaseDate",

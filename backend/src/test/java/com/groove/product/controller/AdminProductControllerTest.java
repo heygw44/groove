@@ -1,5 +1,6 @@
 package com.groove.product.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,6 +22,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -38,6 +41,7 @@ import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.global.config.JacksonConfig;
 import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
@@ -52,7 +56,7 @@ import com.groove.product.service.AdminProductService;
 
 @WebMvcTest(AdminProductController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
-	JwtProvider.class})
+	JwtProvider.class, JacksonConfig.class})
 @ActiveProfiles("test")
 class AdminProductControllerTest {
 
@@ -253,6 +257,45 @@ class AdminProductControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.error.code", is("PRODUCT_NOT_FOUND")));
+		}
+
+		@Test
+		@DisplayName("labelId 를 null 로 보내면 해제 요청으로 바인딩된다")
+		void bindsLabelIdAsPresentNullWhenBodyHasExplicitNull() throws Exception {
+			// given
+			given(adminProductService.update(eq(1L), eq(PRODUCT_ID), any())).willReturn(sampleResponse());
+			ArgumentCaptor<ProductUpdateRequest> captor = ArgumentCaptor.forClass(ProductUpdateRequest.class);
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/products/{id}", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"labelId\":null}"))
+					.andExpect(status().isOk());
+
+			// then
+			verify(adminProductService).update(eq(1L), eq(PRODUCT_ID), captor.capture());
+			assertThat(captor.getValue().labelId().isPresent()).isTrue();
+			assertThat(captor.getValue().labelId().get()).isNull();
+		}
+
+		@Test
+		@DisplayName("labelId 키가 없으면 유지 요청으로 바인딩된다")
+		void bindsLabelIdAsUndefinedWhenBodyOmitsKey() throws Exception {
+			// given
+			given(adminProductService.update(eq(1L), eq(PRODUCT_ID), any())).willReturn(sampleResponse());
+			ArgumentCaptor<ProductUpdateRequest> captor = ArgumentCaptor.forClass(ProductUpdateRequest.class);
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/products/{id}", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{}"))
+					.andExpect(status().isOk());
+
+			// then
+			verify(adminProductService).update(eq(1L), eq(PRODUCT_ID), captor.capture());
+			assertThat(captor.getValue().labelId()).isEqualTo(JsonNullable.undefined());
 		}
 	}
 

@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -99,8 +100,9 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 			Long productId = objectMapper.readTree(createResult.getResponse().getContentAsString())
 					.path("data").path("id").asLong();
 
-			ProductUpdateRequest updateRequest = new ProductUpdateRequest("A Love Supreme", null, null, null, null,
-					null, null, new BigDecimal("58000.00"), null, List.of("https://cdn.groove.com/updated.jpg"));
+			ProductUpdateRequest updateRequest = new ProductUpdateRequest("A Love Supreme", null,
+					JsonNullable.undefined(), null, null, null, null, new BigDecimal("58000.00"), null,
+					List.of("https://cdn.groove.com/updated.jpg"));
 			mockMvc.perform(patch("/api/v1/admin/products/{id}", productId)
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -156,6 +158,46 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+		}
+	}
+
+	@Nested
+	@DisplayName("PATCH /admin/products/{id} labelId 삼중 상태")
+	class UpdateLabelTriState {
+
+		@Test
+		@DisplayName("labelId 를 명시적으로 null 로 보내면 레이블을 해제한다")
+		void clearsLabelWhenLabelIdIsExplicitNull() throws Exception {
+			// given
+			Member admin = memberRepository.save(
+					Member.create("admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+			Artist artist = artistRepository.save(Artist.create("John Coltrane", "John Coltrane", "설명"));
+			Label label = labelRepository.save(Label.create("Impulse!", "US"));
+
+			ProductCreateRequest createRequest = new ProductCreateRequest("Blue Train", artist.getId(),
+					label.getId(), List.of(), LocalDate.of(1957, 9, 15), "180g", "Black",
+					new BigDecimal("40000.00"), "설명", List.of(), 5);
+			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isCreated())
+					.andReturn();
+			Long productId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+					.path("data").path("id").asLong();
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/products/{id}", productId)
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"labelId\":null}"))
+					.andExpect(status().isOk());
+
+			// then
+			mockMvc.perform(get("/api/v1/products/{id}", productId))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.label").doesNotExist());
 		}
 	}
 }

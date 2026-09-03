@@ -9,6 +9,7 @@ import { Field } from '@/components/common/Field';
 import { FormError } from '@/components/common/FormError';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
+import { Spinner } from '@/components/common/Spinner';
 import { Textarea } from '@/components/common/Textarea';
 import { useToast } from '@/components/common/Toast';
 import { ArtistSearchSelect } from '@/components/product/ArtistSearchSelect';
@@ -23,7 +24,7 @@ import {
   toUpdatePayload,
   type ProductFormValues,
 } from '@/schemas/product';
-import type { ProductDetail } from '@/types/product';
+import type { Genre, Label, ProductDetail } from '@/types/product';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
 
 interface ProductFormProps {
@@ -31,12 +32,28 @@ interface ProductFormProps {
   product?: ProductDetail;
 }
 
+interface ProductFormBodyProps extends ProductFormProps {
+  genres: Genre[];
+  labels: Label[];
+}
+
 export function ProductForm({ product }: ProductFormProps) {
+  const { data: genres } = useGenres();
+  const { data: labels } = useLabels();
+
+  // register 기반 셀렉트는 기본값을 마운트 시점에 한 번만 적용한다. 옵션이 나중에 오면 레이블이 "없음"으로
+  // 보이고, 그대로 저장하면 해제 요청(null)이 나가므로 기준 데이터가 준비된 뒤에 폼을 그린다.
+  if (!genres || !labels) {
+    return <Spinner />;
+  }
+
+  return <ProductFormBody product={product} genres={genres} labels={labels} />;
+}
+
+function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
   const isEdit = Boolean(product);
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { data: genres } = useGenres();
-  const { data: labels } = useLabels();
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
 
@@ -111,7 +128,7 @@ export function ProductForm({ product }: ProductFormProps) {
       <Field htmlFor="labelId" label="레이블" error={errors.labelId?.message}>
         <Select id="labelId" invalid={Boolean(errors.labelId)} {...register('labelId')}>
           <option value="">없음</option>
-          {labels?.map((label) => (
+          {labels.map((label) => (
             <option key={label.id} value={label.id}>
               {label.name}
             </option>
@@ -127,7 +144,7 @@ export function ProductForm({ product }: ProductFormProps) {
             <GenreCheckboxGroup
               name="genreIds"
               value={field.value}
-              genres={genres ?? []}
+              genres={genres}
               onChange={field.onChange}
             />
           )}

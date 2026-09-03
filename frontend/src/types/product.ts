@@ -116,7 +116,9 @@ export interface AdminProductCreateRequest {
   initialStock: number;
 }
 
-export type AdminProductUpdateRequest = Partial<Omit<AdminProductCreateRequest, 'initialStock'>>;
+export type AdminProductUpdateRequest = Partial<Omit<AdminProductCreateRequest, 'initialStock' | 'labelId'>> & {
+  labelId?: number | null;
+};
 
 export type StockChangeType = 'IN' | 'OUT' | 'ADJUST';
 
