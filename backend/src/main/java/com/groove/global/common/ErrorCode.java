@@ -55,6 +55,13 @@ public enum ErrorCode {
 	CART_EMPTY(HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
 	CART_QUANTITY_EXCEEDED(HttpStatus.BAD_REQUEST, "장바구니 상품은 최대 10개까지 담을 수 있습니다."),
 
+	// ===== ORDER =====
+	ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."),
+	ORDER_ALREADY_PAID(HttpStatus.CONFLICT, "이미 결제된 주문입니다."),
+	ORDER_CANNOT_CANCEL(HttpStatus.BAD_REQUEST, "취소할 수 없는 주문 상태입니다."),
+	ORDER_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "주문 금액이 일치하지 않습니다."),
+	ORDER_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 주문 상태입니다."),
+
 	// ===== FILE =====
 	FILE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다."),
 	FILE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "파일 크기가 제한을 초과했습니다."),
