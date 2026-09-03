@@ -15,13 +15,18 @@ const buildPageItems = (current1: number, totalPages: number, siblingCount: numb
   const end = Math.min(totalPages - 1, current1 + siblingCount);
 
   items.push(1);
-  if (start > 2) {
+  // 건너뛰는 페이지가 한 쪽뿐이면 접어도 자리를 아끼지 못하니 그냥 번호로 보여준다.
+  if (start === 3) {
+    items.push(2);
+  } else if (start > 3) {
     items.push('ellipsis');
   }
   for (let page = start; page <= end; page += 1) {
     items.push(page);
   }
-  if (end < totalPages - 1) {
+  if (end === totalPages - 2) {
+    items.push(totalPages - 1);
+  } else if (end < totalPages - 2) {
     items.push('ellipsis');
   }
   if (totalPages > 1) {
