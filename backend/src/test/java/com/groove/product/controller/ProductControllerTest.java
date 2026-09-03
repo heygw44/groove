@@ -3,6 +3,8 @@ package com.groove.product.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -10,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +24,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,10 +33,12 @@ import com.groove.auth.jwt.JwtProvider;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.global.config.JwtProperties;
 import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
+import com.groove.member.entity.MemberRole;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchRequest;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -48,13 +54,29 @@ class ProductControllerTest {
 	@Autowired
 	private MockMvc mockMvc;
 
+	@Autowired
+	private JwtProvider jwtProvider;
+
+	@Autowired
+	private JwtProperties jwtProperties;
+
 	@MockitoBean
 	private ProductService productService;
+
+	private String bearer() {
+		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
+	}
 
 	private ProductSummaryResponse sampleSummary() {
 		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
 				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
-				"https://cdn.groove.com/kind-of-blue.jpg", null, 0);
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, null);
+	}
+
+	private ProductSummaryResponse sampleSummary(Boolean wishlisted) {
+		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
+				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, wishlisted);
 	}
 
 	@Nested
@@ -67,7 +89,7 @@ class ProductControllerTest {
 			// given
 			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(sampleSummary()), PageRequest.of(0, 20), 1));
-			given(productService.search(any())).willReturn(pageResponse);
+			given(productService.search(any(), isNull())).willReturn(pageResponse);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/products"))
@@ -99,7 +121,7 @@ class ProductControllerTest {
 			// given
 			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-			given(productService.search(any())).willReturn(pageResponse);
+			given(productService.search(any(), isNull())).willReturn(pageResponse);
 			ArgumentCaptor<ProductSearchRequest> captor = ArgumentCaptor.forClass(ProductSearchRequest.class);
 
 			// when
@@ -111,11 +133,71 @@ class ProductControllerTest {
 					.andExpect(status().isOk());
 
 			// then
-			verify(productService).search(captor.capture());
+			verify(productService).search(captor.capture(), isNull());
 			ProductSearchRequest captured = captor.getValue();
 			assertThat(captured.keyword()).isEqualTo("Kind of Blue");
 			assertThat(captured.genreIds()).isEqualTo(List.of(1L, 3L));
 			assertThat(captured.sort()).isEqualTo("priceAsc");
+		}
+
+		@Test
+		@DisplayName("로그인 상태면 회원 id 를 서비스에 넘긴다")
+		void passesMemberIdWhenAuthenticated() throws Exception {
+			// given
+			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
+					new PageImpl<>(List.of(sampleSummary()), PageRequest.of(0, 20), 1));
+			given(productService.search(any(), eq(1L))).willReturn(pageResponse);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk());
+			verify(productService).search(any(), eq(1L));
+		}
+
+		@Test
+		@DisplayName("wishlisted 가 응답에 직렬화된다")
+		void serializesWishlisted() throws Exception {
+			// given
+			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
+					new PageImpl<>(List.of(sampleSummary(true)), PageRequest.of(0, 20), 1));
+			given(productService.search(any(), eq(1L))).willReturn(pageResponse);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.content[0].wishlisted", is(true)));
+		}
+
+		@Test
+		@DisplayName("비로그인이면 wishlisted 키가 없다")
+		void omitsWishlistedWhenAnonymous() throws Exception {
+			// given
+			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
+					new PageImpl<>(List.of(sampleSummary()), PageRequest.of(0, 20), 1));
+			given(productService.search(any(), isNull())).willReturn(pageResponse);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.content[0].wishlisted").doesNotExist());
+		}
+
+		@Test
+		@DisplayName("만료된 토큰이라도 상품 목록은 200 이고 비로그인으로 처리된다")
+		void treatsExpiredTokenAsAnonymous() throws Exception {
+			// given
+			JwtProvider expiredProvider = new JwtProvider(
+					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14)));
+			String expiredToken = expiredProvider.createAccessToken(1L, MemberRole.USER);
+			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
+					new PageImpl<>(List.of(sampleSummary()), PageRequest.of(0, 20), 1));
+			given(productService.search(any(), isNull())).willReturn(pageResponse);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + expiredToken))
+					.andExpect(status().isOk());
+			verify(productService).search(any(), isNull());
 		}
 	}
 
@@ -133,8 +215,8 @@ class ProductControllerTest {
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
 					null, "180g", "Standard Black", new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
-					10, null, 0L);
-			given(productService.getDetail(1L)).willReturn(response);
+					10, null, 0L, null);
+			given(productService.getDetail(eq(1L), isNull())).willReturn(response);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/products/{id}", 1L))
@@ -146,12 +228,33 @@ class ProductControllerTest {
 		@DisplayName("HIDDEN 상품이면 404 PRODUCT_HIDDEN 을 반환한다")
 		void returnsNotFoundWhenHidden() throws Exception {
 			// given
-			given(productService.getDetail(2L)).willThrow(new BusinessException(ErrorCode.PRODUCT_HIDDEN));
+			given(productService.getDetail(eq(2L), isNull()))
+					.willThrow(new BusinessException(ErrorCode.PRODUCT_HIDDEN));
 
 			// when & then
 			mockMvc.perform(get("/api/v1/products/{id}", 2L))
 					.andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.error.code", is("PRODUCT_HIDDEN")));
+		}
+
+		@Test
+		@DisplayName("로그인 상태면 회원 id 를 서비스에 넘긴다")
+		void passesMemberIdWhenAuthenticated() throws Exception {
+			// given
+			ProductDetailResponse response = new ProductDetailResponse(1L, "Kind of Blue",
+					new ProductDetailResponse.ArtistSummary(12L, "Miles Davis"),
+					new ProductDetailResponse.LabelSummary(7L, "Columbia"),
+					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
+					null, "180g", "Standard Black", new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
+					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
+					10, null, 0L, true);
+			given(productService.getDetail(eq(1L), eq(1L))).willReturn(response);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products/{id}", 1L).header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.wishlisted", is(true)));
+			verify(productService).getDetail(eq(1L), eq(1L));
 		}
 	}
 }

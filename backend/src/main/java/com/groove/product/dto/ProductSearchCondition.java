@@ -13,7 +13,8 @@ public record ProductSearchCondition(
 		BigDecimal maxPrice,
 		ProductSortType sort,
 		int page,
-		int size
+		int size,
+		Long memberId
 ) {
 
 	public int offset() {

@@ -23,11 +23,11 @@ public record ProductSearchRequest(
 	private static final int DEFAULT_PAGE = 0;
 	private static final int DEFAULT_SIZE = 20;
 
-	public ProductSearchCondition toCondition() {
+	public ProductSearchCondition toCondition(Long memberId) {
 		int resolvedPage = page == null ? DEFAULT_PAGE : page;
 		int resolvedSize = size == null ? DEFAULT_SIZE : size;
 		List<Long> resolvedGenreIds = genreIds == null ? List.of() : genreIds;
 		return new ProductSearchCondition(keyword, artistId, resolvedGenreIds, labelId, minPrice, maxPrice,
-				ProductSortType.from(sort), resolvedPage, resolvedSize);
+				ProductSortType.from(sort), resolvedPage, resolvedSize, memberId);
 	}
 }

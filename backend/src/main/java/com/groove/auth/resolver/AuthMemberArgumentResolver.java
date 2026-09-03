@@ -30,6 +30,9 @@ public class AuthMemberArgumentResolver implements HandlerMethodArgumentResolver
 		if (authentication != null && authentication.getPrincipal() instanceof LoginMember loginMember) {
 			return loginMember;
 		}
+		if (!parameter.getParameterAnnotation(AuthMember.class).required()) {
+			return null;
+		}
 		throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
 	}
 }

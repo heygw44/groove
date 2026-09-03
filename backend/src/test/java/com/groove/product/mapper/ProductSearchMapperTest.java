@@ -16,7 +16,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
+import com.groove.fixture.MemberFixture;
 import com.groove.fixture.ProductFixture;
+import com.groove.member.entity.Member;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSortType;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -25,6 +27,7 @@ import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
 import com.groove.support.MybatisTestSupport;
+import com.groove.wishlist.entity.Wishlist;
 
 import jakarta.persistence.EntityManager;
 
@@ -95,7 +98,13 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 	private static ProductSearchCondition condition(String keyword, Long artistId, List<Long> genreIds, Long labelId,
 			BigDecimal minPrice, BigDecimal maxPrice, ProductSortType sort, int page, int size) {
-		return new ProductSearchCondition(keyword, artistId, genreIds, labelId, minPrice, maxPrice, sort, page, size);
+		return condition(keyword, artistId, genreIds, labelId, minPrice, maxPrice, sort, page, size, null);
+	}
+
+	private static ProductSearchCondition condition(String keyword, Long artistId, List<Long> genreIds, Long labelId,
+			BigDecimal minPrice, BigDecimal maxPrice, ProductSortType sort, int page, int size, Long memberId) {
+		return new ProductSearchCondition(keyword, artistId, genreIds, labelId, minPrice, maxPrice, sort, page, size,
+				memberId);
 	}
 
 	private static ProductSearchCondition scopedCondition(ProductSortType sort, int page, int size) {
@@ -399,6 +408,53 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(count).isEqualTo(4);
+		}
+	}
+
+	@Nested
+	@DisplayName("wishlisted")
+	class Wishlisted {
+
+		@Test
+		@DisplayName("memberId 가 없으면 모든 상품의 wishlisted 가 null 이다")
+		void isNullWhenMemberIdAbsent() {
+			// given
+			Member member = MemberFixture.create("smt-wish@groove.com");
+			em.persist(member);
+			em.persist(Wishlist.create(member, kindOfBlue));
+			em.flush();
+			em.clear();
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(
+					scopedCondition(ProductSortType.LATEST, 0, 20));
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::wishlisted).containsOnlyNulls();
+		}
+
+		@Test
+		@DisplayName("memberId 를 지정하면 위시리스트에 담긴 상품만 true 를 반환한다")
+		void marksOnlyWishlistedProductsTrue() {
+			// given
+			Member member = MemberFixture.create("smt-wish@groove.com");
+			em.persist(member);
+			em.persist(Wishlist.create(member, kindOfBlue));
+			em.flush();
+			em.clear();
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(
+					condition(KEYWORD, null, null, null, null, null, ProductSortType.LATEST, 0, 20,
+							member.getId()));
+
+			// then
+			assertThat(result).filteredOn(r -> r.id().equals(kindOfBlue.getId()))
+					.extracting(ProductSummaryResponse::wishlisted)
+					.containsExactly(true);
+			assertThat(result).filteredOn(r -> r.id().equals(loveSupreme.getId()))
+					.extracting(ProductSummaryResponse::wishlisted)
+					.containsExactly(false);
 		}
 	}
 }
