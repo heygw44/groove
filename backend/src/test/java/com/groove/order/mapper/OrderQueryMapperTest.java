@@ -2,6 +2,7 @@ package com.groove.order.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,8 @@ import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
+import com.groove.order.dto.AdminOrderSearchCondition;
+import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
@@ -66,6 +69,11 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 	private static OrderSearchCondition condition(Long memberId, OrderStatus status, int page, int size) {
 		return new OrderSearchCondition(memberId, status, page, size);
+	}
+
+	private static AdminOrderSearchCondition adminCondition(OrderStatus status, String keyword,
+			LocalDateTime fromAt, LocalDateTime toExclusiveAt) {
+		return new AdminOrderSearchCondition(status, keyword, fromAt, toExclusiveAt, 0, 20);
 	}
 
 	@Nested
@@ -219,6 +227,119 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			long count = orderQueryMapper.countMyOrders(condition(owner.getId(), null, 0, 20));
 			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
 					condition(owner.getId(), null, 0, 20));
+
+			// then
+			assertThat(count).isEqualTo(result.size());
+		}
+	}
+
+	@Nested
+	@DisplayName("findAdminOrders()")
+	class FindAdminOrders {
+
+		@Test
+		@DisplayName("status 로 필터링하면 해당 상태의 주문만 반환한다")
+		void filtersByStatus() {
+			// given
+			Order paidOrder = persistOrder(owner, "20260903-OQMADM001", kindOfBlue, 1);
+			paidOrder.markPaid();
+			Order pendingOrder = persistOrder(owner, "20260903-OQMADM002", kindOfBlue, 1);
+			em.flush();
+			em.clear();
+
+			// when
+			List<AdminOrderSummaryResponse> result = orderQueryMapper.findAdminOrders(
+					adminCondition(OrderStatus.PAID, null, null, null));
+
+			// then
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).contains(paidOrder.getId());
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).doesNotContain(pendingOrder.getId());
+		}
+
+		@Test
+		@DisplayName("keyword 로 회원 이메일을 검색하면 해당 회원의 주문만 반환한다")
+		void filtersByMemberEmailKeyword() {
+			// given
+			Order ownerOrder = persistOrder(owner, "20260903-OQMADM003", kindOfBlue, 1);
+			Order otherOrder = persistOrder(other, "20260903-OQMADM004", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderSummaryResponse> result = orderQueryMapper.findAdminOrders(
+					adminCondition(null, "order-query-owner", null, null));
+
+			// then
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).contains(ownerOrder.getId());
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).doesNotContain(otherOrder.getId());
+		}
+
+		@Test
+		@DisplayName("keyword 로 주문번호를 검색하면 해당 주문만 반환한다")
+		void filtersByOrderNumberKeyword() {
+			// given
+			Order target = persistOrder(owner, "20260903-OQMADM005", kindOfBlue, 1);
+			Order another = persistOrder(owner, "20260903-OQMADM006", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderSummaryResponse> result = orderQueryMapper.findAdminOrders(
+					adminCondition(null, "OQMADM005", null, null));
+
+			// then
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).contains(target.getId());
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).doesNotContain(another.getId());
+		}
+
+		@Test
+		@DisplayName("생성일 범위로 필터링하면 경계값을 포함해 반환한다")
+		void filtersByCreatedAtRangeInclusiveOfBoundaries() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQMADM007", kindOfBlue, 1);
+			em.clear();
+			LocalDateTime createdAt = em.find(Order.class, order.getId()).getCreatedAt();
+
+			// when
+			List<AdminOrderSummaryResponse> inRange = orderQueryMapper.findAdminOrders(
+					adminCondition(null, null, createdAt, createdAt.plusSeconds(1)));
+			List<AdminOrderSummaryResponse> beforeRange = orderQueryMapper.findAdminOrders(
+					adminCondition(null, null, createdAt.plusSeconds(1), null));
+
+			// then
+			assertThat(inRange).extracting(AdminOrderSummaryResponse::id).contains(order.getId());
+			assertThat(beforeRange).extracting(AdminOrderSummaryResponse::id).doesNotContain(order.getId());
+		}
+
+		@Test
+		@DisplayName("필터가 없으면 전체 주문 중 내가 생성한 주문이 포함된다")
+		void includesOwnOrdersWhenNoFilter() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQMADM008", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderSummaryResponse> result = orderQueryMapper.findAdminOrders(
+					adminCondition(null, null, null, null));
+
+			// then
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).contains(order.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("countAdminOrders()")
+	class CountAdminOrders {
+
+		@Test
+		@DisplayName("동일 조건의 findAdminOrders 결과 개수 이상이다")
+		void matchesFindResultSize() {
+			// given
+			persistOrder(owner, "20260903-OQMADM009", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			long count = orderQueryMapper.countAdminOrders(adminCondition(null, "order-query-owner", null, null));
+			List<AdminOrderSummaryResponse> result = orderQueryMapper.findAdminOrders(
+					adminCondition(null, "order-query-owner", null, null));
 
 			// then
 			assertThat(count).isEqualTo(result.size());

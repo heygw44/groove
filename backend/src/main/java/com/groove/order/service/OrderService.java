@@ -1,9 +1,6 @@
 package com.groove.order.service;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,11 +10,6 @@ import com.groove.cart.repository.CartItemRepository;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
-import com.groove.inventory.entity.Stock;
-import com.groove.inventory.entity.StockChangeType;
-import com.groove.inventory.entity.StockHistory;
-import com.groove.inventory.repository.StockHistoryRepository;
-import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -30,7 +22,6 @@ import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
-import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.mapper.OrderQueryMapper;
@@ -46,15 +37,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class OrderService {
 
-	private static final String STOCK_OUT_REASON_PREFIX = "주문 ";
-	private static final String STOCK_CANCEL_REASON_PREFIX = "주문 취소 ";
-
 	private final MemberRepository memberRepository;
 	private final AddressRepository addressRepository;
 	private final ProductRepository productRepository;
 	private final CartItemRepository cartItemRepository;
-	private final StockRepository stockRepository;
-	private final StockHistoryRepository stockHistoryRepository;
+	private final OrderStockService orderStockService;
 	private final OrderRepository orderRepository;
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final OrderQueryMapper orderQueryMapper;
@@ -73,14 +60,12 @@ public class OrderService {
 				? resolveCartLines(cartItems)
 				: resolveDirectLine(request.productId(), request.quantity());
 
-		Map<Long, Stock> stocksByProductId = lockStocks(lines);
 		String orderNumber = orderNumberGenerator.generate();
-		decreaseStocksAndRecordHistory(lines, stocksByProductId, orderNumber);
-
 		Order order = Order.create(orderNumber, member, ShippingAddress.from(address));
 		for (OrderLine line : lines) {
 			order.addItem(line.product(), line.quantity());
 		}
+		orderStockService.deduct(order);
 		orderRepository.save(order);
 
 		if (request.isFromCart()) {
@@ -112,29 +97,7 @@ public class OrderService {
 		OrderStatus previousStatus = order.getStatus();
 		String reason = request == null ? null : request.reason();
 		order.cancel(reason);
-
-		List<Long> productIds = order.getItems().stream()
-				.map(item -> item.getProduct().getId())
-				.distinct()
-				.toList();
-		Map<Long, Stock> stocksByProductId = stockRepository.findAllWithProductByProductIdInForUpdate(productIds)
-				.stream()
-				.collect(Collectors.toMap(stock -> stock.getProduct().getId(), stock -> stock));
-		if (stocksByProductId.size() != productIds.size()) {
-			throw new BusinessException(ErrorCode.STOCK_NOT_FOUND);
-		}
-		for (OrderItem item : order.getItems()) {
-			stocksByProductId.get(item.getProduct().getId()).increase(item.getQuantity());
-		}
-
-		// 이력 INSERT 가 stock 행에 FK 공유 락을 잡아 UPDATE 와 데드락이 나므로 재고 UPDATE 를 먼저 flush 한다.
-		stockRepository.flush();
-
-		for (OrderItem item : order.getItems()) {
-			Stock stock = stocksByProductId.get(item.getProduct().getId());
-			stockHistoryRepository.save(StockHistory.of(stock, StockChangeType.CANCEL, item.getQuantity(),
-					STOCK_CANCEL_REASON_PREFIX + order.getOrderNumber()));
-		}
+		orderStockService.restore(order);
 
 		if (previousStatus == OrderStatus.PAID) {
 			paymentCancelHook.onPaidOrderCanceled(order);
@@ -168,39 +131,6 @@ public class OrderService {
 			throw new BusinessException(ErrorCode.PRODUCT_HIDDEN);
 		}
 		return new OrderLine(product, quantity);
-	}
-
-	private Map<Long, Stock> lockStocks(List<OrderLine> lines) {
-		List<Long> productIds = lines.stream()
-				.map(line -> line.product().getId())
-				.distinct()
-				.toList();
-		List<Stock> stocks = stockRepository.findAllWithProductByProductIdInForUpdate(productIds);
-		if (stocks.size() != productIds.size()) {
-			throw new BusinessException(ErrorCode.STOCK_NOT_FOUND);
-		}
-		return stocks.stream()
-				.collect(Collectors.toMap(stock -> stock.getProduct().getId(), stock -> stock));
-	}
-
-	private void decreaseStocksAndRecordHistory(List<OrderLine> lines, Map<Long, Stock> stocksByProductId,
-			String orderNumber) {
-		List<OrderLine> sortedLines = lines.stream()
-				.sorted(Comparator.comparing(line -> line.product().getId()))
-				.toList();
-		for (OrderLine line : sortedLines) {
-			Stock stock = stocksByProductId.get(line.product().getId());
-			stock.decrease(line.quantity());
-		}
-
-		// 이력 INSERT 가 stock 행에 FK 공유 락을 잡아 UPDATE 와 데드락이 나므로 재고 UPDATE 를 먼저 flush 한다.
-		stockRepository.flush();
-
-		for (OrderLine line : sortedLines) {
-			Stock stock = stocksByProductId.get(line.product().getId());
-			stockHistoryRepository.save(StockHistory.of(stock, StockChangeType.OUT, -line.quantity(),
-					STOCK_OUT_REASON_PREFIX + orderNumber));
-		}
 	}
 
 	private Member findActiveMember(Long memberId) {

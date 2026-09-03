@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -192,6 +193,61 @@ class OrderTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+		}
+	}
+
+	@Nested
+	@DisplayName("changeStatus()")
+	class ChangeStatus {
+
+		@ParameterizedTest
+		@CsvSource({
+			"PAID, PREPARING",
+			"PREPARING, SHIPPED",
+			"SHIPPED, DELIVERED"
+		})
+		@DisplayName("허용된 전이면 상태가 바뀐다")
+		void changesStatusForAllowedTransition(OrderStatus from, OrderStatus to) {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", from);
+
+			// when
+			order.changeStatus(to);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(to);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
+		@DisplayName("CANCELED 로 전이하면 취소 시각과 사유가 기록된다")
+		void recordsCanceledAtAndReasonWhenTransitioningToCanceled(OrderStatus from) {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", from);
+
+			// when
+			order.changeStatus(OrderStatus.CANCELED);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isNotNull();
+			assertThat(order.getCancelReason()).isEqualTo("관리자 취소");
+		}
+
+		@Test
+		@DisplayName("허용되지 않은 전이면 ORDER_INVALID_STATUS_TRANSITION 예외를 던진다")
+		void throwsWhenTransitionNotAllowed() {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
+
+			// when & then
+			assertThatThrownBy(() -> order.changeStatus(OrderStatus.SHIPPED))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
 		}
 	}
 }

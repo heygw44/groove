@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.inOrder;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -19,7 +19,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -32,13 +31,9 @@ import com.groove.fixture.CartFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
-import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
-import com.groove.inventory.entity.Stock;
-import com.groove.inventory.repository.StockHistoryRepository;
-import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -78,10 +73,7 @@ class OrderServiceTest {
 	CartItemRepository cartItemRepository;
 
 	@Mock
-	StockRepository stockRepository;
-
-	@Mock
-	StockHistoryRepository stockHistoryRepository;
+	OrderStockService orderStockService;
 
 	@Mock
 	OrderRepository orderRepository;
@@ -98,21 +90,18 @@ class OrderServiceTest {
 	Artist artist;
 	Product product;
 	Address address;
-	Stock stock;
 
 	@BeforeEach
 	void setUp() {
 		OrderNumberGenerator orderNumberGenerator = mock(OrderNumberGenerator.class);
 		lenient().when(orderNumberGenerator.generate()).thenReturn("20260903-TESTAB12");
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, cartItemRepository,
-				stockRepository, stockHistoryRepository, orderRepository, orderNumberGenerator, orderQueryMapper,
-				paymentCancelHook);
+				orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper, paymentCancelHook);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 		address = AddressFixture.withId(AddressFixture.create(member), ADDRESS_ID);
-		stock = StockFixture.create(product, 10);
 	}
 
 	@Nested
@@ -129,8 +118,6 @@ class OrderServiceTest {
 			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
 			given(cartItemRepository.findAllByIdInAndCartMemberId(List.of(CART_ITEM_ID), MEMBER_ID))
 					.willReturn(List.of(cartItem));
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(stock));
 
 			OrderCreateRequest request = new OrderCreateRequest(List.of(CART_ITEM_ID), null, null, ADDRESS_ID, null);
 
@@ -141,7 +128,7 @@ class OrderServiceTest {
 			BigDecimal expectedAmount = product.getPrice().multiply(BigDecimal.valueOf(2));
 			assertThat(response.orderNumber()).isEqualTo("20260903-TESTAB12");
 			assertThat(response.finalAmount()).isEqualByComparingTo(expectedAmount);
-			assertThat(stock.getQuantity()).isEqualTo(8);
+			verify(orderStockService).deduct(any());
 			verify(cartItemRepository).deleteAll(List.of(cartItem));
 		}
 
@@ -152,8 +139,6 @@ class OrderServiceTest {
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(stock));
 
 			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 3, ADDRESS_ID, null);
 
@@ -163,19 +148,18 @@ class OrderServiceTest {
 			// then
 			BigDecimal expectedAmount = product.getPrice().multiply(BigDecimal.valueOf(3));
 			assertThat(response.finalAmount()).isEqualByComparingTo(expectedAmount);
-			assertThat(stock.getQuantity()).isEqualTo(7);
+			verify(orderStockService).deduct(any());
 			verify(cartItemRepository, never()).deleteAll(any());
 		}
 
 		@Test
-		@DisplayName("재고보다 많은 수량을 주문하면 STOCK_INSUFFICIENT 예외를 던진다")
-		void throwsWhenStockInsufficient() {
+		@DisplayName("재고 차감이 실패하면 예외가 그대로 전파된다")
+		void propagatesExceptionWhenStockDeductionFails() {
 			// given
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(stock));
+			willThrow(new BusinessException(ErrorCode.STOCK_INSUFFICIENT)).given(orderStockService).deduct(any());
 
 			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 100, ADDRESS_ID, null);
 
@@ -184,26 +168,7 @@ class OrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.STOCK_INSUFFICIENT);
-		}
-
-		@Test
-		@DisplayName("품절(재고 0)인 상품을 주문하면 STOCK_INSUFFICIENT 예외를 던진다")
-		void throwsWhenSoldOut() {
-			// given
-			Stock soldOutStock = StockFixture.create(product, 0);
-			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
-			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(soldOutStock));
-
-			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, null);
-
-			// when & then
-			assertThatThrownBy(() -> orderService.create(MEMBER_ID, request))
-					.isInstanceOf(BusinessException.class)
-					.extracting("errorCode")
-					.isEqualTo(ErrorCode.STOCK_INSUFFICIENT);
+			verify(orderRepository, never()).save(any());
 		}
 
 		@Test
@@ -272,27 +237,6 @@ class OrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
-		}
-
-		@Test
-		@DisplayName("재고 UPDATE 를 flush 한 뒤에 이력을 저장한다")
-		void flushesStockBeforeSavingHistory() {
-			// given
-			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
-			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(stock));
-
-			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, null);
-
-			// when
-			orderService.create(MEMBER_ID, request);
-
-			// then
-			InOrder order = inOrder(stockRepository, stockHistoryRepository);
-			order.verify(stockRepository).flush();
-			order.verify(stockHistoryRepository).save(any());
 		}
 	}
 
@@ -373,22 +317,18 @@ class OrderServiceTest {
 	class Cancel {
 
 		@Test
-		@DisplayName("PENDING 주문을 취소하면 재고를 복구하고 CANCEL 이력을 남기며 결제 취소 훅은 호출하지 않는다")
+		@DisplayName("PENDING 주문을 취소하면 재고를 복구하고 결제 취소 훅은 호출하지 않는다")
 		void restoresStockAndSkipsHookWhenPending() {
 			// given
 			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 2), 500L);
 			given(orderRepository.findWithItemsByIdAndMemberId(500L, MEMBER_ID)).willReturn(Optional.of(order));
-			Stock stock = StockFixture.create(product, 8);
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(stock));
 
 			// when
 			OrderDetailResponse response = orderService.cancel(MEMBER_ID, 500L, null);
 
 			// then
 			assertThat(response.status()).isEqualTo(OrderStatus.CANCELED);
-			assertThat(stock.getQuantity()).isEqualTo(10);
-			verify(stockHistoryRepository).save(any());
+			verify(orderStockService).restore(order);
 			verify(paymentCancelHook, never()).onPaidOrderCanceled(any());
 		}
 
@@ -399,14 +339,12 @@ class OrderServiceTest {
 			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 501L);
 			order.markPaid();
 			given(orderRepository.findWithItemsByIdAndMemberId(501L, MEMBER_ID)).willReturn(Optional.of(order));
-			Stock stock = StockFixture.create(product, 9);
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(stock));
 
 			// when
 			orderService.cancel(MEMBER_ID, 501L, new OrderCancelRequest("단순 변심"));
 
 			// then
+			verify(orderStockService).restore(order);
 			verify(paymentCancelHook).onPaidOrderCanceled(order);
 		}
 
@@ -423,7 +361,7 @@ class OrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
-			verify(stockRepository, never()).findAllWithProductByProductIdInForUpdate(any());
+			verify(orderStockService, never()).restore(any());
 		}
 
 		@Test
@@ -437,25 +375,6 @@ class OrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
-		}
-
-		@Test
-		@DisplayName("재고 UPDATE 를 flush 한 뒤에 CANCEL 이력을 저장한다")
-		void flushesStockBeforeSavingHistory() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 503L);
-			given(orderRepository.findWithItemsByIdAndMemberId(503L, MEMBER_ID)).willReturn(Optional.of(order));
-			Stock stock = StockFixture.create(product, 9);
-			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
-					.willReturn(List.of(stock));
-
-			// when
-			orderService.cancel(MEMBER_ID, 503L, null);
-
-			// then
-			InOrder inOrder = inOrder(stockRepository, stockHistoryRepository);
-			inOrder.verify(stockRepository).flush();
-			inOrder.verify(stockHistoryRepository).save(any());
 		}
 	}
 }

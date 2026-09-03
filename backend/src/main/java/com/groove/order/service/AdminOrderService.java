@@ -1,0 +1,67 @@
+package com.groove.order.service;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.groove.admin.entity.AdminAuditAction;
+import com.groove.admin.entity.AdminAuditTargetType;
+import com.groove.admin.service.AdminAuditLogService;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
+import com.groove.order.dto.AdminOrderSearchCondition;
+import com.groove.order.dto.AdminOrderSearchRequest;
+import com.groove.order.dto.AdminOrderStatusChangeRequest;
+import com.groove.order.dto.AdminOrderSummaryResponse;
+import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderStatus;
+import com.groove.order.mapper.OrderQueryMapper;
+import com.groove.order.repository.OrderRepository;
+
+import lombok.RequiredArgsConstructor;
+
+/** 관리자 주문 목록 조회·상태 전이. */
+@Service
+@Transactional(readOnly = true)
+@RequiredArgsConstructor
+public class AdminOrderService {
+
+	private final OrderRepository orderRepository;
+	private final OrderQueryMapper orderQueryMapper;
+	private final OrderStockService orderStockService;
+	private final PaymentCancelHook paymentCancelHook;
+	private final AdminAuditLogService adminAuditLogService;
+
+	public PageResponse<AdminOrderSummaryResponse> getList(AdminOrderSearchRequest request) {
+		AdminOrderSearchCondition condition = request.toCondition();
+		long totalElements = orderQueryMapper.countAdminOrders(condition);
+		if (totalElements == 0) {
+			return PageResponse.of(List.of(), condition.page(), condition.size(), 0);
+		}
+		List<AdminOrderSummaryResponse> content = orderQueryMapper.findAdminOrders(condition);
+		return PageResponse.of(content, condition.page(), condition.size(), totalElements);
+	}
+
+	@Transactional
+	public OrderDetailResponse changeStatus(Long adminId, Long orderId, AdminOrderStatusChangeRequest request) {
+		Order order = orderRepository.findWithItemsById(orderId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		OrderStatus previous = order.getStatus();
+		OrderStatus next = request.status();
+		order.changeStatus(next);
+
+		if (next == OrderStatus.CANCELED) {
+			orderStockService.restore(order);
+			if (previous == OrderStatus.PAID || previous == OrderStatus.PREPARING) {
+				paymentCancelHook.onPaidOrderCanceled(order);
+			}
+		}
+
+		adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
+				orderId, previous.name() + "->" + next.name());
+		return OrderDetailResponse.from(order);
+	}
+}
