@@ -1,0 +1,192 @@
+package com.groove.order.entity;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.math.BigDecimal;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
+import com.groove.fixture.ProductFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
+import com.groove.member.entity.Member;
+import com.groove.product.entity.Artist;
+import com.groove.product.entity.Product;
+
+class OrderTest {
+
+	private final Member member = MemberFixture.create();
+	private final Artist artist = ArtistFixture.create();
+
+	@Nested
+	@DisplayName("create()")
+	class Create {
+
+		@Test
+		@DisplayName("생성하면 PENDING 상태이고 금액은 0, 배송지는 그대로 보존된다")
+		void createsWithPendingStatusAndZeroAmounts() {
+			// given
+			ShippingAddress shippingAddress = OrderFixture.shippingAddress();
+
+			// when
+			Order order = Order.create("20260903-TESTAB12", member, shippingAddress);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+			assertThat(order.getTotalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+			assertThat(order.getDiscountAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+			assertThat(order.getFinalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+			assertThat(order.getShippingAddress()).isEqualTo(shippingAddress);
+		}
+	}
+
+	@Nested
+	@DisplayName("addItem()")
+	class AddItem {
+
+		@Test
+		@DisplayName("항목을 추가하면 상품명과 가격이 스냅샷으로 복사된다")
+		void copiesProductNameAndPriceAsSnapshot() {
+			// given
+			Order order = OrderFixture.create(member);
+			Product product = ProductFixture.create(artist, "Kind of Blue", new BigDecimal("45000"));
+
+			// when
+			order.addItem(product, 2);
+
+			// then
+			OrderItem item = order.getItems().get(0);
+			assertThat(item.getProductName()).isEqualTo(product.getTitle());
+			assertThat(item.getProductPrice()).isEqualByComparingTo(product.getPrice());
+			assertThat(item.getQuantity()).isEqualTo(2);
+		}
+
+		@Test
+		@DisplayName("두 항목을 추가하면 총액은 각 항목 금액의 합이 된다")
+		void sumsLineAmountsOfAllItems() {
+			// given
+			Order order = OrderFixture.create(member);
+			Product first = ProductFixture.create(artist, "Kind of Blue", new BigDecimal("45000"));
+			Product second = ProductFixture.create(artist, "A Love Supreme", new BigDecimal("50000"));
+
+			// when
+			order.addItem(first, 2);
+			order.addItem(second, 1);
+
+			// then
+			BigDecimal expected = new BigDecimal("45000").multiply(BigDecimal.valueOf(2))
+					.add(new BigDecimal("50000"));
+			assertThat(order.getTotalAmount()).isEqualByComparingTo(expected);
+			assertThat(order.getFinalAmount()).isEqualByComparingTo(expected);
+		}
+
+		@Test
+		@DisplayName("수량이 0 이하면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenQuantityIsNotPositive() {
+			// given
+			Order order = OrderFixture.create(member);
+			Product product = ProductFixture.create(artist);
+
+			// when & then
+			assertThatThrownBy(() -> order.addItem(product, 0))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+	}
+
+	@Nested
+	@DisplayName("markPaid()")
+	class MarkPaid {
+
+		@Test
+		@DisplayName("PENDING 이면 PAID 로 바뀐다")
+		void changesStatusToPaidWhenPending() {
+			// given
+			Order order = OrderFixture.create(member);
+
+			// when
+			order.markPaid();
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+		}
+
+		@Test
+		@DisplayName("이미 PAID 면 ORDER_ALREADY_PAID 예외를 던진다")
+		void throwsAlreadyPaidWhenPaid() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+
+			// when & then
+			assertThatThrownBy(order::markPaid)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_ALREADY_PAID);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class,
+				names = {"PREPARING", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"})
+		@DisplayName("PENDING·PAID 가 아니면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatusForOtherStatuses(OrderStatus status) {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", status);
+
+			// when & then
+			assertThatThrownBy(order::markPaid)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("cancel()")
+	class Cancel {
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class, names = {"PENDING", "PAID"})
+		@DisplayName("PENDING·PAID 면 CANCELED 로 바뀌고 취소 시각·사유가 기록된다")
+		void cancelsAndRecordsReasonForCancelableStatuses(OrderStatus status) {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", status);
+
+			// when
+			order.cancel("고객 변심");
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isNotNull();
+			assertThat(order.getCancelReason()).isEqualTo("고객 변심");
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class,
+				names = {"PREPARING", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"})
+		@DisplayName("취소 불가 상태면 ORDER_CANNOT_CANCEL 예외를 던진다")
+		void throwsCannotCancelForNonCancelableStatuses(OrderStatus status) {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", status);
+
+			// when & then
+			assertThatThrownBy(() -> order.cancel("고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+		}
+	}
+}
