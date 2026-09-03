@@ -46,6 +46,11 @@ public final class OrderFixture {
 		return order;
 	}
 
+	public static Order markDelivered(Order order) {
+		ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
+		return order;
+	}
+
 	public static OrderCreateRequest cartRequest(List<Long> cartItemIds, Long addressId) {
 		return new OrderCreateRequest(cartItemIds, null, null, addressId, null);
 	}

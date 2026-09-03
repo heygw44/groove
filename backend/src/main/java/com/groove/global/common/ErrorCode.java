@@ -80,6 +80,11 @@ public enum ErrorCode {
 	COUPON_DISCOUNT_LOCKED(HttpStatus.CONFLICT, "발급이 시작된 쿠폰의 할인 조건은 변경할 수 없습니다."),
 	COUPON_QUANTITY_BELOW_ISSUED(HttpStatus.BAD_REQUEST, "총 수량은 발급 수 이상이어야 합니다."),
 
+	// ===== REVIEW =====
+	REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다."),
+	REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 작성한 리뷰가 있습니다."),
+	REVIEW_PURCHASE_REQUIRED(HttpStatus.FORBIDDEN, "구매한 회원만 리뷰를 작성할 수 있습니다."),
+
 	// ===== FILE =====
 	FILE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다."),
 	FILE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "파일 크기가 제한을 초과했습니다."),
