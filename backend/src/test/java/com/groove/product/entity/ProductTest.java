@@ -196,6 +196,25 @@ class ProductTest {
 			assertThat(product.getProductGenres()).hasSize(1);
 			assertThat(product.getProductGenres().get(0).getGenre()).isEqualTo(rock);
 		}
+
+		@Test
+		@DisplayName("새 목록에 남아 있는 장르는 기존 매핑 인스턴스를 그대로 유지한다")
+		void keepsExistingLinkForRemainingGenre() {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+			Genre jazz = GenreFixture.create("Jazz");
+			Genre rock = GenreFixture.create("Rock");
+			product.addGenre(jazz);
+			ProductGenre existingLink = product.getProductGenres().get(0);
+
+			// when
+			product.replaceGenres(List.of(jazz, rock));
+
+			// then
+			assertThat(product.getProductGenres()).hasSize(2);
+			assertThat(product.getProductGenres().get(0)).isSameAs(existingLink);
+			assertThat(product.getProductGenres().get(1).getGenre()).isEqualTo(rock);
+		}
 	}
 
 	@Nested
