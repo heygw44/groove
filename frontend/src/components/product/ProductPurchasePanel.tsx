@@ -5,6 +5,7 @@ import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { useToast } from '@/components/common/toastContext';
 import { QuantitySelector } from '@/components/product/QuantitySelector';
+import { WishButton } from '@/components/product/WishButton';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
 import { useAuthStore } from '@/store/authStore';
 import type { ProductDetail } from '@/types/product';
@@ -91,13 +92,8 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
             장바구니
           </Button>
         </span>
-        <span title="위시리스트는 곧 연결됩니다." className="flex-1">
-          <Button variant="secondary" className="w-full" disabled>
-            위시리스트
-          </Button>
-        </span>
+        <WishButton size="md" productId={product.id} wishlisted={product.wishlisted} />
       </div>
-      <p className="text-xs text-content-muted">위시리스트는 곧 연결됩니다.</p>
     </div>
   );
 }

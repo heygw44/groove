@@ -32,6 +32,7 @@ export interface ProductSummary {
   status: ProductStatus;
   thumbnailUrl?: string;
   averageRating?: number;
+  wishlisted?: boolean;
 }
 
 export interface ProductDetail {
@@ -50,6 +51,7 @@ export interface ProductDetail {
   description?: string;
   averageRating?: number;
   reviewCount?: number;
+  wishlisted?: boolean;
 }
 
 export interface ProductListParams {
@@ -132,7 +134,9 @@ export interface AdminProductCreateRequest {
   initialStock: number;
 }
 
-export type AdminProductUpdateRequest = Partial<Omit<AdminProductCreateRequest, 'initialStock' | 'labelId'>> & {
+export type AdminProductUpdateRequest = Partial<
+  Omit<AdminProductCreateRequest, 'initialStock' | 'labelId'>
+> & {
   labelId?: number | null;
 };
 
