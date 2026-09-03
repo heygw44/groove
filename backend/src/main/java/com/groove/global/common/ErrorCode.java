@@ -50,6 +50,11 @@ public enum ErrorCode {
 	STOCK_INSUFFICIENT(HttpStatus.CONFLICT, "재고가 부족합니다."),
 	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 처리 중 충돌이 발생했습니다. 다시 시도해주세요."),
 
+	// ===== CART =====
+	CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."),
+	CART_EMPTY(HttpStatus.BAD_REQUEST, "장바구니가 비어 있습니다."),
+	CART_QUANTITY_EXCEEDED(HttpStatus.BAD_REQUEST, "장바구니 상품은 최대 10개까지 담을 수 있습니다."),
+
 	// ===== FILE =====
 	FILE_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다."),
 	FILE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "파일 크기가 제한을 초과했습니다."),
