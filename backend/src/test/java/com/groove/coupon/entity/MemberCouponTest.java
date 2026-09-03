@@ -150,4 +150,55 @@ class MemberCouponTest {
 					.isEqualTo(ErrorCode.COUPON_ALREADY_USED);
 		}
 	}
+
+	@Nested
+	@DisplayName("isUsable()")
+	class IsUsable {
+
+		@Test
+		@DisplayName("미사용·미만료·ACTIVE 쿠폰이면 true 를 반환한다")
+		void returnsTrueWhenUnusedAndNotExpired() {
+			// given
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, coupon);
+
+			// when & then
+			assertThat(memberCoupon.isUsable()).isTrue();
+		}
+
+		@Test
+		@DisplayName("사용했으면 false 를 반환한다")
+		void returnsFalseWhenUsed() {
+			// given
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, coupon);
+			memberCoupon.use(1L);
+
+			// when & then
+			assertThat(memberCoupon.isUsable()).isFalse();
+		}
+
+		@Test
+		@DisplayName("만료됐으면 false 를 반환한다")
+		void returnsFalseWhenExpired() {
+			// given
+			Coupon expiredCoupon = CouponFixture.expired(CouponFixture.fixed("MC-EXPIRED", BigDecimal.valueOf(1000)));
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, expiredCoupon);
+
+			// when & then
+			assertThat(memberCoupon.isUsable()).isFalse();
+			assertThat(memberCoupon.isExpired()).isTrue();
+		}
+
+		@Test
+		@DisplayName("쿠폰이 비활성화됐으면 false 를 반환한다")
+		void returnsFalseWhenCouponDisabled() {
+			// given
+			Coupon disabledCoupon = CouponFixture.fixed("MC-DISABLED", BigDecimal.valueOf(1000));
+			disabledCoupon.disable();
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, disabledCoupon);
+
+			// when & then
+			assertThat(memberCoupon.isUsable()).isFalse();
+			assertThat(memberCoupon.isExpired()).isTrue();
+		}
+	}
 }

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,6 +15,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import com.groove.coupon.entity.Coupon;
+import com.groove.coupon.entity.DiscountType;
+import com.groove.coupon.entity.MemberCoupon;
 import com.groove.fixture.CouponFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
@@ -99,6 +103,42 @@ class MemberCouponRepositoryTest extends DataJpaTestSupport {
 
 			// then
 			assertThat(exists).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("findUsableByMemberIdAndOrderAmount()")
+	class FindUsableByMemberIdAndOrderAmount {
+
+		@Test
+		@DisplayName("사용됨/만료/최소금액 미달 쿠폰을 제외하고 사용 가능한 쿠폰만 반환한다")
+		void excludesUsedExpiredAndMinOrderAmountNotMet() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("member-coupon-repo-usable@groove.com"));
+			Coupon usableCoupon = couponRepository.save(
+					CouponFixture.fixed("member-coupon-repo-usable", BigDecimal.valueOf(1000)));
+			Coupon usedCoupon = couponRepository.save(
+					CouponFixture.fixed("member-coupon-repo-used", BigDecimal.valueOf(1000)));
+			Coupon expiredCoupon = couponRepository.save(
+					CouponFixture.expired(CouponFixture.fixed("member-coupon-repo-expired",
+							BigDecimal.valueOf(1000))));
+			Coupon minAmountCoupon = couponRepository.save(
+					CouponFixture.withMinOrderAmount("member-coupon-repo-minamt", DiscountType.FIXED,
+							BigDecimal.valueOf(1000), BigDecimal.valueOf(50000)));
+
+			MemberCoupon usable = memberCouponRepository.save(MemberCouponFixture.create(member, usableCoupon));
+			MemberCoupon used = MemberCouponFixture.create(member, usedCoupon);
+			used.use(1L);
+			memberCouponRepository.save(used);
+			memberCouponRepository.save(MemberCouponFixture.create(member, expiredCoupon));
+			memberCouponRepository.save(MemberCouponFixture.create(member, minAmountCoupon));
+
+			// when
+			List<MemberCoupon> result = memberCouponRepository.findUsableByMemberIdAndOrderAmount(member.getId(),
+					BigDecimal.valueOf(10000), LocalDateTime.now());
+
+			// then
+			assertThat(result).extracting(MemberCoupon::getId).containsExactly(usable.getId());
 		}
 	}
 }
