@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,11 +13,18 @@ import com.groove.coupon.dto.AdminCouponSummaryResponse;
 import com.groove.coupon.entity.Coupon;
 import com.groove.coupon.entity.CouponStatus;
 
+import jakarta.persistence.LockModeType;
+
 public interface CouponRepository extends JpaRepository<Coupon, Long> {
 
 	Optional<Coupon> findByCode(String code);
 
 	boolean existsByCode(String code);
+
+	// 동시 발급 요청을 coupon 행 락으로 직렬화해 정확한 발급 수량을 보장한다.
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select c from Coupon c where c.code = :code")
+	Optional<Coupon> findByCodeForUpdate(@Param("code") String code);
 
 	@Query(value = """
 			SELECT new com.groove.coupon.dto.AdminCouponSummaryResponse(

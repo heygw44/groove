@@ -19,4 +19,9 @@ public final class MemberCouponFixture {
 		ReflectionTestUtils.setField(memberCoupon, "id", id);
 		return memberCoupon;
 	}
+
+	public static MemberCoupon used(MemberCoupon memberCoupon, Long orderId) {
+		memberCoupon.use(orderId);
+		return memberCoupon;
+	}
 }

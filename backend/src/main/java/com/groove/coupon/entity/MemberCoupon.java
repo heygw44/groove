@@ -104,4 +104,12 @@ public class MemberCoupon extends BaseTimeEntity {
 		}
 		return this.coupon.calculateDiscount(orderAmount);
 	}
+
+	public boolean isExpired() {
+		return this.coupon.isExpired() || this.coupon.getStatus() == CouponStatus.DISABLED;
+	}
+
+	public boolean isUsable() {
+		return !this.used && !isExpired();
+	}
 }
