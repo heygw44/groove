@@ -118,4 +118,41 @@ class OrderRepositoryTest extends DataJpaTestSupport {
 			assertThat(found).isEmpty();
 		}
 	}
+
+	@Nested
+	@DisplayName("findWithItemsByIdAndMemberId()")
+	class FindWithItemsByIdAndMemberId {
+
+		@Test
+		@DisplayName("본인 주문이면 항목과 함께 조회한다")
+		void returnsOrderWithItemsForOwner() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("order-scoped-owner@groove.com"));
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product product = productRepository.save(ProductFixture.create(artist));
+			Order saved = orderRepository.saveAndFlush(OrderFixture.createWithItem(member, product, 1));
+
+			// when
+			Optional<Order> found = orderRepository.findWithItemsByIdAndMemberId(saved.getId(), member.getId());
+
+			// then
+			assertThat(found).isPresent();
+			assertThat(found.get().getItems()).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("다른 회원의 id 로 조회하면 empty 를 반환한다")
+		void returnsEmptyForOtherMember() {
+			// given
+			Member owner = memberRepository.save(MemberFixture.create("order-scoped-target@groove.com"));
+			Member other = memberRepository.save(MemberFixture.create("order-scoped-other@groove.com"));
+			Order saved = orderRepository.saveAndFlush(OrderFixture.create(owner, "20260903-SCOPED01"));
+
+			// when
+			Optional<Order> found = orderRepository.findWithItemsByIdAndMemberId(saved.getId(), other.getId());
+
+			// then
+			assertThat(found).isEmpty();
+		}
+	}
 }

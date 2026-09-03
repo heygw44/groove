@@ -30,10 +30,12 @@ import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.CartFixture;
 import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
@@ -41,8 +43,15 @@ import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
+import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderSearchRequest;
+import com.groove.order.dto.OrderSummaryResponse;
+import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderStatus;
+import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -77,6 +86,12 @@ class OrderServiceTest {
 	@Mock
 	OrderRepository orderRepository;
 
+	@Mock
+	OrderQueryMapper orderQueryMapper;
+
+	@Mock
+	PaymentCancelHook paymentCancelHook;
+
 	OrderService orderService;
 
 	Member member;
@@ -90,7 +105,8 @@ class OrderServiceTest {
 		OrderNumberGenerator orderNumberGenerator = mock(OrderNumberGenerator.class);
 		lenient().when(orderNumberGenerator.generate()).thenReturn("20260903-TESTAB12");
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, cartItemRepository,
-				stockRepository, stockHistoryRepository, orderRepository, orderNumberGenerator);
+				stockRepository, stockHistoryRepository, orderRepository, orderNumberGenerator, orderQueryMapper,
+				paymentCancelHook);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -277,6 +293,169 @@ class OrderServiceTest {
 			InOrder order = inOrder(stockRepository, stockHistoryRepository);
 			order.verify(stockRepository).flush();
 			order.verify(stockHistoryRepository).save(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("getMyOrders()")
+	class GetMyOrders {
+
+		@Test
+		@DisplayName("주문이 없으면 매퍼를 호출하지 않고 빈 페이지를 반환한다")
+		void returnsEmptyPageWhenNoOrders() {
+			// given
+			given(orderQueryMapper.countMyOrders(any())).willReturn(0L);
+			OrderSearchRequest request = new OrderSearchRequest(null, null, null);
+
+			// when
+			PageResponse<OrderSummaryResponse> response = orderService.getMyOrders(MEMBER_ID, request);
+
+			// then
+			assertThat(response.content()).isEmpty();
+			assertThat(response.totalElements()).isZero();
+			verify(orderQueryMapper, never()).findMyOrders(any());
+		}
+
+		@Test
+		@DisplayName("주문이 있으면 목록과 총 개수를 반환한다")
+		void returnsOrdersWhenPresent() {
+			// given
+			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
+					new BigDecimal("30000"), "Kind of Blue", 1, null, null);
+			given(orderQueryMapper.countMyOrders(any())).willReturn(1L);
+			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(summary));
+			OrderSearchRequest request = new OrderSearchRequest(null, null, null);
+
+			// when
+			PageResponse<OrderSummaryResponse> response = orderService.getMyOrders(MEMBER_ID, request);
+
+			// then
+			assertThat(response.content()).containsExactly(summary);
+			assertThat(response.totalElements()).isEqualTo(1);
+		}
+	}
+
+	@Nested
+	@DisplayName("getDetail()")
+	class GetDetail {
+
+		@Test
+		@DisplayName("본인 주문이면 상세 정보를 반환한다")
+		void returnsDetailForOwner() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 2), 600L);
+			given(orderRepository.findWithItemsByIdAndMemberId(600L, MEMBER_ID)).willReturn(Optional.of(order));
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 600L);
+
+			// then
+			assertThat(response.id()).isEqualTo(600L);
+			assertThat(response.items()).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("타인 주문이거나 존재하지 않으면 ORDER_NOT_FOUND 예외를 던진다")
+		void throwsForOtherMemberOrder() {
+			// given
+			given(orderRepository.findWithItemsByIdAndMemberId(601L, MEMBER_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> orderService.getDetail(MEMBER_ID, 601L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("cancel()")
+	class Cancel {
+
+		@Test
+		@DisplayName("PENDING 주문을 취소하면 재고를 복구하고 CANCEL 이력을 남기며 결제 취소 훅은 호출하지 않는다")
+		void restoresStockAndSkipsHookWhenPending() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 2), 500L);
+			given(orderRepository.findWithItemsByIdAndMemberId(500L, MEMBER_ID)).willReturn(Optional.of(order));
+			Stock stock = StockFixture.create(product, 8);
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willReturn(List.of(stock));
+
+			// when
+			OrderDetailResponse response = orderService.cancel(MEMBER_ID, 500L, null);
+
+			// then
+			assertThat(response.status()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(stock.getQuantity()).isEqualTo(10);
+			verify(stockHistoryRepository).save(any());
+			verify(paymentCancelHook, never()).onPaidOrderCanceled(any());
+		}
+
+		@Test
+		@DisplayName("PAID 주문을 취소하면 결제 취소 훅을 호출한다")
+		void callsHookWhenPaid() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 501L);
+			order.markPaid();
+			given(orderRepository.findWithItemsByIdAndMemberId(501L, MEMBER_ID)).willReturn(Optional.of(order));
+			Stock stock = StockFixture.create(product, 9);
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willReturn(List.of(stock));
+
+			// when
+			orderService.cancel(MEMBER_ID, 501L, new OrderCancelRequest("단순 변심"));
+
+			// then
+			verify(paymentCancelHook).onPaidOrderCanceled(order);
+		}
+
+		@Test
+		@DisplayName("SHIPPED 주문을 취소하면 ORDER_CANNOT_CANCEL 예외를 던지고 재고를 건드리지 않는다")
+		void throwsWhenShipped() {
+			// given
+			Order order = OrderFixture.withId(
+					OrderFixture.markShipped(OrderFixture.createWithItem(member, product, 1)), 502L);
+			given(orderRepository.findWithItemsByIdAndMemberId(502L, MEMBER_ID)).willReturn(Optional.of(order));
+
+			// when & then
+			assertThatThrownBy(() -> orderService.cancel(MEMBER_ID, 502L, null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+			verify(stockRepository, never()).findAllWithProductByProductIdInForUpdate(any());
+		}
+
+		@Test
+		@DisplayName("타인 주문이거나 존재하지 않으면 ORDER_NOT_FOUND 예외를 던진다")
+		void throwsWhenOrderNotFound() {
+			// given
+			given(orderRepository.findWithItemsByIdAndMemberId(999L, MEMBER_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> orderService.cancel(MEMBER_ID, 999L, null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("재고 UPDATE 를 flush 한 뒤에 CANCEL 이력을 저장한다")
+		void flushesStockBeforeSavingHistory() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 503L);
+			given(orderRepository.findWithItemsByIdAndMemberId(503L, MEMBER_ID)).willReturn(Optional.of(order));
+			Stock stock = StockFixture.create(product, 9);
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willReturn(List.of(stock));
+
+			// when
+			orderService.cancel(MEMBER_ID, 503L, null);
+
+			// then
+			InOrder inOrder = inOrder(stockRepository, stockHistoryRepository);
+			inOrder.verify(stockRepository).flush();
+			inOrder.verify(stockHistoryRepository).save(any());
 		}
 	}
 }
