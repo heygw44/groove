@@ -7,7 +7,7 @@ import { Field } from '@/components/common/Field';
 import { FormError } from '@/components/common/FormError';
 import { Input } from '@/components/common/Input';
 import { Modal } from '@/components/common/Modal';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { useCreateAddress, useUpdateAddress } from '@/hooks/mutations/useAddressMutations';
 import { addressSchema, addressUpdateSchema, type AddressFormValues } from '@/schemas/address';
 import type { Address } from '@/types/member';

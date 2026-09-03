@@ -11,7 +11,7 @@ import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
 import { Spinner } from '@/components/common/Spinner';
 import { Textarea } from '@/components/common/Textarea';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { ArtistSearchSelect } from '@/components/product/ArtistSearchSelect';
 import { useCreateProduct, useUpdateProduct } from '@/hooks/mutations/useAdminProductMutations';
 import { useGenres, useLabels } from '@/hooks/queries/useReferences';

@@ -7,7 +7,7 @@ import { Field } from '@/components/common/Field';
 import { FormError } from '@/components/common/FormError';
 import { Input } from '@/components/common/Input';
 import { Modal } from '@/components/common/Modal';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { useAdjustStock } from '@/hooks/mutations/useAdminProductMutations';
 import { stockAdjustSchema, type StockAdjustFormValues } from '@/schemas/product';
 import type { AdminProductSummary } from '@/types/product';

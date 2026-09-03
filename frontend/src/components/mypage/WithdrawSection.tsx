@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { useWithdraw } from '@/hooks/mutations/useMemberMutations';
 import { getErrorMessage } from '@/utils/apiError';
 

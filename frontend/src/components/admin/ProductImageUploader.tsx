@@ -2,7 +2,7 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 
 import { Badge } from '@/components/common/Badge';
 import { Spinner } from '@/components/common/Spinner';
-import { useToast } from '@/components/common/Toast';
+import { useToast } from '@/components/common/toastContext';
 import { useUploadImage } from '@/hooks/mutations/useFileMutations';
 import { getErrorMessage } from '@/utils/apiError';
 
