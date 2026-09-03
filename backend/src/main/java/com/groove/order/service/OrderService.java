@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.cart.entity.CartItem;
 import com.groove.cart.repository.CartItemRepository;
+import com.groove.coupon.entity.MemberCoupon;
+import com.groove.coupon.repository.MemberCouponRepository;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
@@ -41,6 +43,7 @@ public class OrderService {
 	private final AddressRepository addressRepository;
 	private final ProductRepository productRepository;
 	private final CartItemRepository cartItemRepository;
+	private final MemberCouponRepository memberCouponRepository;
 	private final OrderStockService orderStockService;
 	private final OrderRepository orderRepository;
 	private final OrderNumberGenerator orderNumberGenerator;
@@ -52,6 +55,9 @@ public class OrderService {
 		Member member = findActiveMember(memberId);
 		Address address = addressRepository.findByIdAndMemberId(request.addressId(), memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_ADDRESS_NOT_FOUND));
+		MemberCoupon memberCoupon = request.memberCouponId() == null ? null
+				: memberCouponRepository.findWithCouponByIdAndMemberIdForUpdate(request.memberCouponId(), memberId)
+						.orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
 
 		List<CartItem> cartItems = request.isFromCart()
 				? findOwnedCartItems(memberId, request.cartItemIds())
@@ -65,8 +71,17 @@ public class OrderService {
 		for (OrderLine line : lines) {
 			order.addItem(line.product(), line.quantity());
 		}
+		if (memberCoupon != null) {
+			order.applyCoupon(memberCoupon, memberCoupon.calculateDiscount(order.getTotalAmount()));
+		}
 		orderStockService.deduct(order);
 		orderRepository.save(order);
+
+		// 쿠폰 사용은 주문 생성과 원자적으로 성공/실패해야 하므로 이벤트 대신 같은 트랜잭션에서 직접 호출한다.
+		// 비동기·별도 트랜잭션 이벤트는 재고 차감 후 쿠폰 실패 시 정합성 깨짐.
+		if (memberCoupon != null) {
+			memberCoupon.use(order.getId());
+		}
 
 		if (request.isFromCart()) {
 			cartItemRepository.deleteAll(cartItems);
@@ -98,11 +113,18 @@ public class OrderService {
 		String reason = request == null ? null : request.reason();
 		order.cancel(reason);
 		orderStockService.restore(order);
+		restoreCoupon(order);
 
 		if (previousStatus == OrderStatus.PAID) {
 			paymentCancelHook.onPaidOrderCanceled(order);
 		}
 		return OrderDetailResponse.from(order);
+	}
+
+	private void restoreCoupon(Order order) {
+		if (order.getMemberCoupon() != null && order.getMemberCoupon().isUsed()) {
+			order.getMemberCoupon().restore();
+		}
 	}
 
 	private List<CartItem> findOwnedCartItems(Long memberId, List<Long> cartItemIds) {

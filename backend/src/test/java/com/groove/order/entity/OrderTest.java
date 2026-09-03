@@ -16,7 +16,10 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.groove.coupon.entity.MemberCoupon;
 import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.CouponFixture;
+import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
@@ -104,6 +107,92 @@ class OrderTest {
 
 			// when & then
 			assertThatThrownBy(() -> order.addItem(product, 0))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+	}
+
+	@Nested
+	@DisplayName("applyCoupon()")
+	class ApplyCoupon {
+
+		@Test
+		@DisplayName("적용하면 할인 금액이 반영되고 최종 금액이 재계산된다")
+		void appliesDiscountAndRecalculatesFinalAmount() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist, "Kind of Blue",
+					new BigDecimal("45000")), 1);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, CouponFixture.fixed("FIXED5000",
+					new BigDecimal("5000")));
+
+			// when
+			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+
+			// then
+			assertThat(order.getMemberCoupon()).isEqualTo(memberCoupon);
+			assertThat(order.getDiscountAmount()).isEqualByComparingTo(new BigDecimal("5000"));
+			assertThat(order.getFinalAmount()).isEqualByComparingTo(new BigDecimal("40000"));
+		}
+
+		@Test
+		@DisplayName("항목이 없으면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenNoItems() {
+			// given
+			Order order = OrderFixture.create(member);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, CouponFixture.fixed("FIXED5000",
+					new BigDecimal("5000")));
+
+			// when & then
+			assertThatThrownBy(() -> order.applyCoupon(memberCoupon, new BigDecimal("5000")))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+
+		@Test
+		@DisplayName("할인 금액이 음수면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenDiscountAmountNegative() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, CouponFixture.fixed("FIXED5000",
+					new BigDecimal("5000")));
+
+			// when & then
+			assertThatThrownBy(() -> order.applyCoupon(memberCoupon, new BigDecimal("-1")))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+
+		@Test
+		@DisplayName("할인 금액이 총액을 초과하면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenDiscountAmountExceedsTotalAmount() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist, "Kind of Blue",
+					new BigDecimal("10000")), 1);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, CouponFixture.fixed("FIXED5000",
+					new BigDecimal("5000")));
+
+			// when & then
+			assertThatThrownBy(() -> order.applyCoupon(memberCoupon, new BigDecimal("10001")))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+
+		@Test
+		@DisplayName("적용된 이후 addItem 을 호출하면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenAddItemAfterCouponApplied() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist, "Kind of Blue",
+					new BigDecimal("45000")), 1);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(member, CouponFixture.fixed("FIXED5000",
+					new BigDecimal("5000")));
+			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+
+			// when & then
+			assertThatThrownBy(() -> order.addItem(ProductFixture.create(artist), 1))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);

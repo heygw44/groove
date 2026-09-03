@@ -1,6 +1,5 @@
 package com.groove.order.controller;
 
-import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -73,12 +72,13 @@ class OrderControllerTest {
 	}
 
 	private OrderCreateResponse sampleResponse() {
-		return new OrderCreateResponse(1L, "20260903-TESTAB12", new BigDecimal("90000"));
+		return new OrderCreateResponse(1L, "20260903-TESTAB12", new BigDecimal("90000"), BigDecimal.ZERO,
+				new BigDecimal("90000"), null);
 	}
 
 	private OrderDetailResponse sampleDetailResponse(OrderStatus status) {
 		return new OrderDetailResponse(1L, "20260903-TESTAB12", status, new BigDecimal("90000"), BigDecimal.ZERO,
-				new BigDecimal("90000"), List.of(), null, null, null, null, null);
+				new BigDecimal("90000"), null, List.of(), null, null, null, null, null);
 	}
 
 	@Nested
@@ -170,9 +170,12 @@ class OrderControllerTest {
 		}
 
 		@Test
-		@DisplayName("memberCouponId 를 지정하면 400 COMMON_VALIDATION_FAILED 를 반환한다")
-		void returnsBadRequestWhenMemberCouponIdSpecified() throws Exception {
+		@DisplayName("memberCouponId 를 지정하면 201 과 할인이 반영된 주문을 반환한다")
+		void createsOrderWithCoupon() throws Exception {
 			// given
+			OrderCreateResponse response = new OrderCreateResponse(1L, "20260903-TESTAB12",
+					new BigDecimal("90000"), new BigDecimal("5000"), new BigDecimal("85000"), "가을맞이 할인");
+			given(orderService.create(eq(1L), any())).willReturn(response);
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 2, 10L, 5L);
 
 			// when & then
@@ -180,10 +183,10 @@ class OrderControllerTest {
 							.header(HttpHeaders.AUTHORIZATION, bearer())
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(request)))
-					.andExpect(status().isBadRequest())
-					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
-					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("couponNotSupported")));
-			verify(orderService, never()).create(any(), any());
+					.andExpect(status().isCreated())
+					.andExpect(jsonPath("$.data.discountAmount", is(5000)))
+					.andExpect(jsonPath("$.data.couponName", is("가을맞이 할인")));
+			verify(orderService).create(eq(1L), any());
 		}
 
 		@Test
@@ -211,7 +214,7 @@ class OrderControllerTest {
 		void returnsOrderList() throws Exception {
 			// given
 			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
-					new BigDecimal("90000"), "Kind of Blue", 1, null, null);
+					new BigDecimal("90000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, null);
 			given(orderService.getMyOrders(eq(1L), any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
 
 			// when & then

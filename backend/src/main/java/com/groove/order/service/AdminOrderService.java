@@ -61,6 +61,7 @@ public class AdminOrderService {
 
 		if (next == OrderStatus.CANCELED) {
 			orderStockService.restore(order);
+			restoreCoupon(order);
 			if (previous == OrderStatus.PAID || previous == OrderStatus.PREPARING) {
 				paymentCancelHook.onPaidOrderCanceled(order);
 			}
@@ -69,5 +70,11 @@ public class AdminOrderService {
 		adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
 				orderId, previous.name() + "->" + next.name());
 		return AdminOrderDetailResponse.from(order);
+	}
+
+	private void restoreCoupon(Order order) {
+		if (order.getMemberCoupon() != null && order.getMemberCoupon().isUsed()) {
+			order.getMemberCoupon().restore();
+		}
 	}
 }

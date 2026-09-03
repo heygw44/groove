@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +32,10 @@ import com.groove.admin.repository.AdminAuditLogRepository;
 import com.groove.auth.dto.LoginRequest;
 import com.groove.auth.dto.SignupRequest;
 import com.groove.auth.jwt.JwtProvider;
+import com.groove.coupon.dto.CouponIssueRequest;
+import com.groove.coupon.entity.Coupon;
+import com.groove.coupon.entity.DiscountType;
+import com.groove.coupon.repository.CouponRepository;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.CartFixture;
@@ -88,6 +94,9 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	OrderRepository orderRepository;
+
+	@Autowired
+	CouponRepository couponRepository;
 
 	@Autowired
 	AdminAuditLogRepository adminAuditLogRepository;
@@ -272,6 +281,77 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(histories).hasSize(1);
 			assertThat(histories.get(0).getChangeType()).isEqualTo(StockChangeType.OUT);
 			assertThat(histories.get(0).getQuantityDelta()).isEqualTo(-orderedQuantity);
+		}
+	}
+
+	@Nested
+	@DisplayName("쿠폰을 적용한 주문")
+	class CouponAppliedOrder {
+
+		@Test
+		@DisplayName("발급 → 쿠폰 적용 주문 → 재사용 거부 → 취소 → 재사용 순으로 진행된다")
+		void appliesUsesCancelsAndReusesCoupon() throws Exception {
+			// given: 회원, 배송지, 재고 5개인 상품, 5천원 정액 쿠폰을 준비한다
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			String code = "FLOW" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
+			couponRepository.save(Coupon.create(code, "가을맞이 5천원 할인", DiscountType.FIXED, new BigDecimal("5000"),
+					BigDecimal.ZERO, null, null, LocalDateTime.now().plusDays(7)));
+
+			// when: 쿠폰을 발급받는다
+			MvcResult issueResult = mockMvc.perform(post("/api/v1/coupons/issue")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new CouponIssueRequest(code))))
+					.andExpect(status().isCreated())
+					.andReturn();
+			long memberCouponId = objectMapper.readTree(issueResult.getResponse().getContentAsString())
+					.path("data").path("memberCouponId").asLong();
+
+			// when & then: 쿠폰을 적용해 주문하면 할인 금액과 쿠폰명이 반영된다
+			OrderCreateRequest createRequest = OrderFixture.directRequestWithCoupon(product.getId(), 1,
+					address.getId(), memberCouponId);
+			MvcResult createResult = mockMvc.perform(post("/api/v1/orders")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isCreated())
+					.andExpect(jsonPath("$.data.discountAmount", is(5000.0)))
+					.andExpect(jsonPath("$.data.finalAmount", is(40000.0)))
+					.andExpect(jsonPath("$.data.couponName", is("가을맞이 5천원 할인")))
+					.andReturn();
+			long orderId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+					.path("data").path("orderId").asLong();
+
+			// then: 재고는 주문한 만큼만 차감된다
+			Stock stockAfterFirstOrder = stockRepository.findByProductId(product.getId()).orElseThrow();
+			assertThat(stockAfterFirstOrder.getQuantity()).isEqualTo(4);
+
+			// when & then: 이미 사용한 쿠폰으로 다시 주문하면 409 를 반환하고 재고는 그대로다
+			mockMvc.perform(post("/api/v1/orders")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("COUPON_ALREADY_USED")));
+			Stock stockAfterRejectedReuse = stockRepository.findByProductId(product.getId()).orElseThrow();
+			assertThat(stockAfterRejectedReuse.getQuantity()).isEqualTo(4);
+
+			// when: 첫 주문을 취소한다
+			mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then: 취소로 복구된 쿠폰을 다시 적용해 주문할 수 있다
+			mockMvc.perform(post("/api/v1/orders")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isCreated())
+					.andExpect(jsonPath("$.data.discountAmount", is(5000.0)));
 		}
 	}
 
