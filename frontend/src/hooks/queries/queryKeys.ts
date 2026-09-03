@@ -1,3 +1,4 @@
+import type { OrderListParams } from '@/types/order';
 import type { AdminProductListParams, ProductListParams } from '@/types/product';
 
 export const memberKeys = {
@@ -22,6 +23,13 @@ export const adminProductKeys = {
   all: ['adminProducts'] as const,
   list: (params: AdminProductListParams) => ['adminProducts', params] as const,
   detail: (id: number) => ['adminProducts', 'detail', id] as const,
+};
+
+// detail 을 'order' 단수로 분리해 ['orders'] 무효화가 상세 캐시를 건드리지 않게 한다 (productKeys 와 같은 이유).
+export const orderKeys = {
+  all: ['orders'] as const,
+  list: (params: OrderListParams) => ['orders', params] as const,
+  detail: (id: number) => ['order', id] as const,
 };
 
 export const referenceKeys = {

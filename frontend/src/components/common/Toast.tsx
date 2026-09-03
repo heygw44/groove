@@ -8,11 +8,14 @@ interface ToastMessage {
   message: string;
 }
 
+// Date.now() 는 같은 밀리초에 두 번 호출되면(StrictMode 이펙트 이중 실행 등) 키가 중복된다.
+let nextToastId = 0;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = useCallback((type: ToastType, message: string) => {
-    const id = Date.now();
+    const id = ++nextToastId;
     setToasts((prev) => [...prev, { id, type, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
