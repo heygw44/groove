@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -38,6 +39,7 @@ import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
+import com.groove.inventory.entity.Stock;
 import com.groove.member.entity.MemberRole;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
@@ -106,6 +108,23 @@ class OrderControllerTest {
 		void returnsConflictWhenStockLockFails() throws Exception {
 			// given
 			willThrow(new PessimisticLockingFailureException("lock wait timeout"))
+					.given(orderService).create(eq(1L), any());
+			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL)
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("STOCK_CONFLICT")));
+		}
+
+		@Test
+		@DisplayName("재고 버전 충돌이 나면 409 STOCK_CONFLICT 를 반환한다")
+		void returnsConflictWhenStockVersionConflicts() throws Exception {
+			// given
+			willThrow(new ObjectOptimisticLockingFailureException(Stock.class, 1L))
 					.given(orderService).create(eq(1L), any());
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
 

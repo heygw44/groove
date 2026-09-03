@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
@@ -33,7 +35,7 @@ import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.dto.OrderCreateRequest;
+import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -68,6 +70,9 @@ class OrderConcurrencyIntegrationTest extends IntegrationTestSupport {
 	@Autowired
 	private OrderService orderService;
 
+	@Autowired
+	private OrderRepository orderRepository;
+
 	private ExecutorService executorService;
 
 	@BeforeEach
@@ -95,7 +100,8 @@ class OrderConcurrencyIntegrationTest extends IntegrationTestSupport {
 			List<Long> memberIds = new ArrayList<>();
 			List<Long> addressIds = new ArrayList<>();
 			for (int i = 0; i < MEMBER_COUNT; i++) {
-				Member member = memberRepository.save(MemberFixture.create("buyer" + i + "@groove.com"));
+				Member member = memberRepository.save(
+						MemberFixture.create("buyer-" + UUID.randomUUID() + "@groove.com"));
 				Address address = addressRepository.save(AddressFixture.create(member));
 				memberIds.add(member.getId());
 				addressIds.add(address.getId());
@@ -116,9 +122,7 @@ class OrderConcurrencyIntegrationTest extends IntegrationTestSupport {
 					try {
 						readyLatch.countDown();
 						startLatch.await();
-						OrderCreateRequest request = new OrderCreateRequest(null, product.getId(), 1, addressId,
-								null);
-						orderService.create(memberId, request);
+						orderService.create(memberId, OrderFixture.directRequest(product.getId(), 1, addressId));
 						successCount.incrementAndGet();
 					} catch (Throwable throwable) {
 						result.set(throwable);
@@ -147,6 +151,7 @@ class OrderConcurrencyIntegrationTest extends IntegrationTestSupport {
 							.isEqualTo(ErrorCode.STOCK_INSUFFICIENT));
 
 			Stock reloadedStock = stockRepository.findById(stock.getId()).orElseThrow();
+			assertThat(reloadedStock.getQuantity()).isGreaterThanOrEqualTo(0);
 			assertThat(reloadedStock.getQuantity()).isZero();
 			Product reloadedProduct = productRepository.findById(product.getId()).orElseThrow();
 			assertThat(reloadedProduct.getStatus()).isEqualTo(ProductStatus.SOLD_OUT);
@@ -154,6 +159,10 @@ class OrderConcurrencyIntegrationTest extends IntegrationTestSupport {
 					.filter(history -> history.getChangeType() == StockChangeType.OUT)
 					.count();
 			assertThat(outHistoryCount).isEqualTo(INITIAL_QUANTITY);
+			long persistedOrderCount = orderRepository.findAll().stream()
+					.filter(order -> memberIds.contains(order.getMember().getId()))
+					.count();
+			assertThat(persistedOrderCount).isEqualTo(INITIAL_QUANTITY);
 		}
 	}
 }

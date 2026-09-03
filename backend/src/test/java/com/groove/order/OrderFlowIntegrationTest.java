@@ -1,6 +1,7 @@
 package com.groove.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -31,10 +32,14 @@ import com.groove.auth.dto.SignupRequest;
 import com.groove.auth.jwt.JwtProvider;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.CartFixture;
 import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.inventory.entity.Stock;
+import com.groove.inventory.entity.StockChangeType;
+import com.groove.inventory.entity.StockHistory;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Address;
@@ -145,8 +150,12 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(stockAfterCancel.getQuantity()).isEqualTo(5);
 			Product productAfterCancel = productRepository.findById(product.getId()).orElseThrow();
 			assertThat(productAfterCancel.getStatus()).isEqualTo(ProductStatus.ON_SALE);
-			assertThat(stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stockAfterCancel.getId()))
-					.hasSize(2);
+			List<StockHistory> histories =
+					stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stockAfterCancel.getId());
+			assertThat(histories).hasSize(2);
+			StockHistory cancelHistory = histories.get(1);
+			assertThat(cancelHistory.getChangeType()).isEqualTo(StockChangeType.CANCEL);
+			assertThat(cancelHistory.getQuantityDelta()).isEqualTo(5);
 		}
 	}
 
@@ -203,6 +212,66 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 					.header(HttpHeaders.AUTHORIZATION, adminBearer)
 					.contentType(MediaType.APPLICATION_JSON)
 					.content(objectMapper.writeValueAsString(request)));
+		}
+	}
+
+	@Nested
+	@DisplayName("장바구니 기반 주문")
+	class CartBasedOrder {
+
+		@Test
+		@DisplayName("장바구니 상품으로 주문하면 장바구니가 비워지고 각 상품 재고가 차감된다")
+		void createsOrderFromCartAndClearsCart() throws Exception {
+			// given: 회원, 배송지, 장바구니에 담은 두 상품을 준비한다
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product firstProduct = seedProduct(5);
+			Product secondProduct = seedProduct(3);
+			int firstQuantity = 2;
+			int secondQuantity = 1;
+
+			long firstCartItemId = addToCart(accessToken, firstProduct.getId(), firstQuantity);
+			long secondCartItemId = addToCart(accessToken, secondProduct.getId(), secondQuantity);
+
+			// when: 장바구니 항목으로 주문을 생성한다
+			OrderCreateRequest createRequest = OrderFixture.cartRequest(
+					List.of(firstCartItemId, secondCartItemId), address.getId());
+			mockMvc.perform(post("/api/v1/orders")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(createRequest)))
+					.andExpect(status().isCreated());
+
+			// then: 장바구니가 비워진다
+			mockMvc.perform(get("/api/v1/cart").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.items", hasSize(0)));
+
+			// then: 두 상품의 재고가 각각 주문 수량만큼 차감되고 OUT 이력이 남는다
+			assertStockDeductedByOut(firstProduct.getId(), 5, firstQuantity);
+			assertStockDeductedByOut(secondProduct.getId(), 3, secondQuantity);
+		}
+
+		private long addToCart(String accessToken, Long productId, int quantity) throws Exception {
+			MvcResult result = mockMvc.perform(post("/api/v1/cart/items")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(CartFixture.addRequest(productId, quantity))))
+					.andExpect(status().isCreated())
+					.andReturn();
+			return objectMapper.readTree(result.getResponse().getContentAsString())
+					.path("data").path("id").asLong();
+		}
+
+		private void assertStockDeductedByOut(Long productId, int initialQuantity, int orderedQuantity) {
+			Stock stock = stockRepository.findByProductId(productId).orElseThrow();
+			assertThat(stock.getQuantity()).isEqualTo(initialQuantity - orderedQuantity);
+			List<StockHistory> histories =
+					stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stock.getId());
+			assertThat(histories).hasSize(1);
+			assertThat(histories.get(0).getChangeType()).isEqualTo(StockChangeType.OUT);
+			assertThat(histories.get(0).getQuantityDelta()).isEqualTo(-orderedQuantity);
 		}
 	}
 
