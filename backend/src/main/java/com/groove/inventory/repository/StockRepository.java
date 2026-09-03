@@ -1,5 +1,7 @@
 package com.groove.inventory.repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -13,4 +15,6 @@ public interface StockRepository extends JpaRepository<Stock, Long> {
 
 	@EntityGraph(attributePaths = "product")
 	Optional<Stock> findWithProductByProductId(Long productId);
+
+	List<Stock> findAllByProductIdIn(Collection<Long> productIds);
 }
