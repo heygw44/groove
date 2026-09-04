@@ -53,6 +53,7 @@ public enum ErrorCode {
 	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 처리 중 충돌이 발생했습니다. 다시 시도해주세요."),
 
 	// ===== LIMITED =====
+	LIMITED_DROP_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 한정반 드롭이 등록된 상품입니다."),
 	LIMITED_DROP_NOT_FOUND(HttpStatus.NOT_FOUND, "한정반 드롭을 찾을 수 없습니다."),
 	LIMITED_NOT_OPEN(HttpStatus.BAD_REQUEST, "아직 오픈되지 않은 한정반입니다."),
 	LIMITED_CLOSED(HttpStatus.BAD_REQUEST, "종료된 한정반입니다."),
