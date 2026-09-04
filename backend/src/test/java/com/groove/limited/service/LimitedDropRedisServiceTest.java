@@ -153,6 +153,107 @@ class LimitedDropRedisServiceTest extends IntegrationTestSupport {
 		}
 	}
 
+	@Nested
+	@DisplayName("reserve()")
+	class Reserve {
+
+		@Test
+		@DisplayName("최초 요청이면 재고를 1 줄이고 OK 를 반환한다")
+		void returnsOkOnFirstReserve() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+
+			// when
+			LimitedDropRedisService.ReserveResult result = limitedDropRedisService.reserve(dropId, 1L);
+
+			// then
+			assertThat(result).isEqualTo(LimitedDropRedisService.ReserveResult.OK);
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("9");
+			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(dropId), "1")).isTrue();
+		}
+
+		@Test
+		@DisplayName("이미 구매한 회원이 다시 요청하면 재고를 건드리지 않고 ALREADY 를 반환한다")
+		void returnsAlreadyOnRetryBySameMember() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			limitedDropRedisService.reserve(dropId, 1L);
+
+			// when
+			LimitedDropRedisService.ReserveResult result = limitedDropRedisService.reserve(dropId, 1L);
+
+			// then
+			assertThat(result).isEqualTo(LimitedDropRedisService.ReserveResult.ALREADY);
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("9");
+		}
+
+		@Test
+		@DisplayName("재고가 0 이면 SOLD_OUT 을 반환한다")
+		void returnsSoldOutWhenStockIsZero() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 0);
+
+			// when
+			LimitedDropRedisService.ReserveResult result = limitedDropRedisService.reserve(dropId, 1L);
+
+			// then
+			assertThat(result).isEqualTo(LimitedDropRedisService.ReserveResult.SOLD_OUT);
+		}
+
+		@Test
+		@DisplayName("재고 키가 세팅되지 않았으면 NOT_INITIALIZED 를 반환한다")
+		void returnsNotInitializedWhenStockKeyMissing() {
+			// given
+			dropId = newDropId();
+
+			// when
+			LimitedDropRedisService.ReserveResult result = limitedDropRedisService.reserve(dropId, 1L);
+
+			// then
+			assertThat(result).isEqualTo(LimitedDropRedisService.ReserveResult.NOT_INITIALIZED);
+		}
+	}
+
+	@Nested
+	@DisplayName("release()")
+	class Release {
+
+		@Test
+		@DisplayName("선점한 회원을 지우고 재고를 1 복구한다")
+		void restoresStockAndRemovesBuyer() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			limitedDropRedisService.reserve(dropId, 1L);
+
+			// when
+			limitedDropRedisService.release(dropId, 1L);
+
+			// then
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("10");
+			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(dropId), "1")).isFalse();
+		}
+
+		@Test
+		@DisplayName("두 번 호출해도 재고가 중복 복구되지 않는다")
+		void isIdempotentOnRepeatedCalls() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			limitedDropRedisService.reserve(dropId, 1L);
+
+			// when
+			limitedDropRedisService.release(dropId, 1L);
+			limitedDropRedisService.release(dropId, 1L);
+
+			// then
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("10");
+		}
+	}
+
 	private static Long newDropId() {
 		return ThreadLocalRandom.current().nextLong(1_000_000_000L, 2_000_000_000L);
 	}
