@@ -219,9 +219,18 @@ describe('toUpdatePayload()', () => {
     expect(payload).not.toHaveProperty('discountValue');
   });
 
-  it('총 수량을 비우면 원본에 값이 있어도 포함하지 않는다', () => {
+  it('총 수량을 비우면 null을 보낸다', () => {
     // given
     const original = coupon({ totalQuantity: 100 });
+    const values = { ...toFormValues(original), totalQuantity: '' };
+
+    // when & then
+    expect(toUpdatePayload(values, original)).toEqual({ totalQuantity: null });
+  });
+
+  it('원본도 무제한이면 총 수량을 비워도 포함하지 않는다', () => {
+    // given
+    const original = coupon({ totalQuantity: undefined });
     const values = { ...toFormValues(original), totalQuantity: '' };
 
     // when
@@ -229,6 +238,27 @@ describe('toUpdatePayload()', () => {
 
     // then
     expect(payload).not.toHaveProperty('totalQuantity');
+  });
+
+  it('최대 할인 금액을 비우면 null을 보낸다', () => {
+    // given
+    const original = coupon({ discountType: 'RATE', maxDiscountAmount: 5000 });
+    const values = { ...toFormValues(original), maxDiscountAmount: '' };
+
+    // when & then
+    expect(toUpdatePayload(values, original)).toEqual({ maxDiscountAmount: null });
+  });
+
+  it('원본에 상한이 없으면 최대 할인 금액을 비워도 포함하지 않는다', () => {
+    // given
+    const original = coupon({ discountType: 'RATE', maxDiscountAmount: undefined });
+    const values = { ...toFormValues(original), maxDiscountAmount: '' };
+
+    // when
+    const payload = toUpdatePayload(values, original);
+
+    // then
+    expect(payload).not.toHaveProperty('maxDiscountAmount');
   });
 
   it('상태가 바뀌면 status를 담는다', () => {

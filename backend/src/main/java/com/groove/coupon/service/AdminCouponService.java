@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -60,8 +61,10 @@ public class AdminCouponService {
 
 		List<String> changedFields = new ArrayList<>();
 
+		boolean maxDiscountAmountPresent = request.maxDiscountAmount() != null && request.maxDiscountAmount()
+				.isPresent();
 		if (request.discountType() != null || request.discountValue() != null || request.minOrderAmount() != null
-				|| request.maxDiscountAmount() != null) {
+				|| maxDiscountAmountPresent) {
 			DiscountType discountType = coalesce(request.discountType(), coupon.getDiscountType(), "discountType",
 					changedFields);
 			BigDecimal discountValue = coalesce(request.discountValue(), coupon.getDiscountValue(), "discountValue",
@@ -115,5 +118,13 @@ public class AdminCouponService {
 		}
 		changedFields.add(fieldName);
 		return newValue;
+	}
+
+	private <T> T coalesce(JsonNullable<T> newValue, T currentValue, String fieldName, List<String> changedFields) {
+		if (newValue == null || !newValue.isPresent()) {
+			return currentValue;
+		}
+		changedFields.add(fieldName);
+		return newValue.get();
 	}
 }

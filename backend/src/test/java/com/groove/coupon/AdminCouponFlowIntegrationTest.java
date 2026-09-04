@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -98,8 +99,8 @@ class AdminCouponFlowIntegrationTest extends IntegrationTestSupport {
 			}
 			assertThat(foundAfterCreate).isTrue();
 
-			CouponUpdateRequest updateRequest = new CouponUpdateRequest("변경된 이름", null, null, null, null, 20, null,
-					null);
+			CouponUpdateRequest updateRequest = new CouponUpdateRequest("변경된 이름", null, null, null,
+					JsonNullable.undefined(), JsonNullable.of(20), null, null);
 			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", couponId)
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -110,8 +111,8 @@ class AdminCouponFlowIntegrationTest extends IntegrationTestSupport {
 
 			// 만료일을 미리 늘려두고 비활성화한다. 이후 재활성화 요청이 이 만료일로 통과하는지 확인한다.
 			LocalDateTime extendedExpiresAt = LocalDateTime.now().plusDays(30);
-			CouponUpdateRequest reactivateRequest = new CouponUpdateRequest(null, null, null, null, null, null,
-					extendedExpiresAt, CouponStatus.DISABLED);
+			CouponUpdateRequest reactivateRequest = new CouponUpdateRequest(null, null, null, null,
+					JsonNullable.undefined(), JsonNullable.undefined(), extendedExpiresAt, CouponStatus.DISABLED);
 			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", couponId)
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -119,8 +120,8 @@ class AdminCouponFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.status", is("DISABLED")));
 
-			CouponUpdateRequest activateRequest = new CouponUpdateRequest(null, null, null, null, null, null,
-					extendedExpiresAt, CouponStatus.ACTIVE);
+			CouponUpdateRequest activateRequest = new CouponUpdateRequest(null, null, null, null,
+					JsonNullable.undefined(), JsonNullable.undefined(), extendedExpiresAt, CouponStatus.ACTIVE);
 			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", couponId)
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
