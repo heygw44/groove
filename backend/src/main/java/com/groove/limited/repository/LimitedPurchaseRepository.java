@@ -11,4 +11,6 @@ public interface LimitedPurchaseRepository extends JpaRepository<LimitedPurchase
 	boolean existsByDropIdAndMemberId(Long dropId, Long memberId);
 
 	Optional<LimitedPurchase> findByOrderId(Long orderId);
+
+	long countByDropId(Long dropId);
 }
