@@ -35,7 +35,11 @@ export const parseOrderDraft = (state: unknown): OrderDraft | null => {
   return null;
 };
 
-export const toOrderCreateRequest = (draft: OrderDraft, addressId: number): OrderCreateRequest =>
+export const toOrderCreateRequest = (
+  draft: OrderDraft,
+  addressId: number,
+  memberCouponId: number | null = null,
+): OrderCreateRequest =>
   draft.kind === 'cart'
-    ? { cartItemIds: draft.cartItemIds, addressId, memberCouponId: null }
-    : { productId: draft.productId, quantity: draft.quantity, addressId, memberCouponId: null };
+    ? { cartItemIds: draft.cartItemIds, addressId, memberCouponId }
+    : { productId: draft.productId, quantity: draft.quantity, addressId, memberCouponId };
