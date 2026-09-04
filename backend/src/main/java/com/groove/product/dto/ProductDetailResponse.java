@@ -2,8 +2,10 @@ package com.groove.product.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 
+import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductGenre;
 import com.groove.product.entity.ProductImage;
@@ -25,11 +27,12 @@ public record ProductDetailResponse(
 		int stockQuantity,
 		Double averageRating,
 		long reviewCount,
-		Boolean wishlisted
+		Boolean wishlisted,
+		LimitedDropSummary limitedDrop
 ) {
 
 	public static ProductDetailResponse from(Product product, List<ProductImage> images, int stockQuantity,
-		Boolean wishlisted) {
+		Boolean wishlisted, LimitedDropSummary limitedDrop) {
 		LabelSummary label = product.getLabel() == null
 				? null
 				: new LabelSummary(product.getLabel().getId(), product.getLabel().getName());
@@ -57,7 +60,8 @@ public record ProductDetailResponse(
 				stockQuantity,
 				product.getAverageRating() == null ? null : product.getAverageRating().doubleValue(),
 				product.getReviewCount(),
-				wishlisted);
+				wishlisted,
+				limitedDrop);
 	}
 
 	public record ArtistSummary(Long id, String name) {
@@ -70,5 +74,15 @@ public record ProductDetailResponse(
 	}
 
 	public record ImageSummary(String url, int sortOrder) {
+	}
+
+	public record LimitedDropSummary(
+			Long id,
+			LimitedDropStatus status,
+			OffsetDateTime openAt,
+			OffsetDateTime closeAt,
+			int remainingQuantity,
+			int perMemberLimit
+	) {
 	}
 }

@@ -3,6 +3,9 @@ package com.groove.limited.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.AfterEach;
@@ -91,6 +94,62 @@ class LimitedDropRedisServiceTest extends IntegrationTestSupport {
 
 			// when & then
 			assertThatCode(() -> limitedDropRedisService.clear(dropId)).doesNotThrowAnyException();
+		}
+	}
+
+	@Nested
+	@DisplayName("getStock()")
+	class GetStock {
+
+		@Test
+		@DisplayName("키가 있으면 값을 반환한다")
+		void returnsValueWhenKeyExists() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 30);
+
+			// when
+			Optional<Integer> result = limitedDropRedisService.getStock(dropId);
+
+			// then
+			assertThat(result).contains(30);
+		}
+
+		@Test
+		@DisplayName("키가 없으면 empty 를 반환한다")
+		void returnsEmptyWhenKeyMissing() {
+			// given
+			dropId = newDropId();
+
+			// when
+			Optional<Integer> result = limitedDropRedisService.getStock(dropId);
+
+			// then
+			assertThat(result).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("getStocks()")
+	class GetStocks {
+
+		@Test
+		@DisplayName("multiGet 으로 일부만 존재해도 있는 값만 채운다")
+		void returnsOnlyExistingValues() {
+			// given
+			dropId = newDropId();
+			Long missingDropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 42);
+
+			try {
+				// when
+				Map<Long, Integer> result = limitedDropRedisService.getStocks(List.of(dropId, missingDropId));
+
+				// then
+				assertThat(result).containsExactly(Map.entry(dropId, 42));
+			} finally {
+				limitedDropRedisService.clear(missingDropId);
+			}
 		}
 	}
 

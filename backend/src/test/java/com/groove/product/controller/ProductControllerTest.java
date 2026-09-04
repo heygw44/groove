@@ -215,7 +215,7 @@ class ProductControllerTest {
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
 					null, "180g", "Standard Black", new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
-					10, null, 0L, null);
+					10, null, 0L, null, null);
 			given(productService.getDetail(eq(1L), isNull())).willReturn(response);
 
 			// when & then
@@ -247,7 +247,7 @@ class ProductControllerTest {
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
 					null, "180g", "Standard Black", new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
-					10, null, 0L, true);
+					10, null, 0L, true, null);
 			given(productService.getDetail(eq(1L), eq(1L))).willReturn(response);
 
 			// when & then
