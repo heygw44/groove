@@ -108,6 +108,8 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			stockRepository.saveAndFlush(StockFixture.create(product, TOTAL_QUANTITY));
 			LimitedDrop drop = limitedDropRepository.saveAndFlush(openDrop(product, TOTAL_QUANTITY));
 			dropId = drop.getId();
+			// create-drop 로 PK 가 재사용될 수 있어, 다른 테스트가 남긴 낡은 키를 먼저 지우고 초기화한다.
+			limitedDropRedisService.clear(dropId);
 			limitedDropRedisService.initStock(dropId, TOTAL_QUANTITY);
 
 			List<Long> memberIds = new ArrayList<>();
@@ -179,6 +181,8 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			stockRepository.saveAndFlush(StockFixture.create(product, TOTAL_QUANTITY));
 			LimitedDrop drop = limitedDropRepository.saveAndFlush(openDrop(product, TOTAL_QUANTITY));
 			dropId = drop.getId();
+			// create-drop 로 PK 가 재사용될 수 있어, 다른 테스트가 남긴 낡은 키를 먼저 지우고 초기화한다.
+			limitedDropRedisService.clear(dropId);
 			limitedDropRedisService.initStock(dropId, TOTAL_QUANTITY);
 
 			Member member = memberRepository.save(MemberFixture.create("dup-" + UUID.randomUUID() + "@groove.com"));
