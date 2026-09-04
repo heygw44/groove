@@ -98,6 +98,18 @@ public class LimitedDrop extends BaseTimeEntity {
 				.build();
 	}
 
+	/** SCHEDULED 상태에서만 수량/일정을 바꿀 수 있다. */
+	public void reschedule(int totalQuantity, int perMemberLimit, LocalDateTime openAt, LocalDateTime closeAt) {
+		if (this.status != LimitedDropStatus.SCHEDULED) {
+			throw new BusinessException(ErrorCode.LIMITED_INVALID_STATUS);
+		}
+		validateSchedule(totalQuantity, perMemberLimit, openAt, closeAt);
+		this.totalQuantity = totalQuantity;
+		this.perMemberLimit = perMemberLimit;
+		this.openAt = openAt;
+		this.closeAt = closeAt;
+	}
+
 	public void open() {
 		if (this.status != LimitedDropStatus.SCHEDULED) {
 			throw new BusinessException(ErrorCode.LIMITED_INVALID_STATUS);

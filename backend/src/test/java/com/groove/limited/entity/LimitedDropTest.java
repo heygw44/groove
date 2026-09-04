@@ -433,4 +433,71 @@ class LimitedDropTest {
 			assertThat(drop.isActive()).isFalse();
 		}
 	}
+
+	@Nested
+	@DisplayName("reschedule()")
+	class Reschedule {
+
+		@Test
+		@DisplayName("SCHEDULED 상태면 수량과 일정이 교체된다")
+		void replacesFieldsWhenScheduled() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.scheduled(product);
+			LocalDateTime newOpenAt = LocalDateTime.now().plusDays(3);
+			LocalDateTime newCloseAt = LocalDateTime.now().plusDays(4);
+
+			// when
+			drop.reschedule(200, 3, newOpenAt, newCloseAt);
+
+			// then
+			assertThat(drop.getTotalQuantity()).isEqualTo(200);
+			assertThat(drop.getPerMemberLimit()).isEqualTo(3);
+			assertThat(drop.getOpenAt()).isEqualTo(newOpenAt);
+			assertThat(drop.getCloseAt()).isEqualTo(newCloseAt);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = LimitedDropStatus.class, names = {"OPEN", "SOLD_OUT", "CLOSED"})
+		@DisplayName("SCHEDULED 상태가 아니면 LIMITED_INVALID_STATUS 예외를 던진다")
+		void throwsWhenNotScheduled(LimitedDropStatus status) {
+			// given
+			LimitedDrop drop = LimitedDropFixture.withStatus(LimitedDropFixture.scheduled(product), status);
+
+			// when & then
+			assertThatThrownBy(() -> drop.reschedule(200, 3, LocalDateTime.now().plusDays(3),
+					LocalDateTime.now().plusDays(4)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.LIMITED_INVALID_STATUS);
+		}
+
+		@Test
+		@DisplayName("마감 시각이 오픈 시각보다 이후가 아니면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenCloseAtBeforeOpenAt() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.scheduled(product);
+			LocalDateTime openAt = LocalDateTime.now().plusDays(4);
+			LocalDateTime closeAt = LocalDateTime.now().plusDays(3);
+
+			// when & then
+			assertThatThrownBy(() -> drop.reschedule(200, 3, openAt, closeAt))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+
+		@Test
+		@DisplayName("회원당 구매 제한이 총 수량을 초과하면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenPerMemberLimitExceedsTotalQuantity() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.scheduled(product);
+
+			// when & then
+			assertThatThrownBy(() -> drop.reschedule(5, 6, LocalDateTime.now().plusDays(3),
+					LocalDateTime.now().plusDays(4)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+		}
+	}
 }

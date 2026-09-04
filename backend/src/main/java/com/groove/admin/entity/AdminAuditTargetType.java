@@ -4,5 +4,6 @@ package com.groove.admin.entity;
 public enum AdminAuditTargetType {
 	PRODUCT,
 	ORDER,
-	COUPON
+	COUPON,
+	LIMITED_DROP
 }
