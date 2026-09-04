@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
@@ -69,31 +69,43 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
         )}
       </div>
 
-      {!isSoldOut && (
+      {!isSoldOut && !product.limitedDrop && (
         <div className="flex items-center gap-3">
           <span className="text-sm text-content-muted">수량</span>
           <QuantitySelector value={quantity} onChange={setQuantity} max={product.stockQuantity} />
         </div>
       )}
 
-      <div className="flex gap-2">
-        <span className="flex-1">
-          <Button className="w-full" disabled={isSoldOut} onClick={handleBuyNow}>
-            바로 구매
-          </Button>
-        </span>
-        <span className="flex-1">
-          <Button
-            variant="secondary"
-            className="w-full"
-            disabled={isSoldOut || addCartItemMutation.isPending}
-            onClick={handleAddToCart}
-          >
-            장바구니
-          </Button>
-        </span>
-        <WishButton size="md" productId={product.id} wishlisted={product.wishlisted} />
-      </div>
+      {product.limitedDrop ? (
+        // 한정반 상품은 일반 주문 경로가 막혀 있다(PRODUCT_LIMITED_ONLY) - 전용 페이지로 보낸다.
+        <div className="flex gap-2">
+          <span className="flex-1">
+            <Link to={`/limited-drops/${product.limitedDrop.id}`} className="block">
+              <Button className="w-full">한정반 상세로</Button>
+            </Link>
+          </span>
+          <WishButton size="md" productId={product.id} wishlisted={product.wishlisted} />
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <span className="flex-1">
+            <Button className="w-full" disabled={isSoldOut} onClick={handleBuyNow}>
+              바로 구매
+            </Button>
+          </span>
+          <span className="flex-1">
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={isSoldOut || addCartItemMutation.isPending}
+              onClick={handleAddToCart}
+            >
+              장바구니
+            </Button>
+          </span>
+          <WishButton size="md" productId={product.id} wishlisted={product.wishlisted} />
+        </div>
+      )}
     </div>
   );
 }

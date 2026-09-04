@@ -1,6 +1,17 @@
+import type { LimitedDropStatus } from '@/types/limitedDrop';
+
 export type ProductStatus = 'ON_SALE' | 'SOLD_OUT' | 'HIDDEN';
 
 export type ProductSort = 'latest' | 'priceAsc' | 'priceDesc' | 'rating' | 'popular';
+
+export interface ProductLimitedDropSummary {
+  id: number;
+  status: LimitedDropStatus;
+  openAt: string;
+  closeAt: string;
+  remainingQuantity: number;
+  perMemberLimit: number;
+}
 
 export interface Genre {
   id: number;
@@ -52,6 +63,7 @@ export interface ProductDetail {
   averageRating?: number;
   reviewCount?: number;
   wishlisted?: boolean;
+  limitedDrop?: ProductLimitedDropSummary;
 }
 
 export interface ProductListParams {

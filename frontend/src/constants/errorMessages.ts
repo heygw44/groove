@@ -46,6 +46,15 @@ export const ERROR_MESSAGES: Record<string, string> = {
   REVIEW_NOT_FOUND: '리뷰를 찾을 수 없습니다.',
   REVIEW_ALREADY_EXISTS: '이미 작성한 리뷰가 있습니다.',
   REVIEW_PURCHASE_REQUIRED: '배송 완료된 주문이 있는 상품만 리뷰를 쓸 수 있습니다.',
+  LIMITED_DROP_ALREADY_EXISTS: '이미 한정반 드롭이 등록된 상품입니다.',
+  LIMITED_DROP_NOT_FOUND: '존재하지 않는 한정반입니다.',
+  LIMITED_NOT_OPEN: '아직 오픈되지 않은 한정반입니다.',
+  LIMITED_CLOSED: '종료된 한정반입니다.',
+  LIMITED_SOLD_OUT: '한정반이 매진되었습니다.',
+  LIMITED_ALREADY_PURCHASED: '이미 구매한 한정반입니다.',
+  LIMITED_LIMIT_EXCEEDED: '1인 구매 한도를 초과했습니다.',
+  LIMITED_INVALID_STATUS: '처리할 수 없는 한정반 상태입니다.',
+  PRODUCT_LIMITED_ONLY: '한정반 상품은 한정반 페이지에서만 구매할 수 있습니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
@@ -62,6 +71,7 @@ export const ERROR_CODE_FIELD: Record<string, string> = {
   COUPON_ALREADY_ISSUED: 'code',
   COUPON_CODE_DUPLICATE: 'code',
   COUPON_QUANTITY_BELOW_ISSUED: 'totalQuantity',
+  LIMITED_DROP_ALREADY_EXISTS: 'productId',
 };
 
 /**
@@ -71,4 +81,5 @@ export const ERROR_CODE_FIELD: Record<string, string> = {
 export const FIELD_ALIASES: Record<string, string> = {
   rateWithinRange: 'discountValue',
   singleSource: 'cartItemIds',
+  closeAfterOpen: 'closeAt',
 };

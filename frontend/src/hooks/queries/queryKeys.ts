@@ -1,4 +1,5 @@
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
+import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
 import type { AdminOrderListParams, OrderListParams } from '@/types/order';
 import type { AdminProductListParams, ProductListParams } from '@/types/product';
 import type { ReviewListParams } from '@/types/review';
@@ -66,6 +67,20 @@ export const couponKeys = {
 export const adminCouponKeys = {
   all: ['adminCoupons'] as const,
   list: (params: AdminCouponListParams) => ['adminCoupons', params] as const,
+};
+
+export const limitedDropKeys = {
+  all: ['limitedDrops'] as const,
+  list: (status?: LimitedDropStatus) => ['limitedDrops', status ?? 'all'] as const,
+  detail: (id: number) => ['limitedDrop', id] as const,
+};
+
+// list 를 'list' sub-prefix 로 분리해 오픈/마감 등 상태 변경 후 상세는 건드리지 않고 목록만 무효화한다.
+export const adminLimitedDropKeys = {
+  all: ['adminLimitedDrops'] as const,
+  lists: ['adminLimitedDrops', 'list'] as const,
+  list: (params: AdminLimitedDropListParams) => ['adminLimitedDrops', 'list', params] as const,
+  detail: (id: number) => ['adminLimitedDrops', 'detail', id] as const,
 };
 
 export const referenceKeys = {
