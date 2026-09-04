@@ -106,8 +106,8 @@ class OrderControllerTest {
 		@Test
 		@DisplayName("재고 락 대기에 실패하면 409 STOCK_CONFLICT 를 반환한다")
 		void returnsConflictWhenStockLockFails() throws Exception {
-			// given
-			willThrow(new PessimisticLockingFailureException("lock wait timeout"))
+			// given: 재고 락 실패는 OrderStockService 가 도메인 코드로 확정해 던진다.
+			willThrow(new BusinessException(ErrorCode.STOCK_CONFLICT))
 					.given(orderService).create(eq(1L), any());
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
 
@@ -124,7 +124,7 @@ class OrderControllerTest {
 		@DisplayName("재고 버전 충돌이 나면 409 STOCK_CONFLICT 를 반환한다")
 		void returnsConflictWhenStockVersionConflicts() throws Exception {
 			// given
-			willThrow(new ObjectOptimisticLockingFailureException(Stock.class, 1L))
+			willThrow(new ObjectOptimisticLockingFailureException(Stock.class.getName(), 1L))
 					.given(orderService).create(eq(1L), any());
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
 
@@ -135,6 +135,23 @@ class OrderControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.error.code", is("STOCK_CONFLICT")));
+		}
+
+		@Test
+		@DisplayName("재고가 아닌 락 대기 실패는 409 COMMON_CONFLICT 를 반환한다")
+		void returnsCommonConflictWhenCouponLockFails() throws Exception {
+			// given: 쿠폰 락 실패는 서비스가 변환하지 않아 전역 핸들러까지 올라온다.
+			willThrow(new PessimisticLockingFailureException("lock wait timeout"))
+					.given(orderService).create(eq(1L), any());
+			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL)
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("COMMON_CONFLICT")));
 		}
 
 		@Test

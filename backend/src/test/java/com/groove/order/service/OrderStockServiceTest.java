@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
@@ -118,6 +121,37 @@ class OrderStockServiceTest {
 					.isEqualTo(ErrorCode.STOCK_NOT_FOUND);
 			verify(stockRepository, never()).flush();
 		}
+
+		@Test
+		@DisplayName("재고 락 대기에 실패하면 STOCK_CONFLICT 예외를 던지고 flush 하지 않는다")
+		void throwsStockConflictWhenLockWaitFails() {
+			// given
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willThrow(new PessimisticLockingFailureException("lock wait timeout"));
+
+			// when & then
+			assertThatThrownBy(() -> orderStockService.deduct(order))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.STOCK_CONFLICT);
+			verify(stockRepository, never()).flush();
+		}
+
+		@Test
+		@DisplayName("재고 UPDATE flush 가 데드락으로 실패하면 STOCK_CONFLICT 예외를 던지고 이력을 남기지 않는다")
+		void throwsStockConflictWhenFlushDeadlocks() {
+			// given
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willReturn(List.of(stock));
+			willThrow(new CannotAcquireLockException("deadlock found")).given(stockRepository).flush();
+
+			// when & then
+			assertThatThrownBy(() -> orderStockService.deduct(order))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.STOCK_CONFLICT);
+			verify(stockHistoryRepository, never()).save(any());
+		}
 	}
 
 	@Nested
@@ -157,6 +191,37 @@ class OrderStockServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.STOCK_NOT_FOUND);
 			verify(stockRepository, never()).flush();
+		}
+
+		@Test
+		@DisplayName("재고 락 대기에 실패하면 STOCK_CONFLICT 예외를 던지고 flush 하지 않는다")
+		void throwsStockConflictWhenLockWaitFails() {
+			// given
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willThrow(new PessimisticLockingFailureException("lock wait timeout"));
+
+			// when & then
+			assertThatThrownBy(() -> orderStockService.restore(order))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.STOCK_CONFLICT);
+			verify(stockRepository, never()).flush();
+		}
+
+		@Test
+		@DisplayName("재고 UPDATE flush 가 데드락으로 실패하면 STOCK_CONFLICT 예외를 던지고 이력을 남기지 않는다")
+		void throwsStockConflictWhenFlushDeadlocks() {
+			// given
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willReturn(List.of(stock));
+			willThrow(new CannotAcquireLockException("deadlock found")).given(stockRepository).flush();
+
+			// when & then
+			assertThatThrownBy(() -> orderStockService.restore(order))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.STOCK_CONFLICT);
+			verify(stockHistoryRepository, never()).save(any());
 		}
 	}
 }

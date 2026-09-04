@@ -146,7 +146,7 @@ class AdminStockControllerTest {
 		void returnsConflictWhenOptimisticLockFails() throws Exception {
 			// given
 			StockAdjustRequest request = StockFixture.adjustRequest(StockChangeType.OUT, 1);
-			willThrow(new ObjectOptimisticLockingFailureException(Stock.class, 1L))
+			willThrow(new ObjectOptimisticLockingFailureException(Stock.class.getName(), 1L))
 					.given(stockService).adjust(eq(PRODUCT_ID), any());
 
 			// when & then
