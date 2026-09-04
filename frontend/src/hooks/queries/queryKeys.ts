@@ -1,6 +1,7 @@
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminOrderListParams, OrderListParams } from '@/types/order';
 import type { AdminProductListParams, ProductListParams } from '@/types/product';
+import type { ReviewListParams } from '@/types/review';
 import type { WishlistListParams } from '@/types/wishlist';
 
 export const memberKeys = {
@@ -40,6 +41,14 @@ export const adminOrderKeys = {
   lists: ['adminOrders', 'list'] as const,
   list: (params: AdminOrderListParams) => ['adminOrders', 'list', params] as const,
   detail: (id: number) => ['adminOrders', 'detail', id] as const,
+};
+
+export const reviewKeys = {
+  all: ['reviews'] as const,
+  product: (productId: number) => ['reviews', productId] as const,
+  list: (productId: number, params: ReviewListParams) =>
+    ['reviews', productId, 'list', params] as const,
+  eligibility: (productId: number) => ['reviews', productId, 'eligibility'] as const,
 };
 
 export const wishlistKeys = {
