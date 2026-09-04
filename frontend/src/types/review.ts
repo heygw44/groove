@@ -30,3 +30,11 @@ export interface ReviewEligibility {
   eligible: boolean;
   reason?: ReviewIneligibleReason;
 }
+
+export type ReviewRatingDistribution = Record<'1' | '2' | '3' | '4' | '5', number>;
+
+export interface ReviewStats {
+  averageRating?: number;
+  reviewCount: number;
+  distribution: ReviewRatingDistribution;
+}

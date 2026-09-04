@@ -2,6 +2,7 @@ package com.groove.review.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -42,7 +43,9 @@ import com.groove.product.repository.ProductRepository;
 import com.groove.review.dto.ReviewEligibilityResponse;
 import com.groove.review.dto.ReviewIneligibleReason;
 import com.groove.review.dto.ReviewListRequest;
+import com.groove.review.dto.ReviewRatingCount;
 import com.groove.review.dto.ReviewResponse;
+import com.groove.review.dto.ReviewStatsResponse;
 import com.groove.review.dto.ReviewUpdateRequest;
 import com.groove.review.entity.Review;
 import com.groove.review.repository.ReviewRepository;
@@ -238,6 +241,40 @@ class ReviewServiceTest {
 			assertThat(used).isEqualTo(PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "rating")
 					.and(Sort.by(Sort.Direction.DESC, "createdAt", "id"))));
 			assertThat(response.content()).extracting(ReviewResponse::mine).containsExactly(true, false);
+		}
+	}
+
+	@Nested
+	@DisplayName("getStats()")
+	class GetStats {
+
+		@Test
+		@DisplayName("존재하지 않는 상품이면 PRODUCT_NOT_FOUND 예외를 던진다")
+		void throwsWhenProductNotFound() {
+			// given
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> reviewService.getStats(PRODUCT_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("작성된 별점이 없는 구간은 0 으로 채운다")
+		void fillsMissingRatingsWithZero() {
+			// given
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(reviewRepository.countByRatingForProduct(PRODUCT_ID))
+					.willReturn(List.of(new ReviewRatingCount(5, 2L), new ReviewRatingCount(3, 1L)));
+
+			// when
+			ReviewStatsResponse response = reviewService.getStats(PRODUCT_ID);
+
+			// then
+			assertThat(response.distribution()).containsExactly(entry(1, 0L), entry(2, 0L), entry(3, 1L),
+					entry(4, 0L), entry(5, 2L));
 		}
 	}
 

@@ -14,8 +14,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,6 +33,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.auth.jwt.JwtProvider;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.global.config.JacksonConfig;
 import com.groove.global.config.RestAccessDeniedHandler;
@@ -42,6 +46,7 @@ import com.groove.review.dto.ReviewCreateRequest;
 import com.groove.review.dto.ReviewEligibilityResponse;
 import com.groove.review.dto.ReviewIneligibleReason;
 import com.groove.review.dto.ReviewResponse;
+import com.groove.review.dto.ReviewStatsResponse;
 import com.groove.review.dto.ReviewUpdateRequest;
 import com.groove.review.service.ReviewService;
 
@@ -119,6 +124,38 @@ class ReviewControllerTest {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.eligible", is(false)))
 					.andExpect(jsonPath("$.data.reason", is("LOGIN_REQUIRED")));
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/products/{productId}/reviews/stats")
+	class GetStats {
+
+		@Test
+		@DisplayName("비로그인이어도 200 과 별점 분포를 반환한다")
+		void returnsStatsWithoutLogin() throws Exception {
+			// given
+			Map<Integer, Long> distribution = Map.of(1, 0L, 2, 0L, 3, 1L, 4, 0L, 5, 2L);
+			given(reviewService.getStats(PRODUCT_ID))
+					.willReturn(new ReviewStatsResponse(new BigDecimal("4.3"), 3, distribution));
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products/{productId}/reviews/stats", PRODUCT_ID))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.distribution.5", is(2)))
+					.andExpect(jsonPath("$.data.reviewCount", is(3)));
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 상품이면 404 를 반환한다")
+		void returnsNotFoundWhenProductMissing() throws Exception {
+			// given
+			given(reviewService.getStats(PRODUCT_ID)).willThrow(new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products/{productId}/reviews/stats", PRODUCT_ID))
+					.andExpect(status().isNotFound())
+					.andExpect(jsonPath("$.error.code", is("PRODUCT_NOT_FOUND")));
 		}
 	}
 
