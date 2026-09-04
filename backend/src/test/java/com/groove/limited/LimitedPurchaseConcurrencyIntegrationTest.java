@@ -2,6 +2,8 @@ package com.groove.limited;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -80,11 +82,14 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 	@Autowired
 	private LimitedPurchaseService limitedPurchaseService;
 
+	@Autowired
+	private Clock clock;
+
 	private Long dropId;
 
-	private static LimitedDrop openDrop(Product product, int totalQuantity) {
+	private LimitedDrop openDrop(Product product, int totalQuantity) {
 		LimitedDrop drop = LimitedDropFixture.open(product, totalQuantity);
-		java.time.LocalDateTime now = java.time.LocalDateTime.now();
+		LocalDateTime now = LocalDateTime.now(clock);
 		LimitedDropFixture.withOpenAt(drop, now.minusHours(1));
 		LimitedDropFixture.withCloseAt(drop, now.plusHours(1));
 		return drop;
@@ -149,7 +154,6 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			startLatch.countDown();
 			executorService.shutdown();
 			boolean finished = executorService.awaitTermination(30, TimeUnit.SECONDS);
-			logFailures(results);
 
 			// then
 			assertThat(finished).isTrue();
@@ -214,20 +218,11 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			startLatch.countDown();
 			executorService.shutdown();
 			boolean finished = executorService.awaitTermination(30, TimeUnit.SECONDS);
-			logFailures(results);
 
 			// then
 			assertThat(finished).isTrue();
 			assertThat(successCount.get()).isEqualTo(1);
 			assertThat(limitedPurchaseRepository.existsByDropIdAndMemberId(dropId, member.getId())).isTrue();
-		}
-
-		private void logFailures(List<AtomicReference<Throwable>> results) {
-			results.stream()
-					.map(AtomicReference::get)
-					.filter(throwable -> throwable != null)
-					.forEach(throwable -> System.out.println(
-							"동시성 테스트 실패 원인: " + throwable.getClass().getName() + " - " + throwable.getMessage()));
 		}
 	}
 }
