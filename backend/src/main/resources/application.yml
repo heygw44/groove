@@ -63,6 +63,10 @@ file:
   upload-path: ${FILE_UPLOAD_PATH:./uploads}
   base-url: ${FILE_BASE_URL:http://localhost:8080/uploads}
 
+limited:
+  # 부하 테스트에서 Redis ON/OFF 를 비교하기 위한 스위치. 운영에서는 항상 true 로 둔다.
+  redis-enabled: ${LIMITED_REDIS_ENABLED:true}
+
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
 

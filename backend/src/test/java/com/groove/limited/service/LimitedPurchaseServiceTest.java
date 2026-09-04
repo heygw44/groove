@@ -6,7 +6,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -26,6 +28,7 @@ import com.groove.fixture.LimitedDropFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.limited.config.LimitedProperties;
 import com.groove.limited.dto.LimitedPurchaseResponse;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.repository.LimitedDropRepository;
@@ -54,7 +57,7 @@ class LimitedPurchaseServiceTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		limitedPurchaseService = new LimitedPurchaseService(limitedDropRepository, limitedDropRedisService,
-				limitedPurchaseWriter, clock);
+				limitedPurchaseWriter, new LimitedProperties(true), clock);
 	}
 
 	@Nested
@@ -150,7 +153,7 @@ class LimitedPurchaseServiceTest {
 			given(limitedDropRepository.findById(6L)).willReturn(Optional.of(drop));
 			given(limitedDropRedisService.reserve(6L, 10L)).willReturn(LimitedDropRedisService.ReserveResult.OK);
 			LimitedPurchaseResponse response = new LimitedPurchaseResponse(1L, "20260904-ABCDE123",
-					new java.math.BigDecimal("10000"), java.time.LocalDateTime.now());
+					new BigDecimal("10000"), LocalDateTime.now(clock));
 			given(limitedPurchaseWriter.write(6L, 10L, 20L)).willReturn(response);
 
 			// when
@@ -159,6 +162,52 @@ class LimitedPurchaseServiceTest {
 			// then
 			assertThat(result).isEqualTo(response);
 			verify(limitedDropRedisService, never()).release(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("purchase() - limited.redis-enabled=false")
+	class PurchaseWithRedisDisabled {
+
+		@Test
+		@DisplayName("Redis 를 건너뛰고 Writer 결과를 그대로 반환한다")
+		void writesWithoutTouchingRedis() {
+			// given
+			LimitedProperties redisDisabled = new LimitedProperties(false);
+			LimitedPurchaseService service = new LimitedPurchaseService(limitedDropRepository,
+					limitedDropRedisService, limitedPurchaseWriter, redisDisabled, clock);
+			LimitedDrop drop = openDrop(7L);
+			given(limitedDropRepository.findById(7L)).willReturn(Optional.of(drop));
+			LimitedPurchaseResponse response = new LimitedPurchaseResponse(1L, "20260904-ABCDE123",
+					new BigDecimal("10000"), LocalDateTime.now(clock));
+			given(limitedPurchaseWriter.write(7L, 10L, 20L)).willReturn(response);
+
+			// when
+			LimitedPurchaseResponse result = service.purchase(7L, 10L, 20L);
+
+			// then
+			assertThat(result).isEqualTo(response);
+			verifyNoInteractions(limitedDropRedisService);
+		}
+
+		@Test
+		@DisplayName("Writer 에서 예외가 나면 Redis 를 호출하지 않고 예외를 그대로 던진다")
+		void propagatesWriterExceptionWithoutRelease() {
+			// given
+			LimitedProperties redisDisabled = new LimitedProperties(false);
+			LimitedPurchaseService service = new LimitedPurchaseService(limitedDropRepository,
+					limitedDropRedisService, limitedPurchaseWriter, redisDisabled, clock);
+			LimitedDrop drop = openDrop(8L);
+			given(limitedDropRepository.findById(8L)).willReturn(Optional.of(drop));
+			given(limitedPurchaseWriter.write(8L, 10L, 20L))
+					.willThrow(new BusinessException(ErrorCode.MEMBER_ADDRESS_NOT_FOUND));
+
+			// when & then
+			assertThatThrownBy(() -> service.purchase(8L, 10L, 20L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_ADDRESS_NOT_FOUND);
+			verifyNoInteractions(limitedDropRedisService);
 		}
 	}
 

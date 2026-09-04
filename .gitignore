@@ -32,8 +32,9 @@ frontend/.vite/
 backend/bin/
 .DS_Store
 
-# k6 결과
-scripts/k6/results/
+# k6 결과 (마크다운 리포트만 예외적으로 추적)
+scripts/k6/results/*
+!scripts/k6/results/*.md
 
 # Claude
 .claude/
