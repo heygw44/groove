@@ -70,6 +70,26 @@ const NAV_ITEMS: MyPageNavItem[] = [
     ),
   },
   {
+    to: '/mypage/coupons',
+    label: '쿠폰함',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M2.5 8.2a1.7 1.7 0 0 0 0 3.6v2.7a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-2.7a1.7 1.7 0 0 1 0-3.6V5.5a1 1 0 0 0-1-1h-13a1 1 0 0 0-1 1v2.7Z" />
+        <path d="M8 4.8v10.4" strokeDasharray="1.8 1.8" />
+      </svg>
+    ),
+  },
+  {
     to: '/mypage/addresses',
     label: '배송지 관리',
     icon: (

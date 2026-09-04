@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { FieldValues, Path, UseFormSetError } from 'react-hook-form';
 
-import { ERROR_CODE_FIELD, ERROR_MESSAGES } from '@/constants/errorMessages';
+import { ERROR_CODE_FIELD, ERROR_MESSAGES, FIELD_ALIASES } from '@/constants/errorMessages';
 import type { ApiError } from '@/types/api';
 
 /**
@@ -42,8 +42,9 @@ export const applyFieldErrors = <T extends FieldValues>(
 
   const fieldErrors = apiError.fieldErrors ?? [];
   fieldErrors.forEach((fieldError, index) => {
+    const field = FIELD_ALIASES[fieldError.field] ?? fieldError.field;
     setError(
-      fieldError.field as Path<T>,
+      field as Path<T>,
       { type: 'server', message: fieldError.reason },
       { shouldFocus: index === 0 },
     );
