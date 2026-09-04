@@ -3,6 +3,7 @@ package com.groove.order.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +17,9 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.limited.service.LimitedPurchaseWriter;
+import com.groove.limited.service.LimitedRelease;
 import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
@@ -49,6 +52,7 @@ public class OrderService {
 	private final AddressRepository addressRepository;
 	private final ProductRepository productRepository;
 	private final LimitedDropRepository limitedDropRepository;
+	private final LimitedPurchaseRepository limitedPurchaseRepository;
 	private final LimitedPurchaseWriter limitedPurchaseWriter;
 	private final LimitedReleaseSynchronizer limitedReleaseSynchronizer;
 	private final CartItemRepository cartItemRepository;
@@ -112,7 +116,10 @@ public class OrderService {
 	public OrderDetailResponse getDetail(Long memberId, Long orderId) {
 		Order order = orderRepository.findWithItemsByIdAndMemberId(orderId, memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		return OrderDetailResponse.from(order);
+		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
+				.map(purchase -> purchase.getDrop().getId())
+				.orElse(null);
+		return OrderDetailResponse.from(order, limitedDropId);
 	}
 
 	@Transactional
@@ -126,13 +133,15 @@ public class OrderService {
 		order.cancel(reason);
 		orderStockService.restore(order);
 		restoreCoupon(order);
-		limitedPurchaseWriter.revertByOrder(order.getId(), LocalDateTime.now(clock))
-				.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
+		Optional<LimitedRelease> limitedRelease = limitedPurchaseWriter.revertByOrder(order.getId(),
+				LocalDateTime.now(clock));
+		limitedRelease.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
 
 		if (previousStatus == OrderStatus.PAID) {
 			paymentCancelHook.onPaidOrderCanceled(order);
 		}
-		return OrderDetailResponse.from(order);
+		Long limitedDropId = limitedRelease.map(LimitedRelease::dropId).orElse(null);
+		return OrderDetailResponse.from(order, limitedDropId);
 	}
 
 	private void restoreCoupon(Order order) {

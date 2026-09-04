@@ -9,6 +9,8 @@ interface ModalProps {
   children?: ReactNode;
   footer?: ReactNode;
   size?: 'sm' | 'md';
+  /** 'bottom' 은 모바일에서 화면 아래에서 올라오는 시트로 보이고, sm 이상에서는 center 와 같다. */
+  placement?: 'center' | 'bottom';
 }
 
 const SIZE_CLASS = {
@@ -24,6 +26,7 @@ export function Modal({
   children,
   footer,
   size = 'md',
+  placement = 'center',
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -58,7 +61,9 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-content/45 p-4"
+      className={`fixed inset-0 z-50 flex justify-center bg-content/45 p-4 ${
+        placement === 'bottom' ? 'items-end sm:items-center' : 'items-center'
+      }`}
       onMouseDown={(event) => {
         /* 패널 안에서 시작한 드래그가 바깥에서 끝나도 닫히지 않게 target 을 본다. */
         if (event.target === event.currentTarget) {
@@ -73,7 +78,9 @@ export function Modal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`w-full ${SIZE_CLASS[size]} overflow-hidden rounded-lg bg-surface shadow-2xl outline-none`}
+        className={`w-full ${SIZE_CLASS[size]} overflow-hidden bg-surface shadow-2xl outline-none ${
+          placement === 'bottom' ? 'rounded-t-lg sm:rounded-lg' : 'rounded-lg'
+        }`}
       >
         <div className="flex items-start justify-between gap-4 px-6 pt-5">
           <div>

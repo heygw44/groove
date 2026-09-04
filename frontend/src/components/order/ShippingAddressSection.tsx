@@ -12,7 +12,7 @@ interface ShippingAddressSectionProps {
   onSelect: (id: number) => void;
 }
 
-function AddressLine({ address }: { address: Address }) {
+export function AddressLine({ address }: { address: Address }) {
   return (
     <div className="flex flex-col gap-0.5 text-sm">
       <div className="flex items-center gap-2">

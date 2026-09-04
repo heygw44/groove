@@ -96,3 +96,27 @@ export function pickBannerDrop(drops: LimitedDropSummary[]): LimitedDropSummary 
     return toServerMs(a.openAt) - toServerMs(b.openAt);
   })[0];
 }
+
+export type PurchaseErrorKind =
+  | 'SOLD_OUT'
+  | 'ALREADY_PURCHASED'
+  | 'STATE_CHANGED'
+  | 'ADDRESS_MISSING'
+  | 'UNKNOWN';
+
+const PURCHASE_ERROR_CODE_KIND: Record<string, PurchaseErrorKind> = {
+  LIMITED_SOLD_OUT: 'SOLD_OUT',
+  LIMITED_ALREADY_PURCHASED: 'ALREADY_PURCHASED',
+  LIMITED_NOT_OPEN: 'STATE_CHANGED',
+  LIMITED_CLOSED: 'STATE_CHANGED',
+  LIMITED_INVALID_STATUS: 'STATE_CHANGED',
+  MEMBER_ADDRESS_NOT_FOUND: 'ADDRESS_MISSING',
+};
+
+/** 한정반 구매 요청 실패 코드를 화면 처리 분기로 좁힌다. */
+export function classifyPurchaseError(code: string | undefined): PurchaseErrorKind {
+  if (!code) {
+    return 'UNKNOWN';
+  }
+  return PURCHASE_ERROR_CODE_KIND[code] ?? 'UNKNOWN';
+}

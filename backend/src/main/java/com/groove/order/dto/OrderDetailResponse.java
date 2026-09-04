@@ -20,16 +20,21 @@ public record OrderDetailResponse(
 		LocalDateTime createdAt,
 		LocalDateTime expiresAt,
 		LocalDateTime canceledAt,
-		String cancelReason
+		String cancelReason,
+		Long limitedDropId
 ) {
 
 	public static OrderDetailResponse from(Order order) {
+		return from(order, null);
+	}
+
+	public static OrderDetailResponse from(Order order, Long limitedDropId) {
 		List<OrderItemResponse> items = order.getItems().stream()
 				.map(OrderItemResponse::from)
 				.toList();
 		return new OrderDetailResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
 				order.getTotalAmount(), order.getDiscountAmount(), order.getFinalAmount(), order.getCouponName(),
 				items, ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(),
-				order.getExpiresAt(), order.getCanceledAt(), order.getCancelReason());
+				order.getExpiresAt(), order.getCanceledAt(), order.getCancelReason(), limitedDropId);
 	}
 }
