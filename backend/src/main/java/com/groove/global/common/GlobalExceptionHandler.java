@@ -38,8 +38,9 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
 		ErrorCode code = ex.getErrorCode();
 		log.warn("BusinessException: {} - {}", code.name(), ex.getMessage());
+		// 상세 메시지에는 외부 연동 응답 원문이 실릴 수 있어 로그에만 남기고, 응답에는 고정 메시지만 내보낸다.
 		return ResponseEntity.status(code.getStatus())
-				.body(ApiResponse.error(code.name(), ex.getMessage()));
+				.body(ApiResponse.error(code.name(), code.getMessage()));
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
