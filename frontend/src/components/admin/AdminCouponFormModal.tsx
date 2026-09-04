@@ -24,6 +24,7 @@ import {
 } from '@/schemas/adminCoupon';
 import type { AdminCouponSummary } from '@/types/coupon';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
+import { toDatetimeLocalValue } from '@/utils/formatDate';
 import { getServerNow } from '@/utils/serverTime';
 
 interface AdminCouponFormModalProps {
@@ -37,12 +38,6 @@ const DISCOUNT_TYPE_OPTIONS: { value: AdminCouponFormValues['discountType']; lab
   { value: 'FIXED', label: '정액' },
   { value: 'RATE', label: '정률' },
 ];
-
-const pad2 = (value: number): string => String(value).padStart(2, '0');
-
-/** datetime-local min 속성은 로컬 시각 "YYYY-MM-DDTHH:mm" 형식을 요구한다. */
-const toDatetimeLocalValue = (date: Date): string =>
-  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 
 export function AdminCouponFormModal({ open, onClose, coupon }: AdminCouponFormModalProps) {
   const isEdit = Boolean(coupon);

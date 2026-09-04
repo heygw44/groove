@@ -19,3 +19,8 @@ export function formatDateTime(value: string | Date): string {
   const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
   return `${datePart} ${time}`;
 }
+
+/** datetime-local input 의 min/value 속성은 로컬 시각 "YYYY-MM-DDTHH:mm" 형식을 요구한다. */
+export function toDatetimeLocalValue(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}

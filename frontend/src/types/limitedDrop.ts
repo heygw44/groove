@@ -1,3 +1,5 @@
+import type { OrderStatus } from './order';
+
 export type LimitedDropStatus = 'SCHEDULED' | 'OPEN' | 'SOLD_OUT' | 'CLOSED';
 
 export interface LimitedDropProduct {
@@ -82,7 +84,7 @@ export interface AdminLimitedPurchase {
   memberNickname: string;
   orderId?: number;
   orderNumber?: string;
-  orderStatus?: string;
+  orderStatus?: OrderStatus;
   quantity: number;
   purchasedAt: string;
 }

@@ -18,6 +18,7 @@ import com.groove.auth.LoginMember;
 import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
+import com.groove.limited.dto.AdminLimitedDropDetailResponse;
 import com.groove.limited.dto.AdminLimitedDropResponse;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
 import com.groove.limited.dto.LimitedDropCreateRequest;
@@ -52,6 +53,12 @@ public class AdminLimitedDropController {
 			@RequestParam(required = false) LimitedDropStatus status,
 			@PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 		return ApiResponse.ok(adminLimitedDropService.getList(status, pageable));
+	}
+
+	@Operation(summary = "한정반 드롭 상세 조회")
+	@GetMapping("/{id}")
+	public ApiResponse<AdminLimitedDropDetailResponse> getDetail(@PathVariable Long id) {
+		return ApiResponse.ok(adminLimitedDropService.getDetail(id));
 	}
 
 	@Operation(summary = "한정반 드롭 수정")

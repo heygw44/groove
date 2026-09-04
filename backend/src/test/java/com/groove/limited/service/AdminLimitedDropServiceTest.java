@@ -32,6 +32,9 @@ import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
+import com.groove.fixture.LimitedPurchaseFixture;
+import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -39,13 +42,18 @@ import com.groove.global.common.PageResponse;
 import com.groove.inventory.dto.StockAdjustRequest;
 import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.service.StockService;
+import com.groove.limited.dto.AdminLimitedDropDetailResponse;
 import com.groove.limited.dto.AdminLimitedDropResponse;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
 import com.groove.limited.dto.LimitedDropCreateRequest;
 import com.groove.limited.dto.LimitedDropUpdateRequest;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.repository.LimitedPurchaseRepository;
+import com.groove.member.entity.Member;
+import com.groove.order.entity.Order;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
@@ -59,6 +67,9 @@ class AdminLimitedDropServiceTest {
 
 	@Mock
 	LimitedDropRepository limitedDropRepository;
+
+	@Mock
+	LimitedPurchaseRepository limitedPurchaseRepository;
 
 	@Mock
 	ProductRepository productRepository;
@@ -78,8 +89,8 @@ class AdminLimitedDropServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		adminLimitedDropService = new AdminLimitedDropService(limitedDropRepository, productRepository, stockService,
-				limitedDropRedisService, adminAuditLogService);
+		adminLimitedDropService = new AdminLimitedDropService(limitedDropRepository, limitedPurchaseRepository,
+				productRepository, stockService, limitedDropRedisService, adminAuditLogService);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 	}
@@ -429,6 +440,89 @@ class AdminLimitedDropServiceTest {
 			// then
 			assertThat(response.content()).hasSize(1);
 			verify(limitedDropRepository).findAdminSummaries(LimitedDropStatus.OPEN, pageable);
+		}
+	}
+
+	@Nested
+	@DisplayName("getDetail()")
+	class GetDetail {
+
+		@Test
+		@DisplayName("존재하지 않는 드롭이면 LIMITED_DROP_NOT_FOUND 예외를 던진다")
+		void throwsWhenDropNotFound() {
+			// given
+			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminLimitedDropService.getDetail(DROP_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.LIMITED_DROP_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("Redis 값이 있으면 redisRemaining에 그 값을 채운다")
+		void fillsRedisRemainingWhenPresent() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.open(product, 100), DROP_ID);
+			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
+			given(limitedDropRedisService.getStock(DROP_ID)).willReturn(Optional.of(80));
+			given(limitedPurchaseRepository.findAllWithMemberAndOrderByDropId(DROP_ID)).willReturn(List.of());
+
+			// when
+			AdminLimitedDropDetailResponse response = adminLimitedDropService.getDetail(DROP_ID);
+
+			// then
+			assertThat(response.redisRemaining()).isEqualTo(80);
+			assertThat(response.dbRemaining()).isEqualTo(drop.remainingQuantity());
+		}
+
+		@Test
+		@DisplayName("Redis 값이 없으면 redisRemaining이 null이다")
+		void leavesRedisRemainingNullWhenAbsent() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.scheduled(product), DROP_ID);
+			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
+			given(limitedDropRedisService.getStock(DROP_ID)).willReturn(Optional.empty());
+			given(limitedPurchaseRepository.findAllWithMemberAndOrderByDropId(DROP_ID)).willReturn(List.of());
+
+			// when
+			AdminLimitedDropDetailResponse response = adminLimitedDropService.getDetail(DROP_ID);
+
+			// then
+			assertThat(response.redisRemaining()).isNull();
+		}
+
+		@Test
+		@DisplayName("구매자 목록을 매핑하며 주문이 없는 구매도 order 필드가 null인 채로 포함한다")
+		void mapsPurchasesIncludingOneWithoutOrder() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.open(product, 100), DROP_ID);
+			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
+			given(limitedDropRedisService.getStock(DROP_ID)).willReturn(Optional.of(90));
+
+			Member memberWithoutOrder = MemberFixture.withId(MemberFixture.create("no-order@groove.com", "구매자1"),
+					5L);
+			LimitedPurchase purchaseWithoutOrder = LimitedPurchaseFixture.create(drop, memberWithoutOrder);
+
+			Member memberWithOrder = MemberFixture.withId(MemberFixture.create("with-order@groove.com", "구매자2"), 6L);
+			Order order = OrderFixture.withId(OrderFixture.create(memberWithOrder), 20L);
+			LimitedPurchase purchaseWithOrder = LimitedPurchaseFixture.create(drop, memberWithOrder, order, 1);
+
+			given(limitedPurchaseRepository.findAllWithMemberAndOrderByDropId(DROP_ID))
+					.willReturn(List.of(purchaseWithoutOrder, purchaseWithOrder));
+
+			// when
+			AdminLimitedDropDetailResponse response = adminLimitedDropService.getDetail(DROP_ID);
+
+			// then
+			assertThat(response.purchases()).hasSize(2);
+			assertThat(response.purchases().get(0).memberNickname()).isEqualTo("구매자1");
+			assertThat(response.purchases().get(0).orderId()).isNull();
+			assertThat(response.purchases().get(0).orderNumber()).isNull();
+			assertThat(response.purchases().get(1).memberNickname()).isEqualTo("구매자2");
+			assertThat(response.purchases().get(1).orderId()).isEqualTo(20L);
+			assertThat(response.purchases().get(1).orderNumber()).isEqualTo(order.getOrderNumber());
 		}
 	}
 }
