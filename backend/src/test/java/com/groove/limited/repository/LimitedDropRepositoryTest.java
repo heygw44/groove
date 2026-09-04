@@ -3,6 +3,8 @@ package com.groove.limited.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
@@ -154,7 +157,7 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 
 			// when
 			Page<AdminLimitedDropSummaryResponse> page = limitedDropRepository.findAdminSummaries(
-					LimitedDropStatus.OPEN, PageRequest.of(0, 20));
+					LimitedDropStatus.OPEN, PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id")));
 
 			// then
 			List<Long> ids = page.getContent().stream().map(AdminLimitedDropSummaryResponse::id).toList();
@@ -173,7 +176,7 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 
 			// when
 			Page<AdminLimitedDropSummaryResponse> page = limitedDropRepository.findAdminSummaries(null,
-					PageRequest.of(0, 20));
+					PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id")));
 
 			// then
 			List<Long> ids = page.getContent().stream().map(AdminLimitedDropSummaryResponse::id).toList();
@@ -186,9 +189,13 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
 			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품10"));
-			LimitedDrop drop = LimitedDropFixture.withSoldCount(LimitedDropFixture.open(product, 50), 7);
-			LimitedDrop saved = limitedDropRepository.save(drop);
-			Pageable pageable = PageRequest.of(0, 20);
+			// MySQL datetime(6) 이 나노초를 반올림하므로 초 단위로 잘라 저장한다.
+			LocalDateTime openAt = LocalDateTime.now().plusDays(1).truncatedTo(ChronoUnit.SECONDS);
+			LocalDateTime closeAt = openAt.plusDays(1);
+			LimitedDrop drop = LimitedDropFixture.withCloseAt(
+					LimitedDropFixture.withOpenAt(LimitedDropFixture.open(product, 50), openAt), closeAt);
+			LimitedDrop saved = limitedDropRepository.save(LimitedDropFixture.withSoldCount(drop, 7));
+			Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"));
 
 			// when
 			Page<AdminLimitedDropSummaryResponse> page = limitedDropRepository.findAdminSummaries(
@@ -204,8 +211,8 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 			assertThat(summary.totalQuantity()).isEqualTo(50);
 			assertThat(summary.soldCount()).isEqualTo(7);
 			assertThat(summary.perMemberLimit()).isEqualTo(saved.getPerMemberLimit());
-			assertThat(summary.openAt()).isEqualTo(saved.getOpenAt());
-			assertThat(summary.closeAt()).isEqualTo(saved.getCloseAt());
+			assertThat(summary.openAt()).isEqualTo(openAt);
+			assertThat(summary.closeAt()).isEqualTo(closeAt);
 			assertThat(summary.status()).isEqualTo(LimitedDropStatus.OPEN);
 			assertThat(summary.createdAt()).isNotNull();
 		}
