@@ -1,4 +1,4 @@
-import type { MemberCouponStatus } from '@/types/coupon';
+import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminOrderListParams, OrderListParams } from '@/types/order';
 import type { AdminProductListParams, ProductListParams } from '@/types/product';
 import type { WishlistListParams } from '@/types/wishlist';
@@ -51,6 +51,11 @@ export const couponKeys = {
   all: ['coupons'] as const,
   mine: (status?: MemberCouponStatus) => ['coupons', 'me', status ?? 'all'] as const,
   available: (orderAmount: number) => ['coupons', 'available', orderAmount] as const,
+};
+
+export const adminCouponKeys = {
+  all: ['adminCoupons'] as const,
+  list: (params: AdminCouponListParams) => ['adminCoupons', params] as const,
 };
 
 export const referenceKeys = {

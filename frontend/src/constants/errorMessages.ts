@@ -57,6 +57,8 @@ export const ERROR_CODE_FIELD: Record<string, string> = {
   COUPON_DISABLED: 'code',
   COUPON_SOLD_OUT: 'code',
   COUPON_ALREADY_ISSUED: 'code',
+  COUPON_CODE_DUPLICATE: 'code',
+  COUPON_QUANTITY_BELOW_ISSUED: 'totalQuantity',
 };
 
 /**
