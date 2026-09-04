@@ -361,25 +361,71 @@ class LimitedDropTest {
 			drop.recordSale(3);
 
 			// when
-			drop.restoreSale(1);
+			drop.restoreSale(1, drop.getOpenAt().plusMinutes(1));
 
 			// then
 			assertThat(drop.getSoldCount()).isEqualTo(2);
 		}
 
 		@Test
-		@DisplayName("SOLD_OUT 상태에서 복구하면 OPEN 으로 되돌아간다")
-		void revertsToOpenWhenSoldOut() {
+		@DisplayName("마감 시각 전 SOLD_OUT 상태에서 복구하면 OPEN 으로 되돌아간다")
+		void revertsToOpenWhenSoldOutBeforeCloseAt() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 5);
 			drop.recordSale(5);
 
 			// when
-			drop.restoreSale(1);
+			drop.restoreSale(1, drop.getCloseAt().minusMinutes(1));
 
 			// then
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
 			assertThat(drop.getSoldCount()).isEqualTo(4);
+		}
+
+		@Test
+		@DisplayName("마감 시각이 지난 SOLD_OUT 상태에서 복구해도 SOLD_OUT 을 유지한다")
+		void staysSoldOutWhenCloseAtPassed() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+			drop.recordSale(5);
+
+			// when
+			drop.restoreSale(1, drop.getCloseAt().plusMinutes(1));
+
+			// then
+			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.SOLD_OUT);
+			assertThat(drop.getSoldCount()).isEqualTo(4);
+		}
+
+		@Test
+		@DisplayName("CLOSED 상태에서 복구해도 CLOSED 를 유지하고 판매 수량만 줄어든다")
+		void staysClosedWhenAlreadyClosed() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+			drop.recordSale(3);
+			drop.close();
+
+			// when
+			drop.restoreSale(1, drop.getCloseAt().minusMinutes(1));
+
+			// then
+			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.CLOSED);
+			assertThat(drop.getSoldCount()).isEqualTo(2);
+		}
+
+		@Test
+		@DisplayName("OPEN 상태에서 복구해도 OPEN 을 유지한다")
+		void staysOpenWhenAlreadyOpen() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.open(product, 10);
+			drop.recordSale(3);
+
+			// when
+			drop.restoreSale(1, drop.getOpenAt().plusMinutes(1));
+
+			// then
+			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
+			assertThat(drop.getSoldCount()).isEqualTo(2);
 		}
 
 		@Test
@@ -390,7 +436,7 @@ class LimitedDropTest {
 			drop.recordSale(2);
 
 			// when & then
-			assertThatThrownBy(() -> drop.restoreSale(3))
+			assertThatThrownBy(() -> drop.restoreSale(3, drop.getOpenAt().plusMinutes(1)))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);

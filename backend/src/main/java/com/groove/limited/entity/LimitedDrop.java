@@ -157,13 +157,15 @@ public class LimitedDrop extends BaseTimeEntity {
 		}
 	}
 
-	/** PENDING 주문 만료 등으로 선점을 되돌릴 때 사용한다. */
-	public void restoreSale(int quantity) {
+	/**
+	 * PENDING 주문 만료 등으로 선점을 되돌린다. 마감 시각이 지났으면 SOLD_OUT 을 OPEN 으로 되돌리지 않는다.
+	 */
+	public void restoreSale(int quantity, LocalDateTime now) {
 		if (quantity <= 0 || this.soldCount - quantity < 0) {
 			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
 		}
 		this.soldCount -= quantity;
-		if (this.status == LimitedDropStatus.SOLD_OUT) {
+		if (this.status == LimitedDropStatus.SOLD_OUT && now.isBefore(this.closeAt)) {
 			this.status = LimitedDropStatus.OPEN;
 		}
 	}

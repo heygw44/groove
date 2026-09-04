@@ -167,6 +167,7 @@ class AdminOrderServiceTest {
 		void changesStatusAndRecordsAuditLog() {
 			// given
 			Order order = orderWithStatus(OrderStatus.PAID);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
 
@@ -186,6 +187,7 @@ class AdminOrderServiceTest {
 		void restoresStockAndCallsHookWhenCancelingPaidOrPreparing(OrderStatus previous) {
 			// given
 			Order order = orderWithStatus(previous);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
 
@@ -202,6 +204,7 @@ class AdminOrderServiceTest {
 		void throwsWhenTransitionNotAllowed() {
 			// given
 			Order order = orderWithStatus(OrderStatus.SHIPPED);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
 
@@ -219,6 +222,7 @@ class AdminOrderServiceTest {
 		void skipsStockRestoreAndHookWhenNotCanceling() {
 			// given
 			Order order = orderWithStatus(OrderStatus.PREPARING);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.SHIPPED);
 
@@ -234,7 +238,7 @@ class AdminOrderServiceTest {
 		@DisplayName("존재하지 않는 주문이면 ORDER_NOT_FOUND 예외를 던진다")
 		void throwsWhenOrderNotFound() {
 			// given
-			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.empty());
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.empty());
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
 
 			// when & then
@@ -253,6 +257,7 @@ class AdminOrderServiceTest {
 					CouponFixture.fixed("ADMIN5000", new BigDecimal("5000")));
 			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
 			memberCoupon.use(order.getId());
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
 
