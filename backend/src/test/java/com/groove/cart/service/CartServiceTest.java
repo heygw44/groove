@@ -34,6 +34,8 @@ import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
@@ -67,6 +69,9 @@ class CartServiceTest {
 	@Mock
 	StockRepository stockRepository;
 
+	@Mock
+	LimitedDropRepository limitedDropRepository;
+
 	CartService cartService;
 
 	Member member;
@@ -76,7 +81,7 @@ class CartServiceTest {
 	@BeforeEach
 	void setUp() {
 		cartService = new CartService(cartRepository, cartItemRepository, memberRepository, productRepository,
-				productImageRepository, stockRepository);
+				productImageRepository, stockRepository, limitedDropRepository);
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
@@ -190,6 +195,22 @@ class CartServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_HIDDEN);
+		}
+
+		@Test
+		@DisplayName("활성 드롭이 있는 상품이면 PRODUCT_LIMITED_ONLY 예외를 던진다")
+		void throwsWhenProductHasActiveLimitedDrop() {
+			// given
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(limitedDropRepository.existsByProductIdAndStatusNot(PRODUCT_ID, LimitedDropStatus.CLOSED))
+					.willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> cartService.addItem(MEMBER_ID, CartFixture.addRequest(PRODUCT_ID, 1)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_LIMITED_ONLY);
 		}
 
 		@Test

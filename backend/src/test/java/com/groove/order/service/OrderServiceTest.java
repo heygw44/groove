@@ -41,6 +41,8 @@ import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -78,6 +80,9 @@ class OrderServiceTest {
 	ProductRepository productRepository;
 
 	@Mock
+	LimitedDropRepository limitedDropRepository;
+
+	@Mock
 	CartItemRepository cartItemRepository;
 
 	@Mock
@@ -111,9 +116,9 @@ class OrderServiceTest {
 			ReflectionTestUtils.setField(savedOrder, "id", 999L);
 			return savedOrder;
 		});
-		orderService = new OrderService(memberRepository, addressRepository, productRepository, cartItemRepository,
-				memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper,
-				paymentCancelHook);
+		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
+				cartItemRepository, memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator,
+				orderQueryMapper, paymentCancelHook);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -204,6 +209,25 @@ class OrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_HIDDEN);
+		}
+
+		@Test
+		@DisplayName("활성 드롭이 있는 상품을 주문하면 PRODUCT_LIMITED_ONLY 예외를 던진다")
+		void throwsWhenProductHasActiveLimitedDrop() {
+			// given
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(limitedDropRepository.existsByProductIdAndStatusNot(PRODUCT_ID, LimitedDropStatus.CLOSED))
+					.willReturn(true);
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, null);
+
+			// when & then
+			assertThatThrownBy(() -> orderService.create(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_LIMITED_ONLY);
 		}
 
 		@Test

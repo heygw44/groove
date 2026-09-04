@@ -42,6 +42,7 @@ public enum ErrorCode {
 	PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
 	PRODUCT_HIDDEN(HttpStatus.NOT_FOUND, "판매 중지된 상품입니다."),
 	PRODUCT_NOT_HIDDEN(HttpStatus.CONFLICT, "숨김 상태가 아닌 상품입니다."),
+	PRODUCT_LIMITED_ONLY(HttpStatus.BAD_REQUEST, "한정반 상품은 한정반 구매로만 주문할 수 있습니다."),
 	ARTIST_NOT_FOUND(HttpStatus.NOT_FOUND, "아티스트를 찾을 수 없습니다."),
 	LABEL_NOT_FOUND(HttpStatus.NOT_FOUND, "레이블을 찾을 수 없습니다."),
 	GENRE_NOT_FOUND(HttpStatus.NOT_FOUND, "장르를 찾을 수 없습니다."),
@@ -50,6 +51,15 @@ public enum ErrorCode {
 	STOCK_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
 	STOCK_INSUFFICIENT(HttpStatus.CONFLICT, "재고가 부족합니다."),
 	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 처리 중 충돌이 발생했습니다. 다시 시도해주세요."),
+
+	// ===== LIMITED =====
+	LIMITED_DROP_NOT_FOUND(HttpStatus.NOT_FOUND, "한정반 드롭을 찾을 수 없습니다."),
+	LIMITED_NOT_OPEN(HttpStatus.BAD_REQUEST, "아직 오픈되지 않은 한정반입니다."),
+	LIMITED_CLOSED(HttpStatus.BAD_REQUEST, "종료된 한정반입니다."),
+	LIMITED_SOLD_OUT(HttpStatus.CONFLICT, "한정반 수량이 모두 소진되었습니다."),
+	LIMITED_ALREADY_PURCHASED(HttpStatus.CONFLICT, "이미 구매한 한정반입니다."),
+	LIMITED_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "회원당 구매 가능 수량을 초과했습니다."),
+	LIMITED_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 한정반 상태입니다."),
 
 	// ===== CART =====
 	CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."),
