@@ -13,6 +13,7 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.groove.coupon.entity.Coupon;
@@ -21,6 +22,26 @@ import com.groove.inventory.entity.Stock;
 class GlobalExceptionHandlerTest {
 
 	GlobalExceptionHandler globalExceptionHandler = new GlobalExceptionHandler();
+
+	@Nested
+	@DisplayName("handleInvalidInput()")
+	class HandleInvalidInput {
+
+		@Test
+		@DisplayName("필수 요청 파라미터가 누락되면 400 COMMON_INVALID_INPUT 을 반환한다")
+		void returnsBadRequestWhenRequestParameterMissing() {
+			// given
+			MissingServletRequestParameterException exception =
+					new MissingServletRequestParameterException("orderAmount", "BigDecimal");
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleInvalidInput(exception);
+
+			// then
+			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.COMMON_INVALID_INPUT.name());
+		}
+	}
 
 	@Nested
 	@DisplayName("handleMaxUploadSizeExceeded()")
