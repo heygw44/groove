@@ -1,11 +1,14 @@
 import { StarRatingDisplay } from '@/components/common/StarRating';
+import { ReviewRatingDistribution } from '@/components/review/ReviewRatingDistribution';
+import type { ReviewRatingDistribution as ReviewRatingDistributionType } from '@/types/review';
 
 interface ReviewSummaryProps {
   averageRating?: number;
   reviewCount: number;
+  distribution?: ReviewRatingDistributionType;
 }
 
-export function ReviewSummary({ averageRating, reviewCount }: ReviewSummaryProps) {
+export function ReviewSummary({ averageRating, reviewCount, distribution }: ReviewSummaryProps) {
   if (averageRating === undefined) {
     return (
       <div className="flex flex-col gap-1">
@@ -16,12 +19,15 @@ export function ReviewSummary({ averageRating, reviewCount }: ReviewSummaryProps
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-3xl font-bold tracking-tight">{averageRating.toFixed(1)}</span>
-      <div className="flex flex-col gap-1">
-        <StarRatingDisplay value={averageRating} />
-        <span className="text-sm text-content-muted">리뷰 {reviewCount}개</span>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <span className="text-3xl font-bold tracking-tight">{averageRating.toFixed(1)}</span>
+        <div className="flex flex-col gap-1">
+          <StarRatingDisplay value={averageRating} />
+          <span className="text-sm text-content-muted">리뷰 {reviewCount}개</span>
+        </div>
       </div>
+      {distribution && <ReviewRatingDistribution distribution={distribution} />}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { REVIEW_INELIGIBLE_MESSAGE } from '@/constants/review';
 import { useCreateReview, useDeleteReview, useUpdateReview } from '@/hooks/mutations/useReviewMutations';
 import { reviewKeys } from '@/hooks/queries/queryKeys';
 import { useReviewEligibility } from '@/hooks/queries/useReviewEligibility';
+import { useReviewStats } from '@/hooks/queries/useReviewStats';
 import { toReviewFormValues, type ReviewFormValues } from '@/schemas/review';
 import type { Review, ReviewSort, ReviewWriteRequest } from '@/types/review';
 import { applyFieldErrors, getErrorCode, getErrorMessage } from '@/utils/apiError';
@@ -38,6 +39,7 @@ export function ReviewSection({ productId, averageRating, reviewCount }: ReviewS
   const [deleting, setDeleting] = useState<Review | undefined>(undefined);
 
   const eligibilityQuery = useReviewEligibility(productId);
+  const statsQuery = useReviewStats(productId);
   const createMutation = useCreateReview(productId);
   const updateMutation = useUpdateReview(productId);
   const deleteMutation = useDeleteReview(productId);
@@ -122,7 +124,11 @@ export function ReviewSection({ productId, averageRating, reviewCount }: ReviewS
   return (
     <section id="reviews" ref={sectionRef} className="mt-12">
       <h2 className="mb-4 text-lg font-bold">리뷰</h2>
-      <ReviewSummary averageRating={averageRating} reviewCount={reviewCount} />
+      <ReviewSummary
+        averageRating={averageRating}
+        reviewCount={reviewCount}
+        distribution={statsQuery.data?.distribution}
+      />
 
       {!eligibilityQuery.isPending && eligibility && (
         <div className="mt-6">

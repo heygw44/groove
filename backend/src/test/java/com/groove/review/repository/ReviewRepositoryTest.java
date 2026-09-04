@@ -2,6 +2,7 @@ package com.groove.review.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,6 +24,7 @@ import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.review.dto.ReviewRatingCount;
 import com.groove.review.dto.ReviewSortType;
 import com.groove.review.entity.Review;
 import com.groove.support.DataJpaTestSupport;
@@ -100,6 +102,36 @@ class ReviewRepositoryTest extends DataJpaTestSupport {
 
 			// then
 			assertThat(result).extracting(Review::getId).containsExactly(later.getId(), earlier.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("countByRatingForProduct()")
+	class CountByRatingForProduct {
+
+		@Test
+		@DisplayName("상품별로 별점 개수를 집계하고 다른 상품 리뷰는 섞이지 않는다")
+		void aggregatesRatingCountsPerProduct() {
+			// given
+			Member first = memberRepository.save(MemberFixture.create("review-repo-stats-1@groove.com"));
+			Member second = memberRepository.save(MemberFixture.create("review-repo-stats-2@groove.com"));
+			Member third = memberRepository.save(MemberFixture.create("review-repo-stats-3@groove.com"));
+			Artist artistA = artistRepository.save(ArtistFixture.create("review-repo-stats-a"));
+			Artist artistB = artistRepository.save(ArtistFixture.create("review-repo-stats-b"));
+			Product productA = productRepository.save(ProductFixture.create(artistA));
+			Product productB = productRepository.save(ProductFixture.create(artistB));
+			reviewRepository.save(ReviewFixture.create(productA, first, 5));
+			reviewRepository.save(ReviewFixture.create(productA, second, 5));
+			reviewRepository.save(ReviewFixture.create(productA, third, 3));
+			Member fourth = memberRepository.save(MemberFixture.create("review-repo-stats-4@groove.com"));
+			reviewRepository.save(ReviewFixture.create(productB, fourth, 1));
+
+			// when
+			List<ReviewRatingCount> result = reviewRepository.countByRatingForProduct(productA.getId());
+
+			// then
+			assertThat(result).extracting(ReviewRatingCount::rating, ReviewRatingCount::count)
+					.containsExactlyInAnyOrder(tuple(5, 2L), tuple(3, 1L));
 		}
 	}
 

@@ -20,6 +20,7 @@ import com.groove.review.dto.ReviewEligibilityResponse;
 import com.groove.review.dto.ReviewIneligibleReason;
 import com.groove.review.dto.ReviewListRequest;
 import com.groove.review.dto.ReviewResponse;
+import com.groove.review.dto.ReviewStatsResponse;
 import com.groove.review.dto.ReviewUpdateRequest;
 import com.groove.review.entity.Review;
 import com.groove.review.repository.ReviewRepository;
@@ -69,6 +70,11 @@ public class ReviewService {
 		}
 		Page<Review> page = reviewRepository.findByProductId(productId, request.toPageable());
 		return PageResponse.from(page.map(review -> ReviewResponse.from(review, memberId)));
+	}
+
+	public ReviewStatsResponse getStats(Long productId) {
+		Product product = findProduct(productId);
+		return ReviewStatsResponse.of(product, reviewRepository.countByRatingForProduct(productId));
 	}
 
 	public ReviewEligibilityResponse checkEligibility(Long productId, Long memberId) {

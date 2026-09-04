@@ -49,6 +49,7 @@ export const reviewKeys = {
   list: (productId: number, params: ReviewListParams) =>
     ['reviews', productId, 'list', params] as const,
   eligibility: (productId: number) => ['reviews', productId, 'eligibility'] as const,
+  stats: (productId: number) => ['reviews', productId, 'stats'] as const,
 };
 
 export const wishlistKeys = {

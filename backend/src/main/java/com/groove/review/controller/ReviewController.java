@@ -21,6 +21,7 @@ import com.groove.review.dto.ReviewEligibilityResponse;
 import com.groove.review.dto.ReviewListRequest;
 import com.groove.review.dto.ReviewResponse;
 import com.groove.review.dto.ReviewSortType;
+import com.groove.review.dto.ReviewStatsResponse;
 import com.groove.review.dto.ReviewUpdateRequest;
 import com.groove.review.service.ReviewService;
 
@@ -54,6 +55,13 @@ public class ReviewController {
 	public ApiResponse<ReviewEligibilityResponse> checkEligibility(@PathVariable Long productId,
 			@AuthMember(required = false) LoginMember loginMember) {
 		return ApiResponse.ok(reviewService.checkEligibility(productId, memberIdOf(loginMember)));
+	}
+
+	@Operation(summary = "상품 리뷰 별점 통계 조회")
+	@SecurityRequirements
+	@GetMapping("/products/{productId}/reviews/stats")
+	public ApiResponse<ReviewStatsResponse> getStats(@PathVariable Long productId) {
+		return ApiResponse.ok(reviewService.getStats(productId));
 	}
 
 	@Operation(summary = "리뷰 작성")
