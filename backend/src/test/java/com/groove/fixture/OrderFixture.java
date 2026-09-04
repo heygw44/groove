@@ -1,5 +1,6 @@
 package com.groove.fixture;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.test.util.ReflectionTestUtils;
@@ -27,7 +28,7 @@ public final class OrderFixture {
 	}
 
 	public static Order create(Member member, String orderNumber) {
-		return Order.create(orderNumber, member, shippingAddress());
+		return Order.create(orderNumber, member, shippingAddress(), LocalDateTime.now());
 	}
 
 	public static Order createWithItem(Member member, Product product, int quantity) {
@@ -48,6 +49,16 @@ public final class OrderFixture {
 
 	public static Order markDelivered(Order order) {
 		ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
+		return order;
+	}
+
+	public static Order markPaid(Order order) {
+		ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
+		return order;
+	}
+
+	public static Order withExpiresAt(Order order, LocalDateTime expiresAt) {
+		ReflectionTestUtils.setField(order, "expiresAt", expiresAt);
 		return order;
 	}
 

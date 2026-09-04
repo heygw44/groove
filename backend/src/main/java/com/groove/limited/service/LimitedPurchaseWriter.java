@@ -2,6 +2,7 @@ package com.groove.limited.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -71,7 +72,7 @@ public class LimitedPurchaseWriter {
 		}
 
 		String orderNumber = orderNumberGenerator.generate();
-		Order order = Order.create(orderNumber, member, ShippingAddress.from(address));
+		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), LocalDateTime.now(clock));
 		order.addItem(drop.getProduct(), PURCHASE_QUANTITY);
 		orderRepository.save(order);
 
@@ -85,6 +86,25 @@ public class LimitedPurchaseWriter {
 
 		return new LimitedPurchaseResponse(order.getId(), order.getOrderNumber(), order.getFinalAmount(),
 				order.getExpiresAt());
+	}
+
+	/** 한정반 주문이면 구매 이력을 지우고 판매 수량을 되돌린다. 아니면 empty. 호출자 트랜잭션에 참여한다. */
+	@Transactional
+	public Optional<LimitedRelease> revertByOrder(Long orderId, LocalDateTime now) {
+		Optional<LimitedPurchase> found = limitedPurchaseRepository.findByOrderId(orderId);
+		if (found.isEmpty()) {
+			return Optional.empty();
+		}
+		LimitedPurchase purchase = found.get();
+		Long dropId = purchase.getDrop().getId();
+		Long memberId = purchase.getMember().getId();
+
+		LimitedDrop drop = limitedDropRepository.findByIdForUpdate(dropId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.LIMITED_DROP_NOT_FOUND));
+		drop.restoreSale(purchase.getQuantity(), now);
+		limitedPurchaseRepository.delete(purchase);
+
+		return Optional.of(new LimitedRelease(dropId, memberId));
 	}
 
 	private Member findActiveMember(Long memberId) {

@@ -2,11 +2,9 @@ package com.groove.order.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.within;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -43,9 +41,10 @@ class OrderTest {
 		void createsWithPendingStatusAndZeroAmounts() {
 			// given
 			ShippingAddress shippingAddress = OrderFixture.shippingAddress();
+			LocalDateTime now = LocalDateTime.now();
 
 			// when
-			Order order = Order.create("20260903-TESTAB12", member, shippingAddress);
+			Order order = Order.create("20260903-TESTAB12", member, shippingAddress, now);
 
 			// then
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
@@ -53,8 +52,8 @@ class OrderTest {
 			assertThat(order.getDiscountAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getFinalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getShippingAddress()).isEqualTo(shippingAddress);
-			LocalDateTime expectedExpiresAt = LocalDateTime.now().plusMinutes(Order.PENDING_EXPIRATION_MINUTES);
-			assertThat(order.getExpiresAt()).isCloseTo(expectedExpiresAt, within(5, ChronoUnit.SECONDS));
+			LocalDateTime expectedExpiresAt = now.plusMinutes(Order.PENDING_EXPIRATION_MINUTES);
+			assertThat(order.getExpiresAt()).isEqualTo(expectedExpiresAt);
 		}
 	}
 
@@ -337,6 +336,104 @@ class OrderTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
+		}
+	}
+
+	@Nested
+	@DisplayName("expire()")
+	class Expire {
+
+		@Test
+		@DisplayName("PENDING 이면 CANCELED 로 바뀌고 취소 시각·사유가 기록된다")
+		void cancelsWithExpiredReasonWhenPending() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime now = LocalDateTime.now();
+
+			// when
+			order.expire(now);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isEqualTo(now);
+			assertThat(order.getCancelReason()).isEqualTo(Order.EXPIRED_CANCEL_REASON);
+		}
+
+		@Test
+		@DisplayName("PAID 면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenPaid() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+
+			// when & then
+			assertThatThrownBy(() -> order.expire(LocalDateTime.now()))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+
+		@Test
+		@DisplayName("CANCELED 면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenAlreadyCanceled() {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", OrderStatus.CANCELED);
+
+			// when & then
+			assertThatThrownBy(() -> order.expire(LocalDateTime.now()))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("isExpired()")
+	class IsExpired {
+
+		@Test
+		@DisplayName("만료 시각 이전이면 false 를 반환한다")
+		void returnsFalseBeforeExpiresAt() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime now = order.getExpiresAt().minusMinutes(1);
+
+			// when & then
+			assertThat(order.isExpired(now)).isFalse();
+		}
+
+		@Test
+		@DisplayName("만료 시각과 정확히 같으면 true 를 반환한다")
+		void returnsTrueAtExactExpiresAt() {
+			// given
+			Order order = OrderFixture.create(member);
+
+			// when & then
+			assertThat(order.isExpired(order.getExpiresAt())).isTrue();
+		}
+
+		@Test
+		@DisplayName("만료 시각 이후면 true 를 반환한다")
+		void returnsTrueAfterExpiresAt() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime now = order.getExpiresAt().plusMinutes(1);
+
+			// when & then
+			assertThat(order.isExpired(now)).isTrue();
+		}
+
+		@Test
+		@DisplayName("PAID 면 만료 시각이 지났어도 false 를 반환한다")
+		void returnsFalseWhenPaidEvenIfPastExpiresAt() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+			LocalDateTime now = order.getExpiresAt().plusMinutes(1);
+
+			// when & then
+			assertThat(order.isExpired(now)).isFalse();
 		}
 	}
 }

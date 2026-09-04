@@ -1,5 +1,7 @@
 package com.groove.order.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -52,6 +54,7 @@ public class OrderService {
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final OrderQueryMapper orderQueryMapper;
 	private final PaymentCancelHook paymentCancelHook;
+	private final Clock clock;
 
 	@Transactional
 	public OrderCreateResponse create(Long memberId, OrderCreateRequest request) {
@@ -70,7 +73,7 @@ public class OrderService {
 				: resolveDirectLine(request.productId(), request.quantity());
 
 		String orderNumber = orderNumberGenerator.generate();
-		Order order = Order.create(orderNumber, member, ShippingAddress.from(address));
+		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), LocalDateTime.now(clock));
 		for (OrderLine line : lines) {
 			order.addItem(line.product(), line.quantity());
 		}
@@ -110,6 +113,8 @@ public class OrderService {
 
 	@Transactional
 	public OrderDetailResponse cancel(Long memberId, Long orderId, OrderCancelRequest request) {
+		// 만료 스케줄러와 같은 주문을 동시에 취소하면 재고가 두 번 복구되므로 주문 행을 먼저 잠근다.
+		orderRepository.findByIdForUpdate(orderId).orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Order order = orderRepository.findWithItemsByIdAndMemberId(orderId, memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		OrderStatus previousStatus = order.getStatus();

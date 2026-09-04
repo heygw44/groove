@@ -11,6 +11,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -116,9 +119,10 @@ class OrderServiceTest {
 			ReflectionTestUtils.setField(savedOrder, "id", 999L);
 			return savedOrder;
 		});
+		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				cartItemRepository, memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator,
-				orderQueryMapper, paymentCancelHook);
+				orderQueryMapper, paymentCancelHook, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -501,6 +505,7 @@ class OrderServiceTest {
 		void restoresStockAndSkipsHookWhenPending() {
 			// given
 			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 2), 500L);
+			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsByIdAndMemberId(500L, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when
@@ -518,6 +523,7 @@ class OrderServiceTest {
 			// given
 			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 501L);
 			order.markPaid();
+			given(orderRepository.findByIdForUpdate(501L)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsByIdAndMemberId(501L, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when
@@ -534,6 +540,7 @@ class OrderServiceTest {
 			// given
 			Order order = OrderFixture.withId(
 					OrderFixture.markShipped(OrderFixture.createWithItem(member, product, 1)), 502L);
+			given(orderRepository.findByIdForUpdate(502L)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsByIdAndMemberId(502L, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when & then
@@ -548,7 +555,7 @@ class OrderServiceTest {
 		@DisplayName("타인 주문이거나 존재하지 않으면 ORDER_NOT_FOUND 예외를 던진다")
 		void throwsWhenOrderNotFound() {
 			// given
-			given(orderRepository.findWithItemsByIdAndMemberId(999L, MEMBER_ID)).willReturn(Optional.empty());
+			given(orderRepository.findByIdForUpdate(999L)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> orderService.cancel(MEMBER_ID, 999L, null))
@@ -566,6 +573,7 @@ class OrderServiceTest {
 					CouponFixture.fixed("CANCEL5000", new BigDecimal("5000")));
 			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
 			memberCoupon.use(order.getId());
+			given(orderRepository.findByIdForUpdate(503L)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsByIdAndMemberId(503L, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when
@@ -585,6 +593,7 @@ class OrderServiceTest {
 			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
 			memberCoupon.use(order.getId());
 			CouponFixture.expired(coupon);
+			given(orderRepository.findByIdForUpdate(504L)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsByIdAndMemberId(504L, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when

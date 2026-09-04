@@ -49,11 +49,13 @@ import lombok.NoArgsConstructor;
 		uniqueConstraints = @UniqueConstraint(name = "uk_orders_order_number", columnNames = "order_number"),
 		indexes = {
 			@Index(name = "idx_orders_member_created", columnList = "member_id, created_at"),
-			@Index(name = "idx_orders_status", columnList = "status")
+			@Index(name = "idx_orders_status", columnList = "status"),
+			@Index(name = "idx_orders_status_expires", columnList = "status, expires_at")
 		})
 public class Order extends BaseTimeEntity {
 
 	public static final int PENDING_EXPIRATION_MINUTES = 10;
+	public static final String EXPIRED_CANCEL_REASON = "EXPIRED";
 
 	private static final String ADMIN_CANCEL_REASON = "관리자 취소";
 
@@ -104,22 +106,23 @@ public class Order extends BaseTimeEntity {
 	private List<OrderItem> items = new ArrayList<>();
 
 	@Builder(access = PRIVATE)
-	private Order(String orderNumber, Member member, ShippingAddress shippingAddress) {
+	private Order(String orderNumber, Member member, ShippingAddress shippingAddress, LocalDateTime now) {
 		this.orderNumber = orderNumber;
 		this.member = member;
 		this.shippingAddress = shippingAddress;
 		this.status = OrderStatus.PENDING;
-		this.expiresAt = LocalDateTime.now().plusMinutes(PENDING_EXPIRATION_MINUTES);
+		this.expiresAt = now.plusMinutes(PENDING_EXPIRATION_MINUTES);
 		this.totalAmount = BigDecimal.ZERO;
 		this.discountAmount = BigDecimal.ZERO;
 		this.finalAmount = BigDecimal.ZERO;
 	}
 
-	public static Order create(String orderNumber, Member member, ShippingAddress shippingAddress) {
+	public static Order create(String orderNumber, Member member, ShippingAddress shippingAddress, LocalDateTime now) {
 		return Order.builder()
 				.orderNumber(orderNumber)
 				.member(member)
 				.shippingAddress(shippingAddress)
+				.now(now)
 				.build();
 	}
 
@@ -181,6 +184,20 @@ public class Order extends BaseTimeEntity {
 			this.canceledAt = LocalDateTime.now();
 			this.cancelReason = ADMIN_CANCEL_REASON;
 		}
+	}
+
+	public boolean isExpired(LocalDateTime now) {
+		return this.status == OrderStatus.PENDING && !now.isBefore(this.expiresAt);
+	}
+
+	/** 스케줄러가 결제 기한이 지난 PENDING 주문을 취소할 때 쓴다. 상태값을 새로 두지 않고 CANCELED + 사유로 구분한다. */
+	public void expire(LocalDateTime now) {
+		if (this.status != OrderStatus.PENDING) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		this.status = OrderStatus.CANCELED;
+		this.canceledAt = now;
+		this.cancelReason = EXPIRED_CANCEL_REASON;
 	}
 
 	public List<OrderItem> getItems() {

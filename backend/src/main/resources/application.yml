@@ -17,6 +17,11 @@ spring:
       # Redis 장애 시 DB 폴백이 지연되지 않도록 기본 타임아웃보다 짧게 잡는다.
       timeout: 1s
       connect-timeout: 500ms
+  task:
+    scheduling:
+      thread-name-prefix: groove-scheduler-
+      pool:
+        size: 2
   servlet:
     multipart:
       max-file-size: 5MB

@@ -1,5 +1,6 @@
 package com.groove.limited.repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -54,4 +55,9 @@ public interface LimitedDropRepository extends JpaRepository<LimitedDrop, Long> 
 			ORDER BY d.openAt ASC, d.id ASC
 			""")
 	List<LimitedDropSummaryRow> findPublicSummaries(@Param("statuses") Collection<LimitedDropStatus> statuses);
+
+	List<LimitedDrop> findAllByStatusAndOpenAtLessThanEqual(LimitedDropStatus status, LocalDateTime openAt);
+
+	List<LimitedDrop> findAllByStatusInAndCloseAtLessThanEqual(Collection<LimitedDropStatus> statuses,
+			LocalDateTime closeAt);
 }

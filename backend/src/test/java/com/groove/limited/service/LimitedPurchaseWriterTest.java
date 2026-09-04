@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 
@@ -26,6 +27,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
+import com.groove.fixture.LimitedPurchaseFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
@@ -35,6 +37,7 @@ import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.dto.LimitedPurchaseResponse;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.member.entity.Address;
@@ -173,6 +176,67 @@ class LimitedPurchaseWriterTest {
 			assertThat(drop.getSoldCount()).isEqualTo(1);
 			verify(orderRepository).save(any());
 			verify(stockHistoryRepository).save(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("revertByOrder()")
+	class RevertByOrder {
+
+		@Test
+		@DisplayName("한정반 주문이 아니면 empty 를 반환하고 락도 삭제도 하지 않는다")
+		void returnsEmptyWhenNotLimitedOrder() {
+			// given
+			given(limitedPurchaseRepository.findByOrderId(100L)).willReturn(Optional.empty());
+
+			// when
+			Optional<LimitedRelease> result = limitedPurchaseWriter.revertByOrder(100L, LocalDateTime.now(clock));
+
+			// then
+			assertThat(result).isEmpty();
+			verify(limitedDropRepository, never()).findByIdForUpdate(any());
+			verify(limitedPurchaseRepository, never()).delete(any());
+		}
+
+		@Test
+		@DisplayName("한정반 주문이면 드롭을 락으로 잠그고 판매량을 되돌린 뒤 구매 이력을 지운다")
+		void restoresSaleAndDeletesPurchase() {
+			// given
+			Product product = product();
+			LimitedDrop drop = openDrop(product, 5L);
+			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
+			LimitedPurchase purchase = LimitedPurchaseFixture.create(drop, member);
+			drop.recordSale(1);
+			given(limitedPurchaseRepository.findByOrderId(100L)).willReturn(Optional.of(purchase));
+			given(limitedDropRepository.findByIdForUpdate(5L)).willReturn(Optional.of(drop));
+
+			// when
+			Optional<LimitedRelease> result = limitedPurchaseWriter.revertByOrder(100L, LocalDateTime.now(clock));
+
+			// then
+			assertThat(result).contains(new LimitedRelease(5L, 10L));
+			assertThat(drop.getSoldCount()).isZero();
+			verify(limitedDropRepository).findByIdForUpdate(5L);
+			verify(limitedPurchaseRepository).delete(purchase);
+		}
+
+		@Test
+		@DisplayName("락을 잡는 시점에 드롭이 없으면 LIMITED_DROP_NOT_FOUND 예외를 던진다")
+		void throwsWhenDropNotFoundUnderLock() {
+			// given
+			Product product = product();
+			LimitedDrop drop = openDrop(product, 5L);
+			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
+			LimitedPurchase purchase = LimitedPurchaseFixture.create(drop, member);
+			given(limitedPurchaseRepository.findByOrderId(100L)).willReturn(Optional.of(purchase));
+			given(limitedDropRepository.findByIdForUpdate(5L)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> limitedPurchaseWriter.revertByOrder(100L, LocalDateTime.now(clock)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.LIMITED_DROP_NOT_FOUND);
+			verify(limitedPurchaseRepository, never()).delete(any());
 		}
 	}
 

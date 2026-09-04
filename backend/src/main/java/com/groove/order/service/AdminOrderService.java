@@ -53,6 +53,8 @@ public class AdminOrderService {
 
 	@Transactional
 	public AdminOrderDetailResponse changeStatus(Long adminId, Long orderId, AdminOrderStatusChangeRequest request) {
+		// 만료 스케줄러와 같은 주문을 동시에 취소하면 재고가 두 번 복구되므로 주문 행을 먼저 잠근다.
+		orderRepository.findByIdForUpdate(orderId).orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Order order = orderRepository.findWithItemsAndMemberById(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		OrderStatus previous = order.getStatus();
