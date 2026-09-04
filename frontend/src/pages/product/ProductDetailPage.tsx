@@ -5,9 +5,11 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { StarRatingDisplay } from '@/components/common/StarRating';
 import { ProductDetailSkeleton } from '@/components/product/ProductDetailSkeleton';
 import { ProductImageGallery } from '@/components/product/ProductImageGallery';
 import { ProductPurchasePanel } from '@/components/product/ProductPurchasePanel';
+import { ReviewSection } from '@/components/review/ReviewSection';
 import { useProduct } from '@/hooks/queries/useProduct';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
@@ -128,11 +130,16 @@ export default function ProductDetailPage() {
             </div>
           )}
 
-          <p className="mt-3 text-sm text-content-muted">
-            {product.averageRating !== undefined
-              ? `★ ${product.averageRating.toFixed(1)} · 리뷰 ${product.reviewCount ?? 0}개`
-              : `리뷰 ${product.reviewCount ?? 0}개`}
-          </p>
+          <a href="#reviews" className="mt-3 flex items-center gap-1.5 text-sm text-content-muted">
+            {product.averageRating !== undefined ? (
+              <>
+                <StarRatingDisplay value={product.averageRating} size="sm" />
+                {product.averageRating.toFixed(1)} · 리뷰 {product.reviewCount ?? 0}개
+              </>
+            ) : (
+              `리뷰 ${product.reviewCount ?? 0}개`
+            )}
+          </a>
 
           <ProductPurchasePanel product={product} />
         </div>
@@ -142,10 +149,11 @@ export default function ProductDetailPage() {
         <p className="mt-10 whitespace-pre-line text-sm text-content">{product.description}</p>
       )}
 
-      <section className="mt-12">
-        <h2 className="mb-4 text-lg font-bold">리뷰 ({product.reviewCount ?? 0})</h2>
-        <EmptyState title="리뷰 기능은 준비 중입니다." />
-      </section>
+      <ReviewSection
+        productId={product.id}
+        averageRating={product.averageRating}
+        reviewCount={product.reviewCount ?? 0}
+      />
     </div>
   );
 }

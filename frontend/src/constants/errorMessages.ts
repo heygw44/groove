@@ -43,6 +43,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   COUPON_CODE_DUPLICATE: '이미 존재하는 쿠폰 코드입니다.',
   COUPON_DISCOUNT_LOCKED: '발급이 시작된 쿠폰의 할인 조건은 변경할 수 없습니다.',
   COUPON_QUANTITY_BELOW_ISSUED: '총 수량은 발급 수 이상이어야 합니다.',
+  REVIEW_NOT_FOUND: '리뷰를 찾을 수 없습니다.',
+  REVIEW_ALREADY_EXISTS: '이미 작성한 리뷰가 있습니다.',
+  REVIEW_PURCHASE_REQUIRED: '배송 완료된 주문이 있는 상품만 리뷰를 쓸 수 있습니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */

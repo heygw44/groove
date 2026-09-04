@@ -29,6 +29,11 @@ export const useLogin = () => {
     onSuccess: ({ accessToken, member }) => {
       setAuth(accessToken, member);
       queryClient.setQueryData(memberKeys.me, member);
+      /*
+       * 로그인 여부에 따라 응답이 달라지는 공개 쿼리(상품 wishlisted, 리뷰 mine,
+       * 리뷰 작성 가능 여부)가 로그인 전 값으로 staleTime 동안 남지 않게 전부 다시 받는다.
+       */
+      queryClient.invalidateQueries();
     },
   });
 };
