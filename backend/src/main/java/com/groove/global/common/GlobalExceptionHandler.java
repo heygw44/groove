@@ -19,6 +19,8 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import com.groove.inventory.entity.Stock;
+
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -27,6 +29,9 @@ public class GlobalExceptionHandler {
 
 	/** MySQL 이 유니크 제약 위반에 쓰는 에러 코드. 같은 SQLException 계열의 FK·NOT NULL 위반과 갈라내는 기준. */
 	private static final int MYSQL_DUPLICATE_ENTRY = 1062;
+
+	/** 낙관적 락 실패에서 재고를 특정하는 기준. Hibernate 는 클래스가 아닌 엔티티명만 실어 보내므로 이름으로 비교한다. */
+	private static final String STOCK_ENTITY_NAME = Stock.class.getName();
 
 	@ExceptionHandler(BusinessException.class)
 	public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
@@ -85,15 +90,17 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(ObjectOptimisticLockingFailureException.class)
 	public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
-		log.warn("ObjectOptimisticLockingFailureException: {}", ex.getMessage());
-		return stockConflict();
+		log.warn("ObjectOptimisticLockingFailureException({}): {}", ex.getPersistentClassName(), ex.getMessage());
+		return conflict(STOCK_ENTITY_NAME.equals(ex.getPersistentClassName())
+				? ErrorCode.STOCK_CONFLICT
+				: ErrorCode.COMMON_CONFLICT);
 	}
 
-	// 비관적 락 대기 실패(타임아웃·데드락 희생)도 재고 충돌로 보고 클라이언트 재시도에 맡긴다.
+	// 락 대기 실패 예외는 어떤 엔티티였는지 담지 않는다. 도메인 단정은 락을 건 서비스가 하고 여기서는 일반 충돌로만 답한다.
 	@ExceptionHandler(PessimisticLockingFailureException.class)
 	public ResponseEntity<ApiResponse<Void>> handlePessimisticLock(PessimisticLockingFailureException ex) {
 		log.warn("PessimisticLockingFailureException: {}", ex.getMessage());
-		return stockConflict();
+		return conflict(ErrorCode.COMMON_CONFLICT);
 	}
 
 	/**
@@ -107,9 +114,7 @@ public class GlobalExceptionHandler {
 			return handleUnexpected(ex);
 		}
 		log.warn("DataIntegrityViolationException(duplicate key): {}", ex.getMostSpecificCause().getMessage());
-		ErrorCode code = ErrorCode.COMMON_CONFLICT;
-		return ResponseEntity.status(code.getStatus())
-				.body(ApiResponse.error(code.name(), code.getMessage()));
+		return conflict(ErrorCode.COMMON_CONFLICT);
 	}
 
 	private boolean isDuplicateKey(DataIntegrityViolationException ex) {
@@ -117,8 +122,7 @@ public class GlobalExceptionHandler {
 				&& cause.getErrorCode() == MYSQL_DUPLICATE_ENTRY;
 	}
 
-	private ResponseEntity<ApiResponse<Void>> stockConflict() {
-		ErrorCode code = ErrorCode.STOCK_CONFLICT;
+	private ResponseEntity<ApiResponse<Void>> conflict(ErrorCode code) {
 		return ResponseEntity.status(code.getStatus())
 				.body(ApiResponse.error(code.name(), code.getMessage()));
 	}
