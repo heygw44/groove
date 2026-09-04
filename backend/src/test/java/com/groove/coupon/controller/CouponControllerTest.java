@@ -175,5 +175,16 @@ class CouponControllerTest {
 					.andExpect(jsonPath("$.error.code", is("COMMON_INVALID_INPUT")));
 			verify(memberCouponService, never()).getAvailableCoupons(any(), any());
 		}
+
+		@Test
+		@DisplayName("orderAmount 를 보내지 않으면 400 COMMON_INVALID_INPUT 을 반환한다")
+		void returnsBadRequestWhenOrderAmountMissing() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/coupons/available")
+							.header(HttpHeaders.AUTHORIZATION, userToken()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_INVALID_INPUT")));
+			verify(memberCouponService, never()).getAvailableCoupons(any(), any());
+		}
 	}
 }
