@@ -149,6 +149,7 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			startLatch.countDown();
 			executorService.shutdown();
 			boolean finished = executorService.awaitTermination(30, TimeUnit.SECONDS);
+			logFailures(results);
 
 			// then
 			assertThat(finished).isTrue();
@@ -213,11 +214,20 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			startLatch.countDown();
 			executorService.shutdown();
 			boolean finished = executorService.awaitTermination(30, TimeUnit.SECONDS);
+			logFailures(results);
 
 			// then
 			assertThat(finished).isTrue();
 			assertThat(successCount.get()).isEqualTo(1);
 			assertThat(limitedPurchaseRepository.existsByDropIdAndMemberId(dropId, member.getId())).isTrue();
+		}
+
+		private void logFailures(List<AtomicReference<Throwable>> results) {
+			results.stream()
+					.map(AtomicReference::get)
+					.filter(throwable -> throwable != null)
+					.forEach(throwable -> System.out.println(
+							"동시성 테스트 실패 원인: " + throwable.getClass().getName() + " - " + throwable.getMessage()));
 		}
 	}
 }
