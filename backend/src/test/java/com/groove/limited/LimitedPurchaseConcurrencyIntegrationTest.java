@@ -46,10 +46,13 @@ import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
+import com.groove.order.service.AdminOrderService;
+import com.groove.order.service.OrderService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ArtistRepository;
@@ -92,6 +95,12 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 	private OrderExpirationScheduler orderExpirationScheduler;
 
 	@Autowired
+	private OrderService orderService;
+
+	@Autowired
+	private AdminOrderService adminOrderService;
+
+	@Autowired
 	private StringRedisTemplate redisTemplate;
 
 	@Autowired
@@ -110,7 +119,9 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 		Product product = productRepository.save(ProductFixture.create(artist));
 		stockRepository.saveAndFlush(StockFixture.create(product, totalQuantity));
 
-		LimitedDrop drop = LimitedDropFixture.open(product, totalQuantity);
+		int perMemberLimit = Math.min(2, totalQuantity);
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, perMemberLimit);
+		drop.open();
 		LocalDateTime now = LocalDateTime.now(clock);
 		LimitedDropFixture.withOpenAt(drop, now.minusHours(1));
 		LimitedDropFixture.withCloseAt(drop, now.plusHours(1));
@@ -324,6 +335,112 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 			// when
 			orderExpirationScheduler.expireOrders();
+
+			// then
+			Order reloadedOrder = orderRepository.findById(order.getId()).orElseThrow();
+			assertThat(reloadedOrder.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(limitedPurchaseRepository.existsByDropIdAndMemberId(dropId, buyer.memberId())).isFalse();
+
+			LimitedDrop reloadedDrop = limitedDropRepository.findById(dropId).orElseThrow();
+			assertThat(reloadedDrop.getSoldCount()).isZero();
+			assertThat(reloadedDrop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
+
+			Stock reloadedStock = stockRepository.findByProductId(productId).orElseThrow();
+			assertThat(reloadedStock.getQuantity()).isEqualTo(totalQuantity);
+			assertThat(redisTemplate.opsForValue().get(stockKey())).isEqualTo(String.valueOf(totalQuantity));
+			assertThat(redisTemplate.opsForSet().isMember(buyersKey(), String.valueOf(buyer.memberId()))).isFalse();
+
+			LimitedPurchaseResponse repurchase = limitedPurchaseService.purchase(dropId, buyer.memberId(),
+					buyer.addressId());
+
+			assertThat(repurchase.orderId()).isNotNull();
+			assertThat(limitedPurchaseRepository.countByDropId(dropId)).isEqualTo(1);
+		}
+	}
+
+	@Nested
+	@DisplayName("cancel()")
+	class Cancel {
+
+		@Test
+		@DisplayName("사용자가 주문을 취소하면 선점이 되돌아가 같은 회원이 재구매할 수 있다")
+		void allowsRepurchaseAfterUserCancel() {
+			// given
+			int totalQuantity = 5;
+			prepareOpenDrop(totalQuantity);
+			Buyer buyer = createBuyers(1).get(0);
+			LimitedPurchaseResponse purchaseResponse = limitedPurchaseService.purchase(dropId, buyer.memberId(),
+					buyer.addressId());
+
+			// when
+			orderService.cancel(buyer.memberId(), purchaseResponse.orderId(), null);
+
+			// then
+			Order reloadedOrder = orderRepository.findById(purchaseResponse.orderId()).orElseThrow();
+			assertThat(reloadedOrder.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(limitedPurchaseRepository.existsByDropIdAndMemberId(dropId, buyer.memberId())).isFalse();
+
+			LimitedDrop reloadedDrop = limitedDropRepository.findById(dropId).orElseThrow();
+			assertThat(reloadedDrop.getSoldCount()).isZero();
+			assertThat(reloadedDrop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
+
+			Stock reloadedStock = stockRepository.findByProductId(productId).orElseThrow();
+			assertThat(reloadedStock.getQuantity()).isEqualTo(totalQuantity);
+			assertThat(redisTemplate.opsForValue().get(stockKey())).isEqualTo(String.valueOf(totalQuantity));
+			assertThat(redisTemplate.opsForSet().isMember(buyersKey(), String.valueOf(buyer.memberId()))).isFalse();
+
+			LimitedPurchaseResponse repurchase = limitedPurchaseService.purchase(dropId, buyer.memberId(),
+					buyer.addressId());
+
+			assertThat(repurchase.orderId()).isNotNull();
+			assertThat(limitedPurchaseRepository.countByDropId(dropId)).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("품절 상태에서 취소하면 드롭이 다시 OPEN 되고 Redis 재고가 복구된다")
+		void reopensSoldOutDropAfterCancel() {
+			// given
+			int totalQuantity = 1;
+			prepareOpenDrop(totalQuantity);
+			Buyer buyer = createBuyers(1).get(0);
+			LimitedPurchaseResponse purchaseResponse = limitedPurchaseService.purchase(dropId, buyer.memberId(),
+					buyer.addressId());
+
+			LimitedDrop soldOutDrop = limitedDropRepository.findById(dropId).orElseThrow();
+			assertThat(soldOutDrop.getStatus()).isEqualTo(LimitedDropStatus.SOLD_OUT);
+
+			// when
+			orderService.cancel(buyer.memberId(), purchaseResponse.orderId(), null);
+
+			// then
+			LimitedDrop reopenedDrop = limitedDropRepository.findById(dropId).orElseThrow();
+			assertThat(reopenedDrop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
+			assertThat(redisTemplate.opsForValue().get(stockKey())).isEqualTo(String.valueOf(totalQuantity));
+		}
+	}
+
+	@Nested
+	@DisplayName("changeStatus()")
+	class ChangeStatus {
+
+		@Test
+		@DisplayName("관리자가 주문을 취소하면 선점이 되돌아가 같은 회원이 재구매할 수 있다")
+		void allowsRepurchaseAfterAdminCancel() {
+			// given
+			int totalQuantity = 5;
+			prepareOpenDrop(totalQuantity);
+			Buyer buyer = createBuyers(1).get(0);
+			LimitedPurchaseResponse purchaseResponse = limitedPurchaseService.purchase(dropId, buyer.memberId(),
+					buyer.addressId());
+			Order order = orderRepository.findById(purchaseResponse.orderId()).orElseThrow();
+			OrderFixture.markPaid(order);
+			orderRepository.saveAndFlush(order);
+			Member admin = memberRepository.save(MemberFixture.createAdmin("admin-" + UUID.randomUUID()
+					+ "@groove.com"));
+
+			// when
+			adminOrderService.changeStatus(admin.getId(), order.getId(),
+					new AdminOrderStatusChangeRequest(OrderStatus.CANCELED));
 
 			// then
 			Order reloadedOrder = orderRepository.findById(order.getId()).orElseThrow();

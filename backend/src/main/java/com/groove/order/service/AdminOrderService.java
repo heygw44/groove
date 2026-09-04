@@ -1,5 +1,7 @@
 package com.groove.order.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -11,6 +13,8 @@ import com.groove.admin.service.AdminAuditLogService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.limited.service.LimitedPurchaseWriter;
+import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSearchRequest;
@@ -34,6 +38,9 @@ public class AdminOrderService {
 	private final OrderStockService orderStockService;
 	private final PaymentCancelHook paymentCancelHook;
 	private final AdminAuditLogService adminAuditLogService;
+	private final LimitedPurchaseWriter limitedPurchaseWriter;
+	private final LimitedReleaseSynchronizer limitedReleaseSynchronizer;
+	private final Clock clock;
 
 	public PageResponse<AdminOrderSummaryResponse> getList(AdminOrderSearchRequest request) {
 		AdminOrderSearchCondition condition = request.toCondition();
@@ -64,6 +71,8 @@ public class AdminOrderService {
 		if (next == OrderStatus.CANCELED) {
 			orderStockService.restore(order);
 			restoreCoupon(order);
+			limitedPurchaseWriter.revertByOrder(order.getId(), LocalDateTime.now(clock))
+					.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
 			if (previous == OrderStatus.PAID || previous == OrderStatus.PREPARING) {
 				paymentCancelHook.onPaidOrderCanceled(order);
 			}
