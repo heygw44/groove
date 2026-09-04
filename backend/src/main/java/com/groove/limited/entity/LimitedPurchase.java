@@ -74,4 +74,12 @@ public class LimitedPurchase extends BaseTimeEntity {
 				.quantity(quantity)
 				.build();
 	}
+
+	/** 구매 이력을 먼저 확보한 뒤 뒤이어 생성한 주문을 붙일 때 사용한다. */
+	public void attachOrder(Order order) {
+		if (this.order != null) {
+			throw new BusinessException(ErrorCode.LIMITED_INVALID_STATUS);
+		}
+		this.order = order;
+	}
 }

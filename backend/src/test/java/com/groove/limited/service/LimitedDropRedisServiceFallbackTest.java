@@ -38,7 +38,7 @@ class LimitedDropRedisServiceFallbackTest {
 		@DisplayName("Redis 연결 실패면 empty 를 반환한다")
 		void returnsEmptyWhenRedisConnectionFails() {
 			// given
-			limitedDropRedisService = new LimitedDropRedisService(redisTemplate);
+			limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null);
 			given(redisTemplate.opsForValue()).willReturn(valueOperations);
 			willThrow(new RedisConnectionFailureException("connection refused"))
 					.given(valueOperations).get("limited:stock:1");
@@ -54,7 +54,7 @@ class LimitedDropRedisServiceFallbackTest {
 		@DisplayName("값이 숫자가 아니면 empty 를 반환한다")
 		void returnsEmptyWhenValueIsNotNumeric() {
 			// given
-			limitedDropRedisService = new LimitedDropRedisService(redisTemplate);
+			limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null);
 			given(redisTemplate.opsForValue()).willReturn(valueOperations);
 			given(valueOperations.get("limited:stock:1")).willReturn("not-a-number");
 
@@ -74,7 +74,7 @@ class LimitedDropRedisServiceFallbackTest {
 		@DisplayName("Redis 연결 실패면 빈 맵을 반환한다")
 		void returnsEmptyMapWhenRedisConnectionFails() {
 			// given
-			limitedDropRedisService = new LimitedDropRedisService(redisTemplate);
+			limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null);
 			given(redisTemplate.opsForValue()).willReturn(valueOperations);
 			willThrow(new RedisConnectionFailureException("connection refused"))
 					.given(valueOperations).multiGet(List.of("limited:stock:1", "limited:stock:2"));
@@ -90,7 +90,7 @@ class LimitedDropRedisServiceFallbackTest {
 		@DisplayName("빈 입력이면 Redis 를 호출하지 않고 빈 맵을 반환한다")
 		void returnsEmptyMapWithoutCallingRedisWhenInputEmpty() {
 			// given
-			limitedDropRedisService = new LimitedDropRedisService(redisTemplate);
+			limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null);
 
 			// when
 			Map<Long, Integer> result = limitedDropRedisService.getStocks(List.of());

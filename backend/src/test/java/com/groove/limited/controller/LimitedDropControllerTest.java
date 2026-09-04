@@ -40,6 +40,7 @@ import com.groove.limited.dto.LimitedDropListResponse;
 import com.groove.limited.dto.LimitedDropSummaryResponse;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.service.LimitedDropService;
+import com.groove.limited.service.LimitedPurchaseService;
 import com.groove.member.entity.MemberRole;
 
 @WebMvcTest(LimitedDropController.class)
@@ -59,6 +60,9 @@ class LimitedDropControllerTest {
 
 	@MockitoBean
 	private LimitedDropService limitedDropService;
+
+	@MockitoBean
+	private LimitedPurchaseService limitedPurchaseService;
 
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);

@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,14 @@ public class LimitedDropRedisService {
 	public static final String STOCK_KEY_PREFIX = "limited:stock:";
 	public static final String BUYERS_KEY_PREFIX = "limited:buyers:";
 
+	/** reserve 스크립트 반환값. */
+	public enum ReserveResult {
+		OK, ALREADY, SOLD_OUT, NOT_INITIALIZED
+	}
+
 	private final StringRedisTemplate redisTemplate;
+	private final RedisScript<Long> limitedReserveScript;
+	private final RedisScript<Long> limitedReleaseScript;
 
 	/** 이미 키가 있으면 덮어쓰지 않는다(SET NX). 세팅됐으면 true. */
 	public boolean initStock(Long dropId, int quantity) {
@@ -69,6 +77,36 @@ public class LimitedDropRedisService {
 			log.warn("한정반 재고 Redis 일괄 조회 실패, DB 폴백 dropIds={}", ids, e);
 			return Map.of();
 		}
+	}
+
+	/** 재고 선점과 구매자 등록을 원자적으로 처리한다. 이미 구매했거나 재고가 없으면 아무 것도 바꾸지 않는다. */
+	public ReserveResult reserve(Long dropId, Long memberId) {
+		Long result = redisTemplate.execute(limitedReserveScript, List.of(stockKey(dropId), buyersKey(dropId)),
+				memberId.toString());
+		return toReserveResult(result);
+	}
+
+	/** 선점을 되돌린다. DB 처리 실패 등으로 뒤늦게 취소할 때 쓰이며, 실패 시 재고 불일치로 남으므로 반드시 로그를 남긴다. */
+	public void release(Long dropId, Long memberId) {
+		try {
+			redisTemplate.execute(limitedReleaseScript, List.of(stockKey(dropId), buyersKey(dropId)),
+					memberId.toString());
+		} catch (DataAccessException e) {
+			log.error("한정반 Redis 재고 복구 실패, 수동 복구 필요 dropId={} memberId={}", dropId, memberId, e);
+		}
+	}
+
+	private static ReserveResult toReserveResult(Long result) {
+		if (result == null) {
+			throw new IllegalStateException("한정반 reserve 스크립트가 null 을 반환했습니다.");
+		}
+		return switch (result.intValue()) {
+			case 0 -> ReserveResult.OK;
+			case 1 -> ReserveResult.ALREADY;
+			case 2 -> ReserveResult.SOLD_OUT;
+			case 3 -> ReserveResult.NOT_INITIALIZED;
+			default -> throw new IllegalStateException("알 수 없는 한정반 reserve 결과: " + result);
+		};
 	}
 
 	public static String stockKey(Long dropId) {

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +16,8 @@ import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
 import com.groove.limited.dto.LimitedDropSummaryRow;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
+
+import jakarta.persistence.LockModeType;
 
 public interface LimitedDropRepository extends JpaRepository<LimitedDrop, Long> {
 
@@ -24,6 +27,11 @@ public interface LimitedDropRepository extends JpaRepository<LimitedDrop, Long> 
 
 	@EntityGraph(attributePaths = "product")
 	Optional<LimitedDrop> findWithProductById(Long id);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@EntityGraph(attributePaths = "product")
+	@Query("select d from LimitedDrop d where d.id = :id")
+	Optional<LimitedDrop> findByIdForUpdate(@Param("id") Long id);
 
 	@Query(value = """
 			SELECT new com.groove.limited.dto.AdminLimitedDropSummaryResponse(
