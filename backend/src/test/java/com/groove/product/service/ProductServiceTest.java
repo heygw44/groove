@@ -30,6 +30,8 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.service.LimitedDropService;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSearchRequest;
@@ -62,12 +64,15 @@ class ProductServiceTest {
 	@Mock
 	private WishlistRepository wishlistRepository;
 
+	@Mock
+	private LimitedDropService limitedDropService;
+
 	private ProductService productService;
 
 	@BeforeEach
 	void setUp() {
 		productService = new ProductService(productSearchMapper, productRepository, productImageRepository,
-				stockRepository, wishlistRepository);
+				stockRepository, wishlistRepository, limitedDropService);
 	}
 
 	@Nested
@@ -294,6 +299,44 @@ class ProductServiceTest {
 
 			// then
 			assertThat(response.stockQuantity()).isZero();
+		}
+
+		@Test
+		@DisplayName("활성 한정반이 있으면 limitedDrop 요약을 포함한다")
+		void returnsLimitedDropSummaryWhenPresent() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 15L);
+			given(productRepository.findDetailById(15L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(15L)).willReturn(List.of());
+			given(stockRepository.findByProductId(15L)).willReturn(Optional.empty());
+			ProductDetailResponse.LimitedDropSummary summary = new ProductDetailResponse.LimitedDropSummary(
+					1L, LimitedDropStatus.OPEN, null, null, 30, 2);
+			given(limitedDropService.findSummaryForProduct(15L)).willReturn(Optional.of(summary));
+
+			// when
+			ProductDetailResponse response = productService.getDetail(15L, null);
+
+			// then
+			assertThat(response.limitedDrop()).isEqualTo(summary);
+		}
+
+		@Test
+		@DisplayName("활성 한정반이 없으면 limitedDrop 이 null 이다")
+		void returnsNullLimitedDropWhenAbsent() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 16L);
+			given(productRepository.findDetailById(16L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(16L)).willReturn(List.of());
+			given(stockRepository.findByProductId(16L)).willReturn(Optional.empty());
+			given(limitedDropService.findSummaryForProduct(16L)).willReturn(Optional.empty());
+
+			// when
+			ProductDetailResponse response = productService.getDetail(16L, null);
+
+			// then
+			assertThat(response.limitedDrop()).isNull();
 		}
 
 		private Artist artist() {

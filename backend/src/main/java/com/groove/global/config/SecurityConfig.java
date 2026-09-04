@@ -37,6 +37,7 @@ public class SecurityConfig {
 
 	private static final String[] PUBLIC_PATHS = {
 		"/api/v1/health",
+		"/api/v1/time",
 		"/api/v1/auth/signup",
 		"/api/v1/auth/login",
 		"/api/v1/auth/reissue",
@@ -62,6 +63,8 @@ public class SecurityConfig {
 						.requestMatchers(PUBLIC_PATHS).permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/genres", "/api/v1/labels", "/api/v1/artists/**")
+								.permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/limited-drops", "/api/v1/limited-drops/**")
 								.permitAll()
 						.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 						.requestMatchers(HttpMethod.POST, "/api/v1/files/**").hasRole("ADMIN")

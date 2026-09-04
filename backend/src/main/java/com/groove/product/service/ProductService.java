@@ -10,6 +10,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.limited.service.LimitedDropService;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSearchRequest;
@@ -34,6 +35,7 @@ public class ProductService {
 	private final ProductImageRepository productImageRepository;
 	private final StockRepository stockRepository;
 	private final WishlistRepository wishlistRepository;
+	private final LimitedDropService limitedDropService;
 
 	public PageResponse<ProductSummaryResponse> search(ProductSearchRequest request, Long memberId) {
 		ProductSearchCondition condition = request.toCondition(memberId);
@@ -56,6 +58,8 @@ public class ProductService {
 				.map(Stock::getQuantity)
 				.orElse(0);
 		Boolean wishlisted = memberId == null ? null : wishlistRepository.existsByMemberIdAndProductId(memberId, id);
-		return ProductDetailResponse.from(product, images, stockQuantity, wishlisted);
+		ProductDetailResponse.LimitedDropSummary limitedDrop = limitedDropService.findSummaryForProduct(id)
+				.orElse(null);
+		return ProductDetailResponse.from(product, images, stockQuantity, wishlisted, limitedDrop);
 	}
 }

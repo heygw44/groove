@@ -22,11 +22,14 @@ import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
+import com.groove.limited.dto.LimitedDropSummaryRow;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.entity.ProductImage;
 import com.groove.product.repository.ArtistRepository;
+import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.DataJpaTestSupport;
 
@@ -40,6 +43,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 
 	@Autowired
 	private ProductRepository productRepository;
+
+	@Autowired
+	private ProductImageRepository productImageRepository;
 
 	@Nested
 	@DisplayName("save()")
@@ -215,6 +221,98 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 			assertThat(summary.closeAt()).isEqualTo(closeAt);
 			assertThat(summary.status()).isEqualTo(LimitedDropStatus.OPEN);
 			assertThat(summary.createdAt()).isNotNull();
+		}
+	}
+
+	@Nested
+	@DisplayName("findPublicSummaries()")
+	class FindPublicSummaries {
+
+		@Test
+		@DisplayName("statuses 로 필터링하면 저장한 드롭 중 해당 상태만 포함한다")
+		void returnsOnlyMatchingStatusAmongSavedDrops() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product scheduledProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품11"));
+			Product openProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품12"));
+			LimitedDrop scheduledDrop = limitedDropRepository.save(LimitedDropFixture.scheduled(scheduledProduct));
+			LimitedDrop openDrop = limitedDropRepository.save(LimitedDropFixture.open(openProduct, 50));
+
+			// when
+			List<LimitedDropSummaryRow> rows = limitedDropRepository.findPublicSummaries(
+					List.of(LimitedDropStatus.OPEN));
+
+			// then
+			List<Long> ids = rows.stream().map(LimitedDropSummaryRow::id).toList();
+			assertThat(ids).contains(openDrop.getId()).doesNotContain(scheduledDrop.getId());
+		}
+
+		@Test
+		@DisplayName("상품이 HIDDEN 이면 드롭이 있어도 제외한다")
+		void excludesDropsOfHiddenProduct() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product hiddenProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품13"));
+			hiddenProduct.hide();
+			productRepository.save(hiddenProduct);
+			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(hiddenProduct));
+
+			// when
+			List<LimitedDropSummaryRow> rows = limitedDropRepository.findPublicSummaries(
+					List.of(LimitedDropStatus.SCHEDULED));
+
+			// then
+			List<Long> ids = rows.stream().map(LimitedDropSummaryRow::id).toList();
+			assertThat(ids).doesNotContain(drop.getId());
+		}
+
+		@Test
+		@DisplayName("openAt 오름차순으로 정렬한다")
+		void ordersByOpenAtAscending() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product laterProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품14"));
+			Product earlierProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품15"));
+			LocalDateTime base = LocalDateTime.now().plusDays(1).truncatedTo(ChronoUnit.SECONDS);
+			LimitedDrop laterDrop = limitedDropRepository.save(LimitedDropFixture.withOpenAt(
+					LimitedDropFixture.scheduled(laterProduct), base.plusDays(5)));
+			LimitedDrop earlierDrop = limitedDropRepository.save(LimitedDropFixture.withOpenAt(
+					LimitedDropFixture.scheduled(earlierProduct), base));
+
+			// when
+			List<LimitedDropSummaryRow> rows = limitedDropRepository.findPublicSummaries(
+					List.of(LimitedDropStatus.SCHEDULED));
+
+			// then
+			List<Long> orderedIds = rows.stream()
+					.map(LimitedDropSummaryRow::id)
+					.filter(id -> id.equals(laterDrop.getId()) || id.equals(earlierDrop.getId()))
+					.toList();
+			assertThat(orderedIds).containsExactly(earlierDrop.getId(), laterDrop.getId());
+		}
+
+		@Test
+		@DisplayName("sortOrder 0 인 이미지를 썸네일로 채운다")
+		void populatesThumbnailFromFirstImage() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품16"));
+			productImageRepository.save(ProductImage.of(product, "https://cdn.groove.com/0.jpg", 0));
+			productImageRepository.save(ProductImage.of(product, "https://cdn.groove.com/1.jpg", 1));
+			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));
+
+			// when
+			List<LimitedDropSummaryRow> rows = limitedDropRepository.findPublicSummaries(
+					List.of(LimitedDropStatus.SCHEDULED));
+
+			// then
+			LimitedDropSummaryRow row = rows.stream()
+					.filter(r -> r.id().equals(drop.getId()))
+					.findFirst()
+					.orElseThrow();
+			assertThat(row.thumbnailUrl()).isEqualTo("https://cdn.groove.com/0.jpg");
+			assertThat(row.artistName()).isEqualTo(artist.getName());
+			assertThat(row.productTitle()).isEqualTo("한정반 상품16");
 		}
 	}
 }

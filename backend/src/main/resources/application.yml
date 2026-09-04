@@ -12,6 +12,11 @@ spring:
   jackson:
     time-zone: Asia/Seoul
     default-property-inclusion: non_null
+  data:
+    redis:
+      # Redis 장애 시 DB 폴백이 지연되지 않도록 기본 타임아웃보다 짧게 잡는다.
+      timeout: 1s
+      connect-timeout: 500ms
   servlet:
     multipart:
       max-file-size: 5MB
