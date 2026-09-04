@@ -1,13 +1,19 @@
+import { useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
+import { useToast } from '@/components/common/toastContext';
 import { CountdownTimer } from '@/components/limited/CountdownTimer';
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
+import { LimitedPurchaseSheet } from '@/components/limited/LimitedPurchaseSheet';
+import { PurchaseResultModal } from '@/components/limited/PurchaseResultModal';
 import { RemainingGauge } from '@/components/limited/RemainingGauge';
+import { usePurchaseLimitedDrop } from '@/hooks/mutations/useLimitedDropMutations';
+import { addressKeys } from '@/hooks/queries/queryKeys';
 import { useLimitedDrop } from '@/hooks/queries/useLimitedDrop';
 import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
@@ -15,7 +21,7 @@ import { useAuthStore } from '@/store/authStore';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
-import { getDropPhase, getPurchaseButtonState } from '@/utils/limitedDrop';
+import { classifyPurchaseError, getDropPhase, getPurchaseButtonState } from '@/utils/limitedDrop';
 import { applyServerTime, toServerMs } from '@/utils/serverTime';
 
 const NOT_FOUND_CODES = new Set(['LIMITED_DROP_NOT_FOUND']);
@@ -32,9 +38,17 @@ export default function LimitedDropDetailPage() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
   const nowMs = useServerNow();
   const { data: drop, isPending, isError, error, refetch } = useLimitedDrop(id);
+  const purchaseMutation = usePurchaseLimitedDrop(id);
+
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [resultModal, setResultModal] = useState<
+    { title: string; description: string; linkTo?: string; linkLabel?: string } | undefined
+  >(undefined);
 
   const phase = drop ? getDropPhase(drop, nowMs) : undefined;
   const previousPhaseRef = useRef(phase);
@@ -112,7 +126,53 @@ export default function LimitedDropDetailPage() {
       navigate(`/login?redirect=${redirect}`);
       return;
     }
-    // TODO(#130): 배송지 선택 시트를 열고 실제 구매 요청을 보낸다.
+    setIsSheetOpen(true);
+  };
+
+  const handleConfirmPurchase = (addressId: number) => {
+    purchaseMutation.mutate(
+      { addressId },
+      {
+        onSuccess: (data) => {
+          setIsSheetOpen(false);
+          navigate(`/orders/${data.orderId}`);
+        },
+        onError: (mutationError) => {
+          const code = getErrorCode(mutationError);
+          switch (classifyPurchaseError(code)) {
+            case 'SOLD_OUT':
+              setIsSheetOpen(false);
+              setResultModal({
+                title: '매진되었습니다',
+                description: '아쉽지만 이번 한정반은 모두 판매되었습니다.',
+              });
+              void refetch();
+              break;
+            case 'ALREADY_PURCHASED':
+              setIsSheetOpen(false);
+              setResultModal({
+                title: '이미 구매했습니다',
+                description: '한 회원당 한정반 구매는 1회로 제한됩니다.',
+                linkTo: '/orders',
+                linkLabel: '내 주문 보기',
+              });
+              void refetch();
+              break;
+            case 'STATE_CHANGED':
+              showToast('error', getErrorMessage(mutationError));
+              void refetch();
+              break;
+            case 'ADDRESS_MISSING':
+              showToast('error', getErrorMessage(mutationError));
+              void queryClient.invalidateQueries({ queryKey: addressKeys.all });
+              break;
+            default:
+              showToast('error', getErrorMessage(mutationError));
+              break;
+          }
+        },
+      },
+    );
   };
 
   return (
@@ -161,6 +221,23 @@ export default function LimitedDropDetailPage() {
       >
         {buttonState.label}
       </Button>
+
+      <LimitedPurchaseSheet
+        open={isSheetOpen}
+        onClose={() => setIsSheetOpen(false)}
+        drop={drop}
+        pending={purchaseMutation.isPending}
+        onConfirm={handleConfirmPurchase}
+      />
+
+      <PurchaseResultModal
+        open={resultModal !== undefined}
+        onClose={() => setResultModal(undefined)}
+        title={resultModal?.title ?? ''}
+        description={resultModal?.description ?? ''}
+        linkTo={resultModal?.linkTo}
+        linkLabel={resultModal?.linkLabel}
+      />
     </div>
   );
 }

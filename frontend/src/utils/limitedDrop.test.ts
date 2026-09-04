@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { LimitedDropDetail, LimitedDropSummary } from '@/types/limitedDrop';
 import {
+  classifyPurchaseError,
   formatDday,
   getDropPhase,
   getPurchaseButtonState,
@@ -160,5 +161,36 @@ describe('pickBannerDrop()', () => {
 
     // when & then
     expect(pickBannerDrop([soldOut, closed])).toBeUndefined();
+  });
+});
+
+describe('classifyPurchaseError()', () => {
+  it('LIMITED_SOLD_OUT 은 SOLD_OUT 이다', () => {
+    // when & then
+    expect(classifyPurchaseError('LIMITED_SOLD_OUT')).toBe('SOLD_OUT');
+  });
+
+  it('LIMITED_ALREADY_PURCHASED 는 ALREADY_PURCHASED 다', () => {
+    // when & then
+    expect(classifyPurchaseError('LIMITED_ALREADY_PURCHASED')).toBe('ALREADY_PURCHASED');
+  });
+
+  it.each(['LIMITED_NOT_OPEN', 'LIMITED_CLOSED', 'LIMITED_INVALID_STATUS'])(
+    '%s 는 STATE_CHANGED 다',
+    (code) => {
+      // when & then
+      expect(classifyPurchaseError(code)).toBe('STATE_CHANGED');
+    },
+  );
+
+  it('MEMBER_ADDRESS_NOT_FOUND 는 ADDRESS_MISSING 이다', () => {
+    // when & then
+    expect(classifyPurchaseError('MEMBER_ADDRESS_NOT_FOUND')).toBe('ADDRESS_MISSING');
+  });
+
+  it('그 외 코드나 undefined 는 UNKNOWN 이다', () => {
+    // when & then
+    expect(classifyPurchaseError('COMMON_INTERNAL_ERROR')).toBe('UNKNOWN');
+    expect(classifyPurchaseError(undefined)).toBe('UNKNOWN');
   });
 });

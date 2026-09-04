@@ -77,8 +77,12 @@ class OrderControllerTest {
 	}
 
 	private OrderDetailResponse sampleDetailResponse(OrderStatus status) {
+		return sampleDetailResponse(status, null);
+	}
+
+	private OrderDetailResponse sampleDetailResponse(OrderStatus status, Long limitedDropId) {
 		return new OrderDetailResponse(1L, "20260903-TESTAB12", status, new BigDecimal("90000"), BigDecimal.ZERO,
-				new BigDecimal("90000"), null, List.of(), null, null, null, null, null);
+				new BigDecimal("90000"), null, List.of(), null, null, null, null, null, limitedDropId);
 	}
 
 	@Nested
@@ -260,12 +264,14 @@ class OrderControllerTest {
 		@DisplayName("유효한 요청이면 200 과 주문 상세를 반환한다")
 		void returnsOrderDetail() throws Exception {
 			// given
-			given(orderService.getDetail(eq(1L), eq(1L))).willReturn(sampleDetailResponse(OrderStatus.PENDING));
+			given(orderService.getDetail(eq(1L), eq(1L)))
+					.willReturn(sampleDetailResponse(OrderStatus.PENDING, 10L));
 
 			// when & then
 			mockMvc.perform(get(BASE_URL + "/1").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isOk())
-					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")));
+					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")))
+					.andExpect(jsonPath("$.data.limitedDropId", is(10)));
 		}
 
 		@Test

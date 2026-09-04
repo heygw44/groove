@@ -38,6 +38,8 @@ import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.CartFixture;
 import com.groove.fixture.CouponFixture;
+import com.groove.fixture.LimitedDropFixture;
+import com.groove.fixture.LimitedPurchaseFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
@@ -45,8 +47,11 @@ import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.limited.service.LimitedPurchaseWriter;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.limited.service.LimitedReleaseSynchronizer;
@@ -88,6 +93,9 @@ class OrderServiceTest {
 
 	@Mock
 	LimitedDropRepository limitedDropRepository;
+
+	@Mock
+	LimitedPurchaseRepository limitedPurchaseRepository;
 
 	@Mock
 	LimitedPurchaseWriter limitedPurchaseWriter;
@@ -133,8 +141,9 @@ class OrderServiceTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
-				limitedPurchaseWriter, limitedReleaseSynchronizer, cartItemRepository, memberCouponRepository,
-				orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper, paymentCancelHook, clock);
+				limitedPurchaseRepository, limitedPurchaseWriter, limitedReleaseSynchronizer, cartItemRepository,
+				memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper,
+				paymentCancelHook, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -505,6 +514,38 @@ class OrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("한정반 구매로 생긴 주문이면 limitedDropId 를 채운다")
+		void returnsLimitedDropIdForLimitedOrder() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 602L);
+			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.open(product, 10), 700L);
+			LimitedPurchase purchase = LimitedPurchaseFixture.create(drop, member, order, 1);
+			given(orderRepository.findWithItemsByIdAndMemberId(602L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(limitedPurchaseRepository.findByOrderId(602L)).willReturn(Optional.of(purchase));
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 602L);
+
+			// then
+			assertThat(response.limitedDropId()).isEqualTo(700L);
+		}
+
+		@Test
+		@DisplayName("일반 주문이면 limitedDropId 는 null 이다")
+		void returnsNullLimitedDropIdForNormalOrder() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 603L);
+			given(orderRepository.findWithItemsByIdAndMemberId(603L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(limitedPurchaseRepository.findByOrderId(603L)).willReturn(Optional.empty());
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 603L);
+
+			// then
+			assertThat(response.limitedDropId()).isNull();
 		}
 	}
 

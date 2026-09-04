@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Spinner } from '@/components/common/Spinner';
@@ -12,17 +13,23 @@ import type { OrderSummaryItem } from '@/components/order/OrderItemSummaryList';
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
+import { PendingExpiryBanner } from '@/components/order/PendingExpiryBanner';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
 import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
+import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatDateTime } from '@/utils/formatDate';
 import { isCancelableStatus } from '@/utils/orderStatus';
+import { toServerMs } from '@/utils/serverTime';
 
 const NOT_FOUND_CODES = new Set(['ORDER_NOT_FOUND']);
 
 const ID_PATTERN = /^\d+$/;
+
+// 만료 스케줄러 반영을 기다리는 동안 짧은 간격으로 다시 확인한다. 상태가 PENDING 을 벗어나면 멈춘다.
+const EXPIRY_POLL_MS = 5_000;
 
 export default function OrderDetailPage() {
   const { id: idParam } = useParams();
@@ -30,7 +37,17 @@ export default function OrderDetailPage() {
   const id = isValidId ? Number(idParam) : -1;
 
   const { showToast } = useToast();
-  const { data: order, isPending, isError, error, refetch } = useOrder(id);
+  const nowMs = useServerNow();
+  const [isExpired, setIsExpired] = useState(false);
+  const {
+    data: order,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useOrder(id, (query) =>
+    isExpired && query.state.data?.status === 'PENDING' ? EXPIRY_POLL_MS : false,
+  );
   const cancelOrderMutation = useCancelOrder();
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
@@ -44,6 +61,11 @@ export default function OrderDetailPage() {
       document.title = previousTitle;
     };
   }, [order]);
+
+  const handleExpired = () => {
+    setIsExpired(true);
+    void refetch();
+  };
 
   // enabled:false 여도 isPending 은 true 이므로, 잘못된 id 분기를 로딩 분기보다 먼저 둔다.
   if (!isValidId) {
@@ -109,6 +131,11 @@ export default function OrderDetailPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="font-mono text-lg font-bold">{order.orderNumber}</h1>
         <OrderStatusBadge status={order.status} />
+        {order.limitedDropId !== undefined && (
+          <Link to={`/limited-drops/${order.limitedDropId}`}>
+            <Badge variant="accent">한정반</Badge>
+          </Link>
+        )}
         <span className="text-sm text-content-muted">{formatDateTime(order.createdAt)}</span>
       </div>
 
@@ -117,10 +144,11 @@ export default function OrderDetailPage() {
       </div>
 
       {order.status === 'PENDING' && (
-        <div className="mt-6 rounded-lg border border-line bg-surface-muted px-5 py-4 text-sm text-content-muted">
-          결제 대기 중입니다. {formatDateTime(order.expiresAt)} 까지 결제하지 않으면 자동
-          취소됩니다.
-        </div>
+        <PendingExpiryBanner
+          expiresAtMs={toServerMs(order.expiresAt)}
+          nowMs={nowMs}
+          onExpired={handleExpired}
+        />
       )}
 
       {order.status === 'CANCELED' && order.canceledAt && (
