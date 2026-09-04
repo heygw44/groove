@@ -130,6 +130,7 @@ export const toCreatePayload = (values: AdminCouponFormValues): AdminCouponCreat
 
 /**
  * 수정 요청은 키 생략 = 기존 유지이므로, 원본과 달라진 필드만 담는다.
+ * totalQuantity·maxDiscountAmount 는 null = 해제(무제한/상한 없음)를 명시적으로 보낸다.
  * 발급이 시작된(issuedCount > 0) 쿠폰은 할인 4필드 비교 자체를 건너뛰어 절대 포함하지 않는다.
  */
 export const toUpdatePayload = (
@@ -147,8 +148,6 @@ export const toUpdatePayload = (
   if (!discountLocked) {
     const discountValue = Number(values.discountValue);
     const minOrderAmount = values.minOrderAmount !== '' ? Number(values.minOrderAmount) : 0;
-    const maxDiscountAmount =
-      values.maxDiscountAmount !== '' ? Number(values.maxDiscountAmount) : undefined;
 
     if (values.discountType !== original.discountType) {
       payload.discountType = values.discountType;
@@ -159,8 +158,16 @@ export const toUpdatePayload = (
     if (minOrderAmount !== original.minOrderAmount) {
       payload.minOrderAmount = minOrderAmount;
     }
-    if (maxDiscountAmount !== original.maxDiscountAmount) {
-      payload.maxDiscountAmount = maxDiscountAmount;
+
+    if (values.maxDiscountAmount === '') {
+      if (original.maxDiscountAmount !== undefined) {
+        payload.maxDiscountAmount = null;
+      }
+    } else {
+      const maxDiscountAmount = Number(values.maxDiscountAmount);
+      if (maxDiscountAmount !== original.maxDiscountAmount) {
+        payload.maxDiscountAmount = maxDiscountAmount;
+      }
     }
   }
 
@@ -169,8 +176,11 @@ export const toUpdatePayload = (
     payload.expiresAt = nextExpiresAt;
   }
 
-  // 빈 값(무제한 요청)은 원본에 수량이 있어도 보내지 않는다 - 한 번 정한 수량은 무제한으로 되돌릴 수 없다.
-  if (values.totalQuantity !== '') {
+  if (values.totalQuantity === '') {
+    if (original.totalQuantity !== undefined) {
+      payload.totalQuantity = null;
+    }
+  } else {
     const totalQuantity = Number(values.totalQuantity);
     if (totalQuantity !== original.totalQuantity) {
       payload.totalQuantity = totalQuantity;

@@ -1,5 +1,6 @@
 package com.groove.coupon.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,6 +22,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -85,7 +88,8 @@ class AdminCouponControllerTest {
 	}
 
 	private CouponUpdateRequest emptyUpdateRequest() {
-		return new CouponUpdateRequest(null, null, null, null, null, null, null, null);
+		return new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(), JsonNullable.undefined(),
+				null, null);
 	}
 
 	private AdminCouponResponse sampleResponse() {
@@ -313,13 +317,63 @@ class AdminCouponControllerTest {
 		void returnsBadRequestWhenRateExceeds100() throws Exception {
 			// given
 			CouponUpdateRequest request = new CouponUpdateRequest(null, DiscountType.RATE, BigDecimal.valueOf(150),
-					null, null, null, null, null);
+					null, JsonNullable.undefined(), JsonNullable.undefined(), null, null);
 
 			// when & then
 			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", COUPON_ID)
 							.header(HttpHeaders.AUTHORIZATION, adminToken())
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
+		@DisplayName("totalQuantity 가 명시적 null 이면 해제 요청으로 서비스에 전달된다")
+		void bindsTotalQuantityAsExplicitNullWhenBodyHasNullValue() throws Exception {
+			// given
+			given(adminCouponService.update(eq(1L), eq(COUPON_ID), any())).willReturn(sampleResponse());
+			ArgumentCaptor<CouponUpdateRequest> captor = ArgumentCaptor.forClass(CouponUpdateRequest.class);
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", COUPON_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"totalQuantity\":null}"))
+					.andExpect(status().isOk());
+
+			// then
+			verify(adminCouponService).update(eq(1L), eq(COUPON_ID), captor.capture());
+			assertThat(captor.getValue().totalQuantity()).isEqualTo(JsonNullable.of(null));
+		}
+
+		@Test
+		@DisplayName("totalQuantity 키가 없으면 유지 요청으로 바인딩된다")
+		void bindsTotalQuantityAsUndefinedWhenBodyOmitsKey() throws Exception {
+			// given
+			given(adminCouponService.update(eq(1L), eq(COUPON_ID), any())).willReturn(sampleResponse());
+			ArgumentCaptor<CouponUpdateRequest> captor = ArgumentCaptor.forClass(CouponUpdateRequest.class);
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", COUPON_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"name\":\"x\"}"))
+					.andExpect(status().isOk());
+
+			// then
+			verify(adminCouponService).update(eq(1L), eq(COUPON_ID), captor.capture());
+			assertThat(captor.getValue().totalQuantity()).isEqualTo(JsonNullable.undefined());
+		}
+
+		@Test
+		@DisplayName("totalQuantity 가 0이면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenTotalQuantityZero() throws Exception {
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", COUPON_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"totalQuantity\":0}"))
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 		}

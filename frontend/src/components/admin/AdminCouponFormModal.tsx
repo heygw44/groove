@@ -89,10 +89,9 @@ export function AdminCouponFormModal({ open, onClose, coupon }: AdminCouponFormM
     }
   };
 
-  const totalQuantityHelp =
-    coupon && coupon.totalQuantity !== undefined
-      ? `발급 수 ${coupon.issuedCount} 이상이어야 하며 무제한으로 되돌릴 수 없습니다.`
-      : '비워두면 무제한';
+  const totalQuantityHelp = coupon
+    ? `발급 수 ${coupon.issuedCount} 이상이어야 합니다. 비워두면 무제한`
+    : '비워두면 무제한';
 
   const onSubmit = handleSubmit((values) => {
     if (!isEdit) {

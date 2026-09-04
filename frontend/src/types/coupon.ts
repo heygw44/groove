@@ -87,8 +87,10 @@ export interface AdminCouponUpdateRequest {
   discountType?: DiscountType;
   discountValue?: number;
   minOrderAmount?: number;
-  maxDiscountAmount?: number;
-  totalQuantity?: number;
+  /** null 이면 해제(상한 없음). */
+  maxDiscountAmount?: number | null;
+  /** null 이면 해제(무제한). */
+  totalQuantity?: number | null;
   expiresAt?: string;
   status?: CouponStatus;
 }

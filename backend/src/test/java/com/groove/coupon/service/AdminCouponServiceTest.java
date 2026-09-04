@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.openapitools.jackson.nullable.JsonNullable;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
@@ -121,7 +122,8 @@ class AdminCouponServiceTest {
 			Coupon coupon = CouponFixture.withId(CouponFixture.fixed("UPDATE1000", BigDecimal.valueOf(1000)),
 					COUPON_ID);
 			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
-			CouponUpdateRequest request = new CouponUpdateRequest("새 이름", null, null, null, null, null, null, null);
+			CouponUpdateRequest request = new CouponUpdateRequest("새 이름", null, null, null, JsonNullable.undefined(),
+					JsonNullable.undefined(), null, null);
 			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
 
 			// when
@@ -142,7 +144,7 @@ class AdminCouponServiceTest {
 					COUPON_ID);
 			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
 			CouponUpdateRequest request = new CouponUpdateRequest(null, DiscountType.RATE, BigDecimal.valueOf(10),
-					null, null, null, null, null);
+					null, JsonNullable.undefined(), JsonNullable.undefined(), null, null);
 
 			// when & then
 			assertThatThrownBy(() -> adminCouponService.update(ADMIN_ID, COUPON_ID, request))
@@ -160,8 +162,8 @@ class AdminCouponServiceTest {
 			coupon.disableAndExpire();
 			LocalDateTime newExpiresAt = LocalDateTime.now().plusDays(10);
 			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
-			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, null, null, newExpiresAt,
-					CouponStatus.ACTIVE);
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(),
+					JsonNullable.undefined(), newExpiresAt, CouponStatus.ACTIVE);
 
 			// when
 			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
@@ -179,14 +181,89 @@ class AdminCouponServiceTest {
 					COUPON_ID);
 			coupon.disableAndExpire();
 			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
-			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, null, null, null,
-					CouponStatus.ACTIVE);
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(),
+					JsonNullable.undefined(), null, CouponStatus.ACTIVE);
 
 			// when & then
 			assertThatThrownBy(() -> adminCouponService.update(ADMIN_ID, COUPON_ID, request))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COUPON_EXPIRED);
+		}
+
+		@Test
+		@DisplayName("totalQuantity 를 명시적 null 로 보내면 발급 수와 무관하게 무제한으로 해제한다")
+		void clearsTotalQuantityWhenExplicitNull() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.withTotalQuantity("CLEARQTY1", 100), COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(),
+					JsonNullable.of(null), null, null);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.totalQuantity()).isNull();
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("totalQuantity");
+		}
+
+		@Test
+		@DisplayName("totalQuantity 키를 생략하면 기존 값을 유지한다")
+		void keepsTotalQuantityWhenUndefined() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.withTotalQuantity("KEEPQTY1", 100), COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = emptyUpdateRequest();
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.totalQuantity()).isEqualTo(100);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("발급 전 정률 쿠폰의 maxDiscountAmount 를 명시적 null 로 보내면 상한을 해제한다")
+		void clearsMaxDiscountAmountWhenExplicitNull() {
+			// given
+			Coupon coupon = CouponFixture.withId(
+					CouponFixture.rate("CLEARCAP1", BigDecimal.valueOf(10), BigDecimal.valueOf(5000)), COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.of(null),
+					JsonNullable.undefined(), null, null);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.maxDiscountAmount()).isNull();
+		}
+
+		@Test
+		@DisplayName("발급이 시작된 쿠폰의 maxDiscountAmount 를 해제하려 하면 COUPON_DISCOUNT_LOCKED 예외를 던진다")
+		void throwsWhenClearingMaxDiscountAfterIssued() {
+			// given
+			Coupon coupon = CouponFixture.withId(
+					CouponFixture.withIssuedCount(
+							CouponFixture.rate("LOCKEDCAP1", BigDecimal.valueOf(10), BigDecimal.valueOf(5000)), 1),
+					COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.of(null),
+					JsonNullable.undefined(), null, null);
+
+			// when & then
+			assertThatThrownBy(() -> adminCouponService.update(ADMIN_ID, COUPON_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_DISCOUNT_LOCKED);
 		}
 	}
 
@@ -245,6 +322,7 @@ class AdminCouponServiceTest {
 	}
 
 	private CouponUpdateRequest emptyUpdateRequest() {
-		return new CouponUpdateRequest(null, null, null, null, null, null, null, null);
+		return new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(), JsonNullable.undefined(),
+				null, null);
 	}
 }
