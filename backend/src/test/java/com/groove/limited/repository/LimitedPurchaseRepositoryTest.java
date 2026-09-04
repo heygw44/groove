@@ -3,6 +3,8 @@ package com.groove.limited.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -124,6 +126,34 @@ class LimitedPurchaseRepositoryTest extends DataJpaTestSupport {
 
 			// then
 			assertThat(exists).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("findAllWithMemberAndOrderByDropId()")
+	class FindAllWithMemberAndOrderByDropId {
+
+		@Test
+		@DisplayName("회원을 즉시 로딩하며 주문이 없는 구매도 함께 조회한다")
+		void returnsPurchasesWithMemberFetchedAndOrderNullable() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("limited-repo-fetch@groove.com"));
+			LimitedDrop drop = createDrop("한정반 구매 상품6");
+			LimitedPurchase saved = limitedPurchaseRepository.saveAndFlush(LimitedPurchaseFixture.create(drop,
+					member));
+
+			// when
+			List<LimitedPurchase> purchases = limitedPurchaseRepository
+					.findAllWithMemberAndOrderByDropId(drop.getId());
+
+			// then
+			assertThat(purchases).extracting("id").contains(saved.getId());
+			LimitedPurchase found = purchases.stream()
+					.filter(p -> p.getId().equals(saved.getId()))
+					.findFirst()
+					.orElseThrow();
+			assertThat(found.getMember().getId()).isEqualTo(member.getId());
+			assertThat(found.getOrder()).isNull();
 		}
 	}
 

@@ -17,13 +17,16 @@ import com.groove.global.common.PageResponse;
 import com.groove.inventory.dto.StockAdjustRequest;
 import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.service.StockService;
+import com.groove.limited.dto.AdminLimitedDropDetailResponse;
 import com.groove.limited.dto.AdminLimitedDropResponse;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
 import com.groove.limited.dto.LimitedDropCreateRequest;
 import com.groove.limited.dto.LimitedDropUpdateRequest;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
 
@@ -39,6 +42,7 @@ public class AdminLimitedDropService {
 	private static final String UPDATE_STOCK_REASON = "한정반 드롭 수정";
 
 	private final LimitedDropRepository limitedDropRepository;
+	private final LimitedPurchaseRepository limitedPurchaseRepository;
 	private final ProductRepository productRepository;
 	private final StockService stockService;
 	private final LimitedDropRedisService limitedDropRedisService;
@@ -137,6 +141,16 @@ public class AdminLimitedDropService {
 
 	public PageResponse<AdminLimitedDropSummaryResponse> getList(LimitedDropStatus status, Pageable pageable) {
 		return PageResponse.from(limitedDropRepository.findAdminSummaries(status, pageable));
+	}
+
+	public AdminLimitedDropDetailResponse getDetail(Long dropId) {
+		LimitedDrop drop = limitedDropRepository.findWithProductById(dropId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.LIMITED_DROP_NOT_FOUND));
+
+		Integer redisRemaining = limitedDropRedisService.getStock(dropId).orElse(null);
+		List<LimitedPurchase> purchases = limitedPurchaseRepository.findAllWithMemberAndOrderByDropId(dropId);
+
+		return AdminLimitedDropDetailResponse.from(drop, redisRemaining, purchases);
 	}
 
 	private <T> T coalesce(T newValue, T currentValue, String fieldName, List<String> changedFields) {

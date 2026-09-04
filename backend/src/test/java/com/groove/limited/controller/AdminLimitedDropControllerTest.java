@@ -40,13 +40,16 @@ import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
+import com.groove.limited.dto.AdminLimitedDropDetailResponse;
 import com.groove.limited.dto.AdminLimitedDropResponse;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
+import com.groove.limited.dto.AdminLimitedPurchaseResponse;
 import com.groove.limited.dto.LimitedDropCreateRequest;
 import com.groove.limited.dto.LimitedDropUpdateRequest;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.service.AdminLimitedDropService;
 import com.groove.member.entity.MemberRole;
+import com.groove.order.entity.OrderStatus;
 
 @WebMvcTest(AdminLimitedDropController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -239,6 +242,42 @@ class AdminLimitedDropControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(adminLimitedDropService, never()).getList(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/admin/limited-drops/{id}")
+	class GetDetail {
+
+		@Test
+		@DisplayName("관리자면 200과 재고 대조·구매자 목록을 포함한 상세 정보를 반환한다")
+		void returnsDetailWhenAdmin() throws Exception {
+			// given
+			AdminLimitedPurchaseResponse purchase = new AdminLimitedPurchaseResponse(1L, 5L, "구매자1", 20L,
+					"20260904-TESTAB12", OrderStatus.PAID, 1, LocalDateTime.now());
+			AdminLimitedDropDetailResponse detail = new AdminLimitedDropDetailResponse(DROP_ID, PRODUCT_ID,
+					"Kind of Blue", 100, 10, 90, 88, 2, LocalDateTime.now().plusDays(1),
+					LocalDateTime.now().plusDays(2), LimitedDropStatus.OPEN, LocalDateTime.now(), LocalDateTime.now(),
+					List.of(purchase));
+			given(adminLimitedDropService.getDetail(DROP_ID)).willReturn(detail);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/limited-drops/{id}", DROP_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.redisRemaining", is(88)))
+					.andExpect(jsonPath("$.data.purchases[0].memberNickname", is("구매자1")));
+		}
+
+		@Test
+		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN을 반환하고 서비스는 호출되지 않는다")
+		void returnsForbiddenWhenNotAdmin() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/limited-drops/{id}", DROP_ID)
+							.header(HttpHeaders.AUTHORIZATION, userToken()))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(adminLimitedDropService, never()).getDetail(any());
 		}
 	}
 
