@@ -1,6 +1,13 @@
 import { client, unwrap } from '@/api/client';
 import type { ApiResponse, PageResponse } from '@/types/api';
 import type {
+  AdminCouponCreateRequest,
+  AdminCouponListParams,
+  AdminCouponResponse,
+  AdminCouponSummary,
+  AdminCouponUpdateRequest,
+} from '@/types/coupon';
+import type {
   AdminOrderDetail,
   AdminOrderListParams,
   AdminOrderStatusChangeRequest,
@@ -53,3 +60,20 @@ export const getAdminOrder = (orderId: number) =>
 
 export const changeAdminOrderStatus = (orderId: number, payload: AdminOrderStatusChangeRequest) =>
   unwrap(client.patch<ApiResponse<AdminOrderDetail>>(`/admin/orders/${orderId}/status`, payload));
+
+export const getAdminCoupons = (params: AdminCouponListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<AdminCouponSummary>>>('/admin/coupons', {
+      params,
+    }),
+  );
+
+export const createAdminCoupon = (payload: AdminCouponCreateRequest) =>
+  unwrap(client.post<ApiResponse<AdminCouponResponse>>('/admin/coupons', payload));
+
+export const updateAdminCoupon = (id: number, payload: AdminCouponUpdateRequest) =>
+  unwrap(client.patch<ApiResponse<AdminCouponResponse>>(`/admin/coupons/${id}`, payload));
+
+export const disableAdminCoupon = async (id: number) => {
+  await client.delete<ApiResponse<void>>(`/admin/coupons/${id}`);
+};
