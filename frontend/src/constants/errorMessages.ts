@@ -31,6 +31,17 @@ export const ERROR_MESSAGES: Record<string, string> = {
   ORDER_INVALID_STATUS_TRANSITION: '허용되지 않는 상태 변경입니다. 주문 상태를 다시 확인해주세요.',
   WISHLIST_ALREADY_EXISTS: '이미 위시리스트에 있는 상품입니다.',
   WISHLIST_NOT_FOUND: '위시리스트에 없는 상품입니다.',
+  COUPON_NOT_FOUND: '존재하지 않는 쿠폰 코드입니다.',
+  COUPON_EXPIRED: '만료된 쿠폰입니다.',
+  COUPON_DISABLED: '사용이 중지된 쿠폰입니다.',
+  COUPON_SOLD_OUT: '쿠폰이 모두 소진되었습니다.',
+  COUPON_ALREADY_ISSUED: '이미 발급받은 쿠폰입니다.',
+  COUPON_ALREADY_USED: '이미 사용한 쿠폰입니다.',
+  COUPON_NOT_USED: '사용하지 않은 쿠폰입니다.',
+  COUPON_MIN_ORDER_AMOUNT_NOT_MET: '최소 주문 금액을 충족하지 않는 쿠폰입니다.',
+  COUPON_CODE_DUPLICATE: '이미 존재하는 쿠폰 코드입니다.',
+  COUPON_DISCOUNT_LOCKED: '발급이 시작된 쿠폰의 할인 조건은 변경할 수 없습니다.',
+  COUPON_QUANTITY_BELOW_ISSUED: '총 수량은 발급 수 이상이어야 합니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
@@ -40,4 +51,18 @@ export const ERROR_CODE_FIELD: Record<string, string> = {
   ARTIST_NOT_FOUND: 'artistId',
   LABEL_NOT_FOUND: 'labelId',
   GENRE_NOT_FOUND: 'genreIds',
+  COUPON_NOT_FOUND: 'code',
+  COUPON_EXPIRED: 'code',
+  COUPON_DISABLED: 'code',
+  COUPON_SOLD_OUT: 'code',
+  COUPON_ALREADY_ISSUED: 'code',
+};
+
+/**
+ * 서버 @AssertTrue 교차 검증은 메서드명 기반 프로퍼티명(rateWithinRange 등)으로
+ * fieldErrors 에 담겨 오므로, 실제 폼 필드명으로 한 번 바꿔준다.
+ */
+export const FIELD_ALIASES: Record<string, string> = {
+  rateWithinRange: 'discountValue',
+  singleSource: 'cartItemIds',
 };
