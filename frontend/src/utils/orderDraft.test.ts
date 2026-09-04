@@ -89,4 +89,26 @@ describe('toOrderCreateRequest()', () => {
     // then
     expect(result).toEqual({ productId: 10, quantity: 3, addressId: 5, memberCouponId: null });
   });
+
+  it('장바구니 draft 에 memberCouponId 를 넘기면 그대로 담긴다', () => {
+    // given
+    const draft: OrderDraft = { kind: 'cart', cartItemIds: [1, 2] };
+
+    // when
+    const result = toOrderCreateRequest(draft, 5, 7);
+
+    // then
+    expect(result).toEqual({ cartItemIds: [1, 2], addressId: 5, memberCouponId: 7 });
+  });
+
+  it('직접 구매 draft 에 memberCouponId 를 넘기면 그대로 담긴다', () => {
+    // given
+    const draft: OrderDraft = { kind: 'direct', productId: 10, quantity: 3 };
+
+    // when
+    const result = toOrderCreateRequest(draft, 5, 7);
+
+    // then
+    expect(result).toEqual({ productId: 10, quantity: 3, addressId: 5, memberCouponId: 7 });
+  });
 });

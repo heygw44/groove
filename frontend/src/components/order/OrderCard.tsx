@@ -56,7 +56,14 @@ export function OrderCard({ order }: OrderCardProps) {
 
         <div className="flex shrink-0 flex-col items-end gap-2">
           <OrderStatusBadge status={order.status} />
-          <p className="text-sm font-bold">{formatPrice(order.finalAmount)}</p>
+          <div className="text-right">
+            <p className="text-sm font-bold">{formatPrice(order.finalAmount)}</p>
+            {order.discountAmount > 0 && (
+              <p className="text-xs text-content-muted">
+                쿠폰 -{formatPrice(order.discountAmount)}
+              </p>
+            )}
+          </div>
         </div>
       </Link>
     </li>

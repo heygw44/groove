@@ -137,6 +137,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
             totalAmount={detail.totalAmount}
             discountAmount={detail.discountAmount}
             finalAmount={detail.finalAmount}
+            couponName={detail.couponName}
           />
 
           <div className="border-t border-line pt-5">

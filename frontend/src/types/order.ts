@@ -15,7 +15,7 @@ export interface OrderCreateResponse {
   totalAmount: number;
   discountAmount: number;
   finalAmount: number;
-  couponName: string | null;
+  couponName?: string;
 }
 
 export interface OrderItem {
@@ -40,7 +40,7 @@ export interface OrderSummary {
   status: OrderStatus;
   finalAmount: number;
   discountAmount: number;
-  couponName: string | null;
+  couponName?: string;
   representativeProductName: string;
   itemCount: number;
   thumbnailUrl?: string;
@@ -54,7 +54,7 @@ export interface OrderDetail {
   totalAmount: number;
   discountAmount: number;
   finalAmount: number;
-  couponName: string | null;
+  couponName?: string;
   items: OrderItem[];
   shippingAddress: ShippingAddress;
   createdAt: string;
@@ -92,7 +92,7 @@ export interface AdminOrderDetail {
   totalAmount: number;
   discountAmount: number;
   finalAmount: number;
-  couponName: string | null;
+  couponName?: string;
   items: OrderItem[];
   shippingAddress: ShippingAddress;
   createdAt: string;

@@ -11,6 +11,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   MEMBER_ADDRESS_NOT_FOUND: '이미 삭제된 배송지입니다.',
   MEMBER_ADDRESS_LIMIT_EXCEEDED: '배송지는 최대 10개까지 등록할 수 있습니다.',
   COMMON_INTERNAL_ERROR: '잠시 후 다시 시도해주세요.',
+  COMMON_CONFLICT: '다른 요청과 충돌했습니다. 다시 시도해주세요.',
   PRODUCT_NOT_FOUND: '존재하지 않는 상품입니다.',
   PRODUCT_HIDDEN: '판매가 중지된 상품입니다.',
   PRODUCT_NOT_HIDDEN: '숨김 상태가 아닌 상품입니다.',

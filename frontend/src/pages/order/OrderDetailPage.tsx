@@ -147,6 +147,7 @@ export default function OrderDetailPage() {
           totalAmount={order.totalAmount}
           discountAmount={order.discountAmount}
           finalAmount={order.finalAmount}
+          couponName={order.couponName}
         />
       </section>
 
