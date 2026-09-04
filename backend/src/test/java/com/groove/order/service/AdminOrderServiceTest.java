@@ -9,6 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +40,9 @@ import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.limited.service.LimitedPurchaseWriter;
+import com.groove.limited.service.LimitedRelease;
+import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchRequest;
@@ -69,15 +76,24 @@ class AdminOrderServiceTest {
 	@Mock
 	AdminAuditLogService adminAuditLogService;
 
+	@Mock
+	LimitedPurchaseWriter limitedPurchaseWriter;
+
+	@Mock
+	LimitedReleaseSynchronizer limitedReleaseSynchronizer;
+
 	AdminOrderService adminOrderService;
 
 	Member member;
 	Product product;
+	LocalDateTime now;
 
 	@BeforeEach
 	void setUp() {
+		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+		now = LocalDateTime.now(clock);
 		adminOrderService = new AdminOrderService(orderRepository, orderQueryMapper, orderStockService,
-				paymentCancelHook, adminAuditLogService);
+				paymentCancelHook, adminAuditLogService, limitedPurchaseWriter, limitedReleaseSynchronizer, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
@@ -215,6 +231,7 @@ class AdminOrderServiceTest {
 					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
 			verify(orderStockService, never()).restore(any());
 			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
+			verify(limitedPurchaseWriter, never()).revertByOrder(any(), any());
 		}
 
 		@Test
@@ -266,6 +283,40 @@ class AdminOrderServiceTest {
 
 			// then
 			assertThat(memberCoupon.isUsed()).isFalse();
+		}
+
+		@Test
+		@DisplayName("한정반 주문을 CANCELED 로 바꾸면 구매 이력을 되돌리고 커밋 후 Redis 선점을 해제한다")
+		void revertsLimitedPurchaseAndReleasesAfterCommitOnCancel() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			LimitedRelease release = new LimitedRelease(5L, member.getId());
+			given(limitedPurchaseWriter.revertByOrder(ORDER_ID, now)).willReturn(Optional.of(release));
+			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
+
+			// when
+			adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
+
+			// then
+			verify(limitedReleaseSynchronizer).releaseAfterCommit(release);
+		}
+
+		@Test
+		@DisplayName("CANCELED 가 아닌 전이면 한정반 구매 이력을 되돌리지 않는다")
+		void skipsLimitedRevertWhenNotCanceling() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
+
+			// when
+			adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
+
+			// then
+			verify(limitedPurchaseWriter, never()).revertByOrder(any(), any());
 		}
 	}
 

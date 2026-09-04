@@ -16,6 +16,8 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.service.LimitedPurchaseWriter;
+import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -47,6 +49,8 @@ public class OrderService {
 	private final AddressRepository addressRepository;
 	private final ProductRepository productRepository;
 	private final LimitedDropRepository limitedDropRepository;
+	private final LimitedPurchaseWriter limitedPurchaseWriter;
+	private final LimitedReleaseSynchronizer limitedReleaseSynchronizer;
 	private final CartItemRepository cartItemRepository;
 	private final MemberCouponRepository memberCouponRepository;
 	private final OrderStockService orderStockService;
@@ -122,6 +126,8 @@ public class OrderService {
 		order.cancel(reason);
 		orderStockService.restore(order);
 		restoreCoupon(order);
+		limitedPurchaseWriter.revertByOrder(order.getId(), LocalDateTime.now(clock))
+				.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
 
 		if (previousStatus == OrderStatus.PAID) {
 			paymentCancelHook.onPaidOrderCanceled(order);

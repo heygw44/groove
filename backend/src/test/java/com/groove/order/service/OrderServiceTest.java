@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
@@ -46,6 +47,9 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.service.LimitedPurchaseWriter;
+import com.groove.limited.service.LimitedRelease;
+import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -86,6 +90,12 @@ class OrderServiceTest {
 	LimitedDropRepository limitedDropRepository;
 
 	@Mock
+	LimitedPurchaseWriter limitedPurchaseWriter;
+
+	@Mock
+	LimitedReleaseSynchronizer limitedReleaseSynchronizer;
+
+	@Mock
 	CartItemRepository cartItemRepository;
 
 	@Mock
@@ -109,6 +119,7 @@ class OrderServiceTest {
 	Artist artist;
 	Product product;
 	Address address;
+	LocalDateTime now;
 
 	@BeforeEach
 	void setUp() {
@@ -120,9 +131,10 @@ class OrderServiceTest {
 			return savedOrder;
 		});
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+		now = LocalDateTime.now(clock);
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
-				cartItemRepository, memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator,
-				orderQueryMapper, paymentCancelHook, clock);
+				limitedPurchaseWriter, limitedReleaseSynchronizer, cartItemRepository, memberCouponRepository,
+				orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper, paymentCancelHook, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -549,6 +561,7 @@ class OrderServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
 			verify(orderStockService, never()).restore(any());
+			verify(limitedPurchaseWriter, never()).revertByOrder(any(), any());
 		}
 
 		@Test
@@ -601,6 +614,39 @@ class OrderServiceTest {
 
 			// then
 			assertThat(memberCoupon.isUsed()).isFalse();
+		}
+
+		@Test
+		@DisplayName("한정반 주문을 취소하면 구매 이력을 되돌리고 커밋 후 Redis 선점을 해제한다")
+		void revertsLimitedPurchaseAndReleasesAfterCommit() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 505L);
+			given(orderRepository.findByIdForUpdate(505L)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsByIdAndMemberId(505L, MEMBER_ID)).willReturn(Optional.of(order));
+			LimitedRelease release = new LimitedRelease(5L, MEMBER_ID);
+			given(limitedPurchaseWriter.revertByOrder(505L, now)).willReturn(Optional.of(release));
+
+			// when
+			orderService.cancel(MEMBER_ID, 505L, null);
+
+			// then
+			verify(limitedReleaseSynchronizer).releaseAfterCommit(release);
+		}
+
+		@Test
+		@DisplayName("한정반 주문이 아니면 Redis 선점 해제를 호출하지 않는다")
+		void skipsLimitedReleaseForNormalOrder() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 506L);
+			given(orderRepository.findByIdForUpdate(506L)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsByIdAndMemberId(506L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(limitedPurchaseWriter.revertByOrder(506L, now)).willReturn(Optional.empty());
+
+			// when
+			orderService.cancel(MEMBER_ID, 506L, null);
+
+			// then
+			verify(limitedReleaseSynchronizer, never()).releaseAfterCommit(any());
 		}
 	}
 }
