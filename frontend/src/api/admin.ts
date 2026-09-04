@@ -8,6 +8,14 @@ import type {
   AdminCouponUpdateRequest,
 } from '@/types/coupon';
 import type {
+  AdminLimitedDrop,
+  AdminLimitedDropCreateRequest,
+  AdminLimitedDropDetail,
+  AdminLimitedDropListParams,
+  AdminLimitedDropSummary,
+  AdminLimitedDropUpdateRequest,
+} from '@/types/limitedDrop';
+import type {
   AdminOrderDetail,
   AdminOrderListParams,
   AdminOrderStatusChangeRequest,
@@ -77,3 +85,25 @@ export const updateAdminCoupon = (id: number, payload: AdminCouponUpdateRequest)
 export const disableAdminCoupon = async (id: number) => {
   await client.delete<ApiResponse<void>>(`/admin/coupons/${id}`);
 };
+
+export const getAdminLimitedDrops = (params: AdminLimitedDropListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<AdminLimitedDropSummary>>>('/admin/limited-drops', {
+      params,
+    }),
+  );
+
+export const getAdminLimitedDrop = (id: number) =>
+  unwrap(client.get<ApiResponse<AdminLimitedDropDetail>>(`/admin/limited-drops/${id}`));
+
+export const createAdminLimitedDrop = (payload: AdminLimitedDropCreateRequest) =>
+  unwrap(client.post<ApiResponse<AdminLimitedDrop>>('/admin/limited-drops', payload));
+
+export const updateAdminLimitedDrop = (id: number, payload: AdminLimitedDropUpdateRequest) =>
+  unwrap(client.patch<ApiResponse<AdminLimitedDrop>>(`/admin/limited-drops/${id}`, payload));
+
+export const openAdminLimitedDrop = (id: number) =>
+  unwrap(client.patch<ApiResponse<AdminLimitedDrop>>(`/admin/limited-drops/${id}/open`));
+
+export const closeAdminLimitedDrop = (id: number) =>
+  unwrap(client.patch<ApiResponse<AdminLimitedDrop>>(`/admin/limited-drops/${id}/close`));
