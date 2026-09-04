@@ -20,6 +20,8 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Product;
@@ -43,6 +45,7 @@ public class CartService {
 	private final ProductRepository productRepository;
 	private final ProductImageRepository productImageRepository;
 	private final StockRepository stockRepository;
+	private final LimitedDropRepository limitedDropRepository;
 
 	public CartResponse getCart(Long memberId) {
 		Cart cart = cartRepository.findByMemberId(memberId).orElse(null);
@@ -77,6 +80,9 @@ public class CartService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 		if (product.isHidden()) {
 			throw new BusinessException(ErrorCode.PRODUCT_HIDDEN);
+		}
+		if (limitedDropRepository.existsByProductIdAndStatusNot(product.getId(), LimitedDropStatus.CLOSED)) {
+			throw new BusinessException(ErrorCode.PRODUCT_LIMITED_ONLY);
 		}
 
 		Cart cart = getOrCreateCart(member);

@@ -12,6 +12,8 @@ import com.groove.coupon.repository.MemberCouponRepository;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -42,6 +44,7 @@ public class OrderService {
 	private final MemberRepository memberRepository;
 	private final AddressRepository addressRepository;
 	private final ProductRepository productRepository;
+	private final LimitedDropRepository limitedDropRepository;
 	private final CartItemRepository cartItemRepository;
 	private final MemberCouponRepository memberCouponRepository;
 	private final OrderStockService orderStockService;
@@ -151,6 +154,9 @@ public class OrderService {
 	private OrderLine toOrderLine(Product product, int quantity) {
 		if (product.isHidden()) {
 			throw new BusinessException(ErrorCode.PRODUCT_HIDDEN);
+		}
+		if (limitedDropRepository.existsByProductIdAndStatusNot(product.getId(), LimitedDropStatus.CLOSED)) {
+			throw new BusinessException(ErrorCode.PRODUCT_LIMITED_ONLY);
 		}
 		return new OrderLine(product, quantity);
 	}
