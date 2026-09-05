@@ -13,6 +13,7 @@ concurrency:
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/groove-backend
   HEALTH_URL: https://groove-lp.duckdns.org/api/v1/health
+  AWS_REGION: ap-northeast-2
 
 jobs:
   ci:
@@ -51,6 +52,10 @@ jobs:
     name: Deploy to EC2
     needs: build-push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC 로 AWS 역할을 맡기 위해 필요하다. 저장하는 액세스 키가 없다.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -68,6 +73,21 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 보안그룹 22번은 평소 닫혀 있다. 러너 IP 만 배포하는 동안 열고 마지막에 회수한다.
+      - name: Open SSH for this runner
+        id: open-ssh
+        run: |
+          ip=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')
+          echo "cidr=${ip}/32" >> "$GITHUB_OUTPUT"
+          aws ec2 authorize-security-group-ingress \
+            --group-id "${{ secrets.AWS_SECURITY_GROUP_ID }}" \
+            --protocol tcp --port 22 --cidr "${ip}/32"
 
       - name: Prepare server
         uses: appleboy/ssh-action@v1
@@ -143,3 +163,11 @@ jobs:
           done
           echo "헬스체크 실패: $HEALTH_URL"
           exit 1
+
+      # 앞 단계가 실패해도 반드시 닫는다.
+      - name: Close SSH
+        if: always() && steps.open-ssh.outputs.cidr != ''
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ secrets.AWS_SECURITY_GROUP_ID }}" \
+            --protocol tcp --port 22 --cidr "${{ steps.open-ssh.outputs.cidr }}"
