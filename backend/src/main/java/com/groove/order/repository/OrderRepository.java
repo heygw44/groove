@@ -35,6 +35,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 	@Query("select o from Order o where o.id = :id")
 	Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select o from Order o where o.orderNumber = :orderNumber")
+	Optional<Order> findByOrderNumberForUpdate(@Param("orderNumber") String orderNumber);
+
 	@Query("""
 			select o.id from Order o
 			where o.status = :status and o.expiresAt <= :now
