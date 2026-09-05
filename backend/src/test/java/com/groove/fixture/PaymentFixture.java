@@ -19,8 +19,12 @@ public final class PaymentFixture {
 	}
 
 	public static Payment approved(Order order) {
+		return approved(order, PAYMENT_KEY);
+	}
+
+	public static Payment approved(Order order, String paymentKey) {
 		Payment payment = Payment.ready(order);
-		payment.approve(PAYMENT_KEY, METHOD, APPROVED_AT);
+		payment.approve(paymentKey, METHOD, APPROVED_AT);
 		return payment;
 	}
 

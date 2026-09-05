@@ -2,6 +2,8 @@ package com.groove.limited;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
@@ -29,6 +32,7 @@ import com.groove.fixture.LimitedDropFixture;
 import com.groove.fixture.LimitedPurchaseFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
@@ -53,6 +57,10 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
 import com.groove.order.service.AdminOrderService;
 import com.groove.order.service.OrderService;
+import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelResult;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ArtistRepository;
@@ -105,6 +113,12 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private Clock clock;
+
+	@Autowired
+	private PaymentRepository paymentRepository;
+
+	@MockitoBean
+	private PaymentClient paymentClient;
 
 	private Long dropId;
 	private Long productId;
@@ -435,6 +449,10 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			Order order = orderRepository.findById(purchaseResponse.orderId()).orElseThrow();
 			OrderFixture.markPaid(order);
 			orderRepository.saveAndFlush(order);
+			Payment payment = paymentRepository.save(PaymentFixture.approved(order, "toss-" + UUID.randomUUID()));
+			given(paymentClient.cancel(any(), any()))
+					.willReturn(new PaymentCancelResult(payment.getPaymentKey(), "CANCELED",
+							LocalDateTime.now(clock)));
 			Member admin = memberRepository.save(MemberFixture.createAdmin("admin-" + UUID.randomUUID()
 					+ "@groove.com"));
 

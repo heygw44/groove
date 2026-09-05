@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -36,6 +38,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.auth.dto.LoginRequest;
 import com.groove.auth.dto.SignupRequest;
+import com.groove.coupon.dto.CouponIssueRequest;
+import com.groove.coupon.entity.Coupon;
+import com.groove.coupon.entity.DiscountType;
+import com.groove.coupon.entity.MemberCoupon;
+import com.groove.coupon.repository.CouponRepository;
+import com.groove.coupon.repository.MemberCouponRepository;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
@@ -44,10 +52,15 @@ import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.inventory.entity.Stock;
+import com.groove.inventory.entity.StockChangeType;
+import com.groove.inventory.entity.StockHistory;
+import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.dto.LimitedPurchaseResponse;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.limited.service.LimitedDropRedisService;
 import com.groove.limited.service.LimitedPurchaseService;
 import com.groove.member.entity.Address;
@@ -60,7 +73,9 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
+import com.groove.payment.dto.PaymentCancelRequest;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
@@ -105,6 +120,9 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 	LimitedDropRepository limitedDropRepository;
 
 	@Autowired
+	LimitedPurchaseRepository limitedPurchaseRepository;
+
+	@Autowired
 	LimitedDropRedisService limitedDropRedisService;
 
 	@Autowired
@@ -112,6 +130,18 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	OrderExpirationScheduler orderExpirationScheduler;
+
+	@Autowired
+	StockHistoryRepository stockHistoryRepository;
+
+	@Autowired
+	CouponRepository couponRepository;
+
+	@Autowired
+	MemberCouponRepository memberCouponRepository;
+
+	@Autowired
+	StringRedisTemplate redisTemplate;
 
 	@Autowired
 	Clock clock;
@@ -246,17 +276,237 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 		}
 	}
 
+	@Nested
+	@DisplayName("POST /api/v1/payments/{id}/cancel")
+	class Cancel {
+
+		@Test
+		@DisplayName("쿠폰이 적용된 결제 완료 주문을 취소하면 결제/주문/재고/쿠폰이 모두 복구된다")
+		void cancelsPaidOrderWithCouponAndRestoresEverything() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			CouponOrderInfo orderInfo = createOrderWithCoupon(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			String reason = "고객 변심";
+			stubCancelSuccess(paymentKey);
+
+			// when
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new PaymentCancelRequest(reason))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then
+			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			Order order = orderRepository.findById(orderInfo.orderId()).orElseThrow();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCancelReason()).isEqualTo(reason);
+			Stock stock = stockRepository.findByProductId(product.getId()).orElseThrow();
+			assertThat(stock.getQuantity()).isEqualTo(5);
+			List<StockHistory> histories = stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stock.getId());
+			assertThat(histories).hasSize(2);
+			assertThat(histories.get(1).getChangeType()).isEqualTo(StockChangeType.CANCEL);
+			MemberCoupon memberCoupon = memberCouponRepository.findById(orderInfo.memberCouponId()).orElseThrow();
+			assertThat(memberCoupon.isUsed()).isFalse();
+			verify(paymentClient).cancel(eq(paymentKey), eq(reason));
+		}
+
+		@Test
+		@DisplayName("한정반 주문을 취소하면 선점이 되돌아가 Redis 재고와 구매자 목록이 복구된다")
+		void cancelsPaidLimitedOrderAndRestoresRedisReservation() throws Exception {
+			// given
+			int totalQuantity = 5;
+			Long dropId = prepareOpenDrop(totalQuantity);
+			Member member = signup();
+			Address address = addressRepository.save(AddressFixture.create(member));
+			LimitedPurchaseResponse purchase = limitedPurchaseService.purchase(dropId, member.getId(),
+					address.getId());
+			String accessToken = login(member.getEmail());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, purchase.orderNumber(),
+					purchase.finalAmount());
+			stubCancelSuccess(paymentKey);
+
+			// when
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+					.andExpect(status().isOk());
+
+			// then
+			assertThat(limitedPurchaseRepository.findByOrderId(purchase.orderId())).isEmpty();
+			LimitedDrop reloadedDrop = limitedDropRepository.findById(dropId).orElseThrow();
+			assertThat(reloadedDrop.getSoldCount()).isZero();
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.STOCK_KEY_PREFIX + dropId))
+					.isEqualTo(String.valueOf(totalQuantity));
+			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.BUYERS_KEY_PREFIX + dropId,
+					String.valueOf(member.getId()))).isFalse();
+
+			limitedDropRedisService.clear(dropId);
+		}
+
+		@Test
+		@DisplayName("토스 취소가 실패하면 400 을 반환하고 결제/주문/재고/쿠폰이 그대로 유지된다")
+		void keepsEverythingWhenTossCancelFails() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			CouponOrderInfo orderInfo = createOrderWithCoupon(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS ALREADY_CANCELED_PAYMENT"))
+					.given(paymentClient).cancel(eq(paymentKey), any());
+
+			// when & then
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("PAYMENT_CANCEL_FAILED")));
+
+			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			Order order = orderRepository.findById(orderInfo.orderId()).orElseThrow();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			Stock stock = stockRepository.findByProductId(product.getId()).orElseThrow();
+			assertThat(stock.getQuantity()).isEqualTo(4);
+			assertThat(stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stock.getId()))
+					.extracting(StockHistory::getChangeType)
+					.doesNotContain(StockChangeType.CANCEL);
+			MemberCoupon memberCoupon = memberCouponRepository.findById(orderInfo.memberCouponId()).orElseThrow();
+			assertThat(memberCoupon.isUsed()).isTrue();
+		}
+
+		@Test
+		@DisplayName("결제 완료 주문을 /orders/{id}/cancel 로 취소해도 결제가 취소되고 토스 취소가 호출된다")
+		void cancelsPaymentThroughOrderCancelEndpoint() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			given(paymentClient.cancel(eq(paymentKey), any()))
+					.willReturn(new PaymentCancelResult(paymentKey, "CANCELED",
+							LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS)));
+
+			// when
+			mockMvc.perform(post("/api/v1/orders/" + orderInfo.orderId() + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then
+			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			verify(paymentClient).cancel(eq(paymentKey), any());
+		}
+
+		@Test
+		@DisplayName("DONE 이 아닌 결제를 취소하려 하면 409 를 반환하고 토스를 호출하지 않는다")
+		void returnsConflictWhenPaymentIsNotDone() throws Exception {
+			// given: confirm 을 실패시켜 FAILED 결제를 만든다
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			willThrow(new BusinessException(ErrorCode.PAYMENT_CONFIRM_FAILED, "TOSS REJECT_CARD_COMPANY"))
+					.given(paymentClient).confirm(eq(paymentKey), eq(orderInfo.orderNumber()), any());
+			confirm(accessToken, paymentKey, orderInfo).andExpect(status().isBadRequest());
+			Payment failedPayment = paymentRepository.findByOrderId(orderInfo.orderId()).orElseThrow();
+			assertThat(failedPayment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+			reset(paymentClient);
+
+			// when & then
+			mockMvc.perform(post("/api/v1/payments/" + failedPayment.getId() + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("PAYMENT_INVALID_STATUS")));
+			verify(paymentClient, never()).cancel(any(), any());
+		}
+	}
+
 	private record OrderInfo(Long orderId, String orderNumber, BigDecimal finalAmount) {
+	}
+
+	private record CouponOrderInfo(Long orderId, String orderNumber, BigDecimal finalAmount, Long memberCouponId) {
 	}
 
 	private String uniquePaymentKey() {
 		return "tviva-" + UUID.randomUUID();
 	}
 
+	private long confirmAndGetPaymentId(String accessToken, String paymentKey, String orderNumber, BigDecimal amount)
+			throws Exception {
+		stubConfirmSuccess(paymentKey, orderNumber, amount);
+		MvcResult result = mockMvc.perform(post("/api/v1/payments/confirm")
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(
+								confirmRequest(paymentKey, orderNumber, amount.longValueExact()))))
+				.andExpect(status().isOk())
+				.andReturn();
+		return objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("paymentId")
+				.asLong();
+	}
+
+	private CouponOrderInfo createOrderWithCoupon(String accessToken, Long productId, int quantity, Long addressId)
+			throws Exception {
+		String code = "CANCEL" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
+		couponRepository.save(Coupon.create(code, "결제 취소 테스트 쿠폰", DiscountType.FIXED, new BigDecimal("5000"),
+				BigDecimal.ZERO, null, null, LocalDateTime.now(clock).plusDays(7)));
+		MvcResult issueResult = mockMvc.perform(post("/api/v1/coupons/issue")
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(new CouponIssueRequest(code))))
+				.andExpect(status().isCreated())
+				.andReturn();
+		long memberCouponId = objectMapper.readTree(issueResult.getResponse().getContentAsString())
+				.path("data").path("memberCouponId").asLong();
+
+		OrderCreateRequest createRequest = OrderFixture.directRequestWithCoupon(productId, quantity, addressId,
+				memberCouponId);
+		MvcResult createResult = mockMvc.perform(post("/api/v1/orders")
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(createRequest)))
+				.andExpect(status().isCreated())
+				.andReturn();
+		JsonNode data = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("data");
+		return new CouponOrderInfo(data.path("orderId").asLong(), data.path("orderNumber").asText(),
+				new BigDecimal(data.path("finalAmount").asText()), memberCouponId);
+	}
+
 	private void stubConfirmSuccess(String paymentKey, String orderNumber, BigDecimal amount) {
 		LocalDateTime approvedAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 		given(paymentClient.confirm(eq(paymentKey), eq(orderNumber), any(BigDecimal.class)))
 				.willReturn(new PaymentConfirmResult(paymentKey, orderNumber, "카드", amount, approvedAt));
+	}
+
+	private void stubCancelSuccess(String paymentKey) {
+		LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+		given(paymentClient.cancel(eq(paymentKey), any()))
+				.willReturn(new PaymentCancelResult(paymentKey, "CANCELED", canceledAt));
 	}
 
 	private ResultActions confirm(String accessToken, String paymentKey, OrderInfo orderInfo) throws Exception {
