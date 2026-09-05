@@ -119,6 +119,23 @@ class MemberCouponServiceTest {
 		}
 
 		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.fixed(CODE, BigDecimal.valueOf(1000)), 10L);
+			Member suspended = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			given(couponRepository.findByCodeForUpdate(CODE)).willReturn(Optional.of(coupon));
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(suspended));
+
+			// when & then
+			assertThatThrownBy(() -> memberCouponService.issue(MEMBER_ID, new CouponIssueRequest(CODE)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+			verify(memberCouponRepository, never()).saveAndFlush(any());
+		}
+
+		@Test
 		@DisplayName("이미 발급받은 쿠폰이면 COUPON_ALREADY_ISSUED 예외를 던진다")
 		void throwsWhenAlreadyIssued() {
 			// given

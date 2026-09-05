@@ -185,6 +185,23 @@ class ReviewServiceTest {
 		}
 
 		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Member suspended = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(suspended));
+
+			// when & then
+			assertThatThrownBy(
+					() -> reviewService.create(PRODUCT_ID, MEMBER_ID, ReviewFixture.createRequest()))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+			verify(reviewRepository, never()).saveAndFlush(any());
+			verify(productRepository, never()).refreshReviewStats(any());
+		}
+
+		@Test
 		@DisplayName("존재하지 않는 상품이면 PRODUCT_NOT_FOUND 예외를 던진다")
 		void throwsWhenProductNotFound() {
 			// given

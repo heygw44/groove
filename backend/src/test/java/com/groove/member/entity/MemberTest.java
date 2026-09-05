@@ -113,6 +113,114 @@ class MemberTest {
 	}
 
 	@Nested
+	@DisplayName("suspend()")
+	class Suspend {
+
+		@Test
+		@DisplayName("활성 회원이면 상태를 SUSPENDED 로 바꾼다")
+		void changesStatusToSuspended() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+
+			// when
+			member.suspend();
+
+			// then
+			assertThat(member.isSuspended()).isTrue();
+		}
+
+		@Test
+		@DisplayName("탈퇴한 회원이면 MEMBER_WITHDRAWN 예외를 던진다")
+		void throwsWhenWithdrawn() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+			member.withdraw();
+
+			// when & then
+			assertThatThrownBy(member::suspend)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
+		}
+	}
+
+	@Nested
+	@DisplayName("activate()")
+	class Activate {
+
+		@Test
+		@DisplayName("정지된 회원이면 상태를 ACTIVE 로 바꾼다")
+		void changesStatusToActive() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+			member.suspend();
+
+			// when
+			member.activate();
+
+			// then
+			assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+		}
+
+		@Test
+		@DisplayName("탈퇴한 회원이면 MEMBER_WITHDRAWN 예외를 던진다")
+		void throwsWhenWithdrawn() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+			member.withdraw();
+
+			// when & then
+			assertThatThrownBy(member::activate)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
+		}
+	}
+
+	@Nested
+	@DisplayName("validateActive()")
+	class ValidateActive {
+
+		@Test
+		@DisplayName("활성 회원이면 통과한다")
+		void passesForActiveMember() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+
+			// when & then
+			member.validateActive();
+		}
+
+		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenSuspended() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+			member.suspend();
+
+			// when & then
+			assertThatThrownBy(member::validateActive)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
+
+		@Test
+		@DisplayName("탈퇴한 회원이면 MEMBER_WITHDRAWN 예외를 던진다")
+		void throwsWhenWithdrawn() {
+			// given
+			Member member = Member.create("groover@groove.com", "$2a$10$encodedpassword", "그루버");
+			member.withdraw();
+
+			// when & then
+			assertThatThrownBy(member::validateActive)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
+		}
+	}
+
+	@Nested
 	@DisplayName("MemberRole.authority()")
 	class Authority {
 

@@ -46,9 +46,7 @@ public class AuthService {
 		if (!passwordEncoder.matches(request.password(), member.getPassword())) {
 			throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
 		}
-		if (member.isWithdrawn()) {
-			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
-		}
+		member.validateActive();
 		return issueTokens(member);
 	}
 
@@ -66,9 +64,7 @@ public class AuthService {
 		}
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-		if (member.isWithdrawn()) {
-			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
-		}
+		member.validateActive();
 		return issueTokens(member);
 	}
 

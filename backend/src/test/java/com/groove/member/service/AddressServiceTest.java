@@ -176,6 +176,21 @@ class AddressServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
 		}
+
+		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Member suspended = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(suspended));
+			AddressCreateRequest request = AddressFixture.createRequest();
+
+			// when & then
+			assertThatThrownBy(() -> addressService.create(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
 	}
 
 	@Nested

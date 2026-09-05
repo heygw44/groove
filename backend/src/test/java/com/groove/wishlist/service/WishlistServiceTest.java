@@ -120,6 +120,20 @@ class WishlistServiceTest {
 		}
 
 		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Member suspended = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(suspended));
+
+			// when & then
+			assertThatThrownBy(() -> wishlistService.add(MEMBER_ID, WishlistFixture.addRequest(PRODUCT_ID)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
+
+		@Test
 		@DisplayName("회원이 없으면 MEMBER_NOT_FOUND 예외를 던진다")
 		void throwsWhenMemberNotFound() {
 			// given
