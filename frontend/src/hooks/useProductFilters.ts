@@ -31,8 +31,11 @@ export function useProductFilters() {
     setSearchParams((prev) => serializeProductFilters({ ...parseProductFilters(prev), page }));
   };
 
+  /** 정렬은 결과를 좁히는 조건이 아니라 보기 방식이라 초기화 대상에서 뺀다. */
   const reset = () => {
-    setSearchParams(new URLSearchParams());
+    setSearchParams((prev) =>
+      serializeProductFilters({ sort: parseProductFilters(prev).sort, page: 0 }),
+    );
   };
 
   return { filters, update, setPage, reset };
