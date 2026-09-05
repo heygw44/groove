@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.recommend.mapper.RecommendQueryMapper">
+
+	<select id="findSummariesByIds" resultMap="com.groove.product.mapper.ProductSearchMapper.productSummaryMap">
+		SELECT
+			p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+			p.color_variant, p.pressing_info, p.status,
+			(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0) AS thumbnail_url,
+			p.avg_rating AS average_rating,
+			p.review_count AS review_count,
+			<choose>
+				<when test="memberId != null">
+					EXISTS (SELECT 1 FROM wishlist w WHERE w.product_id = p.id AND w.member_id = #{memberId})
+				</when>
+				<otherwise>NULL</otherwise>
+			</choose> AS wishlisted
+		FROM product p
+		JOIN artist a ON a.id = p.artist_id
+		LEFT JOIN label l ON l.id = p.label_id
+		WHERE p.status &lt;&gt; 'HIDDEN'
+		AND p.id IN
+		<foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+	</select>
+
+	<select id="findRecentProductIds" resultType="java.lang.Long">
+		SELECT product_id
+		FROM product_view_log
+		WHERE member_id = #{memberId}
+		GROUP BY product_id
+		ORDER BY MAX(viewed_at) DESC
+		LIMIT #{limit}
+	</select>
+
+</mapper>

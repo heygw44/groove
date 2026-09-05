@@ -8,6 +8,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.ArtistFixture;
@@ -44,10 +49,14 @@ import com.groove.product.entity.ProductImage;
 import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.recommend.service.ProductViewedEvent;
 import com.groove.wishlist.repository.WishlistRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
+
+	private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-09-06T12:00:00Z"),
+			ZoneId.of("Asia/Seoul"));
 
 	@Mock
 	private ProductSearchMapper productSearchMapper;
@@ -67,12 +76,15 @@ class ProductServiceTest {
 	@Mock
 	private LimitedDropService limitedDropService;
 
+	@Mock
+	private ApplicationEventPublisher eventPublisher;
+
 	private ProductService productService;
 
 	@BeforeEach
 	void setUp() {
 		productService = new ProductService(productSearchMapper, productRepository, productImageRepository,
-				stockRepository, wishlistRepository, limitedDropService);
+				stockRepository, wishlistRepository, limitedDropService, eventPublisher, FIXED_CLOCK);
 	}
 
 	@Nested
@@ -200,6 +212,47 @@ class ProductServiceTest {
 		}
 
 		@Test
+		@DisplayName("상세 조회에 성공하면 ProductViewedEvent 를 한 번 발행한다")
+		void publishesViewedEventOnSuccess() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+
+			// when
+			productService.getDetail(10L, 7L);
+
+			// then
+			ArgumentCaptor<ProductViewedEvent> captor = ArgumentCaptor.forClass(ProductViewedEvent.class);
+			verify(eventPublisher).publishEvent(captor.capture());
+			ProductViewedEvent event = captor.getValue();
+			assertThat(event.memberId()).isEqualTo(7L);
+			assertThat(event.productId()).isEqualTo(10L);
+			assertThat(event.viewedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
+		}
+
+		@Test
+		@DisplayName("비로그인 조회면 memberId 가 null 인 이벤트를 발행한다")
+		void publishesViewedEventWithNullMemberIdWhenGuest() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+
+			// when
+			productService.getDetail(10L, null);
+
+			// then
+			ArgumentCaptor<ProductViewedEvent> captor = ArgumentCaptor.forClass(ProductViewedEvent.class);
+			verify(eventPublisher).publishEvent(captor.capture());
+			assertThat(captor.getValue().memberId()).isNull();
+		}
+
+		@Test
 		@DisplayName("평점 집계가 채워져 있으면 평균 평점과 리뷰 개수를 그대로 내려준다")
 		void returnsAverageRatingAndReviewCountWhenAggregated() {
 			// given
@@ -266,6 +319,7 @@ class ProductServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+			verify(eventPublisher, never()).publishEvent(any());
 		}
 
 		@Test
@@ -282,6 +336,7 @@ class ProductServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_HIDDEN);
+			verify(eventPublisher, never()).publishEvent(any());
 		}
 
 		@Test
