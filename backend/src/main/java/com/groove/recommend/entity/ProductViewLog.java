@@ -30,7 +30,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "product_view_log",
 		indexes = {
 			@Index(name = "idx_view_log_member_viewed", columnList = "member_id, viewed_at"),
-			@Index(name = "idx_view_log_product_viewed", columnList = "product_id, viewed_at")
+			@Index(name = "idx_view_log_product_viewed", columnList = "product_id, viewed_at"),
+			@Index(name = "idx_view_log_viewed_at", columnList = "viewed_at")
 		})
 public class ProductViewLog {
 

@@ -82,4 +82,54 @@ class ProductViewLogRepositoryTest extends DataJpaTestSupport {
 			assertThat(found.getViewedAt()).isEqualTo(viewedAt);
 		}
 	}
+
+	@Nested
+	@DisplayName("deleteExpired()")
+	class DeleteExpired {
+
+		@Test
+		@DisplayName("threshold 이전 행만 삭제하고 threshold 와 같은 행은 남긴다")
+		void deletesOnlyRowsBeforeThreshold() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product product = productRepository.save(ProductFixture.create(artist));
+			LocalDateTime threshold = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+			ProductViewLog expired = viewLogRepository.save(
+					ProductViewLogFixture.createAnonymous(product, threshold.minusDays(1)));
+			ProductViewLog atThreshold = viewLogRepository.save(
+					ProductViewLogFixture.createAnonymous(product, threshold));
+			entityManager.flush();
+
+			// when
+			viewLogRepository.deleteExpired(threshold, 100);
+			entityManager.clear();
+
+			// then
+			assertThat(viewLogRepository.findById(expired.getId())).isEmpty();
+			assertThat(viewLogRepository.findById(atThreshold.getId())).isPresent();
+		}
+
+		@Test
+		@DisplayName("size 만큼만 삭제하고 삭제된 행 수를 반환한다")
+		void deletesOnlyUpToGivenSize() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product product = productRepository.save(ProductFixture.create(artist));
+			LocalDateTime threshold = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+			ProductViewLog first = viewLogRepository.save(
+					ProductViewLogFixture.createAnonymous(product, threshold.minusDays(2)));
+			ProductViewLog second = viewLogRepository.save(
+					ProductViewLogFixture.createAnonymous(product, threshold.minusDays(1)));
+			entityManager.flush();
+
+			// when
+			int deleted = viewLogRepository.deleteExpired(threshold, 1);
+			entityManager.clear();
+
+			// then
+			assertThat(deleted).isEqualTo(1);
+			assertThat(viewLogRepository.findById(first.getId())).isEmpty();
+			assertThat(viewLogRepository.findById(second.getId())).isPresent();
+		}
+	}
 }
