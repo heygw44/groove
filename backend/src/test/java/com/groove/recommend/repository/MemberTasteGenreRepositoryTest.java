@@ -1,6 +1,7 @@
 package com.groove.recommend.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Optional;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.MemberFixture;
@@ -62,6 +64,72 @@ class MemberTasteGenreRepositoryTest extends DataJpaTestSupport {
 			assertThat(found).isPresent();
 			assertThat(found.get().getId().getProfileId()).isEqualTo(profile.getId());
 			assertThat(found.get().getId().getGenreId()).isEqualTo(genre.getId());
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 프로필을 참조하면 FK 위반이 발생한다")
+		void throwsWhenProfileDoesNotExist() {
+			// given
+			MemberTasteProfile fakeProfile = TasteProfileFixture.withId(
+					TasteProfileFixture.create(MemberFixture.create("taste-genre-fk-profile@groove.com")),
+					999_999L);
+			Genre genre = genreRepository.save(GenreFixture.create("타지-장르-FK프로필"));
+
+			// when & then
+			assertThatThrownBy(() -> tasteGenreRepository.saveAndFlush(MemberTasteGenre.of(fakeProfile, genre)))
+					.isInstanceOf(DataIntegrityViolationException.class);
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 장르를 참조하면 FK 위반이 발생한다")
+		void throwsWhenGenreDoesNotExist() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("taste-genre-fk-genre@groove.com"));
+			MemberTasteProfile profile = profileRepository.save(TasteProfileFixture.create(member));
+			Genre fakeGenre = GenreFixture.withId(GenreFixture.create("타지-장르-없음"), 999_999L);
+
+			// when & then
+			assertThatThrownBy(() -> tasteGenreRepository.saveAndFlush(MemberTasteGenre.of(profile, fakeGenre)))
+					.isInstanceOf(DataIntegrityViolationException.class);
+		}
+	}
+
+	@Nested
+	@DisplayName("findAllByProfileId()")
+	class FindAllByProfileId {
+
+		@Test
+		@DisplayName("다른 프로필의 장르는 섞지 않는다")
+		void doesNotMixOtherProfilesGenres() {
+			// given
+			Member memberA = memberRepository.save(MemberFixture.create("taste-genre-find-a@groove.com"));
+			Member memberB = memberRepository.save(MemberFixture.create("taste-genre-find-b@groove.com"));
+			MemberTasteProfile profileA = profileRepository.save(TasteProfileFixture.create(memberA));
+			MemberTasteProfile profileB = profileRepository.save(TasteProfileFixture.create(memberB));
+			Genre genreA = genreRepository.save(GenreFixture.create("타지-장르-조회A"));
+			Genre genreB = genreRepository.save(GenreFixture.create("타지-장르-조회B"));
+			tasteGenreRepository.saveAndFlush(MemberTasteGenre.of(profileA, genreA));
+			tasteGenreRepository.saveAndFlush(MemberTasteGenre.of(profileB, genreB));
+
+			// when
+			List<MemberTasteGenre> found = tasteGenreRepository.findAllByProfileId(profileA.getId());
+
+			// then
+			assertThat(found).extracting(g -> g.getGenre().getId()).containsExactly(genreA.getId());
+		}
+
+		@Test
+		@DisplayName("저장된 장르가 없으면 빈 리스트를 반환한다")
+		void returnsEmptyListWhenNoGenreSaved() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("taste-genre-find-empty@groove.com"));
+			MemberTasteProfile profile = profileRepository.save(TasteProfileFixture.create(member));
+
+			// when
+			List<MemberTasteGenre> found = tasteGenreRepository.findAllByProfileId(profile.getId());
+
+			// then
+			assertThat(found).isEmpty();
 		}
 	}
 
