@@ -29,6 +29,7 @@ import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderPaymentResponse;
 import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
@@ -37,6 +38,8 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
 
@@ -61,6 +64,7 @@ public class OrderService {
 	private final OrderRepository orderRepository;
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final OrderQueryMapper orderQueryMapper;
+	private final PaymentRepository paymentRepository;
 	private final PaymentCancelHook paymentCancelHook;
 	private final Clock clock;
 
@@ -119,7 +123,7 @@ public class OrderService {
 		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
 				.map(purchase -> purchase.getDrop().getId())
 				.orElse(null);
-		return OrderDetailResponse.from(order, limitedDropId);
+		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId));
 	}
 
 	@Transactional
@@ -141,7 +145,16 @@ public class OrderService {
 			paymentCancelHook.onPaidOrderCanceled(order);
 		}
 		Long limitedDropId = limitedRelease.map(LimitedRelease::dropId).orElse(null);
-		return OrderDetailResponse.from(order, limitedDropId);
+		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId));
+	}
+
+	/** 승인 이력이 있는 결제(DONE/CANCELED)만 상세 응답에 포함한다. */
+	private OrderPaymentResponse resolvePayment(Long orderId) {
+		return paymentRepository.findByOrderId(orderId)
+				.filter(payment -> payment.getStatus() == PaymentStatus.DONE
+						|| payment.getStatus() == PaymentStatus.CANCELED)
+				.map(OrderPaymentResponse::from)
+				.orElse(null);
 	}
 
 	private void restoreCoupon(Order order) {

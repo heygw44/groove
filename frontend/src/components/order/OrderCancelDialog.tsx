@@ -11,6 +11,8 @@ interface OrderCancelDialogProps {
   onClose: () => void;
   onConfirm: (reason?: string) => void;
   pending?: boolean;
+  /** 결제 완료(PAID) 주문 취소 시 환불 안내 문구를 함께 보여준다. */
+  refundNotice?: boolean;
 }
 
 export function OrderCancelDialog({
@@ -18,6 +20,7 @@ export function OrderCancelDialog({
   onClose,
   onConfirm,
   pending = false,
+  refundNotice = false,
 }: OrderCancelDialogProps) {
   const [reason, setReason] = useState('');
   // 렌더 중 open 전환을 감지해 재오픈 시 이전 입력을 지운다(effect 대신 파생 상태로 처리).
@@ -52,6 +55,11 @@ export function OrderCancelDialog({
       }
     >
       <div>
+        {refundNotice && (
+          <p className="mb-3 rounded-md border border-line bg-surface-muted px-3 py-2.5 text-sm text-content-muted">
+            결제 금액은 결제 수단으로 환불됩니다.
+          </p>
+        )}
         <label htmlFor="order-cancel-reason" className="mb-1.5 block text-sm text-content-muted">
           취소 사유 (선택)
         </label>

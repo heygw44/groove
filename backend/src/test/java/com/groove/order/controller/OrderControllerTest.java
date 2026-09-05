@@ -82,7 +82,7 @@ class OrderControllerTest {
 
 	private OrderDetailResponse sampleDetailResponse(OrderStatus status, Long limitedDropId) {
 		return new OrderDetailResponse(1L, "20260903-TESTAB12", status, new BigDecimal("90000"), BigDecimal.ZERO,
-				new BigDecimal("90000"), null, List.of(), null, null, null, null, null, limitedDropId);
+				new BigDecimal("90000"), null, List.of(), null, null, null, null, null, limitedDropId, null);
 	}
 
 	@Nested

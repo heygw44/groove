@@ -43,6 +43,7 @@ import com.groove.fixture.LimitedPurchaseFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -69,6 +70,8 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
@@ -119,6 +122,9 @@ class OrderServiceTest {
 	OrderQueryMapper orderQueryMapper;
 
 	@Mock
+	PaymentRepository paymentRepository;
+
+	@Mock
 	PaymentCancelHook paymentCancelHook;
 
 	OrderService orderService;
@@ -138,12 +144,13 @@ class OrderServiceTest {
 			ReflectionTestUtils.setField(savedOrder, "id", 999L);
 			return savedOrder;
 		});
+		lenient().when(paymentRepository.findByOrderId(any())).thenReturn(Optional.empty());
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, limitedPurchaseWriter, limitedReleaseSynchronizer, cartItemRepository,
 				memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper,
-				paymentCancelHook, clock);
+				paymentRepository, paymentCancelHook, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -562,6 +569,40 @@ class OrderServiceTest {
 
 			// then
 			assertThat(response.limitedDropId()).isNull();
+		}
+
+		@Test
+		@DisplayName("승인된 결제가 있으면 payment 를 함께 내려준다")
+		void includesPaymentWhenApproved() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 604L);
+			order.markPaid();
+			Payment payment = PaymentFixture.approved(order);
+			given(orderRepository.findWithItemsByIdAndMemberId(604L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(604L)).willReturn(Optional.of(payment));
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 604L);
+
+			// then
+			assertThat(response.payment()).isNotNull();
+			assertThat(response.payment().method()).isEqualTo(PaymentFixture.METHOD);
+			assertThat(response.payment().approvedAt()).isEqualTo(PaymentFixture.APPROVED_AT);
+		}
+
+		@Test
+		@DisplayName("결제가 없으면 payment 가 null 이다")
+		void returnsNullPaymentWhenNoPayment() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 605L);
+			given(orderRepository.findWithItemsByIdAndMemberId(605L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(605L)).willReturn(Optional.empty());
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 605L);
+
+			// then
+			assertThat(response.payment()).isNull();
 		}
 	}
 
