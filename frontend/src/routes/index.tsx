@@ -1,9 +1,9 @@
 import { createBrowserRouter } from 'react-router-dom';
 
-import { AdminPlaceholder } from '@/components/admin/AdminPlaceholder';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { MyPageLayout } from '@/components/layout/MyPageLayout';
 import { RootLayout } from '@/components/layout/RootLayout';
+import AdminAuditLogsPage from '@/pages/admin/AdminAuditLogsPage';
 import AdminCouponsPage from '@/pages/admin/AdminCouponsPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 import AdminLimitedDropsPage from '@/pages/admin/AdminLimitedDropsPage';
@@ -123,7 +123,7 @@ export const router = createBrowserRouter([
           { path: 'coupons', element: <AdminCouponsPage /> },
           { path: 'limited-drops', element: <AdminLimitedDropsPage /> },
           { path: 'members', element: <AdminMembersPage /> },
-          { path: 'audit-logs', element: <AdminPlaceholder title="감사 로그" /> },
+          { path: 'audit-logs', element: <AdminAuditLogsPage /> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

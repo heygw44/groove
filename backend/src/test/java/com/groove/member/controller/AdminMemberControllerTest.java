@@ -137,7 +137,7 @@ class AdminMemberControllerTest {
 							.header(HttpHeaders.AUTHORIZATION, adminToken())
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(
-									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED))))
+									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null))))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.status", is("SUSPENDED")));
 		}
@@ -150,7 +150,24 @@ class AdminMemberControllerTest {
 							.header(HttpHeaders.AUTHORIZATION, adminToken())
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(
-									new AdminMemberStatusChangeRequest(MemberStatus.WITHDRAWN))))
+									new AdminMemberStatusChangeRequest(MemberStatus.WITHDRAWN, null))))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminMemberService, never()).changeStatus(any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("사유가 200자를 넘으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenReasonTooLong() throws Exception {
+			// given
+			String tooLongReason = "가".repeat(201);
+
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/2/status")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(
+									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, tooLongReason))))
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 			verify(adminMemberService, never()).changeStatus(any(), any(), any());
@@ -177,7 +194,7 @@ class AdminMemberControllerTest {
 							.header(HttpHeaders.AUTHORIZATION, userToken())
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(
-									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED))))
+									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null))))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
 			verify(adminMemberService, never()).changeStatus(any(), any(), any());

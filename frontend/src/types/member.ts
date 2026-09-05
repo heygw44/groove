@@ -1,6 +1,6 @@
 export type MemberRole = 'USER' | 'ADMIN';
 
-export type MemberStatus = 'ACTIVE' | 'WITHDRAWN';
+export type MemberStatus = 'ACTIVE' | 'SUSPENDED' | 'WITHDRAWN';
 
 export interface Member {
   id: number;
