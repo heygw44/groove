@@ -57,7 +57,7 @@ export function PopularProductTable({ items, sort, onSortChange }: PopularProduc
                   <td className="py-2.5 pr-3">
                     <Link
                       to={`/admin/products/${item.productId}/edit`}
-                      className="font-medium text-content underline-offset-2 hover:underline"
+                      className="font-medium text-content hover:text-accent"
                     >
                       {item.productTitle}
                     </Link>

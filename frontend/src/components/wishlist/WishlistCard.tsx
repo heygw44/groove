@@ -56,7 +56,7 @@ export function WishlistCard({
       <div className="mt-2.5 flex items-center gap-2">
         <Link
           to={`/products/${item.productId}`}
-          className="line-clamp-2 text-sm font-medium text-content no-underline hover:underline"
+          className="line-clamp-2 text-sm font-medium text-content hover:text-accent"
         >
           {item.title}
         </Link>

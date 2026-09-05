@@ -122,7 +122,6 @@ export default function ProductDetailPage() {
                 <Link
                   key={genre.id}
                   to={`/products?genreIds=${genre.id}`}
-                  className="no-underline hover:no-underline"
                 >
                   <Badge variant="accent">{genre.name}</Badge>
                 </Link>

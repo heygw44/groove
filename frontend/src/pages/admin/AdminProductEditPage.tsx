@@ -35,7 +35,7 @@ export default function AdminProductEditPage() {
       <EmptyState
         title="상품을 찾을 수 없습니다."
         action={
-          <Link to="/admin/products" className="no-underline hover:no-underline">
+          <Link to="/admin/products">
             <Button variant="secondary">상품 목록으로</Button>
           </Link>
         }

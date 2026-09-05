@@ -33,7 +33,7 @@ export function AdminMemberTable({ members, onSelect }: AdminMemberTableProps) {
                 <button
                   type="button"
                   onClick={() => onSelect(member)}
-                  className="font-medium text-content underline-offset-2 hover:underline"
+                  className="font-medium text-content hover:text-accent"
                 >
                   {member.email}
                 </button>
