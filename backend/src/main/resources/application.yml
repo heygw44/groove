@@ -1,6 +1,9 @@
 spring:
   application:
     name: groove
+  flyway:
+    # 운영에서만 켠다. local 은 ddl-auto: update, test 는 create-drop 으로 스키마를 만든다.
+    enabled: false
   profiles:
     active: local
   jpa:
