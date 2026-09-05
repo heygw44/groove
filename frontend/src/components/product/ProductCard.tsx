@@ -48,7 +48,7 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <Link
       to={`/products/${product.id}`}
-      className="group block no-underline hover:no-underline text-content"
+      className="group block text-content"
     >
       <div className="relative">
         <ProductThumbnail url={product.thumbnailUrl} soldOut={soldOut} />

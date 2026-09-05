@@ -119,7 +119,7 @@ export function AdminLimitedDropDetailDrawer({
                           {purchase.orderNumber ? (
                             <Link
                               to={`/admin/orders?keyword=${purchase.orderNumber}`}
-                              className="text-accent hover:underline"
+                              className="text-accent"
                             >
                               {purchase.orderNumber}
                             </Link>

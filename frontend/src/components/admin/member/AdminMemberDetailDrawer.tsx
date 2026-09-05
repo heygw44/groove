@@ -134,7 +134,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
                     <div className="min-w-0">
                       <Link
                         to={`/admin/orders?keyword=${order.orderNumber}`}
-                        className="font-mono text-xs text-content underline-offset-2 hover:underline"
+                        className="font-mono text-xs text-content hover:text-accent"
                       >
                         {order.orderNumber}
                       </Link>

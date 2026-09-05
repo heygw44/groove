@@ -18,7 +18,7 @@ function AuditTargetCell({ log }: { log: AdminAuditLog }) {
     return (
       <Link
         to={`/admin/products/${log.targetId}/edit`}
-        className="text-content underline-offset-2 hover:underline"
+        className="text-content hover:text-accent"
       >
         {label}
       </Link>

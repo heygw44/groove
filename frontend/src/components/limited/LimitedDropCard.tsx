@@ -19,7 +19,7 @@ export function LimitedDropCard({ drop, nowMs }: LimitedDropCardProps) {
   return (
     <Link
       to={`/limited-drops/${drop.id}`}
-      className="group block no-underline hover:no-underline text-content"
+      className="group block text-content"
     >
       <div className="relative aspect-square overflow-hidden rounded-md bg-surface-muted">
         {drop.product.thumbnailUrl ? (

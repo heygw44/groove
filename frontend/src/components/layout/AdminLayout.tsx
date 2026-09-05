@@ -170,7 +170,7 @@ export function AdminLayout() {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `flex h-9 items-center gap-2 rounded-md px-3 text-sm whitespace-nowrap no-underline hover:no-underline ${
+                `flex h-9 items-center gap-2 rounded-md px-3 text-sm whitespace-nowrap ${
                   isActive
                     ? 'bg-accent-soft font-bold text-accent-hover'
                     : 'text-content-muted hover:bg-surface hover:text-content'

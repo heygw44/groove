@@ -44,7 +44,7 @@ export function OrderCard({ order }: OrderCardProps) {
     <li className="list-none">
       <Link
         to={`/orders/${order.id}`}
-        className="flex items-center gap-4 rounded-lg border border-line bg-surface px-5 py-4 no-underline hover:border-line-strong hover:no-underline"
+        className="flex items-center gap-4 rounded-lg border border-line bg-surface px-5 py-4 hover:border-line-strong"
       >
         <OrderThumbnail url={order.thumbnailUrl} />
 

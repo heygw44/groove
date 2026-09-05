@@ -18,7 +18,7 @@ export function LimitedDropBanner({ drop, nowMs }: LimitedDropBannerProps) {
   return (
     <Link
       to={`/limited-drops/${drop.id}`}
-      className="flex items-center gap-5 rounded-lg border border-line bg-accent-soft px-6 py-5 no-underline hover:no-underline"
+      className="flex items-center gap-5 rounded-lg border border-line bg-accent-soft px-6 py-5"
     >
       <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-surface-muted">
         {drop.product.thumbnailUrl && (

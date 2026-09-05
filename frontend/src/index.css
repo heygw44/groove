@@ -47,6 +47,5 @@ body {
 
   a:hover {
     color: var(--color-accent-hover);
-    text-decoration: underline;
   }
 }

@@ -20,7 +20,7 @@ export function StatCard({ label, value, hint, to }: StatCardProps) {
     return (
       <Link
         to={to}
-        className="block rounded-lg border border-line-strong p-5 no-underline hover:no-underline hover:bg-surface-muted"
+        className="block rounded-lg border border-line-strong p-5 hover:bg-surface-muted"
       >
         {content}
       </Link>
