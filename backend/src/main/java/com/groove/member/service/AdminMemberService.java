@@ -87,8 +87,16 @@ public class AdminMemberService {
 		}
 
 		adminAuditLogService.record(adminId, AdminAuditAction.MEMBER_STATUS_CHANGE, AdminAuditTargetType.MEMBER,
-				memberId, previous.name() + "->" + next.name());
+				memberId, buildStatusChangeDetail(previous, next, request.reason()));
 		return toDetailResponse(member);
+	}
+
+	private String buildStatusChangeDetail(MemberStatus previous, MemberStatus next, String reason) {
+		String transition = previous.name() + "->" + next.name();
+		if (reason == null || reason.isBlank()) {
+			return transition;
+		}
+		return transition + " (" + reason + ")";
 	}
 
 	private AdminMemberDetailResponse toDetailResponse(Member member) {

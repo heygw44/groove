@@ -1,4 +1,11 @@
 import { client, unwrap } from '@/api/client';
+import type { AdminAuditLog, AdminAuditLogListParams } from '@/types/adminAuditLog';
+import type {
+  AdminMemberDetail,
+  AdminMemberListParams,
+  AdminMemberStatusChangeRequest,
+  AdminMemberSummary,
+} from '@/types/adminMember';
 import type {
   AdminStatsSummary,
   DailySales,
@@ -135,3 +142,23 @@ export const getAdminPopularProducts = (params: PopularProductParams) =>
 
 export const getAdminLimitedDropStats = () =>
   unwrap(client.get<ApiResponse<LimitedDropStats[]>>('/admin/stats/limited-drops'));
+
+export const getAdminMembers = (params: AdminMemberListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<AdminMemberSummary>>>('/admin/members', {
+      params,
+    }),
+  );
+
+export const getAdminMember = (id: number) =>
+  unwrap(client.get<ApiResponse<AdminMemberDetail>>(`/admin/members/${id}`));
+
+export const changeAdminMemberStatus = (id: number, payload: AdminMemberStatusChangeRequest) =>
+  unwrap(client.patch<ApiResponse<AdminMemberDetail>>(`/admin/members/${id}/status`, payload));
+
+export const getAdminAuditLogs = (params: AdminAuditLogListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<AdminAuditLog>>>('/admin/audit-logs', {
+      params,
+    }),
+  );

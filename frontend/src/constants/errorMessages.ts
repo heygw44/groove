@@ -62,6 +62,10 @@ export const ERROR_MESSAGES: Record<string, string> = {
   LIMITED_LIMIT_EXCEEDED: '1인 구매 한도를 초과했습니다.',
   LIMITED_INVALID_STATUS: '처리할 수 없는 한정반 상태입니다.',
   PRODUCT_LIMITED_ONLY: '한정반 상품은 한정반 페이지에서만 구매할 수 있습니다.',
+  ADMIN_CANNOT_MODIFY_SELF: '자기 자신의 상태는 변경할 수 없습니다.',
+  ADMIN_CANNOT_MODIFY_ADMIN: '다른 관리자의 상태는 변경할 수 없습니다.',
+  MEMBER_NOT_FOUND: '존재하지 않는 회원입니다.',
+  AUTH_MEMBER_SUSPENDED: '정지된 계정입니다. 고객센터에 문의해주세요.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */

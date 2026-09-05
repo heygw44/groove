@@ -1,3 +1,5 @@
+import type { AdminAuditLogListParams } from '@/types/adminAuditLog';
+import type { AdminMemberListParams } from '@/types/adminMember';
 import type { PopularProductParams, StatsPeriodParams } from '@/types/adminStats';
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
@@ -98,4 +100,17 @@ export const referenceKeys = {
   labels: ['labels'] as const,
   artists: (keyword?: string) => ['artists', keyword] as const,
   artist: (id: number) => ['artist', id] as const,
+};
+
+// list 를 'list' sub-prefix 로 분리해 상태 변경 후 상세는 건드리지 않고 목록만 무효화한다(adminOrderKeys 와 동일 이유).
+export const adminMemberKeys = {
+  all: ['adminMembers'] as const,
+  lists: ['adminMembers', 'list'] as const,
+  list: (params: AdminMemberListParams) => ['adminMembers', 'list', params] as const,
+  detail: (id: number) => ['adminMembers', 'detail', id] as const,
+};
+
+export const adminAuditLogKeys = {
+  all: ['adminAuditLogs'] as const,
+  list: (params: AdminAuditLogListParams) => ['adminAuditLogs', params] as const,
 };

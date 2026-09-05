@@ -83,7 +83,7 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(
-									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED))))
+									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null))))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.status", is("SUSPENDED")));
 
@@ -111,7 +111,7 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(
-									new AdminMemberStatusChangeRequest(MemberStatus.ACTIVE))))
+									new AdminMemberStatusChangeRequest(MemberStatus.ACTIVE, null))))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.status", is("ACTIVE")));
 
@@ -140,7 +140,7 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(
-									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED))))
+									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null))))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("ADMIN_CANNOT_MODIFY_SELF")));
 		}
@@ -160,7 +160,7 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(
-									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED))))
+									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null))))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("ADMIN_CANNOT_MODIFY_ADMIN")));
 		}

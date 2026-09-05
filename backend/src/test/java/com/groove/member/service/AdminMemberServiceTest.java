@@ -165,7 +165,7 @@ class AdminMemberServiceTest {
 		@DisplayName("자기 자신을 대상으로 하면 ADMIN_CANNOT_MODIFY_SELF 예외를 던지고 조회조차 하지 않는다")
 		void throwsWhenTargetIsSelf() {
 			// given
-			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED);
+			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null);
 
 			// when & then
 			assertThatThrownBy(() -> adminMemberService.changeStatus(ADMIN_ID, ADMIN_ID, request))
@@ -181,7 +181,7 @@ class AdminMemberServiceTest {
 			// given
 			Member otherAdmin = MemberFixture.withId(MemberFixture.createAdmin("other-admin@groove.com"), MEMBER_ID);
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(otherAdmin));
-			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED);
+			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null);
 
 			// when & then
 			assertThatThrownBy(() -> adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request))
@@ -196,7 +196,7 @@ class AdminMemberServiceTest {
 		void throwsWhenMemberNotFound() {
 			// given
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.empty());
-			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED);
+			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null);
 
 			// when & then
 			assertThatThrownBy(() -> adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request))
@@ -211,7 +211,7 @@ class AdminMemberServiceTest {
 			// given
 			Member withdrawn = MemberFixture.withId(MemberFixture.createWithdrawn(), MEMBER_ID);
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(withdrawn));
-			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED);
+			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null);
 
 			// when & then
 			assertThatThrownBy(() -> adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request))
@@ -229,7 +229,7 @@ class AdminMemberServiceTest {
 			given(memberQueryMapper.findActivitySummary(eq(MEMBER_ID), any()))
 					.willReturn(new AdminMemberActivitySummary(0L, BigDecimal.ZERO, 0L));
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of());
-			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.ACTIVE);
+			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.ACTIVE, null);
 
 			// when
 			adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request);
@@ -248,7 +248,7 @@ class AdminMemberServiceTest {
 			given(memberQueryMapper.findActivitySummary(eq(MEMBER_ID), any()))
 					.willReturn(new AdminMemberActivitySummary(0L, BigDecimal.ZERO, 0L));
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of());
-			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED);
+			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null);
 
 			// when
 			AdminMemberDetailResponse response = adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request);
@@ -269,7 +269,7 @@ class AdminMemberServiceTest {
 			given(memberQueryMapper.findActivitySummary(eq(MEMBER_ID), any()))
 					.willReturn(new AdminMemberActivitySummary(0L, BigDecimal.ZERO, 0L));
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of());
-			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.ACTIVE);
+			AdminMemberStatusChangeRequest request = new AdminMemberStatusChangeRequest(MemberStatus.ACTIVE, null);
 
 			// when
 			AdminMemberDetailResponse response = adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request);
@@ -279,6 +279,46 @@ class AdminMemberServiceTest {
 			verify(refreshTokenRepository, never()).deleteByMemberId(anyLong());
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
 					AdminAuditTargetType.MEMBER, MEMBER_ID, "SUSPENDED->ACTIVE");
+		}
+
+		@Test
+		@DisplayName("사유가 있으면 감사 로그 detail 에 괄호로 덧붙인다")
+		void appendsReasonToAuditDetail() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(memberQueryMapper.findActivitySummary(eq(MEMBER_ID), any()))
+					.willReturn(new AdminMemberActivitySummary(0L, BigDecimal.ZERO, 0L));
+			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of());
+			AdminMemberStatusChangeRequest request =
+					new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, "반복 어뷰징 신고");
+
+			// when
+			adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request);
+
+			// then
+			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED (반복 어뷰징 신고)");
+		}
+
+		@Test
+		@DisplayName("사유가 비어 있으면 상태 전이만 기록한다")
+		void omitsBlankReasonFromAuditDetail() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(memberQueryMapper.findActivitySummary(eq(MEMBER_ID), any()))
+					.willReturn(new AdminMemberActivitySummary(0L, BigDecimal.ZERO, 0L));
+			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of());
+			AdminMemberStatusChangeRequest request =
+					new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, "   ");
+
+			// when
+			adminMemberService.changeStatus(ADMIN_ID, MEMBER_ID, request);
+
+			// then
+			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED");
 		}
 	}
 }

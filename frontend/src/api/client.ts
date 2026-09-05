@@ -95,6 +95,15 @@ client.interceptors.response.use(
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     const code = getErrorCode(error);
 
+    /*
+     * 정지된 계정은 재발급으로 살릴 수 없는 상태다(서버가 모든 인증 API 에서
+     * 403 AUTH_MEMBER_SUSPENDED 를 준다). 세션 만료와 같은 경로로 로그인 화면으로 보낸다.
+     */
+    if (status === 403 && code === 'AUTH_MEMBER_SUSPENDED') {
+      handleSessionExpired();
+      return Promise.reject(error);
+    }
+
     if (status !== 401 || !config) {
       return Promise.reject(error);
     }
