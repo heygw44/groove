@@ -15,13 +15,16 @@ import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
 import { PendingExpiryBanner } from '@/components/order/PendingExpiryBanner';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
+import { PaymentWidgetSection } from '@/components/payment/PaymentWidgetSection';
 import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
 import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
+import { useAuthStore } from '@/store/authStore';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatDateTime } from '@/utils/formatDate';
 import { isCancelableStatus } from '@/utils/orderStatus';
+import { buildOrderName } from '@/utils/paymentRedirect';
 import { toServerMs } from '@/utils/serverTime';
 
 const NOT_FOUND_CODES = new Set(['ORDER_NOT_FOUND']);
@@ -37,6 +40,7 @@ export default function OrderDetailPage() {
   const id = isValidId ? Number(idParam) : -1;
 
   const { showToast } = useToast();
+  const member = useAuthStore((s) => s.member);
   const nowMs = useServerNow();
   const [isExpired, setIsExpired] = useState(false);
   const {
@@ -179,6 +183,39 @@ export default function OrderDetailPage() {
         />
       </section>
 
+      {order.status === 'PENDING' && (
+        <PaymentWidgetSection
+          orderId={order.id}
+          orderNumber={order.orderNumber}
+          orderName={buildOrderName(order.items.map((item) => ({ productName: item.productName })))}
+          amount={order.finalAmount}
+          customerEmail={member?.email}
+          disabled={isExpired}
+        />
+      )}
+
+      {order.payment && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-base font-bold">결제 정보</h2>
+          <div className="space-y-1.5 rounded-lg border border-line bg-surface px-5 py-4 text-sm">
+            <p>
+              <span className="text-content-muted">결제 수단</span>{' '}
+              <span className="font-medium">{order.payment.method}</span>
+            </p>
+            <p>
+              <span className="text-content-muted">승인 시각</span>{' '}
+              <span className="font-medium">{formatDateTime(order.payment.approvedAt)}</span>
+            </p>
+            {order.payment.status === 'CANCELED' && order.payment.canceledAt && (
+              <p>
+                <span className="text-content-muted">취소 시각</span>{' '}
+                <span className="font-medium">{formatDateTime(order.payment.canceledAt)}</span>
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
       {isCancelableStatus(order.status) && (
         <div className="mt-6 flex justify-end">
           <Button variant="danger" onClick={() => setIsCancelDialogOpen(true)}>
@@ -192,6 +229,7 @@ export default function OrderDetailPage() {
         onClose={() => setIsCancelDialogOpen(false)}
         onConfirm={handleCancel}
         pending={cancelOrderMutation.isPending}
+        refundNotice={order.status === 'PAID'}
       />
     </div>
   );

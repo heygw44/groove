@@ -25,6 +25,8 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import OrderDetailPage from '@/pages/order/OrderDetailPage';
 import OrderFormPage from '@/pages/order/OrderFormPage';
 import OrderListPage from '@/pages/order/OrderListPage';
+import PaymentFailPage from '@/pages/payment/PaymentFailPage';
+import PaymentSuccessPage from '@/pages/payment/PaymentSuccessPage';
 import ProductDetailPage from '@/pages/product/ProductDetailPage';
 import ProductListPage from '@/pages/product/ProductListPage';
 import { AdminRoute } from '@/routes/AdminRoute';
@@ -69,6 +71,22 @@ export const router = createBrowserRouter([
         element: (
           <PrivateRoute>
             <OrderDetailPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'payments/success',
+        element: (
+          <PrivateRoute>
+            <PaymentSuccessPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'payments/fail',
+        element: (
+          <PrivateRoute>
+            <PaymentFailPage />
           </PrivateRoute>
         ),
       },
