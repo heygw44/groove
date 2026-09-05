@@ -68,18 +68,23 @@ public class AdminOrderService {
 		OrderStatus next = request.status();
 		order.changeStatus(next);
 
+		Long canceledPaymentId = null;
 		if (next == OrderStatus.CANCELED) {
 			orderStockService.restore(order);
 			restoreCoupon(order);
 			limitedPurchaseWriter.revertByOrder(order.getId(), LocalDateTime.now(clock))
 					.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
 			if (previous == OrderStatus.PAID || previous == OrderStatus.PREPARING) {
-				paymentCancelHook.onPaidOrderCanceled(order);
+				canceledPaymentId = paymentCancelHook.onPaidOrderCanceled(order);
 			}
 		}
 
 		adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
 				orderId, previous.name() + "->" + next.name());
+		if (canceledPaymentId != null) {
+			adminAuditLogService.record(adminId, AdminAuditAction.PAYMENT_CANCEL, AdminAuditTargetType.PAYMENT,
+					canceledPaymentId, "DONE->CANCELED");
+		}
 		return AdminOrderDetailResponse.from(order);
 	}
 

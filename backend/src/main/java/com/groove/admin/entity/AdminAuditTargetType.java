@@ -5,5 +5,7 @@ public enum AdminAuditTargetType {
 	PRODUCT,
 	ORDER,
 	COUPON,
-	LIMITED_DROP
+	LIMITED_DROP,
+	MEMBER,
+	PAYMENT
 }

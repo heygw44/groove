@@ -77,11 +77,12 @@ class PaymentCancelServiceTest {
 					.willReturn(new PaymentCancelResult(payment.getPaymentKey(), "CANCELED", tossCanceledAt));
 
 			// when
-			service.onPaidOrderCanceled(order);
+			Long canceledPaymentId = service.onPaidOrderCanceled(order);
 
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
 			assertThat(payment.getCanceledAt()).isEqualTo(tossCanceledAt);
+			assertThat(canceledPaymentId).isEqualTo(payment.getId());
 		}
 
 		@Test

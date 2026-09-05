@@ -1,30 +1,26 @@
 package com.groove.admin.service;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.admin.entity.AdminAuditAction;
-import com.groove.admin.entity.AdminAuditLog;
 import com.groove.admin.entity.AdminAuditTargetType;
-import com.groove.admin.repository.AdminAuditLogRepository;
-import com.groove.member.entity.Member;
-import com.groove.member.repository.MemberRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** 관리자 행위 감사 로그 기록. 호출자의 트랜잭션에 참여한다. */
+/** 관리자 행위 감사 로그 기록. 실제 저장은 커밋 이후 이벤트로 위임한다. */
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class AdminAuditLogService {
 
-	private final AdminAuditLogRepository adminAuditLogRepository;
-	private final MemberRepository memberRepository;
+	private final ApplicationEventPublisher eventPublisher;
+	private final ClientIpResolver clientIpResolver;
 
-	@Transactional
 	public void record(Long adminId, AdminAuditAction action, AdminAuditTargetType targetType, Long targetId,
 			String detail) {
-		Member admin = memberRepository.getReferenceById(adminId);
-		adminAuditLogRepository.save(AdminAuditLog.record(admin, action, targetType, targetId, detail));
+		String ipAddress = clientIpResolver.resolve();
+		eventPublisher.publishEvent(new AdminAuditEvent(adminId, action, targetType, targetId, detail, ipAddress));
 	}
 }

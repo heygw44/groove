@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
@@ -60,6 +61,7 @@ class AdminOrderServiceTest {
 
 	private static final Long ADMIN_ID = 1L;
 	private static final Long ORDER_ID = 500L;
+	private static final Long PAYMENT_ID = 900L;
 
 	@Mock
 	OrderRepository orderRepository;
@@ -195,16 +197,18 @@ class AdminOrderServiceTest {
 			assertThat(response.memberEmail()).isEqualTo(member.getEmail());
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
 					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("PAID->PREPARING"));
+			verify(adminAuditLogService, times(1)).record(any(), any(), any(), any(), any());
 		}
 
 		@ParameterizedTest
 		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
-		@DisplayName("PAID·PREPARING 상태를 CANCELED 로 바꾸면 재고를 복구하고 결제 취소 훅을 호출한다")
+		@DisplayName("PAID·PREPARING 상태를 CANCELED 로 바꾸면 재고를 복구하고 결제 취소 훅을 호출하며 감사 로그를 두 건 남긴다")
 		void restoresStockAndCallsHookWhenCancelingPaidOrPreparing(OrderStatus previous) {
 			// given
 			Order order = orderWithStatus(previous);
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentCancelHook.onPaidOrderCanceled(order)).willReturn(PAYMENT_ID);
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
 
 			// when
@@ -213,6 +217,10 @@ class AdminOrderServiceTest {
 			// then
 			verify(orderStockService).restore(order);
 			verify(paymentCancelHook).onPaidOrderCanceled(order);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq(previous.name() + "->CANCELED"));
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PAYMENT_CANCEL),
+					eq(AdminAuditTargetType.PAYMENT), eq(PAYMENT_ID), eq("DONE->CANCELED"));
 		}
 
 		@Test

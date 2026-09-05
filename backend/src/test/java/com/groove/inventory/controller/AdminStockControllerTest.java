@@ -40,7 +40,7 @@ import com.groove.inventory.dto.StockAdjustRequest;
 import com.groove.inventory.dto.StockResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.entity.StockChangeType;
-import com.groove.inventory.service.StockService;
+import com.groove.inventory.service.AdminStockService;
 import com.groove.member.entity.MemberRole;
 import com.groove.product.entity.ProductStatus;
 
@@ -62,7 +62,7 @@ class AdminStockControllerTest {
 	JwtProvider jwtProvider;
 
 	@MockitoBean
-	StockService stockService;
+	AdminStockService adminStockService;
 
 	private String adminToken() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.ADMIN);
@@ -82,7 +82,7 @@ class AdminStockControllerTest {
 			// given
 			StockAdjustRequest request = StockFixture.adjustRequest(StockChangeType.IN, 5);
 			StockResponse response = new StockResponse(PRODUCT_ID, 15, ProductStatus.ON_SALE);
-			given(stockService.adjust(eq(PRODUCT_ID), any())).willReturn(response);
+			given(adminStockService.adjust(any(), eq(PRODUCT_ID), any())).willReturn(response);
 
 			// when & then
 			mockMvc.perform(patch("/api/v1/admin/products/{productId}/stock", PRODUCT_ID)
@@ -106,7 +106,7 @@ class AdminStockControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(stockService, never()).adjust(any(), any());
+			verify(adminStockService, never()).adjust(any(), any(), any());
 		}
 
 		@Test
@@ -121,7 +121,7 @@ class AdminStockControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(stockService, never()).adjust(any(), any());
+			verify(adminStockService, never()).adjust(any(), any(), any());
 		}
 
 		@ParameterizedTest
@@ -147,7 +147,7 @@ class AdminStockControllerTest {
 			// given
 			StockAdjustRequest request = StockFixture.adjustRequest(StockChangeType.OUT, 1);
 			willThrow(new ObjectOptimisticLockingFailureException(Stock.class.getName(), 1L))
-					.given(stockService).adjust(eq(PRODUCT_ID), any());
+					.given(adminStockService).adjust(any(), eq(PRODUCT_ID), any());
 
 			// when & then
 			mockMvc.perform(patch("/api/v1/admin/products/{productId}/stock", PRODUCT_ID)
@@ -164,7 +164,7 @@ class AdminStockControllerTest {
 			// given
 			StockAdjustRequest request = StockFixture.adjustRequest(StockChangeType.OUT, 100);
 			willThrow(new BusinessException(ErrorCode.STOCK_INSUFFICIENT))
-					.given(stockService).adjust(eq(PRODUCT_ID), any());
+					.given(adminStockService).adjust(any(), eq(PRODUCT_ID), any());
 
 			// when & then
 			mockMvc.perform(patch("/api/v1/admin/products/{productId}/stock", PRODUCT_ID)
