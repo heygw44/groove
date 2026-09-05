@@ -1,2 +1,13 @@
-// TODO: wishlist 도메인 API 구현 (1주차 셋업 플레이스홀더)
-export {};
+import { client, unwrap } from '@/api/client';
+import type { ApiResponse, PageResponse } from '@/types/api';
+import type { WishlistItem, WishlistListParams } from '@/types/wishlist';
+
+export const getWishlist = (params: WishlistListParams) =>
+  unwrap(client.get<ApiResponse<PageResponse<WishlistItem>>>('/wishlist', { params }));
+
+export const addWishlist = (productId: number) =>
+  unwrap(client.post<ApiResponse<WishlistItem>>('/wishlist', { productId }));
+
+export const removeWishlist = async (productId: number) => {
+  await client.delete<ApiResponse<void>>(`/wishlist/${productId}`);
+};

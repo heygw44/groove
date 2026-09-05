@@ -1,2 +1,6 @@
-// TODO: payment 도메인 API 구현 (1주차 셋업 플레이스홀더)
-export {};
+import { client, unwrap } from '@/api/client';
+import type { ApiResponse } from '@/types/api';
+import type { PaymentConfirmRequest, PaymentConfirmResponse } from '@/types/payment';
+
+export const confirmPayment = (payload: PaymentConfirmRequest) =>
+  unwrap(client.post<ApiResponse<PaymentConfirmResponse>>('/payments/confirm', payload));

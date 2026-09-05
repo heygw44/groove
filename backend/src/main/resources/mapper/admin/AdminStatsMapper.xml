@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.admin.mapper.AdminStatsMapper">
+
+	<resultMap id="dailySalesMap" type="com.groove.admin.dto.DailySalesResponse">
+		<constructor>
+			<arg column="sale_date" javaType="java.time.LocalDate"/>
+			<arg column="order_count" javaType="_long"/>
+			<arg column="sales_amount" javaType="java.math.BigDecimal"/>
+			<arg column="cancel_amount" javaType="java.math.BigDecimal"/>
+		</constructor>
+	</resultMap>
+
+	<!-- 승인 행과 취소 행을 UNION ALL 로 합쳐 날짜별로 집계한다. 승인일 매출/취소일 취소액이 서로 다른 날일 수 있다. -->
+	<select id="findDailySales" resultMap="dailySalesMap">
+		SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
+			SUM(d.cancel_amount) AS cancel_amount
+		FROM (
+			SELECT DATE(p.approved_at) AS sale_date, 1 AS order_count, p.amount AS sales_amount, 0 AS cancel_amount
+			FROM payment p
+			WHERE p.status IN ('DONE', 'CANCELED')
+			AND p.approved_at &gt;= #{fromAt} AND p.approved_at &lt; #{toExclusiveAt}
+			UNION ALL
+			SELECT DATE(p.canceled_at), 0, 0, p.amount
+			FROM payment p
+			WHERE p.status = 'CANCELED'
+			AND p.canceled_at &gt;= #{fromAt} AND p.canceled_at &lt; #{toExclusiveAt}
+		) d
+		GROUP BY d.sale_date
+		ORDER BY d.sale_date
+	</select>
+
+	<resultMap id="popularProductMap" type="com.groove.admin.dto.PopularProductResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="title" javaType="java.lang.String"/>
+			<arg column="artist_name" javaType="java.lang.String"/>
+			<arg column="sold_quantity" javaType="_long"/>
+			<arg column="sales_amount" javaType="java.math.BigDecimal"/>
+			<arg column="order_count" javaType="_long"/>
+		</constructor>
+	</resultMap>
+
+	<select id="findPopularProducts" parameterType="com.groove.admin.dto.PopularProductStatsCondition"
+			resultMap="popularProductMap">
+		SELECT
+			pr.id, pr.title, a.name AS artist_name,
+			SUM(oi.quantity) AS sold_quantity,
+			SUM(oi.price_snapshot * oi.quantity) AS sales_amount,
+			COUNT(DISTINCT o.id) AS order_count
+		FROM order_item oi
+		JOIN orders o ON o.id = oi.order_id
+		JOIN payment p ON p.order_id = o.id
+		JOIN product pr ON pr.id = oi.product_id
+		JOIN artist a ON a.id = pr.artist_id
+		WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+		AND p.approved_at &gt;= #{fromAt} AND p.approved_at &lt; #{toExclusiveAt}
+		GROUP BY pr.id, pr.title, a.name
+		<choose>
+			<when test="sort.name() == 'SALES'">
+				ORDER BY sales_amount DESC, sold_quantity DESC, pr.id DESC
+			</when>
+			<otherwise>
+				ORDER BY sold_quantity DESC, sales_amount DESC, pr.id DESC
+			</otherwise>
+		</choose>
+		LIMIT #{limit}
+	</select>
+
+	<resultMap id="limitedDropStatsMap" type="com.groove.admin.dto.LimitedDropStatsResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="title" javaType="java.lang.String"/>
+			<arg column="status" javaType="com.groove.limited.entity.LimitedDropStatus"/>
+			<arg column="total_quantity" javaType="_int"/>
+			<arg column="sold_count" javaType="_int"/>
+			<arg column="sell_rate" javaType="_double"/>
+			<arg column="open_at" javaType="java.time.LocalDateTime"/>
+			<arg column="close_at" javaType="java.time.LocalDateTime"/>
+			<arg column="sold_out_at" javaType="java.time.LocalDateTime"/>
+			<arg column="sold_out_seconds" javaType="java.lang.Long"/>
+		</constructor>
+	</resultMap>
+
+	<!-- sold_out_at 은 별도 컬럼이 없어 SOLD_OUT 상태일 때만 마지막 구매 시각으로 파생한다. -->
+	<select id="findLimitedDropStats" resultMap="limitedDropStatsMap">
+		SELECT
+			ld.id, pr.title, ld.status, ld.total_quantity, ld.sold_count,
+			ROUND(ld.sold_count * 100 / ld.total_quantity, 1) AS sell_rate,
+			ld.open_at, ld.close_at,
+			CASE WHEN ld.status = 'SOLD_OUT'
+				THEN (SELECT MAX(lp.created_at) FROM limited_purchase lp WHERE lp.drop_id = ld.id)
+			END AS sold_out_at,
+			CASE WHEN ld.status = 'SOLD_OUT'
+				THEN TIMESTAMPDIFF(SECOND, ld.open_at,
+					(SELECT MAX(lp.created_at) FROM limited_purchase lp WHERE lp.drop_id = ld.id))
+			END AS sold_out_seconds
+		FROM limited_drop ld
+		JOIN product pr ON pr.id = ld.product_id
+		ORDER BY ld.open_at DESC, ld.id DESC
+	</select>
+
+	<resultMap id="statsSummaryMap" type="com.groove.admin.dto.AdminStatsSummaryResponse">
+		<constructor>
+			<arg column="today_sales_amount" javaType="java.math.BigDecimal"/>
+			<arg column="today_order_count" javaType="_long"/>
+			<arg column="today_new_member_count" javaType="_long"/>
+			<arg column="pending_order_count" javaType="_long"/>
+		</constructor>
+	</resultMap>
+
+	<select id="findSummary" resultMap="statsSummaryMap">
+		SELECT
+			COALESCE((SELECT SUM(p.amount) FROM payment p
+				WHERE p.status IN ('DONE', 'CANCELED')
+				AND p.approved_at &gt;= #{todayStart} AND p.approved_at &lt; #{tomorrowStart}), 0) AS today_sales_amount,
+			(SELECT COUNT(*) FROM payment p
+				WHERE p.status IN ('DONE', 'CANCELED')
+				AND p.approved_at &gt;= #{todayStart} AND p.approved_at &lt; #{tomorrowStart}) AS today_order_count,
+			(SELECT COUNT(*) FROM member m
+				WHERE m.created_at &gt;= #{todayStart} AND m.created_at &lt; #{tomorrowStart}) AS today_new_member_count,
+			(SELECT COUNT(*) FROM orders o WHERE o.status = 'PENDING') AS pending_order_count
+	</select>
+
+</mapper>

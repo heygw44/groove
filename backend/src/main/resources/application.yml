@@ -1,15 +1,43 @@
 spring:
   application:
     name: groove
+  flyway:
+    # 운영에서만 켠다. local 은 ddl-auto: update, test 는 create-drop 으로 스키마를 만든다.
+    enabled: false
   profiles:
     active: local
+  jpa:
+    properties:
+      hibernate:
+        type:
+          # ERD 의 BOOLEAN 컬럼과 맞춘다. Hibernate 기본값은 MySQL 에서 BIT(1) 이라 DDL 이 달라진다.
+          preferred_boolean_jdbc_type: TINYINT
   jackson:
     time-zone: Asia/Seoul
     default-property-inclusion: non_null
+  data:
+    redis:
+      # Redis 장애 시 DB 폴백이 지연되지 않도록 기본 타임아웃보다 짧게 잡는다.
+      timeout: 1s
+      connect-timeout: 500ms
+  task:
+    scheduling:
+      thread-name-prefix: groove-scheduler-
+      pool:
+        size: 2
   servlet:
     multipart:
-      max-file-size: 10MB
+      max-file-size: 5MB
       max-request-size: 10MB
+  http:
+    client:
+      # 토스 결제 API 호출용. 결제 승인이 걸려 있는 요청 스레드를 오래 잡지 않도록 짧게 둔다.
+      connect-timeout: 3s
+      read-timeout: 10s
+
+server:
+  tomcat:
+    max-swallow-size: 10MB
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
@@ -27,17 +55,25 @@ springdoc:
 
 jwt:
   secret: ${JWT_SECRET}            # 환경변수 필수, 최소 256bit (32바이트 이상)
-  access-token-expire-minutes: 30
-  refresh-token-expire-days: 14
+  access-token-expiry: 30m
+  refresh-token-expiry: 14d
+
+auth:
+  cookie:
+    secure: false   # 로컬 HTTP. 운영은 application-prod.yml 에서 true
 
 toss:
   client-key: ${TOSS_CLIENT_KEY:}
-  secret-key: ${TOSS_SECRET_KEY:}
+  secret-key: ${TOSS_SECRET_KEY}   # 환경변수 필수. 로컬 기본값은 application-local.yml
   base-url: https://api.tosspayments.com
 
 file:
   upload-path: ${FILE_UPLOAD_PATH:./uploads}
   base-url: ${FILE_BASE_URL:http://localhost:8080/uploads}
+
+limited:
+  # 부하 테스트에서 Redis ON/OFF 를 비교하기 위한 스위치. 운영에서는 항상 true 로 둔다.
+  redis-enabled: ${LIMITED_REDIS_ENABLED:true}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 
-type ToastType = 'success' | 'error' | 'info';
+import { ToastContext, type ToastType } from '@/components/common/toastContext';
 
 interface ToastMessage {
   id: number;
@@ -8,17 +8,14 @@ interface ToastMessage {
   message: string;
 }
 
-interface ToastContextValue {
-  showToast: (type: ToastType, message: string) => void;
-}
-
-const ToastContext = createContext<ToastContextValue | null>(null);
+// Date.now() 는 같은 밀리초에 두 번 호출되면(StrictMode 이펙트 이중 실행 등) 키가 중복된다.
+let nextToastId = 0;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = useCallback((type: ToastType, message: string) => {
-    const id = Date.now();
+    const id = ++nextToastId;
     setToasts((prev) => [...prev, { id, type, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -32,12 +29,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`rounded px-4 py-2 text-sm text-white shadow ${
+            className={`rounded-md px-4 py-2 text-sm text-white shadow-lg ${
               toast.type === 'success'
-                ? 'bg-green-600'
+                ? 'bg-success'
                 : toast.type === 'error'
-                  ? 'bg-red-600'
-                  : 'bg-neutral-800'
+                  ? 'bg-danger'
+                  : 'bg-content'
             }`}
           >
             {toast.message}
@@ -46,12 +43,4 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       </div>
     </ToastContext.Provider>
   );
-}
-
-export function useToast() {
-  const ctx = useContext(ToastContext);
-  if (!ctx) {
-    throw new Error('useToast는 ToastProvider 내부에서만 사용할 수 있습니다.');
-  }
-  return ctx;
 }

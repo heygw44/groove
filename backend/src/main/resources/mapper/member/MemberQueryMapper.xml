@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.member.mapper.MemberQueryMapper">
+
+	<resultMap id="adminMemberSummaryMap" type="com.groove.member.dto.AdminMemberSummaryResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="email" javaType="java.lang.String"/>
+			<arg column="nickname" javaType="java.lang.String"/>
+			<arg column="role" javaType="com.groove.member.entity.MemberRole"/>
+			<arg column="status" javaType="com.groove.member.entity.MemberStatus"/>
+			<arg column="order_count" javaType="_long"/>
+			<arg column="total_payment_amount" javaType="java.math.BigDecimal"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+		</constructor>
+	</resultMap>
+
+	<resultMap id="adminMemberActivitySummaryMap" type="com.groove.member.dto.AdminMemberActivitySummary">
+		<constructor>
+			<arg column="order_count" javaType="_long"/>
+			<arg column="total_payment_amount" javaType="java.math.BigDecimal"/>
+			<arg column="usable_coupon_count" javaType="_long"/>
+		</constructor>
+	</resultMap>
+
+	<!-- orderCount = PENDING/CANCELED 를 제외한 주문 수, totalPaymentAmount = DONE 결제 금액 합계 -->
+	<sql id="memberOrderStats">
+		LEFT JOIN (
+			SELECT member_id, COUNT(*) AS order_count
+			FROM orders
+			WHERE status NOT IN ('PENDING', 'CANCELED')
+			GROUP BY member_id
+		) o ON o.member_id = m.id
+		LEFT JOIN (
+			SELECT o2.member_id, SUM(p.amount) AS total_payment_amount
+			FROM payment p
+			JOIN orders o2 ON o2.id = p.order_id
+			WHERE p.status = 'DONE'
+			GROUP BY o2.member_id
+		) pay ON pay.member_id = m.id
+	</sql>
+
+	<sql id="adminMembersWhere">
+		<where>
+			<if test="keyword != null and keyword != ''">
+				AND (m.email LIKE CONCAT('%', #{keyword}, '%') OR m.nickname LIKE CONCAT('%', #{keyword}, '%'))
+			</if>
+			<if test="status != null">
+				AND m.status = #{status}
+			</if>
+			<if test="role != null">
+				AND m.role = #{role}
+			</if>
+		</where>
+	</sql>
+
+	<select id="findAdminMembers" parameterType="com.groove.member.dto.AdminMemberSearchCondition"
+			resultMap="adminMemberSummaryMap">
+		SELECT
+			m.id, m.email, m.nickname, m.role, m.status, m.created_at,
+			COALESCE(o.order_count, 0) AS order_count,
+			COALESCE(pay.total_payment_amount, 0) AS total_payment_amount
+		FROM member m
+		<include refid="memberOrderStats"/>
+		<include refid="adminMembersWhere"/>
+		ORDER BY m.created_at DESC, m.id DESC
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countAdminMembers" parameterType="com.groove.member.dto.AdminMemberSearchCondition"
+			resultType="long">
+		SELECT COUNT(*)
+		FROM member m
+		<include refid="adminMembersWhere"/>
+	</select>
+
+	<select id="findActivitySummary" resultMap="adminMemberActivitySummaryMap">
+		SELECT
+			COALESCE(o.order_count, 0) AS order_count,
+			COALESCE(pay.total_payment_amount, 0) AS total_payment_amount,
+			COALESCE(mc.usable_coupon_count, 0) AS usable_coupon_count
+		FROM member m
+		<include refid="memberOrderStats"/>
+		LEFT JOIN (
+			SELECT mc2.member_id, COUNT(*) AS usable_coupon_count
+			FROM member_coupon mc2
+			JOIN coupon c ON c.id = mc2.coupon_id
+			WHERE mc2.used = 0 AND c.status = 'ACTIVE' AND c.expires_at &gt; #{now}
+			GROUP BY mc2.member_id
+		) mc ON mc.member_id = m.id
+		WHERE m.id = #{memberId}
+	</select>
+
+</mapper>

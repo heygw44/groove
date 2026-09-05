@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'checkstyle'
+    id 'jacoco'
     id 'org.springframework.boot' version '3.5.16'
     id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -39,6 +40,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
 
     // --- MyBatis (Boot 3.2~3.5 / Java 17+) ---
     implementation "org.mybatis.spring.boot:mybatis-spring-boot-starter:${mybatisVersion}"
@@ -53,6 +55,10 @@ dependencies {
 
     // --- DB Driver ---
     runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // --- Migration (운영 프로파일에서만 활성) ---
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
 
     // --- Lombok ---
     compileOnly 'org.projectlombok:lombok'
@@ -73,6 +79,7 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport
 }
 
 // 네이버 캠퍼스 핵데이 Java 코딩 컨벤션 (우아한형제들 등 국내 다수 기업 채택) 강제
@@ -83,3 +90,37 @@ checkstyle {
     maxWarnings = 0
     ignoreFailures = false
 }
+
+jacoco {
+    toolVersion = '0.8.13'
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(dir: it, exclude: ['**/GrooveApplication*', '**/dto/**', '**/config/**'])
+    }))
+}
+
+jacocoTestCoverageVerification {
+    // service 클래스 라인 커버리지 70% 게이트. check 에 연결되어 위반 시 빌드가 실패한다.
+    dependsOn test
+    violationRules {
+        rule {
+            element = 'CLASS'
+            includes = ['com.groove.*.service.*']
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.70
+            }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification

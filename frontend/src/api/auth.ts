@@ -1,18 +1,17 @@
-import { client } from '@/api/client';
+import { client, refreshClient, unwrap } from '@/api/client';
 import type { ApiResponse } from '@/types/api';
+import type { LoginRequest, SignupRequest, SignupResponse, TokenResponse } from '@/types/member';
 
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface LoginResponse {
-  accessToken: string;
-}
+export const signup = (payload: SignupRequest) =>
+  unwrap(client.post<ApiResponse<SignupResponse>>('/auth/signup', payload));
 
 export const login = (payload: LoginRequest) =>
-  client.post<ApiResponse<LoginResponse>>('/auth/login', payload);
+  unwrap(client.post<ApiResponse<TokenResponse>>('/auth/login', payload));
 
-export const logout = () => client.post<ApiResponse<null>>('/auth/logout');
+export const logout = async () => {
+  await client.post<ApiResponse<void>>('/auth/logout');
+};
 
-export const reissue = () => client.post<ApiResponse<LoginResponse>>('/auth/reissue');
+/** 인터셉터가 달리지 않은 인스턴스로 보낸다 - client.ts 의 refreshClient 주석 참고. */
+export const reissue = () =>
+  unwrap(refreshClient.post<ApiResponse<TokenResponse>>('/auth/reissue'));

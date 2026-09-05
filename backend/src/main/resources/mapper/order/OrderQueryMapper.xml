@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.order.mapper.OrderQueryMapper">
+
+	<resultMap id="orderSummaryMap" type="com.groove.order.dto.OrderSummaryResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="order_number" javaType="java.lang.String"/>
+			<arg column="status" javaType="com.groove.order.entity.OrderStatus"/>
+			<arg column="final_amount" javaType="java.math.BigDecimal"/>
+			<arg column="discount_amount" javaType="java.math.BigDecimal"/>
+			<arg column="coupon_name" javaType="java.lang.String"/>
+			<arg column="representative_product_name" javaType="java.lang.String"/>
+			<arg column="item_count" javaType="_int"/>
+			<arg column="thumbnail_url" javaType="java.lang.String"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+		</constructor>
+	</resultMap>
+
+	<sql id="myOrdersWhere">
+		<where>
+			o.member_id = #{memberId}
+			<if test="status != null">
+				AND o.status = #{status}
+			</if>
+		</where>
+	</sql>
+
+	<!-- 대표 상품 = order_item 중 가장 먼저 담긴(id 최소) 행. 썸네일은 그 상품의 sort_order = 0 이미지. -->
+	<select id="findMyOrders" parameterType="com.groove.order.dto.OrderSearchCondition" resultMap="orderSummaryMap">
+		SELECT
+			o.id, o.order_number, o.status, o.final_amount, o.discount_amount, c.name AS coupon_name, o.created_at,
+			(SELECT oi.product_name_snapshot FROM order_item oi
+				WHERE oi.order_id = o.id ORDER BY oi.id LIMIT 1) AS representative_product_name,
+			(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count,
+			(SELECT MIN(pi.image_url) FROM product_image pi
+				WHERE pi.sort_order = 0
+				AND pi.product_id = (SELECT oi.product_id FROM order_item oi
+					WHERE oi.order_id = o.id ORDER BY oi.id LIMIT 1)) AS thumbnail_url
+		FROM orders o
+		LEFT JOIN member_coupon mc ON mc.id = o.member_coupon_id
+		LEFT JOIN coupon c ON c.id = mc.coupon_id
+		<include refid="myOrdersWhere"/>
+		ORDER BY o.created_at DESC, o.id DESC
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countMyOrders" parameterType="com.groove.order.dto.OrderSearchCondition" resultType="long">
+		SELECT COUNT(*)
+		FROM orders o
+		<include refid="myOrdersWhere"/>
+	</select>
+
+	<resultMap id="adminOrderSummaryMap" type="com.groove.order.dto.AdminOrderSummaryResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="order_number" javaType="java.lang.String"/>
+			<arg column="member_email" javaType="java.lang.String"/>
+			<arg column="status" javaType="com.groove.order.entity.OrderStatus"/>
+			<arg column="final_amount" javaType="java.math.BigDecimal"/>
+			<arg column="item_count" javaType="_int"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+		</constructor>
+	</resultMap>
+
+	<sql id="adminOrdersWhere">
+		<where>
+			<if test="status != null">
+				AND o.status = #{status}
+			</if>
+			<if test="keyword != null and keyword != ''">
+				AND (m.email LIKE CONCAT('%', #{keyword}, '%') OR o.order_number LIKE CONCAT('%', #{keyword}, '%'))
+			</if>
+			<if test="fromAt != null">
+				AND o.created_at &gt;= #{fromAt}
+			</if>
+			<if test="toExclusiveAt != null">
+				AND o.created_at &lt; #{toExclusiveAt}
+			</if>
+		</where>
+	</sql>
+
+	<select id="findAdminOrders" parameterType="com.groove.order.dto.AdminOrderSearchCondition"
+			resultMap="adminOrderSummaryMap">
+		SELECT
+			o.id, o.order_number, m.email AS member_email, o.status, o.final_amount, o.created_at,
+			(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count
+		FROM orders o
+		JOIN member m ON m.id = o.member_id
+		<include refid="adminOrdersWhere"/>
+		ORDER BY o.created_at DESC, o.id DESC
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countAdminOrders" parameterType="com.groove.order.dto.AdminOrderSearchCondition" resultType="long">
+		SELECT COUNT(*)
+		FROM orders o
+		JOIN member m ON m.id = o.member_id
+		<include refid="adminOrdersWhere"/>
+	</select>
+
+</mapper>

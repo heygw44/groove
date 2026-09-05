@@ -1,0 +1,83 @@
+# EC2(운영) 전용. 이미지는 GHCR 에서 pull 하고 값은 /opt/groove/.env 에서 읽는다.
+# 프론트엔드는 컨테이너로 띄우지 않는다(1GB 메모리). 호스트 Nginx 가 /var/www/groove 를 직접 서빙한다.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: groove-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: groove-redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    image: ghcr.io/${GHCR_OWNER}/groove-backend:${BACKEND_IMAGE_TAG}
+    container_name: groove-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY}
+      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY}
+      FILE_UPLOAD_PATH: ${FILE_UPLOAD_PATH}
+      FILE_BASE_URL: ${FILE_BASE_URL}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      LIMITED_REDIS_ENABLED: "true"
+    volumes:
+      - /opt/groove/uploads:/app/uploads
+      - /opt/groove/logs:/app/logs
+    # 호스트 루프백에만 바인딩한다. 외부 노출은 Nginx 프록시로만.
+    ports:
+      - "127.0.0.1:8080:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mysql-data:

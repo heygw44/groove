@@ -23,6 +23,9 @@ spring:
 jwt:
   secret: ${JWT_SECRET:local-dev-only-secret-key-must-be-at-least-32-bytes-long}
 
+toss:
+  secret-key: ${TOSS_SECRET_KEY:test_sk_local_dev_only}
+
 logging:
   level:
     com.groove: DEBUG

@@ -5,6 +5,8 @@ on:
     branches: [main, develop]
   push:
     branches: [develop]
+  # deploy.yml 이 배포 전 게이트로 그대로 재사용한다.
+  workflow_call:
 
 jobs:
   backend:
@@ -28,6 +30,13 @@ jobs:
         with:
           name: backend-test-report
           path: backend/build/reports/tests/test
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jacoco-report
+          path: backend/build/reports/jacoco/test/html
+          if-no-files-found: ignore
 
   frontend:
     name: Frontend lint & build
@@ -44,4 +53,5 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run test
       - run: npm run build
