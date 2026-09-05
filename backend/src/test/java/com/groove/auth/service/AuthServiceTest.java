@@ -165,6 +165,23 @@ class AuthServiceTest {
 		}
 
 		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			LoginRequest request = new LoginRequest(member.getEmail(), "password1");
+			given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
+			given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> authService.login(request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+			verify(refreshTokenRepository, never()).save(anyLong(), any());
+		}
+
+		@Test
 		@DisplayName("인증에 성공하면 토큰을 발급하고 refresh token 을 저장한다")
 		void issuesTokensAndSavesRefresh() {
 			// given
@@ -243,6 +260,22 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
+		}
+
+		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(MEMBER_ID);
+			given(refreshTokenRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of("refresh"));
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+
+			// when & then
+			assertThatThrownBy(() -> authService.reissue("refresh"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
 		}
 
 		@Test

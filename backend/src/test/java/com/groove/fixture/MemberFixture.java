@@ -38,6 +38,18 @@ public final class MemberFixture {
 		return member;
 	}
 
+	public static Member createSuspended() {
+		Member member = create();
+		member.suspend();
+		return member;
+	}
+
+	public static Member createSuspended(String email) {
+		Member member = create(email);
+		member.suspend();
+		return member;
+	}
+
 	public static Member withId(Member member, Long id) {
 		ReflectionTestUtils.setField(member, "id", id);
 		return member;

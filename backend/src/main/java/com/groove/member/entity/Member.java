@@ -101,7 +101,35 @@ public class Member extends BaseTimeEntity {
 		this.status = MemberStatus.WITHDRAWN;
 	}
 
+	public void suspend() {
+		if (isWithdrawn()) {
+			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
+		}
+		this.status = MemberStatus.SUSPENDED;
+	}
+
+	public void activate() {
+		if (isWithdrawn()) {
+			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
+		}
+		this.status = MemberStatus.ACTIVE;
+	}
+
+	/** 탈퇴/정지 회원의 모든 회원 전용 API 접근을 막을 때 쓴다. */
+	public void validateActive() {
+		if (isWithdrawn()) {
+			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
+		}
+		if (isSuspended()) {
+			throw new BusinessException(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
+	}
+
 	public boolean isWithdrawn() {
 		return this.status == MemberStatus.WITHDRAWN;
+	}
+
+	public boolean isSuspended() {
+		return this.status == MemberStatus.SUSPENDED;
 	}
 }

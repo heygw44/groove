@@ -99,6 +99,20 @@ class MemberServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
 		}
+
+		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+
+			// when & then
+			assertThatThrownBy(() -> memberService.getMyInfo(MEMBER_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
 	}
 
 	@Nested

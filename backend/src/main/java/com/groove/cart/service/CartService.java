@@ -146,9 +146,7 @@ public class CartService {
 	private Member findActiveMember(Long memberId) {
 		Member member = memberRepository.findById(memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-		if (member.isWithdrawn()) {
-			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
-		}
+		member.validateActive();
 		return member;
 	}
 

@@ -306,6 +306,22 @@ class OrderServiceTest {
 		}
 
 		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Member suspended = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(suspended));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, null);
+
+			// when & then
+			assertThatThrownBy(() -> orderService.create(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
+
+		@Test
 		@DisplayName("정액 쿠폰을 적용하면 할인 금액만큼 최종 금액이 줄고 쿠폰이 사용 처리된다")
 		void appliesFixedCouponDiscount() {
 			// given

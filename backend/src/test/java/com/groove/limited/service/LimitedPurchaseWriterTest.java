@@ -108,6 +108,40 @@ class LimitedPurchaseWriterTest {
 		}
 
 		@Test
+		@DisplayName("탈퇴한 회원이면 MEMBER_WITHDRAWN 예외를 던진다")
+		void throwsWhenMemberWithdrawn() {
+			// given
+			Product product = product();
+			LimitedDrop drop = openDrop(product, 6L);
+			Member withdrawn = MemberFixture.withId(MemberFixture.createWithdrawn(), 10L);
+			given(limitedDropRepository.findByIdForUpdate(6L)).willReturn(Optional.of(drop));
+			given(memberRepository.findById(10L)).willReturn(Optional.of(withdrawn));
+
+			// when & then
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(6L, 10L, 20L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
+		}
+
+		@Test
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		void throwsWhenMemberSuspended() {
+			// given
+			Product product = product();
+			LimitedDrop drop = openDrop(product, 7L);
+			Member suspended = MemberFixture.withId(MemberFixture.createSuspended(), 10L);
+			given(limitedDropRepository.findByIdForUpdate(7L)).willReturn(Optional.of(drop));
+			given(memberRepository.findById(10L)).willReturn(Optional.of(suspended));
+
+			// when & then
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(7L, 10L, 20L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
+
+		@Test
 		@DisplayName("uk_limited_purchase 위반이면 LIMITED_ALREADY_PURCHASED 예외를 던진다")
 		void throwsWhenDuplicatePurchase() {
 			// given
