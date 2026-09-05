@@ -73,6 +73,28 @@ const NAV_ITEMS: AdminNavItem[] = [
     ),
   },
   {
+    to: '/admin/members',
+    label: '회원',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="7" cy="7" r="2.6" />
+        <path d="M2.5 16c0-2.4 2-3.8 4.5-3.8s4.5 1.4 4.5 3.8" />
+        <circle cx="14.5" cy="7.5" r="2" />
+        <path d="M12.8 12.6c1.9.2 3.7 1.5 3.7 3.4" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/coupons',
     label: '쿠폰',
     icon: (
@@ -114,8 +136,8 @@ const NAV_ITEMS: AdminNavItem[] = [
     ),
   },
   {
-    to: '/admin/members',
-    label: '회원',
+    to: '/admin/audit-logs',
+    label: '감사 로그',
     icon: (
       <svg
         width="16"
@@ -128,10 +150,8 @@ const NAV_ITEMS: AdminNavItem[] = [
         strokeLinejoin="round"
         aria-hidden
       >
-        <circle cx="7" cy="7" r="2.6" />
-        <path d="M2.5 16c0-2.4 2-3.8 4.5-3.8s4.5 1.4 4.5 3.8" />
-        <circle cx="14.5" cy="7.5" r="2" />
-        <path d="M12.8 12.6c1.9.2 3.7 1.5 3.7 3.4" />
+        <path d="M5 3.5h7l3 3v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" />
+        <path d="M7 9.5h6M7 12.5h6M7 15h3" />
       </svg>
     ),
   },
