@@ -26,6 +26,11 @@ spring:
     multipart:
       max-file-size: 5MB
       max-request-size: 10MB
+  http:
+    client:
+      # 토스 결제 API 호출용. 결제 승인이 걸려 있는 요청 스레드를 오래 잡지 않도록 짧게 둔다.
+      connect-timeout: 3s
+      read-timeout: 10s
 
 server:
   tomcat:

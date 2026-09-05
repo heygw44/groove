@@ -65,6 +65,7 @@ import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.dto.LimitedPurchaseResponse;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.limited.service.LimitedDropRedisService;
@@ -334,10 +335,10 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 		}
 
 		@Test
-		@DisplayName("한정반 주문을 취소하면 선점이 되돌아가 Redis 재고와 구매자 목록이 복구된다")
+		@DisplayName("한정반 주문을 취소하면 선점이 되돌아가 Redis 재고와 구매자 목록이 복구되고 품절 상태도 풀린다")
 		void cancelsPaidLimitedOrderAndRestoresRedisReservation() throws Exception {
-			// given
-			int totalQuantity = 5;
+			// given: 총 수량 1건짜리 드롭이라 이 구매 한 건으로 SOLD_OUT 이 된다
+			int totalQuantity = 1;
 			Long dropId = prepareOpenDrop(totalQuantity);
 			Member member = signup();
 			Address address = addressRepository.save(AddressFixture.create(member));
@@ -348,6 +349,8 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, purchase.orderNumber(),
 					purchase.finalAmount());
 			stubCancelSuccess(paymentKey);
+			assertThat(limitedDropRepository.findById(dropId).orElseThrow().getStatus())
+					.isEqualTo(LimitedDropStatus.SOLD_OUT);
 
 			// when
 			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
@@ -360,6 +363,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(limitedPurchaseRepository.findByOrderId(purchase.orderId())).isEmpty();
 			LimitedDrop reloadedDrop = limitedDropRepository.findById(dropId).orElseThrow();
 			assertThat(reloadedDrop.getSoldCount()).isZero();
+			assertThat(reloadedDrop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
 			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.STOCK_KEY_PREFIX + dropId))
 					.isEqualTo(String.valueOf(totalQuantity));
 			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.BUYERS_KEY_PREFIX + dropId,
