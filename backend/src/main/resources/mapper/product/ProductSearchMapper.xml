@@ -72,6 +72,15 @@
 				<otherwise>NULL</otherwise>
 			</choose> AS wishlisted
 		<include refid="searchFrom"/>
+		<if test="sort.name() == 'POPULAR'">
+			LEFT JOIN (
+				SELECT oi.product_id, SUM(oi.quantity) AS sold_quantity
+				FROM order_item oi
+				JOIN orders o ON o.id = oi.order_id
+				WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+				GROUP BY oi.product_id
+			) sold ON sold.product_id = p.id
+		</if>
 		<include refid="searchWhere"/>
 		<choose>
 			<when test="sort.name() == 'PRICE_ASC'">
@@ -84,7 +93,7 @@
 				ORDER BY p.avg_rating DESC, p.review_count DESC, p.created_at DESC, p.id DESC
 			</when>
 			<when test="sort.name() == 'POPULAR'">
-				ORDER BY p.review_count DESC, p.created_at DESC, p.id DESC
+				ORDER BY COALESCE(sold.sold_quantity, 0) DESC, p.review_count DESC, p.created_at DESC, p.id DESC
 			</when>
 			<otherwise>
 				ORDER BY p.created_at DESC, p.id DESC

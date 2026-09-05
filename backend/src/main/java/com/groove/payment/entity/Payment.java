@@ -23,6 +23,7 @@ import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -39,7 +40,8 @@ import lombok.NoArgsConstructor;
 			@UniqueConstraint(name = "uk_payment_order", columnNames = "order_id"),
 			@UniqueConstraint(name = "uk_payment_key", columnNames = "payment_key"),
 			@UniqueConstraint(name = "uk_payment_toss_order_id", columnNames = "toss_order_id")
-		})
+		},
+		indexes = @Index(name = "idx_payment_approved_at", columnList = "approved_at"))
 public class Payment extends BaseTimeEntity {
 
 	private static final int MAX_FAIL_REASON_LENGTH = 300;

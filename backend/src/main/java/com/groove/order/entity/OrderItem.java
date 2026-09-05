@@ -28,7 +28,10 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = PROTECTED)
 @Table(name = "order_item",
-		indexes = @Index(name = "idx_order_item_order", columnList = "order_id"))
+		indexes = {
+			@Index(name = "idx_order_item_order", columnList = "order_id"),
+			@Index(name = "idx_order_item_product", columnList = "product_id")
+		})
 public class OrderItem extends BaseTimeEntity {
 
 	@Id

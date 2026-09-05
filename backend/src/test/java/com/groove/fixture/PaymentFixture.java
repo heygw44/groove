@@ -23,8 +23,19 @@ public final class PaymentFixture {
 	}
 
 	public static Payment approved(Order order, String paymentKey) {
+		return approvedAt(order, paymentKey, APPROVED_AT);
+	}
+
+	public static Payment approvedAt(Order order, String paymentKey, LocalDateTime approvedAt) {
 		Payment payment = Payment.ready(order);
-		payment.approve(paymentKey, METHOD, APPROVED_AT);
+		payment.approve(paymentKey, METHOD, approvedAt);
+		return payment;
+	}
+
+	public static Payment canceledAt(Order order, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt) {
+		Payment payment = approvedAt(order, paymentKey, approvedAt);
+		payment.cancel(canceledAt);
 		return payment;
 	}
 

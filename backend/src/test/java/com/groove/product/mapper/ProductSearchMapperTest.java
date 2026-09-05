@@ -17,9 +17,11 @@ import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
 import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.ReviewFixture;
 import com.groove.member.entity.Member;
+import com.groove.order.entity.Order;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSortType;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -506,6 +508,15 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			em.persist(ReviewFixture.create(em.find(Product.class, product.getId()), reviewer, rating));
 		}
 
+		private void addPaidOrder(Product product, int quantity) {
+			Member buyer = MemberFixture.create("smtr-buyer-" + System.nanoTime() + "@groove.com");
+			em.persist(buyer);
+			Order order = OrderFixture.create(buyer, "20260905-SMTR" + System.nanoTime() % 100000);
+			order.addItem(em.find(Product.class, product.getId()), quantity);
+			OrderFixture.markPaid(order);
+			em.persist(order);
+		}
+
 		@Test
 		@DisplayName("RATING 정렬이면 평균 평점 내림차순, 그 다음 리뷰 개수 내림차순으로 반환하고 리뷰 없는 상품은 마지막이다")
 		void sortsByAverageRatingDescending() {
@@ -522,16 +533,21 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
-		@DisplayName("POPULAR 정렬이면 리뷰 개수 내림차순으로 반환한다")
-		void sortsByReviewCountDescending() {
-			// given
+		@DisplayName("POPULAR 정렬이면 판매 수량 내림차순으로 반환하고, 수량이 같으면 리뷰 개수 내림차순으로 반환한다")
+		void sortsBySoldQuantityDescending() {
+			// given: 리뷰는 lowRatedManyReviews 가 더 많지만 판매 수량은 highRatedFewReviews 와 같다(동률 태그)
+			addPaidOrder(highRatedFewReviews, 5);
+			addPaidOrder(lowRatedManyReviews, 5);
+			em.flush();
+			em.clear();
+
 			ProductSearchCondition cond = condition(RATING_KEYWORD, null, null, null, null, null,
 					ProductSortType.POPULAR, 0, 20);
 
 			// when
 			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
 
-			// then
+			// then: 판매 수량이 같으면 리뷰 개수(3 > 1)가 더 많은 lowRatedManyReviews 가 앞선다
 			assertThat(result).extracting(ProductSummaryResponse::id)
 					.containsExactly(lowRatedManyReviews.getId(), highRatedFewReviews.getId(), noReviews.getId());
 		}
