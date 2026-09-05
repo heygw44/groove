@@ -6,10 +6,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.groove.auth.LoginMember;
+import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.inventory.dto.StockAdjustRequest;
 import com.groove.inventory.dto.StockResponse;
-import com.groove.inventory.service.StockService;
+import com.groove.inventory.service.AdminStockService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,12 +24,12 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AdminStockController {
 
-	private final StockService stockService;
+	private final AdminStockService adminStockService;
 
 	@Operation(summary = "재고 조정")
 	@PatchMapping
-	public ApiResponse<StockResponse> adjust(@PathVariable Long productId,
+	public ApiResponse<StockResponse> adjust(@AuthMember LoginMember admin, @PathVariable Long productId,
 			@Valid @RequestBody StockAdjustRequest request) {
-		return ApiResponse.ok(stockService.adjust(productId, request));
+		return ApiResponse.ok(adminStockService.adjust(admin.id(), productId, request));
 	}
 }

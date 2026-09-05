@@ -36,7 +36,7 @@ public class PaymentCancelService implements PaymentCancelHook {
 	 */
 	@Transactional
 	@Override
-	public void onPaidOrderCanceled(Order order) {
+	public Long onPaidOrderCanceled(Order order) {
 		Payment payment = paymentRepository.findByOrderId(order.getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 		if (payment.getStatus() != PaymentStatus.DONE) {
@@ -46,6 +46,7 @@ public class PaymentCancelService implements PaymentCancelHook {
 		PaymentCancelResult result = paymentClient.cancel(payment.getPaymentKey(), reason);
 		LocalDateTime canceledAt = result.canceledAt() != null ? result.canceledAt() : LocalDateTime.now(clock);
 		payment.cancel(canceledAt);
+		return payment.getId();
 	}
 
 	private String resolveReason(String orderCancelReason) {

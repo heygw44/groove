@@ -63,22 +63,24 @@ public class AdminAuditLog extends BaseTimeEntity {
 
 	@Builder(access = PRIVATE)
 	private AdminAuditLog(Member admin, AdminAuditAction action, AdminAuditTargetType targetType, Long targetId,
-			String detail) {
+			String detail, String ipAddress) {
 		this.admin = admin;
 		this.action = action;
 		this.targetType = targetType;
 		this.targetId = targetId;
 		this.detail = detail;
+		this.ipAddress = ipAddress;
 	}
 
 	public static AdminAuditLog record(Member admin, AdminAuditAction action, AdminAuditTargetType targetType,
-			Long targetId, String detail) {
+			Long targetId, String detail, String ipAddress) {
 		return AdminAuditLog.builder()
 				.admin(admin)
 				.action(action)
 				.targetType(targetType)
 				.targetId(targetId)
 				.detail(detail)
+				.ipAddress(ipAddress)
 				.build();
 	}
 }

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.admin.mapper.AdminAuditLogQueryMapper">
+
+	<resultMap id="adminAuditLogMap" type="com.groove.admin.dto.AdminAuditLogResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="admin_id" javaType="java.lang.Long"/>
+			<arg column="admin_nickname" javaType="java.lang.String"/>
+			<arg column="action" javaType="com.groove.admin.entity.AdminAuditAction"/>
+			<arg column="target_type" javaType="com.groove.admin.entity.AdminAuditTargetType"/>
+			<arg column="target_id" javaType="java.lang.Long"/>
+			<arg column="detail" javaType="java.lang.String"/>
+			<arg column="ip_address" javaType="java.lang.String"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+		</constructor>
+	</resultMap>
+
+	<sql id="auditLogsWhere">
+		<where>
+			<if test="action != null">
+				AND a.action = #{action}
+			</if>
+			<if test="targetType != null">
+				AND a.target_type = #{targetType}
+			</if>
+			<if test="adminId != null">
+				AND a.admin_id = #{adminId}
+			</if>
+			<if test="fromAt != null">
+				AND a.created_at &gt;= #{fromAt}
+			</if>
+			<if test="toExclusiveAt != null">
+				AND a.created_at &lt; #{toExclusiveAt}
+			</if>
+		</where>
+	</sql>
+
+	<select id="findAuditLogs" parameterType="com.groove.admin.dto.AdminAuditLogSearchCondition"
+			resultMap="adminAuditLogMap">
+		SELECT
+			a.id, a.admin_id, m.nickname AS admin_nickname, a.action, a.target_type, a.target_id, a.detail,
+			a.ip_address, a.created_at
+		FROM admin_audit_log a
+		JOIN member m ON m.id = a.admin_id
+		<include refid="auditLogsWhere"/>
+		ORDER BY a.created_at DESC, a.id DESC
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countAuditLogs" parameterType="com.groove.admin.dto.AdminAuditLogSearchCondition" resultType="long">
+		SELECT COUNT(*)
+		FROM admin_audit_log a
+		JOIN member m ON m.id = a.admin_id
+		<include refid="auditLogsWhere"/>
+	</select>
+
+</mapper>

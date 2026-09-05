@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,8 +37,13 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.groove.admin.entity.AdminAuditAction;
+import com.groove.admin.entity.AdminAuditLog;
+import com.groove.admin.entity.AdminAuditTargetType;
+import com.groove.admin.repository.AdminAuditLogRepository;
 import com.groove.auth.dto.LoginRequest;
 import com.groove.auth.dto.SignupRequest;
+import com.groove.auth.jwt.JwtProvider;
 import com.groove.coupon.dto.CouponIssueRequest;
 import com.groove.coupon.entity.Coupon;
 import com.groove.coupon.entity.DiscountType;
@@ -65,8 +71,10 @@ import com.groove.limited.service.LimitedDropRedisService;
 import com.groove.limited.service.LimitedPurchaseService;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
+import com.groove.member.entity.MemberRole;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
@@ -145,6 +153,12 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	Clock clock;
+
+	@Autowired
+	JwtProvider jwtProvider;
+
+	@Autowired
+	AdminAuditLogRepository adminAuditLogRepository;
 
 	@MockitoBean
 	PaymentClient paymentClient;
@@ -443,6 +457,50 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.error.code", is("PAYMENT_INVALID_STATUS")));
 			verify(paymentClient, never()).cancel(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("PATCH /api/v1/admin/orders/{id}/status (관리자 취소)")
+	class AdminCancel {
+
+		@Test
+		@DisplayName("관리자가 결제 완료 주문을 취소하면 결제도 취소되고 감사 로그 두 건이 IP 와 함께 남는다")
+		void cancelsPaymentAndRecordsAuditLogsWhenAdminCancelsPaidOrder() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			stubCancelSuccess(paymentKey);
+			Member admin = memberRepository.save(
+					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/orders/{id}/status", orderInfo.orderId())
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.header("X-Forwarded-For", "203.0.113.7")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(
+									new AdminOrderStatusChangeRequest(OrderStatus.CANCELED))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then
+			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCELED);
+			verify(paymentClient).cancel(eq(paymentKey), any());
+			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
+			assertThat(logs).extracting(AdminAuditLog::getAction)
+					.containsExactly(AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditAction.PAYMENT_CANCEL);
+			assertThat(logs).extracting(AdminAuditLog::getIpAddress).containsOnly("203.0.113.7");
+			assertThat(logs.get(1).getTargetType()).isEqualTo(AdminAuditTargetType.PAYMENT);
+			assertThat(logs.get(1).getTargetId()).isEqualTo(paymentId);
 		}
 	}
 
