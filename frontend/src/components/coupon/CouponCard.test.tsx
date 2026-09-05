@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CouponCard } from '@/components/coupon/CouponCard';
 import type { MemberCoupon } from '@/types/coupon';
+import { applyServerTime } from '@/utils/serverTime';
 
 const memberCoupon = (overrides: Partial<MemberCoupon> = {}): MemberCoupon => ({
   memberCouponId: 1,
@@ -20,13 +21,9 @@ const memberCoupon = (overrides: Partial<MemberCoupon> = {}): MemberCoupon => ({
 });
 
 describe('CouponCard', () => {
+  // D-day 는 getServerNow() 기준이라 시스템 시계가 아니라 서버 시각 앵커를 고정해야 실제 날짜와 무관해진다.
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-04T12:00:00'));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
+    applyServerTime('2026-09-04T12:00:00+09:00');
   });
 
   it('사용 완료 쿠폰은 사용 완료 배지를 보여준다', () => {
