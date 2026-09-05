@@ -1,0 +1,145 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 배포가 겹치면 서버 상태가 꼬인다. 이전 배포는 끝까지 두고 순서대로 실행한다.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/groove-backend
+  HEALTH_URL: https://groove-lp.duckdns.org/api/v1/health
+
+jobs:
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+
+  build-push:
+    name: Build & push image
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build & push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          # EC2 는 amd64. 러너 아키텍처에 의존하지 않도록 못 박는다.
+          platforms: linux/amd64
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to EC2
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: /api/v1
+          VITE_TOSS_CLIENT_KEY: ${{ secrets.VITE_TOSS_CLIENT_KEY }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare server
+        uses: appleboy/ssh-action@v1
+        env:
+          PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
+          IMAGE_TAG: ${{ github.sha }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: PROD_ENV_FILE,IMAGE_TAG
+          script: |
+            set -e
+            printf '%s\n' "$PROD_ENV_FILE" > /opt/groove/.env
+            # 롤백을 한 줄로 만들기 위해 latest 대신 커밋 sha 를 고정한다. 뒤에 온 값이 이긴다.
+            printf 'BACKEND_IMAGE_TAG=%s\n' "$IMAGE_TAG" >> /opt/groove/.env
+            chmod 600 /opt/groove/.env
+            # 직전 프론트 빌드를 롤백본으로 남긴다.
+            if [ -d /var/www/groove ]; then
+              sudo rm -rf /var/www/groove.bak
+              sudo mv /var/www/groove /var/www/groove.bak
+            fi
+            sudo mkdir -p /var/www/groove
+            sudo chown -R "$(id -un)":www-data /var/www/groove
+
+      - name: Upload frontend build
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "frontend/dist/*"
+          target: "/var/www/groove"
+          strip_components: 2
+          overwrite: true
+
+      - name: Upload compose file
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.prod.yml"
+          target: "/opt/groove"
+          overwrite: true
+
+      - name: Restart containers
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_USER: ${{ github.actor }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_PAT,GHCR_USER
+          script: |
+            set -e
+            echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            cd /opt/groove
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS "$HEALTH_URL"; then
+              echo "헬스체크 성공 (${i}회차)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "헬스체크 실패: $HEALTH_URL"
+          exit 1

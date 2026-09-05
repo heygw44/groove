@@ -10,7 +10,9 @@ RUN gradle bootJar --no-daemon -x test
 
 # ---- run stage ----
 FROM eclipse-temurin:17-jre
-RUN groupadd -r groove && useradd -r -g groove groove \
+# uid/gid 를 고정한다. 운영 서버가 /opt/groove/{logs,uploads} 를 같은 소유자로 맞춰야
+# 바인드 마운트에 로그와 업로드 파일을 쓸 수 있다.
+RUN groupadd -g 10001 groove && useradd -u 10001 -g groove -M -s /usr/sbin/nologin groove \
     && mkdir -p /app/logs /app/uploads && chown -R groove:groove /app
 WORKDIR /app
 COPY --from=build /workspace/build/libs/*.jar app.jar
