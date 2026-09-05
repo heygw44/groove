@@ -1,7 +1,10 @@
 package com.groove.product.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +23,7 @@ import com.groove.product.entity.ProductImage;
 import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.recommend.service.ProductViewedEvent;
 import com.groove.wishlist.repository.WishlistRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -36,6 +40,8 @@ public class ProductService {
 	private final StockRepository stockRepository;
 	private final WishlistRepository wishlistRepository;
 	private final LimitedDropService limitedDropService;
+	private final ApplicationEventPublisher eventPublisher;
+	private final Clock clock;
 
 	public PageResponse<ProductSummaryResponse> search(ProductSearchRequest request, Long memberId) {
 		ProductSearchCondition condition = request.toCondition(memberId);
@@ -60,6 +66,9 @@ public class ProductService {
 		Boolean wishlisted = memberId == null ? null : wishlistRepository.existsByMemberIdAndProductId(memberId, id);
 		ProductDetailResponse.LimitedDropSummary limitedDrop = limitedDropService.findSummaryForProduct(id)
 				.orElse(null);
-		return ProductDetailResponse.from(product, images, stockQuantity, wishlisted, limitedDrop);
+		ProductDetailResponse response = ProductDetailResponse.from(product, images, stockQuantity, wishlisted,
+				limitedDrop);
+		eventPublisher.publishEvent(new ProductViewedEvent(memberId, id, LocalDateTime.now(clock)));
+		return response;
 	}
 }

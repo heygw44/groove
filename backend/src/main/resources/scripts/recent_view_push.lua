@@ -1,0 +1,6 @@
+-- KEYS[1] = 최근 조회 리스트 키, ARGV[1] = productId, ARGV[2] = 최대 보관 개수, ARGV[3] = TTL(초)
+redis.call('LREM', KEYS[1], 0, ARGV[1])
+redis.call('LPUSH', KEYS[1], ARGV[1])
+redis.call('LTRIM', KEYS[1], 0, tonumber(ARGV[2]) - 1)
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return redis.call('LLEN', KEYS[1])
