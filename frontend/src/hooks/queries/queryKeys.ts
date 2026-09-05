@@ -1,3 +1,4 @@
+import type { PopularProductParams, StatsPeriodParams } from '@/types/adminStats';
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
 import type { AdminOrderListParams, OrderListParams } from '@/types/order';
@@ -81,6 +82,15 @@ export const adminLimitedDropKeys = {
   lists: ['adminLimitedDrops', 'list'] as const,
   list: (params: AdminLimitedDropListParams) => ['adminLimitedDrops', 'list', params] as const,
   detail: (id: number) => ['adminLimitedDrops', 'detail', id] as const,
+};
+
+export const adminStatsKeys = {
+  all: ['adminStats'] as const,
+  summary: ['adminStats', 'summary'] as const,
+  dailySales: (params: StatsPeriodParams) => ['adminStats', 'dailySales', params] as const,
+  popularProducts: (params: PopularProductParams) =>
+    ['adminStats', 'popularProducts', params] as const,
+  limitedDrops: ['adminStats', 'limitedDrops'] as const,
 };
 
 export const referenceKeys = {

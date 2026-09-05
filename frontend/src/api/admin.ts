@@ -1,4 +1,12 @@
 import { client, unwrap } from '@/api/client';
+import type {
+  AdminStatsSummary,
+  DailySales,
+  LimitedDropStats,
+  PopularProduct,
+  PopularProductParams,
+  StatsPeriodParams,
+} from '@/types/adminStats';
 import type { ApiResponse, PageResponse } from '@/types/api';
 import type {
   AdminCouponCreateRequest,
@@ -107,3 +115,23 @@ export const openAdminLimitedDrop = (id: number) =>
 
 export const closeAdminLimitedDrop = (id: number) =>
   unwrap(client.patch<ApiResponse<AdminLimitedDrop>>(`/admin/limited-drops/${id}/close`));
+
+export const getAdminStatsSummary = () =>
+  unwrap(client.get<ApiResponse<AdminStatsSummary>>('/admin/stats/summary'));
+
+export const getAdminDailySales = (params: StatsPeriodParams) =>
+  unwrap(
+    client.get<ApiResponse<DailySales[]>>('/admin/stats/daily-sales', {
+      params,
+    }),
+  );
+
+export const getAdminPopularProducts = (params: PopularProductParams) =>
+  unwrap(
+    client.get<ApiResponse<PopularProduct[]>>('/admin/stats/popular-products', {
+      params,
+    }),
+  );
+
+export const getAdminLimitedDropStats = () =>
+  unwrap(client.get<ApiResponse<LimitedDropStats[]>>('/admin/stats/limited-drops'));
