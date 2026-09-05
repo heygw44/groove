@@ -23,6 +23,7 @@ import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.recommend.dto.HomeRecommendResponse;
 import com.groove.recommend.dto.ProductFeatureRow;
 import com.groove.recommend.dto.RecommendItemResponse;
+import com.groove.recommend.dto.TasteMatchResponse;
 import com.groove.recommend.entity.Decade;
 import com.groove.recommend.entity.MemberTasteDecade;
 import com.groove.recommend.entity.MemberTasteProfile;
@@ -131,6 +132,34 @@ public class RecommendService {
 				resolvedSize);
 
 		return toItems(ranked, memberId);
+	}
+
+	/** 상품별 취향 매칭. 프로필이 없으면 전부 matched=false, 목록에 없는 상품 id 도 none() 으로 채운다. */
+	public Map<Long, TasteMatchResponse> matchTaste(Long memberId, Collection<Long> productIds) {
+		if (productIds.isEmpty()) {
+			return Map.of();
+		}
+
+		Map<Long, TasteMatchResponse> result = new LinkedHashMap<>();
+		TasteSignal taste = loadTasteSignal(memberId);
+		if (taste.isEmpty()) {
+			productIds.forEach(id -> result.put(id, TasteMatchResponse.none()));
+			return result;
+		}
+
+		Map<Long, ProductFeature> features = loadFeatures();
+		for (Long productId : productIds) {
+			ProductFeature feature = features.get(productId);
+			if (feature == null) {
+				result.put(productId, TasteMatchResponse.none());
+				continue;
+			}
+			RecommendScorer.ScoreResult scoreResult = recommendScorer.scoreTaste(feature, taste);
+			result.put(productId, recommendScorer.matchesTaste(scoreResult)
+					? new TasteMatchResponse(true, scoreResult.topReasons())
+					: TasteMatchResponse.none());
+		}
+		return result;
 	}
 
 	private TasteSignal loadTasteSignal(Long memberId) {

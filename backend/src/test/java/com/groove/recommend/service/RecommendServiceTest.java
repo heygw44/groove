@@ -40,6 +40,7 @@ import com.groove.recommend.dto.HomeRecommendResponse;
 import com.groove.recommend.dto.ProductFeatureRow;
 import com.groove.recommend.dto.RecommendItemResponse;
 import com.groove.recommend.dto.RecommendReason;
+import com.groove.recommend.dto.TasteMatchResponse;
 import com.groove.recommend.entity.Decade;
 import com.groove.recommend.entity.MemberTasteArtist;
 import com.groove.recommend.entity.MemberTasteDecade;
@@ -478,6 +479,109 @@ class RecommendServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
 			verify(recommendQueryMapper, never()).findProductFeatures();
+		}
+	}
+
+	@Nested
+	@DisplayName("matchTaste()")
+	class MatchTaste {
+
+		private static ProductFeatureRow rowWithGenreAndDecade(Long id, Long artistId, String genreIds,
+				Integer releaseYear) {
+			return new ProductFeatureRow(id, artistId, null, releaseYear, null, NOW, ProductStatus.ON_SALE,
+					genreIds);
+		}
+
+		@Test
+		@DisplayName("취향 프로필이 없으면 전부 none 이고 상품 특성을 조회하지 않는다")
+		void returnsNoneForAllWhenNoTasteProfile() {
+			// given
+			givenNoTasteProfile(MEMBER_ID);
+
+			// when
+			Map<Long, TasteMatchResponse> result = recommendService.matchTaste(MEMBER_ID, List.of(50L, 60L));
+
+			// then
+			assertThat(result).containsEntry(50L, TasteMatchResponse.none())
+					.containsEntry(60L, TasteMatchResponse.none());
+			verify(recommendQueryMapper, never()).findProductFeatures();
+		}
+
+		@Test
+		@DisplayName("TASTE_DECADE 만 일치하면 콘텐츠 점수 3 미만이라 matched 는 false 다")
+		void returnsUnmatchedWhenOnlyDecadeMatches() {
+			// given
+			givenTasteProfile(MEMBER_ID, Set.of(), Set.of(), Set.of(Decade.D2020));
+			given(recommendQueryMapper.findProductFeatures())
+					.willReturn(List.of(rowWithGenreAndDecade(50L, null, null, 2021)));
+
+			// when
+			Map<Long, TasteMatchResponse> result = recommendService.matchTaste(MEMBER_ID, List.of(50L));
+
+			// then
+			assertThat(result.get(50L).matched()).isFalse();
+			assertThat(result.get(50L).reasons()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("TASTE_GENRE 만 일치하면 콘텐츠 점수 3 이상이라 matched 는 true 다")
+		void returnsMatchedWhenGenreMatches() {
+			// given
+			givenTasteProfile(MEMBER_ID, Set.of(), Set.of(9L), Set.of());
+			given(recommendQueryMapper.findProductFeatures())
+					.willReturn(List.of(rowWithGenreAndDecade(50L, null, "9", null)));
+
+			// when
+			Map<Long, TasteMatchResponse> result = recommendService.matchTaste(MEMBER_ID, List.of(50L));
+
+			// then
+			assertThat(result.get(50L).matched()).isTrue();
+			assertThat(result.get(50L).reasons()).containsExactly(RecommendReason.TASTE_GENRE);
+		}
+
+		@Test
+		@DisplayName("TASTE_ARTIST 와 TASTE_GENRE 가 함께 일치하면 가중치 순으로 이유를 담는다")
+		void ordersReasonsByWeightWhenArtistAndGenreMatch() {
+			// given
+			givenTasteProfile(MEMBER_ID, Set.of(5L), Set.of(9L), Set.of());
+			given(recommendQueryMapper.findProductFeatures())
+					.willReturn(List.of(rowWithGenreAndDecade(50L, 5L, "9", null)));
+
+			// when
+			Map<Long, TasteMatchResponse> result = recommendService.matchTaste(MEMBER_ID, List.of(50L));
+
+			// then
+			assertThat(result.get(50L).matched()).isTrue();
+			assertThat(result.get(50L).reasons())
+					.containsExactly(RecommendReason.TASTE_ARTIST, RecommendReason.TASTE_GENRE);
+		}
+
+		@Test
+		@DisplayName("여러 상품을 입력하면 각각 계산되고 목록에 없는 id 는 none 으로 채운다")
+		void computesEachProductAndFillsMissingIdsWithNone() {
+			// given
+			givenTasteProfile(MEMBER_ID, Set.of(), Set.of(9L), Set.of());
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					rowWithGenreAndDecade(50L, null, "9", null),
+					rowWithGenreAndDecade(60L, null, null, null)));
+
+			// when
+			Map<Long, TasteMatchResponse> result = recommendService.matchTaste(MEMBER_ID, List.of(50L, 60L, 70L));
+
+			// then
+			assertThat(result.get(50L).matched()).isTrue();
+			assertThat(result.get(60L)).isEqualTo(TasteMatchResponse.none());
+			assertThat(result.get(70L)).isEqualTo(TasteMatchResponse.none());
+		}
+
+		@Test
+		@DisplayName("입력이 비어 있으면 빈 맵을 반환한다")
+		void returnsEmptyMapWhenProductIdsEmpty() {
+			// when
+			Map<Long, TasteMatchResponse> result = recommendService.matchTaste(MEMBER_ID, List.of());
+
+			// then
+			assertThat(result).isEmpty();
 		}
 	}
 }
