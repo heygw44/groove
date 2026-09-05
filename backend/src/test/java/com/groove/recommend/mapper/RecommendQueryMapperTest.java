@@ -3,8 +3,10 @@ package com.groove.recommend.mapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.GenreFixture;
+import com.groove.fixture.LabelFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
@@ -22,8 +26,12 @@ import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.Artist;
+import com.groove.product.entity.Genre;
+import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
+import com.groove.product.entity.ProductStatus;
 import com.groove.recommend.dto.CoPurchaseRow;
+import com.groove.recommend.dto.ProductFeatureRow;
 import com.groove.recommend.entity.ProductViewLog;
 import com.groove.support.MybatisTestSupport;
 import com.groove.wishlist.entity.Wishlist;
@@ -298,6 +306,77 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			return recommendQueryMapper.countCoPurchases(sinceAt).stream()
 					.filter(r -> myIds.contains(r.productId()))
 					.toList();
+		}
+	}
+
+	@Nested
+	@DisplayName("findProductFeatures()")
+	class FindProductFeatures {
+
+		@Test
+		@DisplayName("장르가 두 개면 genreIds 에 두 id 가 모두 담긴다")
+		void includesAllGenreIdsWhenProductHasMultipleGenres() {
+			// given
+			Label label = LabelFixture.create();
+			em.persist(label);
+			Genre rock = GenreFixture.create("Rock");
+			Genre jazz = GenreFixture.create("Jazz");
+			em.persist(rock);
+			em.persist(jazz);
+
+			Product product = Product.create("PF Multi Genre", artist, label, LocalDate.of(2020, 5, 1), "180g",
+					"Black", new BigDecimal("30000.00"), "설명");
+			product.addGenre(rock);
+			product.addGenre(jazz);
+			em.persist(product);
+			em.flush();
+			em.clear();
+
+			// when
+			ProductFeatureRow row = findMyRow(product.getId());
+
+			// then
+			assertThat(Arrays.stream(row.genreIds().split(",")).map(Long::parseLong).toList())
+					.containsExactlyInAnyOrder(rock.getId(), jazz.getId());
+			assertThat(row.artistId()).isEqualTo(artist.getId());
+			assertThat(row.labelId()).isEqualTo(label.getId());
+			assertThat(row.releaseYear()).isEqualTo(2020);
+		}
+
+		@Test
+		@DisplayName("장르가 없으면 genreIds 가 null 이다")
+		void genreIdsIsNullWhenProductHasNoGenre() {
+			// given
+			Product product = Product.create("PF No Genre", artist, null, LocalDate.of(2021, 3, 1), "180g", "Black",
+					new BigDecimal("25000.00"), "설명");
+			em.persist(product);
+			em.flush();
+			em.clear();
+
+			// when
+			ProductFeatureRow row = findMyRow(product.getId());
+
+			// then
+			assertThat(row.genreIds()).isNull();
+			assertThat(row.labelId()).isNull();
+			assertThat(row.releaseYear()).isEqualTo(2021);
+		}
+
+		@Test
+		@DisplayName("HIDDEN 상품도 결과에 포함된다")
+		void includesHiddenProduct() {
+			// given & when
+			ProductFeatureRow row = findMyRow(hiddenAlbum.getId());
+
+			// then
+			assertThat(row.status()).isEqualTo(ProductStatus.HIDDEN);
+		}
+
+		private ProductFeatureRow findMyRow(Long productId) {
+			return recommendQueryMapper.findProductFeatures().stream()
+					.filter(r -> r.productId().equals(productId))
+					.findFirst()
+					.orElseThrow();
 		}
 	}
 }

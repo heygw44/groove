@@ -26,18 +26,12 @@ public class RecentViewService {
 	private final RecommendQueryMapper recommendQueryMapper;
 
 	public List<ProductSummaryResponse> getRecentViews(Long memberId) {
-		List<Long> ids = recentViewRedisService.findRecentProductIds(memberId);
-		boolean fromRedis = !ids.isEmpty();
-
-		// Redis 장애·TTL 만료로 빈 리스트가 오는 경우도 같은 분기로 흡수해 DB 조회 로그로 폴백한다.
-		if (ids.isEmpty()) {
-			ids = recommendQueryMapper.findRecentProductIds(memberId, RecentViewRedisService.MAX_SIZE);
-		}
-		if (ids.isEmpty()) {
+		RecentIds recentIds = loadRecentIds(memberId);
+		List<Long> distinctIds = recentIds.ids();
+		if (distinctIds.isEmpty()) {
 			return List.of();
 		}
 
-		List<Long> distinctIds = ids.stream().distinct().toList();
 		Map<Long, ProductSummaryResponse> summariesById = recommendQueryMapper.findSummariesByIds(distinctIds, memberId)
 				.stream()
 				.collect(Collectors.toMap(ProductSummaryResponse::id, Function.identity(), (a, b) -> a,
@@ -49,7 +43,7 @@ public class RecentViewService {
 				.filter(Objects::nonNull)
 				.toList();
 
-		if (fromRedis) {
+		if (recentIds.fromRedis()) {
 			List<Long> staleIds = distinctIds.stream()
 					.filter(id -> !summariesById.containsKey(id))
 					.toList();
@@ -59,5 +53,25 @@ public class RecentViewService {
 		}
 
 		return summaries;
+	}
+
+	/** 다른 추천 신호와 조합할 때 요약 조회 없이 id 만 필요한 경우. */
+	public List<Long> findRecentProductIds(Long memberId) {
+		return loadRecentIds(memberId).ids();
+	}
+
+	private RecentIds loadRecentIds(Long memberId) {
+		List<Long> ids = recentViewRedisService.findRecentProductIds(memberId);
+		boolean fromRedis = !ids.isEmpty();
+
+		// Redis 장애·TTL 만료로 빈 리스트가 오는 경우도 같은 분기로 흡수해 DB 조회 로그로 폴백한다.
+		if (ids.isEmpty()) {
+			ids = recommendQueryMapper.findRecentProductIds(memberId, RecentViewRedisService.MAX_SIZE);
+		}
+
+		return new RecentIds(ids.stream().distinct().toList(), fromRedis);
+	}
+
+	private record RecentIds(List<Long> ids, boolean fromRedis) {
 	}
 }

@@ -1,7 +1,9 @@
 package com.groove.recommend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -128,6 +130,53 @@ class RecentViewServiceTest {
 			// then
 			assertThat(result).extracting(ProductSummaryResponse::id).containsExactly(1L, 2L);
 			verify(recommendQueryMapper).findSummariesByIds(List.of(1L, 2L), MEMBER_ID);
+		}
+	}
+
+	@Nested
+	@DisplayName("findRecentProductIds()")
+	class FindRecentProductIds {
+
+		@Test
+		@DisplayName("Redis 목록이 있으면 그대로 반환하고 DB 는 조회하지 않는다")
+		void returnsRedisIdsWithoutDatabaseFallback() {
+			// given
+			given(recentViewRedisService.findRecentProductIds(MEMBER_ID)).willReturn(List.of(3L, 1L, 2L));
+
+			// when
+			List<Long> result = recentViewService.findRecentProductIds(MEMBER_ID);
+
+			// then
+			assertThat(result).containsExactly(3L, 1L, 2L);
+			verify(recommendQueryMapper, never()).findRecentProductIds(anyLong(), anyInt());
+		}
+
+		@Test
+		@DisplayName("Redis 가 비면 DB 폴백 결과를 반환한다")
+		void fallsBackToDatabaseWhenRedisEmpty() {
+			// given
+			given(recentViewRedisService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
+			given(recommendQueryMapper.findRecentProductIds(MEMBER_ID, RecentViewRedisService.MAX_SIZE))
+					.willReturn(List.of(5L, 6L));
+
+			// when
+			List<Long> result = recentViewService.findRecentProductIds(MEMBER_ID);
+
+			// then
+			assertThat(result).containsExactly(5L, 6L);
+		}
+
+		@Test
+		@DisplayName("중복된 id 는 한 번만 반환한다")
+		void deduplicatesIds() {
+			// given
+			given(recentViewRedisService.findRecentProductIds(MEMBER_ID)).willReturn(List.of(1L, 2L, 1L));
+
+			// when
+			List<Long> result = recentViewService.findRecentProductIds(MEMBER_ID);
+
+			// then
+			assertThat(result).containsExactly(1L, 2L);
 		}
 	}
 }

@@ -53,4 +53,27 @@
 		GROUP BY a.product_id, b.product_id
 	</select>
 
+	<resultMap id="productFeatureRowMap" type="com.groove.recommend.dto.ProductFeatureRow">
+		<constructor>
+			<arg column="product_id" javaType="java.lang.Long"/>
+			<arg column="artist_id" javaType="java.lang.Long"/>
+			<arg column="label_id" javaType="java.lang.Long"/>
+			<arg column="release_year" javaType="java.lang.Integer"/>
+			<arg column="average_rating" javaType="java.lang.Double"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+			<arg column="status" javaType="com.groove.product.entity.ProductStatus"/>
+			<arg column="genre_ids" javaType="java.lang.String"/>
+		</constructor>
+	</resultMap>
+
+	<!-- 후보 제외·시드 조회 등 추천 서비스 전체가 이 결과 하나를 공유한다(HIDDEN 포함 전체 상품). -->
+	<select id="findProductFeatures" resultMap="productFeatureRowMap">
+		SELECT p.id AS product_id, p.artist_id, p.label_id, YEAR(p.release_date) AS release_year,
+		       p.avg_rating AS average_rating, p.created_at, p.status,
+		       GROUP_CONCAT(pg.genre_id) AS genre_ids
+		FROM product p
+		LEFT JOIN product_genre pg ON pg.product_id = p.id
+		GROUP BY p.id
+	</select>
+
 </mapper>
