@@ -56,7 +56,7 @@ auth:
 
 toss:
   client-key: ${TOSS_CLIENT_KEY:}
-  secret-key: ${TOSS_SECRET_KEY:}
+  secret-key: ${TOSS_SECRET_KEY}   # 환경변수 필수. 로컬 기본값은 application-local.yml
   base-url: https://api.tosspayments.com
 
 file:

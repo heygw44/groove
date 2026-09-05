@@ -75,6 +75,13 @@ public enum ErrorCode {
 	ORDER_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 주문 상태입니다."),
 	ORDER_INVALID_STATUS_TRANSITION(HttpStatus.BAD_REQUEST, "허용되지 않는 주문 상태 전이입니다."),
 
+	// ===== PAYMENT =====
+	PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),
+	PAYMENT_ALREADY_DONE(HttpStatus.CONFLICT, "이미 승인된 결제입니다."),
+	PAYMENT_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 결제 상태입니다."),
+	PAYMENT_CONFIRM_FAILED(HttpStatus.BAD_REQUEST, "결제 승인에 실패했습니다."),
+	PAYMENT_CANCEL_FAILED(HttpStatus.BAD_REQUEST, "결제 취소에 실패했습니다."),
+
 	// ===== WISHLIST =====
 	WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 등록된 상품입니다."),
 	WISHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "위시리스트에 없는 상품입니다."),
