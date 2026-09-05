@@ -15,12 +15,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.ProductViewLogFixture;
 import com.groove.member.entity.Member;
+import com.groove.order.entity.Order;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.recommend.dto.CoPurchaseRow;
 import com.groove.recommend.entity.ProductViewLog;
 import com.groove.support.MybatisTestSupport;
 import com.groove.wishlist.entity.Wishlist;
@@ -159,6 +162,142 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			ProductViewLog viewLog = ProductViewLogFixture.create(
 					em.find(Member.class, member.getId()), em.find(Product.class, product.getId()), viewedAt);
 			em.persist(viewLog);
+		}
+	}
+
+	@Nested
+	@DisplayName("countCoPurchases()")
+	class CountCoPurchases {
+
+		private Product productA;
+		private Product productB;
+		private Product productC;
+
+		@BeforeEach
+		void setUpProducts() {
+			productA = ProductFixture.create(artist, "CoPurchase A", new BigDecimal("10000.00"));
+			productB = ProductFixture.create(artist, "CoPurchase B", new BigDecimal("20000.00"));
+			productC = ProductFixture.create(artist, "CoPurchase C", new BigDecimal("30000.00"));
+			em.persist(productA);
+			em.persist(productB);
+			em.persist(productC);
+			em.flush();
+		}
+
+		@Test
+		@DisplayName("PAID 주문에 상품 세 개가 함께 담기면 모든 쌍이 양방향으로 집계된다")
+		void countsEachDirectionOfPairWhenThreeProductsInOneOrder() {
+			// given
+			Member member = MemberFixture.create("copurchase-3items@groove.com");
+			em.persist(member);
+			Order order = OrderFixture.createWithItems(member, List.of(productA, productB, productC));
+			order = OrderFixture.markPaid(order);
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<CoPurchaseRow> result = countMyPairs();
+
+			// then
+			assertThat(result).containsExactlyInAnyOrder(
+					new CoPurchaseRow(productA.getId(), productB.getId(), 1L),
+					new CoPurchaseRow(productB.getId(), productA.getId(), 1L),
+					new CoPurchaseRow(productA.getId(), productC.getId(), 1L),
+					new CoPurchaseRow(productC.getId(), productA.getId(), 1L),
+					new CoPurchaseRow(productB.getId(), productC.getId(), 1L),
+					new CoPurchaseRow(productC.getId(), productB.getId(), 1L));
+		}
+
+		@Test
+		@DisplayName("두 주문에 같은 상품 쌍이 담기면 카운트가 합산된다")
+		void sumsCountAcrossMultipleOrders() {
+			// given
+			Member member = MemberFixture.create("copurchase-2orders@groove.com");
+			em.persist(member);
+			Order paidOrder = OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(productA, productB)));
+			Order deliveredOrder = OrderFixture.markDelivered(
+					OrderFixture.createWithItems(member, List.of(productA, productB)));
+			em.persist(paidOrder);
+			em.persist(deliveredOrder);
+			em.flush();
+			em.clear();
+
+			// when
+			List<CoPurchaseRow> result = countMyPairs();
+
+			// then
+			assertThat(result).filteredOn(r -> r.productId().equals(productA.getId())
+							&& r.otherProductId().equals(productB.getId()))
+					.extracting(CoPurchaseRow::count)
+					.containsExactly(2L);
+		}
+
+		@Test
+		@DisplayName("PENDING·CANCELED 주문은 집계되지 않는다")
+		void excludesPendingAndCanceledOrders() {
+			// given
+			Member member = MemberFixture.create("copurchase-excluded@groove.com");
+			em.persist(member);
+			Order pendingOrder = OrderFixture.createWithItems(member, List.of(productA, productB));
+			Order canceledOrder = OrderFixture.createWithItems(member, List.of(productA, productB));
+			canceledOrder.cancel("사용자 변심");
+			em.persist(pendingOrder);
+			em.persist(canceledOrder);
+			em.flush();
+			em.clear();
+
+			// when
+			List<CoPurchaseRow> result = countMyPairs();
+
+			// then
+			assertThat(result).isEmpty();
+		}
+
+		@Test
+		@DisplayName("상품이 하나만 담긴 주문은 쌍이 나오지 않는다")
+		void producesNoPairForOrderWithSingleItem() {
+			// given
+			Member member = MemberFixture.create("copurchase-single@groove.com");
+			em.persist(member);
+			Order order = OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(productA)));
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<CoPurchaseRow> result = countMyPairs();
+
+			// then
+			assertThat(result).isEmpty();
+		}
+
+		@Test
+		@DisplayName("sinceAt 이 미래면 내 상품 쌍이 조회되지 않는다")
+		void excludesOrdersBeforeFutureSinceAt() {
+			// given
+			Member member = MemberFixture.create("copurchase-future@groove.com");
+			em.persist(member);
+			Order order = OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(productA, productB)));
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<CoPurchaseRow> result = recommendQueryMapper.countCoPurchases(
+					LocalDateTime.now().plusDays(1));
+			List<Long> myIds = List.of(productA.getId(), productB.getId());
+
+			// then
+			assertThat(result.stream().filter(r -> myIds.contains(r.productId())).toList()).isEmpty();
+		}
+
+		private List<CoPurchaseRow> countMyPairs() {
+			List<Long> myIds = List.of(productA.getId(), productB.getId(), productC.getId());
+			LocalDateTime sinceAt = LocalDateTime.now().minusDays(1);
+			return recommendQueryMapper.countCoPurchases(sinceAt).stream()
+					.filter(r -> myIds.contains(r.productId()))
+					.toList();
 		}
 	}
 }
