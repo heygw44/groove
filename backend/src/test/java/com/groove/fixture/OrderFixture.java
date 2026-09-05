@@ -2,6 +2,7 @@ package com.groove.fixture;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -15,6 +16,7 @@ import com.groove.product.entity.Product;
 public final class OrderFixture {
 
 	private static final String ORDER_NUMBER = "20260903-TESTAB12";
+	private static final AtomicInteger SEQUENCE = new AtomicInteger();
 
 	private OrderFixture() {
 	}
@@ -34,6 +36,12 @@ public final class OrderFixture {
 	public static Order createWithItem(Member member, Product product, int quantity) {
 		Order order = create(member);
 		order.addItem(product, quantity);
+		return order;
+	}
+
+	public static Order createWithItems(Member member, List<Product> products) {
+		Order order = create(member, "20260903-CP" + SEQUENCE.incrementAndGet());
+		products.forEach(product -> order.addItem(product, 1));
 		return order;
 	}
 

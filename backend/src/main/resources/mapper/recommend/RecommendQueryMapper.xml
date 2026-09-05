@@ -34,4 +34,23 @@
 		LIMIT #{limit}
 	</select>
 
+	<resultMap id="coPurchaseRowMap" type="com.groove.recommend.dto.CoPurchaseRow">
+		<constructor>
+			<arg column="product_id" javaType="java.lang.Long"/>
+			<arg column="other_product_id" javaType="java.lang.Long"/>
+			<arg column="cnt" javaType="_long"/>
+		</constructor>
+	</resultMap>
+
+	<!-- 한 주문 안의 상품 쌍을 양방향(a,b)/(b,a) 모두 집계한다. -->
+	<select id="countCoPurchases" resultMap="coPurchaseRowMap">
+		SELECT a.product_id AS product_id, b.product_id AS other_product_id, COUNT(DISTINCT o.id) AS cnt
+		FROM order_item a
+		JOIN order_item b ON b.order_id = a.order_id AND b.product_id &lt;&gt; a.product_id
+		JOIN orders o ON o.id = a.order_id
+		WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+		AND o.created_at &gt;= #{sinceAt}
+		GROUP BY a.product_id, b.product_id
+	</select>
+
 </mapper>
