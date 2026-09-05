@@ -30,9 +30,7 @@ const parseSort = (value: string | null): ProductSort =>
 
 /** 자연수 문자열만 통과시켜 숫자로 바꾸고, 중복 제거 후 오름차순 정렬한다(안정적인 쿼리 키를 위해). */
 const parseIdList = (values: string[]): number[] | undefined => {
-  const ids = values
-    .filter((value) => /^\d+$/.test(value))
-    .map(Number);
+  const ids = values.filter((value) => /^\d+$/.test(value)).map(Number);
   if (ids.length === 0) {
     return undefined;
   }
@@ -93,3 +91,30 @@ export const toProductListParams = (filters: ProductListFilters): ProductListPar
   page: filters.page,
   size: PRODUCT_PAGE_SIZE,
 });
+
+/**
+ * 사용자가 직접 건 필터의 개수. 정렬과 페이지는 결과를 좁히지 않으므로 세지 않고,
+ * 가격은 최소·최대를 합쳐 하나로 본다(칩·초기화 버튼이 이 기준을 공유한다).
+ */
+export const countActiveFilters = (filters: ProductListFilters): number => {
+  let count = 0;
+
+  if (filters.keyword) {
+    count += 1;
+  }
+  if (filters.artistId !== undefined) {
+    count += 1;
+  }
+  if (filters.labelId !== undefined) {
+    count += 1;
+  }
+  if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
+    count += 1;
+  }
+  count += filters.genreIds?.length ?? 0;
+
+  return count;
+};
+
+export const hasActiveFilters = (filters: ProductListFilters): boolean =>
+  countActiveFilters(filters) > 0;
