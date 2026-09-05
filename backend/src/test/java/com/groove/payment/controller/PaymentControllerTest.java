@@ -35,10 +35,13 @@ import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
+import com.groove.payment.dto.PaymentCancelRequest;
+import com.groove.payment.dto.PaymentCancelResponse;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.service.PaymentConfirmService;
+import com.groove.payment.service.PaymentService;
 
 @WebMvcTest(PaymentController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -59,6 +62,9 @@ class PaymentControllerTest {
 
 	@MockitoBean
 	PaymentConfirmService paymentConfirmService;
+
+	@MockitoBean
+	PaymentService paymentService;
 
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
@@ -140,6 +146,62 @@ class PaymentControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(paymentConfirmService, never()).confirm(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("POST /api/v1/payments/{id}/cancel")
+	class Cancel {
+
+		@Test
+		@DisplayName("유효한 요청이면 200 과 취소 결과를 반환한다")
+		void cancelsPayment() throws Exception {
+			// given
+			PaymentCancelResponse response = new PaymentCancelResponse(3001L, 9002L, "20260902-K7Q2M9XZ",
+					PaymentStatus.CANCELED, PaymentFixture.CANCELED_AT);
+			given(paymentService.cancel(eq(1L), eq(3001L), any())).willReturn(response);
+			PaymentCancelRequest request = new PaymentCancelRequest("고객 변심");
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/3001/cancel")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.paymentId", is(3001)))
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+			verify(paymentService).cancel(eq(1L), eq(3001L), any());
+		}
+
+		@Test
+		@DisplayName("취소 사유가 비어 있으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenReasonIsBlank() throws Exception {
+			// given
+			PaymentCancelRequest request = new PaymentCancelRequest("");
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/3001/cancel")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(paymentService, never()).cancel(any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// given
+			PaymentCancelRequest request = new PaymentCancelRequest("고객 변심");
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/3001/cancel")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(paymentService, never()).cancel(any(), any(), any());
 		}
 	}
 }
