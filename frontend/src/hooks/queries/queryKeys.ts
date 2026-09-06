@@ -26,6 +26,12 @@ export const productKeys = {
   detail: (id: number) => ['product', id] as const,
 };
 
+// 'products' 트리 밖에 둔다. useToggleWishlist 낙관적 갱신이 ['products'] 캐시를 전부 PageResponse 로 가정하고 훑기 때문이다.
+export const albumKeys = {
+  all: ['albums'] as const,
+  detail: (id: number) => ['albums', id] as const,
+};
+
 export const adminProductKeys = {
   all: ['adminProducts'] as const,
   list: (params: AdminProductListParams) => ['adminProducts', params] as const,

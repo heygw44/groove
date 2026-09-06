@@ -15,6 +15,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   PRODUCT_NOT_FOUND: '존재하지 않는 상품입니다.',
   PRODUCT_HIDDEN: '판매가 중지된 상품입니다.',
   PRODUCT_NOT_HIDDEN: '숨김 상태가 아닌 상품입니다.',
+  ALBUM_NOT_FOUND: '존재하지 않는 앨범입니다.',
   ARTIST_NOT_FOUND: '존재하지 않는 아티스트입니다.',
   LABEL_NOT_FOUND: '존재하지 않는 레이블입니다.',
   GENRE_NOT_FOUND: '존재하지 않는 장르입니다.',
