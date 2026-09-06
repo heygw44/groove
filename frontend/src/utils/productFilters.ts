@@ -1,4 +1,10 @@
-import { PRODUCT_PAGE_SIZE, PRODUCT_SORT_OPTIONS } from '@/constants/product';
+import {
+  EDITION_TYPE_LABELS,
+  PRESSING_COUNTRIES,
+  PRODUCT_PAGE_SIZE,
+  PRODUCT_SORT_OPTIONS,
+} from '@/constants/product';
+import type { EditionType } from '@/types/catalog';
 import type { ProductListParams, ProductSort } from '@/types/product';
 
 export interface ProductListFilters {
@@ -6,6 +12,10 @@ export interface ProductListFilters {
   artistId?: number;
   genreIds?: number[];
   labelId?: number;
+  country?: string;
+  pressingYearFrom?: number;
+  pressingYearTo?: number;
+  editionType?: EditionType;
   minPrice?: number;
   maxPrice?: number;
   sort: ProductSort;
@@ -13,6 +23,7 @@ export interface ProductListFilters {
 }
 
 const SORT_VALUES = PRODUCT_SORT_OPTIONS.map((option) => option.value);
+const EDITION_TYPE_VALUES = Object.keys(EDITION_TYPE_LABELS) as EditionType[];
 
 const DEFAULT_SORT: ProductSort = 'latest';
 const DEFAULT_PAGE = 0;
@@ -28,6 +39,15 @@ const parseNonNegativeInt = (value: string | null): number | undefined => {
 const parseSort = (value: string | null): ProductSort =>
   SORT_VALUES.includes(value as ProductSort) ? (value as ProductSort) : DEFAULT_SORT;
 
+/** 고정 목록에 없는 국가값은 무시한다(오래된 링크·수동 조작 방어). */
+const parseCountry = (value: string | null): string | undefined =>
+  PRESSING_COUNTRIES.includes(value as (typeof PRESSING_COUNTRIES)[number])
+    ? (value as (typeof PRESSING_COUNTRIES)[number])
+    : undefined;
+
+const parseEditionType = (value: string | null): EditionType | undefined =>
+  EDITION_TYPE_VALUES.includes(value as EditionType) ? (value as EditionType) : undefined;
+
 /** 자연수 문자열만 통과시켜 숫자로 바꾸고, 중복 제거 후 오름차순 정렬한다(안정적인 쿼리 키를 위해). */
 const parseIdList = (values: string[]): number[] | undefined => {
   const ids = values.filter((value) => /^\d+$/.test(value)).map(Number);
@@ -42,6 +62,10 @@ export const parseProductFilters = (searchParams: URLSearchParams): ProductListF
   artistId: parseNonNegativeInt(searchParams.get('artistId')),
   genreIds: parseIdList(searchParams.getAll('genreIds')),
   labelId: parseNonNegativeInt(searchParams.get('labelId')),
+  country: parseCountry(searchParams.get('country')),
+  pressingYearFrom: parseNonNegativeInt(searchParams.get('pressingYearFrom')),
+  pressingYearTo: parseNonNegativeInt(searchParams.get('pressingYearTo')),
+  editionType: parseEditionType(searchParams.get('editionType')),
   minPrice: parseNonNegativeInt(searchParams.get('minPrice')),
   maxPrice: parseNonNegativeInt(searchParams.get('maxPrice')),
   sort: parseSort(searchParams.get('sort')),
@@ -64,6 +88,18 @@ export const serializeProductFilters = (filters: ProductListFilters): URLSearchP
   if (filters.labelId !== undefined) {
     params.set('labelId', String(filters.labelId));
   }
+  if (filters.country !== undefined) {
+    params.set('country', filters.country);
+  }
+  if (filters.pressingYearFrom !== undefined) {
+    params.set('pressingYearFrom', String(filters.pressingYearFrom));
+  }
+  if (filters.pressingYearTo !== undefined) {
+    params.set('pressingYearTo', String(filters.pressingYearTo));
+  }
+  if (filters.editionType !== undefined) {
+    params.set('editionType', filters.editionType);
+  }
   if (filters.minPrice !== undefined) {
     params.set('minPrice', String(filters.minPrice));
   }
@@ -85,6 +121,10 @@ export const toProductListParams = (filters: ProductListFilters): ProductListPar
   artistId: filters.artistId,
   genreIds: filters.genreIds,
   labelId: filters.labelId,
+  country: filters.country,
+  pressingYearFrom: filters.pressingYearFrom,
+  pressingYearTo: filters.pressingYearTo,
+  editionType: filters.editionType,
   minPrice: filters.minPrice,
   maxPrice: filters.maxPrice,
   sort: filters.sort,
@@ -106,6 +146,15 @@ export const countActiveFilters = (filters: ProductListFilters): number => {
     count += 1;
   }
   if (filters.labelId !== undefined) {
+    count += 1;
+  }
+  if (filters.country !== undefined) {
+    count += 1;
+  }
+  if (filters.pressingYearFrom !== undefined || filters.pressingYearTo !== undefined) {
+    count += 1;
+  }
+  if (filters.editionType !== undefined) {
     count += 1;
   }
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {

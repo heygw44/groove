@@ -4,8 +4,14 @@ import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
 import { ArtistSearchSelect } from '@/components/product/ArtistSearchSelect';
+import {
+  EDITION_TYPE_LABELS,
+  PRESSING_COUNTRIES,
+  PRESSING_COUNTRY_LABELS,
+} from '@/constants/product';
 import { useGenres, useLabels } from '@/hooks/queries/useReferences';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import type { EditionType } from '@/types/catalog';
 import { hasActiveFilters, type ProductListFilters } from '@/utils/productFilters';
 
 interface ProductFilterPanelProps {
@@ -38,6 +44,12 @@ export function ProductFilterPanel({
   const [maxPrice, setMaxPrice] = useState(filters.maxPrice?.toString() ?? '');
   const [priceError, setPriceError] = useState<string | undefined>(undefined);
 
+  const [pressingYearFrom, setPressingYearFrom] = useState(
+    filters.pressingYearFrom?.toString() ?? '',
+  );
+  const [pressingYearTo, setPressingYearTo] = useState(filters.pressingYearTo?.toString() ?? '');
+  const [pressingYearError, setPressingYearError] = useState<string | undefined>(undefined);
+
   /*
    * URL 이 외부(뒤로가기 등)에서 바뀌면 입력창도 따라가야 한다. 렌더 중 이전 값과
    * 비교해 setState 하는 건 React 공식 패턴(리다이렉트 없이 effect 를 피함) -
@@ -54,6 +66,19 @@ export function ProductFilterPanel({
     setPrevUrlPrice([filters.minPrice, filters.maxPrice]);
     setMinPrice(filters.minPrice?.toString() ?? '');
     setMaxPrice(filters.maxPrice?.toString() ?? '');
+  }
+
+  const [prevUrlPressingYear, setPrevUrlPressingYear] = useState([
+    filters.pressingYearFrom,
+    filters.pressingYearTo,
+  ]);
+  if (
+    filters.pressingYearFrom !== prevUrlPressingYear[0] ||
+    filters.pressingYearTo !== prevUrlPressingYear[1]
+  ) {
+    setPrevUrlPressingYear([filters.pressingYearFrom, filters.pressingYearTo]);
+    setPressingYearFrom(filters.pressingYearFrom?.toString() ?? '');
+    setPressingYearTo(filters.pressingYearTo?.toString() ?? '');
   }
 
   /* 디바운스 반영만 replace - 타이핑 한 글자마다 히스토리 스택이 쌓이면 뒤로가기가 무의미해진다. */
@@ -74,6 +99,17 @@ export function ProductFilterPanel({
     }
     setPriceError(undefined);
     onUpdate({ minPrice: min, maxPrice: max });
+  };
+
+  const applyPressingYearRange = () => {
+    const from = pressingYearFrom ? Number(pressingYearFrom) : undefined;
+    const to = pressingYearTo ? Number(pressingYearTo) : undefined;
+    if (from !== undefined && to !== undefined && from > to) {
+      setPressingYearError('시작 연도는 종료 연도보다 클 수 없습니다.');
+      return;
+    }
+    setPressingYearError(undefined);
+    onUpdate({ pressingYearFrom: from, pressingYearTo: to });
   };
 
   return (
@@ -120,6 +156,44 @@ export function ProductFilterPanel({
       </div>
 
       <div className={SECTION_CLASS}>
+        <label htmlFor={`${uid}-country`} className="mb-1.5 block text-sm font-bold">
+          프레싱 국가
+        </label>
+        <Select
+          id={`${uid}-country`}
+          value={filters.country ?? ''}
+          onChange={(event) => onUpdate({ country: event.target.value || undefined })}
+        >
+          <option value="">전체</option>
+          {PRESSING_COUNTRIES.map((country) => (
+            <option key={country} value={country}>
+              {PRESSING_COUNTRY_LABELS[country]}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className={SECTION_CLASS}>
+        <label htmlFor={`${uid}-editionType`} className="mb-1.5 block text-sm font-bold">
+          에디션
+        </label>
+        <Select
+          id={`${uid}-editionType`}
+          value={filters.editionType ?? ''}
+          onChange={(event) =>
+            onUpdate({ editionType: (event.target.value as EditionType) || undefined })
+          }
+        >
+          <option value="">전체</option>
+          {(Object.keys(EDITION_TYPE_LABELS) as EditionType[]).map((editionType) => (
+            <option key={editionType} value={editionType}>
+              {EDITION_TYPE_LABELS[editionType]}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className={SECTION_CLASS}>
         <fieldset>
           <legend className="mb-1.5 text-sm font-bold">가격</legend>
           <div className="flex items-center gap-2">
@@ -152,6 +226,51 @@ export function ProductFilterPanel({
           </div>
           {priceError && <p className="mt-1.5 text-xs text-danger">{priceError}</p>}
           <Button variant="secondary" size="sm" className="mt-2 w-full" onClick={applyPriceRange}>
+            적용
+          </Button>
+        </fieldset>
+      </div>
+
+      <div className={SECTION_CLASS}>
+        <fieldset>
+          <legend className="mb-1.5 text-sm font-bold">프레싱 연도</legend>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              placeholder="시작"
+              value={pressingYearFrom}
+              onChange={(event) => setPressingYearFrom(event.target.value)}
+              aria-label="프레싱 연도 시작"
+            />
+            <span aria-hidden className="text-content-subtle">
+              ~
+            </span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              placeholder="종료"
+              value={pressingYearTo}
+              onChange={(event) => setPressingYearTo(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  applyPressingYearRange();
+                }
+              }}
+              aria-label="프레싱 연도 종료"
+            />
+          </div>
+          {pressingYearError && (
+            <p className="mt-1.5 text-xs text-danger">{pressingYearError}</p>
+          )}
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={applyPressingYearRange}
+          >
             적용
           </Button>
         </fieldset>
