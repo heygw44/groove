@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
@@ -25,6 +26,7 @@ import com.groove.fixture.ProductViewLogFixture;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.product.dto.ProductSummaryResponse;
+import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
@@ -61,6 +63,9 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 		hiddenAlbum = ProductFixture.create(artist, "RQM Hidden Album", new BigDecimal("40000.00"));
 		hiddenAlbum.hide();
 
+		em.persist(kindOfBlue.getAlbum());
+		em.persist(loveSupreme.getAlbum());
+		em.persist(hiddenAlbum.getAlbum());
 		em.persist(kindOfBlue);
 		em.persist(loveSupreme);
 		em.persist(hiddenAlbum);
@@ -186,6 +191,9 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			productA = ProductFixture.create(artist, "CoPurchase A", new BigDecimal("10000.00"));
 			productB = ProductFixture.create(artist, "CoPurchase B", new BigDecimal("20000.00"));
 			productC = ProductFixture.create(artist, "CoPurchase C", new BigDecimal("30000.00"));
+			em.persist(productA.getAlbum());
+			em.persist(productB.getAlbum());
+			em.persist(productC.getAlbum());
 			em.persist(productA);
 			em.persist(productB);
 			em.persist(productC);
@@ -324,8 +332,11 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			em.persist(rock);
 			em.persist(jazz);
 
-			Product product = Product.create("PF Multi Genre", artist, label, LocalDate.of(2020, 5, 1), "180g",
-					"Black", new BigDecimal("30000.00"), "설명");
+			Album album = AlbumFixture.create(artist, "PF Multi Genre");
+			em.persist(album);
+			Product product = Product.create(album, "PF Multi Genre", artist,
+					label, LocalDate.of(2020, 5, 1), "180g", "Black", null, null, null, null, null,
+					new BigDecimal("30000.00"), "설명");
 			product.addGenre(rock);
 			product.addGenre(jazz);
 			em.persist(product);
@@ -347,7 +358,10 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 		@DisplayName("장르가 없으면 genreIds 가 null 이다")
 		void genreIdsIsNullWhenProductHasNoGenre() {
 			// given
-			Product product = Product.create("PF No Genre", artist, null, LocalDate.of(2021, 3, 1), "180g", "Black",
+			Album album = AlbumFixture.create(artist, "PF No Genre");
+			em.persist(album);
+			Product product = Product.create(album, "PF No Genre", artist, null,
+					LocalDate.of(2021, 3, 1), "180g", "Black", null, null, null, null, null,
 					new BigDecimal("25000.00"), "설명");
 			em.persist(product);
 			em.flush();

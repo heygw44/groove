@@ -146,13 +146,26 @@ class TasteProfileControllerTest {
 		}
 
 		@ParameterizedTest
-		@DisplayName("개수 제약이나 중복을 어기면 400 과 필드 에러를 반환한다")
+		@DisplayName("개수 제약을 어기면 400 과 필드 에러를 반환한다")
 		@MethodSource("com.groove.recommend.controller.TasteProfileControllerTest#invalidRequests")
 		void returnsBadRequestWhenConstraintViolated(String field, Map<String, Object> body) throws Exception {
 			perform(body)
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
 					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem(field)));
+
+			verify(tasteProfileService, never()).update(any(), any());
+		}
+
+		@ParameterizedTest
+		@DisplayName("목록에 중복이 있으면 400 과 목록 필드명으로 필드 에러를 반환한다")
+		@MethodSource("com.groove.recommend.controller.TasteProfileControllerTest#duplicateRequests")
+		void returnsBadRequestWhenDuplicated(String field, String reason, Map<String, Object> body) throws Exception {
+			perform(body)
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[?(@.field == '" + field + "')].reason",
+							hasItem(reason)));
 
 			verify(tasteProfileService, never()).update(any(), any());
 		}
@@ -177,9 +190,17 @@ class TasteProfileControllerTest {
 				Arguments.of("artistIds",
 						body(List.of(1), List.of(1, 2, 3, 4, 5, 6), List.of())),
 				Arguments.of("decades",
-						body(List.of(1), List.of(), List.of("D1960", "D1970", "D1980", "D1990"))),
-				Arguments.of("genreIdsDistinct",
-						body(List.of(1, 1), List.of(), List.of())));
+						body(List.of(1), List.of(), List.of("D1960", "D1970", "D1980", "D1990"))));
+	}
+
+	private static Stream<Arguments> duplicateRequests() {
+		return Stream.of(
+				Arguments.of("genreIds", "선호 장르에 중복이 있습니다.",
+						body(List.of(1, 1), List.of(), List.of())),
+				Arguments.of("artistIds", "선호 아티스트에 중복이 있습니다.",
+						body(List.of(1), List.of(2, 2), List.of())),
+				Arguments.of("decades", "선호 연대에 중복이 있습니다.",
+						body(List.of(1), List.of(), List.of("D1970", "D1970"))));
 	}
 
 	private static Map<String, Object> body(List<?> genreIds, List<?> artistIds, List<?> decades) {

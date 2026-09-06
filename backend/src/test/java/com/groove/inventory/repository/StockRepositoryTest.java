@@ -19,6 +19,7 @@ import com.groove.fixture.StockFixture;
 import com.groove.inventory.entity.Stock;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.DataJpaTestSupport;
@@ -29,6 +30,9 @@ class StockRepositoryTest extends DataJpaTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -48,7 +52,9 @@ class StockRepositoryTest extends DataJpaTestSupport {
 		void findsStockWithProduct() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Stock saved = stockRepository.save(StockFixture.create(product, 5));
 			flushAndClear();
 
@@ -81,8 +87,12 @@ class StockRepositoryTest extends DataJpaTestSupport {
 		void returnsOrderedStocksWithProductInitialized() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product first = productRepository.save(ProductFixture.create(artist, "First"));
-			Product second = productRepository.save(ProductFixture.create(artist, "Second"));
+			Product first = ProductFixture.create(artist, "First");
+			albumRepository.save(first.getAlbum());
+			first = productRepository.save(first);
+			Product second = ProductFixture.create(artist, "Second");
+			albumRepository.save(second.getAlbum());
+			second = productRepository.save(second);
 			Stock firstStock = stockRepository.save(StockFixture.create(first, 5));
 			Stock secondStock = stockRepository.save(StockFixture.create(second, 5));
 			flushAndClear();
@@ -113,7 +123,9 @@ class StockRepositoryTest extends DataJpaTestSupport {
 		void throwsWhenProductIdDuplicated() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			stockRepository.saveAndFlush(StockFixture.create(product, 1));
 
 			// when & then
@@ -126,7 +138,9 @@ class StockRepositoryTest extends DataJpaTestSupport {
 		void incrementsVersionAfterUpdate() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Stock saved = stockRepository.save(StockFixture.create(product, 5));
 			flushAndClear();
 			Stock reloaded = stockRepository.findById(saved.getId()).orElseThrow();

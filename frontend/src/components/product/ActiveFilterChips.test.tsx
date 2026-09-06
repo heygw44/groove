@@ -104,4 +104,69 @@ describe('ActiveFilterChips', () => {
     // then
     expect(onUpdate).toHaveBeenCalledWith({ minPrice: undefined, maxPrice: undefined });
   });
+
+  it('국가 칩을 표시하고 해제하면 국가 조건을 없앤다', async () => {
+    // given
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderChips({ country: 'Japan' }, onUpdate);
+
+    // when
+    expect(screen.getByText('국가: 일본')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '국가: 일본 필터 해제' }));
+
+    // then
+    expect(onUpdate).toHaveBeenCalledWith({ country: undefined });
+  });
+
+  it('에디션 칩을 표시하고 해제하면 에디션 조건을 없앤다', async () => {
+    // given
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderChips({ editionType: 'REISSUE' }, onUpdate);
+
+    // when
+    expect(screen.getByText('에디션: 재발매')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '에디션: 재발매 필터 해제' }));
+
+    // then
+    expect(onUpdate).toHaveBeenCalledWith({ editionType: undefined });
+  });
+
+  it('프레싱 연도 범위가 모두 있으면 물결로 이어 표시한다', () => {
+    // given & when
+    renderChips({ pressingYearFrom: 1959, pressingYearTo: 1970 });
+
+    // then
+    expect(screen.getByText('프레싱 연도: 1959~1970')).toBeInTheDocument();
+  });
+
+  it('프레싱 연도 시작만 있으면 이후로 표시한다', () => {
+    // given & when
+    renderChips({ pressingYearFrom: 1959 });
+
+    // then
+    expect(screen.getByText('프레싱 연도: 1959 이후')).toBeInTheDocument();
+  });
+
+  it('프레싱 연도 종료만 있으면 이전으로 표시한다', () => {
+    // given & when
+    renderChips({ pressingYearTo: 1970 });
+
+    // then
+    expect(screen.getByText('프레싱 연도: 1970 이전')).toBeInTheDocument();
+  });
+
+  it('프레싱 연도 칩을 해제하면 시작·종료를 함께 지운다', async () => {
+    // given
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    renderChips({ pressingYearFrom: 1959, pressingYearTo: 1970 }, onUpdate);
+
+    // when
+    await user.click(screen.getByRole('button', { name: '프레싱 연도: 1959~1970 필터 해제' }));
+
+    // then
+    expect(onUpdate).toHaveBeenCalledWith({ pressingYearFrom: undefined, pressingYearTo: undefined });
+  });
 });

@@ -30,9 +30,11 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.client.RestClient;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,6 +61,7 @@ import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -92,6 +95,9 @@ class PaymentConfirmIntegrationTest extends IntegrationTestSupport {
 	private ProductRepository productRepository;
 
 	@Autowired
+	private AlbumRepository albumRepository;
+
+	@Autowired
 	private StockRepository stockRepository;
 
 	@Autowired
@@ -102,6 +108,11 @@ class PaymentConfirmIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private MockServerRestClientCustomizer mockServerRestClientCustomizer;
+
+	// discogsRestClient 도 같은 RestClient.Builder 자동구성을 타서 목으로 바꿔치기하지 않으면
+	// MockServerRestClientCustomizer 가 RestClient 를 2개에 바인딩해 getServer() 가 실패한다.
+	@MockitoBean(name = "discogsRestClient")
+	private RestClient discogsRestClient;
 
 	private MockRestServiceServer server;
 
@@ -329,7 +340,9 @@ class PaymentConfirmIntegrationTest extends IntegrationTestSupport {
 
 	private Product seedProduct(int stockQuantity) {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		Product product = productRepository.save(ProductFixture.create(artist));
+		Product createdProduct = ProductFixture.create(artist);
+		albumRepository.save(createdProduct.getAlbum());
+		Product product = productRepository.save(createdProduct);
 		stockRepository.save(StockFixture.create(product, stockQuantity));
 		return product;
 	}

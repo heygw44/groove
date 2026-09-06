@@ -90,6 +90,46 @@ const NAV_ITEMS: MyPageNavItem[] = [
     ),
   },
   {
+    to: '/mypage/taste',
+    label: '취향',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="10" cy="10" r="7" />
+        <path d="M10 6.3l1 2.1 2.3.3-1.7 1.6.4 2.3-2-1.1-2 1.1.4-2.3-1.7-1.6 2.3-.3 1-2.1Z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/mypage/recent',
+    label: '최근 본 상품',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="10" cy="10" r="7.5" />
+        <path d="M10 6v4.2l3 1.8" />
+      </svg>
+    ),
+  },
+  {
     to: '/mypage/addresses',
     label: '배송지 관리',
     icon: (

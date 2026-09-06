@@ -15,6 +15,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   PRODUCT_NOT_FOUND: '존재하지 않는 상품입니다.',
   PRODUCT_HIDDEN: '판매가 중지된 상품입니다.',
   PRODUCT_NOT_HIDDEN: '숨김 상태가 아닌 상품입니다.',
+  ALBUM_NOT_FOUND: '존재하지 않는 앨범입니다.',
   ARTIST_NOT_FOUND: '존재하지 않는 아티스트입니다.',
   LABEL_NOT_FOUND: '존재하지 않는 레이블입니다.',
   GENRE_NOT_FOUND: '존재하지 않는 장르입니다.',
@@ -66,6 +67,13 @@ export const ERROR_MESSAGES: Record<string, string> = {
   ADMIN_CANNOT_MODIFY_ADMIN: '다른 관리자의 상태는 변경할 수 없습니다.',
   MEMBER_NOT_FOUND: '존재하지 않는 회원입니다.',
   AUTH_MEMBER_SUSPENDED: '정지된 계정입니다. 고객센터에 문의해주세요.',
+  RECOMMEND_PROFILE_NOT_FOUND: '아직 취향 프로필이 없습니다.',
+  CATALOG_LOOKUP_FAILED: 'Discogs 조회에 실패했습니다. 잠시 후 다시 시도해주세요.',
+  CATALOG_RELEASE_NOT_FOUND: '존재하지 않는 Discogs 릴리즈입니다.',
+  CATALOG_RATE_LIMITED: 'Discogs 요청이 많아 잠시 제한되었습니다. 잠시 후 다시 시도해주세요.',
+  CATALOG_ALREADY_IMPORTED: '이미 등록된 릴리즈입니다.',
+  CATALOG_IMPORT_JOB_NOT_FOUND: '존재하지 않는 적재 잡입니다.',
+  CATALOG_IMPORT_JOB_RUNNING: '이미 실행 중인 적재 잡이 있습니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
@@ -88,9 +96,11 @@ export const ERROR_CODE_FIELD: Record<string, string> = {
 /**
  * 서버 @AssertTrue 교차 검증은 메서드명 기반 프로퍼티명(rateWithinRange 등)으로
  * fieldErrors 에 담겨 오므로, 실제 폼 필드명으로 한 번 바꿔준다.
+ * 폼이 서버와 다른 이름을 쓰는 필드(artistIds → artists)도 여기서 맞춘다.
  */
 export const FIELD_ALIASES: Record<string, string> = {
   rateWithinRange: 'discountValue',
   singleSource: 'cartItemIds',
   closeAfterOpen: 'closeAt',
+  artistIds: 'artists',
 };

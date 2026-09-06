@@ -18,6 +18,9 @@
 			<arg column="average_rating" javaType="java.lang.Double"/>
 			<arg column="review_count" javaType="_long"/>
 			<arg column="wishlisted" javaType="java.lang.Boolean"/>
+			<arg column="country" javaType="java.lang.String"/>
+			<arg column="pressing_year" javaType="java.lang.Integer"/>
+			<arg column="edition_type" javaType="com.groove.product.entity.EditionType"/>
 		</constructor>
 	</resultMap>
 
@@ -27,17 +30,53 @@
 		LEFT JOIN label l ON l.id = p.label_id
 	</sql>
 
+	<sql id="summaryColumns">
+		p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+		p.color_variant, p.pressing_info, p.status,
+		(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0) AS thumbnail_url,
+		p.avg_rating AS average_rating,
+		p.review_count AS review_count,
+		p.country AS country,
+		p.pressing_year AS pressing_year,
+		p.edition_type AS edition_type
+	</sql>
+
 	<sql id="searchWhere">
 		<where>
 			p.status &lt;&gt; 'HIDDEN'
-			<if test="keyword != null and keyword != ''">
-				AND (p.title LIKE CONCAT('%', #{keyword}, '%') OR a.name LIKE CONCAT('%', #{keyword}, '%'))
-			</if>
+			<choose>
+				<!-- 바코드는 숫자 8~14자리일 때만 정확일치만 적용한다(idx_product_barcode 사용, LIKE 는 풀스캔이라 적용하지 않는다). -->
+				<when test="barcode != null">
+					AND p.barcode = #{barcode}
+				</when>
+				<when test="keyword != null and keyword != ''">
+					AND (p.title LIKE CONCAT('%', #{keyword}, '%') OR a.name LIKE CONCAT('%', #{keyword}, '%')
+					<if test="catalogNoNormalized != null">
+						OR p.catalog_no_normalized = #{catalogNoNormalized}
+					</if>
+					)
+				</when>
+			</choose>
 			<if test="artistId != null">
 				AND p.artist_id = #{artistId}
 			</if>
 			<if test="labelId != null">
 				AND p.label_id = #{labelId}
+			</if>
+			<if test="albumId != null">
+				AND p.album_id = #{albumId}
+			</if>
+			<if test="country != null and country != ''">
+				AND p.country = #{country}
+			</if>
+			<if test="pressingYearFrom != null">
+				AND p.pressing_year &gt;= #{pressingYearFrom}
+			</if>
+			<if test="pressingYearTo != null">
+				AND p.pressing_year &lt;= #{pressingYearTo}
+			</if>
+			<if test="editionType != null">
+				AND p.edition_type = #{editionType}
 			</if>
 			<if test="genreIds != null and !genreIds.isEmpty()">
 				AND EXISTS (
@@ -59,11 +98,7 @@
 	<select id="searchProducts" parameterType="com.groove.product.dto.ProductSearchCondition"
 			resultMap="productSummaryMap">
 		SELECT
-			p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-			p.color_variant, p.pressing_info, p.status,
-			(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0) AS thumbnail_url,
-			p.avg_rating AS average_rating,
-			p.review_count AS review_count,
+			<include refid="summaryColumns"/>,
 			<!-- 비로그인(memberId null)은 NULL 이라 응답에서 키가 생략된다. -->
 			<choose>
 				<when test="memberId != null">
@@ -106,6 +141,16 @@
 		SELECT COUNT(*)
 		<include refid="searchFrom"/>
 		<include refid="searchWhere"/>
+	</select>
+
+	<select id="findAlbumPressings" resultMap="productSummaryMap">
+		SELECT
+			<include refid="summaryColumns"/>,
+			NULL AS wishlisted
+		<include refid="searchFrom"/>
+		WHERE p.album_id = #{albumId}
+		AND p.status &lt;&gt; 'HIDDEN'
+		ORDER BY p.pressing_year IS NULL, p.pressing_year ASC, p.id ASC
 	</select>
 
 </mapper>

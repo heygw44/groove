@@ -62,6 +62,7 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(PUBLIC_PATHS).permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/v1/albums/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/genres", "/api/v1/labels", "/api/v1/artists/**")
 								.permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/v1/limited-drops", "/api/v1/limited-drops/**")

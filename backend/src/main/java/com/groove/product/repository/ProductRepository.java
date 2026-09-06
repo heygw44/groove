@@ -1,5 +1,7 @@
 package com.groove.product.repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -16,8 +18,10 @@ import com.groove.product.entity.ProductStatus;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
-	@EntityGraph(attributePaths = {"artist", "label", "productGenres", "productGenres.genre"})
+	@EntityGraph(attributePaths = {"album", "artist", "label", "productGenres", "productGenres.genre"})
 	Optional<Product> findDetailById(Long id);
+
+	long countByAlbumIdAndStatusNot(Long albumId, ProductStatus status);
 
 	@Query(value = """
 			SELECT new com.groove.product.dto.AdminProductSummaryResponse(
@@ -26,9 +30,15 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 				s.quantity, p.createdAt)
 			FROM Product p JOIN p.artist a LEFT JOIN p.label l LEFT JOIN Stock s ON s.product = p
 			WHERE (:status IS NULL OR p.status = :status)
+			AND (:albumId IS NULL OR p.album.id = :albumId)
 			""",
-			countQuery = "SELECT COUNT(p) FROM Product p WHERE (:status IS NULL OR p.status = :status)")
-	Page<AdminProductSummaryResponse> findAdminSummaries(@Param("status") ProductStatus status, Pageable pageable);
+			countQuery = """
+			SELECT COUNT(p) FROM Product p
+			WHERE (:status IS NULL OR p.status = :status)
+			AND (:albumId IS NULL OR p.album.id = :albumId)
+			""")
+	Page<AdminProductSummaryResponse> findAdminSummaries(@Param("status") ProductStatus status,
+			@Param("albumId") Long albumId, Pageable pageable);
 
 	// 동시에 여러 리뷰가 생성/삭제돼도 계산식 UPDATE 라 최종적으로는 항상 실제 집계와 같은 값에 수렴한다.
 	// flushAutomatically 로 리뷰 INSERT/DELETE 가 이 UPDATE 이전에 DB 에 반영된다.
@@ -40,4 +50,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 			WHERE p.id = :productId
 			""", nativeQuery = true)
 	void refreshReviewStats(@Param("productId") Long productId);
+
+	@Query("SELECT p.discogsReleaseId FROM Product p WHERE p.discogsReleaseId IN :ids")
+	List<Long> findExistingDiscogsReleaseIds(@Param("ids") Collection<Long> ids);
+
+	boolean existsByDiscogsReleaseId(Long discogsReleaseId);
 }

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
@@ -142,7 +143,8 @@ class ProductTest {
 
 			// when
 			product.updateInfo("A Love Supreme", newArtist, newLabel, LocalDate.of(2025, 3, 1), "리마스터",
-					"Blue", new BigDecimal("52000.00"), "변경된 설명");
+					"Blue", "JP", 2025, "IMP-1234", "4988005123456", EditionType.REMASTER,
+					new BigDecimal("52000.00"), "변경된 설명");
 
 			// then
 			assertThat(product.getTitle()).isEqualTo("A Love Supreme");
@@ -151,8 +153,66 @@ class ProductTest {
 			assertThat(product.getReleaseDate()).isEqualTo(LocalDate.of(2025, 3, 1));
 			assertThat(product.getPressingInfo()).isEqualTo("리마스터");
 			assertThat(product.getColorVariant()).isEqualTo("Blue");
+			assertThat(product.getCountry()).isEqualTo("JP");
+			assertThat(product.getPressingYear()).isEqualTo(2025);
+			assertThat(product.getCatalogNo()).isEqualTo("IMP-1234");
+			assertThat(product.getCatalogNoNormalized()).isEqualTo("IMP1234");
+			assertThat(product.getBarcode()).isEqualTo("4988005123456");
+			assertThat(product.getEditionType()).isEqualTo(EditionType.REMASTER);
 			assertThat(product.getPrice()).isEqualByComparingTo("52000.00");
 			assertThat(product.getDescription()).isEqualTo("변경된 설명");
+		}
+	}
+
+	@Nested
+	@DisplayName("create() - 프레싱 필드")
+	class CreatePressingFields {
+
+		@Test
+		@DisplayName("catalogNo 는 대문자화하고 공백/하이픈을 제거해 catalogNoNormalized 에 저장한다")
+		void normalizesCatalogNo() {
+			// given
+			Artist artist = ArtistFixture.create();
+			Album album = AlbumFixture.create(artist);
+
+			// when
+			Product product = Product.create(album, "Kind of Blue", artist, null, LocalDate.of(1959, 8, 17),
+					"180g", "Black", "US", 1959, "cs 8163-a", "0888430123", EditionType.ORIGINAL,
+					new BigDecimal("45000"), "설명");
+
+			// then
+			assertThat(product.getCatalogNo()).isEqualTo("cs 8163-a");
+			assertThat(product.getCatalogNoNormalized()).isEqualTo("CS8163A");
+		}
+
+		@Test
+		@DisplayName("catalogNo 가 null 이면 catalogNoNormalized 도 null 이다")
+		void keepsNullNormalizedWhenCatalogNoNull() {
+			// given
+			Artist artist = ArtistFixture.create();
+			Album album = AlbumFixture.create(artist);
+
+			// when
+			Product product = Product.create(album, "Kind of Blue", artist, null, LocalDate.of(1959, 8, 17),
+					"180g", "Black", "US", 1959, null, null, EditionType.ORIGINAL, new BigDecimal("45000"), "설명");
+
+			// then
+			assertThat(product.getCatalogNoNormalized()).isNull();
+		}
+
+		@Test
+		@DisplayName("editionType 을 지정하지 않으면 STANDARD 로 기본값이 채워진다")
+		void defaultsEditionTypeToStandard() {
+			// given
+			Artist artist = ArtistFixture.create();
+			Album album = AlbumFixture.create(artist);
+
+			// when
+			Product product = Product.create(album, "Kind of Blue", artist, null, LocalDate.of(1959, 8, 17),
+					"180g", "Black", null, null, null, null, null, new BigDecimal("45000"), "설명");
+
+			// then
+			assertThat(product.getEditionType()).isEqualTo(EditionType.STANDARD);
 		}
 	}
 

@@ -10,6 +10,11 @@ interface ArtistSearchSelectProps {
   value?: number;
   /** `GET /artists/{id}` 조회로 얻은 이름. 방금 고른 아티스트(로컬 state)가 이보다 우선한다. */
   selectedName?: string;
+  /**
+   * 마운트 시점에만 검색창 초기값으로 쓴다(Discogs 프리필로 이름 검색을 미리 시작해준다).
+   * 이후 값이 바뀌어도 반응하지 않으므로, 다시 적용하려면 부모가 `key` 를 바꿔 리마운트시켜야 한다.
+   */
+  initialKeyword?: string;
   onChange: (artist: Artist | undefined) => void;
   id?: string;
   invalid?: boolean;
@@ -19,14 +24,15 @@ interface ArtistSearchSelectProps {
 export function ArtistSearchSelect({
   value,
   selectedName,
+  initialKeyword,
   onChange,
   id,
   invalid = false,
   disabled = false,
 }: ArtistSearchSelectProps) {
   const [pickedArtist, setPickedArtist] = useState<Artist | undefined>(undefined);
-  const [keyword, setKeyword] = useState('');
-  const [open, setOpen] = useState(false);
+  const [keyword, setKeyword] = useState(initialKeyword ?? '');
+  const [open, setOpen] = useState(Boolean(initialKeyword));
   const debouncedKeyword = useDebouncedValue(keyword, 300);
   const inputId = useId();
 

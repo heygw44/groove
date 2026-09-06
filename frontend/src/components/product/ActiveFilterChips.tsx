@@ -1,3 +1,4 @@
+import { EDITION_TYPE_LABELS, getCountryLabel } from '@/constants/product';
 import { useGenres, useLabels } from '@/hooks/queries/useReferences';
 import { formatPrice } from '@/utils/formatPrice';
 import type { ProductListFilters } from '@/utils/productFilters';
@@ -20,6 +21,13 @@ const formatPriceRange = (min?: number, max?: number): string => {
     return `${formatPrice(min)} ~ ${formatPrice(max)}`;
   }
   return min !== undefined ? `${formatPrice(min)} 이상` : `${formatPrice(max as number)} 이하`;
+};
+
+const formatPressingYearRange = (from?: number, to?: number): string => {
+  if (from !== undefined && to !== undefined) {
+    return `${from}~${to}`;
+  }
+  return from !== undefined ? `${from} 이후` : `${to} 이전`;
 };
 
 export function ActiveFilterChips({
@@ -56,6 +64,30 @@ export function ActiveFilterChips({
       key: 'label',
       label: label?.name ?? '레이블',
       remove: () => onUpdate({ labelId: undefined }),
+    });
+  }
+
+  if (filters.country !== undefined) {
+    chips.push({
+      key: 'country',
+      label: `국가: ${getCountryLabel(filters.country)}`,
+      remove: () => onUpdate({ country: undefined }),
+    });
+  }
+
+  if (filters.editionType !== undefined) {
+    chips.push({
+      key: 'editionType',
+      label: `에디션: ${EDITION_TYPE_LABELS[filters.editionType]}`,
+      remove: () => onUpdate({ editionType: undefined }),
+    });
+  }
+
+  if (filters.pressingYearFrom !== undefined || filters.pressingYearTo !== undefined) {
+    chips.push({
+      key: 'pressingYear',
+      label: `프레싱 연도: ${formatPressingYearRange(filters.pressingYearFrom, filters.pressingYearTo)}`,
+      remove: () => onUpdate({ pressingYearFrom: undefined, pressingYearTo: undefined }),
     });
   }
 

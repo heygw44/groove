@@ -29,4 +29,13 @@ describe('AuditDetailCell', () => {
     expect(screen.getByText(`${'A'.repeat(40)}…`)).toBeInTheDocument();
     expect(screen.getByText(detail)).toBeInTheDocument();
   });
+
+  it('상세가 없는 액션이면 죽지 않고 빈 값 표시로 대체한다', () => {
+    // given & when
+    render(<AuditDetailCell />);
+
+    // then
+    expect(screen.getByText('-')).toBeInTheDocument();
+    expect(document.querySelector('details')).not.toBeInTheDocument();
+  });
 });

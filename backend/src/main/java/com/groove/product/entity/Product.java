@@ -32,6 +32,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -41,11 +42,15 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = PROTECTED)
 @Table(name = "product",
+		uniqueConstraints = @UniqueConstraint(name = "uk_product_discogs_release", columnNames = "discogs_release_id"),
 		indexes = {
 			@Index(name = "idx_product_title_artist", columnList = "title, artist_id"),
 			@Index(name = "idx_product_status_created", columnList = "status, created_at"),
 			@Index(name = "idx_product_artist", columnList = "artist_id"),
-			@Index(name = "idx_product_label", columnList = "label_id")
+			@Index(name = "idx_product_label", columnList = "label_id"),
+			@Index(name = "idx_product_album", columnList = "album_id"),
+			@Index(name = "idx_product_barcode", columnList = "barcode"),
+			@Index(name = "idx_product_catalog_no", columnList = "catalog_no_normalized")
 		})
 public class Product extends BaseTimeEntity {
 
@@ -55,6 +60,10 @@ public class Product extends BaseTimeEntity {
 
 	@Column(nullable = false, length = 200)
 	private String title;
+
+	@ManyToOne(fetch = LAZY)
+	@JoinColumn(name = "album_id", nullable = false, foreignKey = @ForeignKey(name = "fk_product_album"))
+	private Album album;
 
 	@ManyToOne(fetch = LAZY)
 	@JoinColumn(name = "artist_id", nullable = false, foreignKey = @ForeignKey(name = "fk_product_artist"))
@@ -72,6 +81,30 @@ public class Product extends BaseTimeEntity {
 
 	@Column(name = "color_variant", length = 50)
 	private String colorVariant;
+
+	@Column(length = 50)
+	private String country;
+
+	@Column(name = "pressing_year")
+	private Integer pressingYear;
+
+	@Column(name = "catalog_no", length = 50)
+	private String catalogNo;
+
+	@Column(name = "catalog_no_normalized", length = 50)
+	private String catalogNoNormalized;
+
+	@Column(length = 20)
+	private String barcode;
+
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(name = "edition_type", nullable = false, length = 20)
+	@ColumnDefault("'STANDARD'")
+	private EditionType editionType;
+
+	@Column(name = "discogs_release_id")
+	private Long discogsReleaseId;
 
 	@Column(nullable = false, precision = 10, scale = 2)
 	private BigDecimal price;
@@ -100,32 +133,69 @@ public class Product extends BaseTimeEntity {
 	private List<ProductImage> images = new ArrayList<>();
 
 	@Builder(access = PRIVATE)
-	private Product(String title, Artist artist, Label label, LocalDate releaseDate, String pressingInfo,
-			String colorVariant, BigDecimal price, ProductStatus status, String description) {
+	private Product(String title, Album album, Artist artist, Label label, LocalDate releaseDate,
+			String pressingInfo, String colorVariant, String country, Integer pressingYear, String catalogNo,
+			String barcode, EditionType editionType, BigDecimal price, ProductStatus status, String description,
+			Long discogsReleaseId) {
 		this.title = title;
+		this.album = album;
 		this.artist = artist;
 		this.label = label;
 		this.releaseDate = releaseDate;
 		this.pressingInfo = pressingInfo;
 		this.colorVariant = colorVariant;
+		this.country = country;
+		this.pressingYear = pressingYear;
+		this.catalogNo = catalogNo;
+		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
+		this.barcode = barcode;
+		this.editionType = editionType == null ? EditionType.STANDARD : editionType;
 		this.price = price;
 		this.status = status;
 		this.description = description;
+		this.discogsReleaseId = discogsReleaseId;
 		this.reviewCount = 0;
 	}
 
-	public static Product create(String title, Artist artist, Label label, LocalDate releaseDate,
-			String pressingInfo, String colorVariant, BigDecimal price, String description) {
+	public static Product create(Album album, String title, Artist artist, Label label, LocalDate releaseDate,
+			String pressingInfo, String colorVariant, String country, Integer pressingYear, String catalogNo,
+			String barcode, EditionType editionType, BigDecimal price, String description) {
 		return Product.builder()
 				.title(title)
+				.album(album)
 				.artist(artist)
 				.label(label)
 				.releaseDate(releaseDate)
 				.pressingInfo(pressingInfo)
 				.colorVariant(colorVariant)
+				.country(country)
+				.pressingYear(pressingYear)
+				.catalogNo(catalogNo)
+				.barcode(barcode)
+				.editionType(editionType)
 				.price(price)
 				.status(ProductStatus.ON_SALE)
 				.description(description)
+				.build();
+	}
+
+	// Discogs 적재 상품은 가격·재고 검수 전이라 HIDDEN 으로 만든다.
+	public static Product createImported(Album album, String title, Artist artist, Label label, String country,
+			Integer pressingYear, String catalogNo, String barcode, EditionType editionType, BigDecimal price,
+			Long discogsReleaseId) {
+		return Product.builder()
+				.title(title)
+				.album(album)
+				.artist(artist)
+				.label(label)
+				.country(country)
+				.pressingYear(pressingYear)
+				.catalogNo(catalogNo)
+				.barcode(barcode)
+				.editionType(editionType)
+				.price(price)
+				.status(ProductStatus.HIDDEN)
+				.discogsReleaseId(discogsReleaseId)
 				.build();
 	}
 
@@ -158,13 +228,20 @@ public class Product extends BaseTimeEntity {
 	}
 
 	public void updateInfo(String title, Artist artist, Label label, LocalDate releaseDate, String pressingInfo,
-			String colorVariant, BigDecimal price, String description) {
+			String colorVariant, String country, Integer pressingYear, String catalogNo, String barcode,
+			EditionType editionType, BigDecimal price, String description) {
 		this.title = title;
 		this.artist = artist;
 		this.label = label;
 		this.releaseDate = releaseDate;
 		this.pressingInfo = pressingInfo;
 		this.colorVariant = colorVariant;
+		this.country = country;
+		this.pressingYear = pressingYear;
+		this.catalogNo = catalogNo;
+		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
+		this.barcode = barcode;
+		this.editionType = editionType;
 		this.price = price;
 		this.description = description;
 	}

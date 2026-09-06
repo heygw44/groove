@@ -60,6 +60,8 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		kindOfBlue = ProductFixture.create(artist, "OQM Kind of Blue");
 		kindOfBlue.addImage("https://cdn.groove.com/kind-of-blue-0.jpg", 0);
 		loveSupreme = ProductFixture.create(artist, "OQM A Love Supreme");
+		em.persist(kindOfBlue.getAlbum());
+		em.persist(loveSupreme.getAlbum());
 		em.persist(kindOfBlue);
 		em.persist(loveSupreme);
 	}

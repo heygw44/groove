@@ -30,6 +30,7 @@ import com.groove.inventory.repository.StockRepository;
 import com.groove.inventory.service.StockService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -40,6 +41,9 @@ class StockConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -153,7 +157,9 @@ class StockConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	private CreatedStock createStock(int quantity) {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		Product product = productRepository.save(ProductFixture.create(artist));
+		Product createdProduct = ProductFixture.create(artist);
+		albumRepository.save(createdProduct.getAlbum());
+		Product product = productRepository.save(createdProduct);
 		Stock stock = stockRepository.saveAndFlush(StockFixture.create(product, quantity));
 		return new CreatedStock(stock.getId(), product.getId());
 	}

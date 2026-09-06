@@ -7,5 +7,6 @@ public enum AdminAuditTargetType {
 	COUPON,
 	LIMITED_DROP,
 	MEMBER,
-	PAYMENT
+	PAYMENT,
+	CATALOG_IMPORT_JOB
 }

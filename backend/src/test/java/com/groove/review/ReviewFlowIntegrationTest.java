@@ -44,6 +44,7 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.review.dto.ReviewCreateRequest;
@@ -67,6 +68,9 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	ArtistRepository artistRepository;
+
+	@Autowired
+	AlbumRepository albumRepository;
 
 	@Autowired
 	ProductRepository productRepository;
@@ -192,7 +196,9 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 
 	private Product seedProduct(int stockQuantity) {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		Product product = productRepository.save(ProductFixture.create(artist));
+		Product createdProduct = ProductFixture.create(artist);
+		albumRepository.save(createdProduct.getAlbum());
+		Product product = productRepository.save(createdProduct);
 		stockRepository.save(StockFixture.create(product, stockQuantity));
 		return product;
 	}

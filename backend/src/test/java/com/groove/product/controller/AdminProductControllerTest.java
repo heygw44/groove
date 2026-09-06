@@ -51,6 +51,7 @@ import com.groove.product.dto.AdminProductResponse;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
 import com.groove.product.dto.ProductUpdateRequest;
+import com.groove.product.entity.EditionType;
 import com.groove.product.entity.ProductStatus;
 import com.groove.product.service.AdminProductService;
 
@@ -84,8 +85,10 @@ class AdminProductControllerTest {
 
 	private AdminProductResponse sampleResponse() {
 		return new AdminProductResponse(PRODUCT_ID, "Kind of Blue",
+				new AdminProductResponse.AlbumSummary(1L, "Kind of Blue", 1959),
 				new AdminProductResponse.ArtistSummary(10L, "Miles Davis"), null, List.of(), LocalDate.of(2024, 1, 1),
-				"180g", "Black", new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명", List.of(), 10, null, null);
+				"180g", "Black", "US", 1959, "CS 8163", "888880123456", EditionType.STANDARD,
+				new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명", List.of(), 10, null, null);
 	}
 
 	@Nested
@@ -144,7 +147,8 @@ class AdminProductControllerTest {
 		void returnsBadRequestWhenTitleBlank() throws Exception {
 			// given
 			ProductCreateRequest request = new ProductCreateRequest("", 10L, null, List.of(),
-					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(), 10);
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(), 10, 1L, null,
+					null, null, null, null, null);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")
@@ -161,7 +165,8 @@ class AdminProductControllerTest {
 		void returnsBadRequestWhenInitialStockNegative() throws Exception {
 			// given
 			ProductCreateRequest request = new ProductCreateRequest("Kind of Blue", 10L, null, List.of(),
-					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(), -1);
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(), -1, 1L,
+					null, null, null, null, null, null);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")
@@ -178,7 +183,8 @@ class AdminProductControllerTest {
 		void returnsBadRequestWhenPriceHasFraction() throws Exception {
 			// given
 			ProductCreateRequest request = new ProductCreateRequest("Kind of Blue", 10L, null, List.of(),
-					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000.5"), "설명", List.of(), 10);
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000.5"), "설명", List.of(), 10, 1L,
+					null, null, null, null, null, null);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")
@@ -195,7 +201,8 @@ class AdminProductControllerTest {
 		void returnsBadRequestWhenImageUrlBlank() throws Exception {
 			// given
 			ProductCreateRequest request = new ProductCreateRequest("Kind of Blue", 10L, null, List.of(),
-					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(""), 10);
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(""), 10, 1L,
+					null, null, null, null, null, null);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")
@@ -205,6 +212,25 @@ class AdminProductControllerTest {
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
 					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("imageUrls[0]")));
+		}
+
+		@Test
+		@DisplayName("newAlbum.title 이 비어 있으면 400 과 필드 에러를 반환한다")
+		void returnsBadRequestWhenNewAlbumTitleBlank() throws Exception {
+			// given
+			ProductCreateRequest.NewAlbumRequest newAlbum = new ProductCreateRequest.NewAlbumRequest("", 1959);
+			ProductCreateRequest request = new ProductCreateRequest("Kind of Blue", 10L, null, List.of(),
+					LocalDate.of(2024, 1, 1), "180g", "Black", new BigDecimal("45000"), "설명", List.of(), 10, null,
+					newAlbum, null, null, null, null, null);
+
+			// when & then
+			mockMvc.perform(post("/api/v1/admin/products")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("newAlbum.title")));
 		}
 	}
 
@@ -365,12 +391,27 @@ class AdminProductControllerTest {
 					"https://cdn.groove.com/0.jpg", 10, null);
 			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(summary), PageRequest.of(0, 20), 1));
-			given(adminProductService.getList(any(), any())).willReturn(pageResponse);
+			given(adminProductService.getList(any(), any(), any())).willReturn(pageResponse);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/products").header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.content[0].id", is(PRODUCT_ID.intValue())));
+		}
+
+		@Test
+		@DisplayName("albumId 쿼리 파라미터를 서비스에 그대로 전달한다")
+		void passesAlbumIdToService() throws Exception {
+			// given
+			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
+					new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+			given(adminProductService.getList(any(), any(), any())).willReturn(pageResponse);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products").param("albumId", "5")
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk());
+			verify(adminProductService).getList(eq(null), eq(5L), any());
 		}
 
 		@Test
@@ -380,7 +421,7 @@ class AdminProductControllerTest {
 			mockMvc.perform(get("/api/v1/admin/products").header(HttpHeaders.AUTHORIZATION, userToken()))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(adminProductService, never()).getList(any(), any());
+			verify(adminProductService, never()).getList(any(), any(), any());
 		}
 
 		@Test
@@ -390,7 +431,7 @@ class AdminProductControllerTest {
 			mockMvc.perform(get("/api/v1/admin/products"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(adminProductService, never()).getList(any(), any());
+			verify(adminProductService, never()).getList(any(), any(), any());
 		}
 	}
 

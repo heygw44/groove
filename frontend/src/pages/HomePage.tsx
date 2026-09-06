@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { LimitedDropBanner } from '@/components/limited/LimitedDropBanner';
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
+import { DiggingSection } from '@/components/recommend/DiggingSection';
 import { useLimitedDrops } from '@/hooks/queries/useLimitedDrops';
 import { useProducts } from '@/hooks/queries/useProducts';
 import { useServerNow } from '@/hooks/useServerNow';
@@ -26,12 +27,16 @@ export default function HomePage() {
   }, [limitedDropData?.serverTime]);
 
   const bannerDrop = limitedDropData ? pickBannerDrop(limitedDropData.drops) : undefined;
+  const hasBanner = Boolean(bannerDrop);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       {bannerDrop && <LimitedDropBanner drop={bannerDrop} nowMs={nowMs} />}
 
-      <section className={bannerDrop ? 'mt-10' : undefined}>
+      <DiggingSection className={hasBanner ? 'mt-10' : undefined} />
+
+      {/* DiggingSection 이 null 일 수 있어 first:mt-0 으로 앞 형제 유무에 따라 상단 여백을 정리한다. */}
+      <section className="mt-10 first:mt-0">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">신보</h2>
           <Link to="/products?sort=latest" className="text-sm text-content-muted">

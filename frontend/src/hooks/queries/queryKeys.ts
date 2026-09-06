@@ -1,10 +1,15 @@
 import type { AdminAuditLogListParams } from '@/types/adminAuditLog';
 import type { AdminMemberListParams } from '@/types/adminMember';
 import type { PopularProductParams, StatsPeriodParams } from '@/types/adminStats';
+import type { CatalogImportJobListParams, CatalogLookupParams } from '@/types/catalog';
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
 import type { AdminOrderListParams, OrderListParams } from '@/types/order';
-import type { AdminProductListParams, ProductListParams } from '@/types/product';
+import type {
+  AdminAlbumListParams,
+  AdminProductListParams,
+  ProductListParams,
+} from '@/types/product';
 import type { ReviewListParams } from '@/types/review';
 import type { WishlistListParams } from '@/types/wishlist';
 
@@ -24,6 +29,12 @@ export const productKeys = {
   all: ['products'] as const,
   list: (params: ProductListParams) => ['products', params] as const,
   detail: (id: number) => ['product', id] as const,
+};
+
+// 'products' 트리 밖에 둔다. useToggleWishlist 낙관적 갱신이 ['products'] 캐시를 전부 PageResponse 로 가정하고 훑기 때문이다.
+export const albumKeys = {
+  all: ['albums'] as const,
+  detail: (id: number) => ['albums', id] as const,
 };
 
 export const adminProductKeys = {
@@ -76,6 +87,8 @@ export const limitedDropKeys = {
   all: ['limitedDrops'] as const,
   list: (status?: LimitedDropStatus) => ['limitedDrops', status ?? 'all'] as const,
   detail: (id: number) => ['limitedDrop', id] as const,
+  // detail 키 접두사가 단수 'limitedDrop' 이라 이 하나로 모든 상세 캐시를 한 번에 무효화한다.
+  details: ['limitedDrop'] as const,
 };
 
 // list 를 'list' sub-prefix 로 분리해 오픈/마감 등 상태 변경 후 상세는 건드리지 않고 목록만 무효화한다.
@@ -110,7 +123,43 @@ export const adminMemberKeys = {
   detail: (id: number) => ['adminMembers', 'detail', id] as const,
 };
 
+export const tasteProfileKeys = {
+  mine: ['tasteProfile', 'me'] as const,
+};
+
+export const recommendKeys = {
+  all: ['recommend'] as const,
+  home: ['recommend', 'home'] as const,
+  related: (productId: number) => ['recommend', 'related', productId] as const,
+};
+
+export const recentViewKeys = {
+  all: ['recentViews'] as const,
+};
+
 export const adminAuditLogKeys = {
   all: ['adminAuditLogs'] as const,
   list: (params: AdminAuditLogListParams) => ['adminAuditLogs', params] as const,
+};
+
+export const adminAlbumKeys = {
+  all: ['adminAlbums'] as const,
+  list: (params: AdminAlbumListParams) => ['adminAlbums', params] as const,
+};
+
+// list 를 'list' sub-prefix 로 분리해 잡 실행·재시작 후 목록만 무효화한다.
+export const adminCatalogImportJobKeys = {
+  all: ['adminCatalogImportJobs'] as const,
+  lists: ['adminCatalogImportJobs', 'list'] as const,
+  list: (params: CatalogImportJobListParams) =>
+    ['adminCatalogImportJobs', 'list', params] as const,
+  detail: (jobExecutionId: number) =>
+    ['adminCatalogImportJobs', 'detail', jobExecutionId] as const,
+};
+
+export const adminCatalogLookupKeys = {
+  all: ['adminCatalogLookup'] as const,
+  list: (params: CatalogLookupParams) => ['adminCatalogLookup', params] as const,
+  release: (discogsReleaseId: number) =>
+    ['adminCatalogRelease', discogsReleaseId] as const,
 };

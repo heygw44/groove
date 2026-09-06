@@ -1,12 +1,17 @@
 spring:
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      # create-drop 은 컨텍스트 캐시에서 밀려난 컨텍스트가 닫힐 때 공유 DB 테이블을 지워 다른 테스트를 깨뜨린다.
+      ddl-auto: create
     show-sql: false
     open-in-view: false
     properties:
       hibernate:
         generate_statistics: true
+  batch:
+    jdbc:
+      # Flyway 미사용 프로파일이라 Boot 초기화기가 BATCH_* 를 만든다.
+      initialize-schema: always
 
 # 만료 시나리오 테스트는 @TestPropertySource 로 개별 override 한다(전역을 초 단위로 줄이면 다른 통합 테스트가 깨진다).
 jwt:
@@ -21,6 +26,16 @@ auth:
 toss:
   client-key: test_ck_dummy
   secret-key: test_sk_dummy
+
+discogs:
+  token: test_token_dummy
+
+# 배치 테스트가 청크 경계·백오프를 짧게 검증하도록 줄인다.
+catalog:
+  import:
+    chunk-size: 2
+    backoff-initial: 10ms
+    backoff-max: 20ms
 
 file:
   upload-path: ${java.io.tmpdir}/groove-test-uploads

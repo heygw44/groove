@@ -16,7 +16,10 @@
 					EXISTS (SELECT 1 FROM wishlist w WHERE w.product_id = p.id AND w.member_id = #{memberId})
 				</when>
 				<otherwise>NULL</otherwise>
-			</choose> AS wishlisted
+			</choose> AS wishlisted,
+			p.country AS country,
+			p.pressing_year AS pressing_year,
+			p.edition_type AS edition_type
 		FROM product p
 		JOIN artist a ON a.id = p.artist_id
 		LEFT JOIN label l ON l.id = p.label_id

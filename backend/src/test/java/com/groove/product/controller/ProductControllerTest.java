@@ -42,6 +42,7 @@ import com.groove.member.entity.MemberRole;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchRequest;
 import com.groove.product.dto.ProductSummaryResponse;
+import com.groove.product.entity.EditionType;
 import com.groove.product.entity.ProductStatus;
 import com.groove.product.service.ProductService;
 
@@ -70,13 +71,13 @@ class ProductControllerTest {
 	private ProductSummaryResponse sampleSummary() {
 		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
 				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
-				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, null);
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, null, "US", 1959, EditionType.STANDARD);
 	}
 
 	private ProductSummaryResponse sampleSummary(Boolean wishlisted) {
 		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
 				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
-				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, wishlisted);
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, wishlisted, "US", 1959, EditionType.STANDARD);
 	}
 
 	@Nested
@@ -210,10 +211,14 @@ class ProductControllerTest {
 		void returnsDetailWithoutAuthentication() throws Exception {
 			// given
 			ProductDetailResponse response = new ProductDetailResponse(1L, "Kind of Blue",
+					new ProductDetailResponse.AlbumSummary(5L, "Kind of Blue", 1959, 1),
 					new ProductDetailResponse.ArtistSummary(12L, "Miles Davis"),
 					new ProductDetailResponse.LabelSummary(7L, "Columbia"),
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
-					null, "180g", "Standard Black", new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
+					null, "180g", "Standard Black",
+					new ProductDetailResponse.PressingSummary("US", 1959, "CS 8163", "888880123456",
+							EditionType.STANDARD, null),
+					new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
 					10, null, 0L, null, null);
 			given(productService.getDetail(eq(1L), isNull())).willReturn(response);
@@ -242,10 +247,14 @@ class ProductControllerTest {
 		void passesMemberIdWhenAuthenticated() throws Exception {
 			// given
 			ProductDetailResponse response = new ProductDetailResponse(1L, "Kind of Blue",
+					new ProductDetailResponse.AlbumSummary(5L, "Kind of Blue", 1959, 1),
 					new ProductDetailResponse.ArtistSummary(12L, "Miles Davis"),
 					new ProductDetailResponse.LabelSummary(7L, "Columbia"),
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
-					null, "180g", "Standard Black", new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
+					null, "180g", "Standard Black",
+					new ProductDetailResponse.PressingSummary("US", 1959, "CS 8163", "888880123456",
+							EditionType.STANDARD, null),
+					new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
 					10, null, 0L, true, null);
 			given(productService.getDetail(eq(1L), eq(1L))).willReturn(response);

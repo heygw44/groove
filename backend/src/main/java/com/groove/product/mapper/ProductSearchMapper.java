@@ -3,6 +3,7 @@ package com.groove.product.mapper;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -14,4 +15,6 @@ public interface ProductSearchMapper {
 	List<ProductSummaryResponse> searchProducts(ProductSearchCondition condition);
 
 	long countProducts(ProductSearchCondition condition);
+
+	List<ProductSummaryResponse> findAlbumPressings(@Param("albumId") Long albumId);
 }

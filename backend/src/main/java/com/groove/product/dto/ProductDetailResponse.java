@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import com.groove.limited.entity.LimitedDropStatus;
+import com.groove.product.entity.EditionType;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductGenre;
 import com.groove.product.entity.ProductImage;
@@ -14,12 +15,14 @@ import com.groove.product.entity.ProductStatus;
 public record ProductDetailResponse(
 		Long id,
 		String title,
+		AlbumSummary album,
 		ArtistSummary artist,
 		LabelSummary label,
 		List<GenreSummary> genres,
 		LocalDate releaseDate,
 		String pressingInfo,
 		String colorVariant,
+		PressingSummary pressing,
 		BigDecimal price,
 		ProductStatus status,
 		String description,
@@ -32,10 +35,15 @@ public record ProductDetailResponse(
 ) {
 
 	public static ProductDetailResponse from(Product product, List<ProductImage> images, int stockQuantity,
-		Boolean wishlisted, LimitedDropSummary limitedDrop) {
+		Boolean wishlisted, LimitedDropSummary limitedDrop, int pressingCount) {
 		LabelSummary label = product.getLabel() == null
 				? null
 				: new LabelSummary(product.getLabel().getId(), product.getLabel().getName());
+		AlbumSummary album = new AlbumSummary(product.getAlbum().getId(), product.getAlbum().getTitle(),
+				product.getAlbum().getOriginalReleaseYear(), pressingCount);
+		PressingSummary pressing = new PressingSummary(product.getCountry(), product.getPressingYear(),
+				product.getCatalogNo(), product.getBarcode(), product.getEditionType(),
+				product.getDiscogsReleaseId());
 		List<GenreSummary> genres = product.getProductGenres().stream()
 				.map(ProductGenre::getGenre)
 				.map(genre -> new GenreSummary(genre.getId(), genre.getName()))
@@ -47,12 +55,14 @@ public record ProductDetailResponse(
 		return new ProductDetailResponse(
 				product.getId(),
 				product.getTitle(),
+				album,
 				new ArtistSummary(product.getArtist().getId(), product.getArtist().getName()),
 				label,
 				genres,
 				product.getReleaseDate(),
 				product.getPressingInfo(),
 				product.getColorVariant(),
+				pressing,
 				product.getPrice(),
 				product.getStatus(),
 				product.getDescription(),
@@ -62,6 +72,13 @@ public record ProductDetailResponse(
 				product.getReviewCount(),
 				wishlisted,
 				limitedDrop);
+	}
+
+	public record AlbumSummary(Long id, String title, Integer originalReleaseYear, int pressingCount) {
+	}
+
+	public record PressingSummary(String country, Integer pressingYear, String catalogNo, String barcode,
+			EditionType editionType, Long discogsReleaseId) {
 	}
 
 	public record ArtistSummary(Long id, String name) {
