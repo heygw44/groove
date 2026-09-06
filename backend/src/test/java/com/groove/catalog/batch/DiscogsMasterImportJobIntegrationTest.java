@@ -303,6 +303,31 @@ class DiscogsMasterImportJobIntegrationTest extends IntegrationTestSupport {
 			assertThat(findProducts(Set.of(releaseA))).hasSize(1);
 			assertThat(fake.releaseCalls(releaseA)).isEqualTo(3);
 		}
+
+		@Test
+		@DisplayName("format 문자열에 Vinyl 이 없어도 major_formats 가 Vinyl 이면 적재하고 CD 면 걸러낸다")
+		void importsByMajorFormatsEvenWhenFormatStringHasNoVinylKeyword() throws Exception {
+			// given
+			long masterId = 9110007L;
+			long vinylReleaseId = 9110007001L;
+			long cdReleaseId = 9110007002L;
+
+			fake.addRelease(release(vinylReleaseId, masterId, "Album E", "Artist E"));
+			fake.addMaster(masterId, List.of(List.of(
+					DiscogsFixture.version(vinylReleaseId, List.of("Vinyl"), "LP, Album, Promo"),
+					DiscogsFixture.version(cdReleaseId, List.of("CD"), "Album"))));
+
+			// when
+			JobExecution execution = jobLauncherTestUtils.launchJob(jobParameters(masterId));
+
+			// then
+			assertThat(execution.getStatus()).isEqualTo(BatchStatus.COMPLETED);
+			StepExecution stepExecution = execution.getStepExecutions().iterator().next();
+			assertThat(stepExecution.getWriteCount()).isEqualTo(1);
+			assertThat(stepExecution.getFilterCount()).isEqualTo(1);
+			assertThat(findProducts(Set.of(vinylReleaseId))).hasSize(1);
+			assertThat(findProducts(Set.of(cdReleaseId))).isEmpty();
+		}
 	}
 
 	private void waitUntilFinished(long executionId) throws InterruptedException {
@@ -325,11 +350,11 @@ class DiscogsMasterImportJobIntegrationTest extends IntegrationTestSupport {
 	}
 
 	private Version vinylVersion(long releaseId) {
-		return DiscogsFixture.version(releaseId, "Vinyl");
+		return DiscogsFixture.version(releaseId, List.of("Vinyl"), "LP, Album");
 	}
 
 	private Version cdVersion(long releaseId) {
-		return DiscogsFixture.version(releaseId, "CD");
+		return DiscogsFixture.version(releaseId, List.of("CD"), "Album");
 	}
 
 	private DiscogsReleaseResponse release(long releaseId, long masterId, String title, String artistName) {

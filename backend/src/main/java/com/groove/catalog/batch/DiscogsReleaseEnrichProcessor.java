@@ -43,7 +43,7 @@ public class DiscogsReleaseEnrichProcessor implements ItemProcessor<Version, Cat
 
 	@Override
 	public CatalogImportItem process(Version version) {
-		if (!mapper.isVinylFormat(version.format())) {
+		if (!mapper.isVinylVersion(version)) {
 			log.debug("바이닐 포맷이 아니라 건너뜀: releaseId={} format={}", version.id(), version.format());
 			return null;
 		}

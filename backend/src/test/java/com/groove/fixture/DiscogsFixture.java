@@ -52,8 +52,9 @@ public final class DiscogsFixture {
 			{
 				"pagination": { "page": 1, "pages": 1, "per_page": 20, "items": 1 },
 				"versions": [
-					{ "id": 3193, "title": "Bricolage", "country": "UK", "released": "1997", "label": "Ninja Tune",
-						"catno": "zen CD29", "format": "Album", "thumb": "https://i.discogs.com/version.jpeg" }
+					{ "id": 3193, "label": "Ninja Tune", "country": "UK", "title": "Bricolage",
+						"major_formats": ["Vinyl"], "format": "LP, Album", "catno": "zen CD29", "released": "1997",
+						"thumb": "https://i.discogs.com/version.jpeg" }
 				]
 			}
 			""";
@@ -71,8 +72,12 @@ public final class DiscogsFixture {
 	}
 
 	public static DiscogsMasterVersionsResponse.Version version(long id, String format) {
-		return new DiscogsMasterVersionsResponse.Version(id, "Test Release", "UK & Europe", "1959", "Columbia",
-				"CS 8163", format, "https://i.discogs.com/version.jpeg");
+		return version(id, List.of("Vinyl"), format);
+	}
+
+	public static DiscogsMasterVersionsResponse.Version version(long id, List<String> majorFormats, String format) {
+		return new DiscogsMasterVersionsResponse.Version(id, "Columbia", "UK & Europe", "Test Release", majorFormats,
+				format, "CS 8163", "1959", "https://i.discogs.com/version.jpeg");
 	}
 
 	public static DiscogsMasterVersionsResponse masterVersionsResponse(int page, int pages,

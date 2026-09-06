@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import com.groove.catalog.client.dto.DiscogsMasterVersionsResponse.Version;
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.client.dto.DiscogsSearchResponse;
 import com.groove.catalog.dto.CatalogImportItem;
@@ -239,6 +240,55 @@ class DiscogsReleaseMapperTest {
 		void returnsFalseWhenNull(String versionFormat) {
 			// when & then
 			assertThat(mapper.isVinylFormat(versionFormat)).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("isVinylVersion()")
+	class IsVinylVersion {
+
+		@Test
+		@DisplayName("format 문자열에 Vinyl 이 없어도 major_formats 가 Vinyl 이면 true 를 반환한다")
+		void returnsTrueWhenMajorFormatsContainsVinylRegardlessOfFormatString() {
+			// given
+			Version version = DiscogsFixture.version(1L, List.of("Vinyl"), "LP, Album, Promo");
+
+			// when & then
+			assertThat(mapper.isVinylVersion(version)).isTrue();
+		}
+
+		@Test
+		@DisplayName("major_formats 가 CD 면 format 문자열과 무관하게 false 를 반환한다")
+		void returnsFalseWhenMajorFormatsIsCd() {
+			// given
+			Version version = DiscogsFixture.version(1L, List.of("CD"), "Album");
+
+			// when & then
+			assertThat(mapper.isVinylVersion(version)).isFalse();
+		}
+
+		@ParameterizedTest
+		@CsvSource({
+			"'Vinyl, LP', true",
+			"Album, false"
+		})
+		@DisplayName("major_formats 가 없으면 format 문자열 판정으로 폴백한다")
+		void fallsBackToFormatStringWhenMajorFormatsIsNull(String format, boolean expected) {
+			// given
+			Version version = DiscogsFixture.version(1L, null, format);
+
+			// when & then
+			assertThat(mapper.isVinylVersion(version)).isEqualTo(expected);
+		}
+
+		@Test
+		@DisplayName("major_formats 가 빈 목록이면 format 문자열 판정으로 폴백한다")
+		void fallsBackToFormatStringWhenMajorFormatsIsEmpty() {
+			// given
+			Version version = DiscogsFixture.version(1L, List.of(), "Vinyl, LP");
+
+			// when & then
+			assertThat(mapper.isVinylVersion(version)).isTrue();
 		}
 	}
 
