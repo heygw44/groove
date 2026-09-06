@@ -35,7 +35,7 @@ public final class DiscogsFixture {
 				"title": "Kind Of Blue",
 				"artists": [{ "name": "Miles Davis" }],
 				"labels": [{ "name": "Columbia", "catno": "CS 8163" }],
-				"country": "US",
+				"country": "Germany",
 				"year": 1959,
 				"genres": ["Jazz"],
 				"styles": ["Cool Jazz"],
@@ -66,13 +66,13 @@ public final class DiscogsFixture {
 	}
 
 	public static DiscogsSearchResponse.Result searchResult(long id, String title, String year) {
-		return new DiscogsSearchResponse.Result(id, "release", title, year, "US", "CS 8163", List.of("Columbia"),
+		return new DiscogsSearchResponse.Result(id, "release", title, year, "Europe", "CS 8163", List.of("Columbia"),
 				List.of("Vinyl", "LP"), "https://i.discogs.com/thumb.jpeg", 21247L);
 	}
 
 	public static DiscogsMasterVersionsResponse.Version version(long id, String format) {
-		return new DiscogsMasterVersionsResponse.Version(id, "Test Release", "US", "1959", "Columbia", "CS 8163",
-				format, "https://i.discogs.com/version.jpeg");
+		return new DiscogsMasterVersionsResponse.Version(id, "Test Release", "UK & Europe", "1959", "Columbia",
+				"CS 8163", format, "https://i.discogs.com/version.jpeg");
 	}
 
 	public static DiscogsMasterVersionsResponse masterVersionsResponse(int page, int pages,
@@ -95,7 +95,7 @@ public final class DiscogsFixture {
 		List<DiscogsReleaseResponse.Image> images = List.of(
 				new DiscogsReleaseResponse.Image("primary", "https://i.discogs.com/large.jpeg",
 						"https://i.discogs.com/150.jpeg"));
-		return new DiscogsReleaseResponse(249504L, "Kind Of Blue", artists, labels, "US", 1959, genres, styles,
+		return new DiscogsReleaseResponse(249504L, "Kind Of Blue", artists, labels, "Germany", 1959, genres, styles,
 				formats, identifiers, images, 21247L, "Discogs 원본 노트");
 	}
 }

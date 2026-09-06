@@ -60,7 +60,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 
 	private static final String IMAGE_BASE_URL = "https://picsum.photos/seed/";
 
-	private static final List<String> EXTRA_PRESSING_COUNTRIES = List.of("JP", "UK", "DE");
+	private static final List<String> EXTRA_PRESSING_COUNTRIES = List.of("Japan", "UK", "Germany");
 	private static final List<String> EXTRA_PRESSING_COLORS = List.of("Clear", "Translucent Blue", "Red");
 
 	private static final List<String> REVIEW_TITLES = List.of(

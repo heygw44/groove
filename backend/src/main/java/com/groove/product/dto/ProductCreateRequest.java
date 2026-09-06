@@ -54,7 +54,7 @@ public record ProductCreateRequest(
 		@Valid
 		NewAlbumRequest newAlbum,
 
-		@Size(min = 2, max = 2, message = "국가 코드는 2자여야 합니다.")
+		@Size(max = 50, message = "국가는 50자 이하여야 합니다.")
 		String country,
 
 		Integer pressingYear,
