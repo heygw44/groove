@@ -51,6 +51,12 @@ public final class ProductFixture {
 				RELEASE_DATE.getYear(), "CS 8163", "888880123456", EditionType.STANDARD, price, "설명");
 	}
 
+	public static Product createPressing(Album album, Artist artist, String title, BigDecimal price, String country,
+			Integer pressingYear, String catalogNo, String barcode, EditionType editionType) {
+		return Product.create(album, title, artist, null, RELEASE_DATE, "180g", "Black", country, pressingYear,
+				catalogNo, barcode, editionType, price, "설명");
+	}
+
 	private static Product create(Artist artist, Label label, String title) {
 		return Product.create(AlbumFixture.create(artist, title), title, artist, label, RELEASE_DATE, "180g",
 				"Black", "US", RELEASE_DATE.getYear(), "CS 8163", "888880123456", EditionType.STANDARD, PRICE,

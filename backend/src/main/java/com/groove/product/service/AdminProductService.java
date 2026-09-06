@@ -187,8 +187,8 @@ public class AdminProductService {
 		return AdminProductResponse.from(product, stock.getQuantity());
 	}
 
-	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Pageable pageable) {
-		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, pageable);
+	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Long albumId, Pageable pageable) {
+		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, albumId, pageable);
 		return PageResponse.from(page);
 	}
 

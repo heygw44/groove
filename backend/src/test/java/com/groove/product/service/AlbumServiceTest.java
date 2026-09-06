@@ -1,0 +1,87 @@
+package com.groove.product.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import com.groove.fixture.AlbumFixture;
+import com.groove.fixture.ArtistFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
+import com.groove.product.dto.AlbumDetailResponse;
+import com.groove.product.dto.ProductSummaryResponse;
+import com.groove.product.entity.Album;
+import com.groove.product.entity.Artist;
+import com.groove.product.entity.EditionType;
+import com.groove.product.entity.ProductStatus;
+import com.groove.product.mapper.ProductSearchMapper;
+import com.groove.product.repository.AlbumRepository;
+
+@ExtendWith(MockitoExtension.class)
+class AlbumServiceTest {
+
+	@Mock
+	private AlbumRepository albumRepository;
+
+	@Mock
+	private ProductSearchMapper productSearchMapper;
+
+	private AlbumService albumService;
+
+	@BeforeEach
+	void setUp() {
+		albumService = new AlbumService(albumRepository, productSearchMapper);
+	}
+
+	@Nested
+	@DisplayName("getDetail()")
+	class GetDetail {
+
+		@Test
+		@DisplayName("존재하면 앨범 정보와 프레싱 목록을 반환한다")
+		void returnsAlbumWithPressings() {
+			// given
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist, "Kind Of Blue"), 5L);
+			ProductSummaryResponse pressing = new ProductSummaryResponse(10L, "Kind of Blue", "Miles Davis",
+					"Columbia", new BigDecimal("42000"), "Standard Black", "180g", ProductStatus.ON_SALE, null, null,
+					0, null, "US", 1959, EditionType.ORIGINAL);
+			given(albumRepository.findWithArtistById(5L)).willReturn(Optional.of(album));
+			given(productSearchMapper.findAlbumPressings(5L)).willReturn(List.of(pressing));
+
+			// when
+			AlbumDetailResponse response = albumService.getDetail(5L);
+
+			// then
+			assertThat(response.id()).isEqualTo(5L);
+			assertThat(response.title()).isEqualTo("Kind Of Blue");
+			assertThat(response.artist().name()).isEqualTo("Miles Davis");
+			assertThat(response.pressings()).containsExactly(pressing);
+		}
+
+		@Test
+		@DisplayName("존재하지 않으면 ALBUM_NOT_FOUND 예외를 던진다")
+		void throwsWhenNotFound() {
+			// given
+			given(albumRepository.findWithArtistById(99L)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> albumService.getDetail(99L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ALBUM_NOT_FOUND);
+		}
+	}
+}

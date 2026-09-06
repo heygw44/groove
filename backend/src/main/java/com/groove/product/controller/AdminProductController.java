@@ -77,7 +77,8 @@ public class AdminProductController {
 	@GetMapping
 	public ApiResponse<PageResponse<AdminProductSummaryResponse>> getList(
 			@RequestParam(required = false) ProductStatus status,
+			@RequestParam(required = false) Long albumId,
 			@PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-		return ApiResponse.ok(adminProductService.getList(status, pageable));
+		return ApiResponse.ok(adminProductService.getList(status, albumId, pageable));
 	}
 }

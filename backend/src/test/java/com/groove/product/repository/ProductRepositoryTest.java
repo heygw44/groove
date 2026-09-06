@@ -286,7 +286,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			flushAndClear();
 
 			// when
-			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null,
+			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null, null,
 					PageRequest.of(0, 100));
 
 			// then
@@ -317,7 +317,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 
 			// when
 			Page<AdminProductSummaryResponse> hiddenPage = productRepository.findAdminSummaries(
-					ProductStatus.HIDDEN, PageRequest.of(0, 100));
+					ProductStatus.HIDDEN, null, PageRequest.of(0, 100));
 
 			// then
 			List<Long> hiddenIds = hiddenPage.getContent().stream()
@@ -325,6 +325,31 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 					.toList();
 			assertThat(hiddenIds).contains(savedHidden.getId());
 			assertThat(hiddenIds).doesNotContain(onSale.getId());
+		}
+
+		@Test
+		@DisplayName("albumId 로 필터링하면 해당 앨범의 프레싱만 조회된다")
+		void filtersByAlbumId() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product sameAlbumProduct = ProductFixture.create(artist, "Admin AlbumId Base");
+			albumRepository.save(sameAlbumProduct.getAlbum());
+			Product savedBase = productRepository.save(sameAlbumProduct);
+			stockRepository.save(Stock.create(savedBase, 5));
+			Product otherAlbumProduct = ProductFixture.create(artist, "Admin AlbumId Other");
+			albumRepository.save(otherAlbumProduct.getAlbum());
+			Product savedOther = productRepository.save(otherAlbumProduct);
+			stockRepository.save(Stock.create(savedOther, 5));
+			flushAndClear();
+
+			// when
+			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null,
+					savedBase.getAlbum().getId(), PageRequest.of(0, 100));
+
+			// then
+			List<Long> ids = page.getContent().stream().map(AdminProductSummaryResponse::id).toList();
+			assertThat(ids).contains(savedBase.getId());
+			assertThat(ids).doesNotContain(savedOther.getId());
 		}
 	}
 
