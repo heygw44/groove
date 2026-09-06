@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
@@ -8,6 +9,7 @@ import { formatPrice } from '@/utils/formatPrice';
 
 interface ProductCardProps {
   product: ProductSummary;
+  children?: ReactNode;
 }
 
 function ProductThumbnail({ url, soldOut }: { url?: string; soldOut: boolean }) {
@@ -42,7 +44,7 @@ function ProductThumbnail({ url, soldOut }: { url?: string; soldOut: boolean }) 
   );
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, children }: ProductCardProps) {
   const soldOut = product.status === 'SOLD_OUT';
 
   return (
@@ -67,6 +69,7 @@ export function ProductCard({ product }: ProductCardProps) {
       <p className="mt-2.5 line-clamp-2 text-sm font-medium">{product.title}</p>
       <p className="mt-0.5 text-xs text-content-muted">{product.artistName}</p>
       <p className="mt-1 text-sm font-bold">{formatPrice(product.price)}</p>
+      {children}
     </Link>
   );
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { purchaseLimitedDrop } from '@/api/limitedDrop';
-import { limitedDropKeys, orderKeys } from '@/hooks/queries/queryKeys';
+import { limitedDropKeys, orderKeys, recommendKeys } from '@/hooks/queries/queryKeys';
 import type { LimitedPurchaseRequest } from '@/types/limitedDrop';
 
 export const usePurchaseLimitedDrop = (dropId: number) => {
@@ -14,6 +14,8 @@ export const usePurchaseLimitedDrop = (dropId: number) => {
       // 목록의 remainingQuantity/status 도 같이 바뀌므로 함께 무효화한다.
       queryClient.invalidateQueries({ queryKey: limitedDropKeys.all });
       queryClient.invalidateQueries({ queryKey: orderKeys.all });
+      // 추천은 구매 신호를 서버가 반영하므로 함께 무효화한다.
+      queryClient.invalidateQueries({ queryKey: recommendKeys.all });
     },
   });
 };
