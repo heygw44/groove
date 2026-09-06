@@ -13,7 +13,7 @@ public record DiscogsMasterVersionsResponse(DiscogsSearchResponse.Pagination pag
 
 	@JsonNaming(SnakeCaseStrategy.class)
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Version(Long id, String title, String country, String released, String label, String catno,
-			String format, String thumb) {
+	public record Version(Long id, String label, String country, String title, List<String> majorFormats,
+			String format, String catno, String released, String thumb) {
 	}
 }

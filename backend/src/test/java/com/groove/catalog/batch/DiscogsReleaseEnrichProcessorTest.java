@@ -52,7 +52,7 @@ class DiscogsReleaseEnrichProcessorTest {
 		void returnsNullWithoutFetchingWhenNotVinylFormat() {
 			// given
 			Version version = DiscogsFixture.version(1L, "CD");
-			when(mapper.isVinylFormat("CD")).thenReturn(false);
+			when(mapper.isVinylVersion(version)).thenReturn(false);
 
 			// when
 			CatalogImportItem result = processor.process(version);
@@ -67,7 +67,7 @@ class DiscogsReleaseEnrichProcessorTest {
 		void returnsNullWithoutFetchingWhenAlreadyImported() {
 			// given
 			Version version = DiscogsFixture.version(1L, "Album");
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(productRepository.existsByDiscogsReleaseId(1L)).thenReturn(true);
 
 			// when
@@ -83,7 +83,7 @@ class DiscogsReleaseEnrichProcessorTest {
 		void throwsCatalogItemExceptionWhenNotFound() {
 			// given
 			Version version = DiscogsFixture.version(1L, "Album");
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(client.getRelease(1L)).thenThrow(new BusinessException(ErrorCode.CATALOG_RELEASE_NOT_FOUND));
 
 			// when & then
@@ -98,7 +98,7 @@ class DiscogsReleaseEnrichProcessorTest {
 		void throwsCatalogTransientExceptionWhenRateLimited() {
 			// given
 			Version version = DiscogsFixture.version(1L, "Album");
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(client.getRelease(1L)).thenThrow(new BusinessException(ErrorCode.CATALOG_RATE_LIMITED));
 
 			// when & then
@@ -113,7 +113,7 @@ class DiscogsReleaseEnrichProcessorTest {
 		void throwsCatalogTransientExceptionWhenLookupFailed() {
 			// given
 			Version version = DiscogsFixture.version(1L, "Album");
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(client.getRelease(1L)).thenThrow(new BusinessException(ErrorCode.CATALOG_LOOKUP_FAILED));
 
 			// when & then
@@ -128,7 +128,7 @@ class DiscogsReleaseEnrichProcessorTest {
 		void rethrowsOtherBusinessException() {
 			// given
 			Version version = DiscogsFixture.version(1L, "Album");
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(client.getRelease(1L)).thenThrow(new BusinessException(ErrorCode.CATALOG_ALREADY_IMPORTED));
 
 			// when & then
@@ -145,7 +145,7 @@ class DiscogsReleaseEnrichProcessorTest {
 			Version version = DiscogsFixture.version(1L, "Album");
 			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", "Columbia", "CS 8163",
 					List.of("LP"), "123", List.of("Jazz"), List.of());
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(client.getRelease(1L)).thenReturn(release);
 			when(mapper.isVinyl(release)).thenReturn(false);
 
@@ -165,7 +165,7 @@ class DiscogsReleaseEnrichProcessorTest {
 					List.of("LP"), "123", List.of("Jazz"), List.of());
 			CatalogImportItem item = new CatalogImportItem(1L, MASTER_ID, "Kind Of Blue", " ", "Columbia", "US",
 					1959, "CS 8163", "123", EditionType.STANDARD, List.of("Jazz"), DEFAULT_PRICE);
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(client.getRelease(1L)).thenReturn(release);
 			when(mapper.isVinyl(release)).thenReturn(true);
 			when(mapper.toImportItem(any(), any(), any(), any())).thenReturn(item);
@@ -186,7 +186,7 @@ class DiscogsReleaseEnrichProcessorTest {
 					List.of("LP"), "123", List.of("Jazz"), List.of());
 			CatalogImportItem item = new CatalogImportItem(1L, MASTER_ID, "Kind Of Blue", "Miles Davis", "Columbia",
 					"US", 1959, "CS 8163", "123", EditionType.STANDARD, List.of("Jazz"), DEFAULT_PRICE);
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(version)).thenReturn(true);
 			when(client.getRelease(1L)).thenReturn(release);
 			when(mapper.isVinyl(release)).thenReturn(true);
 			List<Genre> genres = List.of(genreOf("Jazz"));
@@ -216,7 +216,7 @@ class DiscogsReleaseEnrichProcessorTest {
 					"US", 1959, "CS 8163", "123", EditionType.STANDARD, List.of("Jazz"), DEFAULT_PRICE);
 			CatalogImportItem item2 = new CatalogImportItem(2L, MASTER_ID, "Kind Of Blue", "Miles Davis", "Columbia",
 					"US", 1959, "CS 8163", "124", EditionType.STANDARD, List.of("Jazz"), DEFAULT_PRICE);
-			when(mapper.isVinylFormat("Album")).thenReturn(true);
+			when(mapper.isVinylVersion(any())).thenReturn(true);
 			when(client.getRelease(1L)).thenReturn(release1);
 			when(client.getRelease(2L)).thenReturn(release2);
 			when(mapper.isVinyl(any())).thenReturn(true);

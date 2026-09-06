@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
+import com.groove.catalog.client.dto.DiscogsMasterVersionsResponse;
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.client.dto.DiscogsSearchResponse;
 import com.groove.catalog.dto.CatalogImportItem;
@@ -72,6 +73,18 @@ public class DiscogsReleaseMapper {
 
 	public boolean isVinylFormat(String versionFormat) {
 		return versionFormat != null && versionFormat.toLowerCase().contains(VINYL_FORMAT_NAME.toLowerCase());
+	}
+
+	/**
+	 * {@code GET /masters/{id}/versions} 의 {@code format} 필드에는 "LP, Album" 처럼 오고 "Vinyl" 이라는
+	 * 단어가 들어오지 않는다. 포맷 구분은 {@code major_formats} 로 판정하고, 값이 없을 때만 문자열 판정으로 폴백한다.
+	 */
+	public boolean isVinylVersion(DiscogsMasterVersionsResponse.Version version) {
+		List<String> majorFormats = version.majorFormats();
+		if (majorFormats == null || majorFormats.isEmpty()) {
+			return isVinylFormat(version.format());
+		}
+		return majorFormats.stream().anyMatch(VINYL_FORMAT_NAME::equalsIgnoreCase);
 	}
 
 	private Integer resolvePressingYear(DiscogsReleaseResponse release) {
