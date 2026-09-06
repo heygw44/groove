@@ -1,6 +1,7 @@
 package com.groove.global.init;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -20,10 +21,13 @@ import com.groove.global.init.SeedCatalog.AlbumSeed;
 import com.groove.inventory.service.StockService;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
+import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
+import com.groove.product.entity.EditionType;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
@@ -56,6 +60,9 @@ public class LocalDataInitializer implements ApplicationRunner {
 
 	private static final String IMAGE_BASE_URL = "https://picsum.photos/seed/";
 
+	private static final List<String> EXTRA_PRESSING_COUNTRIES = List.of("JP", "UK", "DE");
+	private static final List<String> EXTRA_PRESSING_COLORS = List.of("Clear", "Translucent Blue", "Red");
+
 	private static final List<String> REVIEW_TITLES = List.of(
 			"자주 듣게 되는 앨범", "믹싱이 훌륭합니다", "소장 가치 있음", "기대 이상이었어요", "재구매 의사 있습니다");
 
@@ -71,6 +78,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private final GenreRepository genreRepository;
 	private final LabelRepository labelRepository;
 	private final ArtistRepository artistRepository;
+	private final AlbumRepository albumRepository;
 	private final ProductRepository productRepository;
 	private final StockService stockService;
 	private final ReviewRepository reviewRepository;
@@ -114,12 +122,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private void seedCatalog() {
 		long existing = productRepository.count();
 		if (existing > 0) {
-			if (existing != SeedAlbums.ALBUMS.size()) {
-				log.warn("상품이 {}건 있어 시딩을 건너뛴다. 시드 정의는 {}건이다 — 반영하려면 docker compose down -v 로 DB 를 비워라",
-						existing, SeedAlbums.ALBUMS.size());
-			} else {
-				log.info("상품 데이터가 이미 있어 시딩을 건너뛴다");
-			}
+			log.info("상품 데이터가 이미 있어 시딩을 건너뛴다");
 			return;
 		}
 
@@ -131,23 +134,57 @@ public class LocalDataInitializer implements ApplicationRunner {
 				.map(seed -> Artist.create(seed.name(), seed.nameEn(), seed.description()))
 				.toList());
 
-		List<AlbumSeed> albums = SeedAlbums.ALBUMS;
-		for (int i = 0; i < albums.size(); i++) {
-			AlbumSeed seed = albums.get(i);
+		List<AlbumSeed> albumSeeds = SeedAlbums.ALBUMS;
+		int pressingCount = 0;
+		for (int i = 0; i < albumSeeds.size(); i++) {
+			AlbumSeed seed = albumSeeds.get(i);
 			Artist artist = artists.get(seed.artistIndex());
 			Label label = seed.labelIndex() != null ? labels.get(seed.labelIndex()) : null;
+			Integer originalReleaseYear = seed.releaseDate() == null ? null : seed.releaseDate().getYear();
 
-			Product product = Product.create(seed.title(), artist, label, seed.releaseDate(), seed.pressingInfo(),
-					seed.colorVariant(), BigDecimal.valueOf(seed.price()), seed.description());
-			seed.genreIndexes().forEach(genreIndex -> product.addGenre(genres.get(genreIndex)));
-			addImages(product, seed.title(), i % 2 == 0);
+			Album album = albumRepository.save(Album.create(seed.title(), artist, originalReleaseYear));
 
-			productRepository.save(product);
-			stockService.create(product, seed.stock());
+			int variantCount = pressingCountFor(i);
+			for (int variant = 0; variant < variantCount; variant++) {
+				Product product = createPressing(album, artist, label, seed, variant);
+				seed.genreIndexes().forEach(genreIndex -> product.addGenre(genres.get(genreIndex)));
+				addImages(product, seed.title() + variant, i % 2 == 0);
+
+				productRepository.save(product);
+				stockService.create(product, seed.stock());
+				pressingCount++;
+			}
 		}
 
-		log.info("더미 카탈로그를 시딩했다: 장르 {}개, 레이블 {}개, 아티스트 {}개, 앨범 {}개",
-				genres.size(), labels.size(), artists.size(), albums.size());
+		log.info("더미 카탈로그를 시딩했다: 장르 {}개, 레이블 {}개, 아티스트 {}개, 앨범 {}개, 프레싱 {}개",
+				genres.size(), labels.size(), artists.size(), albumSeeds.size(), pressingCount);
+	}
+
+	/** 일부 앨범(5의 배수 인덱스)은 국가/연도/컬러가 다른 프레싱을 2~3개 만들어 "다른 프레싱" 섹션을 채운다. */
+	int pressingCountFor(int albumIndex) {
+		if (albumIndex % 10 == 0) {
+			return 3;
+		}
+		if (albumIndex % 5 == 0) {
+			return 2;
+		}
+		return 1;
+	}
+
+	private Product createPressing(Album album, Artist artist, Label label, AlbumSeed seed, int variantIndex) {
+		if (variantIndex == 0) {
+			Integer pressingYear = seed.releaseDate() == null ? null : seed.releaseDate().getYear();
+			return Product.create(album, seed.title(), artist, label, seed.releaseDate(), seed.pressingInfo(),
+					seed.colorVariant(), "US", pressingYear, null, null, EditionType.STANDARD,
+					BigDecimal.valueOf(seed.price()), seed.description());
+		}
+		String country = EXTRA_PRESSING_COUNTRIES.get((variantIndex - 1) % EXTRA_PRESSING_COUNTRIES.size());
+		String colorVariant = EXTRA_PRESSING_COLORS.get((variantIndex - 1) % EXTRA_PRESSING_COLORS.size());
+		LocalDate releaseDate = seed.releaseDate() == null ? null : seed.releaseDate().plusYears(variantIndex);
+		String title = seed.title() + " (" + country + " Reissue)";
+		return Product.create(album, title, artist, label, releaseDate, seed.pressingInfo(), colorVariant, country,
+				releaseDate == null ? null : releaseDate.getYear(), null, null, EditionType.REISSUE,
+				BigDecimal.valueOf(seed.price()), seed.description());
 	}
 
 	private void seedReviews() {
