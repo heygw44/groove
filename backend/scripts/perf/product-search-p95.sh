@@ -2,6 +2,26 @@
 # GET /api/v1/products 의 p95 응답 시간을 측정한다.
 # docker-compose.yml 의 mysql 서비스에 시드 데이터를 멱등하게 채운 뒤, 8가지 조합을 각 20회 호출해 p95(ms)를 구한다.
 # 300ms 를 초과하면 실패(exit 1)한다.
+# 시드 데이터(Perf 장르/앨범/상품/아티스트/레이블)는 종료 시 cleanup 으로 지운다. 그대로 두면
+# GET /api/v1/genres 응답에 섞여 취향 설정 화면 칩에 노출된다.
+#
+# 이 cleanup 이 추가되기 전에 실행해 이미 오염된 DB 라면 아래 SQL 을 순서대로 직접 실행해 지운다
+# (product_genre/product_image → product → album → genre/artist/label 순, FK 때문에 역순으로 지우면 안 된다):
+#
+#   DELETE pg FROM product_genre pg
+#   LEFT JOIN product p ON p.id = pg.product_id
+#   LEFT JOIN genre g ON g.id = pg.genre_id
+#   WHERE p.title LIKE 'Perf Album %' OR g.name IN ('Perf Jazz', 'Perf Rock');
+#
+#   DELETE pi FROM product_image pi
+#   JOIN product p ON p.id = pi.product_id
+#   WHERE p.title LIKE 'Perf Album %';
+#
+#   DELETE FROM product WHERE title LIKE 'Perf Album %';
+#   DELETE FROM album WHERE title = 'Perf Album';
+#   DELETE FROM genre WHERE name IN ('Perf Jazz', 'Perf Rock');
+#   DELETE FROM artist WHERE name = 'Perf Artist';
+#   DELETE FROM label WHERE name = 'Perf Label';
 set -euo pipefail
 
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-groove-mysql}"
@@ -20,6 +40,32 @@ mysql_exec() {
 	docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" "${MYSQL_CONTAINER}" \
 		mysql -u"${MYSQL_USER}" "${MYSQL_DATABASE}" -N -B -e "$1"
 }
+
+# 정상 종료/실패/중단(Ctrl+C) 모든 경로에서 Perf 시드 데이터를 지운다. FK 때문에 자식 테이블부터 지워야 한다.
+cleanup() {
+	local exit_code=$?
+	rm -f "${TIMES_FILE:-}"
+	mysql_exec "
+	DELETE pg FROM product_genre pg
+	LEFT JOIN product p ON p.id = pg.product_id
+	LEFT JOIN genre g ON g.id = pg.genre_id
+	WHERE p.title LIKE 'Perf Album %' OR g.name IN ('Perf Jazz', 'Perf Rock');
+	" || true
+	mysql_exec "
+	DELETE pi FROM product_image pi
+	JOIN product p ON p.id = pi.product_id
+	WHERE p.title LIKE 'Perf Album %';
+	" || true
+	mysql_exec "DELETE FROM product WHERE title LIKE 'Perf Album %';" || true
+	mysql_exec "DELETE FROM album WHERE title = 'Perf Album';" || true
+	mysql_exec "DELETE FROM genre WHERE name IN ('Perf Jazz', 'Perf Rock');" || true
+	mysql_exec "DELETE FROM artist WHERE name = 'Perf Artist';" || true
+	mysql_exec "DELETE FROM label WHERE name = 'Perf Label';" || true
+	exit "${exit_code}"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "[1/3] 성능 측정용 시드 데이터 확인 및 적재"
 
@@ -145,7 +191,6 @@ for path in "${CASES[@]}"; do
 done
 
 TIMES_FILE=$(mktemp)
-trap 'rm -f "${TIMES_FILE}"' EXIT
 
 for path in "${CASES[@]}"; do
 	for _ in $(seq 1 "${REQUESTS_PER_CASE}"); do
