@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
 import { RemainingGauge } from '@/components/limited/RemainingGauge';
+import { TasteMatchBadge } from '@/components/limited/TasteMatchBadge';
 import type { LimitedDropSummary } from '@/types/limitedDrop';
 import { formatPrice } from '@/utils/formatPrice';
 import { formatDday, getDropPhase } from '@/utils/limitedDrop';
@@ -46,6 +47,7 @@ export function LimitedDropCard({ drop, nowMs }: LimitedDropCardProps) {
           </div>
         )}
         <DropStatusBadge status={drop.status} className="absolute left-2 top-2" />
+        <TasteMatchBadge tasteMatch={drop.tasteMatch} className="absolute right-2 top-2" />
       </div>
 
       <p className="mt-2.5 line-clamp-2 text-sm font-medium">{drop.product.title}</p>
