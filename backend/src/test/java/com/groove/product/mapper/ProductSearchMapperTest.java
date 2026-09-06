@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
@@ -25,7 +27,9 @@ import com.groove.order.entity.Order;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSortType;
 import com.groove.product.dto.ProductSummaryResponse;
+import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
+import com.groove.product.entity.EditionType;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
@@ -115,8 +119,28 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 	private static ProductSearchCondition condition(String keyword, Long artistId, List<Long> genreIds, Long labelId,
 			BigDecimal minPrice, BigDecimal maxPrice, ProductSortType sort, int page, int size, Long memberId) {
-		return new ProductSearchCondition(keyword, artistId, genreIds, labelId, minPrice, maxPrice, sort, page, size,
-				memberId);
+		return pressingCondition(keyword, artistId, genreIds, labelId, null, null, null, null, null, minPrice,
+				maxPrice, sort, page, size, memberId);
+	}
+
+	private static ProductSearchCondition pressingCondition(String keyword, Long artistId, List<Long> genreIds,
+			Long labelId, Long albumId, String country, Integer pressingYearFrom, Integer pressingYearTo,
+			EditionType editionType, BigDecimal minPrice, BigDecimal maxPrice, ProductSortType sort, int page,
+			int size, Long memberId) {
+		return new ProductSearchCondition(keyword, artistId, genreIds, labelId, albumId, country, pressingYearFrom,
+				pressingYearTo, editionType, extractBarcode(keyword), extractCatalogNoNormalized(keyword), minPrice,
+				maxPrice, sort, page, size, memberId);
+	}
+
+	private static String extractBarcode(String keyword) {
+		return keyword != null && keyword.matches("^\\d{8,14}$") ? keyword : null;
+	}
+
+	private static String extractCatalogNoNormalized(String keyword) {
+		if (keyword == null || keyword.matches("^\\d{8,14}$") || !keyword.matches("^[A-Za-z0-9-]+$")) {
+			return null;
+		}
+		return keyword.toUpperCase(Locale.ROOT).replaceAll("[\\s-]", "");
 	}
 
 	private static ProductSearchCondition scopedCondition(ProductSortType sort, int page, int size) {
@@ -558,6 +582,213 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			// then: 판매 수량이 같으면 리뷰 개수(3 > 1)가 더 많은 lowRatedManyReviews 가 앞선다
 			assertThat(result).extracting(ProductSummaryResponse::id)
 					.containsExactly(lowRatedManyReviews.getId(), highRatedFewReviews.getId(), noReviews.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("프레싱 조건 검색")
+	class PressingFilters {
+
+		private static final String BARCODE_US = "9990000000001";
+		private static final String BARCODE_JP = "9990000000002";
+
+		private Album album;
+		private Product usOriginal;
+		private Product jpRemaster;
+		private Product usLimited;
+
+		@BeforeEach
+		void setUpPressings() {
+			Artist artist = ArtistFixture.create("SMTP Artist");
+			em.persist(artist);
+			album = AlbumFixture.create(artist, "SMTP Multi Pressing Album");
+			em.persist(album);
+
+			usOriginal = ProductFixture.createPressing(album, artist, "SMTP US Original", new BigDecimal("40000"),
+					"US", 1959, "SMTP-US1", BARCODE_US, EditionType.STANDARD);
+			jpRemaster = ProductFixture.createPressing(album, artist, "SMTP JP Remaster", new BigDecimal("35000"),
+					"JP", 2022, "SMTP-JP1", BARCODE_JP, EditionType.REMASTER);
+			usLimited = ProductFixture.createPressing(album, artist, "SMTP US Limited", new BigDecimal("60000"),
+					"US", 1980, "SMTP-US2", null, EditionType.LIMITED);
+			em.persist(usOriginal);
+			em.persist(jpRemaster);
+			em.persist(usLimited);
+
+			// 제목에 바코드 숫자를 담아도 LIKE 로 걸리지 않는지 확인하기 위한 다른 상품
+			Product decoy = ProductFixture.createPressing(album, artist, "SMTP " + BARCODE_US + " Decoy",
+					new BigDecimal("10000"), "KR", 2000, "SMTP-DECOY", "9990000000099", EditionType.STANDARD);
+			em.persist(decoy);
+			em.flush();
+			em.clear();
+		}
+
+		@Test
+		@DisplayName("country 로 필터링하면 해당 국가의 프레싱만 반환한다")
+		void filtersByCountry() {
+			// given
+			ProductSearchCondition cond = pressingCondition(null, null, null, null, null, "JP", null, null, null,
+					null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).contains(jpRemaster.getId())
+					.doesNotContain(usOriginal.getId(), usLimited.getId());
+		}
+
+		@Test
+		@DisplayName("pressingYearFrom·pressingYearTo 로 필터링하면 연도 범위 내 프레싱만 반환한다")
+		void filtersByPressingYearRange() {
+			// given
+			ProductSearchCondition cond = pressingCondition(null, null, null, null, null, null, 1990, 2023, null,
+					null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).contains(jpRemaster.getId())
+					.doesNotContain(usOriginal.getId(), usLimited.getId());
+		}
+
+		@Test
+		@DisplayName("editionType 으로 필터링하면 해당 에디션의 프레싱만 반환한다")
+		void filtersByEditionType() {
+			// given
+			ProductSearchCondition cond = pressingCondition(null, null, null, null, null, null, null, null,
+					EditionType.LIMITED, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).contains(usLimited.getId())
+					.doesNotContain(usOriginal.getId(), jpRemaster.getId());
+		}
+
+		@Test
+		@DisplayName("albumId 로 필터링하면 같은 앨범의 프레싱만 반환한다")
+		void filtersByAlbumId() {
+			// given
+			ProductSearchCondition cond = pressingCondition(null, null, null, null, album.getId(), null, null, null,
+					null, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id)
+					.contains(usOriginal.getId(), jpRemaster.getId(), usLimited.getId());
+		}
+
+		@Test
+		@DisplayName("바코드 keyword 는 정확일치만 되고 제목에 같은 숫자가 있어도 LIKE 로 잡히지 않는다")
+		void matchesBarcodeExactlyWithoutLike() {
+			// given
+			ProductSearchCondition cond = pressingCondition(BARCODE_US, null, null, null, null, null, null, null,
+					null, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).containsExactly(usOriginal.getId());
+		}
+
+		@Test
+		@DisplayName("카탈로그 번호 keyword 는 제목/아티스트명 LIKE 와 OR 로 정확일치 검색된다")
+		void matchesCatalogNoExactlyOrWithLike() {
+			// given
+			ProductSearchCondition cond = pressingCondition("SMTP-US2", null, null, null, null, null, null, null,
+					null, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).containsExactly(usLimited.getId());
+		}
+
+		@Test
+		@DisplayName("countProducts() 는 searchProducts() 와 같은 개수를 반환한다")
+		void countMatchesSearchResultSize() {
+			// given
+			ProductSearchCondition cond = pressingCondition(null, null, null, null, album.getId(), null, null, null,
+					null, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			long count = productSearchMapper.countProducts(cond);
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(count).isEqualTo(result.size());
+		}
+	}
+
+	@Nested
+	@DisplayName("findAlbumPressings()")
+	class FindAlbumPressings {
+
+		private Album album;
+		private Product oldest;
+		private Product newest;
+		private Product noYear;
+		private Product hidden;
+
+		@BeforeEach
+		void setUpAlbumPressings() {
+			Artist artist = ArtistFixture.create("SMTF Artist");
+			em.persist(artist);
+			album = AlbumFixture.create(artist, "SMTF Album");
+			em.persist(album);
+
+			newest = ProductFixture.createPressing(album, artist, "SMTF Newest", new BigDecimal("30000"), "JP",
+					2022, "SMTF-JP", "9990000000011", EditionType.REMASTER);
+			oldest = ProductFixture.createPressing(album, artist, "SMTF Oldest", new BigDecimal("40000"), "US",
+					1959, "SMTF-US", "9990000000012", EditionType.STANDARD);
+			noYear = ProductFixture.createPressing(album, artist, "SMTF No Year", new BigDecimal("50000"), "KR",
+					null, "SMTF-KR", "9990000000013", EditionType.STANDARD);
+			hidden = ProductFixture.createPressing(album, artist, "SMTF Hidden", new BigDecimal("20000"), "US",
+					1970, "SMTF-HIDDEN", "9990000000014", EditionType.STANDARD);
+			hidden.hide();
+			em.persist(newest);
+			em.persist(oldest);
+			em.persist(noYear);
+			em.persist(hidden);
+			em.flush();
+			em.clear();
+		}
+
+		@Test
+		@DisplayName("HIDDEN 상품은 제외하고 pressingYear 오름차순, null 은 마지막으로 반환한다")
+		void returnsPressingsOrderedByYearWithNullsLast() {
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.findAlbumPressings(album.getId());
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id)
+					.containsExactly(oldest.getId(), newest.getId(), noYear.getId());
+		}
+
+		@Test
+		@DisplayName("wishlisted 는 항상 null 이다")
+		void alwaysReturnsNullWishlisted() {
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.findAlbumPressings(album.getId());
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::wishlisted).containsOnlyNulls();
+		}
+
+		@Test
+		@DisplayName("다른 앨범의 프레싱은 포함되지 않는다")
+		void excludesOtherAlbums() {
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.findAlbumPressings(album.getId());
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).doesNotContain(kindOfBlue.getId());
 		}
 	}
 }

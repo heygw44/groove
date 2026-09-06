@@ -46,6 +46,7 @@ import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductImage;
+import com.groove.product.entity.ProductStatus;
 import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
@@ -91,12 +92,16 @@ class ProductServiceTest {
 	@DisplayName("search()")
 	class Search {
 
+		private ProductSearchRequest searchRequest(String sort, Integer page, Integer size) {
+			return new ProductSearchRequest(null, null, null, null, null, null, null, null, null, null, null, sort,
+					page, size);
+		}
+
 		@Test
 		@DisplayName("page·size 가 없으면 기본값 0·20 으로 조회한다")
 		void appliesDefaultPageAndSize() {
 			// given
-			ProductSearchRequest request = new ProductSearchRequest(null, null, null, null, null, null, null, null,
-					null);
+			ProductSearchRequest request = searchRequest(null, null, null);
 			given(productSearchMapper.countProducts(any())).willReturn(0L);
 			ArgumentCaptor<ProductSearchCondition> captor = ArgumentCaptor.forClass(ProductSearchCondition.class);
 
@@ -114,8 +119,7 @@ class ProductServiceTest {
 		@DisplayName("정렬 값이 잘못되면 COMMON_INVALID_INPUT 예외를 던진다")
 		void throwsWhenSortInvalid() {
 			// given
-			ProductSearchRequest request = new ProductSearchRequest(null, null, null, null, null, null, "invalid",
-					null, null);
+			ProductSearchRequest request = searchRequest("invalid", null, null);
 
 			// when & then
 			assertThatThrownBy(() -> productService.search(request, null))
@@ -128,8 +132,7 @@ class ProductServiceTest {
 		@DisplayName("전체 개수가 0 이면 목록을 조회하지 않고 빈 결과를 반환한다")
 		void returnsEmptyContentWhenCountIsZero() {
 			// given
-			ProductSearchRequest request = new ProductSearchRequest(null, null, null, null, null, null, null, null,
-					null);
+			ProductSearchRequest request = searchRequest(null, null, null);
 			given(productSearchMapper.countProducts(any())).willReturn(0L);
 
 			// when
@@ -145,8 +148,7 @@ class ProductServiceTest {
 		@DisplayName("전체 개수가 있으면 목록을 조회하고 totalPages 를 계산한다")
 		void returnsPagedContentWhenCountIsPositive() {
 			// given
-			ProductSearchRequest request = new ProductSearchRequest(null, null, null, null, null, null, null, 0,
-					20);
+			ProductSearchRequest request = searchRequest(null, 0, 20);
 			given(productSearchMapper.countProducts(any())).willReturn(45L);
 			given(productSearchMapper.searchProducts(any())).willReturn(List.of());
 
@@ -163,8 +165,7 @@ class ProductServiceTest {
 		@DisplayName("memberId 를 검색 조건에 그대로 전달한다")
 		void passesMemberIdIntoCondition() {
 			// given
-			ProductSearchRequest request = new ProductSearchRequest(null, null, null, null, null, null, null, null,
-					null);
+			ProductSearchRequest request = searchRequest(null, null, null);
 			given(productSearchMapper.countProducts(any())).willReturn(0L);
 			ArgumentCaptor<ProductSearchCondition> captor = ArgumentCaptor.forClass(ProductSearchCondition.class);
 
@@ -209,6 +210,25 @@ class ProductServiceTest {
 					.containsExactly("Jazz");
 			assertThat(response.averageRating()).isNull();
 			assertThat(response.reviewCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("album.pressingCount 는 같은 앨범의 HIDDEN 제외 프레싱 개수다")
+		void returnsAlbumPressingCountFromRepository() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 17L);
+			given(productRepository.findDetailById(17L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(17L)).willReturn(List.of());
+			given(stockRepository.findByProductId(17L)).willReturn(Optional.empty());
+			given(productRepository.countByAlbumIdAndStatusNot(product.getAlbum().getId(), ProductStatus.HIDDEN))
+					.willReturn(3L);
+
+			// when
+			ProductDetailResponse response = productService.getDetail(17L, null);
+
+			// then
+			assertThat(response.album().pressingCount()).isEqualTo(3);
 		}
 
 		@Test
