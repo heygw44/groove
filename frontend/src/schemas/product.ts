@@ -1,10 +1,14 @@
 import { z } from 'zod';
 
+import type { CatalogReleaseDetail, EditionType } from '@/types/catalog';
 import type {
   AdminProductCreateRequest,
   AdminProductUpdateRequest,
+  Label,
   ProductFormSource,
 } from '@/types/product';
+
+const YEAR_REGEX = /^\d{4}$/;
 
 /*
  * 폼 값은 전부 문자열이다(셀렉트·인풋의 자연스러운 타입). 페이로드 변환은
@@ -29,14 +33,41 @@ export const productFormSchema = z.object({
   description: z.string().trim(),
   imageUrls: z.array(z.string().max(500)).max(10, '이미지는 10장까지 등록할 수 있습니다.'),
   initialStock: z.string(),
+  // 등록 폼에서만 쓴다(수정은 앨범 이동을 지원하지 않는다). 필수 여부는 productCreateSchema 가 검증한다.
+  albumMode: z.enum(['existing', 'new']),
+  albumId: z.string(),
+  newAlbumTitle: z.string().trim().max(200, '앨범 제목은 200자 이하여야 합니다.'),
+  newAlbumYear: z.string().regex(YEAR_REGEX, '발매 연도는 4자리 숫자로 입력해주세요.').or(z.literal('')),
+  country: z.string(),
+  pressingYear: z.string().regex(YEAR_REGEX, '프레싱 연도는 4자리 숫자로 입력해주세요.').or(z.literal('')),
+  catalogNo: z.string().trim().max(50, '카탈로그 번호는 50자 이하여야 합니다.'),
+  barcode: z.string().trim().max(20, '바코드는 20자 이하여야 합니다.'),
+  editionType: z.string(),
 });
 
-export const productCreateSchema = productFormSchema.extend({
-  initialStock: z
-    .string()
-    .min(1, '초기 재고를 입력해주세요.')
-    .regex(/^\d+$/, '0 이상의 정수로 입력해주세요.'),
-});
+export const productCreateSchema = productFormSchema
+  .extend({
+    initialStock: z
+      .string()
+      .min(1, '초기 재고를 입력해주세요.')
+      .regex(/^\d+$/, '0 이상의 정수로 입력해주세요.'),
+  })
+  .superRefine((values, ctx) => {
+    if (values.albumMode === 'existing' && !values.albumId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['albumId'],
+        message: '기존 앨범을 선택해주세요.',
+      });
+    }
+    if (values.albumMode === 'new' && !values.newAlbumTitle.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['newAlbumTitle'],
+        message: '새 앨범 제목을 입력해주세요.',
+      });
+    }
+  });
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;
 
@@ -52,6 +83,15 @@ export const EMPTY_PRODUCT_FORM_VALUES: ProductFormValues = {
   description: '',
   imageUrls: [],
   initialStock: '',
+  albumMode: 'existing',
+  albumId: '',
+  newAlbumTitle: '',
+  newAlbumYear: '',
+  country: '',
+  pressingYear: '',
+  catalogNo: '',
+  barcode: '',
+  editionType: '',
 };
 
 export const toFormValues = (product: ProductFormSource): ProductFormValues => ({
@@ -67,6 +107,16 @@ export const toFormValues = (product: ProductFormSource): ProductFormValues => (
   description: product.description ?? '',
   imageUrls: [...product.images].sort((a, b) => a.sortOrder - b.sortOrder).map((image) => image.url),
   initialStock: '',
+  // 수정 폼은 앨범 이동을 지원하지 않으므로 값을 쓰지 않는다.
+  albumMode: 'existing',
+  albumId: '',
+  newAlbumTitle: '',
+  newAlbumYear: '',
+  country: product.country ?? '',
+  pressingYear: product.pressingYear !== undefined ? String(product.pressingYear) : '',
+  catalogNo: product.catalogNo ?? '',
+  barcode: product.barcode ?? '',
+  editionType: product.editionType,
 });
 
 export const toCreatePayload = (values: ProductFormValues): AdminProductCreateRequest => ({
@@ -81,13 +131,27 @@ export const toCreatePayload = (values: ProductFormValues): AdminProductCreateRe
   description: values.description || undefined,
   imageUrls: values.imageUrls,
   initialStock: Number(values.initialStock),
+  // albumId/newAlbum 은 정확히 하나만 실어야 서버가 받아준다(둘 다 있거나 없으면 400).
+  albumId: values.albumMode === 'existing' && values.albumId ? Number(values.albumId) : undefined,
+  newAlbum:
+    values.albumMode === 'new' && values.newAlbumTitle.trim()
+      ? {
+          title: values.newAlbumTitle.trim(),
+          originalReleaseYear: values.newAlbumYear ? Number(values.newAlbumYear) : undefined,
+        }
+      : undefined,
+  country: values.country || undefined,
+  pressingYear: values.pressingYear ? Number(values.pressingYear) : undefined,
+  catalogNo: values.catalogNo || undefined,
+  barcode: values.barcode || undefined,
+  editionType: values.editionType ? (values.editionType as EditionType) : undefined,
 });
 
 /* genreIds/imageUrls 는 서버가 null=유지, []=전부 제거로 구분하므로 항상 배열을 전송한다. */
 export const toUpdatePayload = (values: ProductFormValues): AdminProductUpdateRequest => ({
   title: values.title,
   artistId: Number(values.artistId),
-  // 서버는 null=레이블 해제, 키 생략=유지로 구분하므로 값이 없으면 항상 null 을 보낸다.
+  // 서버는 null=해제, 키 생략=유지로 구분하므로 값이 없으면 항상 null 을 보낸다.
   labelId: values.labelId ? Number(values.labelId) : null,
   genreIds: values.genreIds,
   releaseDate: values.releaseDate || undefined,
@@ -96,7 +160,55 @@ export const toUpdatePayload = (values: ProductFormValues): AdminProductUpdateRe
   price: Number(values.price),
   description: values.description || undefined,
   imageUrls: values.imageUrls,
+  country: values.country || null,
+  pressingYear: values.pressingYear ? Number(values.pressingYear) : null,
+  catalogNo: values.catalogNo || null,
+  barcode: values.barcode || null,
+  editionType: values.editionType ? (values.editionType as EditionType) : undefined,
 });
+
+/**
+ * Discogs 릴리즈 상세를 등록 폼 프리필 값으로 옮긴다. 가격·재고·이미지는 채우지 않는다
+ * (Discogs 는 가격을 주지 않고, 이미지는 저장·업로드가 금지된 Restricted Data 다).
+ * artistName 은 id 가 없어 폼 필드가 아니다 - 호출부가 ArtistSearchSelect 검색창의
+ * 초기 키워드로 넘겨 관리자가 직접 확정하게 한다.
+ */
+export function toFormValuesFromRelease(
+  detail: CatalogReleaseDetail,
+  labels: Label[],
+): Pick<
+  ProductFormValues,
+  | 'title'
+  | 'labelId'
+  | 'country'
+  | 'pressingYear'
+  | 'catalogNo'
+  | 'barcode'
+  | 'editionType'
+  | 'description'
+  | 'albumMode'
+  | 'newAlbumTitle'
+  | 'newAlbumYear'
+> {
+  const matchedLabel = detail.labelName
+    ? labels.find((label) => label.name === detail.labelName)
+    : undefined;
+
+  return {
+    title: detail.title ?? '',
+    labelId: matchedLabel ? String(matchedLabel.id) : '',
+    country: detail.country ?? '',
+    pressingYear: detail.pressingYear !== undefined ? String(detail.pressingYear) : '',
+    catalogNo: detail.catalogNo ?? '',
+    barcode: detail.barcode ?? '',
+    editionType: detail.editionType,
+    description: detail.description ?? '',
+    // 관리자가 기존 앨범 검색으로 바꿀 수 있으니 기본은 새 앨범 쪽에 제목만 채운다.
+    albumMode: 'new',
+    newAlbumTitle: detail.title ?? '',
+    newAlbumYear: detail.pressingYear !== undefined ? String(detail.pressingYear) : '',
+  };
+}
 
 export const stockAdjustSchema = z.object({
   changeType: z.enum(['IN', 'OUT', 'ADJUST']),
