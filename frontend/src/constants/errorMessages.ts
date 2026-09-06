@@ -89,13 +89,11 @@ export const ERROR_CODE_FIELD: Record<string, string> = {
 /**
  * 서버 @AssertTrue 교차 검증은 메서드명 기반 프로퍼티명(rateWithinRange 등)으로
  * fieldErrors 에 담겨 오므로, 실제 폼 필드명으로 한 번 바꿔준다.
+ * 폼이 서버와 다른 이름을 쓰는 필드(artistIds → artists)도 여기서 맞춘다.
  */
 export const FIELD_ALIASES: Record<string, string> = {
   rateWithinRange: 'discountValue',
   singleSource: 'cartItemIds',
   closeAfterOpen: 'closeAt',
   artistIds: 'artists',
-  genreIdsDistinct: 'genreIds',
-  artistIdsDistinct: 'artists',
-  decadesDistinct: 'decades',
 };
