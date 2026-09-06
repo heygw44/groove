@@ -27,7 +27,7 @@ export interface AdminAuditLog {
   action: AdminAuditAction;
   targetType: AdminAuditTargetType;
   targetId: number;
-  detail: string;
+  detail?: string;
   ipAddress?: string;
   createdAt: string;
 }
