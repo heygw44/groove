@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # GET /api/v1/products 의 p95 응답 시간을 측정한다.
-# docker-compose.yml 의 mysql 서비스에 시드 데이터를 멱등하게 채운 뒤, 5가지 조합을 각 20회 호출해 p95(ms)를 구한다.
+# docker-compose.yml 의 mysql 서비스에 시드 데이터를 멱등하게 채운 뒤, 8가지 조합을 각 20회 호출해 p95(ms)를 구한다.
 # 300ms 를 초과하면 실패(exit 1)한다.
 set -euo pipefail
 
-MYSQL_SERVICE="${MYSQL_SERVICE:-mysql}"
+MYSQL_CONTAINER="${MYSQL_CONTAINER:-groove-mysql}"
 MYSQL_USER="${MYSQL_USER:-groove}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-groove1234}"
 MYSQL_DATABASE="${MYSQL_DATABASE:-groove}"
@@ -14,8 +14,10 @@ WARMUP_REQUESTS=5
 REQUESTS_PER_CASE=20
 P95_THRESHOLD_MS=300
 
+# container_name 이 고정이라 docker compose exec 대신 컨테이너 이름으로 직접 붙는다.
+# (compose 프로젝트 디렉터리가 여러 개라도, 예: 워크트리에서 실행해도 항상 같은 컨테이너를 찾는다.)
 mysql_exec() {
-	docker compose exec -T -e MYSQL_PWD="${MYSQL_PASSWORD}" "${MYSQL_SERVICE}" \
+	docker exec -i -e MYSQL_PWD="${MYSQL_PASSWORD}" "${MYSQL_CONTAINER}" \
 		mysql -u"${MYSQL_USER}" "${MYSQL_DATABASE}" -N -B -e "$1"
 }
 
@@ -47,6 +49,15 @@ PERF_LABEL_ID=$(mysql_exec "SELECT id FROM label WHERE name = 'Perf Label' LIMIT
 PERF_JAZZ_ID=$(mysql_exec "SELECT id FROM genre WHERE name = 'Perf Jazz' LIMIT 1;")
 PERF_ROCK_ID=$(mysql_exec "SELECT id FROM genre WHERE name = 'Perf Rock' LIMIT 1;")
 
+# product.album_id 가 NOT NULL 이라 프레싱을 넣기 전에 앨범을 먼저 멱등하게 만든다.
+mysql_exec "
+INSERT INTO album (title, artist_id, original_release_year, created_at, updated_at)
+SELECT 'Perf Album', ${PERF_ARTIST_ID}, 2020, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM album WHERE title = 'Perf Album' AND artist_id = ${PERF_ARTIST_ID});
+"
+PERF_ALBUM_ID=$(mysql_exec \
+	"SELECT id FROM album WHERE title = 'Perf Album' AND artist_id = ${PERF_ARTIST_ID} LIMIT 1;")
+
 EXISTING_COUNT=$(mysql_exec "SELECT COUNT(*) FROM product WHERE title LIKE 'Perf Album %';")
 
 if [ "${EXISTING_COUNT}" -lt "${SEED_PRODUCT_COUNT}" ]; then
@@ -59,14 +70,24 @@ if [ "${EXISTING_COUNT}" -lt "${SEED_PRODUCT_COUNT}" ]; then
 	VALUES_SQL=""
 	for i in $(seq "${START_INDEX}" "${END_INDEX}"); do
 		PRICE=$((20000 + (i * 991) % 50000))
+		COUNTRY=$([ $((i % 2)) -eq 0 ] && echo "US" || echo "KR")
+		PRESSING_YEAR=$((1990 + (i % 30)))
+		EDITION_TYPE=$([ $((i % 5)) -eq 0 ] && echo "LIMITED" || echo "STANDARD")
+		BARCODE=$(printf '%013d' $((8800000000000 + i)))
+		CATALOG_NO="PERF-${i}"
+		CATALOG_NO_NORMALIZED="PERF${i}"
 		if [ -n "${VALUES_SQL}" ]; then
 			VALUES_SQL="${VALUES_SQL},"
 		fi
-		VALUES_SQL="${VALUES_SQL}('Perf Album ${i}', ${PERF_ARTIST_ID}, ${PERF_LABEL_ID}, '180g', 'Black', ${PRICE}, 'ON_SALE', NOW(), NOW())"
+		VALUES_SQL="${VALUES_SQL}('Perf Album ${i}', ${PERF_ALBUM_ID}, ${PERF_ARTIST_ID}, ${PERF_LABEL_ID}, \
+'180g', 'Black', '${COUNTRY}', ${PRESSING_YEAR}, '${CATALOG_NO}', '${CATALOG_NO_NORMALIZED}', '${BARCODE}', \
+'${EDITION_TYPE}', ${PRICE}, 'ON_SALE', NOW(), NOW())"
 	done
 
 	mysql_exec "
-	INSERT INTO product (title, artist_id, label_id, pressing_info, color_variant, price, status, created_at, updated_at)
+	INSERT INTO product (title, album_id, artist_id, label_id, pressing_info, color_variant, country,
+		pressing_year, catalog_no, catalog_no_normalized, barcode, edition_type, price, status, created_at,
+		updated_at)
 	VALUES ${VALUES_SQL};
 	"
 
@@ -89,6 +110,8 @@ else
 	echo "  이미 ${EXISTING_COUNT}건 적재되어 있어 건너뜀"
 fi
 
+PERF_SAMPLE_BARCODE=$(printf '%013d' $((8800000000000 + 7)))
+
 echo "[2/3] 요청 실행 (워밍업 ${WARMUP_REQUESTS}회 + 케이스당 ${REQUESTS_PER_CASE}회)"
 
 CASES=(
@@ -97,6 +120,9 @@ CASES=(
 	"/api/v1/products?sort=priceAsc&minPrice=30000&maxPrice=50000"
 	"/api/v1/products?genreIds=${PERF_JAZZ_ID}&sort=rating"
 	"/api/v1/products?keyword=Album&sort=popular&page=1&size=10"
+	"/api/v1/products?keyword=${PERF_SAMPLE_BARCODE}"
+	"/api/v1/products?keyword=PERF-7"
+	"/api/v1/products?albumId=${PERF_ALBUM_ID}&country=US&pressingYearFrom=2000"
 )
 
 curl_once() {
