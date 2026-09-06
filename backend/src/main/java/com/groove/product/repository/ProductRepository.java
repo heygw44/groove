@@ -53,4 +53,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
 	@Query("SELECT p.discogsReleaseId FROM Product p WHERE p.discogsReleaseId IN :ids")
 	List<Long> findExistingDiscogsReleaseIds(@Param("ids") Collection<Long> ids);
+
+	boolean existsByDiscogsReleaseId(Long discogsReleaseId);
 }

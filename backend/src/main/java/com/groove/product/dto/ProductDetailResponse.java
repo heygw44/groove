@@ -42,7 +42,8 @@ public record ProductDetailResponse(
 		AlbumSummary album = new AlbumSummary(product.getAlbum().getId(), product.getAlbum().getTitle(),
 				product.getAlbum().getOriginalReleaseYear(), pressingCount);
 		PressingSummary pressing = new PressingSummary(product.getCountry(), product.getPressingYear(),
-				product.getCatalogNo(), product.getBarcode(), product.getEditionType());
+				product.getCatalogNo(), product.getBarcode(), product.getEditionType(),
+				product.getDiscogsReleaseId());
 		List<GenreSummary> genres = product.getProductGenres().stream()
 				.map(ProductGenre::getGenre)
 				.map(genre -> new GenreSummary(genre.getId(), genre.getName()))
@@ -77,7 +78,7 @@ public record ProductDetailResponse(
 	}
 
 	public record PressingSummary(String country, Integer pressingYear, String catalogNo, String barcode,
-			EditionType editionType) {
+			EditionType editionType, Long discogsReleaseId) {
 	}
 
 	public record ArtistSummary(Long id, String name) {

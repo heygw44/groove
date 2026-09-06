@@ -135,7 +135,8 @@ public class Product extends BaseTimeEntity {
 	@Builder(access = PRIVATE)
 	private Product(String title, Album album, Artist artist, Label label, LocalDate releaseDate,
 			String pressingInfo, String colorVariant, String country, Integer pressingYear, String catalogNo,
-			String barcode, EditionType editionType, BigDecimal price, ProductStatus status, String description) {
+			String barcode, EditionType editionType, BigDecimal price, ProductStatus status, String description,
+			Long discogsReleaseId) {
 		this.title = title;
 		this.album = album;
 		this.artist = artist;
@@ -152,6 +153,7 @@ public class Product extends BaseTimeEntity {
 		this.price = price;
 		this.status = status;
 		this.description = description;
+		this.discogsReleaseId = discogsReleaseId;
 		this.reviewCount = 0;
 	}
 
@@ -174,6 +176,26 @@ public class Product extends BaseTimeEntity {
 				.price(price)
 				.status(ProductStatus.ON_SALE)
 				.description(description)
+				.build();
+	}
+
+	// Discogs 적재 상품은 가격·재고 검수 전이라 HIDDEN 으로 만든다.
+	public static Product createImported(Album album, String title, Artist artist, Label label, String country,
+			Integer pressingYear, String catalogNo, String barcode, EditionType editionType, BigDecimal price,
+			Long discogsReleaseId) {
+		return Product.builder()
+				.title(title)
+				.album(album)
+				.artist(artist)
+				.label(label)
+				.country(country)
+				.pressingYear(pressingYear)
+				.catalogNo(catalogNo)
+				.barcode(barcode)
+				.editionType(editionType)
+				.price(price)
+				.status(ProductStatus.HIDDEN)
+				.discogsReleaseId(discogsReleaseId)
 				.build();
 	}
 

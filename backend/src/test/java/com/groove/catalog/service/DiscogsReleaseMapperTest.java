@@ -2,6 +2,7 @@ package com.groove.catalog.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -9,9 +10,12 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.client.dto.DiscogsSearchResponse;
+import com.groove.catalog.dto.CatalogImportItem;
 import com.groove.catalog.dto.CatalogLookupResponse;
 import com.groove.catalog.dto.CatalogReleaseDetailResponse;
 import com.groove.fixture.DiscogsFixture;
@@ -167,6 +171,136 @@ class DiscogsReleaseMapperTest {
 
 			// then
 			assertThat(detail.artistName()).isEqualTo("Nirvana");
+		}
+	}
+
+	@Nested
+	@DisplayName("isVinyl()")
+	class IsVinyl {
+
+		@ParameterizedTest
+		@ValueSource(strings = {"Vinyl", "vinyl", "VINYL"})
+		@DisplayName("formats 중 이름이 Vinyl 이면(대소문자 무시) true 를 반환한다")
+		void returnsTrueWhenAnyFormatNameIsVinyl(String formatName) {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(1L, "Title", List.of(), List.of(), "US",
+					2000, List.of(), List.of(), List.of(new DiscogsReleaseResponse.Format(formatName, List.of())),
+					List.of(), List.of(), null, null);
+
+			// when & then
+			assertThat(mapper.isVinyl(release)).isTrue();
+		}
+
+		@Test
+		@DisplayName("Vinyl 포맷이 없으면 false 를 반환한다")
+		void returnsFalseWhenNoVinylFormat() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(1L, "Title", List.of(), List.of(), "US",
+					2000, List.of(), List.of(), List.of(new DiscogsReleaseResponse.Format("CD", List.of())),
+					List.of(), List.of(), null, null);
+
+			// when & then
+			assertThat(mapper.isVinyl(release)).isFalse();
+		}
+
+		@Test
+		@DisplayName("formats 가 null 이면 false 를 반환한다")
+		void returnsFalseWhenFormatsIsNull() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(1L, "Title", List.of(), List.of(), "US",
+					2000, List.of(), List.of(), null, List.of(), List.of(), null, null);
+
+			// when & then
+			assertThat(mapper.isVinyl(release)).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("isVinylFormat()")
+	class IsVinylFormat {
+
+		@ParameterizedTest
+		@CsvSource({
+			"'Vinyl, LP, Album', true",
+			"vinyl, true",
+			"VINYL, true",
+			"CD, false",
+			"'', false"
+		})
+		@DisplayName("format 문자열에 vinyl 이 포함되면(대소문자 무시) true 를 반환한다")
+		void returnsTrueWhenFormatContainsVinyl(String versionFormat, boolean expected) {
+			// when & then
+			assertThat(mapper.isVinylFormat(versionFormat)).isEqualTo(expected);
+		}
+
+		@ParameterizedTest
+		@NullSource
+		@DisplayName("null 이면 false 를 반환한다")
+		void returnsFalseWhenNull(String versionFormat) {
+			// when & then
+			assertThat(mapper.isVinylFormat(versionFormat)).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("toImportItem()")
+	class ToImportItem {
+
+		@Test
+		@DisplayName("masterIdOverride 가 있으면 release 의 masterId 대신 override 를 사용한다")
+		void usesMasterIdOverrideWhenPresent() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", "Columbia", "CS 8163",
+					List.of("LP"), null, List.of(), List.of());
+
+			// when
+			CatalogImportItem item = mapper.toImportItem(release, List.of(), 999L, new BigDecimal("30000"));
+
+			// then
+			assertThat(item.discogsMasterId()).isEqualTo(999L);
+		}
+
+		@Test
+		@DisplayName("masterIdOverride 가 없으면 release 의 masterId 를 사용한다")
+		void usesReleaseMasterIdWhenOverrideIsNull() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", "Columbia", "CS 8163",
+					List.of("LP"), null, List.of(), List.of());
+
+			// when
+			CatalogImportItem item = mapper.toImportItem(release, List.of(), null, new BigDecimal("30000"));
+
+			// then
+			assertThat(item.discogsMasterId()).isEqualTo(release.masterId());
+		}
+
+		@Test
+		@DisplayName("알고 있는 장르명만 일치시켜 담는다")
+		void matchesOnlyKnownGenreNames() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", "Columbia", "CS 8163",
+					List.of("LP"), null, List.of("jazz", "Rock"), List.of());
+
+			// when
+			CatalogImportItem item = mapper.toImportItem(release, List.of("Jazz"), null, new BigDecimal("30000"));
+
+			// then
+			assertThat(item.genreNames()).containsExactly("Jazz");
+		}
+
+		@Test
+		@DisplayName("price 를 그대로 전달한다")
+		void passesThroughPrice() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", "Columbia", "CS 8163",
+					List.of("LP"), null, List.of(), List.of());
+			BigDecimal price = new BigDecimal("45000");
+
+			// when
+			CatalogImportItem item = mapper.toImportItem(release, List.of(), null, price);
+
+			// then
+			assertThat(item.price()).isEqualTo(price);
 		}
 	}
 }

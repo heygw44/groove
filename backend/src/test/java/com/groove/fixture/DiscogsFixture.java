@@ -2,6 +2,7 @@ package com.groove.fixture;
 
 import java.util.List;
 
+import com.groove.catalog.client.dto.DiscogsMasterVersionsResponse;
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.client.dto.DiscogsSearchResponse;
 
@@ -67,6 +68,18 @@ public final class DiscogsFixture {
 	public static DiscogsSearchResponse.Result searchResult(long id, String title, String year) {
 		return new DiscogsSearchResponse.Result(id, "release", title, year, "US", "CS 8163", List.of("Columbia"),
 				List.of("Vinyl", "LP"), "https://i.discogs.com/thumb.jpeg", 21247L);
+	}
+
+	public static DiscogsMasterVersionsResponse.Version version(long id, String format) {
+		return new DiscogsMasterVersionsResponse.Version(id, "Test Release", "US", "1959", "Columbia", "CS 8163",
+				format, "https://i.discogs.com/version.jpeg");
+	}
+
+	public static DiscogsMasterVersionsResponse masterVersionsResponse(int page, int pages,
+			List<DiscogsMasterVersionsResponse.Version> versions) {
+		DiscogsSearchResponse.Pagination pagination = new DiscogsSearchResponse.Pagination(page + 1, pages, 20,
+				versions.size());
+		return new DiscogsMasterVersionsResponse(pagination, versions);
 	}
 
 	public static DiscogsReleaseResponse releaseResponse(String artistName, String labelName, String catalogNo,
