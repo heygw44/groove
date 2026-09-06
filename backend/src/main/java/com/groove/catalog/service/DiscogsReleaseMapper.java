@@ -1,5 +1,6 @@
 package com.groove.catalog.service;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.client.dto.DiscogsSearchResponse;
+import com.groove.catalog.dto.CatalogImportItem;
 import com.groove.catalog.dto.CatalogLookupResponse;
 import com.groove.catalog.dto.CatalogReleaseDetailResponse;
 import com.groove.product.entity.EditionType;
@@ -28,6 +30,7 @@ public class DiscogsReleaseMapper {
 	private static final String DESC_REMASTERED = "remastered";
 	private static final String DESC_REISSUE = "reissue";
 	private static final String DESC_REPRESS = "repress";
+	private static final String VINYL_FORMAT_NAME = "Vinyl";
 
 	public CatalogLookupResponse toLookup(DiscogsSearchResponse.Result result, boolean alreadyImported) {
 		String[] artistAndTitle = splitArtistAndTitle(result.title());
@@ -37,18 +40,42 @@ public class DiscogsReleaseMapper {
 	}
 
 	public CatalogReleaseDetailResponse toDetail(DiscogsReleaseResponse release, Collection<String> knownGenreNames) {
-		String artistName = firstArtistName(release.artists());
-		String labelName = firstLabelName(release.labels());
-		String catalogNo = firstCatalogNo(release.labels());
-		String barcode = firstBarcode(release.identifiers());
-		EditionType editionType = resolveEditionType(release.formats());
-		List<String> genreNames = matchGenreNames(release.genres(), release.styles(), knownGenreNames);
 		String imageUrl = resolveImageUrl(release.images());
-		Integer pressingYear = release.year() == null || release.year() <= 0 ? null : release.year();
 
-		return new CatalogReleaseDetailResponse(release.id(), release.masterId(), release.title(), artistName,
-				labelName, release.country(), pressingYear, catalogNo, barcode, editionType, genreNames, imageUrl,
+		return new CatalogReleaseDetailResponse(release.id(), release.masterId(), release.title(),
+				firstArtistName(release.artists()), firstLabelName(release.labels()), release.country(),
+				resolvePressingYear(release), firstCatalogNo(release.labels()), firstBarcode(release.identifiers()),
+				resolveEditionType(release.formats()),
+				matchGenreNames(release.genres(), release.styles(), knownGenreNames), imageUrl,
 				blankToNull(release.notes()));
+	}
+
+	public CatalogImportItem toImportItem(DiscogsReleaseResponse release, Collection<String> knownGenreNames,
+			Long masterIdOverride, BigDecimal price) {
+		Long discogsMasterId = masterIdOverride != null ? masterIdOverride : release.masterId();
+
+		return new CatalogImportItem(release.id(), discogsMasterId, release.title(),
+				firstArtistName(release.artists()), firstLabelName(release.labels()), release.country(),
+				resolvePressingYear(release), firstCatalogNo(release.labels()), firstBarcode(release.identifiers()),
+				resolveEditionType(release.formats()),
+				matchGenreNames(release.genres(), release.styles(), knownGenreNames), price);
+	}
+
+	public boolean isVinyl(DiscogsReleaseResponse release) {
+		if (release.formats() == null) {
+			return false;
+		}
+		return release.formats().stream()
+				.map(DiscogsReleaseResponse.Format::name)
+				.anyMatch(name -> VINYL_FORMAT_NAME.equalsIgnoreCase(name));
+	}
+
+	public boolean isVinylFormat(String versionFormat) {
+		return versionFormat != null && versionFormat.toLowerCase().contains(VINYL_FORMAT_NAME.toLowerCase());
+	}
+
+	private Integer resolvePressingYear(DiscogsReleaseResponse release) {
+		return release.year() == null || release.year() <= 0 ? null : release.year();
 	}
 
 	private String[] splitArtistAndTitle(String title) {

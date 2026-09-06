@@ -53,6 +53,9 @@ public enum ErrorCode {
 	CATALOG_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "Discogs 조회 중 오류가 발생했습니다."),
 	CATALOG_RELEASE_NOT_FOUND(HttpStatus.NOT_FOUND, "Discogs 릴리즈를 찾을 수 없습니다."),
 	CATALOG_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Discogs 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."),
+	CATALOG_ALREADY_IMPORTED(HttpStatus.CONFLICT, "이미 등록된 릴리즈입니다."),
+	CATALOG_IMPORT_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "적재 작업을 찾을 수 없습니다."),
+	CATALOG_IMPORT_JOB_RUNNING(HttpStatus.CONFLICT, "같은 마스터 릴리즈의 적재 작업이 이미 실행 중입니다."),
 
 	// ===== STOCK =====
 	STOCK_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
