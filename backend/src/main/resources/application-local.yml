@@ -26,6 +26,9 @@ jwt:
 toss:
   secret-key: ${TOSS_SECRET_KEY:test_sk_local_dev_only}
 
+discogs:
+  token: ${DISCOGS_TOKEN:discogs_token_local_dev_only}
+
 logging:
   level:
     com.groove: DEBUG

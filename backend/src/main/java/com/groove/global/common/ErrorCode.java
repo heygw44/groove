@@ -49,6 +49,11 @@ public enum ErrorCode {
 	GENRE_NOT_FOUND(HttpStatus.NOT_FOUND, "장르를 찾을 수 없습니다."),
 	ALBUM_NOT_FOUND(HttpStatus.NOT_FOUND, "앨범을 찾을 수 없습니다."),
 
+	// ===== CATALOG =====
+	CATALOG_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "Discogs 조회 중 오류가 발생했습니다."),
+	CATALOG_RELEASE_NOT_FOUND(HttpStatus.NOT_FOUND, "Discogs 릴리즈를 찾을 수 없습니다."),
+	CATALOG_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Discogs 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."),
+
 	// ===== STOCK =====
 	STOCK_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
 	STOCK_INSUFFICIENT(HttpStatus.CONFLICT, "재고가 부족합니다."),

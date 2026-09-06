@@ -1,5 +1,7 @@
 package com.groove.product.repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.domain.Page;
@@ -42,4 +44,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 			WHERE p.id = :productId
 			""", nativeQuery = true)
 	void refreshReviewStats(@Param("productId") Long productId);
+
+	@Query("SELECT p.discogsReleaseId FROM Product p WHERE p.discogsReleaseId IN :ids")
+	List<Long> findExistingDiscogsReleaseIds(@Param("ids") Collection<Long> ids);
 }
