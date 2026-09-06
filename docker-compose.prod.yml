@@ -66,6 +66,7 @@ services:
       FILE_UPLOAD_PATH: ${FILE_UPLOAD_PATH}
       FILE_BASE_URL: ${FILE_BASE_URL}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      DISCOGS_TOKEN: ${DISCOGS_TOKEN}
       LIMITED_REDIS_ENABLED: "true"
     volumes:
       - /opt/groove/uploads:/app/uploads
