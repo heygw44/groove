@@ -21,6 +21,7 @@ import {
 } from '@/schemas/recommend';
 import type { TasteProfile } from '@/types/recommend';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
+import { getArrayFieldErrorMessage } from '@/utils/formErrors';
 
 interface TasteProfileFormProps {
   profile?: TasteProfile | null;
@@ -88,7 +89,7 @@ export function TasteProfileForm({ profile, onSaved, submitLabel = '저장' }: T
         />
       </Field>
 
-      <Field htmlFor="taste-artist" label="아티스트" error={errors.artists?.message}>
+      <Field htmlFor="taste-artist" label="아티스트" error={getArrayFieldErrorMessage(errors.artists)}>
         <Controller
           control={control}
           name="artists"
