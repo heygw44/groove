@@ -9,7 +9,9 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.limited.config.LimitedProperties;
 import com.groove.limited.dto.LimitedPurchaseResponse;
+import com.groove.limited.entity.LimitedAttemptResult;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.service.LimitedDropRedisService.ReserveResult;
 
@@ -33,12 +35,19 @@ public class LimitedPurchaseService {
 	public LimitedPurchaseResponse purchase(Long dropId, Long memberId, Long addressId) {
 		LimitedDrop drop = limitedDropRepository.findById(dropId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.LIMITED_DROP_NOT_FOUND));
-		drop.validatePurchasable(LocalDateTime.now(clock));
-
-		if (!limitedProperties.redisEnabled()) {
-			return limitedPurchaseWriter.write(dropId, memberId, addressId);
+		try {
+			drop.validatePurchasable(LocalDateTime.now(clock));
+			if (!limitedProperties.redisEnabled()) {
+				return limitedPurchaseWriter.write(dropId, memberId, addressId);
+			}
+			return reserveAndWrite(dropId, memberId, addressId);
+		} catch (BusinessException e) {
+			recordAttempt(drop, e.getErrorCode());
+			throw e;
 		}
+	}
 
+	private LimitedPurchaseResponse reserveAndWrite(Long dropId, Long memberId, Long addressId) {
 		ReserveResult reserveResult = limitedDropRedisService.reserve(dropId, memberId);
 		validateReserveResult(reserveResult);
 
@@ -58,5 +67,14 @@ public class LimitedPurchaseService {
 			case SOLD_OUT -> throw new BusinessException(ErrorCode.LIMITED_SOLD_OUT);
 			case NOT_INITIALIZED -> throw new BusinessException(ErrorCode.LIMITED_NOT_OPEN);
 		}
+	}
+
+	/** CLOSED 이후에는 기록하지 않는다. 마감 flush 로 이미 지운 Redis 키가 뒤늦은 요청으로 되살아나 고아 키가 되는 것을 막는다. */
+	private void recordAttempt(LimitedDrop drop, ErrorCode errorCode) {
+		if (!limitedProperties.redisEnabled() || drop.getStatus() == LimitedDropStatus.CLOSED) {
+			return;
+		}
+		LimitedAttemptResult.from(errorCode)
+				.ifPresent(result -> limitedDropRedisService.recordAttempt(drop.getId(), result));
 	}
 }

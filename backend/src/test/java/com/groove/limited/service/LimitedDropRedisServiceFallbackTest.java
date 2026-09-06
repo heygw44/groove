@@ -1,6 +1,8 @@
 package com.groove.limited.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 
@@ -15,8 +17,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+
+import com.groove.limited.entity.LimitedAttemptResult;
 
 /** Redis 장애·값 파싱 실패 시 DB 폴백을 위해 예외를 삼키고 empty 를 돌려주는지 검증한다. */
 @ExtendWith(MockitoExtension.class)
@@ -27,6 +32,9 @@ class LimitedDropRedisServiceFallbackTest {
 
 	@Mock
 	private ValueOperations<String, String> valueOperations;
+
+	@Mock
+	private HashOperations<String, String, String> hashOperations;
 
 	private LimitedDropRedisService limitedDropRedisService;
 
@@ -97,6 +105,65 @@ class LimitedDropRedisServiceFallbackTest {
 
 			// then
 			assertThat(result).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("recordAttempt()")
+	class RecordAttempt {
+
+		@Test
+		@DisplayName("Redis 연결 실패면 예외를 삼키고 전파하지 않는다")
+		void swallowsRedisException() {
+			// given
+			limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null);
+			given(redisTemplate.<String, String>opsForHash()).willReturn(hashOperations);
+			willThrow(new RedisConnectionFailureException("connection refused"))
+					.given(hashOperations).increment("limited:attempts:1", "SOLD_OUT", 1L);
+
+			// when & then
+			assertThatCode(() -> limitedDropRedisService.recordAttempt(1L, LimitedAttemptResult.SOLD_OUT))
+					.doesNotThrowAnyException();
+		}
+	}
+
+	@Nested
+	@DisplayName("getAttempts()")
+	class GetAttempts {
+
+		@Test
+		@DisplayName("Redis 연결 실패면 빈 맵을 반환한다")
+		void returnsEmptyMapWhenRedisConnectionFails() {
+			// given
+			limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null);
+			given(redisTemplate.<String, String>opsForHash()).willReturn(hashOperations);
+			willThrow(new RedisConnectionFailureException("connection refused"))
+					.given(hashOperations).entries("limited:attempts:1");
+
+			// when
+			Map<LimitedAttemptResult, Long> result = limitedDropRedisService.getAttempts(1L);
+
+			// then
+			assertThat(result).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("getAttemptsForFlush()")
+	class GetAttemptsForFlush {
+
+		@Test
+		@DisplayName("Redis 연결 실패면 예외를 삼키지 않고 그대로 던진다")
+		void propagatesRedisException() {
+			// given
+			limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null);
+			given(redisTemplate.<String, String>opsForHash()).willReturn(hashOperations);
+			willThrow(new RedisConnectionFailureException("connection refused"))
+					.given(hashOperations).entries("limited:attempts:1");
+
+			// when & then
+			assertThatThrownBy(() -> limitedDropRedisService.getAttemptsForFlush(1L))
+					.isInstanceOf(RedisConnectionFailureException.class);
 		}
 	}
 }
