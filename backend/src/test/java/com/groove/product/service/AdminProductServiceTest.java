@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +22,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openapitools.jackson.nullable.JsonNullable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
@@ -31,10 +38,12 @@ import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.inventory.service.StockService;
 import com.groove.product.dto.AdminProductResponse;
+import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
 import com.groove.product.dto.ProductUpdateRequest;
 import com.groove.product.entity.Album;
@@ -490,6 +499,47 @@ class AdminProductServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("getList()")
+	class GetList {
+
+		@Test
+		@DisplayName("albumId 를 지정하면 그대로 리포지토리에 전달한다")
+		void passesAlbumIdIntoRepository() {
+			// given
+			Long albumId = 5L;
+			Pageable pageable = PageRequest.of(0, 20);
+			AdminProductSummaryResponse summary = new AdminProductSummaryResponse(PRODUCT_ID, "Kind of Blue",
+					"Miles Davis", null, new BigDecimal("45000.00"), ProductStatus.ON_SALE, null, 10, null);
+			Page<AdminProductSummaryResponse> page = new PageImpl<>(List.of(summary), pageable, 1);
+			given(productRepository.findAdminSummaries(eq(ProductStatus.ON_SALE), eq(albumId), eq(pageable)))
+					.willReturn(page);
+
+			// when
+			PageResponse<AdminProductSummaryResponse> result = adminProductService.getList(ProductStatus.ON_SALE,
+					albumId, pageable);
+
+			// then
+			assertThat(result.content()).containsExactly(summary);
+			verify(productRepository).findAdminSummaries(ProductStatus.ON_SALE, albumId, pageable);
+		}
+
+		@Test
+		@DisplayName("albumId 가 없으면 null 로 리포지토리에 전달한다")
+		void passesNullAlbumIdWhenAbsent() {
+			// given
+			Pageable pageable = PageRequest.of(0, 20);
+			given(productRepository.findAdminSummaries(isNull(), isNull(), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			// when
+			adminProductService.getList(null, null, pageable);
+
+			// then
+			verify(productRepository).findAdminSummaries(null, null, pageable);
 		}
 	}
 }

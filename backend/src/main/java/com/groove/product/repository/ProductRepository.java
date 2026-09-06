@@ -30,9 +30,15 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 				s.quantity, p.createdAt)
 			FROM Product p JOIN p.artist a LEFT JOIN p.label l LEFT JOIN Stock s ON s.product = p
 			WHERE (:status IS NULL OR p.status = :status)
+			AND (:albumId IS NULL OR p.album.id = :albumId)
 			""",
-			countQuery = "SELECT COUNT(p) FROM Product p WHERE (:status IS NULL OR p.status = :status)")
-	Page<AdminProductSummaryResponse> findAdminSummaries(@Param("status") ProductStatus status, Pageable pageable);
+			countQuery = """
+			SELECT COUNT(p) FROM Product p
+			WHERE (:status IS NULL OR p.status = :status)
+			AND (:albumId IS NULL OR p.album.id = :albumId)
+			""")
+	Page<AdminProductSummaryResponse> findAdminSummaries(@Param("status") ProductStatus status,
+			@Param("albumId") Long albumId, Pageable pageable);
 
 	// 동시에 여러 리뷰가 생성/삭제돼도 계산식 UPDATE 라 최종적으로는 항상 실제 집계와 같은 값에 수렴한다.
 	// flushAutomatically 로 리뷰 INSERT/DELETE 가 이 UPDATE 이전에 DB 에 반영된다.

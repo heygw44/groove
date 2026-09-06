@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -147,7 +146,7 @@ public class Product extends BaseTimeEntity {
 		this.country = country;
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
-		this.catalogNoNormalized = normalizeCatalogNo(catalogNo);
+		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
 		this.barcode = barcode;
 		this.editionType = editionType == null ? EditionType.STANDARD : editionType;
 		this.price = price;
@@ -176,13 +175,6 @@ public class Product extends BaseTimeEntity {
 				.status(ProductStatus.ON_SALE)
 				.description(description)
 				.build();
-	}
-
-	private static String normalizeCatalogNo(String catalogNo) {
-		if (catalogNo == null) {
-			return null;
-		}
-		return catalogNo.toUpperCase(Locale.ROOT).replaceAll("[\\s-]", "");
 	}
 
 	public void hide() {
@@ -225,7 +217,7 @@ public class Product extends BaseTimeEntity {
 		this.country = country;
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
-		this.catalogNoNormalized = normalizeCatalogNo(catalogNo);
+		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
 		this.barcode = barcode;
 		this.editionType = editionType;
 		this.price = price;
