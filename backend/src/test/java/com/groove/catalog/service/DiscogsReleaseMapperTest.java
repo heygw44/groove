@@ -161,6 +161,34 @@ class DiscogsReleaseMapperTest {
 		}
 
 		@Test
+		@DisplayName("공백/하이픈 표기가 달라도 정규화해 같은 장르로 매칭한다")
+		void matchesGenresIgnoringWhitespaceAndHyphenDifferences() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Nas", "Columbia", "CS 8163",
+					List.of("LP"), null, List.of("Hip Hop"), List.of());
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of("Hip-Hop"));
+
+			// then
+			assertThat(detail.genreNames()).containsExactly("Hip-Hop");
+		}
+
+		@Test
+		@DisplayName("Stage & Screen 은 OST 로, Funk / Soul 은 R&B 로 별칭 매칭한다")
+		void matchesGenreAliases() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Joe Hisaishi", "Studio Ghibli Records",
+					"CS 8163", List.of("LP"), null, List.of("Stage & Screen", "Funk / Soul"), List.of());
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of("OST", "R&B"));
+
+			// then
+			assertThat(detail.genreNames()).containsExactlyInAnyOrder("OST", "R&B");
+		}
+
+		@Test
 		@DisplayName("아티스트 이름의 Discogs 중복 접미사 (n) 을 제거한다")
 		void stripsDiscogsDuplicateSuffixFromArtistName() {
 			// given
