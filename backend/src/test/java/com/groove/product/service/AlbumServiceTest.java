@@ -2,7 +2,10 @@ package com.groove.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -15,11 +18,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
+import com.groove.product.dto.AdminAlbumSummaryResponse;
 import com.groove.product.dto.AlbumDetailResponse;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.Album;
@@ -82,6 +89,48 @@ class AlbumServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ALBUM_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("getAdminList()")
+	class GetAdminList {
+
+		@Test
+		@DisplayName("keyword 가 있으면 앞뒤 공백을 제거해 리포지토리에 전달한다")
+		void trimsKeywordBeforeSearching() {
+			// given
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist, "Kind Of Blue"), 5L);
+			PageRequest pageable = PageRequest.of(0, 20);
+			given(albumRepository.searchByKeyword(eq("Kind"), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(album), pageable, 1));
+
+			// when
+			PageResponse<AdminAlbumSummaryResponse> response = albumService.getAdminList("  Kind  ", pageable);
+
+			// then
+			assertThat(response.content()).hasSize(1);
+			assertThat(response.content().get(0).id()).isEqualTo(5L);
+			assertThat(response.content().get(0).title()).isEqualTo("Kind Of Blue");
+			assertThat(response.content().get(0).artistName()).isEqualTo("Miles Davis");
+			verify(albumRepository).searchByKeyword(eq("Kind"), eq(pageable));
+		}
+
+		@Test
+		@DisplayName("keyword 가 공백뿐이면 null 로 전달해 전체를 조회한다")
+		void passesNullWhenKeywordIsBlank() {
+			// given
+			PageRequest pageable = PageRequest.of(0, 20);
+			given(albumRepository.searchByKeyword(isNull(), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			// when
+			PageResponse<AdminAlbumSummaryResponse> response = albumService.getAdminList("   ", pageable);
+
+			// then
+			assertThat(response.content()).isEmpty();
+			verify(albumRepository).searchByKeyword(isNull(), eq(pageable));
 		}
 	}
 }

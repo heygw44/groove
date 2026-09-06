@@ -82,7 +82,7 @@ public class Product extends BaseTimeEntity {
 	@Column(name = "color_variant", length = 50)
 	private String colorVariant;
 
-	@Column(length = 2)
+	@Column(length = 50)
 	private String country;
 
 	@Column(name = "pressing_year")

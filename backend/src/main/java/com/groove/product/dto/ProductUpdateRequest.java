@@ -44,7 +44,7 @@ public record ProductUpdateRequest(
 		List<@NotBlank(message = "이미지 URL은 비어 있을 수 없습니다.")
 		@Size(max = 500, message = "이미지 URL은 500자 이하여야 합니다.") String> imageUrls,
 
-		JsonNullable<@Size(min = 2, max = 2, message = "국가 코드는 2자여야 합니다.") String> country,
+		JsonNullable<@Size(max = 50, message = "국가는 50자 이하여야 합니다.") String> country,
 
 		JsonNullable<Integer> pressingYear,
 
