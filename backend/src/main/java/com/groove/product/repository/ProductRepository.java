@@ -23,6 +23,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
 	long countByAlbumIdAndStatusNot(Long albumId, ProductStatus status);
 
+	boolean existsByAlbumId(Long albumId);
+
 	@Query(value = """
 			SELECT new com.groove.product.dto.AdminProductSummaryResponse(
 				p.id, p.title, a.name, l.name, p.price, p.status,

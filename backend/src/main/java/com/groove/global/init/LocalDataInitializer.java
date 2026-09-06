@@ -39,7 +39,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 더미 데이터 시더. 상품 개수/회원 이메일/장르 이름을 기준으로 멱등하게 동작한다.
+ * 더미 데이터 시더. 회원은 이메일, 장르/레이블/아티스트는 이름, 앨범은 (title, artistId) 기준으로 파트별 멱등하게 동작한다.
  * local 외에 seed 프로파일에서도 뜬다 — 추천 품질 측정 테스트가 같은 시드를 재사용한다.
  */
 @Slf4j
@@ -119,20 +119,11 @@ public class LocalDataInitializer implements ApplicationRunner {
 		log.info("더미 회원 계정을 생성했다: {}", email);
 	}
 
+	/** 레이블/아티스트는 이름, 앨범은 (title, artistId) 로 find-or-create 해 파트별로 멱등하게 동작한다. */
 	private void seedCatalog() {
-		long existing = productRepository.count();
-		if (existing > 0) {
-			log.info("상품 데이터가 이미 있어 시딩을 건너뛴다");
-			return;
-		}
-
 		List<Genre> genres = seedGenres();
-		List<Label> labels = labelRepository.saveAll(SeedCatalog.LABELS.stream()
-				.map(seed -> Label.create(seed.name(), seed.country()))
-				.toList());
-		List<Artist> artists = artistRepository.saveAll(SeedCatalog.ARTISTS.stream()
-				.map(seed -> Artist.create(seed.name(), seed.nameEn(), seed.description()))
-				.toList());
+		List<Label> labels = seedLabels();
+		List<Artist> artists = seedArtists();
 
 		List<AlbumSeed> albumSeeds = SeedAlbums.ALBUMS;
 		int pressingCount = 0;
@@ -142,7 +133,11 @@ public class LocalDataInitializer implements ApplicationRunner {
 			Label label = seed.labelIndex() != null ? labels.get(seed.labelIndex()) : null;
 			Integer originalReleaseYear = seed.releaseDate() == null ? null : seed.releaseDate().getYear();
 
-			Album album = albumRepository.save(Album.create(seed.title(), artist, originalReleaseYear));
+			Album album = albumRepository.findFirstByTitleAndArtistIdOrderByIdAsc(seed.title(), artist.getId())
+					.orElseGet(() -> albumRepository.save(Album.create(seed.title(), artist, originalReleaseYear)));
+			if (productRepository.existsByAlbumId(album.getId())) {
+				continue;
+			}
 
 			int variantCount = pressingCountFor(i);
 			for (int variant = 0; variant < variantCount; variant++) {
@@ -156,8 +151,23 @@ public class LocalDataInitializer implements ApplicationRunner {
 			}
 		}
 
-		log.info("더미 카탈로그를 시딩했다: 장르 {}개, 레이블 {}개, 아티스트 {}개, 앨범 {}개, 프레싱 {}개",
+		log.info("더미 카탈로그를 시딩했다: 장르 {}개, 레이블 {}개, 아티스트 {}개, 앨범 {}개, 신규 프레싱 {}개",
 				genres.size(), labels.size(), artists.size(), albumSeeds.size(), pressingCount);
+	}
+
+	private List<Label> seedLabels() {
+		return SeedCatalog.LABELS.stream()
+				.map(seed -> labelRepository.findFirstByNameOrderByIdAsc(seed.name())
+						.orElseGet(() -> labelRepository.save(Label.create(seed.name(), seed.country()))))
+				.toList();
+	}
+
+	private List<Artist> seedArtists() {
+		return SeedCatalog.ARTISTS.stream()
+				.map(seed -> artistRepository.findFirstByNameOrderByIdAsc(seed.name())
+						.orElseGet(() -> artistRepository.save(
+								Artist.create(seed.name(), seed.nameEn(), seed.description()))))
+				.toList();
 	}
 
 	/** 일부 앨범(5의 배수 인덱스)은 국가/연도/컬러가 다른 프레싱을 2~3개 만들어 "다른 프레싱" 섹션을 채운다. */
