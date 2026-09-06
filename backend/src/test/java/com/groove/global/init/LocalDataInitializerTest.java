@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -80,6 +81,9 @@ class LocalDataInitializerTest {
 
 	@Mock
 	LocalSignalSeeder localSignalSeeder;
+
+	@Mock
+	ObjectProvider<LocalSignalSeeder> localSignalSeederProvider;
 
 	/** 이름/키로 찾지 못하면 넘겨받은 엔티티를 그대로 저장한 것처럼 되돌려준다. 미사용 시 실패하지 않게 lenient 로 둔다. */
 	@BeforeEach
@@ -179,6 +183,7 @@ class LocalDataInitializerTest {
 			// given
 			LocalDataInitializer initializer = newInitializer();
 			given(reviewRepository.count()).willReturn(1L);
+			given(localSignalSeederProvider.getIfAvailable()).willReturn(localSignalSeeder);
 			Member user1 = MemberFixture.withId(MemberFixture.create("user1@groove.com"), 1L);
 			Member user2 = MemberFixture.withId(MemberFixture.create("user2@groove.com"), 2L);
 			given(memberRepository.findByEmail("user1@groove.com")).willReturn(Optional.of(user1));
@@ -189,6 +194,21 @@ class LocalDataInitializerTest {
 
 			// then
 			verify(localSignalSeeder).seed(List.of(user1, user2));
+		}
+
+		@Test
+		@DisplayName("LocalSignalSeeder 빈이 없으면 신호 시딩을 건너뛴다")
+		void skipsSignalSeedingWhenSeederAbsent() {
+			// given
+			LocalDataInitializer initializer = newInitializer();
+			given(reviewRepository.count()).willReturn(1L);
+			given(localSignalSeederProvider.getIfAvailable()).willReturn(null);
+
+			// when
+			initializer.run(null);
+
+			// then — 신호 시딩용 회원 조회 자체가 일어나지 않는다
+			verify(memberRepository, never()).findByEmail(anyString());
 		}
 
 		@Test
@@ -221,6 +241,6 @@ class LocalDataInitializerTest {
 	private LocalDataInitializer newInitializer() {
 		return new LocalDataInitializer(memberRepository, passwordEncoder, genreRepository, labelRepository,
 				artistRepository, albumRepository, productRepository, stockService, reviewRepository,
-				localSignalSeeder);
+				localSignalSeederProvider);
 	}
 }
