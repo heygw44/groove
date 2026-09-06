@@ -9,6 +9,7 @@ import { StarRatingDisplay } from '@/components/common/StarRating';
 import { ProductDetailSkeleton } from '@/components/product/ProductDetailSkeleton';
 import { ProductImageGallery } from '@/components/product/ProductImageGallery';
 import { ProductPurchasePanel } from '@/components/product/ProductPurchasePanel';
+import { RelatedProductsSection } from '@/components/recommend/RelatedProductsSection';
 import { ReviewSection } from '@/components/review/ReviewSection';
 import { useProduct } from '@/hooks/queries/useProduct';
 import NotFoundPage from '@/pages/NotFoundPage';
@@ -147,6 +148,8 @@ export default function ProductDetailPage() {
       {product.description && (
         <p className="mt-10 whitespace-pre-line text-sm text-content">{product.description}</p>
       )}
+
+      <RelatedProductsSection productId={product.id} />
 
       <ReviewSection
         productId={product.id}
