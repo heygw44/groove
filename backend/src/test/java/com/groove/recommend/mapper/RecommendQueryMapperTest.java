@@ -386,6 +386,25 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			assertThat(row.status()).isEqualTo(ProductStatus.HIDDEN);
 		}
 
+		@Test
+		@DisplayName("release_date 없이 pressing_year 만 있으면 그 연도로 연대를 구한다")
+		void usesPressingYearWhenReleaseDateIsAbsent() {
+			// given
+			Album album = AlbumFixture.create(artist, "PF Imported");
+			em.persist(album);
+			Product product = Product.createImported(album, "PF Imported", artist, null, "US", 1975,
+					"CS 8163", "888880123456", null, new BigDecimal("30000.00"), null);
+			em.persist(product);
+			em.flush();
+			em.clear();
+
+			// when
+			ProductFeatureRow row = findMyRow(product.getId());
+
+			// then
+			assertThat(row.releaseYear()).isEqualTo(1975);
+		}
+
 		private ProductFeatureRow findMyRow(Long productId) {
 			return recommendQueryMapper.findProductFeatures().stream()
 					.filter(r -> r.productId().equals(productId))
