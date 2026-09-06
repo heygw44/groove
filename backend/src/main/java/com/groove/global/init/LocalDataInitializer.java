@@ -2,26 +2,19 @@ package com.groove.global.init;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
-import org.springframework.data.domain.Sort;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.global.init.SeedCatalog.AlbumSeed;
 import com.groove.inventory.service.StockService;
 import com.groove.member.entity.Member;
-import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.EditionType;
@@ -33,16 +26,15 @@ import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
 import com.groove.product.repository.ProductRepository;
-import com.groove.review.entity.Review;
-import com.groove.review.repository.ReviewRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 더미 데이터 시더. 회원은 이메일, 장르/레이블/아티스트는 이름, 앨범은 (title, artistId) 기준으로 파트별 멱등하게 동작한다.
- * local 외에 seed 프로파일에서도 뜬다 — 운영에 카탈로그만 적재하기 위해서다. 취향·위시·구매 신호는
- * local 전용인 {@link LocalSignalSeeder} 가 없으면 건너뛴다.
+ * 카탈로그(장르/레이블/아티스트/앨범/프레싱) 시더. 장르/레이블/아티스트는 이름, 앨범은 (title, artistId) 기준으로
+ * 파트별 멱등하게 동작해 local/seed 양쪽에서 안전하게 반복 실행된다. 데모 계정·리뷰는 local 전용인
+ * {@link LocalDemoDataSeeder}, 취향·위시·구매 신호는 local 전용인 {@link LocalSignalSeeder} 가 빈으로
+ * 존재할 때만 돈다 — 운영(seed)에는 카탈로그만 적재해야 하기 때문이다.
  */
 @Slf4j
 @Component
@@ -50,79 +42,32 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class LocalDataInitializer implements ApplicationRunner {
 
-	private static final String ADMIN_EMAIL = "admin@groove.com";
-	private static final String ADMIN_PASSWORD = "admin1234!";
-	private static final String ADMIN_NICKNAME = "관리자";
-
-	private static final String USER1_EMAIL = "user1@groove.com";
-	private static final String USER1_NICKNAME = "그루브1";
-	private static final String USER2_EMAIL = "user2@groove.com";
-	private static final String USER2_NICKNAME = "그루브2";
-	private static final String USER_PASSWORD = "user1234!";
-
 	private static final String IMAGE_BASE_URL = "https://picsum.photos/seed/";
 
 	private static final List<String> EXTRA_PRESSING_COUNTRIES = List.of("Japan", "UK", "Germany");
 	private static final List<String> EXTRA_PRESSING_COLORS = List.of("Clear", "Translucent Blue", "Red");
 
-	private static final List<String> REVIEW_TITLES = List.of(
-			"자주 듣게 되는 앨범", "믹싱이 훌륭합니다", "소장 가치 있음", "기대 이상이었어요", "재구매 의사 있습니다");
-
-	private static final List<String> REVIEW_CONTENTS = List.of(
-			"판 상태도 좋고 배송도 빨랐습니다.",
-			"음질이 생각보다 훨씬 좋네요.",
-			"자켓 디자인이 마음에 듭니다.",
-			"플레이어에 걸어두고 매일 듣고 있어요.",
-			"선물용으로 구매했는데 반응이 좋았습니다.");
-
-	private final MemberRepository memberRepository;
-	private final PasswordEncoder passwordEncoder;
 	private final GenreRepository genreRepository;
 	private final LabelRepository labelRepository;
 	private final ArtistRepository artistRepository;
 	private final AlbumRepository albumRepository;
 	private final ProductRepository productRepository;
 	private final StockService stockService;
-	private final ReviewRepository reviewRepository;
+	private final ObjectProvider<LocalDemoDataSeeder> localDemoDataSeederProvider;
 	private final ObjectProvider<LocalSignalSeeder> localSignalSeederProvider;
 
 	@Override
 	@Transactional
 	public void run(ApplicationArguments args) {
-		seedMembers();
 		seedCatalog();
-		seedReviews();
+
+		LocalDemoDataSeeder demoDataSeeder = localDemoDataSeederProvider.getIfAvailable();
+		List<Member> demoMembers = demoDataSeeder != null ? demoDataSeeder.seed() : List.of();
 
 		LocalSignalSeeder localSignalSeeder = localSignalSeederProvider.getIfAvailable();
 		if (localSignalSeeder != null) {
-			localSignalSeeder.seed(demoMembers());
+			localSignalSeeder.seed(demoMembers);
 		}
-	}
-
-	private void seedMembers() {
-		createMemberIfAbsent(ADMIN_EMAIL,
-				() -> Member.createAdmin(ADMIN_EMAIL, passwordEncoder.encode(ADMIN_PASSWORD), ADMIN_NICKNAME));
-		createMemberIfAbsent(USER1_EMAIL,
-				() -> Member.create(USER1_EMAIL, passwordEncoder.encode(USER_PASSWORD), USER1_NICKNAME));
-		createMemberIfAbsent(USER2_EMAIL,
-				() -> Member.create(USER2_EMAIL, passwordEncoder.encode(USER_PASSWORD), USER2_NICKNAME));
-	}
-
-	/** 조회 로그는 이 둘에게만 심는다. 취향 클러스터 회원에 심으면 추천 후보에서 빠져 품질 측정이 흔들린다. */
-	private List<Member> demoMembers() {
-		return Stream.of(USER1_EMAIL, USER2_EMAIL)
-				.map(memberRepository::findByEmail)
-				.flatMap(Optional::stream)
-				.toList();
-	}
-
-	private void createMemberIfAbsent(String email, Supplier<Member> factory) {
-		if (memberRepository.existsByEmail(email)) {
-			log.info("더미 회원 계정이 이미 있어 건너뛴다: {}", email);
-			return;
-		}
-		memberRepository.save(factory.get());
-		log.info("더미 회원 계정을 생성했다: {}", email);
 	}
 
 	/** 레이블/아티스트는 이름, 앨범은 (title, artistId) 로 find-or-create 해 파트별로 멱등하게 동작한다. */
@@ -201,34 +146,6 @@ public class LocalDataInitializer implements ApplicationRunner {
 		return Product.create(album, title, artist, label, releaseDate, seed.pressingInfo(), colorVariant, country,
 				releaseDate == null ? null : releaseDate.getYear(), null, null, EditionType.REISSUE,
 				BigDecimal.valueOf(seed.price()), seed.description());
-	}
-
-	private void seedReviews() {
-		if (reviewRepository.count() > 0) {
-			log.info("리뷰 데이터가 이미 있어 시딩을 건너뛴다");
-			return;
-		}
-
-		Member user1 = memberRepository.findByEmail(USER1_EMAIL).orElseThrow();
-		Member user2 = memberRepository.findByEmail(USER2_EMAIL).orElseThrow();
-		List<Member> reviewers = List.of(user1, user2);
-		List<Product> products = productRepository.findAll(Sort.by(Sort.Direction.ASC, "id"));
-
-		List<Review> reviews = new ArrayList<>();
-		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
-			Product product = products.get(productIndex);
-			for (int memberIndex = 0; memberIndex < reviewers.size(); memberIndex++) {
-				Member reviewer = reviewers.get(memberIndex);
-				int rating = (productIndex * 7 + memberIndex * 3) % 5 + 1;
-				int phraseIndex = (productIndex + memberIndex) % REVIEW_TITLES.size();
-				reviews.add(Review.create(product, reviewer, rating, REVIEW_TITLES.get(phraseIndex),
-						REVIEW_CONTENTS.get(phraseIndex)));
-			}
-		}
-		reviewRepository.saveAll(reviews);
-		products.forEach(product -> productRepository.refreshReviewStats(product.getId()));
-
-		log.info("더미 리뷰를 시딩했다: {}건", reviews.size());
 	}
 
 	private List<Genre> seedGenres() {
