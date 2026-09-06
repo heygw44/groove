@@ -2,6 +2,7 @@ package com.groove.global.config;
 
 import java.util.concurrent.RejectedExecutionHandler;
 
+import org.springframework.boot.autoconfigure.batch.BatchTaskExecutor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -10,7 +11,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 비동기 실행기 설정. 상품 조회 로그처럼 유실돼도 되는 부가 작업을 요청 스레드와 분리하기 위해 쓴다.
+ * 비동기 실행기 설정. 상품 조회 로그처럼 유실돼도 되는 부가 작업을 요청 스레드와 분리하고, 카탈로그 적재 배치 잡을 별도 스레드에서 돌리기 위해 쓴다.
  *
  * <p>Executor 빈을 직접 정의하면 Boot 의 TaskExecutionAutoConfiguration 이 백오프해 MVC 비동기 요청(@Async 가 아닌
  * Callable/StreamingResponseBody 등)의 기본 실행기가 SimpleAsyncTaskExecutor 로 폴백된다. 현재 그런 컨트롤러가 없어
@@ -36,6 +37,22 @@ public class AsyncConfig {
 		executor.setRejectedExecutionHandler(rejectedTaskLogger());
 		executor.setWaitForTasksToCompleteOnShutdown(true);
 		executor.setAwaitTerminationSeconds(5);
+		executor.initialize();
+		return executor;
+	}
+
+	// Discogs 레이트리밋을 리미터 하나로 통제하려고 배치 잡을 단일 스레드로 직렬 실행한다.
+	// @BatchTaskExecutor 로 Boot 의 TaskExecutorJobLauncher 가 이 executor 를 쓴다.
+	@Bean
+	@BatchTaskExecutor
+	public ThreadPoolTaskExecutor catalogImportExecutor() {
+		ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+		executor.setCorePoolSize(1);
+		executor.setMaxPoolSize(1);
+		executor.setQueueCapacity(10);
+		executor.setThreadNamePrefix("groove-catalog-import-");
+		executor.setWaitForTasksToCompleteOnShutdown(true);
+		executor.setAwaitTerminationSeconds(30);
 		executor.initialize();
 		return executor;
 	}
