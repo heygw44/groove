@@ -76,6 +76,8 @@ export const limitedDropKeys = {
   all: ['limitedDrops'] as const,
   list: (status?: LimitedDropStatus) => ['limitedDrops', status ?? 'all'] as const,
   detail: (id: number) => ['limitedDrop', id] as const,
+  // detail 키 접두사가 단수 'limitedDrop' 이라 이 하나로 모든 상세 캐시를 한 번에 무효화한다.
+  details: ['limitedDrop'] as const,
 };
 
 // list 를 'list' sub-prefix 로 분리해 오픈/마감 등 상태 변경 후 상세는 건드리지 않고 목록만 무효화한다.
@@ -108,6 +110,20 @@ export const adminMemberKeys = {
   lists: ['adminMembers', 'list'] as const,
   list: (params: AdminMemberListParams) => ['adminMembers', 'list', params] as const,
   detail: (id: number) => ['adminMembers', 'detail', id] as const,
+};
+
+export const tasteProfileKeys = {
+  mine: ['tasteProfile', 'me'] as const,
+};
+
+export const recommendKeys = {
+  all: ['recommend'] as const,
+  home: ['recommend', 'home'] as const,
+  related: (productId: number) => ['recommend', 'related', productId] as const,
+};
+
+export const recentViewKeys = {
+  all: ['recentViews'] as const,
 };
 
 export const adminAuditLogKeys = {
