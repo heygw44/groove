@@ -21,6 +21,7 @@ import LimitedDropListPage from '@/pages/limited/LimitedDropListPage';
 import AddressListPage from '@/pages/mypage/AddressListPage';
 import CouponBoxPage from '@/pages/mypage/CouponBoxPage';
 import MyPage from '@/pages/mypage/MyPage';
+import TastePage from '@/pages/mypage/TastePage';
 import WishlistPage from '@/pages/mypage/WishlistPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import OrderDetailPage from '@/pages/order/OrderDetailPage';
@@ -105,6 +106,7 @@ export const router = createBrowserRouter([
           { path: 'addresses', element: <AddressListPage /> },
           { path: 'wishlist', element: <WishlistPage /> },
           { path: 'coupons', element: <CouponBoxPage /> },
+          { path: 'taste', element: <TastePage /> },
         ],
       },
       {

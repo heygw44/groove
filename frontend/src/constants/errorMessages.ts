@@ -66,6 +66,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   ADMIN_CANNOT_MODIFY_ADMIN: '다른 관리자의 상태는 변경할 수 없습니다.',
   MEMBER_NOT_FOUND: '존재하지 않는 회원입니다.',
   AUTH_MEMBER_SUSPENDED: '정지된 계정입니다. 고객센터에 문의해주세요.',
+  RECOMMEND_PROFILE_NOT_FOUND: '아직 취향 프로필이 없습니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
@@ -93,4 +94,8 @@ export const FIELD_ALIASES: Record<string, string> = {
   rateWithinRange: 'discountValue',
   singleSource: 'cartItemIds',
   closeAfterOpen: 'closeAt',
+  artistIds: 'artists',
+  genreIdsDistinct: 'genreIds',
+  artistIdsDistinct: 'artists',
+  decadesDistinct: 'decades',
 };

@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
+import { TasteOnboardingModal } from '@/components/recommend/TasteOnboardingModal';
 
 export function RootLayout() {
   return (
@@ -11,6 +12,7 @@ export function RootLayout() {
         <Outlet />
       </main>
       <Footer />
+      <TasteOnboardingModal />
     </div>
   );
 }
