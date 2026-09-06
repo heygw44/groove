@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
@@ -386,11 +387,72 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			assertThat(row.status()).isEqualTo(ProductStatus.HIDDEN);
 		}
 
+		@Test
+		@DisplayName("release_date 없이 pressing_year 만 있으면 그 연도로 연대를 구한다")
+		void usesPressingYearWhenReleaseDateIsAbsent() {
+			// given
+			Album album = AlbumFixture.create(artist, "PF Imported");
+			em.persist(album);
+			Product product = Product.createImported(album, "PF Imported", artist, null, "US", 1975,
+					"CS 8163", "888880123456", null, new BigDecimal("30000.00"), null);
+			em.persist(product);
+			em.flush();
+			em.clear();
+
+			// when
+			ProductFeatureRow row = findMyRow(product.getId());
+
+			// then
+			assertThat(row.releaseYear()).isEqualTo(1975);
+		}
+
 		private ProductFeatureRow findMyRow(Long productId) {
 			return recommendQueryMapper.findProductFeatures().stream()
 					.filter(r -> r.productId().equals(productId))
 					.findFirst()
 					.orElseThrow();
+		}
+	}
+
+	@Nested
+	@DisplayName("findPopularProductIds()")
+	class FindPopularProductIds {
+
+		@Test
+		@DisplayName("ON_SALE 상품만 평점 desc(null 마지막) → 리뷰수 desc → 최신순으로 뽑는다")
+		void ordersByRatingThenReviewCountForOnSaleProductsOnly() {
+			// given
+			Product highRating = ratedProduct("FPI High Rating", new BigDecimal("4.5"), 10);
+			Product moreReviews = ratedProduct("FPI More Reviews", new BigDecimal("4.5"), 20);
+			Product noRating = ratedProduct("FPI No Rating", null, 100);
+			Product soldOut = ratedProduct("FPI Sold Out", new BigDecimal("5.0"), 5);
+			soldOut.markSoldOut();
+			em.persist(highRating.getAlbum());
+			em.persist(moreReviews.getAlbum());
+			em.persist(noRating.getAlbum());
+			em.persist(soldOut.getAlbum());
+			em.persist(highRating);
+			em.persist(moreReviews);
+			em.persist(noRating);
+			em.persist(soldOut);
+			em.flush();
+			em.clear();
+
+			// when
+			List<Long> myIds = List.of(highRating.getId(), moreReviews.getId(), noRating.getId(), soldOut.getId());
+			List<Long> result = recommendQueryMapper.findPopularProductIds(1000).stream()
+					.filter(myIds::contains)
+					.toList();
+
+			// then
+			assertThat(result).containsExactly(moreReviews.getId(), highRating.getId(), noRating.getId());
+		}
+
+		private Product ratedProduct(String title, BigDecimal rating, int reviewCount) {
+			Product product = ProductFixture.create(artist, title, new BigDecimal("30000.00"));
+			ReflectionTestUtils.setField(product, "averageRating", rating);
+			ReflectionTestUtils.setField(product, "reviewCount", reviewCount);
+			return product;
 		}
 	}
 }

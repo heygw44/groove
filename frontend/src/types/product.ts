@@ -28,7 +28,7 @@ export interface Label {
 export interface Artist {
   id: number;
   name: string;
-  nameEn: string;
+  nameEn?: string;
 }
 
 export interface ProductImage {

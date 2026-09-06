@@ -68,6 +68,40 @@ describe('DiggingSection', () => {
     );
   });
 
+  it('profileRequired 여도 폴백 상품이 있으면 그리드와 유도 배너를 함께 보여준다', () => {
+    // given
+    const homeData: HomeRecommendResponse = {
+      profileRequired: true,
+      items: [
+        {
+          product: {
+            id: 1,
+            title: '판 A',
+            artistName: '아티스트 A',
+            price: 10000,
+            status: 'ON_SALE',
+            editionType: 'STANDARD',
+            wishlisted: false,
+          },
+          reasons: ['POPULAR'],
+        },
+      ],
+    };
+
+    // when
+    renderSection({ homeData });
+
+    // then
+    expect(screen.getByText('당신을 위한 디깅')).toBeInTheDocument();
+    expect(screen.getByText('판 A')).toBeInTheDocument();
+    expect(screen.getByText('인기 상품')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '취향 설정하기' })).toHaveAttribute(
+      'href',
+      '/mypage/taste',
+    );
+    expect(screen.queryByText('취향을 알려주면 판을 골라드려요')).not.toBeInTheDocument();
+  });
+
   it('추천 상품과 이유 배지를 최대 2개까지 렌더한다', () => {
     // given
     const homeData: HomeRecommendResponse = {

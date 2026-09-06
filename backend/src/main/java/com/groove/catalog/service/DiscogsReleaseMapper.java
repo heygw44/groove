@@ -5,7 +5,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.stereotype.Component;
@@ -32,6 +35,11 @@ public class DiscogsReleaseMapper {
 	private static final String DESC_REISSUE = "reissue";
 	private static final String DESC_REPRESS = "repress";
 	private static final String VINYL_FORMAT_NAME = "Vinyl";
+
+	// Discogs 표기가 우리 장르명과 문자열 자체가 달라 정규화로도 못 맞추는 것만 명시적으로 잇는다.
+	private static final Map<String, String> GENRE_ALIASES = Map.of(
+			normalizeGenre("Stage & Screen"), "OST",
+			normalizeGenre("Funk / Soul"), "R&B");
 
 	public CatalogLookupResponse toLookup(DiscogsSearchResponse.Result result, boolean alreadyImported) {
 		String[] artistAndTitle = splitArtistAndTitle(result.title());
@@ -201,14 +209,29 @@ public class DiscogsReleaseMapper {
 			if (candidate == null) {
 				continue;
 			}
-			for (String known : knownGenreNames) {
-				if (known.equalsIgnoreCase(candidate)) {
-					matched.add(known);
-					break;
-				}
-			}
+			findKnownGenre(candidate, knownGenreNames).ifPresent(matched::add);
 		}
 		return List.copyOf(matched);
+	}
+
+	private Optional<String> findKnownGenre(String candidate, Collection<String> knownGenreNames) {
+		String normalizedCandidate = normalizeGenre(candidate);
+		String normalizedAliasTarget = normalizeGenre(GENRE_ALIASES.get(normalizedCandidate));
+		for (String known : knownGenreNames) {
+			String normalizedKnown = normalizeGenre(known);
+			if (normalizedKnown.equals(normalizedCandidate) || normalizedKnown.equals(normalizedAliasTarget)) {
+				return Optional.of(known);
+			}
+		}
+		return Optional.empty();
+	}
+
+	/** 소문자화 후 공백·하이픈·`&`를 제거해 "Hip Hop" 과 "Hip-Hop" 처럼 표기만 다른 이름을 같게 만든다. */
+	private static String normalizeGenre(String value) {
+		if (value == null) {
+			return "";
+		}
+		return value.toLowerCase(Locale.ROOT).replaceAll("[\\s\\-&]", "");
 	}
 
 	private String resolveImageUrl(List<DiscogsReleaseResponse.Image> images) {

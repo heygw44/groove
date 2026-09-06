@@ -70,13 +70,24 @@
 	</resultMap>
 
 	<!-- 후보 제외·시드 조회 등 추천 서비스 전체가 이 결과 하나를 공유한다(HIDDEN 포함 전체 상품). -->
+	<!-- Discogs 적재 상품은 release_date 가 비어 있어 pressing_year 로 연대를 보완한다. -->
 	<select id="findProductFeatures" resultMap="productFeatureRowMap">
-		SELECT p.id AS product_id, p.artist_id, p.label_id, YEAR(p.release_date) AS release_year,
+		SELECT p.id AS product_id, p.artist_id, p.label_id,
+		       COALESCE(YEAR(p.release_date), p.pressing_year) AS release_year,
 		       p.avg_rating AS average_rating, p.created_at, p.status,
 		       GROUP_CONCAT(pg.genre_id) AS genre_ids
 		FROM product p
 		LEFT JOIN product_genre pg ON pg.product_id = p.id
 		GROUP BY p.id
+	</select>
+
+	<!-- 콜드스타트 폴백 전용. findProductFeatures 전체 스캔을 타지 않는 별도 쿼리다. -->
+	<select id="findPopularProductIds" resultType="java.lang.Long">
+		SELECT p.id
+		FROM product p
+		WHERE p.status = 'ON_SALE'
+		ORDER BY p.avg_rating DESC, p.review_count DESC, p.created_at DESC, p.id DESC
+		LIMIT #{limit}
 	</select>
 
 </mapper>

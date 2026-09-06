@@ -144,18 +144,24 @@ class RecommendServiceTest {
 	class RecommendHome {
 
 		@Test
-		@DisplayName("취향 프로필도 시드도 없으면 profileRequired 를 true 로 반환하고 후보를 조회하지 않는다")
-		void requiresProfileWhenNoTasteAndNoSeeds() {
+		@DisplayName("취향 프로필도 시드도 없으면 profileRequired 와 함께 인기 상품을 폴백으로 반환한다")
+		void returnsPopularFallbackWhenNoTasteAndNoSeeds() {
 			// given
 			givenNoSeeds();
 			givenNoTasteProfile(MEMBER_ID);
+			given(recommendQueryMapper.findPopularProductIds(RecommendService.HOME_DEFAULT_SIZE))
+					.willReturn(List.of(900L, 800L));
+			given(recommendQueryMapper.findSummariesByIds(List.of(900L, 800L), MEMBER_ID))
+					.willReturn(List.of(summary(900L), summary(800L)));
 
 			// when
 			HomeRecommendResponse response = recommendService.recommendHome(MEMBER_ID, null);
 
 			// then
 			assertThat(response.profileRequired()).isTrue();
-			assertThat(response.items()).isEmpty();
+			assertThat(response.items()).extracting(item -> item.product().id()).containsExactly(900L, 800L);
+			assertThat(response.items()).flatExtracting(RecommendItemResponse::reasons)
+					.containsOnly(RecommendReason.POPULAR);
 			verify(recommendQueryMapper, never()).findProductFeatures();
 		}
 

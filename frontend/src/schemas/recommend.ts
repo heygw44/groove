@@ -15,7 +15,7 @@ export const tasteProfileFormSchema = z.object({
     .min(TASTE_GENRE_MIN, '좋아하는 장르를 하나 이상 골라주세요.')
     .max(TASTE_GENRE_MAX, `장르는 최대 ${TASTE_GENRE_MAX}개까지 고를 수 있습니다.`),
   artists: z
-    .array(z.object({ id: z.number().int(), name: z.string(), nameEn: z.string() }))
+    .array(z.object({ id: z.number().int(), name: z.string(), nameEn: z.string().optional() }))
     .max(TASTE_ARTIST_MAX, `아티스트는 최대 ${TASTE_ARTIST_MAX}명까지 고를 수 있습니다.`),
   decades: z
     .array(z.enum(DECADES))

@@ -10,6 +10,7 @@ export const RECOMMEND_REASON_LABELS: Record<RecommendReason, string> = {
   SAME_DECADE: '같은 연대',
   BOUGHT_TOGETHER: '함께 구매',
   RECENTLY_VIEWED_SIMILAR: '최근 본 판과 비슷',
+  POPULAR: '인기 상품',
 };
 
 export const MAX_REASON_BADGES = 2;

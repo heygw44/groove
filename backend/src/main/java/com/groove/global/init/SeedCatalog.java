@@ -20,7 +20,9 @@ final class SeedCatalog {
 	}
 
 	static final List<String> GENRES = List.of(
-			"Jazz", "Rock", "Hip-Hop", "K-Pop", "Soul", "Electronic", "Classical", "Folk", "Indie", "OST");
+			"Jazz", "Rock", "Hip-Hop", "K-Pop", "Soul", "Electronic", "Classical", "Folk", "Indie", "OST",
+			"Funk", "Pop", "Blues", "Reggae", "Punk", "Metal", "Disco", "House", "Techno", "Ambient",
+			"Alternative", "Country", "Latin", "R&B", "World");
 
 	static final List<LabelSeed> LABELS = List.of(
 			new LabelSeed("Blue Note", "US"),
