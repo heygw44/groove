@@ -2,6 +2,7 @@ package com.groove.product.dto;
 
 import java.math.BigDecimal;
 
+import com.groove.product.entity.EditionType;
 import com.groove.product.entity.ProductStatus;
 
 public record ProductSummaryResponse(
@@ -16,6 +17,9 @@ public record ProductSummaryResponse(
 		String thumbnailUrl,
 		Double averageRating,
 		long reviewCount,
-		Boolean wishlisted
+		Boolean wishlisted,
+		String country,
+		Integer pressingYear,
+		EditionType editionType
 ) {
 }

@@ -6,6 +6,8 @@ import java.util.List;
 
 import org.openapitools.jackson.nullable.JsonNullable;
 
+import com.groove.product.entity.EditionType;
+
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -13,7 +15,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * 부분 수정 요청. 필드가 null 이면 기존 값을 유지한다. genreIds/imageUrls 는 null=유지, 빈 리스트=전부 제거.
- * labelId 는 키 생략=유지, null=해제, 값=교체.
+ * labelId/country/pressingYear/catalogNo/barcode 는 키 생략=유지, null=해제, 값=교체. album 은 이 API 로 바꿀 수 없다.
  */
 public record ProductUpdateRequest(
 		@Size(max = 200, message = "제목은 200자 이하여야 합니다.")
@@ -40,6 +42,16 @@ public record ProductUpdateRequest(
 		String description,
 
 		List<@NotBlank(message = "이미지 URL은 비어 있을 수 없습니다.")
-		@Size(max = 500, message = "이미지 URL은 500자 이하여야 합니다.") String> imageUrls
+		@Size(max = 500, message = "이미지 URL은 500자 이하여야 합니다.") String> imageUrls,
+
+		JsonNullable<@Size(min = 2, max = 2, message = "국가 코드는 2자여야 합니다.") String> country,
+
+		JsonNullable<Integer> pressingYear,
+
+		JsonNullable<@Size(max = 50, message = "카탈로그 번호는 50자 이하여야 합니다.") String> catalogNo,
+
+		JsonNullable<@Size(max = 20, message = "바코드는 20자 이하여야 합니다.") String> barcode,
+
+		EditionType editionType
 ) {
 }
