@@ -136,4 +136,29 @@ class WishlistRepositoryTest extends DataJpaTestSupport {
 					.containsExactly(secondWishlist.getId(), firstWishlist.getId());
 		}
 	}
+
+	@Nested
+	@DisplayName("findProductIdsByMemberId()")
+	class FindProductIdsByMemberId {
+
+		@Test
+		@DisplayName("내 위시리스트 상품 id 만 반환하고 다른 회원 것은 제외한다")
+		void returnsOnlyMyWishlistProductIds() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("wishlist-repo-ids@groove.com"));
+			Member other = memberRepository.save(MemberFixture.create("wishlist-repo-ids-other@groove.com"));
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product myProduct = productRepository.save(ProductFixture.create(artist, "내 위시 상품"));
+			Product otherProduct = productRepository.save(ProductFixture.create(artist, "타 회원 위시 상품"));
+
+			wishlistRepository.save(WishlistFixture.create(member, myProduct));
+			wishlistRepository.save(WishlistFixture.create(other, otherProduct));
+
+			// when
+			List<Long> result = wishlistRepository.findProductIdsByMemberId(member.getId());
+
+			// then
+			assertThat(result).containsExactly(myProduct.getId());
+		}
+	}
 }

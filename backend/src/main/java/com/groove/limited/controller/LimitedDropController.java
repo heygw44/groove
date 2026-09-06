@@ -39,14 +39,15 @@ public class LimitedDropController {
 	private final LimitedDropService limitedDropService;
 	private final LimitedPurchaseService limitedPurchaseService;
 
-	@Operation(summary = "한정반 목록 조회", description = "status 미지정 시 SCHEDULED·OPEN·SOLD_OUT 을 반환")
+	@Operation(summary = "한정반 목록 조회", description = "status 미지정 시 SCHEDULED·OPEN·SOLD_OUT 을 반환, 로그인 시 tasteMatch 포함")
 	@SecurityRequirements
 	@GetMapping
 	public ResponseEntity<ApiResponse<LimitedDropListResponse>> getList(
-			@RequestParam(required = false) LimitedDropStatus status) {
+			@RequestParam(required = false) LimitedDropStatus status,
+			@AuthMember(required = false) LoginMember loginMember) {
 		return ResponseEntity.ok()
 				.cacheControl(CacheControl.noStore())
-				.body(ApiResponse.ok(limitedDropService.getList(status)));
+				.body(ApiResponse.ok(limitedDropService.getList(status, memberIdOf(loginMember))));
 	}
 
 	@Operation(summary = "한정반 상세 조회", description = "로그인 시 purchased 포함")

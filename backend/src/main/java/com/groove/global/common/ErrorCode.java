@@ -113,6 +113,9 @@ public enum ErrorCode {
 	FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 업로드에 실패했습니다."),
 	FILE_EMPTY(HttpStatus.BAD_REQUEST, "업로드할 파일이 없습니다."),
 
+	// ===== RECOMMEND =====
+	RECOMMEND_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "취향 프로필이 없습니다."),
+
 	// ===== ADMIN =====
 	ADMIN_CANNOT_MODIFY_SELF(HttpStatus.FORBIDDEN, "자기 자신의 상태는 변경할 수 없습니다."),
 	ADMIN_CANNOT_MODIFY_ADMIN(HttpStatus.FORBIDDEN, "다른 관리자의 상태는 변경할 수 없습니다.");

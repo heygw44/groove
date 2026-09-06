@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -44,6 +45,9 @@ import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductImage;
 import com.groove.product.repository.ProductImageRepository;
+import com.groove.recommend.dto.RecommendReason;
+import com.groove.recommend.dto.TasteMatchResponse;
+import com.groove.recommend.service.RecommendService;
 
 @ExtendWith(MockitoExtension.class)
 class LimitedDropServiceTest {
@@ -62,6 +66,9 @@ class LimitedDropServiceTest {
 	@Mock
 	private LimitedDropRedisService limitedDropRedisService;
 
+	@Mock
+	private RecommendService recommendService;
+
 	private Clock clock;
 
 	private LimitedDropService limitedDropService;
@@ -70,7 +77,7 @@ class LimitedDropServiceTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		limitedDropService = new LimitedDropService(limitedDropRepository, limitedPurchaseRepository,
-				productImageRepository, limitedDropRedisService, clock);
+				productImageRepository, limitedDropRedisService, recommendService, clock);
 	}
 
 	@Nested
@@ -85,7 +92,7 @@ class LimitedDropServiceTest {
 			ArgumentCaptor<List<LimitedDropStatus>> captor = ArgumentCaptor.forClass(List.class);
 
 			// when
-			limitedDropService.getList(null);
+			limitedDropService.getList(null, null);
 
 			// then
 			verify(limitedDropRepository).findPublicSummaries(captor.capture());
@@ -101,7 +108,7 @@ class LimitedDropServiceTest {
 			ArgumentCaptor<List<LimitedDropStatus>> captor = ArgumentCaptor.forClass(List.class);
 
 			// when
-			limitedDropService.getList(LimitedDropStatus.SOLD_OUT);
+			limitedDropService.getList(LimitedDropStatus.SOLD_OUT, null);
 
 			// then
 			verify(limitedDropRepository).findPublicSummaries(captor.capture());
@@ -118,7 +125,7 @@ class LimitedDropServiceTest {
 			given(limitedDropRedisService.getStocks(List.of(1L))).willReturn(Map.of(1L, 55));
 
 			// when
-			LimitedDropListResponse response = limitedDropService.getList(null);
+			LimitedDropListResponse response = limitedDropService.getList(null, null);
 
 			// then
 			assertThat(response.drops()).hasSize(2);
@@ -135,7 +142,7 @@ class LimitedDropServiceTest {
 			given(limitedDropRedisService.getStocks(List.of(1L))).willReturn(Map.of());
 
 			// when
-			LimitedDropListResponse response = limitedDropService.getList(null);
+			LimitedDropListResponse response = limitedDropService.getList(null, null);
 
 			// then
 			assertThat(response.drops().get(0).remainingQuantity()).isEqualTo(80);
@@ -148,10 +155,43 @@ class LimitedDropServiceTest {
 			given(limitedDropRepository.findPublicSummaries(any())).willReturn(List.of());
 
 			// when
-			LimitedDropListResponse response = limitedDropService.getList(null);
+			LimitedDropListResponse response = limitedDropService.getList(null, null);
 
 			// then
 			assertThat(response.serverTime()).isEqualTo(OffsetDateTime.now(clock));
+		}
+
+		@Test
+		@DisplayName("memberId 가 없으면 취향 매칭을 조회하지 않고 tasteMatch 는 null 이다")
+		void skipsTasteMatchWhenMemberIdAbsent() {
+			// given
+			LimitedDropSummaryRow row = summaryRow(1L, LimitedDropStatus.OPEN, 100, 20);
+			given(limitedDropRepository.findPublicSummaries(any())).willReturn(List.of(row));
+			given(limitedDropRedisService.getStocks(any())).willReturn(Map.of());
+
+			// when
+			LimitedDropListResponse response = limitedDropService.getList(null, null);
+
+			// then
+			assertThat(response.drops().get(0).tasteMatch()).isNull();
+			verifyNoInteractions(recommendService);
+		}
+
+		@Test
+		@DisplayName("memberId 가 있으면 취향 매칭 결과를 각 드롭에 채운다")
+		void fillsTasteMatchWhenMemberIdPresent() {
+			// given
+			LimitedDropSummaryRow row = summaryRow(1L, LimitedDropStatus.OPEN, 100, 20);
+			given(limitedDropRepository.findPublicSummaries(any())).willReturn(List.of(row));
+			given(limitedDropRedisService.getStocks(any())).willReturn(Map.of());
+			TasteMatchResponse tasteMatch = new TasteMatchResponse(true, List.of(RecommendReason.TASTE_GENRE));
+			given(recommendService.matchTaste(7L, List.of(1L))).willReturn(Map.of(1L, tasteMatch));
+
+			// when
+			LimitedDropListResponse response = limitedDropService.getList(null, 7L);
+
+			// then
+			assertThat(response.drops().get(0).tasteMatch()).isEqualTo(tasteMatch);
 		}
 
 		private LimitedDropSummaryRow summaryRow(Long id, LimitedDropStatus status, int totalQuantity,
@@ -227,6 +267,41 @@ class LimitedDropServiceTest {
 
 			// then
 			assertThat(response.purchased()).isTrue();
+		}
+
+		@Test
+		@DisplayName("memberId 가 없으면 취향 매칭을 조회하지 않고 tasteMatch 는 null 이다")
+		void skipsTasteMatchWhenMemberIdAbsent() {
+			// given
+			Product product = product(14L);
+			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.scheduled(product), 8L);
+			given(limitedDropRepository.findWithProductById(8L)).willReturn(Optional.of(drop));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(14L)).willReturn(List.of());
+
+			// when
+			LimitedDropDetailResponse response = limitedDropService.getDetail(8L, null);
+
+			// then
+			assertThat(response.tasteMatch()).isNull();
+			verifyNoInteractions(recommendService);
+		}
+
+		@Test
+		@DisplayName("memberId 가 있으면 취향 매칭 결과를 tasteMatch 에 담는다")
+		void fillsTasteMatchWhenMemberIdPresent() {
+			// given
+			Product product = product(15L);
+			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.scheduled(product), 9L);
+			given(limitedDropRepository.findWithProductById(9L)).willReturn(Optional.of(drop));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(15L)).willReturn(List.of());
+			TasteMatchResponse tasteMatch = new TasteMatchResponse(true, List.of(RecommendReason.TASTE_GENRE));
+			given(recommendService.matchTaste(7L, List.of(15L))).willReturn(Map.of(15L, tasteMatch));
+
+			// when
+			LimitedDropDetailResponse response = limitedDropService.getDetail(9L, 7L);
+
+			// then
+			assertThat(response.tasteMatch()).isEqualTo(tasteMatch);
 		}
 
 		@Test

@@ -72,7 +72,7 @@ class LimitedDropControllerTest {
 		LimitedDropSummaryResponse.ProductSummary product = new LimitedDropSummaryResponse.ProductSummary(
 				1L, "Kind of Blue", "Miles Davis", new BigDecimal("45000.00"), "https://cdn.groove.com/0.jpg");
 		return new LimitedDropSummaryResponse(1L, product, 100, 80, 2,
-				OffsetDateTime.now().plusDays(1), OffsetDateTime.now().plusDays(2), LimitedDropStatus.OPEN);
+				OffsetDateTime.now().plusDays(1), OffsetDateTime.now().plusDays(2), LimitedDropStatus.OPEN, null);
 	}
 
 	private LimitedDropDetailResponse sampleDetail(Boolean purchased) {
@@ -80,7 +80,7 @@ class LimitedDropControllerTest {
 				1L, "Kind of Blue", "Miles Davis", new BigDecimal("45000.00"), "https://cdn.groove.com/0.jpg");
 		return new LimitedDropDetailResponse(1L, product, 100, 80, 2,
 				OffsetDateTime.now().plusDays(1), OffsetDateTime.now().plusDays(2), LimitedDropStatus.OPEN,
-				purchased, OffsetDateTime.now());
+				purchased, null, OffsetDateTime.now());
 	}
 
 	@Nested
@@ -93,7 +93,7 @@ class LimitedDropControllerTest {
 			// given
 			LimitedDropListResponse response = new LimitedDropListResponse(List.of(sampleSummary()),
 					OffsetDateTime.now());
-			given(limitedDropService.getList(null)).willReturn(response);
+			given(limitedDropService.getList(null, null)).willReturn(response);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/limited-drops"))
@@ -106,7 +106,7 @@ class LimitedDropControllerTest {
 		void returnsNoStoreCacheControl() throws Exception {
 			// given
 			LimitedDropListResponse response = new LimitedDropListResponse(List.of(), OffsetDateTime.now());
-			given(limitedDropService.getList(null)).willReturn(response);
+			given(limitedDropService.getList(null, null)).willReturn(response);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/limited-drops"))
@@ -119,12 +119,38 @@ class LimitedDropControllerTest {
 		void returnsServerTimeWithSeoulOffset() throws Exception {
 			// given
 			LimitedDropListResponse response = new LimitedDropListResponse(List.of(), OffsetDateTime.now());
-			given(limitedDropService.getList(null)).willReturn(response);
+			given(limitedDropService.getList(null, null)).willReturn(response);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/limited-drops"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.serverTime", endsWith("+09:00")));
+		}
+
+		@Test
+		@DisplayName("비로그인이면 서비스에 memberId 로 null 을 넘긴다")
+		void passesNullMemberIdWhenAnonymous() throws Exception {
+			// given
+			LimitedDropListResponse response = new LimitedDropListResponse(List.of(), OffsetDateTime.now());
+			given(limitedDropService.getList(null, null)).willReturn(response);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/limited-drops"))
+					.andExpect(status().isOk());
+			verify(limitedDropService).getList(null, null);
+		}
+
+		@Test
+		@DisplayName("로그인 상태면 서비스에 회원 id 를 넘긴다")
+		void passesMemberIdWhenAuthenticated() throws Exception {
+			// given
+			LimitedDropListResponse response = new LimitedDropListResponse(List.of(), OffsetDateTime.now());
+			given(limitedDropService.getList(null, 1L)).willReturn(response);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/limited-drops").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk());
+			verify(limitedDropService).getList(null, 1L);
 		}
 
 		@Test

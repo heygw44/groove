@@ -1,5 +1,7 @@
 package com.groove.order.entity;
 
+import java.util.List;
+
 /** 주문 상태. */
 public enum OrderStatus {
 
@@ -10,6 +12,9 @@ public enum OrderStatus {
 	DELIVERED,
 	CANCELED,
 	REFUNDED;
+
+	/** 결제가 끝나 실제 구매로 보는 상태. 통계·추천의 "PAID 이상" 기준. */
+	public static final List<OrderStatus> PAID_OR_LATER = List.of(PAID, PREPARING, SHIPPED, DELIVERED);
 
 	public boolean isCancelable() {
 		return this == PENDING || this == PAID;

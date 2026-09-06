@@ -7,6 +7,7 @@ import com.groove.limited.dto.LimitedDropSummaryResponse.ProductSummary;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.product.entity.Product;
+import com.groove.recommend.dto.TasteMatchResponse;
 
 public record LimitedDropDetailResponse(
 		Long id,
@@ -18,11 +19,12 @@ public record LimitedDropDetailResponse(
 		OffsetDateTime closeAt,
 		LimitedDropStatus status,
 		Boolean purchased,
+		TasteMatchResponse tasteMatch,
 		OffsetDateTime serverTime
 ) {
 
 	public static LimitedDropDetailResponse from(LimitedDrop drop, String thumbnailUrl, int remainingQuantity,
-			Boolean purchased, OffsetDateTime serverTime, ZoneId zone) {
+			Boolean purchased, TasteMatchResponse tasteMatch, OffsetDateTime serverTime, ZoneId zone) {
 		Product product = drop.getProduct();
 		ProductSummary productSummary = new ProductSummary(product.getId(), product.getTitle(),
 				product.getArtist().getName(), product.getPrice(), thumbnailUrl);
@@ -36,6 +38,7 @@ public record LimitedDropDetailResponse(
 				drop.getCloseAt().atZone(zone).toOffsetDateTime(),
 				drop.getStatus(),
 				purchased,
+				tasteMatch,
 				serverTime);
 	}
 }

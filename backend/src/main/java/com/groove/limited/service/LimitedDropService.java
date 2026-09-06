@@ -24,6 +24,8 @@ import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.entity.ProductImage;
 import com.groove.product.repository.ProductImageRepository;
+import com.groove.recommend.dto.TasteMatchResponse;
+import com.groove.recommend.service.RecommendService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -40,9 +42,10 @@ public class LimitedDropService {
 	private final LimitedPurchaseRepository limitedPurchaseRepository;
 	private final ProductImageRepository productImageRepository;
 	private final LimitedDropRedisService limitedDropRedisService;
+	private final RecommendService recommendService;
 	private final Clock clock;
 
-	public LimitedDropListResponse getList(LimitedDropStatus status) {
+	public LimitedDropListResponse getList(LimitedDropStatus status, Long memberId) {
 		List<LimitedDropStatus> statuses = status == null ? DEFAULT_STATUSES : List.of(status);
 		List<LimitedDropSummaryRow> rows = limitedDropRepository.findPublicSummaries(statuses);
 
@@ -52,12 +55,17 @@ public class LimitedDropService {
 				.toList();
 		Map<Long, Integer> redisStocks = limitedDropRedisService.getStocks(openDropIds);
 
+		Map<Long, TasteMatchResponse> tasteMatches = memberId == null
+				? Map.of()
+				: recommendService.matchTaste(memberId, rows.stream().map(LimitedDropSummaryRow::productId).toList());
+
 		List<LimitedDropSummaryResponse> drops = rows.stream()
 				.map(row -> {
 					int remaining = row.status() == LimitedDropStatus.OPEN && redisStocks.containsKey(row.id())
 							? redisStocks.get(row.id())
 							: row.totalQuantity() - row.soldCount();
-					return LimitedDropSummaryResponse.from(row, remaining, clock.getZone());
+					TasteMatchResponse tasteMatch = tasteMatches.get(row.productId());
+					return LimitedDropSummaryResponse.from(row, remaining, tasteMatch, clock.getZone());
 				})
 				.toList();
 
@@ -80,8 +88,12 @@ public class LimitedDropService {
 		Boolean purchased = memberId == null
 				? null
 				: limitedPurchaseRepository.existsByDropIdAndMemberId(id, memberId);
+		Long productId = drop.getProduct().getId();
+		TasteMatchResponse tasteMatch = memberId == null
+				? null
+				: recommendService.matchTaste(memberId, List.of(productId)).get(productId);
 
-		return LimitedDropDetailResponse.from(drop, thumbnailUrl, remainingQuantity, purchased, now(),
+		return LimitedDropDetailResponse.from(drop, thumbnailUrl, remainingQuantity, purchased, tasteMatch, now(),
 				clock.getZone());
 	}
 

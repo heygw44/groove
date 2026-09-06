@@ -2,6 +2,8 @@ package com.groove.order.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -96,6 +98,56 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 
 			// then
 			assertThat(exists).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("findProductIdsByMemberIdAndOrderStatusIn()")
+	class FindProductIdsByMemberIdAndOrderStatusIn {
+
+		@Test
+		@DisplayName("PAID·DELIVERED 주문에 담긴 상품 id 를 반환한다")
+		void returnsProductIdsForPaidOrLaterOrders() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("order-item-repo-status@groove.com"));
+			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-status"));
+			Product paidProduct = productRepository.save(ProductFixture.create(artist, "결제완료 상품"));
+			Product deliveredProduct = productRepository.save(ProductFixture.create(artist, "배송완료 상품"));
+			Product pendingProduct = productRepository.save(ProductFixture.create(artist, "결제대기 상품"));
+
+			Order paidOrder = OrderFixture.createWithItems(member, List.of(paidProduct));
+			paidOrder.markPaid();
+			orderRepository.saveAndFlush(paidOrder);
+			orderRepository.saveAndFlush(
+					OrderFixture.markDelivered(OrderFixture.createWithItems(member, List.of(deliveredProduct))));
+			orderRepository.saveAndFlush(OrderFixture.createWithItems(member, List.of(pendingProduct)));
+
+			// when
+			List<Long> result = orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(member.getId(),
+					OrderStatus.PAID_OR_LATER);
+
+			// then
+			assertThat(result).containsExactlyInAnyOrder(paidProduct.getId(), deliveredProduct.getId());
+		}
+
+		@Test
+		@DisplayName("같은 상품이 담긴 주문이 두 개면 중복 없이 한 번만 반환한다")
+		void distinctsSameProductAcrossMultipleOrders() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("order-item-repo-distinct@groove.com"));
+			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-distinct"));
+			Product product = productRepository.save(ProductFixture.create(artist));
+
+			orderRepository.saveAndFlush(OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(product))));
+			orderRepository.saveAndFlush(
+					OrderFixture.markDelivered(OrderFixture.createWithItems(member, List.of(product))));
+
+			// when
+			List<Long> result = orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(member.getId(),
+					OrderStatus.PAID_OR_LATER);
+
+			// then
+			assertThat(result).containsExactly(product.getId());
 		}
 	}
 }
