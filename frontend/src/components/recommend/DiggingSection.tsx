@@ -12,6 +12,39 @@ interface DiggingSectionProps {
   className?: string;
 }
 
+function TasteOnboardingCard({ className }: DiggingSectionProps) {
+  return (
+    <section className={className}>
+      <div className="rounded-lg border border-line bg-surface-muted px-6 py-8 text-center">
+        <p className="text-sm font-medium text-content">취향을 알려주면 판을 골라드려요</p>
+        <p className="mt-1.5 text-sm text-content-muted">
+          좋아하는 장르·아티스트·연대만 고르면 홈에서 취향에 맞는 판을 골라드려요.
+        </p>
+        <Link
+          to="/mypage/taste"
+          className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-content px-4 text-sm font-medium text-surface hover:bg-content-muted"
+        >
+          취향 설정하기
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function TasteOnboardingBanner() {
+  return (
+    <div className="mt-3 flex items-center justify-between rounded-lg border border-line bg-surface-muted px-4 py-3">
+      <p className="text-sm text-content-muted">지금은 인기 판이에요. 취향을 알려주시겠어요?</p>
+      <Link
+        to="/mypage/taste"
+        className="shrink-0 text-sm font-medium text-content underline underline-offset-2 hover:text-content-muted"
+      >
+        취향 설정하기
+      </Link>
+    </div>
+  );
+}
+
 export function DiggingSection({ className }: DiggingSectionProps) {
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
   const { data, isPending, isError } = useHomeRecommendations();
@@ -34,32 +67,20 @@ export function DiggingSection({ className }: DiggingSectionProps) {
     return null;
   }
 
-  if (data.profileRequired) {
-    return (
-      <section className={className}>
-        <div className="rounded-lg border border-line bg-surface-muted px-6 py-8 text-center">
-          <p className="text-sm font-medium text-content">취향을 알려주면 판을 골라드려요</p>
-          <p className="mt-1.5 text-sm text-content-muted">
-            좋아하는 장르·아티스트·연대만 고르면 홈에서 취향에 맞는 판을 골라드려요.
-          </p>
-          <Link
-            to="/mypage/taste"
-            className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-content px-4 text-sm font-medium text-surface hover:bg-content-muted"
-          >
-            취향 설정하기
-          </Link>
-        </div>
-      </section>
-    );
+  const hasNoRecommendations = data.items.length === 0;
+
+  if (data.profileRequired && hasNoRecommendations) {
+    return <TasteOnboardingCard className={className} />;
   }
 
-  if (data.items.length === 0) {
+  if (hasNoRecommendations) {
     return null;
   }
 
   return (
     <section className={className}>
       <h2 className="text-lg font-bold">당신을 위한 디깅</h2>
+      {data.profileRequired && <TasteOnboardingBanner />}
       <RecommendProductGrid items={data.items} />
     </section>
   );

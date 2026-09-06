@@ -11,7 +11,8 @@ export type RecommendReason =
   | 'SAME_LABEL'
   | 'SAME_DECADE'
   | 'BOUGHT_TOGETHER'
-  | 'RECENTLY_VIEWED_SIMILAR';
+  | 'RECENTLY_VIEWED_SIMILAR'
+  | 'POPULAR';
 
 export interface TasteProfile {
   genres: Genre[];
