@@ -70,8 +70,10 @@
 	</resultMap>
 
 	<!-- 후보 제외·시드 조회 등 추천 서비스 전체가 이 결과 하나를 공유한다(HIDDEN 포함 전체 상품). -->
+	<!-- Discogs 적재 상품은 release_date 가 비어 있어 pressing_year 로 연대를 보완한다. -->
 	<select id="findProductFeatures" resultMap="productFeatureRowMap">
-		SELECT p.id AS product_id, p.artist_id, p.label_id, YEAR(p.release_date) AS release_year,
+		SELECT p.id AS product_id, p.artist_id, p.label_id,
+		       COALESCE(YEAR(p.release_date), p.pressing_year) AS release_year,
 		       p.avg_rating AS average_rating, p.created_at, p.status,
 		       GROUP_CONCAT(pg.genre_id) AS genre_ids
 		FROM product p
