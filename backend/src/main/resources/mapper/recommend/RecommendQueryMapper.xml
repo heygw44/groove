@@ -81,4 +81,13 @@
 		GROUP BY p.id
 	</select>
 
+	<!-- 콜드스타트 폴백 전용. findProductFeatures 전체 스캔을 타지 않는 별도 쿼리다. -->
+	<select id="findPopularProductIds" resultType="java.lang.Long">
+		SELECT p.id
+		FROM product p
+		WHERE p.status = 'ON_SALE'
+		ORDER BY p.avg_rating DESC, p.review_count DESC, p.created_at DESC, p.id DESC
+		LIMIT #{limit}
+	</select>
+
 </mapper>

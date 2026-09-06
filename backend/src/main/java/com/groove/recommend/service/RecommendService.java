@@ -23,6 +23,7 @@ import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.recommend.dto.HomeRecommendResponse;
 import com.groove.recommend.dto.ProductFeatureRow;
 import com.groove.recommend.dto.RecommendItemResponse;
+import com.groove.recommend.dto.RecommendReason;
 import com.groove.recommend.dto.TasteMatchResponse;
 import com.groove.recommend.entity.Decade;
 import com.groove.recommend.entity.MemberTasteDecade;
@@ -84,7 +85,8 @@ public class RecommendService {
 		seedIds.addAll(recentIds);
 
 		if (taste.isEmpty() && seedIds.isEmpty()) {
-			return HomeRecommendResponse.requiresProfile();
+			List<Long> popularIds = recommendQueryMapper.findPopularProductIds(resolvedSize);
+			return HomeRecommendResponse.requiresProfileWithPopularFallback(toPopularItems(popularIds, memberId));
 		}
 
 		Map<Long, ProductFeature> features = loadFeatures();
@@ -237,6 +239,22 @@ public class RecommendService {
 				.map(summaryById::get)
 				.filter(Objects::nonNull)
 				.map(summary -> new RecommendItemResponse(summary, scoreById.get(summary.id()).topReasons()))
+				.toList();
+	}
+
+	private List<RecommendItemResponse> toPopularItems(List<Long> ids, Long memberId) {
+		if (ids.isEmpty()) {
+			return List.of();
+		}
+		Map<Long, ProductSummaryResponse> summaryById = recommendQueryMapper.findSummariesByIds(ids, memberId)
+				.stream()
+				.collect(Collectors.toMap(ProductSummaryResponse::id, Function.identity(), (a, b) -> a,
+						LinkedHashMap::new));
+
+		return ids.stream()
+				.map(summaryById::get)
+				.filter(Objects::nonNull)
+				.map(summary -> new RecommendItemResponse(summary, List.of(RecommendReason.POPULAR)))
 				.toList();
 	}
 

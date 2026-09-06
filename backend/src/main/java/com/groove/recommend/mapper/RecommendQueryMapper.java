@@ -21,4 +21,6 @@ public interface RecommendQueryMapper {
 	List<CoPurchaseRow> countCoPurchases(@Param("sinceAt") LocalDateTime sinceAt);
 
 	List<ProductFeatureRow> findProductFeatures();
+
+	List<Long> findPopularProductIds(@Param("limit") int limit);
 }
