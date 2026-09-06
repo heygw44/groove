@@ -40,7 +40,7 @@ import jakarta.persistence.EntityManager;
  * 으로만 돈다. 합성 시드 기준이라 실사용 지표가 아니라 규칙이 무작위보다 낫다는 것을 보이는 용도다.
  */
 @Tag("precision")
-@ActiveProfiles({"test", "seed"})
+@ActiveProfiles({"local", "seed", "test"})
 class RecommendPrecisionTest extends IntegrationTestSupport {
 
 	private static final int TOP_K = 10;

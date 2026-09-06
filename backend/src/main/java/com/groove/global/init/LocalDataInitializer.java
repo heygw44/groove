@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
@@ -40,7 +41,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * 더미 데이터 시더. 회원은 이메일, 장르/레이블/아티스트는 이름, 앨범은 (title, artistId) 기준으로 파트별 멱등하게 동작한다.
- * local 외에 seed 프로파일에서도 뜬다 — 추천 품질 측정 테스트가 같은 시드를 재사용한다.
+ * local 외에 seed 프로파일에서도 뜬다 — 운영에 카탈로그만 적재하기 위해서다. 취향·위시·구매 신호는
+ * local 전용인 {@link LocalSignalSeeder} 가 없으면 건너뛴다.
  */
 @Slf4j
 @Component
@@ -82,7 +84,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private final ProductRepository productRepository;
 	private final StockService stockService;
 	private final ReviewRepository reviewRepository;
-	private final LocalSignalSeeder localSignalSeeder;
+	private final ObjectProvider<LocalSignalSeeder> localSignalSeederProvider;
 
 	@Override
 	@Transactional
@@ -90,7 +92,11 @@ public class LocalDataInitializer implements ApplicationRunner {
 		seedMembers();
 		seedCatalog();
 		seedReviews();
-		localSignalSeeder.seed(demoMembers());
+
+		LocalSignalSeeder localSignalSeeder = localSignalSeederProvider.getIfAvailable();
+		if (localSignalSeeder != null) {
+			localSignalSeeder.seed(demoMembers());
+		}
 	}
 
 	private void seedMembers() {
