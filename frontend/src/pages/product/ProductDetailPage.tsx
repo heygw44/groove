@@ -6,6 +6,8 @@ import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { StarRatingDisplay } from '@/components/common/StarRating';
+import { AlbumPressingsSection } from '@/components/product/AlbumPressingsSection';
+import { PressingSpecTable } from '@/components/product/PressingSpecTable';
 import { ProductDetailSkeleton } from '@/components/product/ProductDetailSkeleton';
 import { ProductImageGallery } from '@/components/product/ProductImageGallery';
 import { ProductPurchasePanel } from '@/components/product/ProductPurchasePanel';
@@ -14,7 +16,6 @@ import { ReviewSection } from '@/components/review/ReviewSection';
 import { useProduct } from '@/hooks/queries/useProduct';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { formatDate } from '@/utils/formatDate';
 
 const NOT_FOUND_CODES = new Set(['PRODUCT_NOT_FOUND', 'PRODUCT_HIDDEN']);
 
@@ -90,32 +91,13 @@ export default function ProductDetailPage() {
             {product.artist.name}
           </Link>
 
-          <dl className="mt-4 flex flex-col gap-2 text-sm">
-            {product.label && (
-              <div className="flex gap-2">
-                <dt className="w-20 shrink-0 text-content-muted">레이블</dt>
-                <dd className="m-0">{product.label.name}</dd>
-              </div>
-            )}
-            {product.releaseDate && (
-              <div className="flex gap-2">
-                <dt className="w-20 shrink-0 text-content-muted">발매일</dt>
-                <dd className="m-0">{formatDate(product.releaseDate)}</dd>
-              </div>
-            )}
-            {product.pressingInfo && (
-              <div className="flex gap-2">
-                <dt className="w-20 shrink-0 text-content-muted">프레싱</dt>
-                <dd className="m-0">{product.pressingInfo}</dd>
-              </div>
-            )}
-            {product.colorVariant && (
-              <div className="flex gap-2">
-                <dt className="w-20 shrink-0 text-content-muted">컬러반</dt>
-                <dd className="m-0">{product.colorVariant}</dd>
-              </div>
-            )}
-          </dl>
+          <PressingSpecTable
+            pressing={product.pressing}
+            label={product.label}
+            releaseDate={product.releaseDate}
+            colorVariant={product.colorVariant}
+            pressingInfo={product.pressingInfo}
+          />
 
           {product.genres.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -147,6 +129,10 @@ export default function ProductDetailPage() {
 
       {product.description && (
         <p className="mt-10 whitespace-pre-line text-sm text-content">{product.description}</p>
+      )}
+
+      {product.album.pressingCount > 1 && (
+        <AlbumPressingsSection albumId={product.album.id} currentProductId={product.id} />
       )}
 
       <RelatedProductsSection productId={product.id} />

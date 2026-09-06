@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PRODUCT_PAGE_SIZE } from '@/constants/product';
 import {
+  countActiveFilters,
   parseProductFilters,
   serializeProductFilters,
   toProductListParams,
@@ -28,6 +29,10 @@ describe('parseProductFilters()', () => {
       artistId: undefined,
       genreIds: undefined,
       labelId: undefined,
+      country: undefined,
+      pressingYearFrom: undefined,
+      pressingYearTo: undefined,
+      editionType: undefined,
       minPrice: undefined,
       maxPrice: undefined,
       sort: 'latest',
@@ -83,6 +88,66 @@ describe('parseProductFilters()', () => {
     expect(parseProductFilters(searchParams).genreIds).toBeUndefined();
   });
 
+  it.each(['France', ''])('허용된 country(%s) 값은 그대로 쓴다', (value) => {
+    // given
+    const searchParams = new URLSearchParams(`country=${value}`);
+
+    // when & then
+    expect(parseProductFilters(searchParams).country).toBe(value || undefined);
+  });
+
+  it.each(['japan', 'Mars', 'us'])('정의에 없는 country(%s) 는 무시한다', (value) => {
+    // given
+    const searchParams = new URLSearchParams(`country=${value}`);
+
+    // when & then
+    expect(parseProductFilters(searchParams).country).toBeUndefined();
+  });
+
+  it.each(['REISSUE', 'LIMITED'])('정의된 editionType(%s) 값은 그대로 쓴다', (value) => {
+    // given
+    const searchParams = new URLSearchParams(`editionType=${value}`);
+
+    // when & then
+    expect(parseProductFilters(searchParams).editionType).toBe(value);
+  });
+
+  it.each(['reissue', 'UNKNOWN', ''])('정의에 없는 editionType(%s) 은 무시한다', (value) => {
+    // given
+    const searchParams = new URLSearchParams(`editionType=${value}`);
+
+    // when & then
+    expect(parseProductFilters(searchParams).editionType).toBeUndefined();
+  });
+
+  it.each(['-1', '1.5', 'abc', ''])('자연수가 아닌 pressingYearFrom(%s) 은 무시한다', (value) => {
+    // given
+    const searchParams = new URLSearchParams(`pressingYearFrom=${value}`);
+
+    // when & then
+    expect(parseProductFilters(searchParams).pressingYearFrom).toBeUndefined();
+  });
+
+  it.each(['-1', '1.5', 'abc', ''])('자연수가 아닌 pressingYearTo(%s) 는 무시한다', (value) => {
+    // given
+    const searchParams = new URLSearchParams(`pressingYearTo=${value}`);
+
+    // when & then
+    expect(parseProductFilters(searchParams).pressingYearTo).toBeUndefined();
+  });
+
+  it('유효한 프레싱 연도 범위는 그대로 쓴다', () => {
+    // given
+    const searchParams = new URLSearchParams('pressingYearFrom=1959&pressingYearTo=1970');
+
+    // when
+    const result = parseProductFilters(searchParams);
+
+    // then
+    expect(result.pressingYearFrom).toBe(1959);
+    expect(result.pressingYearTo).toBe(1970);
+  });
+
   it('알 수 없는 sort 값이면 latest 로 되돌린다', () => {
     // given
     const searchParams = new URLSearchParams('sort=cheapest');
@@ -119,6 +184,10 @@ describe('serializeProductFilters()', () => {
       artistId: 7,
       genreIds: [1, 2],
       labelId: 3,
+      country: 'Japan',
+      pressingYearFrom: 1959,
+      pressingYearTo: 1970,
+      editionType: 'REISSUE',
       minPrice: 10000,
       maxPrice: 50000,
       sort: 'priceAsc',
@@ -130,7 +199,7 @@ describe('serializeProductFilters()', () => {
 
     // then
     expect(params.toString()).toBe(
-      'keyword=blue&artistId=7&genreIds=1&genreIds=2&labelId=3&minPrice=10000&maxPrice=50000&sort=priceAsc&page=2',
+      'keyword=blue&artistId=7&genreIds=1&genreIds=2&labelId=3&country=Japan&pressingYearFrom=1959&pressingYearTo=1970&editionType=REISSUE&minPrice=10000&maxPrice=50000&sort=priceAsc&page=2',
     );
   });
 
@@ -159,6 +228,34 @@ describe('serializeProductFilters()', () => {
 
     // then
     expect(result).toMatchObject(value);
+  });
+});
+
+describe('countActiveFilters()', () => {
+  it('아무 필터도 없으면 0 이다', () => {
+    // given
+    const value = filters();
+
+    // when & then
+    expect(countActiveFilters(value)).toBe(0);
+  });
+
+  it('프레싱 연도는 from·to 를 합쳐 1개로 센다', () => {
+    // given
+    const both = filters({ pressingYearFrom: 1959, pressingYearTo: 1970 });
+    const fromOnly = filters({ pressingYearFrom: 1959 });
+
+    // when & then
+    expect(countActiveFilters(both)).toBe(1);
+    expect(countActiveFilters(fromOnly)).toBe(1);
+  });
+
+  it('국가·에디션은 각각 1개씩 센다', () => {
+    // given
+    const value = filters({ country: 'Japan', editionType: 'REISSUE' });
+
+    // when & then
+    expect(countActiveFilters(value)).toBe(2);
   });
 });
 

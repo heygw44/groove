@@ -1,3 +1,4 @@
+import type { EditionType, PressingSummary, ProductAlbumSummary } from '@/types/catalog';
 import type { LimitedDropStatus } from '@/types/limitedDrop';
 
 export type ProductStatus = 'ON_SALE' | 'SOLD_OUT' | 'HIDDEN';
@@ -39,16 +40,24 @@ export interface ProductSummary {
   id: number;
   title: string;
   artistName: string;
+  labelName?: string;
   price: number;
+  colorVariant?: string;
+  pressingInfo?: string;
   status: ProductStatus;
   thumbnailUrl?: string;
   averageRating?: number;
+  reviewCount?: number;
   wishlisted?: boolean;
+  country?: string;
+  pressingYear?: number;
+  editionType: EditionType;
 }
 
 export interface ProductDetail {
   id: number;
   title: string;
+  album: ProductAlbumSummary;
   artist: Artist;
   label?: Label;
   genres: Genre[];
@@ -59,6 +68,7 @@ export interface ProductDetail {
   releaseDate?: string;
   pressingInfo?: string;
   colorVariant?: string;
+  pressing: PressingSummary;
   description?: string;
   averageRating?: number;
   reviewCount?: number;
@@ -71,6 +81,11 @@ export interface ProductListParams {
   artistId?: number;
   genreIds?: number[];
   labelId?: number;
+  albumId?: number;
+  country?: string;
+  pressingYearFrom?: number;
+  pressingYearTo?: number;
+  editionType?: EditionType;
   minPrice?: number;
   maxPrice?: number;
   sort?: ProductSort;
