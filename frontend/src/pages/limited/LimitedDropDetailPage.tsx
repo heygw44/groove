@@ -12,6 +12,7 @@ import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
 import { LimitedPurchaseSheet } from '@/components/limited/LimitedPurchaseSheet';
 import { PurchaseResultModal } from '@/components/limited/PurchaseResultModal';
 import { RemainingGauge } from '@/components/limited/RemainingGauge';
+import { TasteMatchBadge } from '@/components/limited/TasteMatchBadge';
 import { usePurchaseLimitedDrop } from '@/hooks/mutations/useLimitedDropMutations';
 import { addressKeys } from '@/hooks/queries/queryKeys';
 import { useLimitedDrop } from '@/hooks/queries/useLimitedDrop';
@@ -182,7 +183,10 @@ export default function LimitedDropDetailPage() {
       </Link>
 
       <div className="mt-4 flex items-center gap-3">
-        <DropStatusBadge status={drop.status} />
+        <div className="flex items-center gap-1.5">
+          <DropStatusBadge status={drop.status} />
+          <TasteMatchBadge tasteMatch={drop.tasteMatch} />
+        </div>
         <h1 className="text-2xl font-bold tracking-tight">{drop.product.title}</h1>
       </div>
       <p className="mt-1 text-sm text-content-muted">{drop.product.artistName}</p>

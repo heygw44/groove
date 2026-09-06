@@ -1,3 +1,5 @@
+import type { TasteMatch } from '@/types/recommend';
+
 import type { OrderStatus } from './order';
 
 export type LimitedDropStatus = 'SCHEDULED' | 'OPEN' | 'SOLD_OUT' | 'CLOSED';
@@ -19,6 +21,8 @@ export interface LimitedDropSummary {
   openAt: string;
   closeAt: string;
   status: LimitedDropStatus;
+  /** 비로그인이면 서버가 키 자체를 내려주지 않는다. */
+  tasteMatch?: TasteMatch;
 }
 
 export interface LimitedDropListResponse {
