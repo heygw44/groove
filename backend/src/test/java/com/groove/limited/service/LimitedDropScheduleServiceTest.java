@@ -45,6 +45,9 @@ class LimitedDropScheduleServiceTest {
 	@Mock
 	private LimitedDropRedisService limitedDropRedisService;
 
+	@Mock
+	private LimitedDropStatFlusher limitedDropStatFlusher;
+
 	private LimitedDropScheduleService scheduleService;
 
 	private LocalDateTime now;
@@ -52,7 +55,8 @@ class LimitedDropScheduleServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		scheduleService = new LimitedDropScheduleService(limitedDropRepository, limitedDropRedisService);
+		scheduleService = new LimitedDropScheduleService(limitedDropRepository, limitedDropRedisService,
+				limitedDropStatFlusher);
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
 		Artist artist = ArtistFixture.withId(1L);
@@ -151,8 +155,8 @@ class LimitedDropScheduleServiceTest {
 	class Close {
 
 		@Test
-		@DisplayName("OPEN 이고 마감 시각이 지났으면 CLOSED 로 바꾸고 Redis 를 지운다")
-		void closesAndClearsRedisWhenOpenAndPastCloseAt() {
+		@DisplayName("OPEN 이고 마감 시각이 지났으면 CLOSED 로 바꾸고 집계를 flush 한다")
+		void closesAndFlushesStatWhenOpenAndPastCloseAt() {
 			// given
 			LimitedDrop drop = scheduledDrop();
 			drop.open();
@@ -165,7 +169,7 @@ class LimitedDropScheduleServiceTest {
 			// then
 			assertThat(result).isTrue();
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.CLOSED);
-			verify(limitedDropRedisService).clear(DROP_ID);
+			verify(limitedDropStatFlusher).flushAndClear(drop);
 		}
 
 		@Test
@@ -199,7 +203,7 @@ class LimitedDropScheduleServiceTest {
 
 			// then
 			assertThat(result).isFalse();
-			verify(limitedDropRedisService, never()).clear(any());
+			verify(limitedDropStatFlusher, never()).flushAndClear(any());
 		}
 
 		@Test
@@ -217,7 +221,7 @@ class LimitedDropScheduleServiceTest {
 
 			// then
 			assertThat(result).isFalse();
-			verify(limitedDropRedisService, never()).clear(any());
+			verify(limitedDropStatFlusher, never()).flushAndClear(any());
 		}
 	}
 }
