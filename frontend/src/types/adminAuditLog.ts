@@ -13,9 +13,12 @@ export type AdminAuditAction =
   | 'LIMITED_DROP_CLOSE'
   | 'MEMBER_STATUS_CHANGE'
   | 'PAYMENT_CANCEL'
-  | 'STOCK_ADJUST';
+  | 'STOCK_ADJUST'
+  | 'PRODUCT_IMPORT'
+  | 'CATALOG_IMPORT_JOB_START';
 
-export type AdminAuditTargetType = 'PRODUCT' | 'ORDER' | 'COUPON' | 'LIMITED_DROP' | 'MEMBER' | 'PAYMENT';
+export type AdminAuditTargetType =
+  'PRODUCT' | 'ORDER' | 'COUPON' | 'LIMITED_DROP' | 'MEMBER' | 'PAYMENT' | 'CATALOG_IMPORT_JOB';
 
 export interface AdminAuditLog {
   id: number;

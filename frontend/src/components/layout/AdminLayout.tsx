@@ -53,6 +53,26 @@ const NAV_ITEMS: AdminNavItem[] = [
     ),
   },
   {
+    to: '/admin/catalog/import-jobs',
+    label: '적재 잡',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M4 5.5h12M4 10h12M4 14.5h8" />
+        <path d="M3.2 5.5h.01M3.2 10h.01M3.2 14.5h.01" strokeWidth="2.2" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/orders',
     label: '주문',
     icon: (
