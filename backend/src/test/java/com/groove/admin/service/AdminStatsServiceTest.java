@@ -45,6 +45,9 @@ class AdminStatsServiceTest {
 	@Mock
 	AdminStatsMapper adminStatsMapper;
 
+	@Mock
+	AdminLimitedDropStatsService adminLimitedDropStatsService;
+
 	AdminStatsService adminStatsService;
 
 	LocalDate today;
@@ -53,7 +56,7 @@ class AdminStatsServiceTest {
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T15:00:00Z"), ZoneId.of("Asia/Seoul"));
 		today = LocalDate.now(clock);
-		adminStatsService = new AdminStatsService(adminStatsMapper, clock);
+		adminStatsService = new AdminStatsService(adminStatsMapper, adminLimitedDropStatsService, clock);
 	}
 
 	@Nested
@@ -266,13 +269,13 @@ class AdminStatsServiceTest {
 	class GetLimitedDropStats {
 
 		@Test
-		@DisplayName("매퍼 결과를 그대로 반환한다")
-		void passesThroughMapperResult() {
+		@DisplayName("위임 서비스 결과를 그대로 반환한다")
+		void passesThroughDelegateResult() {
 			// given
 			LimitedDropStatsResponse response = new LimitedDropStatsResponse(1L, "그루브 앨범",
 					LimitedDropStatus.OPEN, 10, 3, 30.0, LocalDateTime.now(),
-					LocalDateTime.now().plusDays(1), null, null);
-			given(adminStatsMapper.findLimitedDropStats()).willReturn(List.of(response));
+					LocalDateTime.now().plusDays(1), null, null, null);
+			given(adminLimitedDropStatsService.getLimitedDropStats()).willReturn(List.of(response));
 
 			// when
 			List<LimitedDropStatsResponse> result = adminStatsService.getLimitedDropStats();

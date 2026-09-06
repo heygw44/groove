@@ -35,6 +35,7 @@ public class AdminStatsService {
 	private static final int MAX_LIMIT = 100;
 
 	private final AdminStatsMapper adminStatsMapper;
+	private final AdminLimitedDropStatsService adminLimitedDropStatsService;
 	private final Clock clock;
 
 	public List<DailySalesResponse> getDailySales(StatsPeriodRequest request) {
@@ -59,7 +60,7 @@ public class AdminStatsService {
 	}
 
 	public List<LimitedDropStatsResponse> getLimitedDropStats() {
-		return adminStatsMapper.findLimitedDropStats();
+		return adminLimitedDropStatsService.getLimitedDropStats();
 	}
 
 	public AdminStatsSummaryResponse getSummary() {

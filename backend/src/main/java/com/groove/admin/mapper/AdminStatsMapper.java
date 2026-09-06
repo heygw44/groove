@@ -8,7 +8,7 @@ import org.apache.ibatis.annotations.Param;
 
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
-import com.groove.admin.dto.LimitedDropStatsResponse;
+import com.groove.admin.dto.LimitedDropStatsRow;
 import com.groove.admin.dto.PopularProductResponse;
 import com.groove.admin.dto.PopularProductStatsCondition;
 
@@ -21,7 +21,7 @@ public interface AdminStatsMapper {
 
 	List<PopularProductResponse> findPopularProducts(PopularProductStatsCondition condition);
 
-	List<LimitedDropStatsResponse> findLimitedDropStats();
+	List<LimitedDropStatsRow> findLimitedDropStats();
 
 	AdminStatsSummaryResponse findSummary(@Param("todayStart") LocalDateTime todayStart,
 			@Param("tomorrowStart") LocalDateTime tomorrowStart);
