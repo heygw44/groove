@@ -20,6 +20,7 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.DataJpaTestSupport;
@@ -38,6 +39,9 @@ class OrderRepositoryTest extends DataJpaTestSupport {
 	@Autowired
 	private ProductRepository productRepository;
 
+	@Autowired
+	private AlbumRepository albumRepository;
+
 	@Nested
 	@DisplayName("save()")
 	class Save {
@@ -48,7 +52,9 @@ class OrderRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-save@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Order order = OrderFixture.createWithItem(member, product, 2);
 
 			// when
@@ -85,7 +91,9 @@ class OrderRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-items@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "Kind of Blue"));
+			Product createdProduct = ProductFixture.create(artist, "Kind of Blue");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Order saved = orderRepository.saveAndFlush(OrderFixture.createWithItem(member, product, 3));
 
 			// when
@@ -129,7 +137,9 @@ class OrderRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-scoped-owner@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Order saved = orderRepository.saveAndFlush(OrderFixture.createWithItem(member, product, 1));
 
 			// when

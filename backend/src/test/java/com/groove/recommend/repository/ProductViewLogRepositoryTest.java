@@ -18,6 +18,7 @@ import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.recommend.entity.ProductViewLog;
@@ -37,6 +38,9 @@ class ProductViewLogRepositoryTest extends DataJpaTestSupport {
 	private ArtistRepository artistRepository;
 
 	@Autowired
+	private AlbumRepository albumRepository;
+
+	@Autowired
 	private ProductRepository productRepository;
 
 	@Autowired
@@ -51,7 +55,9 @@ class ProductViewLogRepositoryTest extends DataJpaTestSupport {
 		void savesWithoutMemberForAnonymousView() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			ProductViewLog saved = viewLogRepository.save(
 					ProductViewLogFixture.createAnonymous(product, LocalDateTime.now()));
 
@@ -68,7 +74,9 @@ class ProductViewLogRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("view-log-save@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LocalDateTime viewedAt = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 			ProductViewLog saved = viewLogRepository.save(ProductViewLogFixture.create(member, product, viewedAt));
 			entityManager.flush();
@@ -92,7 +100,9 @@ class ProductViewLogRepositoryTest extends DataJpaTestSupport {
 		void deletesOnlyRowsBeforeThreshold() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LocalDateTime threshold = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 			ProductViewLog expired = viewLogRepository.save(
 					ProductViewLogFixture.createAnonymous(product, threshold.minusDays(1)));
@@ -114,7 +124,9 @@ class ProductViewLogRepositoryTest extends DataJpaTestSupport {
 		void deletesOnlyUpToGivenSize() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LocalDateTime threshold = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 			ProductViewLog first = viewLogRepository.save(
 					ProductViewLogFixture.createAnonymous(product, threshold.minusDays(2)));

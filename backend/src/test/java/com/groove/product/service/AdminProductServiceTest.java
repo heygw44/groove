@@ -23,6 +23,7 @@ import org.openapitools.jackson.nullable.JsonNullable;
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
+import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
@@ -36,11 +37,13 @@ import com.groove.inventory.service.StockService;
 import com.groove.product.dto.AdminProductResponse;
 import com.groove.product.dto.ProductCreateRequest;
 import com.groove.product.dto.ProductUpdateRequest;
+import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductStatus;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
@@ -56,6 +59,9 @@ class AdminProductServiceTest {
 
 	@Mock
 	ProductRepository productRepository;
+
+	@Mock
+	AlbumRepository albumRepository;
 
 	@Mock
 	ArtistRepository artistRepository;
@@ -79,8 +85,8 @@ class AdminProductServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		adminProductService = new AdminProductService(productRepository, artistRepository, labelRepository,
-				genreRepository, stockRepository, stockService, adminAuditLogService);
+		adminProductService = new AdminProductService(productRepository, albumRepository, artistRepository,
+				labelRepository, genreRepository, stockRepository, stockService, adminAuditLogService);
 	}
 
 	@Nested
@@ -93,9 +99,11 @@ class AdminProductServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Label label = LabelFixture.create();
+			Album album = AlbumFixture.create(artist);
 			ProductCreateRequest request = ProductFixture.createRequest(ARTIST_ID, LABEL_ID, List.of());
 			given(artistRepository.findById(ARTIST_ID)).willReturn(Optional.of(artist));
 			given(labelRepository.findById(LABEL_ID)).willReturn(Optional.of(label));
+			given(albumRepository.findById(1L)).willReturn(Optional.of(album));
 			Product saved = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 			given(productRepository.save(any())).willReturn(saved);
 			Stock stock = StockFixture.create(saved, 10);
@@ -142,6 +150,63 @@ class AdminProductServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.GENRE_NOT_FOUND);
 			verify(productRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("albumId 와 newAlbum 을 모두 지정하면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenBothAlbumIdAndNewAlbumGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			ProductCreateRequest.NewAlbumRequest newAlbum = new ProductCreateRequest.NewAlbumRequest(
+					"Kind of Blue", 1959);
+			ProductCreateRequest request = ProductFixture.createRequest(ARTIST_ID, null, List.of(), 1L, newAlbum);
+			given(artistRepository.findById(ARTIST_ID)).willReturn(Optional.of(artist));
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.create(ADMIN_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+			verify(productRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("albumId 와 newAlbum 을 둘 다 지정하지 않으면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenNeitherAlbumIdNorNewAlbumGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			ProductCreateRequest request = ProductFixture.createRequest(ARTIST_ID, null, List.of(), null, null);
+			given(artistRepository.findById(ARTIST_ID)).willReturn(Optional.of(artist));
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.create(ADMIN_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+			verify(productRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("newAlbum 을 지정하면 새 앨범을 만들어 연결한다")
+		void createsNewAlbumWhenNewAlbumGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			ProductCreateRequest.NewAlbumRequest newAlbum = new ProductCreateRequest.NewAlbumRequest(
+					"A Love Supreme", 1965);
+			ProductCreateRequest request = ProductFixture.createRequest(ARTIST_ID, null, List.of(), null, newAlbum);
+			given(artistRepository.findById(ARTIST_ID)).willReturn(Optional.of(artist));
+			Album savedAlbum = AlbumFixture.withId(AlbumFixture.create(artist, "A Love Supreme"), 5L);
+			given(albumRepository.save(any())).willReturn(savedAlbum);
+			Product saved = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.save(any())).willReturn(saved);
+			given(stockService.create(any(), anyInt())).willReturn(StockFixture.create(saved, 10));
+
+			// when
+			adminProductService.create(ADMIN_ID, request);
+
+			// then
+			verify(albumRepository).save(any());
+			verify(albumRepository, never()).findById(any());
 		}
 	}
 

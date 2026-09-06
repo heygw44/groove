@@ -22,6 +22,7 @@ import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.DataJpaTestSupport;
@@ -41,6 +42,9 @@ class CartItemRepositoryTest extends DataJpaTestSupport {
 	private ArtistRepository artistRepository;
 
 	@Autowired
+	private AlbumRepository albumRepository;
+
+	@Autowired
 	private ProductRepository productRepository;
 
 	@Nested
@@ -54,7 +58,9 @@ class CartItemRepositoryTest extends DataJpaTestSupport {
 			Member member = memberRepository.save(MemberFixture.create("cart-item-uk@groove.com"));
 			Cart cart = cartRepository.save(CartFixture.createCart(member));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			cartItemRepository.saveAndFlush(CartFixture.createItem(cart, product, 1));
 
 			// when & then
@@ -75,7 +81,9 @@ class CartItemRepositoryTest extends DataJpaTestSupport {
 			Member other = memberRepository.save(MemberFixture.create("cart-item-other@groove.com"));
 			Cart ownerCart = cartRepository.save(CartFixture.createCart(owner));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			CartItem item = cartItemRepository.save(CartFixture.createItem(ownerCart, product, 1));
 
 			// when
@@ -92,7 +100,9 @@ class CartItemRepositoryTest extends DataJpaTestSupport {
 			Member owner = memberRepository.save(MemberFixture.create("cart-item-owner2@groove.com"));
 			Cart ownerCart = cartRepository.save(CartFixture.createCart(owner));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			CartItem item = cartItemRepository.save(CartFixture.createItem(ownerCart, product, 1));
 
 			// when
@@ -115,8 +125,12 @@ class CartItemRepositoryTest extends DataJpaTestSupport {
 			Member member = memberRepository.save(MemberFixture.create("cart-item-clear@groove.com"));
 			Cart cart = cartRepository.save(CartFixture.createCart(member));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product firstProduct = productRepository.save(ProductFixture.create(artist, "상품1"));
-			Product secondProduct = productRepository.save(ProductFixture.create(artist, "상품2"));
+			Product firstProduct = ProductFixture.create(artist, "상품1");
+			albumRepository.save(firstProduct.getAlbum());
+			firstProduct = productRepository.save(firstProduct);
+			Product secondProduct = ProductFixture.create(artist, "상품2");
+			albumRepository.save(secondProduct.getAlbum());
+			secondProduct = productRepository.save(secondProduct);
 			cartItemRepository.save(CartFixture.createItem(cart, firstProduct, 1));
 			cartItemRepository.save(CartFixture.createItem(cart, secondProduct, 1));
 

@@ -29,8 +29,10 @@ import com.groove.fixture.ProductFixture;
 import com.groove.inventory.service.StockService;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
+import com.groove.product.entity.Album;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
@@ -55,6 +57,9 @@ class LocalDataInitializerTest {
 
 	@Mock
 	ArtistRepository artistRepository;
+
+	@Mock
+	AlbumRepository albumRepository;
 
 	@Mock
 	ProductRepository productRepository;
@@ -105,7 +110,7 @@ class LocalDataInitializerTest {
 		}
 
 		@Test
-		@DisplayName("데이터가 비어 있으면 회원 3명과 시드 정의만큼의 앨범을 시딩한다")
+		@DisplayName("데이터가 비어 있으면 회원 3명과 시드 정의만큼의 앨범·프레싱을 시딩한다")
 		void seedsEveryAlbumWhenEmpty() {
 			// given
 			LocalDataInitializer initializer = newInitializer();
@@ -115,6 +120,7 @@ class LocalDataInitializerTest {
 			given(genreRepository.save(any(Genre.class))).willAnswer(invocation -> invocation.getArgument(0));
 			given(labelRepository.saveAll(any())).willAnswer(invocation -> invocation.getArgument(0));
 			given(artistRepository.saveAll(any())).willAnswer(invocation -> invocation.getArgument(0));
+			given(albumRepository.save(any(Album.class))).willAnswer(invocation -> invocation.getArgument(0));
 			given(productRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
 
 			// when
@@ -122,8 +128,10 @@ class LocalDataInitializerTest {
 
 			// then
 			int albumCount = SeedAlbums.ALBUMS.size();
-			verify(productRepository, times(albumCount)).save(any());
-			verify(stockService, times(albumCount)).create(any(), anyInt());
+			int pressingCount = IntStream.range(0, albumCount).map(initializer::pressingCountFor).sum();
+			verify(albumRepository, times(albumCount)).save(any());
+			verify(productRepository, times(pressingCount)).save(any());
+			verify(stockService, times(pressingCount)).create(any(), anyInt());
 			verify(memberRepository, times(3)).save(any());
 		}
 
@@ -191,6 +199,7 @@ class LocalDataInitializerTest {
 
 	private LocalDataInitializer newInitializer() {
 		return new LocalDataInitializer(memberRepository, passwordEncoder, genreRepository, labelRepository,
-				artistRepository, productRepository, stockService, reviewRepository, localSignalSeeder);
+				artistRepository, albumRepository, productRepository, stockService, reviewRepository,
+				localSignalSeeder);
 	}
 }

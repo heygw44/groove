@@ -29,6 +29,7 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.ProductRepository;
@@ -50,6 +51,9 @@ class LimitedDropTasteMatchIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	ArtistRepository artistRepository;
+
+	@Autowired
+	AlbumRepository albumRepository;
 
 	@Autowired
 	ProductRepository productRepository;
@@ -75,6 +79,7 @@ class LimitedDropTasteMatchIntegrationTest extends IntegrationTestSupport {
 			Artist artist = artistRepository.save(ArtistFixture.create());
 			Product product = ProductFixture.create(artist);
 			product.addGenre(genre);
+			albumRepository.save(product.getAlbum());
 			productRepository.save(product);
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));
 
@@ -104,7 +109,9 @@ class LimitedDropTasteMatchIntegrationTest extends IntegrationTestSupport {
 		void returnsUnmatchedForMemberWithoutProfile() throws Exception {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));
 
 			Member member = memberRepository.save(
@@ -124,7 +131,9 @@ class LimitedDropTasteMatchIntegrationTest extends IntegrationTestSupport {
 		void omitsTasteMatchKeyForAnonymous() throws Exception {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));
 
 			// when & then

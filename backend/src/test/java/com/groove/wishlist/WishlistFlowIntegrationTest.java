@@ -26,6 +26,7 @@ import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -42,6 +43,9 @@ class WishlistFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	ArtistRepository artistRepository;
+
+	@Autowired
+	AlbumRepository albumRepository;
 
 	@Autowired
 	ProductRepository productRepository;
@@ -153,7 +157,9 @@ class WishlistFlowIntegrationTest extends IntegrationTestSupport {
 
 	private Product seedProduct() {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		return productRepository.save(ProductFixture.create(artist));
+		Product product = ProductFixture.create(artist);
+		albumRepository.save(product.getAlbum());
+		return productRepository.save(product);
 	}
 
 	private String signupAndLogin() throws Exception {

@@ -29,6 +29,7 @@ import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -41,6 +42,9 @@ class WishlistConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -75,7 +79,9 @@ class WishlistConcurrencyIntegrationTest extends IntegrationTestSupport {
 		void onlyOneWishlistItemIsCreated() throws InterruptedException {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Member member = memberRepository.save(
 					MemberFixture.create("wisher-" + UUID.randomUUID() + "@groove.com"));
 

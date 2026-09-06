@@ -28,6 +28,7 @@ import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductImage;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
@@ -40,6 +41,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -56,7 +60,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void throwsWhenProductDuplicated() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품1"));
+			Product createdProduct = ProductFixture.create(artist, "한정반 상품1");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			limitedDropRepository.saveAndFlush(LimitedDropFixture.scheduled(product));
 
 			// when & then
@@ -74,7 +80,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void returnsTrueWhenActiveDropExists() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품2"));
+			Product createdProduct = ProductFixture.create(artist, "한정반 상품2");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));
 
 			// when
@@ -91,7 +99,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void returnsFalseWhenDropClosed() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품3"));
+			Product createdProduct = ProductFixture.create(artist, "한정반 상품3");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LimitedDrop drop = LimitedDropFixture.withStatus(LimitedDropFixture.scheduled(product),
 					LimitedDropStatus.CLOSED);
 			limitedDropRepository.save(drop);
@@ -114,7 +124,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void returnsDropWhenExists() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품4"));
+			Product createdProduct = ProductFixture.create(artist, "한정반 상품4");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));
 
 			// when
@@ -135,7 +147,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void returnsDropWithAccessibleProduct() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품5"));
+			Product createdProduct = ProductFixture.create(artist, "한정반 상품5");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));
 
 			// when
@@ -156,8 +170,12 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void returnsOnlyMatchingStatusAmongSavedDrops() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product scheduledProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품6"));
-			Product openProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품7"));
+			Product scheduledProduct = ProductFixture.create(artist, "한정반 상품6");
+			albumRepository.save(scheduledProduct.getAlbum());
+			scheduledProduct = productRepository.save(scheduledProduct);
+			Product openProduct = ProductFixture.create(artist, "한정반 상품7");
+			albumRepository.save(openProduct.getAlbum());
+			openProduct = productRepository.save(openProduct);
 			LimitedDrop scheduledDrop = limitedDropRepository.save(LimitedDropFixture.scheduled(scheduledProduct));
 			LimitedDrop openDrop = limitedDropRepository.save(LimitedDropFixture.open(openProduct, 50));
 
@@ -175,8 +193,12 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void includesAllStatusesWhenStatusIsNull() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product scheduledProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품8"));
-			Product openProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품9"));
+			Product scheduledProduct = ProductFixture.create(artist, "한정반 상품8");
+			albumRepository.save(scheduledProduct.getAlbum());
+			scheduledProduct = productRepository.save(scheduledProduct);
+			Product openProduct = ProductFixture.create(artist, "한정반 상품9");
+			albumRepository.save(openProduct.getAlbum());
+			openProduct = productRepository.save(openProduct);
 			LimitedDrop scheduledDrop = limitedDropRepository.save(LimitedDropFixture.scheduled(scheduledProduct));
 			LimitedDrop openDrop = limitedDropRepository.save(LimitedDropFixture.open(openProduct, 50));
 
@@ -194,7 +216,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void populatesSummaryProjectionFields() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품10"));
+			Product createdProduct = ProductFixture.create(artist, "한정반 상품10");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			// MySQL datetime(6) 이 나노초를 반올림하므로 초 단위로 잘라 저장한다.
 			LocalDateTime openAt = LocalDateTime.now().plusDays(1).truncatedTo(ChronoUnit.SECONDS);
 			LocalDateTime closeAt = openAt.plusDays(1);
@@ -233,8 +257,12 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void returnsOnlyMatchingStatusAmongSavedDrops() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product scheduledProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품11"));
-			Product openProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품12"));
+			Product scheduledProduct = ProductFixture.create(artist, "한정반 상품11");
+			albumRepository.save(scheduledProduct.getAlbum());
+			scheduledProduct = productRepository.save(scheduledProduct);
+			Product openProduct = ProductFixture.create(artist, "한정반 상품12");
+			albumRepository.save(openProduct.getAlbum());
+			openProduct = productRepository.save(openProduct);
 			LimitedDrop scheduledDrop = limitedDropRepository.save(LimitedDropFixture.scheduled(scheduledProduct));
 			LimitedDrop openDrop = limitedDropRepository.save(LimitedDropFixture.open(openProduct, 50));
 
@@ -252,7 +280,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void excludesDropsOfHiddenProduct() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product hiddenProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품13"));
+			Product hiddenProduct = ProductFixture.create(artist, "한정반 상품13");
+			albumRepository.save(hiddenProduct.getAlbum());
+			hiddenProduct = productRepository.save(hiddenProduct);
 			hiddenProduct.hide();
 			productRepository.save(hiddenProduct);
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(hiddenProduct));
@@ -271,8 +301,12 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void ordersByOpenAtAscending() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product laterProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품14"));
-			Product earlierProduct = productRepository.save(ProductFixture.create(artist, "한정반 상품15"));
+			Product laterProduct = ProductFixture.create(artist, "한정반 상품14");
+			albumRepository.save(laterProduct.getAlbum());
+			laterProduct = productRepository.save(laterProduct);
+			Product earlierProduct = ProductFixture.create(artist, "한정반 상품15");
+			albumRepository.save(earlierProduct.getAlbum());
+			earlierProduct = productRepository.save(earlierProduct);
 			LocalDateTime base = LocalDateTime.now().plusDays(1).truncatedTo(ChronoUnit.SECONDS);
 			LimitedDrop laterDrop = limitedDropRepository.save(LimitedDropFixture.withOpenAt(
 					LimitedDropFixture.scheduled(laterProduct), base.plusDays(5)));
@@ -296,7 +330,9 @@ class LimitedDropRepositoryTest extends DataJpaTestSupport {
 		void populatesThumbnailFromFirstImage() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, "한정반 상품16"));
+			Product createdProduct = ProductFixture.create(artist, "한정반 상품16");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			productImageRepository.save(ProductImage.of(product, "https://cdn.groove.com/0.jpg", 0));
 			productImageRepository.save(ProductImage.of(product, "https://cdn.groove.com/1.jpg", 1));
 			LimitedDrop drop = limitedDropRepository.save(LimitedDropFixture.scheduled(product));

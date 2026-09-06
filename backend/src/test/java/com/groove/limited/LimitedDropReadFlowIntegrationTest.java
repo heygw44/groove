@@ -36,6 +36,7 @@ import com.groove.member.entity.MemberRole;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -57,6 +58,9 @@ class LimitedDropReadFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	ArtistRepository artistRepository;
+
+	@Autowired
+	AlbumRepository albumRepository;
 
 	@Autowired
 	ProductRepository productRepository;
@@ -130,7 +134,9 @@ class LimitedDropReadFlowIntegrationTest extends IntegrationTestSupport {
 
 	private Long createProductWithStock(int quantity) {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		Product product = productRepository.save(ProductFixture.create(artist));
+		Product createdProduct = ProductFixture.create(artist);
+		albumRepository.save(createdProduct.getAlbum());
+		Product product = productRepository.save(createdProduct);
 		stockRepository.save(StockFixture.create(product, quantity));
 		return product.getId();
 	}

@@ -45,6 +45,7 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -56,6 +57,9 @@ class MemberCouponUseConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -102,7 +106,9 @@ class MemberCouponUseConcurrencyIntegrationTest extends IntegrationTestSupport {
 		void onlyOneOrderConsumesCoupon() throws InterruptedException {
 			// given: 재고 부족이 실패 원인으로 섞이지 않게 재고를 넉넉히 둔다.
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Stock stock = stockRepository.saveAndFlush(StockFixture.create(product, INITIAL_QUANTITY));
 
 			Member member = memberRepository.save(

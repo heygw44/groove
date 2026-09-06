@@ -20,6 +20,7 @@ import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.recommend.entity.ProductViewLog;
@@ -35,6 +36,9 @@ class ProductViewLogCleanupIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ProductRepository productRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private MemberRepository memberRepository;
@@ -53,7 +57,9 @@ class ProductViewLogCleanupIntegrationTest extends IntegrationTestSupport {
 
 	private Product createProduct() {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		return productRepository.save(ProductFixture.create(artist));
+		Product product = ProductFixture.create(artist);
+		albumRepository.save(product.getAlbum());
+		return productRepository.save(product);
 	}
 
 	private Member createMember() {

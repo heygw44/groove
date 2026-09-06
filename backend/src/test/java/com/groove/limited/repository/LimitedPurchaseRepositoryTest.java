@@ -22,6 +22,7 @@ import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.DataJpaTestSupport;
@@ -39,6 +40,9 @@ class LimitedPurchaseRepositoryTest extends DataJpaTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -159,7 +163,9 @@ class LimitedPurchaseRepositoryTest extends DataJpaTestSupport {
 
 	private LimitedDrop createDrop(String productTitle) {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		Product product = productRepository.save(ProductFixture.create(artist, productTitle));
+		Product createdProduct = ProductFixture.create(artist, productTitle);
+		albumRepository.save(createdProduct.getAlbum());
+		Product product = productRepository.save(createdProduct);
 		return limitedDropRepository.save(LimitedDropFixture.scheduled(product));
 	}
 }

@@ -136,7 +136,7 @@ class RecommendServiceTest {
 
 	private static ProductSummaryResponse summary(Long id) {
 		return new ProductSummaryResponse(id, "title" + id, "artist", null, BigDecimal.ONE, null, null,
-				ProductStatus.ON_SALE, null, null, 0L, null);
+				ProductStatus.ON_SALE, null, null, 0L, null, null, null, null);
 	}
 
 	@Nested

@@ -33,6 +33,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.review.repository.ReviewRepository;
@@ -45,6 +46,9 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -82,7 +86,9 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
 		void onlyOneReviewIsCreated() throws InterruptedException {
 			// given: 구매 검증을 통과시키려면 DELIVERED 주문이 필요해 REST 흐름 없이 바로 심는다.
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Member member = memberRepository.save(
 					MemberFixture.create("reviewer-" + UUID.randomUUID() + "@groove.com"));
 			Order order = OrderFixture.createWithItem(member, product, 1);

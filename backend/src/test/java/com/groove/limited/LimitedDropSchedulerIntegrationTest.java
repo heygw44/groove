@@ -43,6 +43,7 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -51,6 +52,9 @@ class LimitedDropSchedulerIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -96,7 +100,9 @@ class LimitedDropSchedulerIntegrationTest extends IntegrationTestSupport {
 
 	private Product createProduct() {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		return productRepository.save(ProductFixture.create(artist));
+		Product product = ProductFixture.create(artist);
+		albumRepository.save(product.getAlbum());
+		return productRepository.save(product);
 	}
 
 	private Member createMember() {

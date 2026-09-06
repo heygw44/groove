@@ -88,7 +88,8 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 			ProductCreateRequest createRequest = new ProductCreateRequest("Kind of Blue", artist.getId(),
 					label.getId(), List.of(genre.getId()), LocalDate.of(1959, 8, 17), "180g", "Black",
 					new BigDecimal("45000"), "설명",
-					List.of("https://cdn.groove.com/0.jpg", "https://cdn.groove.com/1.jpg"), 10);
+					List.of("https://cdn.groove.com/0.jpg", "https://cdn.groove.com/1.jpg"), 10, null,
+					new ProductCreateRequest.NewAlbumRequest("Kind of Blue", 1959), null, null, null, null, null);
 
 			// when
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
@@ -102,7 +103,8 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 
 			ProductUpdateRequest updateRequest = new ProductUpdateRequest("A Love Supreme", null,
 					JsonNullable.undefined(), null, null, null, null, new BigDecimal("58000"), null,
-					List.of("https://cdn.groove.com/updated.jpg"));
+					List.of("https://cdn.groove.com/updated.jpg"), JsonNullable.undefined(),
+					JsonNullable.undefined(), JsonNullable.undefined(), JsonNullable.undefined(), null);
 			mockMvc.perform(patch("/api/v1/admin/products/{id}", productId)
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -149,7 +151,8 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 			Artist artist = artistRepository.save(Artist.create("Bill Evans", "Bill Evans", "설명"));
 			ProductCreateRequest request = new ProductCreateRequest("Waltz for Debby", artist.getId(), null,
 					List.of(), LocalDate.of(1961, 6, 25), "180g", "Black", new BigDecimal("40000"), "설명",
-					List.of(), 5);
+					List.of(), 5, null, new ProductCreateRequest.NewAlbumRequest("Waltz for Debby", 1961), null,
+					null, null, null, null);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/admin/products")
@@ -177,7 +180,8 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 
 			ProductCreateRequest createRequest = new ProductCreateRequest("Blue Train", artist.getId(),
 					label.getId(), List.of(), LocalDate.of(1957, 9, 15), "180g", "Black",
-					new BigDecimal("40000"), "설명", List.of(), 5);
+					new BigDecimal("40000"), "설명", List.of(), 5, null,
+					new ProductCreateRequest.NewAlbumRequest("Blue Train", 1957), null, null, null, null, null);
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -216,7 +220,8 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 
 			ProductCreateRequest createRequest = new ProductCreateRequest("Maiden Voyage", artist.getId(), null,
 					List.of(), LocalDate.of(1965, 3, 17), "180g", "Black", new BigDecimal("42000"), "설명",
-					List.of(), 5);
+					List.of(), 5, null, new ProductCreateRequest.NewAlbumRequest("Maiden Voyage", 1965), null,
+					null, null, null, null);
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -266,7 +271,8 @@ class AdminProductFlowIntegrationTest extends IntegrationTestSupport {
 
 			ProductCreateRequest createRequest = new ProductCreateRequest("Blue Train", artist.getId(), null,
 					List.of(genre.getId()), LocalDate.of(1957, 9, 15), "180g", "Black", new BigDecimal("40000"),
-					"설명", List.of(), 5);
+					"설명", List.of(), 5, null, new ProductCreateRequest.NewAlbumRequest("Blue Train", 1957), null,
+					null, null, null, null);
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/products")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
 							.contentType(MediaType.APPLICATION_JSON)
