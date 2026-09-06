@@ -22,6 +22,9 @@ toss:
   client-key: test_ck_dummy
   secret-key: test_sk_dummy
 
+discogs:
+  token: test_token_dummy
+
 file:
   upload-path: ${java.io.tmpdir}/groove-test-uploads
   base-url: http://localhost:8080/uploads

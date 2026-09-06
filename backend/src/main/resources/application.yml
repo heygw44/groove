@@ -67,6 +67,11 @@ toss:
   secret-key: ${TOSS_SECRET_KEY}   # 환경변수 필수. 로컬 기본값은 application-local.yml
   base-url: https://api.tosspayments.com
 
+discogs:
+  base-url: https://api.discogs.com
+  token: ${DISCOGS_TOKEN}   # 환경변수 필수. 로컬 기본값은 application-local.yml
+  user-agent: "GrooveLP/1.0 +https://groove-lp.duckdns.org"
+
 file:
   upload-path: ${FILE_UPLOAD_PATH:./uploads}
   base-url: ${FILE_BASE_URL:http://localhost:8080/uploads}
