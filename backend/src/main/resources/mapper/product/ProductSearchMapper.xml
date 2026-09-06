@@ -18,6 +18,9 @@
 			<arg column="average_rating" javaType="java.lang.Double"/>
 			<arg column="review_count" javaType="_long"/>
 			<arg column="wishlisted" javaType="java.lang.Boolean"/>
+			<arg column="country" javaType="java.lang.String"/>
+			<arg column="pressing_year" javaType="java.lang.Integer"/>
+			<arg column="edition_type" javaType="com.groove.product.entity.EditionType"/>
 		</constructor>
 	</resultMap>
 
@@ -64,6 +67,9 @@
 			(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0) AS thumbnail_url,
 			p.avg_rating AS average_rating,
 			p.review_count AS review_count,
+			p.country AS country,
+			p.pressing_year AS pressing_year,
+			p.edition_type AS edition_type,
 			<!-- 비로그인(memberId null)은 NULL 이라 응답에서 키가 생략된다. -->
 			<choose>
 				<when test="memberId != null">

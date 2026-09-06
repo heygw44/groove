@@ -54,7 +54,7 @@ class RecentViewControllerTest {
 
 	private ProductSummaryResponse summary(Long id, String title) {
 		return new ProductSummaryResponse(id, title, "artist", "label", BigDecimal.TEN, "Black", "180g",
-				ProductStatus.ON_SALE, "thumb", 4.5, 3L, true);
+				ProductStatus.ON_SALE, "thumb", 4.5, 3L, true, null, null, null);
 	}
 
 	@Nested

@@ -63,6 +63,7 @@ import com.groove.payment.entity.Payment;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -71,6 +72,9 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private ArtistRepository artistRepository;
+
+	@Autowired
+	private AlbumRepository albumRepository;
 
 	@Autowired
 	private ProductRepository productRepository;
@@ -130,7 +134,9 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 
 	private Long prepareOpenDrop(int totalQuantity) {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		Product product = productRepository.save(ProductFixture.create(artist));
+		Product createdProduct = ProductFixture.create(artist);
+		albumRepository.save(createdProduct.getAlbum());
+		Product product = productRepository.save(createdProduct);
 		stockRepository.saveAndFlush(StockFixture.create(product, totalQuantity));
 
 		int perMemberLimit = Math.min(2, totalQuantity);

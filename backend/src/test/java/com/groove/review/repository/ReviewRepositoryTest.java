@@ -22,6 +22,7 @@ import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.review.dto.ReviewRatingCount;
@@ -41,6 +42,9 @@ class ReviewRepositoryTest extends DataJpaTestSupport {
 	private ArtistRepository artistRepository;
 
 	@Autowired
+	private AlbumRepository albumRepository;
+
+	@Autowired
 	private ProductRepository productRepository;
 
 	@Nested
@@ -52,8 +56,10 @@ class ReviewRepositoryTest extends DataJpaTestSupport {
 		void throwsWhenProductAndMemberDuplicated() {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("review-repo-uk@groove.com"));
-			Product product = productRepository.save(ProductFixture.create(artistRepository.save(
-					ArtistFixture.create("review-repo-uk"))));
+			Artist artist = artistRepository.save(ArtistFixture.create("review-repo-uk"));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			reviewRepository.saveAndFlush(ReviewFixture.create(product, member));
 
 			// when & then
@@ -73,7 +79,9 @@ class ReviewRepositoryTest extends DataJpaTestSupport {
 			Member first = memberRepository.save(MemberFixture.create("review-repo-rating-1@groove.com"));
 			Member second = memberRepository.save(MemberFixture.create("review-repo-rating-2@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("review-repo-rating"));
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Review low = reviewRepository.save(ReviewFixture.create(product, first, 2));
 			Review high = reviewRepository.save(ReviewFixture.create(product, second, 5));
 
@@ -92,7 +100,9 @@ class ReviewRepositoryTest extends DataJpaTestSupport {
 			Member first = memberRepository.save(MemberFixture.create("review-repo-latest-1@groove.com"));
 			Member second = memberRepository.save(MemberFixture.create("review-repo-latest-2@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("review-repo-latest"));
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Review earlier = reviewRepository.saveAndFlush(ReviewFixture.create(product, first));
 			Review later = reviewRepository.saveAndFlush(ReviewFixture.create(product, second));
 
@@ -118,8 +128,12 @@ class ReviewRepositoryTest extends DataJpaTestSupport {
 			Member third = memberRepository.save(MemberFixture.create("review-repo-stats-3@groove.com"));
 			Artist artistA = artistRepository.save(ArtistFixture.create("review-repo-stats-a"));
 			Artist artistB = artistRepository.save(ArtistFixture.create("review-repo-stats-b"));
-			Product productA = productRepository.save(ProductFixture.create(artistA));
-			Product productB = productRepository.save(ProductFixture.create(artistB));
+			Product productA = ProductFixture.create(artistA);
+			albumRepository.save(productA.getAlbum());
+			productA = productRepository.save(productA);
+			Product productB = ProductFixture.create(artistB);
+			albumRepository.save(productB.getAlbum());
+			productB = productRepository.save(productB);
 			reviewRepository.save(ReviewFixture.create(productA, first, 5));
 			reviewRepository.save(ReviewFixture.create(productA, second, 5));
 			reviewRepository.save(ReviewFixture.create(productA, third, 3));
@@ -146,7 +160,9 @@ class ReviewRepositoryTest extends DataJpaTestSupport {
 			Member owner = memberRepository.save(MemberFixture.create("review-repo-owner@groove.com"));
 			Member other = memberRepository.save(MemberFixture.create("review-repo-other@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("review-repo-owner"));
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Review review = reviewRepository.save(ReviewFixture.create(product, owner));
 
 			// when

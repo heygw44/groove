@@ -54,6 +54,7 @@ class MemberQueryMapperTest extends MybatisTestSupport {
 		artist = ArtistFixture.create();
 		em.persist(artist);
 		product = ProductFixture.create(artist, "MQM Kind of Blue");
+		em.persist(product.getAlbum());
 		em.persist(product);
 	}
 

@@ -24,6 +24,7 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductStatus;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.DataJpaTestSupport;
@@ -41,6 +42,9 @@ class WishlistRepositoryTest extends DataJpaTestSupport {
 	private ArtistRepository artistRepository;
 
 	@Autowired
+	private AlbumRepository albumRepository;
+
+	@Autowired
 	private ProductRepository productRepository;
 
 	@Nested
@@ -53,7 +57,9 @@ class WishlistRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("wishlist-repo-uk@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			wishlistRepository.saveAndFlush(WishlistFixture.create(member, product));
 
 			// when & then
@@ -72,7 +78,9 @@ class WishlistRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("wishlist-repo-present@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Wishlist wishlist = wishlistRepository.save(WishlistFixture.create(member, product));
 
 			// when
@@ -92,7 +100,9 @@ class WishlistRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("wishlist-repo-absent@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 
 			// when
 			boolean exists = wishlistRepository.existsByMemberIdAndProductId(member.getId(), product.getId());
@@ -116,9 +126,15 @@ class WishlistRepositoryTest extends DataJpaTestSupport {
 			Member member = memberRepository.save(MemberFixture.create("wishlist-repo-sort@groove.com"));
 			Member other = memberRepository.save(MemberFixture.create("wishlist-repo-sort-other@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product visibleFirst = productRepository.save(ProductFixture.create(artist, "상품1"));
-			Product visibleSecond = productRepository.save(ProductFixture.create(artist, "상품2"));
-			Product hiddenProduct = productRepository.save(ProductFixture.create(artist, "상품3"));
+			Product visibleFirst = ProductFixture.create(artist, "상품1");
+			albumRepository.save(visibleFirst.getAlbum());
+			visibleFirst = productRepository.save(visibleFirst);
+			Product visibleSecond = ProductFixture.create(artist, "상품2");
+			albumRepository.save(visibleSecond.getAlbum());
+			visibleSecond = productRepository.save(visibleSecond);
+			Product hiddenProduct = ProductFixture.create(artist, "상품3");
+			albumRepository.save(hiddenProduct.getAlbum());
+			hiddenProduct = productRepository.save(hiddenProduct);
 			hiddenProduct.hide();
 			productRepository.save(hiddenProduct);
 
@@ -148,8 +164,12 @@ class WishlistRepositoryTest extends DataJpaTestSupport {
 			Member member = memberRepository.save(MemberFixture.create("wishlist-repo-ids@groove.com"));
 			Member other = memberRepository.save(MemberFixture.create("wishlist-repo-ids-other@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product myProduct = productRepository.save(ProductFixture.create(artist, "내 위시 상품"));
-			Product otherProduct = productRepository.save(ProductFixture.create(artist, "타 회원 위시 상품"));
+			Product myProduct = ProductFixture.create(artist, "내 위시 상품");
+			albumRepository.save(myProduct.getAlbum());
+			myProduct = productRepository.save(myProduct);
+			Product otherProduct = ProductFixture.create(artist, "타 회원 위시 상품");
+			albumRepository.save(otherProduct.getAlbum());
+			otherProduct = productRepository.save(otherProduct);
 
 			wishlistRepository.save(WishlistFixture.create(member, myProduct));
 			wishlistRepository.save(WishlistFixture.create(other, otherProduct));

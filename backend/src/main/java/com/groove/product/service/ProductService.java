@@ -20,6 +20,7 @@ import com.groove.product.dto.ProductSearchRequest;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductImage;
+import com.groove.product.entity.ProductStatus;
 import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
@@ -66,8 +67,10 @@ public class ProductService {
 		Boolean wishlisted = memberId == null ? null : wishlistRepository.existsByMemberIdAndProductId(memberId, id);
 		ProductDetailResponse.LimitedDropSummary limitedDrop = limitedDropService.findSummaryForProduct(id)
 				.orElse(null);
+		long pressingCount = productRepository.countByAlbumIdAndStatusNot(product.getAlbum().getId(),
+				ProductStatus.HIDDEN);
 		ProductDetailResponse response = ProductDetailResponse.from(product, images, stockQuantity, wishlisted,
-				limitedDrop);
+				limitedDrop, (int) pressingCount);
 		eventPublisher.publishEvent(new ProductViewedEvent(memberId, id, LocalDateTime.now(clock)));
 		return response;
 	}

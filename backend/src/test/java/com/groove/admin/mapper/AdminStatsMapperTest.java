@@ -82,6 +82,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		void aggregatesByApprovedAndCanceledDate() {
 			// given
 			Product product = ProductFixture.create(artist, "ASM Daily Sales", new BigDecimal("30000"));
+			em.persist(product.getAlbum());
 			em.persist(product);
 
 			Order first = OrderFixture.create(member, "20310302-ASM00001");
@@ -161,8 +162,11 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			productA = ProductFixture.create(artist, "ASM Popular A", new BigDecimal("50000"));
 			productB = ProductFixture.create(artist, "ASM Popular B", new BigDecimal("10000"));
 			productC = ProductFixture.create(artist, "ASM Popular C", new BigDecimal("20000"));
+			em.persist(productA.getAlbum());
 			em.persist(productA);
+			em.persist(productB.getAlbum());
 			em.persist(productB);
+			em.persist(productC.getAlbum());
 			em.persist(productC);
 
 			// PAID: A x 3
@@ -283,6 +287,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		void returnsSoldOutAtAndSellRateForSoldOutDrop() {
 			// given
 			Product product = ProductFixture.create(artist, "ASM Sold Out Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
 			em.persist(product);
 			LimitedDrop drop = LimitedDropFixture.open(product, 2);
 			LimitedDropFixture.withOpenAt(drop, LocalDateTime.now().minusHours(1));
@@ -330,6 +335,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		void returnsNullSoldOutForOpenDrop() {
 			// given
 			Product product = ProductFixture.create(artist, "ASM Open Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
 			em.persist(product);
 			LimitedDrop drop = LimitedDropFixture.open(product, 4);
 			LimitedDropFixture.withSoldCount(drop, 1);
@@ -356,7 +362,9 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			// given
 			Product productOld = ProductFixture.create(artist, "ASM Order Old Drop", new BigDecimal("40000"));
 			Product productNew = ProductFixture.create(artist, "ASM Order New Drop", new BigDecimal("40000"));
+			em.persist(productOld.getAlbum());
 			em.persist(productOld);
+			em.persist(productNew.getAlbum());
 			em.persist(productNew);
 
 			LimitedDrop oldDrop = LimitedDropFixture.open(productOld, 10);
@@ -393,6 +401,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			LocalDateTime todayStart = LocalDateTime.of(2031, 6, 10, 0, 0);
 			LocalDateTime tomorrowStart = LocalDateTime.of(2031, 6, 11, 0, 0);
 			Product product = ProductFixture.create(artist, "ASM Summary Product", new BigDecimal("25000"));
+			em.persist(product.getAlbum());
 			em.persist(product);
 
 			persistOrderWithPayment("20310610-ASMSUM001", product, 1, "asm-summary-key-1",

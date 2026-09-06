@@ -25,11 +25,14 @@ import com.groove.product.dto.AdminProductResponse;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
 import com.groove.product.dto.ProductUpdateRequest;
+import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
+import com.groove.product.entity.EditionType;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductStatus;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
@@ -44,6 +47,7 @@ import lombok.RequiredArgsConstructor;
 public class AdminProductService {
 
 	private final ProductRepository productRepository;
+	private final AlbumRepository albumRepository;
 	private final ArtistRepository artistRepository;
 	private final LabelRepository labelRepository;
 	private final GenreRepository genreRepository;
@@ -57,9 +61,12 @@ public class AdminProductService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.ARTIST_NOT_FOUND));
 		Label label = findLabelOrNull(request.labelId());
 		List<Genre> genres = findGenres(request.genreIds() == null ? List.of() : request.genreIds());
+		Album album = resolveAlbum(request, artist);
 
-		Product product = Product.create(request.title(), artist, label, request.releaseDate(),
-				request.pressingInfo(), request.colorVariant(), request.price(), request.description());
+		Product product = Product.create(album, request.title(), artist, label, request.releaseDate(),
+				request.pressingInfo(), request.colorVariant(), request.country(), request.pressingYear(),
+				request.catalogNo(), request.barcode(), request.editionType(), request.price(),
+				request.description());
 		genres.forEach(product::addGenre);
 		addImages(product, request.imageUrls() == null ? List.of() : request.imageUrls());
 
@@ -100,8 +107,32 @@ public class AdminProductService {
 		BigDecimal price = coalesce(request.price(), product.getPrice(), "price", changedFields);
 		String description = coalesce(request.description(), product.getDescription(), "description",
 				changedFields);
+		EditionType editionType = coalesce(request.editionType(), product.getEditionType(), "editionType",
+				changedFields);
 
-		product.updateInfo(title, artist, label, releaseDate, pressingInfo, colorVariant, price, description);
+		String country = product.getCountry();
+		if (request.country() != null && request.country().isPresent()) {
+			country = request.country().get();
+			changedFields.add("country");
+		}
+		Integer pressingYear = product.getPressingYear();
+		if (request.pressingYear() != null && request.pressingYear().isPresent()) {
+			pressingYear = request.pressingYear().get();
+			changedFields.add("pressingYear");
+		}
+		String catalogNo = product.getCatalogNo();
+		if (request.catalogNo() != null && request.catalogNo().isPresent()) {
+			catalogNo = request.catalogNo().get();
+			changedFields.add("catalogNo");
+		}
+		String barcode = product.getBarcode();
+		if (request.barcode() != null && request.barcode().isPresent()) {
+			barcode = request.barcode().get();
+			changedFields.add("barcode");
+		}
+
+		product.updateInfo(title, artist, label, releaseDate, pressingInfo, colorVariant, country, pressingYear,
+				catalogNo, barcode, editionType, price, description);
 
 		if (request.genreIds() != null) {
 			product.replaceGenres(findGenres(request.genreIds()));
@@ -159,6 +190,20 @@ public class AdminProductService {
 	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Pageable pageable) {
 		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, pageable);
 		return PageResponse.from(page);
+	}
+
+	private Album resolveAlbum(ProductCreateRequest request, Artist artist) {
+		boolean hasAlbumId = request.albumId() != null;
+		boolean hasNewAlbum = request.newAlbum() != null;
+		if (hasAlbumId == hasNewAlbum) {
+			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
+		}
+		if (hasAlbumId) {
+			return albumRepository.findById(request.albumId())
+					.orElseThrow(() -> new BusinessException(ErrorCode.ALBUM_NOT_FOUND));
+		}
+		Album album = Album.create(request.newAlbum().title(), artist, request.newAlbum().originalReleaseYear());
+		return albumRepository.save(album);
 	}
 
 	private Label findLabelOrNull(Long labelId) {

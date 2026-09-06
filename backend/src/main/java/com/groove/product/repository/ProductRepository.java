@@ -16,8 +16,10 @@ import com.groove.product.entity.ProductStatus;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
-	@EntityGraph(attributePaths = {"artist", "label", "productGenres", "productGenres.genre"})
+	@EntityGraph(attributePaths = {"album", "artist", "label", "productGenres", "productGenres.genre"})
 	Optional<Product> findDetailById(Long id);
+
+	long countByAlbumIdAndStatusNot(Long albumId, ProductStatus status);
 
 	@Query(value = """
 			SELECT new com.groove.product.dto.AdminProductSummaryResponse(

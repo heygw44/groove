@@ -94,6 +94,11 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		cheapRecord = ProductFixture.create(johnColtrane, "SMT Cheap Record", new BigDecimal("15000.00"));
 		cheapRecord.addGenre(rock);
 
+		em.persist(kindOfBlue.getAlbum());
+		em.persist(loveSupreme.getAlbum());
+		em.persist(roundMidnight.getAlbum());
+		em.persist(hiddenAlbum.getAlbum());
+		em.persist(cheapRecord.getAlbum());
 		em.persist(kindOfBlue);
 		em.persist(loveSupreme);
 		em.persist(roundMidnight);
@@ -483,6 +488,9 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			highRatedFewReviews = ProductFixture.create(artist, "SMTR High Rated", new BigDecimal("10000.00"));
 			lowRatedManyReviews = ProductFixture.create(artist, "SMTR Low Rated", new BigDecimal("10000.00"));
 			noReviews = ProductFixture.create(artist, "SMTR No Reviews", new BigDecimal("10000.00"));
+			em.persist(highRatedFewReviews.getAlbum());
+			em.persist(lowRatedManyReviews.getAlbum());
+			em.persist(noReviews.getAlbum());
 			em.persist(highRatedFewReviews);
 			em.persist(lowRatedManyReviews);
 			em.persist(noReviews);

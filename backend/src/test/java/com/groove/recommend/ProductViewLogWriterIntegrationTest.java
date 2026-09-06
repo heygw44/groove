@@ -24,6 +24,7 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.product.service.ProductService;
@@ -45,6 +46,9 @@ class ProductViewLogWriterIntegrationTest extends IntegrationTestSupport {
 	private ProductRepository productRepository;
 
 	@Autowired
+	private AlbumRepository albumRepository;
+
+	@Autowired
 	private MemberRepository memberRepository;
 
 	@Autowired
@@ -58,7 +62,9 @@ class ProductViewLogWriterIntegrationTest extends IntegrationTestSupport {
 
 	private Product createProduct() {
 		Artist artist = artistRepository.save(ArtistFixture.create());
-		return productRepository.save(ProductFixture.create(artist));
+		Product product = ProductFixture.create(artist);
+		albumRepository.save(product.getAlbum());
+		return productRepository.save(product);
 	}
 
 	private Member createMember() {

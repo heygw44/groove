@@ -19,6 +19,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.AlbumRepository;
 import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.DataJpaTestSupport;
@@ -40,6 +41,9 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 	@Autowired
 	private ProductRepository productRepository;
 
+	@Autowired
+	private AlbumRepository albumRepository;
+
 	@Nested
 	@DisplayName("existsByOrderMemberIdAndProductIdAndOrderStatus()")
 	class ExistsByOrderMemberIdAndProductIdAndOrderStatus {
@@ -50,7 +54,9 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-item-repo-delivered@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-delivered"));
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Order order = OrderFixture.markDelivered(OrderFixture.createWithItem(member, product, 1));
 			orderRepository.saveAndFlush(order);
 
@@ -68,7 +74,9 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-item-repo-paid@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-paid"));
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Order order = OrderFixture.createWithItem(member, product, 1);
 			order.markPaid();
 			orderRepository.saveAndFlush(order);
@@ -87,8 +95,12 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-item-repo-other@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-other"));
-			Product deliveredProduct = productRepository.save(ProductFixture.create(artist));
-			Product otherProduct = productRepository.save(ProductFixture.create(artist, "다른 상품"));
+			Product deliveredProduct = ProductFixture.create(artist);
+			albumRepository.save(deliveredProduct.getAlbum());
+			deliveredProduct = productRepository.save(deliveredProduct);
+			Product otherProduct = ProductFixture.create(artist, "다른 상품");
+			albumRepository.save(otherProduct.getAlbum());
+			otherProduct = productRepository.save(otherProduct);
 			Order order = OrderFixture.markDelivered(OrderFixture.createWithItem(member, deliveredProduct, 1));
 			orderRepository.saveAndFlush(order);
 
@@ -111,9 +123,15 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-item-repo-status@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-status"));
-			Product paidProduct = productRepository.save(ProductFixture.create(artist, "결제완료 상품"));
-			Product deliveredProduct = productRepository.save(ProductFixture.create(artist, "배송완료 상품"));
-			Product pendingProduct = productRepository.save(ProductFixture.create(artist, "결제대기 상품"));
+			Product paidProduct = ProductFixture.create(artist, "결제완료 상품");
+			albumRepository.save(paidProduct.getAlbum());
+			paidProduct = productRepository.save(paidProduct);
+			Product deliveredProduct = ProductFixture.create(artist, "배송완료 상품");
+			albumRepository.save(deliveredProduct.getAlbum());
+			deliveredProduct = productRepository.save(deliveredProduct);
+			Product pendingProduct = ProductFixture.create(artist, "결제대기 상품");
+			albumRepository.save(pendingProduct.getAlbum());
+			pendingProduct = productRepository.save(pendingProduct);
 
 			Order paidOrder = OrderFixture.createWithItems(member, List.of(paidProduct));
 			paidOrder.markPaid();
@@ -136,7 +154,9 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-item-repo-distinct@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-distinct"));
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 
 			orderRepository.saveAndFlush(OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(product))));
 			orderRepository.saveAndFlush(

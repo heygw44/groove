@@ -54,6 +54,9 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 	private ProductRepository productRepository;
 
 	@Autowired
+	private AlbumRepository albumRepository;
+
+	@Autowired
 	private ProductImageRepository productImageRepository;
 
 	@Autowired
@@ -81,7 +84,9 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
 			Label label = labelRepository.save(LabelFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist, label));
+			Product createdProduct = ProductFixture.create(artist, label);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 
 			// when
 			flushAndClear();
@@ -104,6 +109,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			Product product = ProductFixture.create(artist);
 			product.addGenre(jazz);
 			product.addGenre(soul);
+			albumRepository.save(product.getAlbum());
 
 			// when
 			Product saved = productRepository.save(product);
@@ -126,6 +132,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			Genre rock = genreRepository.save(GenreFixture.create("Rock-product-replace"));
 			Product product = ProductFixture.create(artist);
 			product.addGenre(jazz);
+			albumRepository.save(product.getAlbum());
 			Product saved = productRepository.save(product);
 			flushAndClear();
 
@@ -150,6 +157,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			product.addImage("https://cdn.groove.com/2.jpg", 2);
 			product.addImage("https://cdn.groove.com/0.jpg", 0);
 			product.addImage("https://cdn.groove.com/1.jpg", 1);
+			albumRepository.save(product.getAlbum());
 			Product saved = productRepository.save(product);
 
 			// when
@@ -181,6 +189,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			product.addGenre(soul);
 			product.addImage("https://cdn.groove.com/PRT-1-0.jpg", 0);
 			product.addImage("https://cdn.groove.com/PRT-1-1.jpg", 1);
+			albumRepository.save(product.getAlbum());
 			Product saved = productRepository.save(product);
 			flushAndClear();
 
@@ -205,7 +214,9 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 		void findsProductWithoutLabel() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create("Miles Davis-PRT-2"));
-			Product saved = productRepository.save(ProductFixture.create(artist));
+			Product product = ProductFixture.create(artist);
+			albumRepository.save(product.getAlbum());
+			Product saved = productRepository.save(product);
 			flushAndClear();
 
 			// when
@@ -227,6 +238,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			product.addGenre(jazz);
 			product.addImage("https://cdn.groove.com/PRT-3-0.jpg", 0);
 			product.addImage("https://cdn.groove.com/PRT-3-1.jpg", 1);
+			albumRepository.save(product.getAlbum());
 			Product saved = productRepository.save(product);
 			stockRepository.save(Stock.create(saved, 9));
 			flushAndClear();
@@ -268,6 +280,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			product.addImage("https://cdn.groove.com/thumb.jpg", 0);
 			product.addImage("https://cdn.groove.com/sub.jpg", 1);
 			product.hide();
+			albumRepository.save(product.getAlbum());
 			Product saved = productRepository.save(product);
 			Stock stock = stockRepository.save(Stock.create(saved, 7));
 			flushAndClear();
@@ -291,10 +304,13 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 		void filtersByStatus() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product onSale = productRepository.save(ProductFixture.create(artist, "Admin Filter On Sale"));
+			Product onSale = ProductFixture.create(artist, "Admin Filter On Sale");
+			albumRepository.save(onSale.getAlbum());
+			onSale = productRepository.save(onSale);
 			stockRepository.save(Stock.create(onSale, 5));
 			Product hidden = ProductFixture.create(artist, "Admin Filter Hidden");
 			hidden.hide();
+			albumRepository.save(hidden.getAlbum());
 			Product savedHidden = productRepository.save(hidden);
 			stockRepository.save(Stock.create(savedHidden, 3));
 			flushAndClear();
@@ -321,7 +337,9 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 		void recalculatesAverageAndCountAsReviewsChange() {
 			// given
 			Artist artist = artistRepository.save(ArtistFixture.create());
-			Product product = productRepository.save(ProductFixture.create(artist));
+			Product createdProduct = ProductFixture.create(artist);
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
 			Member reviewer1 = memberRepository.save(MemberFixture.create("refresh-stats-1@groove.com"));
 			Member reviewer2 = memberRepository.save(MemberFixture.create("refresh-stats-2@groove.com"));
 			Member reviewer3 = memberRepository.save(MemberFixture.create("refresh-stats-3@groove.com"));
