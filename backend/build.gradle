@@ -78,8 +78,25 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    // precision 태그는 추천 품질 측정용이라 일반 빌드/CI 에서는 뺀다. ./gradlew precisionAt10 으로 따로 돈다.
+    useJUnitPlatform {
+        excludeTags 'precision'
+    }
     finalizedBy jacocoTestReport
+}
+
+tasks.register('precisionAt10', Test) {
+    group = 'verification'
+    description = '시드 회원 위시리스트 20% 홀드아웃 기준 추천 품질(recall@10)을 측정한다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'precision'
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
 }
 
 // 네이버 캠퍼스 핵데이 Java 코딩 컨벤션 (우아한형제들 등 국내 다수 기업 채택) 강제

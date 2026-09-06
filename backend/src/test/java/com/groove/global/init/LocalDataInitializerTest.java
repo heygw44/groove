@@ -65,6 +65,9 @@ class LocalDataInitializerTest {
 	@Mock
 	ReviewRepository reviewRepository;
 
+	@Mock
+	LocalSignalSeeder localSignalSeeder;
+
 	@Nested
 	@DisplayName("run()")
 	class Run {
@@ -102,8 +105,8 @@ class LocalDataInitializerTest {
 		}
 
 		@Test
-		@DisplayName("데이터가 비어 있으면 회원 3명과 앨범 50개를 시딩한다")
-		void seedsFiftyProductsWhenEmpty() {
+		@DisplayName("데이터가 비어 있으면 회원 3명과 시드 정의만큼의 앨범을 시딩한다")
+		void seedsEveryAlbumWhenEmpty() {
 			// given
 			LocalDataInitializer initializer = newInitializer();
 			given(productRepository.count()).willReturn(0L);
@@ -118,8 +121,9 @@ class LocalDataInitializerTest {
 			initializer.run(null);
 
 			// then
-			verify(productRepository, times(50)).save(any());
-			verify(stockService, times(50)).create(any(), anyInt());
+			int albumCount = SeedAlbums.ALBUMS.size();
+			verify(productRepository, times(albumCount)).save(any());
+			verify(stockService, times(albumCount)).create(any(), anyInt());
 			verify(memberRepository, times(3)).save(any());
 		}
 
@@ -136,12 +140,30 @@ class LocalDataInitializerTest {
 
 			// then
 			verify(reviewRepository, never()).saveAll(any());
-			verify(memberRepository, never()).findByEmail(anyString());
 		}
 
 		@Test
-		@DisplayName("리뷰 데이터가 비어 있으면 회원 2명 × 상품 50개의 리뷰 100건을 시딩한다")
-		void seedsHundredReviewsWhenEmpty() {
+		@DisplayName("카탈로그·리뷰를 건너뛰어도 취향/행동 신호 시딩은 user1·user2 를 넘겨 호출한다")
+		void delegatesSignalSeedingWithDemoMembers() {
+			// given
+			LocalDataInitializer initializer = newInitializer();
+			given(productRepository.count()).willReturn(1L);
+			given(reviewRepository.count()).willReturn(1L);
+			Member user1 = MemberFixture.withId(MemberFixture.create("user1@groove.com"), 1L);
+			Member user2 = MemberFixture.withId(MemberFixture.create("user2@groove.com"), 2L);
+			given(memberRepository.findByEmail("user1@groove.com")).willReturn(Optional.of(user1));
+			given(memberRepository.findByEmail("user2@groove.com")).willReturn(Optional.of(user2));
+
+			// when
+			initializer.run(null);
+
+			// then
+			verify(localSignalSeeder).seed(List.of(user1, user2));
+		}
+
+		@Test
+		@DisplayName("리뷰 데이터가 비어 있으면 상품마다 회원 2명의 리뷰를 시딩한다")
+		void seedsTwoReviewsPerProductWhenEmpty() {
 			// given
 			LocalDataInitializer initializer = newInitializer();
 			given(productRepository.count()).willReturn(1L);
@@ -150,7 +172,8 @@ class LocalDataInitializerTest {
 			Member user2 = MemberFixture.withId(MemberFixture.create("user2@groove.com"), 2L);
 			given(memberRepository.findByEmail("user1@groove.com")).willReturn(Optional.of(user1));
 			given(memberRepository.findByEmail("user2@groove.com")).willReturn(Optional.of(user2));
-			List<Product> products = IntStream.range(0, 50)
+			int productCount = SeedAlbums.ALBUMS.size();
+			List<Product> products = IntStream.range(0, productCount)
 					.mapToObj(i -> ProductFixture.withId(ProductFixture.create(null), (long) (i + 1)))
 					.toList();
 			given(productRepository.findAll(any(Sort.class))).willReturn(products);
@@ -161,13 +184,13 @@ class LocalDataInitializerTest {
 			// then
 			ArgumentCaptor<List<Review>> captor = ArgumentCaptor.forClass(List.class);
 			verify(reviewRepository).saveAll(captor.capture());
-			assertThat(captor.getValue()).hasSize(100);
-			verify(productRepository, times(50)).refreshReviewStats(anyLong());
+			assertThat(captor.getValue()).hasSize(productCount * 2);
+			verify(productRepository, times(productCount)).refreshReviewStats(anyLong());
 		}
 	}
 
 	private LocalDataInitializer newInitializer() {
 		return new LocalDataInitializer(memberRepository, passwordEncoder, genreRepository, labelRepository,
-				artistRepository, productRepository, stockService, reviewRepository);
+				artistRepository, productRepository, stockService, reviewRepository, localSignalSeeder);
 	}
 }

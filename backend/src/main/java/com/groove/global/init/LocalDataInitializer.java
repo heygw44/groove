@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -32,10 +34,13 @@ import com.groove.review.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-/** local 프로파일 전용 더미 데이터 시더. 상품 개수/회원 이메일/장르 이름을 기준으로 멱등하게 동작한다. */
+/**
+ * 더미 데이터 시더. 상품 개수/회원 이메일/장르 이름을 기준으로 멱등하게 동작한다.
+ * local 외에 seed 프로파일에서도 뜬다 — 추천 품질 측정 테스트가 같은 시드를 재사용한다.
+ */
 @Slf4j
 @Component
-@Profile("local")
+@Profile({"local", "seed"})
 @RequiredArgsConstructor
 public class LocalDataInitializer implements ApplicationRunner {
 
@@ -50,8 +55,6 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private static final String USER_PASSWORD = "user1234!";
 
 	private static final String IMAGE_BASE_URL = "https://picsum.photos/seed/";
-
-	private static final int REVIEW_TARGET_PRODUCT_COUNT = 50;
 
 	private static final List<String> REVIEW_TITLES = List.of(
 			"자주 듣게 되는 앨범", "믹싱이 훌륭합니다", "소장 가치 있음", "기대 이상이었어요", "재구매 의사 있습니다");
@@ -71,6 +74,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private final ProductRepository productRepository;
 	private final StockService stockService;
 	private final ReviewRepository reviewRepository;
+	private final LocalSignalSeeder localSignalSeeder;
 
 	@Override
 	@Transactional
@@ -78,6 +82,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 		seedMembers();
 		seedCatalog();
 		seedReviews();
+		localSignalSeeder.seed(demoMembers());
 	}
 
 	private void seedMembers() {
@@ -87,6 +92,14 @@ public class LocalDataInitializer implements ApplicationRunner {
 				() -> Member.create(USER1_EMAIL, passwordEncoder.encode(USER_PASSWORD), USER1_NICKNAME));
 		createMemberIfAbsent(USER2_EMAIL,
 				() -> Member.create(USER2_EMAIL, passwordEncoder.encode(USER_PASSWORD), USER2_NICKNAME));
+	}
+
+	/** 조회 로그는 이 둘에게만 심는다. 취향 클러스터 회원에 심으면 추천 후보에서 빠져 품질 측정이 흔들린다. */
+	private List<Member> demoMembers() {
+		return Stream.of(USER1_EMAIL, USER2_EMAIL)
+				.map(memberRepository::findByEmail)
+				.flatMap(Optional::stream)
+				.toList();
 	}
 
 	private void createMemberIfAbsent(String email, Supplier<Member> factory) {
@@ -99,8 +112,14 @@ public class LocalDataInitializer implements ApplicationRunner {
 	}
 
 	private void seedCatalog() {
-		if (productRepository.count() > 0) {
-			log.info("상품 데이터가 이미 있어 시딩을 건너뛴다");
+		long existing = productRepository.count();
+		if (existing > 0) {
+			if (existing != SeedAlbums.ALBUMS.size()) {
+				log.warn("상품이 {}건 있어 시딩을 건너뛴다. 시드 정의는 {}건이다 — 반영하려면 docker compose down -v 로 DB 를 비워라",
+						existing, SeedAlbums.ALBUMS.size());
+			} else {
+				log.info("상품 데이터가 이미 있어 시딩을 건너뛴다");
+			}
 			return;
 		}
 
@@ -112,7 +131,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 				.map(seed -> Artist.create(seed.name(), seed.nameEn(), seed.description()))
 				.toList());
 
-		List<AlbumSeed> albums = SeedCatalog.ALBUMS;
+		List<AlbumSeed> albums = SeedAlbums.ALBUMS;
 		for (int i = 0; i < albums.size(); i++) {
 			AlbumSeed seed = albums.get(i);
 			Artist artist = artists.get(seed.artistIndex());
@@ -140,9 +159,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 		Member user1 = memberRepository.findByEmail(USER1_EMAIL).orElseThrow();
 		Member user2 = memberRepository.findByEmail(USER2_EMAIL).orElseThrow();
 		List<Member> reviewers = List.of(user1, user2);
-		List<Product> products = productRepository.findAll(Sort.by(Sort.Direction.ASC, "id")).stream()
-				.limit(REVIEW_TARGET_PRODUCT_COUNT)
-				.toList();
+		List<Product> products = productRepository.findAll(Sort.by(Sort.Direction.ASC, "id"));
 
 		List<Review> reviews = new ArrayList<>();
 		for (int productIndex = 0; productIndex < products.size(); productIndex++) {
