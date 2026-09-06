@@ -8,7 +8,7 @@ interface ModalProps {
   description?: string;
   children?: ReactNode;
   footer?: ReactNode;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
   /** 'bottom' 은 모바일에서 화면 아래에서 올라오는 시트로 보이고, sm 이상에서는 center 와 같다. */
   placement?: 'center' | 'bottom';
 }
@@ -16,6 +16,7 @@ interface ModalProps {
 const SIZE_CLASS = {
   sm: 'max-w-sm',
   md: 'max-w-lg',
+  lg: 'max-w-3xl',
 } as const;
 
 export function Modal({

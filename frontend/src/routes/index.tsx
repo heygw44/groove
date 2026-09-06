@@ -4,6 +4,7 @@ import { AdminLayout } from '@/components/layout/AdminLayout';
 import { MyPageLayout } from '@/components/layout/MyPageLayout';
 import { RootLayout } from '@/components/layout/RootLayout';
 import AdminAuditLogsPage from '@/pages/admin/AdminAuditLogsPage';
+import AdminCatalogImportJobsPage from '@/pages/admin/AdminCatalogImportJobsPage';
 import AdminCouponsPage from '@/pages/admin/AdminCouponsPage';
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
 import AdminLimitedDropsPage from '@/pages/admin/AdminLimitedDropsPage';
@@ -123,6 +124,7 @@ export const router = createBrowserRouter([
           { path: 'products', element: <AdminProductListPage /> },
           { path: 'products/new', element: <AdminProductCreatePage /> },
           { path: 'products/:id/edit', element: <AdminProductEditPage /> },
+          { path: 'catalog/import-jobs', element: <AdminCatalogImportJobsPage /> },
           { path: 'orders', element: <AdminOrdersPage /> },
           { path: 'coupons', element: <AdminCouponsPage /> },
           { path: 'limited-drops', element: <AdminLimitedDropsPage /> },

@@ -37,6 +37,8 @@ import type {
   AdminOrderSummary,
 } from '@/types/order';
 import type {
+  AdminAlbumListParams,
+  AdminAlbumSummary,
   AdminProductCreateRequest,
   AdminProductListParams,
   AdminProductResponse,
@@ -45,6 +47,9 @@ import type {
   StockAdjustRequest,
   StockAdjustResponse,
 } from '@/types/product';
+
+export const getAdminAlbums = (params: AdminAlbumListParams) =>
+  unwrap(client.get<ApiResponse<PageResponse<AdminAlbumSummary>>>('/admin/albums', { params }));
 
 export const getAdminProducts = (params: AdminProductListParams) =>
   unwrap(

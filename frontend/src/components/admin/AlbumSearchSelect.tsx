@@ -2,56 +2,54 @@ import { useId, useState } from 'react';
 
 import { Input } from '@/components/common/Input';
 import { Spinner } from '@/components/common/Spinner';
-import { useArtists } from '@/hooks/queries/useReferences';
+import { useAdminAlbums } from '@/hooks/queries/useAdminAlbums';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import type { Artist } from '@/types/product';
+import type { AdminAlbumSummary } from '@/types/product';
 
-interface ArtistSearchSelectProps {
+interface AlbumSearchSelectProps {
   value?: number;
-  /** `GET /artists/{id}` 조회로 얻은 이름. 방금 고른 아티스트(로컬 state)가 이보다 우선한다. */
-  selectedName?: string;
-  /**
-   * 마운트 시점에만 검색창 초기값으로 쓴다(Discogs 프리필로 이름 검색을 미리 시작해준다).
-   * 이후 값이 바뀌어도 반응하지 않으므로, 다시 적용하려면 부모가 `key` 를 바꿔 리마운트시켜야 한다.
-   */
-  initialKeyword?: string;
-  onChange: (artist: Artist | undefined) => void;
+  /** `GET /admin/albums/{id}` 류 조회로 얻은 제목. 방금 고른 앨범(로컬 state)이 이보다 우선한다. */
+  selectedTitle?: string;
+  onChange: (album: AdminAlbumSummary | undefined) => void;
   id?: string;
   invalid?: boolean;
   disabled?: boolean;
 }
 
-export function ArtistSearchSelect({
+const formatAlbumLabel = (album: Pick<AdminAlbumSummary, 'title' | 'artistName' | 'originalReleaseYear'>) =>
+  `${album.title} — ${album.artistName}${album.originalReleaseYear ? ` (${album.originalReleaseYear})` : ''}`;
+
+export function AlbumSearchSelect({
   value,
-  selectedName,
-  initialKeyword,
+  selectedTitle,
   onChange,
   id,
   invalid = false,
   disabled = false,
-}: ArtistSearchSelectProps) {
-  const [pickedArtist, setPickedArtist] = useState<Artist | undefined>(undefined);
-  const [keyword, setKeyword] = useState(initialKeyword ?? '');
-  const [open, setOpen] = useState(Boolean(initialKeyword));
+}: AlbumSearchSelectProps) {
+  const [pickedAlbum, setPickedAlbum] = useState<AdminAlbumSummary | undefined>(undefined);
+  const [keyword, setKeyword] = useState('');
+  const [open, setOpen] = useState(false);
   const debouncedKeyword = useDebouncedValue(keyword, 300);
   const inputId = useId();
 
-  const { data: artists, isFetching } = useArtists(debouncedKeyword || undefined, open);
+  const { data, isFetching } = useAdminAlbums({ keyword: debouncedKeyword || undefined, size: 10 });
+  const albums = data?.content ?? [];
 
-  const handleSelect = (artist: Artist) => {
-    setPickedArtist(artist);
+  const handleSelect = (album: AdminAlbumSummary) => {
+    setPickedAlbum(album);
     setKeyword('');
     setOpen(false);
-    onChange(artist);
+    onChange(album);
   };
 
   const handleClear = () => {
-    setPickedArtist(undefined);
+    setPickedAlbum(undefined);
     onChange(undefined);
   };
 
   if (value !== undefined) {
-    const displayName = pickedArtist?.name ?? selectedName ?? `아티스트 #${value}`;
+    const displayName = pickedAlbum ? formatAlbumLabel(pickedAlbum) : selectedTitle ?? `앨범 #${value}`;
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft py-1 pl-3 pr-1.5 text-sm text-accent-hover">
         {displayName}
@@ -59,7 +57,7 @@ export function ArtistSearchSelect({
           type="button"
           onClick={handleClear}
           disabled={disabled}
-          aria-label="아티스트 선택 해제"
+          aria-label="앨범 선택 해제"
           className="rounded-full p-0.5 hover:bg-accent-hover/10 disabled:cursor-not-allowed"
         >
           ×
@@ -77,7 +75,7 @@ export function ArtistSearchSelect({
         aria-autocomplete="list"
         invalid={invalid}
         disabled={disabled}
-        placeholder="아티스트 검색"
+        placeholder="앨범 검색"
         value={keyword}
         onChange={(event) => setKeyword(event.target.value)}
         onFocus={() => setOpen(true)}
@@ -90,19 +88,19 @@ export function ArtistSearchSelect({
               <Spinner size="sm" />
             </li>
           )}
-          {!isFetching && artists?.length === 0 && (
+          {!isFetching && albums.length === 0 && (
             <li className="px-3 py-2.5 text-sm text-content-subtle">검색 결과가 없습니다.</li>
           )}
           {!isFetching &&
-            artists?.map((artist) => (
-              <li key={artist.id}>
+            albums.map((album) => (
+              <li key={album.id}>
                 <button
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleSelect(artist)}
+                  onClick={() => handleSelect(album)}
                   className="block w-full px-3 py-2 text-left text-sm hover:bg-surface-muted"
                 >
-                  {artist.name}
+                  {formatAlbumLabel(album)}
                 </button>
               </li>
             ))}

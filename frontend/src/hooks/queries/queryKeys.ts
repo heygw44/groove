@@ -1,10 +1,15 @@
 import type { AdminAuditLogListParams } from '@/types/adminAuditLog';
 import type { AdminMemberListParams } from '@/types/adminMember';
 import type { PopularProductParams, StatsPeriodParams } from '@/types/adminStats';
+import type { CatalogImportJobListParams, CatalogLookupParams } from '@/types/catalog';
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
 import type { AdminOrderListParams, OrderListParams } from '@/types/order';
-import type { AdminProductListParams, ProductListParams } from '@/types/product';
+import type {
+  AdminAlbumListParams,
+  AdminProductListParams,
+  ProductListParams,
+} from '@/types/product';
 import type { ReviewListParams } from '@/types/review';
 import type { WishlistListParams } from '@/types/wishlist';
 
@@ -135,4 +140,26 @@ export const recentViewKeys = {
 export const adminAuditLogKeys = {
   all: ['adminAuditLogs'] as const,
   list: (params: AdminAuditLogListParams) => ['adminAuditLogs', params] as const,
+};
+
+export const adminAlbumKeys = {
+  all: ['adminAlbums'] as const,
+  list: (params: AdminAlbumListParams) => ['adminAlbums', params] as const,
+};
+
+// list 를 'list' sub-prefix 로 분리해 잡 실행·재시작 후 목록만 무효화한다.
+export const adminCatalogImportJobKeys = {
+  all: ['adminCatalogImportJobs'] as const,
+  lists: ['adminCatalogImportJobs', 'list'] as const,
+  list: (params: CatalogImportJobListParams) =>
+    ['adminCatalogImportJobs', 'list', params] as const,
+  detail: (jobExecutionId: number) =>
+    ['adminCatalogImportJobs', 'detail', jobExecutionId] as const,
+};
+
+export const adminCatalogLookupKeys = {
+  all: ['adminCatalogLookup'] as const,
+  list: (params: CatalogLookupParams) => ['adminCatalogLookup', params] as const,
+  release: (discogsReleaseId: number) =>
+    ['adminCatalogRelease', discogsReleaseId] as const,
 };

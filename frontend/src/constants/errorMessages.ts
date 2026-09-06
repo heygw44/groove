@@ -68,6 +68,12 @@ export const ERROR_MESSAGES: Record<string, string> = {
   MEMBER_NOT_FOUND: '존재하지 않는 회원입니다.',
   AUTH_MEMBER_SUSPENDED: '정지된 계정입니다. 고객센터에 문의해주세요.',
   RECOMMEND_PROFILE_NOT_FOUND: '아직 취향 프로필이 없습니다.',
+  CATALOG_LOOKUP_FAILED: 'Discogs 조회에 실패했습니다. 잠시 후 다시 시도해주세요.',
+  CATALOG_RELEASE_NOT_FOUND: '존재하지 않는 Discogs 릴리즈입니다.',
+  CATALOG_RATE_LIMITED: 'Discogs 요청이 많아 잠시 제한되었습니다. 잠시 후 다시 시도해주세요.',
+  CATALOG_ALREADY_IMPORTED: '이미 등록된 릴리즈입니다.',
+  CATALOG_IMPORT_JOB_NOT_FOUND: '존재하지 않는 적재 잡입니다.',
+  CATALOG_IMPORT_JOB_RUNNING: '이미 실행 중인 적재 잡이 있습니다.',
 };
 
 /** 서버 코드를 폼의 특정 필드에 귀속시킨다. 나머지는 폼 상단 배너로 간다. */
