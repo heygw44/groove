@@ -123,7 +123,7 @@ export default function AddressListPage() {
 
       <p className="mt-3.5 text-xs text-content-muted">
         {isFull
-          ? `배송지는 최대 ${MAX_ADDRESS_COUNT}개까지 등록할 수 있습니다. 지우고 다시 추가하세요.`
+          ? `배송지는 최대 ${MAX_ADDRESS_COUNT}개까지 등록할 수 있습니다. 기존 배송지를 삭제한 뒤 다시 추가해주세요.`
           : '첫 배송지는 자동으로 기본 배송지가 됩니다. 기본 배송지를 삭제하면 남은 배송지 중 하나가 기본으로 지정됩니다.'}
       </p>
 
@@ -133,7 +133,7 @@ export default function AddressListPage() {
         open={Boolean(deleting)}
         onClose={() => setDeleting(undefined)}
         onConfirm={handleDelete}
-        title="배송지를 삭제할까요?"
+        title="배송지를 삭제하시겠습니까?"
         description={
           deleting
             ? `'${deleting.recipientName} · ${deleting.address1}' 배송지가 목록에서 사라집니다. 되돌릴 수 없습니다.`

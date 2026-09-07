@@ -10,16 +10,14 @@ describe('PendingExpiryBanner', () => {
     const expiresAtMs = nowMs + 9 * 60 * 1000 + 5 * 1000;
 
     // when
-    render(
-      <PendingExpiryBanner expiresAtMs={expiresAtMs} nowMs={nowMs} onExpired={vi.fn()} />,
-    );
+    render(<PendingExpiryBanner expiresAtMs={expiresAtMs} nowMs={nowMs} onExpired={vi.fn()} />);
 
     // then
     expect(screen.getByText(/09:05/)).toBeInTheDocument();
     expect(screen.getByText(/결제 대기 중입니다/)).toBeInTheDocument();
   });
 
-  it('만료 시각이 지나면 만료 처리 안내를 보여주고 onExpired 를 한 번 호출한다', () => {
+  it('만료 시각이 지나면 만료 안내를 보여주고 onExpired 를 한 번 호출한다', () => {
     // given
     const nowMs = new Date('2026-09-04T00:10:01+09:00').getTime();
     const expiresAtMs = new Date('2026-09-04T00:10:00+09:00').getTime();
@@ -29,7 +27,7 @@ describe('PendingExpiryBanner', () => {
     render(<PendingExpiryBanner expiresAtMs={expiresAtMs} nowMs={nowMs} onExpired={onExpired} />);
 
     // then
-    expect(screen.getByText('만료 처리 중…')).toBeInTheDocument();
+    expect(screen.getByText('결제 기한이 지나 곧 자동으로 취소됩니다.')).toBeInTheDocument();
     expect(onExpired).toHaveBeenCalledTimes(1);
   });
 });

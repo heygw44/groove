@@ -13,7 +13,7 @@ export function ReviewSummary({ averageRating, reviewCount, distribution }: Revi
     return (
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium text-content">아직 리뷰가 없습니다.</p>
-        <p className="text-xs text-content-muted">첫 리뷰를 남겨보세요.</p>
+        <p className="text-xs text-content-muted">첫 리뷰를 남겨주세요.</p>
       </div>
     );
   }

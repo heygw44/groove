@@ -195,6 +195,7 @@ export default function OrderFormPage() {
       <PageContainer size="md">
         <EmptyState
           title="주문서를 불러오지 못했습니다"
+          description="잠시 후 다시 시도해주세요."
           action={<Button onClick={handleRetry}>다시 시도</Button>}
         />
       </PageContainer>

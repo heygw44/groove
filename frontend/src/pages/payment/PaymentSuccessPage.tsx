@@ -81,7 +81,7 @@ export default function PaymentSuccessPage() {
           <div className="flex min-h-64 flex-col items-center justify-center gap-3">
             <Spinner size="lg" />
             <p className="text-sm text-content-muted">
-              결제를 승인하고 있습니다. 창을 닫지 마세요.
+              결제를 승인하고 있습니다. 창을 닫지 말아주세요.
             </p>
           </div>
         )}

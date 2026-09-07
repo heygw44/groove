@@ -17,8 +17,8 @@ export const createAdminLimitedDropFormSchema = (now: Date = getServerNow()) =>
   z
     .object({
       productId: z.string().min(1, '상품을 선택해주세요.'),
-      totalQuantity: z.string().regex(/^\d{1,9}$/, '1 이상의 정수로 입력해주세요.'),
-      perMemberLimit: z.string().regex(/^\d{1,2}$/, '1~5 사이의 정수로 입력해주세요.'),
+      totalQuantity: z.string().regex(/^\d{1,9}$/, '1 이상의 숫자로 입력해주세요.'),
+      perMemberLimit: z.string().regex(/^\d{1,2}$/, '1~5 사이의 숫자로 입력해주세요.'),
       openAt: z.string().min(1, '오픈 시각을 입력해주세요.'),
       closeAt: z.string().min(1, '마감 시각을 입력해주세요.'),
     })
@@ -27,7 +27,7 @@ export const createAdminLimitedDropFormSchema = (now: Date = getServerNow()) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['totalQuantity'],
-          message: '1 이상의 정수로 입력해주세요.',
+          message: '1 이상의 숫자로 입력해주세요.',
         });
       }
 
@@ -36,7 +36,7 @@ export const createAdminLimitedDropFormSchema = (now: Date = getServerNow()) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['perMemberLimit'],
-          message: '1~5 사이의 정수로 입력해주세요.',
+          message: '1~5 사이의 숫자로 입력해주세요.',
         });
       }
 
@@ -44,7 +44,7 @@ export const createAdminLimitedDropFormSchema = (now: Date = getServerNow()) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['openAt'],
-          message: '오픈 시각은 현재 시각 이후여야 합니다.',
+          message: '오픈 시각은 현재 시각 이후로 입력해주세요.',
         });
       }
 
@@ -52,12 +52,14 @@ export const createAdminLimitedDropFormSchema = (now: Date = getServerNow()) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['closeAt'],
-          message: '마감 시각은 오픈 시각 이후여야 합니다.',
+          message: '마감 시각은 오픈 시각 이후로 입력해주세요.',
         });
       }
     });
 
-export type AdminLimitedDropFormValues = z.infer<ReturnType<typeof createAdminLimitedDropFormSchema>>;
+export type AdminLimitedDropFormValues = z.infer<
+  ReturnType<typeof createAdminLimitedDropFormSchema>
+>;
 
 export const EMPTY_ADMIN_LIMITED_DROP_FORM_VALUES: AdminLimitedDropFormValues = {
   productId: '',

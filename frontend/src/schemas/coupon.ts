@@ -6,7 +6,7 @@ export const couponIssueSchema = z.object({
     .string()
     .trim()
     .min(1, '쿠폰 코드를 입력해주세요.')
-    .max(30, '쿠폰 코드는 30자 이하여야 합니다.'),
+    .max(30, '쿠폰 코드는 30자 이하로 입력해주세요.'),
 });
 
 export type CouponIssueFormValues = z.infer<typeof couponIssueSchema>;

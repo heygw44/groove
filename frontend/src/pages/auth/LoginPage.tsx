@@ -41,7 +41,7 @@ export default function LoginPage() {
       <div className="rounded-lg border border-line bg-surface p-7">
         <h1 className="text-2xl font-bold tracking-tight">로그인</h1>
         <p className="mt-1.5 text-sm text-content-muted">
-          주문 내역과 배송지를 관리하려면 로그인하세요.
+          주문 내역과 배송지를 관리하려면 로그인해주세요.
         </p>
 
         <form className="mt-6 flex flex-col gap-4" onSubmit={onSubmit} noValidate>

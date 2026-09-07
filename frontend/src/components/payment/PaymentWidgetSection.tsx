@@ -129,7 +129,7 @@ export function PaymentWidgetSection({
   if (!clientKey) {
     return (
       <section className="mt-8 rounded-lg border border-dashed border-line-strong bg-surface px-5 py-4 text-sm text-content-muted">
-        결제 설정이 없습니다. 관리자에게 문의해주세요.
+        지금은 결제를 진행할 수 없습니다. 잠시 후 다시 시도해주세요.
       </section>
     );
   }
@@ -160,9 +160,7 @@ export function PaymentWidgetSection({
       <div id="payment-methods" className="min-h-[320px]" />
       <div id="payment-agreement" className="mt-2 min-h-[80px]" />
       {hasLoadError && (
-        <p className="mt-3 text-sm text-danger">
-          결제 모듈을 불러오지 못했습니다. 새로고침해주세요.
-        </p>
+        <p className="mt-3 text-sm text-danger">결제창을 불러오지 못했습니다. 새로고침해주세요.</p>
       )}
       {disabled && <p className="mt-3 text-sm text-danger">결제 기한이 지나 결제할 수 없습니다.</p>}
       <div className="mt-4 flex justify-end">

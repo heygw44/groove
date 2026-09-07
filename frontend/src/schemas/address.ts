@@ -8,7 +8,7 @@ export const addressSchema = z.object({
   recipientName: z
     .string()
     .min(1, '수령인을 입력해주세요.')
-    .max(30, '수령인은 30자 이하여야 합니다.'),
+    .max(30, '수령인은 30자 이하로 입력해주세요.'),
   phone: z
     .string()
     .min(1, '연락처를 입력해주세요.')
@@ -16,12 +16,12 @@ export const addressSchema = z.object({
   zipCode: z
     .string()
     .min(1, '우편번호를 입력해주세요.')
-    .regex(/^\d{5}$/, '우편번호는 5자리 숫자입니다.'),
+    .regex(/^\d{5}$/, '우편번호 5자리를 입력해주세요.'),
   address1: z
     .string()
     .min(1, '기본 주소를 입력해주세요.')
-    .max(200, '기본 주소는 200자 이하여야 합니다.'),
-  address2: z.string().max(200, '상세 주소는 200자 이하여야 합니다.'),
+    .max(200, '기본 주소는 200자 이하로 입력해주세요.'),
+  address2: z.string().max(200, '상세 주소는 200자 이하로 입력해주세요.'),
   isDefault: z.boolean(),
 });
 

@@ -97,7 +97,7 @@ export function LimitedPurchaseSheet({
             취소
           </Button>
           <Button onClick={handleConfirm} disabled={pending || effectiveSelectedId === undefined}>
-            구매 확정
+            결제하기
           </Button>
         </>
       }

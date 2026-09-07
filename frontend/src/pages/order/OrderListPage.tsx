@@ -74,7 +74,7 @@ export default function OrderListPage() {
 
         {!isPending && isError && (
           <EmptyState
-            title="주문 내역을 불러오지 못했습니다."
+            title="주문 내역을 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => refetch()}>

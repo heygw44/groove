@@ -7,7 +7,7 @@ interface OrderStatusTimelineProps {
 
 const STOPPED_MESSAGE: Partial<Record<OrderStatus, string>> = {
   CANCELED: '이 주문은 취소되었습니다',
-  REFUNDED: '환불된 주문입니다',
+  REFUNDED: '이 주문은 환불되었습니다',
 };
 
 export function OrderStatusTimeline({ status }: OrderStatusTimelineProps) {

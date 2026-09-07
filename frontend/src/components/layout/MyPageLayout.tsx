@@ -74,7 +74,7 @@ const NAV_ITEMS: MyPageNavItem[] = [
   },
   {
     to: '/mypage/wishlist',
-    label: '위시리스트',
+    label: '찜 목록',
     icon: (
       <svg
         width="16"

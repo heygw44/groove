@@ -49,7 +49,7 @@ export default function CouponBoxPage() {
       <h2 className="text-xl font-bold">쿠폰함</h2>
 
       <div className="mt-5">
-        <SectionCard title="쿠폰 등록" description="쿠폰 코드를 입력해 발급받으세요.">
+        <SectionCard title="쿠폰 등록" description="쿠폰 코드를 입력하면 발급받을 수 있습니다.">
           <CouponIssueForm />
         </SectionCard>
       </div>
@@ -69,7 +69,7 @@ export default function CouponBoxPage() {
 
         {!isPending && isError && (
           <EmptyState
-            title="쿠폰을 불러오지 못했습니다."
+            title="쿠폰을 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => refetch()}>

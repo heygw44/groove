@@ -4,16 +4,15 @@ import { REVIEW_CONTENT_MAX, REVIEW_TITLE_MAX } from '@/constants/review';
 import type { Review, ReviewWriteRequest } from '@/types/review';
 
 export const reviewFormSchema = z.object({
-  rating: z
-    .number()
-    .int()
-    .min(1, '별점을 선택해주세요.')
-    .max(5, '별점은 5 이하여야 합니다.'),
-  title: z.string().trim().max(REVIEW_TITLE_MAX, `제목은 ${REVIEW_TITLE_MAX}자 이하여야 합니다.`),
+  rating: z.number().int().min(1, '별점을 선택해주세요.').max(5, '별점은 5 이하로 선택해주세요.'),
+  title: z
+    .string()
+    .trim()
+    .max(REVIEW_TITLE_MAX, `제목은 ${REVIEW_TITLE_MAX}자 이하로 입력해주세요.`),
   content: z
     .string()
     .trim()
-    .max(REVIEW_CONTENT_MAX, `내용은 ${REVIEW_CONTENT_MAX}자 이하여야 합니다.`),
+    .max(REVIEW_CONTENT_MAX, `내용은 ${REVIEW_CONTENT_MAX}자 이하로 입력해주세요.`),
 });
 
 export type ReviewFormValues = z.infer<typeof reviewFormSchema>;

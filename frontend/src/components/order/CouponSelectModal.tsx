@@ -47,7 +47,7 @@ export function CouponSelectModal({
     return (
       <Modal open={open} onClose={onClose} title="쿠폰 선택">
         <EmptyState
-          title="적용 가능한 쿠폰이 없습니다."
+          title="적용 가능한 쿠폰이 없습니다"
           description="최소 주문 금액을 확인해주세요."
           action={<Button onClick={onClose}>닫기</Button>}
         />
