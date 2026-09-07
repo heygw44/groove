@@ -152,17 +152,14 @@ export const adminAlbumKeys = {
 export const adminCatalogImportJobKeys = {
   all: ['adminCatalogImportJobs'] as const,
   lists: ['adminCatalogImportJobs', 'list'] as const,
-  list: (params: CatalogImportJobListParams) =>
-    ['adminCatalogImportJobs', 'list', params] as const,
-  detail: (jobExecutionId: number) =>
-    ['adminCatalogImportJobs', 'detail', jobExecutionId] as const,
+  list: (params: CatalogImportJobListParams) => ['adminCatalogImportJobs', 'list', params] as const,
+  detail: (jobExecutionId: number) => ['adminCatalogImportJobs', 'detail', jobExecutionId] as const,
 };
 
 export const adminCatalogLookupKeys = {
   all: ['adminCatalogLookup'] as const,
   list: (params: CatalogLookupParams) => ['adminCatalogLookup', params] as const,
-  release: (discogsReleaseId: number) =>
-    ['adminCatalogRelease', discogsReleaseId] as const,
+  release: (discogsReleaseId: number) => ['adminCatalogRelease', discogsReleaseId] as const,
 };
 
 export const notificationKeys = {
@@ -174,4 +171,9 @@ export const notificationKeys = {
 
 export const albumWatchKeys = {
   all: ['albumWatches'] as const,
+};
+
+// 'products' 트리 밖에 둔다. useToggleWishlist 낙관적 갱신이 ['products'] 캐시를 전부 PageResponse 로 가정하고 훑기 때문이다.
+export const searchKeys = {
+  suggestions: (keyword: string) => ['searchSuggestions', keyword] as const,
 };

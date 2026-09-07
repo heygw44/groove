@@ -141,9 +141,8 @@ describe('DiggingSection', () => {
     expect(screen.getByText('레코드러버님을 위한 추천')).toBeInTheDocument();
     expect(screen.getByText('판 A')).toBeInTheDocument();
     expect(screen.getByText('판 B')).toBeInTheDocument();
-    expect(screen.getByText('취향 장르')).toBeInTheDocument();
-    expect(screen.getByText('취향 아티스트')).toBeInTheDocument();
-    expect(screen.queryByText('취향 연대')).not.toBeInTheDocument();
+    expect(screen.getByText('취향 장르 · 취향 아티스트')).toBeInTheDocument();
+    expect(screen.queryByText('취향 연대', { exact: false })).not.toBeInTheDocument();
     expect(screen.getByText('같은 레이블')).toBeInTheDocument();
   });
 });

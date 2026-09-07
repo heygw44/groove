@@ -26,6 +26,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	@Query("update Notification n set n.readAt = :now where n.member.id = :memberId and n.readAt is null")
 	int markAllRead(@Param("memberId") Long memberId, @Param("now") LocalDateTime now);
 
+	/** 파생 메서드는 건건이 SELECT 후 DELETE 라 알림 수만큼 쿼리가 나가 벌크 DELETE 로 대신한다. */
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("delete from Notification n where n.member.id = :memberId and n.readAt is not null")
+	int deleteAllByMemberIdAndReadAtIsNotNull(@Param("memberId") Long memberId);
+
 	// 후보 회원마다 exists 쿼리를 도는 대신 in-절 한 방으로 "이미 안 읽은 같은 알림을 가진 회원" 만 골라 차집합에 쓴다.
 	@Query("""
 			select n.member.id from Notification n

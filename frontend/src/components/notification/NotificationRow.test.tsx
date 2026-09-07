@@ -14,11 +14,12 @@ const baseItem: NotificationItem = {
   createdAt: '2026-09-01T10:00:00',
 };
 
-const renderRow = (item: NotificationItem, onRead = vi.fn()) => ({
+const renderRow = (item: NotificationItem, onRead = vi.fn(), onDelete = vi.fn()) => ({
   onRead,
+  onDelete,
   ...render(
     <MemoryRouter>
-      <NotificationRow item={item} onRead={onRead} />
+      <NotificationRow item={item} onRead={onRead} onDelete={onDelete} />
     </MemoryRouter>,
   ),
 });
@@ -82,5 +83,35 @@ describe('NotificationRow', () => {
 
     // then
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('삭제 버튼을 누르면 onDelete 가 해당 id 로 불린다', async () => {
+    // given
+    const user = userEvent.setup();
+    const { onDelete } = renderRow(baseItem);
+
+    // when
+    await user.click(screen.getByRole('button', { name: /알림 삭제/ }));
+
+    // then
+    expect(onDelete).toHaveBeenCalledWith(1);
+  });
+
+  it('삭제 버튼의 aria-label 에 알림 내용이 들어간다', () => {
+    // given & when
+    renderRow(baseItem);
+
+    // then
+    expect(
+      screen.getByRole('button', { name: 'Kind of Blue 재입고됐습니다 알림 삭제' }),
+    ).toBeInTheDocument();
+  });
+
+  it('링크 안에 삭제 버튼이 중첩되지 않는다', () => {
+    // given
+    const { container } = renderRow(baseItem);
+
+    // when & then
+    expect(container.querySelectorAll('a button').length).toBe(0);
   });
 });

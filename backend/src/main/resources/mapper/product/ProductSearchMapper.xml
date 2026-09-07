@@ -24,6 +24,15 @@
 		</constructor>
 	</resultMap>
 
+	<resultMap id="suggestionItemMap" type="com.groove.product.dto.ProductSuggestionResponse$Item">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="title" javaType="java.lang.String"/>
+			<arg column="artistName" javaType="java.lang.String"/>
+			<arg column="thumbnailUrl" javaType="java.lang.String"/>
+		</constructor>
+	</resultMap>
+
 	<sql id="searchFrom">
 		FROM product p
 		JOIN artist a ON a.id = p.artist_id
@@ -151,6 +160,23 @@
 		WHERE p.album_id = #{albumId}
 		AND p.status &lt;&gt; 'HIDDEN'
 		ORDER BY p.pressing_year IS NULL, p.pressing_year ASC, p.id ASC
+	</select>
+
+	<select id="suggestProducts" resultMap="suggestionItemMap">
+		SELECT p.id, p.title, a.name AS artistName,
+			(SELECT MIN(pi.image_url) FROM product_image pi
+				WHERE pi.product_id = p.id AND pi.sort_order = 0) AS thumbnailUrl
+		FROM product p
+		JOIN artist a ON a.id = p.artist_id
+		WHERE p.status &lt;&gt; 'HIDDEN'
+		AND (p.title LIKE CONCAT('%', #{keyword}, '%')
+			OR a.name LIKE CONCAT('%', #{keyword}, '%'))
+		ORDER BY
+			CASE WHEN p.title LIKE CONCAT(#{keyword}, '%') THEN 0
+				WHEN a.name LIKE CONCAT(#{keyword}, '%') THEN 1
+				ELSE 2 END,
+			p.review_count DESC, p.id DESC
+		LIMIT #{limit}
 	</select>
 
 </mapper>

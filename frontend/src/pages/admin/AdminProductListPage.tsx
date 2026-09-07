@@ -120,7 +120,7 @@ export default function AdminProductListPage() {
     <div>
       <div className="mb-4 flex items-end justify-between gap-6">
         <div>
-          <h2 className="text-[17px] font-bold tracking-tight">상품</h2>
+          <h2 className="text-[17px] font-bold tracking-tight">상품 관리</h2>
           <p className="mt-1.5 text-sm text-content-muted">
             {isPending ? '불러오는 중…' : `총 ${data?.totalElements ?? 0}개`}
           </p>

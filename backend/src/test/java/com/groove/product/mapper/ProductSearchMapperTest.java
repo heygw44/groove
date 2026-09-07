@@ -26,6 +26,7 @@ import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSortType;
+import com.groove.product.dto.ProductSuggestionResponse;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
@@ -789,6 +790,98 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result).extracting(ProductSummaryResponse::id).doesNotContain(kindOfBlue.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("suggestProducts()")
+	class SuggestProducts {
+
+		private static final String SUGGEST_KEYWORD = "SGT";
+
+		private Product titlePrefixMatch;
+		private Product artistPrefixMatch;
+		private Product middleMatch;
+		private Product hiddenMatch;
+
+		@BeforeEach
+		void setUpSuggestions() {
+			Artist middleNamedArtist = ArtistFixture.create("Middle SGT Artist");
+			Artist prefixNamedArtist = ArtistFixture.create("SGT Prefix Artist");
+			Artist plainArtist = ArtistFixture.create("Plain Artist");
+			em.persist(middleNamedArtist);
+			em.persist(prefixNamedArtist);
+			em.persist(plainArtist);
+
+			titlePrefixMatch = ProductFixture.create(middleNamedArtist, "SGT Prefix Title",
+					new BigDecimal("10000.00"));
+			artistPrefixMatch = ProductFixture.create(prefixNamedArtist, "Random Title", new BigDecimal("20000.00"));
+			middleMatch = ProductFixture.create(plainArtist, "Something SGT Middle", new BigDecimal("30000.00"));
+			hiddenMatch = ProductFixture.create(plainArtist, "SGT Hidden Product", new BigDecimal("40000.00"));
+			hiddenMatch.hide();
+
+			em.persist(titlePrefixMatch.getAlbum());
+			em.persist(artistPrefixMatch.getAlbum());
+			em.persist(middleMatch.getAlbum());
+			em.persist(hiddenMatch.getAlbum());
+			em.persist(titlePrefixMatch);
+			em.persist(artistPrefixMatch);
+			em.persist(middleMatch);
+			em.persist(hiddenMatch);
+			em.flush();
+			em.clear();
+		}
+
+		@Test
+		@DisplayName("제목에 키워드가 포함되면 결과에 반환된다")
+		void filtersByTitleKeyword() {
+			// when
+			List<ProductSuggestionResponse.Item> result = productSearchMapper.suggestProducts(SUGGEST_KEYWORD, 5);
+
+			// then
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id).contains(titlePrefixMatch.getId());
+		}
+
+		@Test
+		@DisplayName("아티스트명에 키워드가 포함되면 결과에 반환된다")
+		void filtersByArtistNameKeyword() {
+			// when
+			List<ProductSuggestionResponse.Item> result = productSearchMapper.suggestProducts(SUGGEST_KEYWORD, 5);
+
+			// then
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id).contains(artistPrefixMatch.getId());
+		}
+
+		@Test
+		@DisplayName("제목·아티스트명이 키워드로 시작하는 상품이 중간에 포함된 상품보다 앞선다")
+		void ordersPrefixMatchesBeforeMiddleMatches() {
+			// when
+			List<ProductSuggestionResponse.Item> result = productSearchMapper.suggestProducts(SUGGEST_KEYWORD, 5);
+
+			// then
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id)
+					.containsExactly(titlePrefixMatch.getId(), artistPrefixMatch.getId(), middleMatch.getId());
+		}
+
+		@Test
+		@DisplayName("HIDDEN 상품은 결과에서 제외된다")
+		void excludesHiddenProducts() {
+			// when
+			List<ProductSuggestionResponse.Item> result = productSearchMapper.suggestProducts(SUGGEST_KEYWORD, 5);
+
+			// then
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id).doesNotContain(hiddenMatch.getId());
+		}
+
+		@Test
+		@DisplayName("limit 을 넘는 결과는 잘라서 반환한다")
+		void limitsResultSize() {
+			// when
+			List<ProductSuggestionResponse.Item> result = productSearchMapper.suggestProducts(SUGGEST_KEYWORD, 2);
+
+			// then
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id)
+					.containsExactly(titlePrefixMatch.getId(), artistPrefixMatch.getId());
 		}
 	}
 }

@@ -39,12 +39,15 @@ import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
+import com.groove.product.dto.ArtistResponse;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchRequest;
+import com.groove.product.dto.ProductSuggestionResponse;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.EditionType;
 import com.groove.product.entity.ProductStatus;
 import com.groove.product.service.ProductService;
+import com.groove.product.service.ProductSuggestService;
 
 @WebMvcTest(ProductController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -63,6 +66,9 @@ class ProductControllerTest {
 
 	@MockitoBean
 	private ProductService productService;
+
+	@MockitoBean
+	private ProductSuggestService productSuggestService;
 
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
@@ -199,6 +205,73 @@ class ProductControllerTest {
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + expiredToken))
 					.andExpect(status().isOk());
 			verify(productService).search(any(), isNull());
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/products/suggestions")
+	class Suggest {
+
+		@Test
+		@DisplayName("상품·아티스트 제안을 응답으로 직렬화한다")
+		void serializesSuggestions() throws Exception {
+			// given
+			ProductSuggestionResponse response = new ProductSuggestionResponse(
+					List.of(new ProductSuggestionResponse.Item(501L, "Kind of Blue", "Miles Davis",
+							"https://cdn.groove.com/kind-of-blue.jpg")),
+					List.of(new ArtistResponse(7L, "Miles Davis", "Miles Davis")));
+			given(productSuggestService.suggest("kind")).willReturn(response);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products/suggestions").param("keyword", "kind"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.products[0].id", is(501)))
+					.andExpect(jsonPath("$.data.artists[0].name", is("Miles Davis")));
+		}
+
+		@Test
+		@DisplayName("keyword 가 공백뿐이면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenKeywordBlank() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/products/suggestions").param("keyword", "   "))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
+		@DisplayName("keyword 가 없으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenKeywordMissing() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/products/suggestions"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
+		@DisplayName("keyword 가 50자를 초과하면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenKeywordTooLong() throws Exception {
+			// given
+			String tooLong = "a".repeat(51);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products/suggestions").param("keyword", tooLong))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
+		@DisplayName("thumbnailUrl 이 없으면 응답 키가 생략된다")
+		void omitsThumbnailUrlWhenAbsent() throws Exception {
+			// given
+			ProductSuggestionResponse response = new ProductSuggestionResponse(
+					List.of(new ProductSuggestionResponse.Item(501L, "Kind of Blue", "Miles Davis", null)),
+					List.of());
+			given(productSuggestService.suggest("kind")).willReturn(response);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products/suggestions").param("keyword", "kind"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.products[0].thumbnailUrl").doesNotExist());
 		}
 	}
 

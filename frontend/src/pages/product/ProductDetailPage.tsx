@@ -102,12 +102,9 @@ export default function ProductDetailPage() {
           />
 
           {product.genres.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {product.genres.map((genre) => (
-                <Link
-                  key={genre.id}
-                  to={`/products?genreIds=${genre.id}`}
-                >
+                <Link key={genre.id} to={`/products?genreIds=${genre.id}`}>
                   <Badge variant="accent">{genre.name}</Badge>
                 </Link>
               ))}
