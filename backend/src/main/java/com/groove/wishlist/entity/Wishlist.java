@@ -4,10 +4,13 @@ import static jakarta.persistence.FetchType.LAZY;
 import static lombok.AccessLevel.PRIVATE;
 import static lombok.AccessLevel.PROTECTED;
 
+import org.hibernate.annotations.ColumnDefault;
+
 import com.groove.global.common.BaseTimeEntity;
 import com.groove.member.entity.Member;
 import com.groove.product.entity.Product;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
@@ -42,10 +45,15 @@ public class Wishlist extends BaseTimeEntity {
 	@JoinColumn(name = "product_id", nullable = false, foreignKey = @ForeignKey(name = "fk_wishlist_product"))
 	private Product product;
 
+	@Column(name = "alert_enabled", nullable = false)
+	@ColumnDefault("true")
+	private boolean alertEnabled;
+
 	@Builder(access = PRIVATE)
 	private Wishlist(Member member, Product product) {
 		this.member = member;
 		this.product = product;
+		this.alertEnabled = true;
 	}
 
 	public static Wishlist create(Member member, Product product) {
@@ -53,5 +61,9 @@ public class Wishlist extends BaseTimeEntity {
 				.member(member)
 				.product(product)
 				.build();
+	}
+
+	public void changeAlert(boolean alertEnabled) {
+		this.alertEnabled = alertEnabled;
 	}
 }

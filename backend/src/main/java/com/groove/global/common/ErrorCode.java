@@ -125,6 +125,12 @@ public enum ErrorCode {
 	// ===== RECOMMEND =====
 	RECOMMEND_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "취향 프로필이 없습니다."),
 
+	// ===== NOTIFICATION =====
+	NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
+	NOTIFICATION_FORBIDDEN(HttpStatus.FORBIDDEN, "본인의 알림만 처리할 수 있습니다."),
+	ALBUM_WATCH_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 구독 중인 앨범입니다."),
+	ALBUM_WATCH_NOT_FOUND(HttpStatus.NOT_FOUND, "구독하지 않은 앨범입니다."),
+
 	// ===== ADMIN =====
 	ADMIN_CANNOT_MODIFY_SELF(HttpStatus.FORBIDDEN, "자기 자신의 상태는 변경할 수 없습니다."),
 	ADMIN_CANNOT_MODIFY_ADMIN(HttpStatus.FORBIDDEN, "다른 관리자의 상태는 변경할 수 없습니다.");

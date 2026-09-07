@@ -16,6 +16,7 @@ public record WishlistItemResponse(
 		BigDecimal price,
 		ProductStatus productStatus,
 		int stockQuantity,
+		boolean alertEnabled,
 		LocalDateTime createdAt
 ) {
 
@@ -30,6 +31,7 @@ public record WishlistItemResponse(
 				product.getPrice(),
 				product.getStatus(),
 				stockQuantity,
+				wishlist.isAlertEnabled(),
 				wishlist.getCreatedAt());
 	}
 }

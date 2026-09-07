@@ -285,4 +285,41 @@ class WishlistServiceTest {
 			verify(stockRepository, never()).findAllByProductIdIn(any());
 		}
 	}
+
+	@Nested
+	@DisplayName("changeAlert()")
+	class ChangeAlert {
+
+		@Test
+		@DisplayName("위시리스트에 있으면 알림 수신 여부를 바꾸고 갱신된 항목을 반환한다")
+		void changesAlert() {
+			// given
+			Wishlist wishlist = WishlistFixture.withId(WishlistFixture.create(member, product), WISHLIST_ID);
+			given(wishlistRepository.findByMemberIdAndProductId(MEMBER_ID, PRODUCT_ID))
+					.willReturn(Optional.of(wishlist));
+			given(productImageRepository.findAllByProductIdInAndSortOrder(any(), eq(0))).willReturn(List.of());
+			given(stockRepository.findByProductId(PRODUCT_ID))
+				.willReturn(Optional.of(StockFixture.create(product, 10)));
+
+			// when
+			WishlistItemResponse response = wishlistService.changeAlert(MEMBER_ID, PRODUCT_ID, false);
+
+			// then
+			assertThat(response.alertEnabled()).isFalse();
+			assertThat(wishlist.isAlertEnabled()).isFalse();
+		}
+
+		@Test
+		@DisplayName("위시리스트에 없으면 WISHLIST_NOT_FOUND 예외를 던진다")
+		void throwsWhenNotInWishlist() {
+			// given
+			given(wishlistRepository.findByMemberIdAndProductId(MEMBER_ID, PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> wishlistService.changeAlert(MEMBER_ID, PRODUCT_ID, false))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.WISHLIST_NOT_FOUND);
+		}
+	}
 }
