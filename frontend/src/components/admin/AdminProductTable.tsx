@@ -67,7 +67,7 @@ export function AdminProductTable({
                 <div className="flex items-center gap-1.5">
                   <Link
                     to={`/admin/products/${product.id}/edit`}
-                    className="text-sm text-content hover:text-accent"
+                    className="text-sm text-content hover:text-accent-hover"
                   >
                     수정
                   </Link>

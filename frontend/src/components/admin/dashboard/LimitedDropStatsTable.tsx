@@ -53,7 +53,7 @@ export function LimitedDropStatsTable({ items }: LimitedDropStatsTableProps) {
                     {isExpandable ? (
                       <button
                         type="button"
-                        className="text-left hover:text-accent"
+                        className="text-left hover:text-accent-hover"
                         aria-expanded={isExpanded}
                         onClick={() => toggleExpanded(item.dropId)}
                       >

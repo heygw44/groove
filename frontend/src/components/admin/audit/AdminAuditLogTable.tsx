@@ -16,7 +16,10 @@ function AuditTargetCell({ log }: { log: AdminAuditLog }) {
 
   if (log.targetType === 'PRODUCT') {
     return (
-      <Link to={`/admin/products/${log.targetId}/edit`} className="text-content hover:text-accent">
+      <Link
+        to={`/admin/products/${log.targetId}/edit`}
+        className="text-content hover:text-accent-hover"
+      >
         {label}
       </Link>
     );

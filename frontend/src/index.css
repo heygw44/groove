@@ -11,8 +11,10 @@
   --color-line-strong: #cbc7bd;
 
   --color-content: #1a1a17;
-  --color-content-muted: #6b675f;
-  --color-content-subtle: #9c988e;
+  /* surface-muted 대비 6.35:1 (AA), content-subtle 보다 진하게 유지 */
+  --color-content-muted: #5e5a52;
+  /* surface-muted 대비 4.71:1, accent-soft 대비 4.66:1 (둘 다 AA 통과) */
+  --color-content-subtle: #726e62;
 
   --color-accent: #9a6b06;
   --color-accent-hover: #7c5605;
@@ -42,10 +44,15 @@ body {
 
 @layer base {
   a {
-    color: var(--color-accent);
+    color: var(--color-accent-hover);
   }
 
   a:hover {
-    color: var(--color-accent-hover);
+    color: #5f4204;
+  }
+
+  :where(a, button, [role='button'], summary):focus-visible {
+    outline: 2px solid var(--color-content);
+    outline-offset: 2px;
   }
 }

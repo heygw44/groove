@@ -81,7 +81,7 @@ export function CartItemRow({
         <div className="flex items-center gap-2">
           <Link
             to={`/products/${item.productId}`}
-            className="truncate text-sm font-medium text-content hover:text-accent"
+            className="truncate text-sm font-medium text-content hover:text-accent-hover"
           >
             {item.title}
           </Link>

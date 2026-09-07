@@ -31,7 +31,7 @@ export function AdminOrderTable({ orders, onSelect }: AdminOrderTableProps) {
                 <button
                   type="button"
                   onClick={() => onSelect(order)}
-                  className="font-medium text-content hover:text-accent"
+                  className="font-medium text-content hover:text-accent-hover"
                 >
                   {order.orderNumber}
                 </button>
