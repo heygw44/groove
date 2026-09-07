@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
 import { useToast } from '@/components/common/toastContext';
 import { WishlistCard, WishlistCardSkeleton } from '@/components/wishlist/WishlistCard';
@@ -96,9 +97,9 @@ export default function WishlistPage() {
           <EmptyState
             title="위시리스트가 비어 있습니다"
             action={
-              <Link to="/products">
-                <Button variant="secondary">상품 보러 가기</Button>
-              </Link>
+              <LinkButton to="/products" variant="secondary">
+                상품 보러 가기
+              </LinkButton>
             }
           />
         )}

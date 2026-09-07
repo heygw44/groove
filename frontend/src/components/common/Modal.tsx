@@ -1,5 +1,7 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+
+import { useDialogBehavior } from '@/hooks/useDialogBehavior';
 
 interface ModalProps {
   open: boolean;
@@ -33,28 +35,7 @@ export function Modal({
   const titleId = useId();
   const descriptionId = useId();
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    /* 뒤 페이지가 같이 스크롤되면 모달이 떠 있다는 감각이 깨진다. */
-    const { overflow } = document.body.style;
-    document.body.style.overflow = 'hidden';
-    document.addEventListener('keydown', handleKeyDown);
-    panelRef.current?.focus();
-
-    return () => {
-      document.body.style.overflow = overflow;
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open, onClose]);
+  useDialogBehavior({ open, onClose, panelRef });
 
   if (!open) {
     return null;

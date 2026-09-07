@@ -21,15 +21,18 @@ export default function PaymentFailPage() {
 
   return (
     <PageContainer size="sm">
-      <EmptyState
-        title="결제에 실패했습니다"
-        description={description}
-        action={
-          <Button variant="secondary" onClick={() => navigate(backTo)}>
-            주문으로 돌아가 다시 시도
-          </Button>
-        }
-      />
+      <div role="status" aria-live="polite">
+        <EmptyState
+          title="결제에 실패했습니다"
+          titleAs="h1"
+          description={description}
+          action={
+            <Button variant="secondary" onClick={() => navigate(backTo)}>
+              주문으로 돌아가 다시 시도
+            </Button>
+          }
+        />
+      </div>
     </PageContainer>
   );
 }

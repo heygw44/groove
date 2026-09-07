@@ -118,9 +118,7 @@ export function DiscogsImportModal({ onClose, onImport }: DiscogsImportModalProp
           <p className="text-sm text-danger">{getErrorMessage(releaseMutation.error)}</p>
         )}
 
-        {!hasQuery && (
-          <p className="text-sm text-content-subtle">검색 조건을 입력해주세요.</p>
-        )}
+        {!hasQuery && <p className="text-sm text-content-subtle">검색 조건을 입력해주세요.</p>}
 
         {hasQuery && isFetching && (
           <div className="flex items-center justify-center py-8">

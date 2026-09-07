@@ -26,13 +26,27 @@ export function AdminProductTable({
       <table className="min-w-[760px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">썸네일</th>
-            <th className="py-2 pr-3 font-medium">상품</th>
-            <th className="py-2 pr-3 text-right font-medium">가격</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 text-right font-medium">재고</th>
-            <th className="py-2 pr-3 font-medium">등록일</th>
-            <th className="py-2 pr-3 font-medium">액션</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              썸네일
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상품
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              가격
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              재고
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              등록일
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              액션
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -67,13 +81,15 @@ export function AdminProductTable({
                 <div className="flex items-center gap-1.5">
                   <Link
                     to={`/admin/products/${product.id}/edit`}
-                    className="text-sm text-content hover:text-accent"
+                    aria-label={`${product.title} 수정`}
+                    className="text-sm text-content hover:text-accent-hover"
                   >
                     수정
                   </Link>
                   <Button
                     variant="secondary"
                     size="sm"
+                    aria-label={`${product.title} 재고 조정`}
                     onClick={() => onAdjustStock(product)}
                     disabled={disabled || product.status === 'HIDDEN'}
                   >
@@ -83,6 +99,7 @@ export function AdminProductTable({
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label={`${product.title} 복구`}
                       onClick={() => onRestore(product)}
                       disabled={disabled}
                     >
@@ -92,6 +109,7 @@ export function AdminProductTable({
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label={`${product.title} 숨김`}
                       onClick={() => onHide(product)}
                       disabled={disabled}
                     >

@@ -46,7 +46,8 @@ export function ProductImageGallery({ images }: ProductImageGalleryProps) {
             <button
               key={image.url}
               type="button"
-              aria-current={index === activeIndex}
+              aria-label={`상품 이미지 ${index + 1} / ${sorted.length}`}
+              aria-current={index === activeIndex ? true : undefined}
               onClick={() => setActiveIndex(index)}
               className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border ${
                 index === activeIndex ? 'border-content' : 'border-line-strong'

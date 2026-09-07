@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import { AdminProductTable } from '@/components/admin/AdminProductTable';
 import { StockAdjustModal } from '@/components/admin/StockAdjustModal';
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
+import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
 import { Select } from '@/components/common/Select';
 import { Spinner } from '@/components/common/Spinner';
@@ -137,9 +138,7 @@ export default function AdminProductListPage() {
               </option>
             ))}
           </Select>
-          <Link to="/admin/products/new">
-            <Button>상품 등록</Button>
-          </Link>
+          <LinkButton to="/admin/products/new">상품 등록</LinkButton>
         </div>
       </div>
 

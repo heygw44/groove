@@ -1,7 +1,8 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
 import { Skeleton } from '@/components/common/Skeleton';
 import { OrderCard } from '@/components/order/OrderCard';
@@ -87,9 +88,9 @@ export default function OrderListPage() {
           <EmptyState
             title="주문 내역이 없습니다"
             action={
-              <Link to="/products">
-                <Button variant="secondary">상품 보러 가기</Button>
-              </Link>
+              <LinkButton to="/products" variant="secondary">
+                상품 보러 가기
+              </LinkButton>
             }
           />
         )}

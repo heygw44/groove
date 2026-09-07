@@ -17,13 +17,27 @@ export function AdminMemberTable({ members, onSelect }: AdminMemberTableProps) {
       <table className="min-w-[820px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">회원</th>
-            <th className="py-2 pr-3 font-medium">역할</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">가입일</th>
-            <th className="py-2 pr-3 text-right font-medium">주문 수</th>
-            <th className="py-2 pr-3 text-right font-medium">총 결제액</th>
-            <th className="py-2 pr-3 font-medium">상세</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              회원
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              역할
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              가입일
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              주문 수
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              총 결제액
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상세
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -33,7 +47,7 @@ export function AdminMemberTable({ members, onSelect }: AdminMemberTableProps) {
                 <button
                   type="button"
                   onClick={() => onSelect(member)}
-                  className="font-medium text-content hover:text-accent"
+                  className="font-medium text-content hover:text-accent-hover"
                 >
                   {member.email}
                 </button>

@@ -48,10 +48,7 @@ export function ProductCard({ product, children }: ProductCardProps) {
   const soldOut = product.status === 'SOLD_OUT';
 
   return (
-    <Link
-      to={`/products/${product.id}`}
-      className="group flex h-full flex-col text-content"
-    >
+    <div className="group relative flex h-full flex-col text-content">
       <div className="relative">
         <ProductThumbnail url={product.thumbnailUrl} soldOut={soldOut} />
         {soldOut && (
@@ -63,14 +60,20 @@ export function ProductCard({ product, children }: ProductCardProps) {
           size="sm"
           productId={product.id}
           wishlisted={product.wishlisted}
-          className="absolute right-2 top-2"
+          className="absolute right-2 top-2 z-10"
         />
       </div>
-      <p className="mt-2.5 line-clamp-2 min-h-[2.5rem] text-sm font-medium">{product.title}</p>
+      {/* 카드 전체 클릭을 지원하는 stretched link. WishButton 은 z-10 으로 위에 둔 형제 버튼이다. */}
+      <Link
+        to={`/products/${product.id}`}
+        className="mt-2.5 line-clamp-2 min-h-[2.5rem] text-sm font-medium before:absolute before:inset-0 before:content-['']"
+      >
+        {product.title}
+      </Link>
       <p className="mt-0.5 text-xs text-content-muted">{product.artistName}</p>
       <p className="mt-1 text-sm font-bold">{formatPrice(product.price)}</p>
       <div className="mt-auto">{children}</div>
-    </Link>
+    </div>
   );
 }
 
