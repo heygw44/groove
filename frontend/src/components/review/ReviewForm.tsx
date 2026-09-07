@@ -88,7 +88,16 @@ export function ReviewForm({
         />
       </Field>
 
-      <Field htmlFor="review-content" label="내용" error={errors.content?.message}>
+      <Field
+        htmlFor="review-content"
+        label="내용"
+        error={errors.content?.message}
+        trailing={
+          <p className="mt-1 text-right text-xs text-content-subtle">
+            {(content ?? '').length}/{REVIEW_CONTENT_MAX}
+          </p>
+        }
+      >
         <Textarea
           id="review-content"
           rows={4}
@@ -96,9 +105,6 @@ export function ReviewForm({
           invalid={Boolean(errors.content)}
           {...register('content')}
         />
-        <p className="mt-1 text-right text-xs text-content-subtle">
-          {(content ?? '').length}/{REVIEW_CONTENT_MAX}
-        </p>
       </Field>
 
       <div className="flex gap-2">
