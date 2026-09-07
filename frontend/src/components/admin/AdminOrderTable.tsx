@@ -15,13 +15,27 @@ export function AdminOrderTable({ orders, onSelect }: AdminOrderTableProps) {
       <table className="min-w-[820px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">주문번호</th>
-            <th className="py-2 pr-3 font-medium">회원</th>
-            <th className="py-2 pr-3 text-right font-medium">금액</th>
-            <th className="py-2 pr-3 text-right font-medium">상품 수</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">주문일시</th>
-            <th className="py-2 pr-3 font-medium">상세</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              주문번호
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              회원
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              금액
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              상품 수
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              주문일시
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상세
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -48,7 +62,12 @@ export function AdminOrderTable({ orders, onSelect }: AdminOrderTableProps) {
                 {formatServerDateTime(order.createdAt)}
               </td>
               <td className="py-2.5 pr-3">
-                <Button variant="secondary" size="sm" onClick={() => onSelect(order)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label={`주문 ${order.orderNumber} 상세`}
+                  onClick={() => onSelect(order)}
+                >
                   상세
                 </Button>
               </td>

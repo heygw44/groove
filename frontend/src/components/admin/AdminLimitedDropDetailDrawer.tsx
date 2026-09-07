@@ -105,10 +105,18 @@ export function AdminLimitedDropDetailDrawer({
                 <table className="min-w-[420px] w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-line text-xs text-content-muted">
-                      <th className="py-2 pr-3 font-medium">닉네임</th>
-                      <th className="py-2 pr-3 font-medium">주문번호</th>
-                      <th className="py-2 pr-3 font-medium">주문 상태</th>
-                      <th className="py-2 pr-3 font-medium">시각</th>
+                      <th scope="col" className="py-2 pr-3 font-medium">
+                        닉네임
+                      </th>
+                      <th scope="col" className="py-2 pr-3 font-medium">
+                        주문번호
+                      </th>
+                      <th scope="col" className="py-2 pr-3 font-medium">
+                        주문 상태
+                      </th>
+                      <th scope="col" className="py-2 pr-3 font-medium">
+                        시각
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

@@ -111,8 +111,11 @@ export function ProductImageUploader({
         tabIndex={0}
         onClick={() => !disabled && !isFull && inputRef.current?.click()}
         onKeyDown={(event) => {
-          if ((event.key === 'Enter' || event.key === ' ') && !disabled && !isFull) {
-            inputRef.current?.click();
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (!disabled && !isFull) {
+              inputRef.current?.click();
+            }
           }
         }}
         onDragOver={(event) => {
@@ -121,6 +124,7 @@ export function ProductImageUploader({
         }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
+        aria-disabled={disabled || isFull ? true : undefined}
         className={`flex h-28 flex-col items-center justify-center gap-1.5 rounded-md border border-dashed text-sm ${
           disabled || isFull
             ? 'cursor-not-allowed border-line text-content-subtle'
@@ -155,7 +159,11 @@ export function ProductImageUploader({
         <ul className="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
           {value.map((url, index) => (
             <li key={url} className="relative">
-              <img src={url} alt="" className="aspect-square w-full rounded-md object-cover" />
+              <img
+                src={url}
+                alt={`${index + 1}번째 이미지${index === 0 ? ' (대표)' : ''}`}
+                className="aspect-square w-full rounded-md object-cover"
+              />
               {index === 0 && (
                 <Badge variant="accent" className="absolute left-1.5 top-1.5">
                   대표
@@ -166,7 +174,7 @@ export function ProductImageUploader({
                   type="button"
                   onClick={() => move(index, -1)}
                   disabled={disabled || index === 0}
-                  aria-label="앞으로 이동"
+                  aria-label={`${index + 1}번째 이미지 앞으로 이동`}
                   className="flex h-6 w-6 items-center justify-center rounded-full bg-content/70 text-xs text-surface disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   ↑
@@ -175,7 +183,7 @@ export function ProductImageUploader({
                   type="button"
                   onClick={() => move(index, 1)}
                   disabled={disabled || index === value.length - 1}
-                  aria-label="뒤로 이동"
+                  aria-label={`${index + 1}번째 이미지 뒤로 이동`}
                   className="flex h-6 w-6 items-center justify-center rounded-full bg-content/70 text-xs text-surface disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   ↓
@@ -184,7 +192,7 @@ export function ProductImageUploader({
                   type="button"
                   onClick={() => remove(index)}
                   disabled={disabled}
-                  aria-label="삭제"
+                  aria-label={`${index + 1}번째 이미지 삭제`}
                   className="flex h-6 w-6 items-center justify-center rounded-full bg-content/70 text-xs text-surface disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   ×

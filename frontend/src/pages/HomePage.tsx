@@ -39,6 +39,8 @@ export default function HomePage() {
 
   return (
     <PageContainer>
+      <h1 className="sr-only">GROOVE — 바이닐 레코드 스토어</h1>
+
       {bannerDrop && <LimitedDropBanner drop={bannerDrop} nowMs={nowMs} />}
 
       <DiggingSection className={hasBanner ? 'mt-10' : undefined} />

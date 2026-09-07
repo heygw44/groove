@@ -31,10 +31,18 @@ const STATUS_LABEL: Record<string, string> = {
   HIDDEN: '숨김',
 };
 
-const CHANGE_TYPE_OPTIONS: { value: StockAdjustFormValues['changeType']; label: string; help: string }[] = [
+const CHANGE_TYPE_OPTIONS: {
+  value: StockAdjustFormValues['changeType'];
+  label: string;
+  help: string;
+}[] = [
   { value: 'IN', label: '입고', help: '현재 재고에 더합니다.' },
   { value: 'OUT', label: '출고', help: '현재 재고에서 뺍니다. 재고보다 많으면 실패합니다.' },
-  { value: 'ADJUST', label: '조정', help: '입력한 수량으로 맞춥니다. 1 이상만 가능하며, 0으로 만들려면 출고를 사용하세요.' },
+  {
+    value: 'ADJUST',
+    label: '조정',
+    help: '입력한 수량으로 맞춥니다. 1 이상만 가능하며, 0으로 만들려면 출고를 사용하세요.',
+  },
 ];
 
 export function StockAdjustModal({ open, onClose, product }: StockAdjustModalProps) {
@@ -98,7 +106,9 @@ export function StockAdjustModal({ open, onClose, product }: StockAdjustModalPro
       open={open}
       onClose={onClose}
       title="재고 조정"
-      description={product ? `${product.title} · 현재 재고 ${product.stockQuantity ?? 0}개` : undefined}
+      description={
+        product ? `${product.title} · 현재 재고 ${product.stockQuantity ?? 0}개` : undefined
+      }
       size="sm"
       footer={
         <>
@@ -157,7 +167,12 @@ export function StockAdjustModal({ open, onClose, product }: StockAdjustModalPro
         />
 
         <Field htmlFor="reason" label="사유" error={errors.reason?.message}>
-          <Input id="reason" placeholder="선택" invalid={Boolean(errors.reason)} {...register('reason')} />
+          <Input
+            id="reason"
+            placeholder="선택"
+            invalid={Boolean(errors.reason)}
+            {...register('reason')}
+          />
         </Field>
       </form>
     </Modal>

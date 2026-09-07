@@ -16,7 +16,11 @@ import { Spinner } from '@/components/common/Spinner';
 import { Textarea } from '@/components/common/Textarea';
 import { useToast } from '@/components/common/toastContext';
 import { ArtistSearchSelect } from '@/components/product/ArtistSearchSelect';
-import { EDITION_TYPE_LABELS, PRESSING_COUNTRIES, PRESSING_COUNTRY_LABELS } from '@/constants/product';
+import {
+  EDITION_TYPE_LABELS,
+  PRESSING_COUNTRIES,
+  PRESSING_COUNTRY_LABELS,
+} from '@/constants/product';
 import { useCreateProduct, useUpdateProduct } from '@/hooks/mutations/useAdminProductMutations';
 import { useGenres, useLabels } from '@/hooks/queries/useReferences';
 import {
@@ -137,7 +141,12 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
 
       {!isEdit && (
         <div className="flex justify-end">
-          <Button type="button" variant="secondary" size="sm" onClick={() => setDiscogsModalOpen(true)}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setDiscogsModalOpen(true)}
+          >
             Discogs 에서 불러오기
           </Button>
         </div>
@@ -287,11 +296,19 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
       </Field>
 
       <Field htmlFor="pressingInfo" label="프레싱" error={errors.pressingInfo?.message}>
-        <Input id="pressingInfo" invalid={Boolean(errors.pressingInfo)} {...register('pressingInfo')} />
+        <Input
+          id="pressingInfo"
+          invalid={Boolean(errors.pressingInfo)}
+          {...register('pressingInfo')}
+        />
       </Field>
 
       <Field htmlFor="colorVariant" label="컬러반" error={errors.colorVariant?.message}>
-        <Input id="colorVariant" invalid={Boolean(errors.colorVariant)} {...register('colorVariant')} />
+        <Input
+          id="colorVariant"
+          invalid={Boolean(errors.colorVariant)}
+          {...register('colorVariant')}
+        />
       </Field>
 
       <Field htmlFor="country" label="프레싱 국가" error={errors.country?.message}>
@@ -334,7 +351,12 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
       </Field>
 
       <Field htmlFor="price" label="가격" required error={errors.price?.message}>
-        <Input id="price" inputMode="numeric" invalid={Boolean(errors.price)} {...register('price')} />
+        <Input
+          id="price"
+          inputMode="numeric"
+          invalid={Boolean(errors.price)}
+          {...register('price')}
+        />
       </Field>
 
       <Field htmlFor="description" label="설명" error={errors.description?.message}>
@@ -357,7 +379,12 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
       </Field>
 
       {!isEdit && (
-        <Field htmlFor="initialStock" label="초기 재고" required error={errors.initialStock?.message}>
+        <Field
+          htmlFor="initialStock"
+          label="초기 재고"
+          required
+          error={errors.initialStock?.message}
+        >
           <Input
             id="initialStock"
             inputMode="numeric"

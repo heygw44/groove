@@ -23,13 +23,27 @@ export function AdminLimitedDropTable({
       <table className="min-w-[860px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">상품</th>
-            <th className="py-2 pr-3 font-medium">수량</th>
-            <th className="py-2 pr-3 font-medium">1인 한도</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">오픈</th>
-            <th className="py-2 pr-3 font-medium">마감</th>
-            <th className="py-2 pr-3 font-medium">액션</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상품
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              수량
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              1인 한도
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              오픈
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              마감
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              액션
+            </th>
           </tr>
         </thead>
         <tbody>

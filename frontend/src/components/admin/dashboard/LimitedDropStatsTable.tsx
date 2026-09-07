@@ -30,14 +30,30 @@ export function LimitedDropStatsTable({ items }: LimitedDropStatsTableProps) {
       <table className="min-w-[820px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">상품</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 text-right font-medium">판매/총량</th>
-            <th className="py-2 pr-3 font-medium">판매율</th>
-            <th className="py-2 pr-3 text-right font-medium">경쟁률</th>
-            <th className="py-2 pr-3 font-medium">오픈</th>
-            <th className="py-2 pr-3 font-medium">마감</th>
-            <th className="py-2 pr-3 font-medium">매진 소요</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상품
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              판매/총량
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              판매율
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              경쟁률
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              오픈
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              마감
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              매진 소요
+            </th>
           </tr>
         </thead>
         <tbody>

@@ -30,14 +30,30 @@ export function CatalogImportJobTable({
       <table className="min-w-[960px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">잡 실행 ID</th>
-            <th className="py-2 pr-3 font-medium">마스터 ID</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">진행</th>
-            <th className="py-2 pr-3 font-medium">시작</th>
-            <th className="py-2 pr-3 font-medium">종료</th>
-            <th className="py-2 pr-3 font-medium">실패 사유</th>
-            <th className="py-2 pr-3 font-medium">액션</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              잡 실행 ID
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              마스터 ID
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              진행
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              시작
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              종료
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              실패 사유
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              액션
+            </th>
           </tr>
         </thead>
         <tbody>

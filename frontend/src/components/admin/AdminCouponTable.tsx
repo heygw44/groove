@@ -18,14 +18,30 @@ export function AdminCouponTable({ coupons, onEdit, onDisable }: AdminCouponTabl
       <table className="min-w-[820px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">코드</th>
-            <th className="py-2 pr-3 font-medium">이름</th>
-            <th className="py-2 pr-3 text-right font-medium">할인</th>
-            <th className="py-2 pr-3 text-right font-medium">최소 주문</th>
-            <th className="py-2 pr-3 text-right font-medium">발급/사용</th>
-            <th className="py-2 pr-3 font-medium">만료일</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">액션</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              코드
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              이름
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              할인
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              최소 주문
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              발급/사용
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              만료일
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              액션
+            </th>
           </tr>
         </thead>
         <tbody>

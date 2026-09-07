@@ -34,12 +34,24 @@ export function AdminAuditLogTable({ logs }: AdminAuditLogTableProps) {
       <table className="min-w-[900px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">시각</th>
-            <th className="py-2 pr-3 font-medium">관리자</th>
-            <th className="py-2 pr-3 font-medium">행위</th>
-            <th className="py-2 pr-3 font-medium">대상</th>
-            <th className="py-2 pr-3 font-medium">변경 내용</th>
-            <th className="py-2 pr-3 font-medium">IP</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              시각
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              관리자
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              행위
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              대상
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              변경 내용
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              IP
+            </th>
           </tr>
         </thead>
         <tbody>

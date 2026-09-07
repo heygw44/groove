@@ -1,7 +1,10 @@
 import { Badge } from '@/components/common/Badge';
 import type { AdminCouponDisplayStatus } from '@/types/coupon';
 
-const STATUS_LABEL: Record<AdminCouponDisplayStatus, { label: string; variant: 'success' | 'danger' | 'neutral' }> = {
+const STATUS_LABEL: Record<
+  AdminCouponDisplayStatus,
+  { label: string; variant: 'success' | 'danger' | 'neutral' }
+> = {
   ACTIVE: { label: '활성', variant: 'success' },
   EXPIRED: { label: '만료', variant: 'neutral' },
   DISABLED: { label: '비활성', variant: 'danger' },

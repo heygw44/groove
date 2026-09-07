@@ -34,6 +34,7 @@ export function NotificationRow({ item, onRead }: NotificationRowProps) {
       />
       <div className="min-w-0 flex-1">
         <p className={`text-sm ${unread ? 'font-medium text-content' : 'text-content-muted'}`}>
+          {unread && <span className="sr-only">읽지 않음. </span>}
           {buildNotificationMessage(item)}
         </p>
         <p className="mt-1 text-xs text-content-subtle">{formatDateTime(item.createdAt)}</p>

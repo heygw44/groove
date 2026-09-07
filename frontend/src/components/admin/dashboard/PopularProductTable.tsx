@@ -42,12 +42,24 @@ export function PopularProductTable({ items, sort, onSortChange }: PopularProduc
           <table className="min-w-[720px] w-full text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs text-content-muted">
-                <th className="py-2 pr-3 text-right font-medium">순위</th>
-                <th className="py-2 pr-3 font-medium">상품</th>
-                <th className="py-2 pr-3 font-medium">아티스트</th>
-                <th className="py-2 pr-3 text-right font-medium">판매 수량</th>
-                <th className="py-2 pr-3 text-right font-medium">매출</th>
-                <th className="py-2 pr-3 text-right font-medium">주문 수</th>
+                <th scope="col" className="py-2 pr-3 text-right font-medium">
+                  순위
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  상품
+                </th>
+                <th scope="col" className="py-2 pr-3 font-medium">
+                  아티스트
+                </th>
+                <th scope="col" className="py-2 pr-3 text-right font-medium">
+                  판매 수량
+                </th>
+                <th scope="col" className="py-2 pr-3 text-right font-medium">
+                  매출
+                </th>
+                <th scope="col" className="py-2 pr-3 text-right font-medium">
+                  주문 수
+                </th>
               </tr>
             </thead>
             <tbody>

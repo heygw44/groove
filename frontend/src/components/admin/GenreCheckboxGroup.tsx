@@ -9,9 +9,7 @@ interface GenreCheckboxGroupProps {
 
 export function GenreCheckboxGroup({ value, onChange, genres, name }: GenreCheckboxGroupProps) {
   const toggle = (genreId: number) => {
-    onChange(
-      value.includes(genreId) ? value.filter((id) => id !== genreId) : [...value, genreId],
-    );
+    onChange(value.includes(genreId) ? value.filter((id) => id !== genreId) : [...value, genreId]);
   };
 
   return (
