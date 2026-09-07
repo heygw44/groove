@@ -75,14 +75,14 @@ export function Drawer({
         className={`absolute top-0 h-full w-[85vw] overflow-y-auto bg-surface shadow-2xl outline-none ${SIDE_CLASS[side]} ${SIZE_CLASS[size]}`}
       >
         <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3.5">
-          <h2 id={titleId} className="text-base font-bold tracking-tight">
+          <h2 id={titleId} className="min-w-0 truncate text-base font-bold tracking-tight">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="닫기"
-            className="-mr-1 rounded-md p-1 text-content-subtle hover:bg-surface-muted hover:text-content"
+            className="-mr-1 shrink-0 rounded-md p-1 text-content-subtle hover:bg-surface-muted hover:text-content"
           >
             <svg
               width="18"

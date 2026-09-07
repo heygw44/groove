@@ -102,9 +102,9 @@ export function LimitedPurchaseSheet({
         </>
       }
     >
-      <div className="mb-4 flex items-center justify-between rounded-md bg-surface-muted px-4 py-3">
-        <span className="text-sm font-medium">{drop.product.title}</span>
-        <span className="text-sm font-bold">{formatPrice(drop.product.price)}</span>
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-md bg-surface-muted px-4 py-3">
+        <span className="min-w-0 truncate text-sm font-medium">{drop.product.title}</span>
+        <span className="shrink-0 text-sm font-bold">{formatPrice(drop.product.price)}</span>
       </div>
 
       {addressContent}

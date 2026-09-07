@@ -101,7 +101,7 @@ export function CouponSelectModal({
               checked={pendingId === coupon.memberCouponId}
               onChange={() => setPendingId(coupon.memberCouponId)}
             />
-            <div className="flex flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-bold text-content">{coupon.couponName}</span>
                 {coupon.expectedDiscount === maxDiscount && (

@@ -48,8 +48,12 @@ export function AdminLimitedDropTable({
                 <td className="py-2.5 pr-3">
                   <DropStatusBadge status={drop.status} />
                 </td>
-                <td className="py-2.5 pr-3 text-content-muted">{formatDateTime(drop.openAt)}</td>
-                <td className="py-2.5 pr-3 text-content-muted">{formatDateTime(drop.closeAt)}</td>
+                <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                  {formatDateTime(drop.openAt)}
+                </td>
+                <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                  {formatDateTime(drop.closeAt)}
+                </td>
                 <td className="py-2.5 pr-3">
                   <div className="flex items-center gap-1.5">
                     <Button variant="secondary" size="sm" onClick={() => onSelect(drop)}>

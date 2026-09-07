@@ -157,8 +157,8 @@ export function PaymentWidgetSection({
   return (
     <section className="mt-8 rounded-lg border border-line bg-surface p-5">
       <h2 className="mb-3 text-base font-bold">결제하기</h2>
-      <div id="payment-methods" />
-      <div id="payment-agreement" className="mt-2" />
+      <div id="payment-methods" className="min-h-[320px]" />
+      <div id="payment-agreement" className="mt-2 min-h-[80px]" />
       {hasLoadError && (
         <p className="mt-3 text-sm text-danger">
           결제 모듈을 불러오지 못했습니다. 새로고침해주세요.

@@ -47,7 +47,7 @@ export default function ProductListPage() {
 
       <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
-          <div className="sticky top-6 rounded-lg border border-line bg-surface p-4">
+          <div className="sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto rounded-lg border border-line bg-surface p-4">
             {filterPanel}
           </div>
         </aside>

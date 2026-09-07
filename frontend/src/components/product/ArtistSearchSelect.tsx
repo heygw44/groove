@@ -53,8 +53,8 @@ export function ArtistSearchSelect({
   if (value !== undefined) {
     const displayName = pickedArtist?.name ?? selectedName ?? `아티스트 #${value}`;
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft py-1 pl-3 pr-1.5 text-sm text-accent-hover">
-        {displayName}
+      <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent-soft py-1 pl-3 pr-1.5 text-sm text-accent-hover">
+        <span className="truncate">{displayName}</span>
         <button
           type="button"
           onClick={handleClear}

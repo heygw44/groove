@@ -105,7 +105,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 rounded-lg border border-line bg-surface-sunken p-4 text-center">
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-surface-sunken p-4 text-center sm:grid-cols-3">
             <div>
               <p className="text-xs text-content-muted">주문 수</p>
               <p className="mt-1 text-sm font-bold">{detail.orderCount}건</p>
