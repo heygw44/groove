@@ -102,7 +102,7 @@ export default function AdminLimitedDropsPage() {
 
     mutation.mutate(drop.id, {
       onSuccess: () => {
-        showToast('success', type === 'open' ? '드롭을 오픈했습니다.' : '드롭을 마감했습니다.');
+        showToast('success', type === 'open' ? '한정반을 오픈했습니다.' : '한정반을 마감했습니다.');
         setPendingAction(undefined);
       },
       onError: (error) => {
@@ -134,7 +134,7 @@ export default function AdminLimitedDropsPage() {
               </option>
             ))}
           </Select>
-          <Button onClick={() => setCreating(true)}>드롭 등록</Button>
+          <Button onClick={() => setCreating(true)}>한정반 등록</Button>
         </div>
       </div>
 
@@ -146,7 +146,7 @@ export default function AdminLimitedDropsPage() {
 
       {!isPending && isError && (
         <EmptyState
-          title="한정반 드롭을 불러오지 못했습니다."
+          title="한정반을 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -157,7 +157,7 @@ export default function AdminLimitedDropsPage() {
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (
-        <EmptyState title="등록된 한정반 드롭이 없습니다." />
+        <EmptyState title="등록된 한정반이 없습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length > 0 && (
@@ -193,12 +193,12 @@ export default function AdminLimitedDropsPage() {
         onConfirm={handleConfirmAction}
         title={
           pendingAction?.type === 'open'
-            ? '한정반 드롭을 오픈하시겠습니까?'
-            : '한정반 드롭을 마감하시겠습니까?'
+            ? '한정반을 오픈하시겠습니까?'
+            : '한정반을 마감하시겠습니까?'
         }
         description={
           pendingAction?.type === 'open'
-            ? 'Redis 재고 카운터가 즉시 초기화되고 구매가 시작됩니다.'
+            ? '선점 재고가 즉시 초기화되고 구매가 시작됩니다.'
             : '즉시 판매가 종료되고 되돌릴 수 없습니다.'
         }
         confirmLabel={pendingAction?.type === 'open' ? '오픈' : '마감'}

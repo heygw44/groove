@@ -68,7 +68,7 @@ export function ArtistChipPicker({ value, onChange, max, invalid = false, id }: 
           aria-autocomplete="list"
           invalid={invalid}
           disabled={reachedMax}
-          placeholder={reachedMax ? `최대 ${max}명까지 고를 수 있어요` : '아티스트 검색'}
+          placeholder={reachedMax ? `최대 ${max}명까지 고를 수 있습니다` : '아티스트 검색'}
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
           onFocus={() => setOpen(true)}

@@ -5,9 +5,9 @@ export const isUnreadNotification = (item: NotificationItem): boolean =>
   item.readAt === undefined || item.readAt === null;
 
 const MESSAGE_BUILDERS: Record<NotificationType, (titleSnapshot: string) => string> = {
-  RESTOCK: (titleSnapshot) => `${titleSnapshot} 재입고됐어요`,
-  PRICE_DROP: (titleSnapshot) => `${titleSnapshot} 가격이 내려갔어요`,
-  NEW_PRESSING: (titleSnapshot) => `${titleSnapshot}의 새 프레싱이 등록됐어요`,
+  RESTOCK: (titleSnapshot) => `${titleSnapshot} 재입고됐습니다`,
+  PRICE_DROP: (titleSnapshot) => `${titleSnapshot} 가격이 내려갔습니다`,
+  NEW_PRESSING: (titleSnapshot) => `${titleSnapshot}의 새 에디션이 등록됐습니다`,
 };
 
 export const buildNotificationMessage = (item: NotificationItem): string =>

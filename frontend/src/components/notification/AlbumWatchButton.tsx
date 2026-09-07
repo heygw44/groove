@@ -53,7 +53,7 @@ export function AlbumWatchButton({ albumId, albumTitle, className = '' }: AlbumW
       onClick={handleClick}
       className={`${watched ? 'border-content text-content' : ''} ${className}`}
     >
-      {watched ? '알림 받는 중' : '새 프레싱 알림 받기'}
+      {watched ? '알림 받는 중' : '새 에디션 알림 받기'}
     </Button>
   );
 }

@@ -36,8 +36,8 @@ export function OrderCancelDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="주문을 취소할까요?"
-      description="취소하면 재고가 복구되며 되돌릴 수 없습니다."
+      title="주문을 취소하시겠습니까?"
+      description="취소하면 되돌릴 수 없습니다."
       size="sm"
       footer={
         <>

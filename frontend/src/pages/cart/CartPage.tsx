@@ -65,7 +65,7 @@ export default function CartPage() {
     }
     removeMutation.mutate(removing.id, {
       onSuccess: () => {
-        showToast('success', '삭제했습니다.');
+        showToast('success', `'${removing.title}'을(를) 삭제했습니다.`);
         setRemoving(undefined);
       },
       onError: (error) => {
@@ -94,6 +94,7 @@ export default function CartPage() {
       <PageContainer size="md">
         <EmptyState
           title="장바구니를 불러오지 못했습니다"
+          description="잠시 후 다시 시도해주세요."
           action={<Button onClick={() => refetch()}>다시 시도</Button>}
         />
       </PageContainer>
@@ -150,7 +151,7 @@ export default function CartPage() {
         open={Boolean(removing)}
         onClose={() => setRemoving(undefined)}
         onConfirm={handleRemove}
-        title="장바구니에서 삭제할까요?"
+        title="장바구니에서 삭제하시겠습니까?"
         description={removing ? `'${removing.title}'을(를) 장바구니에서 삭제합니다.` : ''}
         confirmLabel="삭제"
         pending={removeMutation.isPending}

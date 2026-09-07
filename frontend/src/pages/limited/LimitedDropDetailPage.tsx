@@ -108,7 +108,7 @@ export default function LimitedDropDetailPage() {
     return (
       <PageContainer size="sm">
         <EmptyState
-          title="한정반 정보를 불러오지 못했습니다."
+          title="한정반 정보를 불러오지 못했습니다"
           description={getErrorMessage(error)}
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -154,7 +154,7 @@ export default function LimitedDropDetailPage() {
               setIsSheetOpen(false);
               setResultModal({
                 title: '이미 구매했습니다',
-                description: '한 회원당 한정반 구매는 1회로 제한됩니다.',
+                description: '한정반은 한 사람당 한 번만 구매할 수 있습니다.',
                 linkTo: '/orders',
                 linkLabel: '내 주문 보기',
               });

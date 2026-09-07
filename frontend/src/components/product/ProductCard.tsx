@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { Skeleton } from '@/components/common/Skeleton';
 import { WishButton } from '@/components/product/WishButton';
+import { PRODUCT_STATUS_META } from '@/constants/product';
 import type { ProductSummary } from '@/types/product';
 import { formatPrice } from '@/utils/formatPrice';
 
@@ -53,7 +54,7 @@ export function ProductCard({ product, children }: ProductCardProps) {
         <ProductThumbnail url={product.thumbnailUrl} soldOut={soldOut} />
         {soldOut && (
           <Badge variant="danger" className="absolute left-2 top-2">
-            품절
+            {PRODUCT_STATUS_META.SOLD_OUT.label}
           </Badge>
         )}
         <WishButton

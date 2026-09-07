@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { QuantitySelector } from '@/components/product/QuantitySelector';
+import { PRODUCT_STATUS_META } from '@/constants/product';
 import type { CartItem } from '@/types/cart';
 import { isCartItemSoldOut, maxSelectableQuantity } from '@/utils/cart';
 import { formatPrice } from '@/utils/formatPrice';
@@ -85,7 +86,7 @@ export function CartItemRow({
           >
             {item.title}
           </Link>
-          {soldOut && <Badge variant="danger">품절</Badge>}
+          {soldOut && <Badge variant="danger">{PRODUCT_STATUS_META.SOLD_OUT.label}</Badge>}
         </div>
         <p className="mt-0.5 text-xs text-content-muted">{item.artistName}</p>
         <p className="mt-1 text-sm text-content-muted">{formatPrice(item.price)}</p>

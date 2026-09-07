@@ -28,7 +28,7 @@ export default function PaymentFailPage() {
           description={description}
           action={
             <Button variant="secondary" onClick={() => navigate(backTo)}>
-              주문으로 돌아가 다시 시도
+              주문으로 돌아가기
             </Button>
           }
         />

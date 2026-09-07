@@ -36,7 +36,7 @@ export function PopularProductTable({ items, sort, onSortChange }: PopularProduc
       </div>
 
       {items.length === 0 ? (
-        <EmptyState title="해당 기간의 판매 데이터가 없습니다." />
+        <EmptyState title="해당 기간의 판매 데이터가 없습니다" />
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-[720px] w-full text-left text-sm">

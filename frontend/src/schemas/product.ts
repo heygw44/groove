@@ -16,7 +16,11 @@ const YEAR_REGEX = /^\d{4}$/;
  * 폼용/페이로드용 두 제네릭을 오가게 되어 useForm<T> 하나로 못 쓴다.
  */
 export const productFormSchema = z.object({
-  title: z.string().trim().min(1, '제목을 입력해주세요.').max(200, '제목은 200자 이하여야 합니다.'),
+  title: z
+    .string()
+    .trim()
+    .min(1, '제목을 입력해주세요.')
+    .max(200, '제목은 200자 이하로 입력해주세요.'),
   artistId: z.string().min(1, '아티스트를 선택해주세요.'),
   labelId: z.string(),
   genreIds: z.array(z.number().int()),
@@ -24,24 +28,30 @@ export const productFormSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, '발매일 형식이 올바르지 않습니다.')
     .or(z.literal('')),
-  pressingInfo: z.string().trim().max(100, '프레싱 정보는 100자 이하여야 합니다.'),
-  colorVariant: z.string().trim().max(50, '컬러반 정보는 50자 이하여야 합니다.'),
+  pressingInfo: z.string().trim().max(100, '사양은 100자 이하로 입력해주세요.'),
+  colorVariant: z.string().trim().max(50, '컬러반은 50자 이하로 입력해주세요.'),
   price: z
     .string()
     .min(1, '가격을 입력해주세요.')
-    .regex(/^\d{1,8}$/, '0 이상의 정수로 입력해주세요.'),
+    .regex(/^\d{1,8}$/, '0 이상의 숫자로 입력해주세요.'),
   description: z.string().trim(),
   imageUrls: z.array(z.string().max(500)).max(10, '이미지는 10장까지 등록할 수 있습니다.'),
   initialStock: z.string(),
   // 등록 폼에서만 쓴다(수정은 앨범 이동을 지원하지 않는다). 필수 여부는 productCreateSchema 가 검증한다.
   albumMode: z.enum(['existing', 'new']),
   albumId: z.string(),
-  newAlbumTitle: z.string().trim().max(200, '앨범 제목은 200자 이하여야 합니다.'),
-  newAlbumYear: z.string().regex(YEAR_REGEX, '발매 연도는 4자리 숫자로 입력해주세요.').or(z.literal('')),
+  newAlbumTitle: z.string().trim().max(200, '앨범 제목은 200자 이하로 입력해주세요.'),
+  newAlbumYear: z
+    .string()
+    .regex(YEAR_REGEX, '발매 연도는 4자리 숫자로 입력해주세요.')
+    .or(z.literal('')),
   country: z.string(),
-  pressingYear: z.string().regex(YEAR_REGEX, '프레싱 연도는 4자리 숫자로 입력해주세요.').or(z.literal('')),
-  catalogNo: z.string().trim().max(50, '카탈로그 번호는 50자 이하여야 합니다.'),
-  barcode: z.string().trim().max(20, '바코드는 20자 이하여야 합니다.'),
+  pressingYear: z
+    .string()
+    .regex(YEAR_REGEX, '제작 연도는 4자리 숫자로 입력해주세요.')
+    .or(z.literal('')),
+  catalogNo: z.string().trim().max(50, '카탈로그 번호는 50자 이하로 입력해주세요.'),
+  barcode: z.string().trim().max(20, '바코드는 20자 이하로 입력해주세요.'),
   editionType: z.string(),
 });
 
@@ -50,7 +60,7 @@ export const productCreateSchema = productFormSchema
     initialStock: z
       .string()
       .min(1, '초기 재고를 입력해주세요.')
-      .regex(/^\d+$/, '0 이상의 정수로 입력해주세요.'),
+      .regex(/^\d+$/, '0 이상의 숫자로 입력해주세요.'),
   })
   .superRefine((values, ctx) => {
     if (values.albumMode === 'existing' && !values.albumId) {
@@ -105,7 +115,9 @@ export const toFormValues = (product: ProductFormSource): ProductFormValues => (
   // 원 단위 정수만 허용하므로, 이전에 저장된 소수 가격이 폼 검증에 걸려 수정을 막지 않도록 반올림해 넣는다.
   price: String(Math.round(product.price)),
   description: product.description ?? '',
-  imageUrls: [...product.images].sort((a, b) => a.sortOrder - b.sortOrder).map((image) => image.url),
+  imageUrls: [...product.images]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((image) => image.url),
   initialStock: '',
   // 수정 폼은 앨범 이동을 지원하지 않으므로 값을 쓰지 않는다.
   albumMode: 'existing',
@@ -215,8 +227,8 @@ export const stockAdjustSchema = z.object({
   quantity: z
     .string()
     .min(1, '수량을 입력해주세요.')
-    .regex(/^[1-9]\d*$/, '1 이상의 정수로 입력해주세요.'),
-  reason: z.string().trim().max(200, '사유는 200자 이하여야 합니다.'),
+    .regex(/^[1-9]\d*$/, '1 이상의 숫자로 입력해주세요.'),
+  reason: z.string().trim().max(200, '사유는 200자 이하로 입력해주세요.'),
 });
 
 export type StockAdjustFormValues = z.infer<typeof stockAdjustSchema>;

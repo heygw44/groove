@@ -126,8 +126,8 @@ describe('ActiveFilterChips', () => {
     renderChips({ editionType: 'REISSUE' }, onUpdate);
 
     // when
-    expect(screen.getByText('에디션: 재발매')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '에디션: 재발매 필터 해제' }));
+    expect(screen.getByText('에디션: 재발매반')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '에디션: 재발매반 필터 해제' }));
 
     // then
     expect(onUpdate).toHaveBeenCalledWith({ editionType: undefined });
@@ -138,7 +138,7 @@ describe('ActiveFilterChips', () => {
     renderChips({ pressingYearFrom: 1959, pressingYearTo: 1970 });
 
     // then
-    expect(screen.getByText('프레싱 연도: 1959~1970')).toBeInTheDocument();
+    expect(screen.getByText('제작 연도: 1959~1970')).toBeInTheDocument();
   });
 
   it('프레싱 연도 시작만 있으면 이후로 표시한다', () => {
@@ -146,7 +146,7 @@ describe('ActiveFilterChips', () => {
     renderChips({ pressingYearFrom: 1959 });
 
     // then
-    expect(screen.getByText('프레싱 연도: 1959 이후')).toBeInTheDocument();
+    expect(screen.getByText('제작 연도: 1959 이후')).toBeInTheDocument();
   });
 
   it('프레싱 연도 종료만 있으면 이전으로 표시한다', () => {
@@ -154,7 +154,7 @@ describe('ActiveFilterChips', () => {
     renderChips({ pressingYearTo: 1970 });
 
     // then
-    expect(screen.getByText('프레싱 연도: 1970 이전')).toBeInTheDocument();
+    expect(screen.getByText('제작 연도: 1970 이전')).toBeInTheDocument();
   });
 
   it('프레싱 연도 칩을 해제하면 시작·종료를 함께 지운다', async () => {
@@ -164,9 +164,12 @@ describe('ActiveFilterChips', () => {
     renderChips({ pressingYearFrom: 1959, pressingYearTo: 1970 }, onUpdate);
 
     // when
-    await user.click(screen.getByRole('button', { name: '프레싱 연도: 1959~1970 필터 해제' }));
+    await user.click(screen.getByRole('button', { name: '제작 연도: 1959~1970 필터 해제' }));
 
     // then
-    expect(onUpdate).toHaveBeenCalledWith({ pressingYearFrom: undefined, pressingYearTo: undefined });
+    expect(onUpdate).toHaveBeenCalledWith({
+      pressingYearFrom: undefined,
+      pressingYearTo: undefined,
+    });
   });
 });

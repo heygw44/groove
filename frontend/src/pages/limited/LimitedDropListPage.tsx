@@ -55,7 +55,7 @@ export default function LimitedDropListPage() {
 
   return (
     <PageContainer>
-      <h1 className="text-xl font-bold">한정반 드롭</h1>
+      <h1 className="text-xl font-bold">한정반</h1>
 
       <div role="group" aria-label="한정반 상태" className="mt-5 flex gap-1">
         {(Object.keys(TAB_LABEL) as ListTab[]).map((value) => {
@@ -87,7 +87,7 @@ export default function LimitedDropListPage() {
 
         {!isPending && isError && (
           <EmptyState
-            title="한정반 목록을 불러오지 못했습니다."
+            title="한정반 목록을 불러오지 못했습니다"
             description={getErrorMessage(error)}
             action={
               <Button variant="secondary" onClick={() => refetch()}>

@@ -13,7 +13,7 @@ export function TasteMatchBadge({ tasteMatch, className }: TasteMatchBadgeProps)
 
   return (
     <Badge variant="accent" className={className}>
-      당신 취향 드롭
+      내 취향 한정반
     </Badge>
   );
 }

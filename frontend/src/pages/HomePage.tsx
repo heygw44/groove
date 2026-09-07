@@ -48,7 +48,7 @@ export default function HomePage() {
       {/* DiggingSection 이 null 일 수 있어 first:mt-0 으로 앞 형제 유무에 따라 상단 여백을 정리한다. */}
       <section className="mt-10 first:mt-0">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">신보</h2>
+          <h2 className="text-lg font-bold">새로 나온 앨범</h2>
           <Link to="/products?sort=latest" className="text-sm text-content-muted">
             더보기 →
           </Link>
@@ -64,7 +64,7 @@ export default function HomePage() {
 
         {!isProductPending && isProductError && (
           <EmptyState
-            title="신보를 불러오지 못했습니다."
+            title="새로 나온 앨범을 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => refetchProducts()}>
@@ -77,7 +77,7 @@ export default function HomePage() {
         {!isProductPending &&
           !isProductError &&
           productData &&
-          productData.content.length === 0 && <EmptyState title="등록된 신보가 없습니다." />}
+          productData.content.length === 0 && <EmptyState title="새로 나온 앨범이 없습니다" />}
 
         {!isProductPending && !isProductError && productData && productData.content.length > 0 && (
           <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { Skeleton } from '@/components/common/Skeleton';
+import { PRODUCT_STATUS_META } from '@/constants/product';
 import type { WishlistItem } from '@/types/wishlist';
 import { formatPrice } from '@/utils/formatPrice';
 
@@ -63,7 +64,7 @@ export function WishlistCard({
         </Link>
         {soldOut && (
           <Badge variant="danger" className="shrink-0">
-            품절
+            {PRODUCT_STATUS_META.SOLD_OUT.label}
           </Badge>
         )}
       </div>

@@ -100,7 +100,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
 
       {!isPending && isError && (
         <EmptyState
-          title="주문 정보를 불러오지 못했습니다."
+          title="주문 정보를 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -119,10 +119,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
                 {formatServerDateTime(detail.createdAt)}
               </span>
             </div>
-            <p className="mt-2 break-all text-sm text-content">
-              {detail.memberEmail}
-              <span className="ml-1.5 text-content-muted">(회원 ID {detail.memberId})</span>
-            </p>
+            <p className="mt-2 break-all text-sm text-content">{detail.memberEmail}</p>
             {detail.status === 'CANCELED' && (
               <p className="mt-2 text-sm text-danger">
                 {detail.canceledAt && `${formatServerDateTime(detail.canceledAt)} 취소`}
@@ -178,7 +175,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
           open={confirming}
           onClose={() => setConfirming(false)}
           onConfirm={handleConfirm}
-          title={`${ORDER_STATUS_LABEL[detail.status]} → ${ORDER_STATUS_LABEL[nextStatus]} 로 변경할까요?`}
+          title={`${ORDER_STATUS_LABEL[detail.status]}에서 ${ORDER_STATUS_LABEL[nextStatus]}(으)로 변경하시겠습니까?`}
           description={
             nextStatus === 'CANCELED'
               ? '재고가 복구되고 결제가 있으면 함께 취소됩니다.'

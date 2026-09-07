@@ -35,8 +35,8 @@ interface AdminCouponFormModalProps {
 }
 
 const DISCOUNT_TYPE_OPTIONS: { value: AdminCouponFormValues['discountType']; label: string }[] = [
-  { value: 'FIXED', label: '정액' },
-  { value: 'RATE', label: '정률' },
+  { value: 'FIXED', label: '금액 할인' },
+  { value: 'RATE', label: '비율 할인' },
 ];
 
 export function AdminCouponFormModal({ open, onClose, coupon }: AdminCouponFormModalProps) {
@@ -85,8 +85,8 @@ export function AdminCouponFormModal({ open, onClose, coupon }: AdminCouponFormM
   };
 
   const totalQuantityHelp = coupon
-    ? `발급 수 ${coupon.issuedCount} 이상이어야 합니다. 비워두면 무제한`
-    : '비워두면 무제한';
+    ? `발급 수 ${coupon.issuedCount} 이상이어야 합니다. 비워두면 무제한으로 발급됩니다.`
+    : '비워두면 무제한으로 발급됩니다.';
 
   const onSubmit = handleSubmit((values) => {
     if (!isEdit) {

@@ -4,6 +4,7 @@ import { LimitedDropAttemptChart } from '@/components/admin/dashboard/LimitedDro
 import { SellRateGauge } from '@/components/admin/dashboard/SellRateGauge';
 import { EmptyState } from '@/components/common/EmptyState';
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
+import { LIMITED_DROP_ATTEMPT_LABELS } from '@/constants/limitedDropStats';
 import type { LimitedDropStats } from '@/types/adminStats';
 import { formatDuration } from '@/utils/adminStatsFilters';
 import { formatServerDateTime } from '@/utils/formatDate';
@@ -18,7 +19,7 @@ export function LimitedDropStatsTable({ items }: LimitedDropStatsTableProps) {
   const [expandedDropId, setExpandedDropId] = useState<number | null>(null);
 
   if (items.length === 0) {
-    return <EmptyState title="등록된 한정반이 없습니다." />;
+    return <EmptyState title="등록된 한정반이 없습니다" />;
   }
 
   const toggleExpanded = (dropId: number) => {
@@ -37,7 +38,7 @@ export function LimitedDropStatsTable({ items }: LimitedDropStatsTableProps) {
               상태
             </th>
             <th scope="col" className="py-2 pr-3 text-right font-medium">
-              판매/총량
+              판매 / 전체
             </th>
             <th scope="col" className="py-2 pr-3 font-medium">
               판매율
@@ -52,7 +53,7 @@ export function LimitedDropStatsTable({ items }: LimitedDropStatsTableProps) {
               마감
             </th>
             <th scope="col" className="py-2 pr-3 font-medium">
-              매진 소요
+              매진까지
             </th>
           </tr>
         </thead>
@@ -110,25 +111,25 @@ export function LimitedDropStatsTable({ items }: LimitedDropStatsTableProps) {
                         </div>
                         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs text-content-muted sm:w-1/3">
                           <div className="flex justify-between gap-2">
-                            <dt>성공</dt>
+                            <dt>{LIMITED_DROP_ATTEMPT_LABELS.successCount}</dt>
                             <dd className="font-medium text-content">{attempts.successCount}</dd>
                           </div>
                           <div className="flex justify-between gap-2">
-                            <dt>매진</dt>
+                            <dt>{LIMITED_DROP_ATTEMPT_LABELS.soldOutCount}</dt>
                             <dd className="font-medium text-content">{attempts.soldOutCount}</dd>
                           </div>
                           <div className="flex justify-between gap-2">
-                            <dt>중복구매</dt>
+                            <dt>{LIMITED_DROP_ATTEMPT_LABELS.alreadyPurchasedCount}</dt>
                             <dd className="font-medium text-content">
                               {attempts.alreadyPurchasedCount}
                             </dd>
                           </div>
                           <div className="flex justify-between gap-2">
-                            <dt>오픈전</dt>
+                            <dt>{LIMITED_DROP_ATTEMPT_LABELS.notOpenCount}</dt>
                             <dd className="font-medium text-content">{attempts.notOpenCount}</dd>
                           </div>
                           <div className="flex justify-between gap-2">
-                            <dt>마감후</dt>
+                            <dt>{LIMITED_DROP_ATTEMPT_LABELS.closedCount}</dt>
                             <dd className="font-medium text-content">{attempts.closedCount}</dd>
                           </div>
                           <div className="flex justify-between gap-2">

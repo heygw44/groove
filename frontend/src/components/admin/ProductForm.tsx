@@ -295,7 +295,7 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
         />
       </Field>
 
-      <Field htmlFor="pressingInfo" label="프레싱" error={errors.pressingInfo?.message}>
+      <Field htmlFor="pressingInfo" label="사양" error={errors.pressingInfo?.message}>
         <Input
           id="pressingInfo"
           invalid={Boolean(errors.pressingInfo)}
@@ -311,7 +311,7 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
         />
       </Field>
 
-      <Field htmlFor="country" label="프레싱 국가" error={errors.country?.message}>
+      <Field htmlFor="country" label="제작 국가" error={errors.country?.message}>
         <Select id="country" invalid={Boolean(errors.country)} {...register('country')}>
           <option value="">없음</option>
           {PRESSING_COUNTRIES.map((country) => (
@@ -322,7 +322,7 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
         </Select>
       </Field>
 
-      <Field htmlFor="pressingYear" label="프레싱 연도" error={errors.pressingYear?.message}>
+      <Field htmlFor="pressingYear" label="제작 연도" error={errors.pressingYear?.message}>
         <Input
           id="pressingYear"
           inputMode="numeric"

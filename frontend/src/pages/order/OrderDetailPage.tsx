@@ -92,7 +92,7 @@ export default function OrderDetailPage() {
   if (isError || !order) {
     return (
       <EmptyState
-        title="주문을 불러오지 못했습니다."
+        title="주문을 불러오지 못했습니다"
         description={getErrorMessage(error)}
         action={
           <Button variant="secondary" onClick={() => refetch()}>

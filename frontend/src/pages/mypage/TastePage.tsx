@@ -12,7 +12,7 @@ export default function TastePage() {
     <div>
       <h2 className="text-xl font-bold">취향</h2>
       <p className="mt-1.5 text-sm text-content-muted">
-        좋아하는 장르·아티스트·연대를 알려주면 홈에서 취향에 맞는 판을 골라드려요.
+        좋아하는 장르·아티스트·연대를 알려주면 홈에서 취향에 맞는 앨범을 추천해드립니다.
       </p>
 
       <div className="mt-5">

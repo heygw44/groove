@@ -34,7 +34,7 @@ export default function AdminProductEditPage() {
   if (isError && (isNotFoundStatus || getErrorCode(error) === 'PRODUCT_NOT_FOUND')) {
     return (
       <EmptyState
-        title="상품을 찾을 수 없습니다."
+        title="상품을 찾을 수 없습니다"
         action={
           <LinkButton to="/admin/products" variant="secondary">
             상품 목록으로
@@ -47,7 +47,7 @@ export default function AdminProductEditPage() {
   if (isError || !product) {
     return (
       <EmptyState
-        title="상품을 불러오지 못했습니다."
+        title="상품을 불러오지 못했습니다"
         description={getErrorMessage(error)}
         action={
           <Button variant="secondary" onClick={() => refetch()}>

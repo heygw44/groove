@@ -86,7 +86,7 @@ export function ActiveFilterChips({
   if (filters.pressingYearFrom !== undefined || filters.pressingYearTo !== undefined) {
     chips.push({
       key: 'pressingYear',
-      label: `프레싱 연도: ${formatPressingYearRange(filters.pressingYearFrom, filters.pressingYearTo)}`,
+      label: `제작 연도: ${formatPressingYearRange(filters.pressingYearFrom, filters.pressingYearTo)}`,
       remove: () => onUpdate({ pressingYearFrom: undefined, pressingYearTo: undefined }),
     });
   }

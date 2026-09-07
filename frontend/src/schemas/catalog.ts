@@ -8,15 +8,15 @@ import type { CatalogImportJobRequest } from '@/types/catalog';
  */
 export const catalogImportJobStartFormSchema = z
   .object({
-    discogsMasterId: z.string().regex(/^\d{1,10}$/, '1 이상의 정수로 입력해주세요.'),
-    defaultPrice: z.string().regex(/^\d{1,9}$/, '1 이상의 정수로 입력해주세요.'),
+    discogsMasterId: z.string().regex(/^\d{1,10}$/, '1 이상의 숫자로 입력해주세요.'),
+    defaultPrice: z.string().regex(/^\d{1,9}$/, '1 이상의 숫자로 입력해주세요.'),
   })
   .superRefine((values, ctx) => {
     if (Number(values.discogsMasterId) < 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['discogsMasterId'],
-        message: '1 이상의 정수로 입력해주세요.',
+        message: '1 이상의 숫자로 입력해주세요.',
       });
     }
 
@@ -24,7 +24,7 @@ export const catalogImportJobStartFormSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['defaultPrice'],
-        message: '1 이상의 정수로 입력해주세요.',
+        message: '1 이상의 숫자로 입력해주세요.',
       });
     }
   });

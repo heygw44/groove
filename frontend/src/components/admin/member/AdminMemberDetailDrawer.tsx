@@ -85,7 +85,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
 
       {!isPending && isError && (
         <EmptyState
-          title="회원 정보를 불러오지 못했습니다."
+          title="회원 정보를 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>

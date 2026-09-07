@@ -55,12 +55,12 @@ describe('AlbumWatchButton', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('미구독이면 새 프레싱 알림 받기 라벨과 aria-pressed=false 를 보여준다', () => {
+  it('미구독이면 새 에디션 알림 받기 라벨과 aria-pressed=false 를 보여준다', () => {
     // given & when
     renderButton({ watches: { content: [] } });
 
     // then
-    const button = screen.getByRole('button', { name: '새 프레싱 알림 받기' });
+    const button = screen.getByRole('button', { name: '새 에디션 알림 받기' });
     expect(button).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -70,7 +70,7 @@ describe('AlbumWatchButton', () => {
     renderButton({ isLoggedIn: false });
 
     // when
-    await user.click(screen.getByRole('button', { name: '새 프레싱 알림 받기' }));
+    await user.click(screen.getByRole('button', { name: '새 에디션 알림 받기' }));
 
     // then
     expect(screen.getByText('로그인 페이지')).toBeInTheDocument();

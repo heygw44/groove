@@ -32,7 +32,7 @@ export function WishToggle({
     <button
       type="button"
       aria-pressed={pressed}
-      aria-label={pressed ? '위시리스트에서 빼기' : '위시리스트에 담기'}
+      aria-label={pressed ? '찜 해제' : '찜하기'}
       disabled={disabled}
       onClick={onClick}
       className={`inline-flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${SIZE_CLASS[size]} ${

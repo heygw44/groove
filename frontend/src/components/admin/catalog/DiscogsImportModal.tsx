@@ -80,7 +80,7 @@ export function DiscogsImportModal({ onClose, onImport }: DiscogsImportModalProp
     <Modal
       open
       onClose={handleClose}
-      title="Discogs 에서 불러오기"
+      title="Discogs에서 불러오기"
       description="바코드, 카탈로그 번호, 키워드 중 하나 이상 입력해주세요."
       size="lg"
       footer={
