@@ -1,7 +1,7 @@
 import { Button } from '@/components/common/Button';
 import { MEMBER_ROLE_LABELS } from '@/constants/adminAudit';
 import type { AdminMemberSummary } from '@/types/adminMember';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 import { MemberStatusBadge } from './MemberStatusBadge';
@@ -17,13 +17,27 @@ export function AdminMemberTable({ members, onSelect }: AdminMemberTableProps) {
       <table className="min-w-[820px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">회원</th>
-            <th className="py-2 pr-3 font-medium">역할</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">가입일</th>
-            <th className="py-2 pr-3 font-medium">주문 수</th>
-            <th className="py-2 pr-3 font-medium">총 결제액</th>
-            <th className="py-2 pr-3 font-medium">상세</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              회원
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              역할
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              가입일
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              주문 수
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              총 결제액
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상세
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -33,7 +47,7 @@ export function AdminMemberTable({ members, onSelect }: AdminMemberTableProps) {
                 <button
                   type="button"
                   onClick={() => onSelect(member)}
-                  className="font-medium text-content hover:text-accent"
+                  className="font-medium text-content hover:text-accent-hover"
                 >
                   {member.email}
                 </button>
@@ -43,9 +57,13 @@ export function AdminMemberTable({ members, onSelect }: AdminMemberTableProps) {
               <td className="py-2.5 pr-3">
                 <MemberStatusBadge status={member.status} />
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">{formatDate(member.createdAt)}</td>
-              <td className="py-2.5 pr-3">{member.orderCount}건</td>
-              <td className="py-2.5 pr-3">{formatPrice(member.totalPaymentAmount)}</td>
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                {formatServerDate(member.createdAt)}
+              </td>
+              <td className="py-2.5 pr-3 text-right tabular-nums">{member.orderCount}건</td>
+              <td className="py-2.5 pr-3 text-right tabular-nums">
+                {formatPrice(member.totalPaymentAmount)}
+              </td>
               <td className="py-2.5 pr-3">
                 <Button variant="secondary" size="sm" onClick={() => onSelect(member)}>
                   상세

@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
+import { LinkButton } from '@/components/common/LinkButton';
 import { useToast } from '@/components/common/toastContext';
 import { QuantitySelector } from '@/components/product/QuantitySelector';
 import { WishButton } from '@/components/product/WishButton';
+import { PRODUCT_STATUS_META } from '@/constants/product';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
 import { useChangeWishlistAlert } from '@/hooks/mutations/useWishlistMutations';
 import { useAuthStore } from '@/store/authStore';
@@ -79,7 +81,7 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
       <div className="flex items-center gap-2">
         <p className="text-xl font-bold">{formatPrice(product.price)}</p>
         {isSoldOut ? (
-          <Badge variant="danger">품절</Badge>
+          <Badge variant="danger">{PRODUCT_STATUS_META.SOLD_OUT.label}</Badge>
         ) : (
           product.stockQuantity <= LOW_STOCK_THRESHOLD && (
             <Badge variant="accent">재고 {product.stockQuantity}개 남음</Badge>
@@ -98,9 +100,9 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
         // 한정반 상품은 일반 주문 경로가 막혀 있다(PRODUCT_LIMITED_ONLY) - 전용 페이지로 보낸다.
         <div className="flex gap-2">
           <span className="flex-1">
-            <Link to={`/limited-drops/${product.limitedDrop.id}`} className="block">
-              <Button className="w-full">한정반 상세로</Button>
-            </Link>
+            <LinkButton to={`/limited-drops/${product.limitedDrop.id}`} className="w-full">
+              한정반 보러 가기
+            </LinkButton>
           </span>
           <WishButton size="md" productId={product.id} wishlisted={product.wishlisted} />
         </div>

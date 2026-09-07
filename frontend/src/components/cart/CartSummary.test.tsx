@@ -20,13 +20,13 @@ describe('CartSummary', () => {
     expect(screen.getByRole('button', { name: '주문하기' })).toBeEnabled();
   });
 
-  it('선택 개수와 총 결제 예정 금액을 보여준다', () => {
+  it('선택 개수와 총 결제 금액을 보여준다', () => {
     // given & when
     render(<CartSummary selectedCount={2} totalAmount={30000} onOrder={vi.fn()} />);
 
     // then
     expect(screen.getByText('선택 상품 2개')).toBeInTheDocument();
-    expect(screen.getByText('총 결제 예정 금액 30,000원')).toBeInTheDocument();
+    expect(screen.getByText('총 결제 금액 30,000원')).toBeInTheDocument();
   });
 
   it('disabled 가 true 이면 선택 상품이 있어도 비활성이다', () => {

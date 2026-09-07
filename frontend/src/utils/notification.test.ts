@@ -4,6 +4,7 @@ import type { NotificationItem } from '@/types/notification';
 import {
   buildNotificationLink,
   buildNotificationMessage,
+  formatBadgeCount,
   isUnreadNotification,
 } from '@/utils/notification';
 
@@ -24,7 +25,7 @@ describe('buildNotificationMessage()', () => {
     const message = buildNotificationMessage(notification);
 
     // then
-    expect(message).toBe('Kind of Blue 재입고됐어요');
+    expect(message).toBe('Kind of Blue 재입고됐습니다');
   });
 
   it('PRICE_DROP 이면 가격 인하 문구를 만든다', () => {
@@ -35,10 +36,10 @@ describe('buildNotificationMessage()', () => {
     const message = buildNotificationMessage(notification);
 
     // then
-    expect(message).toBe('Kind of Blue 가격이 내려갔어요');
+    expect(message).toBe('Kind of Blue 가격이 내려갔습니다');
   });
 
-  it('NEW_PRESSING 이면 새 프레싱 문구를 만든다', () => {
+  it('NEW_PRESSING 이면 새 에디션 문구를 만든다', () => {
     // given
     const notification = item({ type: 'NEW_PRESSING', albumId: 1, titleSnapshot: 'Nevermind' });
 
@@ -46,7 +47,7 @@ describe('buildNotificationMessage()', () => {
     const message = buildNotificationMessage(notification);
 
     // then
-    expect(message).toBe('Nevermind의 새 프레싱이 등록됐어요');
+    expect(message).toBe('Nevermind의 새 에디션이 등록됐습니다');
   });
 });
 
@@ -99,5 +100,17 @@ describe('buildNotificationLink()', () => {
 
     // when & then
     expect(buildNotificationLink(notification)).toBeUndefined();
+  });
+});
+
+describe('formatBadgeCount()', () => {
+  it('99 이하면 숫자를 그대로 문자열로 돌려준다', () => {
+    // when & then
+    expect(formatBadgeCount(99)).toBe('99');
+  });
+
+  it('99 를 넘으면 99+ 로 자른다', () => {
+    // when & then
+    expect(formatBadgeCount(1234)).toBe('99+');
   });
 });

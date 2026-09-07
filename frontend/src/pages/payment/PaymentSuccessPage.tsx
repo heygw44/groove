@@ -49,6 +49,7 @@ export default function PaymentSuccessPage() {
       <PageContainer size="sm">
         <EmptyState
           title="잘못된 접근입니다"
+          titleAs="h1"
           action={
             <Button variant="secondary" onClick={() => navigate('/orders')}>
               주문 내역으로
@@ -59,28 +60,31 @@ export default function PaymentSuccessPage() {
     );
   }
 
-  if (confirmError) {
-    const backTo = params.orderRef ? `/orders/${params.orderRef}` : '/orders';
-    return (
-      <PageContainer size="sm">
-        <EmptyState
-          title="결제 승인에 실패했습니다"
-          description={getErrorMessage(confirmError)}
-          action={
-            <Button variant="secondary" onClick={() => navigate(backTo)}>
-              주문으로 돌아가기
-            </Button>
-          }
-        />
-      </PageContainer>
-    );
-  }
+  const backTo = params.orderRef ? `/orders/${params.orderRef}` : '/orders';
 
+  // 승인 진행 중 → 실패로의 전환이 화면 갱신만으로는 무음이라, 같은 라이브 리전 안에서 내용만 바꾼다.
   return (
     <PageContainer size="sm">
-      <div className="flex min-h-64 flex-col items-center justify-center gap-3">
-        <Spinner size="lg" />
-        <p className="text-sm text-content-muted">결제를 승인하고 있습니다. 창을 닫지 마세요.</p>
+      <div role="status" aria-live="polite">
+        {confirmError ? (
+          <EmptyState
+            title="결제 승인에 실패했습니다"
+            titleAs="h1"
+            description={getErrorMessage(confirmError)}
+            action={
+              <Button variant="secondary" onClick={() => navigate(backTo)}>
+                주문으로 돌아가기
+              </Button>
+            }
+          />
+        ) : (
+          <div className="flex min-h-64 flex-col items-center justify-center gap-3">
+            <Spinner size="lg" />
+            <p className="text-sm text-content-muted">
+              결제를 승인하고 있습니다. 창을 닫지 말아주세요.
+            </p>
+          </div>
+        )}
       </div>
     </PageContainer>
   );

@@ -56,7 +56,12 @@ describe('MemberStatusChangeDialog', () => {
     const user = userEvent.setup();
     const handleConfirm = vi.fn();
     render(
-      <MemberStatusChangeDialog open nextStatus="ACTIVE" onClose={vi.fn()} onConfirm={handleConfirm} />,
+      <MemberStatusChangeDialog
+        open
+        nextStatus="ACTIVE"
+        onClose={vi.fn()}
+        onConfirm={handleConfirm}
+      />,
     );
 
     // when

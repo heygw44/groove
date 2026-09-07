@@ -16,7 +16,9 @@ interface AlbumSearchSelectProps {
   disabled?: boolean;
 }
 
-const formatAlbumLabel = (album: Pick<AdminAlbumSummary, 'title' | 'artistName' | 'originalReleaseYear'>) =>
+const formatAlbumLabel = (
+  album: Pick<AdminAlbumSummary, 'title' | 'artistName' | 'originalReleaseYear'>,
+) =>
   `${album.title} — ${album.artistName}${album.originalReleaseYear ? ` (${album.originalReleaseYear})` : ''}`;
 
 export function AlbumSearchSelect({
@@ -49,7 +51,9 @@ export function AlbumSearchSelect({
   };
 
   if (value !== undefined) {
-    const displayName = pickedAlbum ? formatAlbumLabel(pickedAlbum) : selectedTitle ?? `앨범 #${value}`;
+    const displayName = pickedAlbum
+      ? formatAlbumLabel(pickedAlbum)
+      : (selectedTitle ?? '이름 확인 중');
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft py-1 pl-3 pr-1.5 text-sm text-accent-hover">
         {displayName}

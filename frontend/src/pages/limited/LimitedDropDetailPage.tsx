@@ -21,7 +21,7 @@ import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 import { classifyPurchaseError, getDropPhase, getPurchaseButtonState } from '@/utils/limitedDrop';
 import { applyServerTime, toServerMs } from '@/utils/serverTime';
@@ -108,7 +108,7 @@ export default function LimitedDropDetailPage() {
     return (
       <PageContainer size="sm">
         <EmptyState
-          title="한정반 정보를 불러오지 못했습니다."
+          title="한정반 정보를 불러오지 못했습니다"
           description={getErrorMessage(error)}
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -154,7 +154,7 @@ export default function LimitedDropDetailPage() {
               setIsSheetOpen(false);
               setResultModal({
                 title: '이미 구매했습니다',
-                description: '한 회원당 한정반 구매는 1회로 제한됩니다.',
+                description: '한정반은 한 사람당 한 번만 구매할 수 있습니다.',
                 linkTo: '/orders',
                 linkLabel: '내 주문 보기',
               });
@@ -183,8 +183,8 @@ export default function LimitedDropDetailPage() {
         ← 한정반 목록
       </Link>
 
-      <div className="mt-4 flex items-center gap-3">
-        <div className="flex items-center gap-1.5">
+      <div className="mt-4 flex flex-wrap items-start gap-3">
+        <div className="flex shrink-0 items-center gap-1.5">
           <DropStatusBadge status={drop.status} />
           <TasteMatchBadge tasteMatch={drop.tasteMatch} />
         </div>
@@ -206,24 +206,20 @@ export default function LimitedDropDetailPage() {
 
       <dl className="mt-6 flex flex-col gap-2 text-sm">
         <div className="flex gap-2">
-          <dt className="w-24 shrink-0 text-content-muted">1인 구매 한도</dt>
+          <dt className="w-28 shrink-0 text-content-muted">1인 구매 한도</dt>
           <dd className="m-0">{drop.perMemberLimit}개</dd>
         </div>
         <div className="flex gap-2">
           <dt className="w-24 shrink-0 text-content-muted">오픈</dt>
-          <dd className="m-0">{formatDateTime(drop.openAt)}</dd>
+          <dd className="m-0">{formatServerDateTime(drop.openAt)}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="w-24 shrink-0 text-content-muted">마감</dt>
-          <dd className="m-0">{formatDateTime(drop.closeAt)}</dd>
+          <dd className="m-0">{formatServerDateTime(drop.closeAt)}</dd>
         </div>
       </dl>
 
-      <Button
-        className="mt-8 w-full"
-        disabled={buttonState.disabled}
-        onClick={handlePurchaseClick}
-      >
+      <Button className="mt-8 w-full" disabled={buttonState.disabled} onClick={handlePurchaseClick}>
         {buttonState.label}
       </Button>
 

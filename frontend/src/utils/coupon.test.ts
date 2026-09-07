@@ -9,6 +9,7 @@ import {
   parseMemberCouponStatus,
   serializeMemberCouponStatus,
 } from '@/utils/coupon';
+import { toServerMs } from '@/utils/serverTime';
 
 const memberCoupon = (overrides: Partial<MemberCoupon> = {}): MemberCoupon => ({
   memberCouponId: 1,
@@ -83,7 +84,9 @@ describe('getMemberCouponStatus()', () => {
 });
 
 describe('getDaysUntil() / formatDDay()', () => {
-  const now = new Date('2026-09-04T15:00:00');
+  // now 는 서버 시각(KST) 을 흉내낸 값이라, dateIso 와 같은 방식(toServerMs)으로
+  // KST 해석을 거쳐야 한다 - 그냥 new Date() 로 만들면 TZ=UTC 에서 자정 부근 케이스가 깨진다.
+  const now = new Date(toServerMs('2026-09-04T15:00:00'));
 
   it('오늘 자정 기준으로 오늘이면 0 이고 D-Day 로 표기한다', () => {
     // given
@@ -110,6 +113,18 @@ describe('getDaysUntil() / formatDDay()', () => {
     // when & then
     expect(days).toBe(-1);
     expect(formatDDay(days)).toBe('만료');
+  });
+
+  it('KST 자정 직후 날짜도 호스트 타임존과 무관하게 내일로 계산한다', () => {
+    // given: 00:30 을 오프셋 없이 그대로 new Date() 로 파싱하면(예전 버그) 호스트가
+    // UTC 일 때 "9/4 15:30" 이 아니라 "9/5 00:30" 을 그대로 UTC 로 읽어버려 여전히
+    // 9/5 로는 나오지만, now 쪽 기준(오늘 = 9/4)과 섞이면서 결과가 흔들렸다.
+    // toServerMs 로 양쪽 다 KST 해석을 거치면 호스트 TZ 와 무관하게 항상 1이어야 한다.
+    const days = getDaysUntil('2026-09-05T00:30:00', now);
+
+    // when & then
+    expect(days).toBe(1);
+    expect(formatDDay(days)).toBe('D-1');
   });
 });
 

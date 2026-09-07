@@ -6,7 +6,7 @@ import {
   getDaysUntil,
   getMemberCouponStatus,
 } from '@/utils/coupon';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface CouponCardProps {
@@ -58,8 +58,8 @@ export function CouponCard({ coupon }: CouponCardProps) {
 
       <p className="mt-1 text-xs text-content-muted">
         {status === 'used' && coupon.usedAt
-          ? `사용일 ${formatDate(coupon.usedAt)}`
-          : `만료일 ${formatDate(coupon.expiresAt)}`}
+          ? `사용일 ${formatServerDate(coupon.usedAt)}`
+          : `만료일 ${formatServerDate(coupon.expiresAt)}`}
       </p>
     </article>
   );

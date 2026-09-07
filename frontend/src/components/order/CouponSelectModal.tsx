@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Modal } from '@/components/common/Modal';
 import type { AvailableCoupon } from '@/types/coupon';
 import { formatCouponDiscount } from '@/utils/coupon';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface CouponSelectModalProps {
@@ -47,7 +47,7 @@ export function CouponSelectModal({
     return (
       <Modal open={open} onClose={onClose} title="쿠폰 선택">
         <EmptyState
-          title="적용 가능한 쿠폰이 없습니다."
+          title="적용 가능한 쿠폰이 없습니다"
           description="최소 주문 금액을 확인해주세요."
           action={<Button onClick={onClose}>닫기</Button>}
         />
@@ -101,7 +101,7 @@ export function CouponSelectModal({
               checked={pendingId === coupon.memberCouponId}
               onChange={() => setPendingId(coupon.memberCouponId)}
             />
-            <div className="flex flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-bold text-content">{coupon.couponName}</span>
                 {coupon.expectedDiscount === maxDiscount && (
@@ -114,7 +114,9 @@ export function CouponSelectModal({
                   최소 주문 금액 {formatPrice(coupon.minOrderAmount)}
                 </p>
               )}
-              <p className="text-xs text-content-subtle">만료 {formatDate(coupon.expiresAt)}</p>
+              <p className="text-xs text-content-subtle">
+                만료 {formatServerDate(coupon.expiresAt)}
+              </p>
             </div>
             <span className="shrink-0 text-sm font-bold text-content">
               -{formatPrice(coupon.expectedDiscount)}

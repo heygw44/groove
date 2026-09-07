@@ -10,7 +10,7 @@ describe('WishToggle', () => {
     render(<WishToggle pressed={false} onClick={vi.fn()} />);
 
     // then
-    const button = screen.getByRole('button', { name: '위시리스트에 담기' });
+    const button = screen.getByRole('button', { name: '찜하기' });
     expect(button).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -19,7 +19,7 @@ describe('WishToggle', () => {
     render(<WishToggle pressed onClick={vi.fn()} />);
 
     // then
-    const button = screen.getByRole('button', { name: '위시리스트에서 빼기' });
+    const button = screen.getByRole('button', { name: '찜 해제' });
     expect(button).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -30,7 +30,7 @@ describe('WishToggle', () => {
     render(<WishToggle pressed={false} onClick={handleClick} />);
 
     // when
-    await user.click(screen.getByRole('button', { name: '위시리스트에 담기' }));
+    await user.click(screen.getByRole('button', { name: '찜하기' }));
 
     // then
     expect(handleClick).toHaveBeenCalledTimes(1);

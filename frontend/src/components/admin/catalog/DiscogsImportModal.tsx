@@ -80,7 +80,7 @@ export function DiscogsImportModal({ onClose, onImport }: DiscogsImportModalProp
     <Modal
       open
       onClose={handleClose}
-      title="Discogs 에서 불러오기"
+      title="Discogs에서 불러오기"
       description="바코드, 카탈로그 번호, 키워드 중 하나 이상 입력해주세요."
       size="lg"
       footer={
@@ -118,9 +118,7 @@ export function DiscogsImportModal({ onClose, onImport }: DiscogsImportModalProp
           <p className="text-sm text-danger">{getErrorMessage(releaseMutation.error)}</p>
         )}
 
-        {!hasQuery && (
-          <p className="text-sm text-content-subtle">검색 조건을 입력해주세요.</p>
-        )}
+        {!hasQuery && <p className="text-sm text-content-subtle">검색 조건을 입력해주세요.</p>}
 
         {hasQuery && isFetching && (
           <div className="flex items-center justify-center py-8">

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { QuantitySelector } from '@/components/product/QuantitySelector';
+import { PRODUCT_STATUS_META } from '@/constants/product';
 import type { CartItem } from '@/types/cart';
 import { isCartItemSoldOut, maxSelectableQuantity } from '@/utils/cart';
 import { formatPrice } from '@/utils/formatPrice';
@@ -65,7 +66,7 @@ export function CartItemRow({
   };
 
   return (
-    <div className="flex items-center gap-4 border-b border-line py-4">
+    <div className="flex flex-wrap items-center gap-4 border-b border-line py-4">
       <input
         type="checkbox"
         aria-label={`${item.title} 선택`}
@@ -81,28 +82,31 @@ export function CartItemRow({
         <div className="flex items-center gap-2">
           <Link
             to={`/products/${item.productId}`}
-            className="truncate text-sm font-medium text-content hover:text-accent"
+            className="truncate text-sm font-medium text-content hover:text-accent-hover"
           >
             {item.title}
           </Link>
-          {soldOut && <Badge variant="danger">품절</Badge>}
+          {soldOut && <Badge variant="danger">{PRODUCT_STATUS_META.SOLD_OUT.label}</Badge>}
         </div>
         <p className="mt-0.5 text-xs text-content-muted">{item.artistName}</p>
         <p className="mt-1 text-sm text-content-muted">{formatPrice(item.price)}</p>
       </div>
 
-      <QuantitySelector
-        value={item.quantity}
-        onChange={handleQuantityChange}
-        max={maxSelectableQuantity(item)}
-        disabled={soldOut || disabled}
-      />
+      {/* 좁은 화면에서 체크박스+썸네일+정보만으로도 폭이 꽉 차므로 w-full 로 강제로 다음 줄로 내린다 */}
+      <div className="flex w-full items-center justify-end gap-4 sm:w-auto">
+        <QuantitySelector
+          value={item.quantity}
+          onChange={handleQuantityChange}
+          max={maxSelectableQuantity(item)}
+          disabled={soldOut || disabled}
+        />
 
-      <p className="w-24 shrink-0 text-right text-sm font-bold">{formatPrice(item.subtotal)}</p>
+        <p className="w-24 shrink-0 text-right text-sm font-bold">{formatPrice(item.subtotal)}</p>
 
-      <Button variant="ghost" size="sm" onClick={onRemove} disabled={disabled}>
-        삭제
-      </Button>
+        <Button variant="ghost" size="sm" onClick={onRemove} disabled={disabled}>
+          삭제
+        </Button>
+      </div>
     </div>
   );
 }

@@ -17,7 +17,7 @@ const SKELETON_COUNT = 4;
 function SectionHeading({ action }: { action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <h2 className="text-lg font-bold">이 앨범의 다른 프레싱</h2>
+      <h2 className="text-lg font-bold">이 앨범의 다른 에디션</h2>
       {action}
     </div>
   );
@@ -39,7 +39,7 @@ export function AlbumPressingsSection({
     return (
       <section className="mt-12">
         <SectionHeading action={action} />
-        <GuidanceMessage text="아직 다른 프레싱이 없어요." />
+        <GuidanceMessage text="아직 다른 에디션이 없습니다." />
       </section>
     );
   }
@@ -61,7 +61,7 @@ export function AlbumPressingsSection({
     return (
       <section className="mt-12">
         <SectionHeading action={action} />
-        <GuidanceMessage text="프레싱 목록을 불러오지 못했습니다." />
+        <GuidanceMessage text="에디션 목록을 불러오지 못했습니다." />
       </section>
     );
   }
@@ -72,7 +72,7 @@ export function AlbumPressingsSection({
     <section className="mt-12">
       <SectionHeading action={action} />
       {pressings.length === 0 ? (
-        <GuidanceMessage text="아직 다른 프레싱이 없어요." />
+        <GuidanceMessage text="아직 다른 에디션이 없습니다." />
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
           {pressings.map((product) => (

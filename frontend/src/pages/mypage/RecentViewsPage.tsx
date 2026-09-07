@@ -12,7 +12,9 @@ export default function RecentViewsPage() {
   return (
     <div>
       <h2 className="text-xl font-bold">최근 본 상품</h2>
-      <p className="mt-1 text-sm text-content-muted">최근에 본 순서대로 최대 20장을 보여드려요.</p>
+      <p className="mt-1 text-sm text-content-muted">
+        최근에 본 순서대로 최대 20개를 보여드립니다.
+      </p>
 
       {isPending && (
         <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
@@ -37,7 +39,7 @@ export default function RecentViewsPage() {
       {!isPending && !isError && data && data.length === 0 && (
         <EmptyState
           title="아직 본 상품이 없습니다"
-          description="상품을 둘러보면 여기에 쌓여요."
+          description="상품을 보면 여기에 기록됩니다."
           action={
             <Link
               to="/products"

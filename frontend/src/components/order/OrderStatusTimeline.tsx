@@ -7,7 +7,7 @@ interface OrderStatusTimelineProps {
 
 const STOPPED_MESSAGE: Partial<Record<OrderStatus, string>> = {
   CANCELED: '이 주문은 취소되었습니다',
-  REFUNDED: '환불된 주문입니다',
+  REFUNDED: '이 주문은 환불되었습니다',
 };
 
 export function OrderStatusTimeline({ status }: OrderStatusTimelineProps) {
@@ -23,9 +23,15 @@ export function OrderStatusTimeline({ status }: OrderStatusTimelineProps) {
       {ORDER_STATUS_STEPS.map((step, index) => {
         const isDone = index <= currentIndex;
         const isCurrent = index === currentIndex;
+        const isFirst = index === 0;
+        const isLast = index === ORDER_STATUS_STEPS.length - 1;
         return (
           <li key={step} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center gap-1.5">
+            <div
+              className={`flex flex-col items-center gap-1.5 ${
+                isFirst ? 'items-start' : isLast ? 'items-end' : ''
+              }`}
+            >
               <span
                 aria-current={isCurrent ? 'step' : undefined}
                 className={`h-2.5 w-2.5 rounded-full ${isDone ? 'bg-accent' : 'bg-line-strong'}`}

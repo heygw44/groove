@@ -77,7 +77,7 @@ export function CouponSection({ orderAmount, selected, onSelect }: CouponSection
                   쿠폰 선택
                 </Button>
                 <span className="text-sm text-content-muted">
-                  사용 가능한 쿠폰 {coupons.length}장
+                  적용 가능한 쿠폰 {coupons.length}장
                 </span>
               </>
             ) : (

@@ -48,7 +48,7 @@ export function TasteProfileForm({ profile, onSaved, submitLabel = '저장' }: T
   const submit = handleSubmit((values) => {
     mutate(toTastePayload(values), {
       onSuccess: () => {
-        showToast('success', '취향을 저장했어요');
+        showToast('success', '취향을 저장했습니다.');
         onSaved?.();
       },
       onError: (error) => {

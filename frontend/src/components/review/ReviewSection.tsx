@@ -10,7 +10,11 @@ import { ReviewForm } from '@/components/review/ReviewForm';
 import { ReviewList } from '@/components/review/ReviewList';
 import { ReviewSummary } from '@/components/review/ReviewSummary';
 import { REVIEW_INELIGIBLE_MESSAGE } from '@/constants/review';
-import { useCreateReview, useDeleteReview, useUpdateReview } from '@/hooks/mutations/useReviewMutations';
+import {
+  useCreateReview,
+  useDeleteReview,
+  useUpdateReview,
+} from '@/hooks/mutations/useReviewMutations';
 import { reviewKeys } from '@/hooks/queries/queryKeys';
 import { useReviewEligibility } from '@/hooks/queries/useReviewEligibility';
 import { useReviewStats } from '@/hooks/queries/useReviewStats';
@@ -80,7 +84,8 @@ export function ReviewSection({ productId, averageRating, reviewCount }: ReviewS
   };
 
   const handleUpdate =
-    (review: Review) => (payload: ReviewWriteRequest, { setError }: ReviewFormSubmitHelpers) => {
+    (review: Review) =>
+    (payload: ReviewWriteRequest, { setError }: ReviewFormSubmitHelpers) => {
       updateMutation.mutate(
         { reviewId: review.id, payload },
         {
@@ -152,7 +157,7 @@ export function ReviewSection({ productId, averageRating, reviewCount }: ReviewS
               to={`/login?redirect=${encodeURIComponent(pathname)}`}
               className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-line-strong bg-surface px-4 text-sm font-medium text-content hover:bg-surface-muted"
             >
-              로그인 후 작성
+              로그인하고 리뷰 쓰기
             </Link>
           )}
 

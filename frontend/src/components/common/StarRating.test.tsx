@@ -13,13 +13,41 @@ describe('StarRatingDisplay', () => {
     expect(screen.getByRole('img', { name: '별점 4.3점' })).toBeInTheDocument();
   });
 
-  it('채움 폭을 값 비율만큼의 퍼센트로 그린다', () => {
+  it.each([
+    [0, '0px'],
+    [2.5, '54px'],
+    [4.0, '86px'],
+    [5, '108px'],
+    [6, '108px'],
+    [-1, '0px'],
+  ])('value=%s 이면 채움 폭을 %s 로 그린다', (value, expectedWidth) => {
     // given & when
-    render(<StarRatingDisplay value={2.5} />);
+    render(<StarRatingDisplay value={value} />);
 
     // then
     const fillLayer = screen.getByRole('img').querySelector('span[style]') as HTMLElement;
-    expect(fillLayer.style.width).toBe('50%');
+    expect(fillLayer.style.width).toBe(expectedWidth);
+  });
+
+  it('별 svg 가 부모 폭에 눌려 찌그러지지 않도록 shrink-0 을 갖는다', () => {
+    // given & when
+    render(<StarRatingDisplay value={3} />);
+
+    // then
+    const stars = screen.getByRole('img').querySelectorAll('svg');
+    stars.forEach((star) => {
+      expect(star).toHaveClass('shrink-0');
+    });
+  });
+
+  it('NaN 값은 0점으로 취급한다', () => {
+    // given & when
+    render(<StarRatingDisplay value={NaN} />);
+
+    // then
+    expect(screen.getByRole('img', { name: '별점 0.0점' })).toBeInTheDocument();
+    const fillLayer = screen.getByRole('img').querySelector('span[style]') as HTMLElement;
+    expect(fillLayer.style.width).toBe('0px');
   });
 });
 

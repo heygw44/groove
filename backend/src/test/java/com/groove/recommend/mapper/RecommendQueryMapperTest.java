@@ -388,6 +388,26 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
+		@DisplayName("상품을 앨범과 함께 저장하면 행의 albumId 가 그 앨범 id 와 같다")
+		void albumIdMatchesProductAlbum() {
+			// given
+			Album album = AlbumFixture.create(artist, "PF Album Id");
+			em.persist(album);
+			Product product = Product.create(album, "PF Album Id", artist, null,
+					LocalDate.of(2022, 6, 1), "180g", "Black", null, null, null, null, null,
+					new BigDecimal("28000.00"), "설명");
+			em.persist(product);
+			em.flush();
+			em.clear();
+
+			// when
+			ProductFeatureRow row = findMyRow(product.getId());
+
+			// then
+			assertThat(row.albumId()).isEqualTo(album.getId());
+		}
+
+		@Test
 		@DisplayName("release_date 없이 pressing_year 만 있으면 그 연도로 연대를 구한다")
 		void usesPressingYearWhenReleaseDateIsAbsent() {
 			// given

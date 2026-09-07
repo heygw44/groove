@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
-import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
-import { WishlistCard } from '@/components/wishlist/WishlistCard';
+import { WishlistCard, WishlistCardSkeleton } from '@/components/wishlist/WishlistCard';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
 import { useToggleWishlist } from '@/hooks/mutations/useWishlistMutations';
 import { useWishlist } from '@/hooks/queries/useWishlist';
@@ -37,11 +37,11 @@ export default function WishlistPage() {
   };
 
   const handleRemove = (productId: number) => {
-    // onSettled 가 위시리스트 목록을 다시 불러오므로 카드는 그때 사라진다.
+    // onSettled 가 찜 목록을 다시 불러오므로 카드는 그때 사라진다.
     toggleWishlistMutation.mutate(
       { productId, wishlisted: true },
       {
-        onSuccess: () => showToast('success', '위시리스트에서 뺐습니다.'),
+        onSuccess: () => showToast('success', '찜을 해제했습니다.'),
         onError: (error) => {
           const code = getErrorCode(error);
           if (code !== 'WISHLIST_NOT_FOUND') {
@@ -66,7 +66,7 @@ export default function WishlistPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold">위시리스트</h2>
+      <h2 className="text-xl font-bold">찜 목록</h2>
 
       <p className="mt-4 text-sm text-content-muted">
         {isPending ? '불러오는 중…' : `총 ${data?.totalElements ?? 0}개`}
@@ -74,14 +74,16 @@ export default function WishlistPage() {
 
       <div className="mt-3">
         {isPending && (
-          <div className="flex min-h-48 items-center justify-center">
-            <Spinner />
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: PAGE_SIZE }, (_, index) => (
+              <WishlistCardSkeleton key={index} />
+            ))}
           </div>
         )}
 
         {!isPending && isError && (
           <EmptyState
-            title="위시리스트를 불러오지 못했습니다."
+            title="찜 목록을 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => refetch()}>
@@ -93,11 +95,11 @@ export default function WishlistPage() {
 
         {!isPending && !isError && data && data.content.length === 0 && (
           <EmptyState
-            title="위시리스트가 비어 있습니다"
+            title="찜한 상품이 없습니다"
             action={
-              <Link to="/products">
-                <Button variant="secondary">상품 보러 가기</Button>
-              </Link>
+              <LinkButton to="/products" variant="secondary">
+                상품 보러 가기
+              </LinkButton>
             }
           />
         )}

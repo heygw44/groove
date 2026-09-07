@@ -74,7 +74,7 @@ export default function AdminDashboardPage() {
 
         {!summaryQuery.isPending && summaryQuery.isError && (
           <EmptyState
-            title="요약 정보를 불러오지 못했습니다."
+            title="요약 정보를 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => summaryQuery.refetch()}>
@@ -112,7 +112,7 @@ export default function AdminDashboardPage() {
 
         {!dailySalesQuery.isPending && dailySalesQuery.isError && (
           <EmptyState
-            title="매출 데이터를 불러오지 못했습니다."
+            title="매출 데이터를 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => dailySalesQuery.refetch()}>
@@ -140,7 +140,7 @@ export default function AdminDashboardPage() {
 
         {!popularProductsQuery.isPending && popularProductsQuery.isError && (
           <EmptyState
-            title="인기 상품을 불러오지 못했습니다."
+            title="인기 상품을 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => popularProductsQuery.refetch()}>
@@ -174,7 +174,7 @@ export default function AdminDashboardPage() {
 
         {!limitedDropsQuery.isPending && limitedDropsQuery.isError && (
           <EmptyState
-            title="한정반 현황을 불러오지 못했습니다."
+            title="한정반 현황을 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => limitedDropsQuery.refetch()}>

@@ -22,7 +22,7 @@ import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import { isCancelableStatus } from '@/utils/orderStatus';
 import { buildOrderName } from '@/utils/paymentRedirect';
 import { toServerMs } from '@/utils/serverTime';
@@ -92,7 +92,7 @@ export default function OrderDetailPage() {
   if (isError || !order) {
     return (
       <EmptyState
-        title="주문을 불러오지 못했습니다."
+        title="주문을 불러오지 못했습니다"
         description={getErrorMessage(error)}
         action={
           <Button variant="secondary" onClick={() => refetch()}>
@@ -140,7 +140,7 @@ export default function OrderDetailPage() {
             <Badge variant="accent">한정반</Badge>
           </Link>
         )}
-        <span className="text-sm text-content-muted">{formatDateTime(order.createdAt)}</span>
+        <span className="text-sm text-content-muted">{formatServerDateTime(order.createdAt)}</span>
       </div>
 
       <div className="mt-6">
@@ -157,7 +157,7 @@ export default function OrderDetailPage() {
 
       {order.status === 'CANCELED' && order.canceledAt && (
         <div className="mt-6 rounded-lg border border-line bg-surface-muted px-5 py-4 text-sm text-content-muted">
-          <p>{formatDateTime(order.canceledAt)} 취소</p>
+          <p>{formatServerDateTime(order.canceledAt)} 취소</p>
           {order.cancelReason && <p className="mt-1">사유: {order.cancelReason}</p>}
         </div>
       )}
@@ -204,12 +204,14 @@ export default function OrderDetailPage() {
             </p>
             <p>
               <span className="text-content-muted">승인 시각</span>{' '}
-              <span className="font-medium">{formatDateTime(order.payment.approvedAt)}</span>
+              <span className="font-medium">{formatServerDateTime(order.payment.approvedAt)}</span>
             </p>
             {order.payment.status === 'CANCELED' && order.payment.canceledAt && (
               <p>
                 <span className="text-content-muted">취소 시각</span>{' '}
-                <span className="font-medium">{formatDateTime(order.payment.canceledAt)}</span>
+                <span className="font-medium">
+                  {formatServerDateTime(order.payment.canceledAt)}
+                </span>
               </p>
             )}
           </div>

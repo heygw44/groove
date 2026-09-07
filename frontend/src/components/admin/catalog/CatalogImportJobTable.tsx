@@ -1,7 +1,7 @@
 import { CatalogImportJobStatusBadge } from '@/components/admin/catalog/CatalogImportJobStatusBadge';
 import { Button } from '@/components/common/Button';
 import type { CatalogImportJob } from '@/types/catalog';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 
 interface CatalogImportJobTableProps {
   items: CatalogImportJob[];
@@ -30,14 +30,30 @@ export function CatalogImportJobTable({
       <table className="min-w-[960px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">잡 실행 ID</th>
-            <th className="py-2 pr-3 font-medium">마스터 ID</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">진행</th>
-            <th className="py-2 pr-3 font-medium">시작</th>
-            <th className="py-2 pr-3 font-medium">종료</th>
-            <th className="py-2 pr-3 font-medium">실패 사유</th>
-            <th className="py-2 pr-3 font-medium">액션</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              실행 번호
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              마스터 ID
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              진행
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              시작
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              종료
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              실패 사유
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              관리
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -52,11 +68,11 @@ export function CatalogImportJobTable({
                 read {job.readCount} · write {job.writeCount} · skip {job.skipCount} · filter{' '}
                 {job.filterCount}
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">
-                {job.startedAt ? formatDateTime(job.startedAt) : '-'}
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                {job.startedAt ? formatServerDateTime(job.startedAt) : '-'}
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">
-                {job.endedAt ? formatDateTime(job.endedAt) : '-'}
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                {job.endedAt ? formatServerDateTime(job.endedAt) : '-'}
               </td>
               <td className="py-2.5 pr-3 text-content-muted" title={job.exitMessage}>
                 {truncateExitMessage(job.exitMessage) ?? '-'}

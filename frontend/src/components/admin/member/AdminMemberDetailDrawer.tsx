@@ -14,7 +14,7 @@ import { useAdminMember } from '@/hooks/queries/useAdminMembers';
 import { useAuthStore } from '@/store/authStore';
 import type { AdminMemberChangeableStatus } from '@/types/adminMember';
 import { getErrorMessage } from '@/utils/apiError';
-import { formatDate, formatDateTime } from '@/utils/formatDate';
+import { formatServerDate, formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 import { MemberStatusBadge } from './MemberStatusBadge';
@@ -55,7 +55,10 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
       { memberId, status: dialogStatus, reason },
       {
         onSuccess: () => {
-          showToast('success', dialogStatus === 'SUSPENDED' ? '회원을 정지했습니다.' : '정지를 해제했습니다.');
+          showToast(
+            'success',
+            dialogStatus === 'SUSPENDED' ? '회원을 정지했습니다.' : '정지를 해제했습니다.',
+          );
           setDialogStatus(undefined);
         },
         onError: (error) => {
@@ -82,7 +85,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
 
       {!isPending && isError && (
         <EmptyState
-          title="회원 정보를 불러오지 못했습니다."
+          title="회원 정보를 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -101,11 +104,11 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
             </div>
             <p className="mt-2 text-sm font-medium text-content">{detail.nickname}</p>
             <p className="text-xs text-content-muted">
-              가입일 {formatDate(detail.createdAt)}
+              가입일 {formatServerDate(detail.createdAt)}
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 rounded-lg border border-line bg-surface-sunken p-4 text-center">
+          <div className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-surface-sunken p-4 text-center sm:grid-cols-3">
             <div>
               <p className="text-xs text-content-muted">주문 수</p>
               <p className="mt-1 text-sm font-bold">{detail.orderCount}건</p>
@@ -134,7 +137,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
                     <div className="min-w-0">
                       <Link
                         to={`/admin/orders?keyword=${order.orderNumber}`}
-                        className="font-mono text-xs text-content hover:text-accent"
+                        className="font-mono text-xs text-content hover:text-accent-hover"
                       >
                         {order.orderNumber}
                       </Link>
@@ -145,7 +148,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
                     <div className="shrink-0 text-right">
                       <p className="font-medium">{formatPrice(order.finalAmount)}</p>
                       <p className="text-xs text-content-muted">
-                        {formatDateTime(order.createdAt)}
+                        {formatServerDateTime(order.createdAt)}
                       </p>
                     </div>
                   </li>

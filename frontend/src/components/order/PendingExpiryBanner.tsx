@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 
-import { formatDateTime } from '@/utils/formatDate';
 import { splitCountdown } from '@/utils/limitedDrop';
 
 interface PendingExpiryBannerProps {
@@ -27,12 +26,9 @@ export function PendingExpiryBanner({ expiresAtMs, nowMs, onExpired }: PendingEx
   return (
     <div className="mt-6 rounded-lg border border-line bg-surface-muted px-5 py-4 text-sm text-content-muted">
       {isExpired ? (
-        <p>만료 처리 중…</p>
+        <p>결제 기한이 지나 곧 자동으로 취소됩니다.</p>
       ) : (
-        <p>
-          결제 대기 중입니다. {formatRemaining(remainingMs)} 내에 결제하지 않으면 자동
-          취소됩니다. ({formatDateTime(new Date(expiresAtMs))}까지)
-        </p>
+        <p>결제 대기 중입니다. {formatRemaining(remainingMs)} 후 자동 취소됩니다.</p>
       )}
     </div>
   );

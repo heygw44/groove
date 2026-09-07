@@ -1,11 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { useUnreadNotificationCount } from '@/hooks/queries/useUnreadNotificationCount';
-
-const MAX_DISPLAY_COUNT = 99;
-
-const formatBadgeCount = (count: number): string =>
-  count > MAX_DISPLAY_COUNT ? `${MAX_DISPLAY_COUNT}+` : String(count);
+import { formatBadgeCount } from '@/utils/notification';
 
 export function NotificationBell() {
   const { data } = useUnreadNotificationCount();
@@ -32,7 +28,7 @@ export function NotificationBell() {
         <path d="M8.3 15.8a1.8 1.8 0 0 0 3.4 0" />
       </svg>
       {count > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1.5 text-[11px] text-accent-content">
+        <span className="absolute -right-1.5 -top-1.5 flex min-w-4 justify-center rounded-full bg-accent px-1 text-[11px] text-accent-content">
           {formatBadgeCount(count)}
         </span>
       )}

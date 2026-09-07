@@ -18,10 +18,7 @@ export function LimitedDropCard({ drop, nowMs }: LimitedDropCardProps) {
   const showCountdown = phase === 'SCHEDULED' || phase === 'OPENING';
 
   return (
-    <Link
-      to={`/limited-drops/${drop.id}`}
-      className="group block text-content"
-    >
+    <Link to={`/limited-drops/${drop.id}`} className="group flex h-full flex-col text-content">
       <div className="relative aspect-square overflow-hidden rounded-md bg-surface-muted">
         {drop.product.thumbnailUrl ? (
           <img
@@ -46,25 +43,25 @@ export function LimitedDropCard({ drop, nowMs }: LimitedDropCardProps) {
             </svg>
           </div>
         )}
-        <DropStatusBadge status={drop.status} className="absolute left-2 top-2" />
+        <DropStatusBadge phase={phase} className="absolute left-2 top-2" />
         <TasteMatchBadge tasteMatch={drop.tasteMatch} className="absolute right-2 top-2" />
       </div>
 
-      <p className="mt-2.5 line-clamp-2 text-sm font-medium">{drop.product.title}</p>
+      <p className="mt-2.5 line-clamp-2 min-h-[2.5rem] text-sm font-medium">{drop.product.title}</p>
       <p className="mt-0.5 text-xs text-content-muted">{drop.product.artistName}</p>
       <p className="mt-1 text-sm font-bold">{formatPrice(drop.product.price)}</p>
 
-      <RemainingGauge
-        className="mt-2"
-        remaining={drop.remainingQuantity}
-        total={drop.totalQuantity}
-      />
+      <div className="mt-auto">
+        <RemainingGauge
+          className="mt-2"
+          remaining={drop.remainingQuantity}
+          total={drop.totalQuantity}
+        />
 
-      {showCountdown && (
-        <p className="mt-1.5 text-xs font-medium text-accent-hover">
-          {formatDday(toServerMs(drop.openAt), nowMs)}
+        <p className="mt-1.5 min-h-[1rem] text-xs font-medium text-accent-hover">
+          {showCountdown && formatDday(toServerMs(drop.openAt), nowMs)}
         </p>
-      )}
+      </div>
     </Link>
   );
 }

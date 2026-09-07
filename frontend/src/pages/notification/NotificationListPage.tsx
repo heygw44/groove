@@ -26,7 +26,7 @@ export default function NotificationListPage() {
   const unreadOnly = searchParams.get('unreadOnly') === 'true';
 
   const { showToast } = useToast();
-  const { data, isPending, isError, refetch } = useNotifications({
+  const { data, isPending, isError, isPlaceholderData, refetch } = useNotifications({
     page,
     size: PAGE_SIZE,
     unreadOnly,
@@ -57,7 +57,7 @@ export default function NotificationListPage() {
 
   const handleMarkAllRead = () => {
     markAllReadMutation.mutate(undefined, {
-      onSuccess: () => showToast('success', '모두 읽음으로 표시했습니다.'),
+      onSuccess: () => showToast('success', '모든 알림을 읽음 처리했습니다.'),
       onError: (error) => showToast('error', getErrorMessage(error)),
     });
   };
@@ -78,7 +78,7 @@ export default function NotificationListPage() {
             aria-pressed={unreadOnly}
             onClick={toggleUnreadOnly}
           >
-            안 읽음만
+            읽지 않은 알림만
           </Button>
           <Button
             variant="secondary"
@@ -100,7 +100,7 @@ export default function NotificationListPage() {
 
         {!isPending && isError && (
           <EmptyState
-            title="알림을 불러오지 못했습니다."
+            title="알림을 불러오지 못했습니다"
             description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => refetch()}>
@@ -111,11 +111,11 @@ export default function NotificationListPage() {
         )}
 
         {!isPending && !isError && data && data.content.length === 0 && (
-          <EmptyState title={unreadOnly ? '안 읽은 알림이 없습니다' : '받은 알림이 없습니다'} />
+          <EmptyState title={unreadOnly ? '읽지 않은 알림이 없습니다' : '받은 알림이 없습니다'} />
         )}
 
         {!isPending && !isError && data && data.content.length > 0 && (
-          <div>
+          <div className={isPlaceholderData ? 'opacity-60' : ''}>
             <div className="divide-y divide-line">
               {data.content.map((item) => (
                 <NotificationRow key={item.id} item={item} onRead={handleRead} />

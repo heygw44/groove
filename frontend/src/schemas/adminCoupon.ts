@@ -6,7 +6,7 @@ import type {
   AdminCouponSummary,
   AdminCouponUpdateRequest,
 } from '@/types/coupon';
-import { getServerNow } from '@/utils/serverTime';
+import { getServerNow, toServerMs } from '@/utils/serverTime';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O, 1/I 처럼 헷갈리는 글자는 뺐다.
 
@@ -18,17 +18,17 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O, 1/I 처럼 헷갈
 export const createAdminCouponFormSchema = (now: Date = getServerNow()) =>
   z
     .object({
-      code: z.string().regex(/^[A-Z0-9]{6,20}$/, '코드는 영문 대문자/숫자 6~20자여야 합니다.'),
+      code: z.string().regex(/^[A-Z0-9]{6,20}$/, '코드는 영문 대문자/숫자 6~20자로 입력해주세요.'),
       name: z
         .string()
         .trim()
         .min(1, '이름을 입력해주세요.')
-        .max(50, '이름은 50자 이하여야 합니다.'),
+        .max(50, '이름은 50자 이하로 입력해주세요.'),
       discountType: z.enum(['FIXED', 'RATE']),
-      discountValue: z.string().regex(/^\d{1,8}$/, '0 이상의 정수로 입력해주세요.'),
-      minOrderAmount: z.string().regex(/^\d{0,8}$/, '0 이상의 정수로 입력해주세요.'),
-      maxDiscountAmount: z.string().regex(/^\d{0,8}$/, '0 이상의 정수로 입력해주세요.'),
-      totalQuantity: z.string().regex(/^\d{0,9}$/, '1 이상의 정수로 입력해주세요.'),
+      discountValue: z.string().regex(/^\d{1,8}$/, '0 이상의 숫자로 입력해주세요.'),
+      minOrderAmount: z.string().regex(/^\d{0,8}$/, '0 이상의 숫자로 입력해주세요.'),
+      maxDiscountAmount: z.string().regex(/^\d{0,8}$/, '0 이상의 숫자로 입력해주세요.'),
+      totalQuantity: z.string().regex(/^\d{0,9}$/, '1 이상의 숫자로 입력해주세요.'),
       expiresAt: z.string().min(1, '만료일을 입력해주세요.'),
       status: z.enum(['ACTIVE', 'DISABLED']),
     })
@@ -44,7 +44,7 @@ export const createAdminCouponFormSchema = (now: Date = getServerNow()) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['discountValue'],
-          message: '정률 할인은 1~100 사이여야 합니다.',
+          message: '정률 할인은 1~100 사이로 입력해주세요.',
         });
       }
 
@@ -60,7 +60,7 @@ export const createAdminCouponFormSchema = (now: Date = getServerNow()) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['totalQuantity'],
-          message: '1 이상의 정수로 입력해주세요.',
+          message: '1 이상의 숫자로 입력해주세요.',
         });
       }
 
@@ -68,7 +68,7 @@ export const createAdminCouponFormSchema = (now: Date = getServerNow()) =>
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['expiresAt'],
-          message: '만료일은 현재 시각 이후여야 합니다.',
+          message: '만료일은 현재 시각 이후로 입력해주세요.',
         });
       }
     });
@@ -206,5 +206,6 @@ export const getAdminCouponDisplayStatus = (
   if (coupon.status === 'DISABLED') {
     return 'DISABLED';
   }
-  return new Date(coupon.expiresAt) <= now ? 'EXPIRED' : 'ACTIVE';
+  // expiresAt 은 오프셋 없는 서버 LocalDateTime 이라 KST 로 해석해야 now(서버 시각)와 기준이 맞는다.
+  return toServerMs(coupon.expiresAt) <= now.getTime() ? 'EXPIRED' : 'ACTIVE';
 };

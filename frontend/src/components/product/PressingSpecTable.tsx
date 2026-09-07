@@ -24,15 +24,15 @@ export function PressingSpecTable({
   pressingInfo,
 }: PressingSpecTableProps) {
   const rows: SpecRow[] = [
-    { term: '국가', value: pressing.country && getCountryLabel(pressing.country) },
-    { term: '프레싱 연도', value: pressing.pressingYear?.toString() },
+    { term: '제작 국가', value: pressing.country && getCountryLabel(pressing.country) },
+    { term: '제작 연도', value: pressing.pressingYear?.toString() },
     { term: '레이블', value: label?.name },
     { term: '발매일', value: releaseDate && formatDate(releaseDate) },
     { term: '카탈로그 번호', value: pressing.catalogNo },
     { term: '바코드', value: pressing.barcode },
     { term: '에디션', value: EDITION_TYPE_LABELS[pressing.editionType] },
-    { term: '컬러', value: colorVariant },
-    { term: '프레싱 정보', value: pressingInfo },
+    { term: '컬러반', value: colorVariant },
+    { term: '사양', value: pressingInfo },
   ];
 
   return (
@@ -42,7 +42,7 @@ export function PressingSpecTable({
           .filter((row) => row.value !== undefined)
           .map((row) => (
             <div key={row.term} className="flex gap-2">
-              <dt className="w-24 shrink-0 text-content-muted">{row.term}</dt>
+              <dt className="w-28 shrink-0 text-content-muted">{row.term}</dt>
               <dd className="m-0">{row.value}</dd>
             </div>
           ))}

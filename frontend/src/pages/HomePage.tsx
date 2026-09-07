@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
+import { Button } from '@/components/common/Button';
+import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
 import { LimitedDropBanner } from '@/components/limited/LimitedDropBanner';
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
@@ -16,7 +18,12 @@ const NEW_ARRIVAL_SIZE = 8;
 export default function HomePage() {
   const nowMs = useServerNow();
   const { data: limitedDropData } = useLimitedDrops();
-  const { data: productData, isPending: isProductPending } = useProducts({
+  const {
+    data: productData,
+    isPending: isProductPending,
+    isError: isProductError,
+    refetch: refetchProducts,
+  } = useProducts({
     sort: 'latest',
     size: NEW_ARRIVAL_SIZE,
   });
@@ -32,6 +39,8 @@ export default function HomePage() {
 
   return (
     <PageContainer>
+      <h1 className="sr-only">GROOVE — 바이닐 레코드 스토어</h1>
+
       {bannerDrop && <LimitedDropBanner drop={bannerDrop} nowMs={nowMs} />}
 
       <DiggingSection className={hasBanner ? 'mt-10' : undefined} />
@@ -39,23 +48,44 @@ export default function HomePage() {
       {/* DiggingSection 이 null 일 수 있어 first:mt-0 으로 앞 형제 유무에 따라 상단 여백을 정리한다. */}
       <section className="mt-10 first:mt-0">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">신보</h2>
+          <h2 className="text-lg font-bold">새로 나온 앨범</h2>
           <Link to="/products?sort=latest" className="text-sm text-content-muted">
             더보기 →
           </Link>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-          {isProductPending &&
-            Array.from({ length: NEW_ARRIVAL_SIZE }, (_, index) => (
+        {isProductPending && (
+          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: NEW_ARRIVAL_SIZE }, (_, index) => (
               <ProductCardSkeleton key={index} />
             ))}
+          </div>
+        )}
 
-          {!isProductPending &&
-            productData?.content.map((product) => (
+        {!isProductPending && isProductError && (
+          <EmptyState
+            title="새로 나온 앨범을 불러오지 못했습니다"
+            description="잠시 후 다시 시도해주세요."
+            action={
+              <Button variant="secondary" onClick={() => refetchProducts()}>
+                다시 시도
+              </Button>
+            }
+          />
+        )}
+
+        {!isProductPending &&
+          !isProductError &&
+          productData &&
+          productData.content.length === 0 && <EmptyState title="새로 나온 앨범이 없습니다" />}
+
+        {!isProductPending && !isProductError && productData && productData.content.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
+            {productData.content.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
-        </div>
+          </div>
+        )}
       </section>
     </PageContainer>
   );

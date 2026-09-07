@@ -59,6 +59,7 @@
 	<resultMap id="productFeatureRowMap" type="com.groove.recommend.dto.ProductFeatureRow">
 		<constructor>
 			<arg column="product_id" javaType="java.lang.Long"/>
+			<arg column="album_id" javaType="java.lang.Long"/>
 			<arg column="artist_id" javaType="java.lang.Long"/>
 			<arg column="label_id" javaType="java.lang.Long"/>
 			<arg column="release_year" javaType="java.lang.Integer"/>
@@ -72,7 +73,7 @@
 	<!-- 후보 제외·시드 조회 등 추천 서비스 전체가 이 결과 하나를 공유한다(HIDDEN 포함 전체 상품). -->
 	<!-- Discogs 적재 상품은 release_date 가 비어 있어 pressing_year 로 연대를 보완한다. -->
 	<select id="findProductFeatures" resultMap="productFeatureRowMap">
-		SELECT p.id AS product_id, p.artist_id, p.label_id,
+		SELECT p.id AS product_id, p.album_id, p.artist_id, p.label_id,
 		       COALESCE(YEAR(p.release_date), p.pressing_year) AS release_year,
 		       p.avg_rating AS average_rating, p.created_at, p.status,
 		       GROUP_CONCAT(pg.genre_id) AS genre_ids

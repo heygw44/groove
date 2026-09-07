@@ -9,7 +9,7 @@ describe('TasteMatchBadge', () => {
     render(<TasteMatchBadge tasteMatch={{ matched: true, reasons: ['TASTE_GENRE'] }} />);
 
     // then
-    expect(screen.getByText('당신 취향 드롭')).toBeInTheDocument();
+    expect(screen.getByText('내 취향 한정반')).toBeInTheDocument();
   });
 
   it('tasteMatch 가 없으면 아무것도 렌더링하지 않는다', () => {

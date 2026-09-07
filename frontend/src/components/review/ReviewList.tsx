@@ -33,13 +33,11 @@ export function ReviewList({
   onDelete,
   renderEditForm,
 }: ReviewListProps) {
-  const {
-    data,
-    isPending,
-    isError,
-    isPlaceholderData,
-    refetch,
-  } = useReviews(productId, { sort, page, size: REVIEW_PAGE_SIZE });
+  const { data, isPending, isError, isPlaceholderData, refetch } = useReviews(productId, {
+    sort,
+    page,
+    size: REVIEW_PAGE_SIZE,
+  });
 
   return (
     <div>
@@ -67,7 +65,8 @@ export function ReviewList({
 
         {!isPending && isError && (
           <EmptyState
-            title="리뷰를 불러오지 못했습니다."
+            title="리뷰를 불러오지 못했습니다"
+            description="잠시 후 다시 시도해주세요."
             action={
               <Button variant="secondary" onClick={() => refetch()}>
                 다시 시도
@@ -77,7 +76,7 @@ export function ReviewList({
         )}
 
         {!isPending && !isError && data && data.content.length === 0 && (
-          <EmptyState title="아직 작성된 리뷰가 없습니다." />
+          <EmptyState title="아직 작성된 리뷰가 없습니다" />
         )}
 
         {!isPending && !isError && data && data.content.length > 0 && (

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDate, formatDateTime } from '@/utils/formatDate';
+import {
+  formatDate,
+  formatDateTime,
+  formatServerDate,
+  formatServerDateTime,
+} from '@/utils/formatDate';
 
 // TZ 모호성을 피하려고 문자열이 아니라 로컬 Date 객체를 직접 만든다.
 const FIXED_DATE = new Date(2026, 8, 3, 9, 5);
@@ -46,5 +51,44 @@ describe('formatDateTime()', () => {
 
     // then
     expect(result).toBe(formatDateTime(FIXED_DATE));
+  });
+});
+
+describe('formatServerDate() / formatServerDateTime()', () => {
+  /*
+   * 서버 LocalDateTime 문자열(오프셋 없음)은 KST 로 해석해야 한다. 화면에 찍히는
+   * 시:분 자체는 호스트 타임존에 따라 달라지는 게 맞으므로(뷰어 로컬 시각으로 보여주는
+   * 게 의도) 값을 하드코딩하지 않는다. 대신 프로덕션 코드(toServerMs)와는 별도로
+   * 이 테스트에서 직접 "+09:00" 을 붙여 기대값을 계산해, TZ=UTC 로 돌려도(호스트가
+   * 뭐든) 통과하면서 KST 해석 자체가 틀어지는 회귀도 잡는다.
+   */
+  const iso = '2026-09-05T20:00:00';
+  const expectedDate = new Date(Date.parse(`${iso}+09:00`));
+
+  it('오프셋 없는 문자열을 KST 로 해석해 formatDate() 와 같은 형식으로 찍는다', () => {
+    // given & when
+    const result = formatServerDate(iso);
+
+    // then
+    expect(result).toBe(formatDate(expectedDate));
+  });
+
+  it('오프셋 없는 문자열을 KST 로 해석해 formatDateTime() 과 같은 형식으로 찍는다', () => {
+    // given & when
+    const result = formatServerDateTime(iso);
+
+    // then
+    expect(result).toBe(formatDateTime(expectedDate));
+  });
+
+  it('이미 오프셋이 있는 문자열은 KST 를 덧붙이지 않고 그대로 해석한다', () => {
+    // given
+    const isoWithOffset = '2026-09-05T20:00:00Z';
+
+    // when
+    const result = formatServerDateTime(isoWithOffset);
+
+    // then
+    expect(result).toBe(formatDateTime(new Date(isoWithOffset)));
   });
 });

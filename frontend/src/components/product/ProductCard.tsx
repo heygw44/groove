@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { Skeleton } from '@/components/common/Skeleton';
 import { WishButton } from '@/components/product/WishButton';
+import { PRODUCT_STATUS_META } from '@/constants/product';
 import type { ProductSummary } from '@/types/product';
 import { formatPrice } from '@/utils/formatPrice';
 
@@ -48,37 +49,41 @@ export function ProductCard({ product, children }: ProductCardProps) {
   const soldOut = product.status === 'SOLD_OUT';
 
   return (
-    <Link
-      to={`/products/${product.id}`}
-      className="group block text-content"
-    >
+    <div className="group relative flex h-full flex-col text-content">
       <div className="relative">
         <ProductThumbnail url={product.thumbnailUrl} soldOut={soldOut} />
         {soldOut && (
           <Badge variant="danger" className="absolute left-2 top-2">
-            품절
+            {PRODUCT_STATUS_META.SOLD_OUT.label}
           </Badge>
         )}
         <WishButton
           size="sm"
           productId={product.id}
           wishlisted={product.wishlisted}
-          className="absolute right-2 top-2"
+          className="absolute right-2 top-2 z-10"
         />
       </div>
-      <p className="mt-2.5 line-clamp-2 text-sm font-medium">{product.title}</p>
+      {/* 카드 전체 클릭을 지원하는 stretched link. WishButton 은 z-10 으로 위에 둔 형제 버튼이다. */}
+      <Link
+        to={`/products/${product.id}`}
+        className="mt-2.5 line-clamp-2 min-h-[2.5rem] text-sm font-medium before:absolute before:inset-0 before:content-['']"
+      >
+        {product.title}
+      </Link>
       <p className="mt-0.5 text-xs text-content-muted">{product.artistName}</p>
       <p className="mt-1 text-sm font-bold">{formatPrice(product.price)}</p>
-      {children}
-    </Link>
+      <div className="mt-auto">{children}</div>
+    </div>
   );
 }
 
 export function ProductCardSkeleton() {
   return (
-    <div>
+    <div className="flex h-full flex-col">
       <Skeleton className="aspect-square w-full" />
       <Skeleton className="mt-2.5 h-4 w-4/5" />
+      <Skeleton className="mt-1.5 h-4 w-3/5" />
       <Skeleton className="mt-1.5 h-3 w-2/5" />
       <Skeleton className="mt-1.5 h-4 w-1/3" />
     </div>

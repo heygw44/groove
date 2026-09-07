@@ -42,7 +42,7 @@ export default function AlbumDetailPage() {
     return (
       <PageContainer>
         <EmptyState
-          title="앨범을 찾을 수 없습니다."
+          title="앨범을 찾을 수 없습니다"
           description="주소를 다시 확인해주세요."
           action={backToProducts}
         />
@@ -64,7 +64,7 @@ export default function AlbumDetailPage() {
     return (
       <PageContainer>
         <EmptyState
-          title="앨범 정보를 불러오지 못했습니다."
+          title="앨범 정보를 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={backToProducts}
         />
@@ -90,7 +90,7 @@ export default function AlbumDetailPage() {
       )}
 
       <section className="mt-10">
-        <h2 className="text-lg font-bold">프레싱</h2>
+        <h2 className="text-lg font-bold">에디션</h2>
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
           {album.pressings.map((product) => (
             <ProductCard key={product.id} product={product}>

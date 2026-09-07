@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
@@ -8,6 +8,7 @@ import { useLogout } from '@/hooks/mutations/useAuthMutations';
 import { useCart } from '@/hooks/queries/useCart';
 import { useUnreadNotificationCount } from '@/hooks/queries/useUnreadNotificationCount';
 import { useAuthStore } from '@/store/authStore';
+import { formatBadgeCount } from '@/utils/notification';
 
 interface NavItem {
   to: string;
@@ -29,6 +30,7 @@ export function Header() {
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { pathname } = useLocation();
+  const mobileMenuId = useId();
 
   /*
    * 메뉴에서 링크를 누르면 화면만 바뀌고 드로어가 남아 있으면 안 된다.
@@ -58,7 +60,7 @@ export function Header() {
     'aria-label': item.badge ? `${item.label} ${item.badge}개` : undefined,
   });
 
-  const countBadge = (count: number) => (
+  const countBadge = (count: number | string) => (
     <span className="rounded-full bg-accent px-1.5 text-[11px] text-accent-content">{count}</span>
   );
 
@@ -85,7 +87,7 @@ export function Header() {
         <div className="hidden items-center gap-3 text-sm md:flex">
           {/* 부팅 중에는 로그인 여부를 모른다. 자리만 잡아 레이아웃이 튀지 않게 한다. */}
           {isBootstrapping ? (
-            <div className="h-8 w-40 animate-pulse rounded-md bg-surface-muted" />
+            <div className="h-8 w-64 animate-pulse rounded-md bg-surface-muted" />
           ) : isLoggedIn ? (
             <>
               <NotificationBell />
@@ -118,8 +120,9 @@ export function Header() {
 
         <button
           type="button"
-          aria-label="메뉴 열기"
+          aria-label={isMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
           aria-expanded={isMenuOpen}
+          aria-controls={mobileMenuId}
           onClick={() => setIsMenuOpen(true)}
           className="-mr-1 rounded-md p-1.5 text-content-muted hover:bg-surface-muted hover:text-content md:hidden"
         >
@@ -141,58 +144,64 @@ export function Header() {
       </div>
 
       <Drawer open={isMenuOpen} onClose={() => setIsMenuOpen(false)} title="메뉴" side="right">
-        <nav className="flex flex-col">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              {...navLinkProps(item)}
-              className="flex items-center gap-2 py-2.5 text-sm text-content"
-            >
-              {item.label}
-              {item.badge !== undefined && countBadge(item.badge)}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="mt-2 flex flex-col gap-2 border-t border-line pt-4 text-sm">
-          {isBootstrapping ? (
-            <div className="h-9 w-full animate-pulse rounded-md bg-surface-muted" />
-          ) : isLoggedIn ? (
-            <>
-              <p className="text-content-muted">
-                <b className="font-medium text-content">{member?.nickname}</b>님
-              </p>
+        <div id={mobileMenuId}>
+          <nav className="flex flex-col">
+            {navItems.map((item) => (
               <Link
-                to="/notifications"
-                aria-label={notificationCount > 0 ? `알림 ${notificationCount}개` : undefined}
-                className="flex items-center gap-2 py-2.5 text-content"
+                key={item.to}
+                {...navLinkProps(item)}
+                className="flex items-center gap-2 py-2.5 text-sm text-content"
               >
-                알림
-                {notificationCount > 0 && (
-                  <span className="ml-1">{countBadge(notificationCount)}</span>
-                )}
+                {item.label}
+                {item.badge !== undefined && countBadge(item.badge)}
               </Link>
-              <Link to="/mypage" className="py-2.5 text-content">
-                마이페이지
-              </Link>
-              <Button
-                variant="secondary"
-                onClick={() => logoutMutation.mutate()}
-                disabled={logoutMutation.isPending}
-              >
-                로그아웃
-              </Button>
-            </>
-          ) : (
-            <>
-              <Link to="/login" className="py-2.5 text-content">
-                로그인
-              </Link>
-              <Link to="/signup" className="py-2.5 text-content">
-                회원가입
-              </Link>
-            </>
-          )}
+            ))}
+          </nav>
+
+          <div className="mt-2 flex flex-col gap-2 border-t border-line pt-4 text-sm">
+            {isBootstrapping ? (
+              <div className="h-[150px] w-full animate-pulse rounded-md bg-surface-muted" />
+            ) : isLoggedIn ? (
+              <>
+                <p className="text-content-muted">
+                  <b className="font-medium text-content">{member?.nickname}</b>님
+                </p>
+                <Link
+                  to="/notifications"
+                  aria-label={
+                    notificationCount > 0
+                      ? `알림 ${formatBadgeCount(notificationCount)}개`
+                      : undefined
+                  }
+                  className="flex items-center gap-2 py-2.5 text-content"
+                >
+                  알림
+                  {notificationCount > 0 && (
+                    <span className="ml-1">{countBadge(formatBadgeCount(notificationCount))}</span>
+                  )}
+                </Link>
+                <Link to="/mypage" className="py-2.5 text-content">
+                  마이페이지
+                </Link>
+                <Button
+                  variant="secondary"
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
+                >
+                  로그아웃
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="py-2.5 text-content">
+                  로그인
+                </Link>
+                <Link to="/signup" className="py-2.5 text-content">
+                  회원가입
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </Drawer>
     </header>

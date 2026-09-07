@@ -61,7 +61,7 @@ export function getPurchaseButtonState(
   isLoggedIn: boolean,
 ): PurchaseButtonState {
   if (phase === 'SCHEDULED' || phase === 'OPENING') {
-    return { label: '오픈 대기', disabled: true };
+    return { label: '오픈 예정', disabled: true };
   }
   if (phase === 'SOLD_OUT') {
     return { label: '매진', disabled: true };
@@ -98,11 +98,7 @@ export function pickBannerDrop(drops: LimitedDropSummary[]): LimitedDropSummary 
 }
 
 export type PurchaseErrorKind =
-  | 'SOLD_OUT'
-  | 'ALREADY_PURCHASED'
-  | 'STATE_CHANGED'
-  | 'ADDRESS_MISSING'
-  | 'UNKNOWN';
+  'SOLD_OUT' | 'ALREADY_PURCHASED' | 'STATE_CHANGED' | 'ADDRESS_MISSING' | 'UNKNOWN';
 
 const PURCHASE_ERROR_CODE_KIND: Record<string, PurchaseErrorKind> = {
   LIMITED_SOLD_OUT: 'SOLD_OUT',

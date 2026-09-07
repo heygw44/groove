@@ -64,6 +64,7 @@ export function StatsPeriodSelector({ value, onChange }: StatsPeriodSelectorProp
           <button
             key={preset}
             type="button"
+            aria-pressed={isActivePreset(preset)}
             onClick={() => handlePresetClick(preset)}
             className={`h-8 rounded-md px-3 text-xs font-medium ${
               isActivePreset(preset)

@@ -33,8 +33,8 @@ export function LimitedDropBanner({ drop, nowMs }: LimitedDropBannerProps) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <DropStatusBadge status={drop.status} />
-          <span className="text-xs font-medium text-content-muted">한정반 드롭</span>
+          <DropStatusBadge phase={phase} />
+          <span className="text-xs font-medium text-content-muted">한정반</span>
         </div>
         <p className="mt-1.5 truncate text-lg font-bold text-content">{drop.product.title}</p>
         <p className="text-sm text-content-muted">

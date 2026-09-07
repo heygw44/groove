@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ProductStatusBadge } from '@/components/admin/ProductStatusBadge';
 import { Button } from '@/components/common/Button';
 import type { AdminProductSummary } from '@/types/product';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface AdminProductTableProps {
@@ -26,13 +26,27 @@ export function AdminProductTable({
       <table className="min-w-[760px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th className="py-2 pr-3 font-medium">썸네일</th>
-            <th className="py-2 pr-3 font-medium">상품</th>
-            <th className="py-2 pr-3 font-medium">가격</th>
-            <th className="py-2 pr-3 font-medium">상태</th>
-            <th className="py-2 pr-3 font-medium">재고</th>
-            <th className="py-2 pr-3 font-medium">등록일</th>
-            <th className="py-2 pr-3 font-medium">액션</th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              썸네일
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상품
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              가격
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              상태
+            </th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">
+              재고
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              등록일
+            </th>
+            <th scope="col" className="py-2 pr-3 font-medium">
+              관리
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -53,23 +67,29 @@ export function AdminProductTable({
                 <p className="font-medium text-content">{product.title}</p>
                 <p className="text-xs text-content-muted">{product.artistName}</p>
               </td>
-              <td className="py-2.5 pr-3">{formatPrice(product.price)}</td>
+              <td className="py-2.5 pr-3 text-right tabular-nums">{formatPrice(product.price)}</td>
               <td className="py-2.5 pr-3">
                 <ProductStatusBadge status={product.status} />
               </td>
-              <td className="py-2.5 pr-3">{product.stockQuantity ?? '—'}</td>
-              <td className="py-2.5 pr-3 text-content-muted">{formatDate(product.createdAt)}</td>
+              <td className="py-2.5 pr-3 text-right tabular-nums">
+                {product.stockQuantity ?? '—'}
+              </td>
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                {formatServerDate(product.createdAt)}
+              </td>
               <td className="py-2.5 pr-3">
                 <div className="flex items-center gap-1.5">
                   <Link
                     to={`/admin/products/${product.id}/edit`}
-                    className="text-sm text-content hover:text-accent"
+                    aria-label={`${product.title} 수정`}
+                    className="text-sm text-content hover:text-accent-hover"
                   >
                     수정
                   </Link>
                   <Button
                     variant="secondary"
                     size="sm"
+                    aria-label={`${product.title} 재고 조정`}
                     onClick={() => onAdjustStock(product)}
                     disabled={disabled || product.status === 'HIDDEN'}
                   >
@@ -79,6 +99,7 @@ export function AdminProductTable({
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label={`${product.title} 복구`}
                       onClick={() => onRestore(product)}
                       disabled={disabled}
                     >
@@ -88,6 +109,7 @@ export function AdminProductTable({
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label={`${product.title} 숨김`}
                       onClick={() => onHide(product)}
                       disabled={disabled}
                     >

@@ -60,7 +60,7 @@ export default function AdminOrdersPage() {
 
       {!isPending && isError && (
         <EmptyState
-          title="주문을 불러오지 못했습니다."
+          title="주문을 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -71,7 +71,7 @@ export default function AdminOrdersPage() {
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (
-        <EmptyState title="조건에 맞는 주문이 없습니다." />
+        <EmptyState title="조건에 맞는 주문이 없습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length > 0 && (
