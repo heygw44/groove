@@ -1,29 +1,33 @@
 import { Badge, type BadgeVariant } from '@/components/common/Badge';
 import type { LimitedDropStatus } from '@/types/limitedDrop';
+import type { DropPhase } from '@/utils/limitedDrop';
 
-const STATUS_LABEL: Record<LimitedDropStatus, string> = {
+const PHASE_LABEL: Record<DropPhase, string> = {
   SCHEDULED: '예정',
+  OPENING: '오픈 중',
   OPEN: '진행중',
   SOLD_OUT: '매진',
   CLOSED: '마감',
 };
 
-const STATUS_VARIANT: Record<LimitedDropStatus, BadgeVariant> = {
+const PHASE_VARIANT: Record<DropPhase, BadgeVariant> = {
   SCHEDULED: 'neutral',
+  OPENING: 'success',
   OPEN: 'success',
   SOLD_OUT: 'danger',
   CLOSED: 'neutral',
 };
 
-interface DropStatusBadgeProps {
-  status: LimitedDropStatus;
-  className?: string;
-}
+type DropStatusBadgeProps = { className?: string } & (
+  { status: LimitedDropStatus; phase?: never } | { phase: DropPhase; status?: never }
+);
 
-export function DropStatusBadge({ status, className }: DropStatusBadgeProps) {
+/** OPENING(스케줄 시각은 지났지만 상태 갱신 전) 을 표시하려면 status 대신 phase 를 넘긴다. */
+export function DropStatusBadge({ status, phase, className }: DropStatusBadgeProps) {
+  const resolvedPhase = phase ?? (status as DropPhase);
   return (
-    <Badge variant={STATUS_VARIANT[status]} className={className}>
-      {STATUS_LABEL[status]}
+    <Badge variant={PHASE_VARIANT[resolvedPhase]} className={className}>
+      {PHASE_LABEL[resolvedPhase]}
     </Badge>
   );
 }
