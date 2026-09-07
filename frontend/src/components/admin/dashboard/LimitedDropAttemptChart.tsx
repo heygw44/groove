@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 
 import { EmptyState } from '@/components/common/EmptyState';
+import { LIMITED_DROP_ATTEMPT_LABELS } from '@/constants/limitedDropStats';
 import type { LimitedDropAttempts } from '@/types/adminStats';
 
 interface LimitedDropAttemptChartProps {
@@ -26,20 +27,36 @@ interface AttemptBar {
 
 export function LimitedDropAttemptChart({ attempts }: LimitedDropAttemptChartProps) {
   const data: AttemptBar[] = [
-    { label: '성공', count: attempts.successCount, color: 'var(--color-success)' },
-    { label: '매진', count: attempts.soldOutCount, color: 'var(--color-accent)' },
     {
-      label: '중복구매',
+      label: LIMITED_DROP_ATTEMPT_LABELS.successCount,
+      count: attempts.successCount,
+      color: 'var(--color-success)',
+    },
+    {
+      label: LIMITED_DROP_ATTEMPT_LABELS.soldOutCount,
+      count: attempts.soldOutCount,
+      color: 'var(--color-accent)',
+    },
+    {
+      label: LIMITED_DROP_ATTEMPT_LABELS.alreadyPurchasedCount,
       count: attempts.alreadyPurchasedCount,
       color: 'var(--color-accent-hover)',
     },
-    { label: '오픈전', count: attempts.notOpenCount, color: 'var(--color-content-muted)' },
-    { label: '마감후', count: attempts.closedCount, color: 'var(--color-content-subtle)' },
+    {
+      label: LIMITED_DROP_ATTEMPT_LABELS.notOpenCount,
+      count: attempts.notOpenCount,
+      color: 'var(--color-content-muted)',
+    },
+    {
+      label: LIMITED_DROP_ATTEMPT_LABELS.closedCount,
+      count: attempts.closedCount,
+      color: 'var(--color-content-subtle)',
+    },
   ];
 
   const isAllZero = data.every((item) => item.count === 0);
   if (isAllZero) {
-    return <EmptyState title="집계된 시도가 없습니다." />;
+    return <EmptyState title="집계된 시도가 없습니다" />;
   }
 
   return (

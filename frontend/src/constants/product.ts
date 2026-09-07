@@ -1,5 +1,6 @@
+import type { BadgeVariant } from '@/components/common/Badge';
 import type { EditionType } from '@/types/catalog';
-import type { ProductSort } from '@/types/product';
+import type { ProductSort, ProductStatus } from '@/types/product';
 
 interface ProductSortOption {
   value: ProductSort;
@@ -19,16 +20,23 @@ export const PRODUCT_PAGE_SIZE = 24;
 
 export const EDITION_TYPE_LABELS: Record<EditionType, string> = {
   STANDARD: '일반반',
-  ORIGINAL: '오리지널',
-  REISSUE: '재발매',
-  REMASTER: '리마스터',
+  ORIGINAL: '오리지널반',
+  REISSUE: '재발매반',
+  REMASTER: '리마스터반',
   LIMITED: '한정반',
-  PROMO: '프로모',
+  PROMO: '프로모션반',
 };
+
+export const PRODUCT_STATUS_META: Record<ProductStatus, { label: string; variant: BadgeVariant }> =
+  {
+    ON_SALE: { label: '판매중', variant: 'success' },
+    SOLD_OUT: { label: '품절', variant: 'danger' },
+    HIDDEN: { label: '숨김', variant: 'neutral' },
+  };
 
 /**
  * 국가 값은 Discogs 표기를 그대로 저장한다("Europe" 같은 비국가 값도 있어 ISO 코드로 담지 않는다).
- * 목록 필터는 프레싱이 많은 상위 국가만 고정 목록으로 노출한다.
+ * 목록 필터는 에디션이 많은 상위 국가만 고정 목록으로 노출한다.
  */
 export const PRESSING_COUNTRIES = [
   'US',

@@ -22,7 +22,7 @@ describe('buildPressingMetaLine()', () => {
     const line = buildPressingMetaLine(target);
 
     // then
-    expect(line).toBe('미국 · 1959 · 오리지널');
+    expect(line).toBe('미국 · 1959 · 오리지널반');
   });
 
   it('국가가 없으면 나머지 값만 이어 붙인다', () => {
@@ -33,7 +33,7 @@ describe('buildPressingMetaLine()', () => {
     const line = buildPressingMetaLine(target);
 
     // then
-    expect(line).toBe('2020 · 재발매');
+    expect(line).toBe('2020 · 재발매반');
   });
 
   it('연도가 없으면 나머지 값만 이어 붙인다', () => {
@@ -44,6 +44,6 @@ describe('buildPressingMetaLine()', () => {
     const line = buildPressingMetaLine(target);
 
     // then
-    expect(line).toBe('일본 · 리마스터');
+    expect(line).toBe('일본 · 리마스터반');
   });
 });

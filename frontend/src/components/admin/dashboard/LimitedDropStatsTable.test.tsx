@@ -70,7 +70,7 @@ describe('LimitedDropStatsTable', () => {
     expect(screen.getByText('2')).toBeInTheDocument();
   });
 
-  it('soldOutSeconds 가 없으면 매진 소요가 - 다', () => {
+  it('soldOutSeconds 가 없으면 매진까지가 - 다', () => {
     // given
     const item: LimitedDropStats = { ...baseItem, soldOutSeconds: undefined };
 

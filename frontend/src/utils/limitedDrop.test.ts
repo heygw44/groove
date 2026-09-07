@@ -88,14 +88,14 @@ describe('formatDday()', () => {
 describe('getPurchaseButtonState()', () => {
   const notPurchased: Pick<LimitedDropDetail, 'purchased'> = { purchased: false };
 
-  it('SCHEDULED/OPENING 이면 오픈 대기 상태다', () => {
+  it('SCHEDULED/OPENING 이면 오픈 예정 상태다', () => {
     // when & then
     expect(getPurchaseButtonState(notPurchased, 'SCHEDULED', true)).toEqual({
-      label: '오픈 대기',
+      label: '오픈 예정',
       disabled: true,
     });
     expect(getPurchaseButtonState(notPurchased, 'OPENING', true)).toEqual({
-      label: '오픈 대기',
+      label: '오픈 예정',
       disabled: true,
     });
   });
