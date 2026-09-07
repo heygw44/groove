@@ -1,9 +1,12 @@
 package com.groove.catalog.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import com.groove.catalog.client.Sleeper;
@@ -15,8 +18,13 @@ import com.groove.global.common.ErrorCode;
 public class CatalogClientConfig {
 
 	@Bean
-	public RestClient discogsRestClient(RestClient.Builder builder, DiscogsProperties properties) {
+	public RestClient discogsRestClient(RestClient.Builder builder, DiscogsProperties properties,
+			ClientHttpRequestFactoryBuilder<?> factoryBuilder, ClientHttpRequestFactorySettings factorySettings) {
+		// 전역 spring.http.client 값은 토스 결제용이라 Discogs 는 read-timeout 만 따로 잡는다.
+		ClientHttpRequestFactory requestFactory = factoryBuilder.build(
+				factorySettings.withReadTimeout(properties.readTimeout()));
 		return builder.baseUrl(properties.baseUrl())
+				.requestFactory(requestFactory)
 				.defaultHeader(HttpHeaders.AUTHORIZATION, "Discogs token=" + properties.token())
 				.defaultHeader(HttpHeaders.USER_AGENT, properties.userAgent())
 				.build();
