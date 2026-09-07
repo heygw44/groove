@@ -7,9 +7,11 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withNoContent;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -58,6 +60,19 @@ class TossPaymentClientTest {
 			}
 			""";
 
+	private static final String CONFIRM_RESPONSE_WITHOUT_APPROVED_AT = """
+			{
+				"paymentKey": "tviva20260902abcdef",
+				"orderId": "20260902-K7Q2M9XZ",
+				"status": "DONE",
+				"method": "카드",
+				"totalAmount": 75600,
+				"requestedAt": "2026-09-02T10:00:59+09:00",
+				"approvedAt": null,
+				"cancels": null
+			}
+			""";
+
 	private static final String CANCEL_RESPONSE = """
 			{
 				"paymentKey": "tviva20260902abcdef",
@@ -73,8 +88,24 @@ class TossPaymentClientTest {
 			}
 			""";
 
+	private static final String CANCEL_RESPONSE_WITHOUT_CANCELS = """
+			{
+				"paymentKey": "tviva20260902abcdef",
+				"orderId": "20260902-K7Q2M9XZ",
+				"status": "CANCELED",
+				"method": "카드",
+				"totalAmount": 75600,
+				"approvedAt": "2026-09-02T10:01:12+09:00",
+				"cancels": null
+			}
+			""";
+
 	private static final String ERROR_RESPONSE = """
 			{ "code": "REJECT_CARD_COMPANY", "message": "카드사에서 승인을 거절했습니다." }
+			""";
+
+	private static final String ERROR_RESPONSE_WITHOUT_CODE = """
+			{ "message": "코드 필드가 없는 에러 응답" }
 			""";
 
 	private MockRestServiceServer server;
@@ -123,6 +154,53 @@ class TossPaymentClientTest {
 		}
 
 		@Test
+		@DisplayName("approvedAt 이 없으면 승인 시각은 null 로 매핑한다")
+		void mapsNullApprovedAtWhenMissing() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withSuccess(CONFIRM_RESPONSE_WITHOUT_APPROVED_AT, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentConfirmResult result = tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER,
+					new BigDecimal("75600"));
+
+			// then
+			assertThat(result.approvedAt()).isNull();
+		}
+
+		@Test
+		@DisplayName("응답 본문이 비어 있으면 PAYMENT_CONFIRM_FAILED 예외를 던진다")
+		void throwsWhenResponseBodyMissing() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withNoContent());
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER, new BigDecimal("75600")))
+					.isInstanceOf(BusinessException.class)
+					.hasMessageContaining("TOSS 응답 본문이 비어 있습니다")
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CONFIRM_FAILED);
+		}
+
+		@Test
+		@DisplayName("통신 자체가 실패하면 PAYMENT_CONFIRM_FAILED 예외를 던진다")
+		void throwsWhenConnectionFails() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(request -> {
+						throw new IOException("연결 실패");
+					});
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER, new BigDecimal("75600")))
+					.isInstanceOf(BusinessException.class)
+					.hasMessageContaining("TOSS 통신 실패")
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CONFIRM_FAILED);
+		}
+
+		@Test
 		@DisplayName("토스가 오류를 응답하면 PAYMENT_CONFIRM_FAILED 로 바꾸고 토스 코드는 예외 상세에만 남긴다")
 		void translatesTossErrorToConfirmFailed() {
 			// given
@@ -150,6 +228,37 @@ class TossPaymentClientTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_CONFIRM_FAILED);
 		}
+
+		@Test
+		@DisplayName("에러 응답 바디가 비어 있으면 UNKNOWN 코드로 처리해 PAYMENT_CONFIRM_FAILED 로 떨어진다")
+		void translatesBlankErrorBodyToConfirmFailed() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withBadRequest().body(""));
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER, new BigDecimal("75600")))
+					.isInstanceOf(BusinessException.class)
+					.hasMessageContaining("UNKNOWN")
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CONFIRM_FAILED);
+		}
+
+		@Test
+		@DisplayName("에러 응답에 code 필드가 없으면 UNKNOWN 코드로 처리해 PAYMENT_CONFIRM_FAILED 로 떨어진다")
+		void translatesErrorWithoutCodeFieldToConfirmFailed() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withBadRequest().body(ERROR_RESPONSE_WITHOUT_CODE)
+							.contentType(MediaType.APPLICATION_JSON));
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER, new BigDecimal("75600")))
+					.isInstanceOf(BusinessException.class)
+					.hasMessageContaining("UNKNOWN")
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CONFIRM_FAILED);
+		}
 	}
 
 	@Nested
@@ -173,6 +282,20 @@ class TossPaymentClientTest {
 			assertThat(result.paymentKey()).isEqualTo(PAYMENT_KEY);
 			assertThat(result.status()).isEqualTo("CANCELED");
 			assertThat(result.canceledAt()).isEqualTo(LocalDateTime.of(2026, 9, 2, 11, 32, 4));
+		}
+
+		@Test
+		@DisplayName("취소 이력이 없으면 취소 시각은 null 로 매핑한다")
+		void mapsNullCanceledAtWhenNoCancelHistory() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/" + PAYMENT_KEY + "/cancel"))
+					.andRespond(withSuccess(CANCEL_RESPONSE_WITHOUT_CANCELS, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentCancelResult result = tossPaymentClient.cancel(PAYMENT_KEY, "고객 변심");
+
+			// then
+			assertThat(result.canceledAt()).isNull();
 		}
 
 		@Test

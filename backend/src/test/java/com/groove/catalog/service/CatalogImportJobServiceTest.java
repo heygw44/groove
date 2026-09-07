@@ -32,6 +32,8 @@ import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.batch.core.launch.NoSuchJobException;
+import org.springframework.batch.core.launch.NoSuchJobExecutionException;
+import org.springframework.batch.core.repository.JobRestartException;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
@@ -126,6 +128,22 @@ class CatalogImportJobServiceTest {
 			verify(adminAuditLogService).record(1L, AdminAuditAction.CATALOG_IMPORT_JOB_START,
 					AdminAuditTargetType.CATALOG_IMPORT_JOB, 88L, "discogsMasterId=21247");
 		}
+
+		@Test
+		@DisplayName("잡 실행이 실패하면 CATALOG_IMPORT_JOB_RUNNING 예외를 던진다")
+		void throwsWhenJobLauncherFails() throws Exception {
+			// given
+			given(jobExplorer.findRunningJobExecutions(CatalogImportJobConfig.JOB_NAME)).willReturn(Set.of());
+			given(jobLauncher.run(eq(discogsMasterImportJob), any()))
+					.willThrow(new JobRestartException("이미 완료된 잡"));
+			CatalogImportJobRequest request = new CatalogImportJobRequest(21247L, BigDecimal.valueOf(45000));
+
+			// when & then
+			assertThatThrownBy(() -> service().start(1L, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.CATALOG_IMPORT_JOB_RUNNING);
+		}
 	}
 
 	@Nested
@@ -168,6 +186,23 @@ class CatalogImportJobServiceTest {
 			assertThat(result.content().get(0).jobExecutionId()).isEqualTo(88L);
 			assertThat(result.content().get(0).discogsMasterId()).isEqualTo(21247L);
 		}
+
+		@Test
+		@DisplayName("실행 이력이 없는 인스턴스는 결과에서 제외한다")
+		void skipsInstancesWithNoExecutions() throws Exception {
+			// given
+			given(jobExplorer.getJobInstanceCount(CatalogImportJobConfig.JOB_NAME)).willReturn(1L);
+			JobInstance instance = jobInstance(1L);
+			given(jobExplorer.getJobInstances(CatalogImportJobConfig.JOB_NAME, 0, 20)).willReturn(List.of(instance));
+			given(jobExplorer.getJobExecutions(instance)).willReturn(List.of());
+
+			// when
+			PageResponse<CatalogImportJobResponse> result = service().list(0, 20);
+
+			// then
+			assertThat(result.content()).isEmpty();
+			assertThat(result.totalElements()).isEqualTo(1L);
+		}
 	}
 
 	@Nested
@@ -201,6 +236,26 @@ class CatalogImportJobServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.CATALOG_IMPORT_JOB_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("존재하면 실행 결과를 매핑해 반환한다")
+		void returnsResponseWhenFound() {
+			// given
+			JobInstance instance = jobInstance(1L);
+			JobParameters params = new JobParametersBuilder()
+					.addLong(CatalogImportJobConfig.PARAM_MASTER_ID, 21247L)
+					.toJobParameters();
+			JobExecution execution = jobExecution(88L, instance, params, BatchStatus.COMPLETED);
+			given(jobExplorer.getJobExecution(88L)).willReturn(execution);
+
+			// when
+			CatalogImportJobResponse response = service().get(88L);
+
+			// then
+			assertThat(response.jobExecutionId()).isEqualTo(88L);
+			assertThat(response.discogsMasterId()).isEqualTo(21247L);
+			assertThat(response.status()).isEqualTo(BatchStatus.COMPLETED);
 		}
 	}
 
@@ -242,6 +297,24 @@ class CatalogImportJobServiceTest {
 			// then
 			assertThat(response.jobExecutionId()).isEqualTo(89L);
 			verify(jobOperator).restart(1L);
+		}
+
+		@Test
+		@DisplayName("jobOperator 재시작이 실패하면 COMMON_CONFLICT 예외를 던진다")
+		void throwsWhenJobOperatorFails() throws Exception {
+			// given
+			JobInstance instance = jobInstance(1L);
+			JobExecution execution = jobExecution(1L, instance,
+					new JobParametersBuilder().toJobParameters(), BatchStatus.FAILED);
+			execution.setExitStatus(ExitStatus.FAILED);
+			given(jobExplorer.getJobExecution(1L)).willReturn(execution);
+			given(jobOperator.restart(1L)).willThrow(new NoSuchJobExecutionException("실행 이력 없음"));
+
+			// when & then
+			assertThatThrownBy(() -> service().restart(1L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_CONFLICT);
 		}
 	}
 }

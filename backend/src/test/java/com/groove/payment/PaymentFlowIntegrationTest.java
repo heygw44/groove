@@ -469,6 +469,69 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 	}
 
 	@Nested
+	@DisplayName("한정반 결제 취소 통합 복구")
+	class LimitedOrderCancel {
+
+		@Test
+		@DisplayName("한정반 결제를 취소하면 결제·주문·재고·선점이 한 흐름에서 모두 되돌아간다")
+		void cancelsConfirmedLimitedOrderAndRestoresPaymentOrderStockAndReservationTogether() throws Exception {
+			// given: 총 수량 1건짜리 드롭이라 이 구매 한 건으로 SOLD_OUT 이 된다
+			int totalQuantity = 1;
+			LimitedDropSetup setup = prepareOpenDropWithProduct(totalQuantity);
+			Member member = signup();
+			Address address = addressRepository.save(AddressFixture.create(member));
+			LimitedPurchaseResponse purchase = limitedPurchaseService.purchase(setup.dropId(), member.getId(),
+					address.getId());
+			String accessToken = login(member.getEmail());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, purchase.orderNumber(),
+					purchase.finalAmount());
+			String reason = "고객 변심";
+			stubCancelSuccess(paymentKey);
+			assertThat(limitedDropRepository.findById(setup.dropId()).orElseThrow().getStatus())
+					.isEqualTo(LimitedDropStatus.SOLD_OUT);
+
+			// when
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new PaymentCancelRequest(reason))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then: 결제·주문 상태가 되돌아간다
+			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			Order order = orderRepository.findById(purchase.orderId()).orElseThrow();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCancelReason()).isEqualTo(reason);
+
+			// then: 재고와 이력이 되돌아간다
+			Stock stock = stockRepository.findByProductId(setup.productId()).orElseThrow();
+			assertThat(stock.getQuantity()).isEqualTo(totalQuantity);
+			List<StockHistory> histories = stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stock.getId());
+			assertThat(histories).hasSize(2);
+			assertThat(histories.get(1).getChangeType()).isEqualTo(StockChangeType.CANCEL);
+
+			// then: 한정반 구매 이력·판매 수량·상태가 되돌아간다
+			assertThat(limitedPurchaseRepository.findByOrderId(purchase.orderId())).isEmpty();
+			LimitedDrop reloadedDrop = limitedDropRepository.findById(setup.dropId()).orElseThrow();
+			assertThat(reloadedDrop.getSoldCount()).isZero();
+			assertThat(reloadedDrop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
+
+			// then: Redis 선점(AFTER_COMMIT)이 되돌아간다. 요청이 끝난 지금 시점이면 커밋 후이다
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(setup.dropId())))
+					.isEqualTo(String.valueOf(totalQuantity));
+			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(setup.dropId()),
+					String.valueOf(member.getId()))).isFalse();
+
+			verify(paymentClient).cancel(eq(paymentKey), eq(reason));
+
+			limitedDropRedisService.clear(setup.dropId());
+		}
+	}
+
+	@Nested
 	@DisplayName("PATCH /api/v1/admin/orders/{id}/status (관리자 취소)")
 	class AdminCancel {
 
@@ -513,6 +576,9 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 	}
 
 	private record OrderInfo(Long orderId, String orderNumber, BigDecimal finalAmount) {
+	}
+
+	private record LimitedDropSetup(Long dropId, Long productId) {
 	}
 
 	private record CouponOrderInfo(Long orderId, String orderNumber, BigDecimal finalAmount, Long memberCouponId) {
@@ -630,6 +696,28 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 		limitedDropRedisService.clear(dropId);
 		limitedDropRedisService.initStock(dropId, totalQuantity);
 		return dropId;
+	}
+
+	/** prepareOpenDrop 과 같은 세팅이지만, 취소 후 재고 복구를 상품 단위로 단언해야 해서 productId 도 함께 돌려준다. */
+	private LimitedDropSetup prepareOpenDropWithProduct(int totalQuantity) {
+		Artist artist = artistRepository.save(ArtistFixture.create());
+		Product createdProduct = ProductFixture.create(artist);
+		albumRepository.save(createdProduct.getAlbum());
+		Product product = productRepository.save(createdProduct);
+		stockRepository.saveAndFlush(StockFixture.create(product, totalQuantity));
+
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, Math.min(2, totalQuantity));
+		drop.open();
+		// 서비스는 Asia/Seoul Clock 을 쓰므로 시스템 시각으로 잡으면 UTC 러너에서 드롭이 마감된 것으로 판정된다.
+		LocalDateTime now = LocalDateTime.now(clock);
+		LimitedDropFixture.withOpenAt(drop, now.minusHours(1));
+		LimitedDropFixture.withCloseAt(drop, now.plusHours(1));
+		limitedDropRepository.saveAndFlush(drop);
+
+		Long dropId = drop.getId();
+		limitedDropRedisService.clear(dropId);
+		limitedDropRedisService.initStock(dropId, totalQuantity);
+		return new LimitedDropSetup(dropId, product.getId());
 	}
 
 	private Member signup() throws Exception {

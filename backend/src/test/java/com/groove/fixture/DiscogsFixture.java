@@ -67,8 +67,13 @@ public final class DiscogsFixture {
 	}
 
 	public static DiscogsSearchResponse.Result searchResult(long id, String title, String year) {
-		return new DiscogsSearchResponse.Result(id, "release", title, year, "Europe", "CS 8163", List.of("Columbia"),
-				List.of("Vinyl", "LP"), "https://i.discogs.com/thumb.jpeg", 21247L);
+		return searchResult(id, title, year, List.of("Columbia"), "https://i.discogs.com/thumb.jpeg");
+	}
+
+	public static DiscogsSearchResponse.Result searchResult(long id, String title, String year, List<String> label,
+			String thumb) {
+		return new DiscogsSearchResponse.Result(id, "release", title, year, "Europe", "CS 8163", label,
+				List.of("Vinyl", "LP"), thumb, 21247L);
 	}
 
 	public static DiscogsMasterVersionsResponse.Version version(long id, String format) {
@@ -89,6 +94,12 @@ public final class DiscogsFixture {
 
 	public static DiscogsReleaseResponse releaseResponse(String artistName, String labelName, String catalogNo,
 			List<String> formatDescriptions, String barcode, List<String> genres, List<String> styles) {
+		return releaseResponse(artistName, labelName, catalogNo, formatDescriptions, barcode, genres, styles, 1959);
+	}
+
+	public static DiscogsReleaseResponse releaseResponse(String artistName, String labelName, String catalogNo,
+			List<String> formatDescriptions, String barcode, List<String> genres, List<String> styles,
+			Integer year) {
 		List<DiscogsReleaseResponse.Artist> artists = artistName == null ? List.of()
 				: List.of(new DiscogsReleaseResponse.Artist(artistName));
 		List<DiscogsReleaseResponse.Label> labels = labelName == null ? List.of()
@@ -100,7 +111,7 @@ public final class DiscogsFixture {
 		List<DiscogsReleaseResponse.Image> images = List.of(
 				new DiscogsReleaseResponse.Image("primary", "https://i.discogs.com/large.jpeg",
 						"https://i.discogs.com/150.jpeg"));
-		return new DiscogsReleaseResponse(249504L, "Kind Of Blue", artists, labels, "Germany", 1959, genres, styles,
+		return new DiscogsReleaseResponse(249504L, "Kind Of Blue", artists, labels, "Germany", year, genres, styles,
 				formats, identifiers, images, 21247L, "Discogs 원본 노트");
 	}
 }

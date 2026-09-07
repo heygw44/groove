@@ -212,5 +212,75 @@ class CatalogImportRegistrarTest {
 					.toList();
 			assertThat(genreNames).containsExactly("Jazz");
 		}
+
+		@Test
+		@DisplayName("genreNames 가 null 이면 장르 연결을 건너뛴다")
+		void skipsGenreLinkingWhenGenreNamesIsNull() {
+			// given
+			CatalogImportItem item = new CatalogImportItem(123L, 21247L, "Kind of Blue", "Miles Davis", "Columbia",
+					"US", 1959, "CS 8163", "888880123456", EditionType.STANDARD, null, new BigDecimal("45000"));
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Label label = LabelFixture.withId(LabelFixture.create("Columbia"), 2L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist), 3L);
+			given(artistRepository.findFirstByNameOrderByIdAsc("Miles Davis")).willReturn(Optional.of(artist));
+			given(labelRepository.findFirstByNameOrderByIdAsc("Columbia")).willReturn(Optional.of(label));
+			given(albumRepository.findByDiscogsMasterId(21247L)).willReturn(Optional.of(album));
+			given(productRepository.save(any(Product.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+			// when
+			registrar.register(item);
+
+			// then
+			verify(genreRepository, never()).findByName(any());
+			verify(productRepository).save(productCaptor.capture());
+			assertThat(productCaptor.getValue().getProductGenres()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("레이블명이 비어 있으면 레이블 없이 상품을 만든다")
+		void createsProductWithoutLabelWhenLabelNameIsBlank() {
+			// given
+			CatalogImportItem item = new CatalogImportItem(123L, 21247L, "Kind of Blue", "Miles Davis", "  ", "US",
+					1959, "CS 8163", "888880123456", EditionType.STANDARD, List.of(), new BigDecimal("45000"));
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist), 3L);
+			given(artistRepository.findFirstByNameOrderByIdAsc("Miles Davis")).willReturn(Optional.of(artist));
+			given(albumRepository.findByDiscogsMasterId(21247L)).willReturn(Optional.of(album));
+			given(productRepository.save(any(Product.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+			// when
+			registrar.register(item);
+
+			// then
+			verify(labelRepository, never()).findFirstByNameOrderByIdAsc(any());
+			verify(productRepository).save(productCaptor.capture());
+			assertThat(productCaptor.getValue().getLabel()).isNull();
+		}
+
+		@Test
+		@DisplayName("masterId 가 없고 제목/아티스트로도 앨범을 찾지 못하면 마스터 연결 없이 새 앨범을 만든다")
+		void createsAlbumWithoutMasterLinkWhenMasterIdNullAndNotFound() {
+			// given
+			CatalogImportItem item = item(null);
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Label label = LabelFixture.withId(LabelFixture.create("Columbia"), 2L);
+			given(artistRepository.findFirstByNameOrderByIdAsc("Miles Davis")).willReturn(Optional.of(artist));
+			given(labelRepository.findFirstByNameOrderByIdAsc("Columbia")).willReturn(Optional.of(label));
+			given(albumRepository.findFirstByTitleAndArtistIdOrderByIdAsc("Kind of Blue", 1L))
+					.willReturn(Optional.empty());
+			Album newAlbum = AlbumFixture.withId(AlbumFixture.create(artist), 3L);
+			given(albumRepository.save(any(Album.class))).willReturn(newAlbum);
+			given(genreRepository.findByName("Jazz")).willReturn(Optional.of(GenreFixture.create("Jazz")));
+			given(genreRepository.findByName("Unknown")).willReturn(Optional.empty());
+			given(productRepository.save(any(Product.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+			// when
+			registrar.register(item);
+
+			// then
+			ArgumentCaptor<Album> albumCaptor = ArgumentCaptor.forClass(Album.class);
+			verify(albumRepository).save(albumCaptor.capture());
+			assertThat(albumCaptor.getValue().getDiscogsMasterId()).isNull();
+		}
 	}
 }

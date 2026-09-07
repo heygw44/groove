@@ -79,6 +79,13 @@ public final class ProductFixture {
 				newAlbum, "US", RELEASE_DATE.getYear(), "CS 8163", "888880123456", EditionType.STANDARD);
 	}
 
+	public static ProductCreateRequest createRequest(Long artistId, Long labelId, List<Long> genreIds,
+			List<String> imageUrls) {
+		return new ProductCreateRequest(TITLE, artistId, labelId, genreIds, RELEASE_DATE, "180g", "Black", PRICE,
+				"설명", imageUrls, 10, 1L, null, "US", RELEASE_DATE.getYear(), "CS 8163", "888880123456",
+				EditionType.STANDARD);
+	}
+
 	public static ProductUpdateRequest updateRequest(Long artistId, Long labelId, List<Long> genreIds) {
 		JsonNullable<Long> label = labelId == null ? JsonNullable.undefined() : JsonNullable.of(labelId);
 		return new ProductUpdateRequest("A Love Supreme", artistId, label, genreIds, RELEASE_DATE, "180g", "Black",
@@ -96,5 +103,26 @@ public final class ProductFixture {
 		return new ProductUpdateRequest(null, null, labelId, null, null, null, null, null, null, null,
 				JsonNullable.undefined(), JsonNullable.undefined(), JsonNullable.undefined(),
 				JsonNullable.undefined(), null);
+	}
+
+	public static ProductUpdateRequest updateRequestWithCountry(JsonNullable<String> country) {
+		return new ProductUpdateRequest(null, null, JsonNullable.undefined(), null, null, null, null, null, null,
+				null, country, JsonNullable.undefined(), JsonNullable.undefined(), JsonNullable.undefined(), null);
+	}
+
+	public static ProductUpdateRequest updateRequestWithPressingYear(JsonNullable<Integer> pressingYear) {
+		return new ProductUpdateRequest(null, null, JsonNullable.undefined(), null, null, null, null, null, null,
+				null, JsonNullable.undefined(), pressingYear, JsonNullable.undefined(), JsonNullable.undefined(),
+				null);
+	}
+
+	public static ProductUpdateRequest updateRequestWithCatalogNo(JsonNullable<String> catalogNo) {
+		return new ProductUpdateRequest(null, null, JsonNullable.undefined(), null, null, null, null, null, null,
+				null, JsonNullable.undefined(), JsonNullable.undefined(), catalogNo, JsonNullable.undefined(), null);
+	}
+
+	public static ProductUpdateRequest updateRequestWithBarcode(JsonNullable<String> barcode) {
+		return new ProductUpdateRequest(null, null, JsonNullable.undefined(), null, null, null, null, null, null,
+				null, JsonNullable.undefined(), JsonNullable.undefined(), JsonNullable.undefined(), barcode, null);
 	}
 }
