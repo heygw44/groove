@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { CountdownTimer } from '@/components/limited/CountdownTimer';
@@ -105,7 +106,7 @@ export default function LimitedDropDetailPage() {
 
   if (isError || !drop || !phase) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <PageContainer size="sm">
         <EmptyState
           title="한정반 정보를 불러오지 못했습니다."
           description={getErrorMessage(error)}
@@ -115,7 +116,7 @@ export default function LimitedDropDetailPage() {
             </Button>
           }
         />
-      </div>
+      </PageContainer>
     );
   }
 
@@ -177,7 +178,7 @@ export default function LimitedDropDetailPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
+    <PageContainer size="sm">
       <Link to="/limited-drops" className="text-sm text-content-muted">
         ← 한정반 목록
       </Link>
@@ -242,6 +243,6 @@ export default function LimitedDropDetailPage() {
         linkTo={resultModal?.linkTo}
         linkLabel={resultModal?.linkLabel}
       />
-    </div>
+    </PageContainer>
   );
 }

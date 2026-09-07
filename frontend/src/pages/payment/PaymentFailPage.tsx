@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { getTossFailMessage, parsePaymentFailParams } from '@/utils/paymentRedirect';
 
 export default function PaymentFailPage() {
@@ -19,14 +20,16 @@ export default function PaymentFailPage() {
   const backTo = orderRef ? `/orders/${orderRef}` : '/orders';
 
   return (
-    <EmptyState
-      title="결제에 실패했습니다"
-      description={description}
-      action={
-        <Button variant="secondary" onClick={() => navigate(backTo)}>
-          주문으로 돌아가 다시 시도
-        </Button>
-      }
-    />
+    <PageContainer size="sm">
+      <EmptyState
+        title="결제에 실패했습니다"
+        description={description}
+        action={
+          <Button variant="secondary" onClick={() => navigate(backTo)}>
+            주문으로 돌아가 다시 시도
+          </Button>
+        }
+      />
+    </PageContainer>
   );
 }

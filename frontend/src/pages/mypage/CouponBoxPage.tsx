@@ -29,7 +29,7 @@ export default function CouponBoxPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold">쿠폰함</h1>
+      <h2 className="text-xl font-bold">쿠폰함</h2>
 
       <div className="mt-5">
         <SectionCard title="쿠폰 등록" description="쿠폰 코드를 입력해 발급받으세요.">

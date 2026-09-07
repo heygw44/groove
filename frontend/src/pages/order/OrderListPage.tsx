@@ -33,7 +33,7 @@ export default function OrderListPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold">주문 내역</h1>
+      <h2 className="text-xl font-bold">주문 내역</h2>
 
       <div className="mt-5">
         <OrderStatusTabs value={filters.status} onChange={updateStatus} />
