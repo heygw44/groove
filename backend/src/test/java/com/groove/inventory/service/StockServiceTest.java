@@ -14,9 +14,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.ProductFixture;
@@ -30,6 +33,7 @@ import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.entity.StockHistory;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.notification.service.RestockEvent;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 
@@ -44,11 +48,14 @@ class StockServiceTest {
 	@Mock
 	StockHistoryRepository stockHistoryRepository;
 
+	@Mock
+	ApplicationEventPublisher eventPublisher;
+
 	StockService stockService;
 
 	@BeforeEach
 	void setUp() {
-		stockService = new StockService(stockRepository, stockHistoryRepository);
+		stockService = new StockService(stockRepository, stockHistoryRepository, eventPublisher);
 	}
 
 	@Nested
@@ -219,6 +226,36 @@ class StockServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
 			verify(stockHistoryRepository, never()).save(any());
+		}
+
+		@ParameterizedTest(name = "{0} -> {1} 이면 발행 여부는 {2}")
+		@DisplayName("0에서 양수로 바뀔 때만 재입고 이벤트를 발행한다")
+		@CsvSource({
+			"0, 0, false",
+			"0, 5, true",
+			"5, 8, false",
+			"5, 0, false",
+		})
+		void publishesRestockEventOnlyWhenQuantityBecomesPositiveFromZero(
+				int before, int after, boolean shouldPublish) {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+			Stock stock = StockFixture.create(product, before);
+			given(stockRepository.findWithProductByProductId(PRODUCT_ID)).willReturn(Optional.of(stock));
+			StockAdjustRequest request = StockFixture.adjustRequest(StockChangeType.ADJUST, after);
+
+			// when
+			stockService.adjust(PRODUCT_ID, request);
+
+			// then
+			if (shouldPublish) {
+				ArgumentCaptor<RestockEvent> captor = ArgumentCaptor.forClass(RestockEvent.class);
+				verify(eventPublisher).publishEvent(captor.capture());
+				assertThat(captor.getValue().productId()).isEqualTo(PRODUCT_ID);
+				assertThat(captor.getValue().productTitle()).isEqualTo(product.getTitle());
+			} else {
+				verify(eventPublisher, never()).publishEvent(any(RestockEvent.class));
+			}
 		}
 	}
 

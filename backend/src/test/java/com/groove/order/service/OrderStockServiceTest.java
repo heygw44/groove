@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
@@ -20,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.PessimisticLockingFailureException;
 
@@ -36,6 +38,7 @@ import com.groove.inventory.entity.StockHistory;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Member;
+import com.groove.notification.service.RestockEvent;
 import com.groove.order.entity.Order;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -51,6 +54,9 @@ class OrderStockServiceTest {
 	@Mock
 	StockHistoryRepository stockHistoryRepository;
 
+	@Mock
+	ApplicationEventPublisher eventPublisher;
+
 	OrderStockService orderStockService;
 
 	Order order;
@@ -58,7 +64,7 @@ class OrderStockServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		orderStockService = new OrderStockService(stockRepository, stockHistoryRepository);
+		orderStockService = new OrderStockService(stockRepository, stockHistoryRepository, eventPublisher);
 
 		Member member = MemberFixture.create();
 		Artist artist = ArtistFixture.withId(1L);
@@ -222,6 +228,63 @@ class OrderStockServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.STOCK_CONFLICT);
 			verify(stockHistoryRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("취소 복구로 품절이 풀리면 재입고 이벤트를 발행한다")
+		void publishesRestockEventWhenSoldOutProductRestored() {
+			// given
+			Product product = order.getItems().get(0).getProduct();
+			Stock soldOutStock = StockFixture.create(product, 0);
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willReturn(List.of(soldOutStock));
+
+			// when
+			orderStockService.restore(order);
+
+			// then
+			ArgumentCaptor<RestockEvent> captor = ArgumentCaptor.forClass(RestockEvent.class);
+			verify(eventPublisher).publishEvent(captor.capture());
+			assertThat(captor.getValue().productId()).isEqualTo(PRODUCT_ID);
+			assertThat(captor.getValue().productTitle()).isEqualTo(product.getTitle());
+		}
+
+		@Test
+		@DisplayName("취소 복구 후에도 재고가 남아 있던 상품이면 재입고 이벤트를 발행하지 않는다")
+		void doesNotPublishRestockEventWhenProductWasNotSoldOut() {
+			// given (setUp 의 stock 은 복구 전에도 수량이 10이라 품절 상태가 아니었다)
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID)))
+					.willReturn(List.of(stock));
+
+			// when
+			orderStockService.restore(order);
+
+			// then
+			verify(eventPublisher, never()).publishEvent(any(RestockEvent.class));
+		}
+
+		@Test
+		@DisplayName("여러 상품 중 품절이었던 상품만 재입고 이벤트를 발행한다")
+		void publishesRestockEventOnlyForProductsThatWereSoldOut() {
+			// given
+			Member member = MemberFixture.create();
+			Artist artist = ArtistFixture.withId(1L);
+			Product soldOutProduct = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			Product inStockProduct = ProductFixture.withId(ProductFixture.create(artist), 200L);
+			Order multiItemOrder = OrderFixture.withId(
+					OrderFixture.createWithItems(member, List.of(soldOutProduct, inStockProduct)), 701L);
+			Stock soldOutStock = StockFixture.create(soldOutProduct, 0);
+			Stock inStockStock = StockFixture.create(inStockProduct, 5);
+			given(stockRepository.findAllWithProductByProductIdInForUpdate(List.of(PRODUCT_ID, 200L)))
+					.willReturn(List.of(soldOutStock, inStockStock));
+
+			// when
+			orderStockService.restore(multiItemOrder);
+
+			// then
+			ArgumentCaptor<RestockEvent> captor = ArgumentCaptor.forClass(RestockEvent.class);
+			verify(eventPublisher, times(1)).publishEvent(captor.capture());
+			assertThat(captor.getValue().productId()).isEqualTo(PRODUCT_ID);
 		}
 	}
 }

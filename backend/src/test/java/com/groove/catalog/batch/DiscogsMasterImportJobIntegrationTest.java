@@ -1,12 +1,14 @@
 package com.groove.catalog.batch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,14 +35,26 @@ import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.dto.CatalogImportItem;
 import com.groove.catalog.service.CatalogImportRegistrar;
 import com.groove.catalog.support.FakePressingLookupClient;
+import com.groove.fixture.AlbumFixture;
+import com.groove.fixture.AlbumWatchFixture;
+import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.DiscogsFixture;
 import com.groove.fixture.GenreFixture;
+import com.groove.fixture.MemberFixture;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.member.entity.Member;
+import com.groove.member.repository.MemberRepository;
+import com.groove.notification.entity.Notification;
+import com.groove.notification.entity.NotificationType;
+import com.groove.notification.repository.AlbumWatchRepository;
+import com.groove.notification.repository.NotificationRepository;
 import com.groove.product.entity.Album;
+import com.groove.product.entity.Artist;
 import com.groove.product.entity.EditionType;
 import com.groove.product.entity.Product;
 import com.groove.product.entity.ProductStatus;
 import com.groove.product.repository.AlbumRepository;
+import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
@@ -80,6 +94,18 @@ class DiscogsMasterImportJobIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private GenreRepository genreRepository;
+
+	@Autowired
+	private ArtistRepository artistRepository;
+
+	@Autowired
+	private MemberRepository memberRepository;
+
+	@Autowired
+	private AlbumWatchRepository albumWatchRepository;
+
+	@Autowired
+	private NotificationRepository notificationRepository;
 
 	private FakePressingLookupClient fake;
 	private JobLauncherTestUtils jobLauncherTestUtils;
@@ -327,6 +353,48 @@ class DiscogsMasterImportJobIntegrationTest extends IntegrationTestSupport {
 			assertThat(stepExecution.getFilterCount()).isEqualTo(1);
 			assertThat(findProducts(Set.of(vinylReleaseId))).hasSize(1);
 			assertThat(findProducts(Set.of(cdReleaseId))).isEmpty();
+		}
+
+		@Test
+		@DisplayName("같은 마스터의 프레싱을 여러 건 적재해도 구독자에게 새 프레싱 알림이 한 건만 생긴다")
+		void createsSingleNewPressingNotificationPerAlbum() throws Exception {
+			// given
+			long masterId = 9110008L;
+			long releaseA = 9110008001L;
+			long releaseB = 9110008002L;
+			long releaseC = 9110008003L;
+
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Album album = AlbumFixture.create(artist);
+			album.linkDiscogsMaster(masterId);
+			albumRepository.save(album);
+
+			Member member = memberRepository.save(MemberFixture.create("pressing-watcher@groove.com"));
+			albumWatchRepository.save(AlbumWatchFixture.create(member, album));
+
+			fake.addRelease(release(releaseA, masterId, "Album A", "Artist A"));
+			fake.addRelease(release(releaseB, masterId, "Album B", "Artist B"));
+			fake.addRelease(release(releaseC, masterId, "Album C", "Artist C"));
+			fake.addMaster(masterId, List.of(
+					List.of(vinylVersion(releaseA), vinylVersion(releaseB), vinylVersion(releaseC))));
+
+			// when
+			JobExecution execution = jobLauncherTestUtils.launchJob(jobParameters(masterId));
+
+			// then
+			assertThat(execution.getStatus()).isEqualTo(BatchStatus.COMPLETED);
+			StepExecution stepExecution = execution.getStepExecutions().iterator().next();
+			assertThat(stepExecution.getWriteCount()).isEqualTo(3);
+
+			// 알림이 3건 쌓이는 회귀를 잡으려면 "1건이 된 순간"이 아니라 1건인 상태가 유지되는지를 봐야 한다.
+			await().atMost(5, TimeUnit.SECONDS).during(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+				List<Notification> notifications = notificationRepository.findAll().stream()
+						.filter(notification -> notification.getMember().getId().equals(member.getId()))
+						.toList();
+				assertThat(notifications).hasSize(1);
+				assertThat(notifications.get(0).getType()).isEqualTo(NotificationType.NEW_PRESSING);
+				assertThat(notifications.get(0).getAlbum().getId()).isEqualTo(album.getId());
+			});
 		}
 	}
 

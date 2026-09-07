@@ -1,5 +1,6 @@
 package com.groove.inventory.service;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +13,7 @@ import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.entity.StockHistory;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.notification.service.RestockEvent;
 import com.groove.product.entity.Product;
 
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class StockService {
 
 	private final StockRepository stockRepository;
 	private final StockHistoryRepository stockHistoryRepository;
+	private final ApplicationEventPublisher eventPublisher;
 
 	@Transactional
 	public Stock create(Product product, int initialQuantity) {
@@ -43,11 +46,16 @@ public class StockService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
 
 		int quantity = request.quantity();
+		int before = stock.getQuantity();
 		int delta = applyChange(stock, request.changeType(), quantity);
 
 		// 이력 INSERT 가 stock 행에 FK 공유 락을 잡아 UPDATE 와 데드락이 나므로 재고 UPDATE 를 먼저 flush 한다.
 		stockRepository.flush();
 		stockHistoryRepository.save(StockHistory.of(stock, request.changeType(), delta, request.reason()));
+
+		if (before == 0 && stock.getQuantity() > 0) {
+			eventPublisher.publishEvent(new RestockEvent(productId, stock.getProduct().getTitle()));
+		}
 		return StockResponse.from(stock);
 	}
 

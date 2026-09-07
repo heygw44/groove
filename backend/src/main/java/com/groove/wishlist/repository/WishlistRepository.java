@@ -24,4 +24,7 @@ public interface WishlistRepository extends JpaRepository<Wishlist, Long> {
 
 	@Query("select w.product.id from Wishlist w where w.member.id = :memberId")
 	List<Long> findProductIdsByMemberId(@Param("memberId") Long memberId);
+
+	@Query("select w.member.id from Wishlist w where w.product.id = :productId and w.alertEnabled = true")
+	List<Long> findAlertEnabledMemberIdsByProductId(@Param("productId") Long productId);
 }

@@ -2,6 +2,7 @@ package com.groove.catalog.service;
 
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -16,6 +17,7 @@ import com.groove.catalog.dto.CatalogImportResponse;
 import com.groove.catalog.dto.CatalogImportResult;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.notification.service.NewPressingEvent;
 import com.groove.product.entity.Genre;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.ProductRepository;
@@ -37,6 +39,7 @@ public class CatalogImportService {
 	private final CatalogImportRegistrar registrar;
 	private final AdminAuditLogService adminAuditLogService;
 	private final TransactionTemplate transactionTemplate;
+	private final ApplicationEventPublisher eventPublisher;
 
 	public CatalogImportResponse importRelease(Long adminId, CatalogImportRequest request) {
 		long releaseId = request.discogsReleaseId();
@@ -62,6 +65,7 @@ public class CatalogImportService {
 			CatalogImportResult registered = registrar.register(item);
 			adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_IMPORT, AdminAuditTargetType.PRODUCT,
 					registered.productId(), "discogsReleaseId=" + releaseId);
+			eventPublisher.publishEvent(new NewPressingEvent(registered.albumId(), registered.albumTitle()));
 			return registered;
 		});
 

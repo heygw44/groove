@@ -106,6 +106,7 @@ class CatalogImportRegistrarTest {
 			verify(albumRepository, never()).save(any());
 			assertThat(result.productId()).isEqualTo(10L);
 			assertThat(result.albumId()).isEqualTo(3L);
+			assertThat(result.albumTitle()).isEqualTo(album.getTitle());
 		}
 
 		@Test
