@@ -87,6 +87,6 @@ describe('ArtistChipPicker', () => {
 
     // then
     expect(screen.getByRole('combobox')).toBeDisabled();
-    expect(screen.getByPlaceholderText('최대 2명까지 고를 수 있어요')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('최대 2명까지 고를 수 있습니다')).toBeInTheDocument();
   });
 });

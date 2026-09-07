@@ -15,11 +15,7 @@ const baseAlbum: Omit<AlbumDetail, 'pressings'> = {
   artist: { id: 1, name: 'Miles Davis' },
 };
 
-const renderSection = (
-  album: AlbumDetail,
-  currentProductId: number,
-  hasOtherPressings = true,
-) => {
+const renderSection = (album: AlbumDetail, currentProductId: number, hasOtherPressings = true) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(albumKeys.detail(album.id), album);
   useAuthStore.setState({ accessToken: null, member: null, isBootstrapping: false });
@@ -93,9 +89,9 @@ describe('AlbumPressingsSection', () => {
     renderSection(album, 1);
 
     // then
-    expect(screen.getByText('이 앨범의 다른 프레싱')).toBeInTheDocument();
+    expect(screen.getByText('이 앨범의 다른 에디션')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '구독' })).toBeInTheDocument();
-    expect(screen.getByText('아직 다른 프레싱이 없어요.')).toBeInTheDocument();
+    expect(screen.getByText('아직 다른 에디션이 없습니다.')).toBeInTheDocument();
   });
 
   it('hasOtherPressings 가 false 면 조회 없이 안내 문구를 보여준다', () => {
@@ -126,8 +122,8 @@ describe('AlbumPressingsSection', () => {
     renderSection(album, 1, false);
 
     // then
-    expect(screen.getByText('이 앨범의 다른 프레싱')).toBeInTheDocument();
-    expect(screen.getByText('아직 다른 프레싱이 없어요.')).toBeInTheDocument();
+    expect(screen.getByText('이 앨범의 다른 에디션')).toBeInTheDocument();
+    expect(screen.getByText('아직 다른 에디션이 없습니다.')).toBeInTheDocument();
     expect(screen.queryByText('재발매 프레싱')).not.toBeInTheDocument();
   });
 
@@ -161,6 +157,6 @@ describe('AlbumPressingsSection', () => {
     renderSection(album, 1);
 
     // then
-    expect(screen.getByText('일본 · 1990 · 재발매')).toBeInTheDocument();
+    expect(screen.getByText('일본 · 1990 · 재발매반')).toBeInTheDocument();
   });
 });

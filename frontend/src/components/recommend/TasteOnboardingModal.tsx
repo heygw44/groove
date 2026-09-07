@@ -48,8 +48,8 @@ export function TasteOnboardingModal() {
     <Modal
       open={open}
       onClose={dismiss}
-      title="어떤 판을 좋아하세요?"
-      description="취향을 알려주면 홈에서 판을 골라드려요."
+      title="좋아하는 앨범을 알려주세요"
+      description="취향을 알려주면 홈에서 취향에 맞는 앨범을 추천해드립니다."
       placement="bottom"
       size="md"
       footer={

@@ -157,7 +157,7 @@ export function ProductFilterPanel({
 
       <div className={SECTION_CLASS}>
         <label htmlFor={`${uid}-country`} className="mb-1.5 block text-sm font-bold">
-          프레싱 국가
+          제작 국가
         </label>
         <Select
           id={`${uid}-country`}
@@ -233,7 +233,7 @@ export function ProductFilterPanel({
 
       <div className={SECTION_CLASS}>
         <fieldset>
-          <legend className="mb-1.5 text-sm font-bold">프레싱 연도</legend>
+          <legend className="mb-1.5 text-sm font-bold">제작 연도</legend>
           <div className="flex items-center gap-2">
             <Input
               type="number"
@@ -242,7 +242,7 @@ export function ProductFilterPanel({
               placeholder="시작"
               value={pressingYearFrom}
               onChange={(event) => setPressingYearFrom(event.target.value)}
-              aria-label="프레싱 연도 시작"
+              aria-label="제작 연도 시작"
             />
             <span aria-hidden className="text-content-subtle">
               ~
@@ -259,7 +259,7 @@ export function ProductFilterPanel({
                   applyPressingYearRange();
                 }
               }}
-              aria-label="프레싱 연도 종료"
+              aria-label="제작 연도 종료"
             />
           </div>
           {pressingYearError && (

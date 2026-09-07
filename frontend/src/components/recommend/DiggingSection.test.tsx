@@ -52,8 +52,8 @@ describe('DiggingSection', () => {
     renderSection({ loggedIn: false });
 
     // then
-    expect(screen.queryByText('당신을 위한 디깅')).not.toBeInTheDocument();
-    expect(screen.queryByText('취향을 알려주면 판을 골라드려요')).not.toBeInTheDocument();
+    expect(screen.queryByText('레코드러버님을 위한 추천')).not.toBeInTheDocument();
+    expect(screen.queryByText('취향을 알려주면 추천해드립니다')).not.toBeInTheDocument();
   });
 
   it('profileRequired 면 취향 설정 유도 카드를 보여준다', () => {
@@ -61,7 +61,7 @@ describe('DiggingSection', () => {
     renderSection({ homeData: { profileRequired: true, items: [] } });
 
     // then
-    expect(screen.getByText('취향을 알려주면 판을 골라드려요')).toBeInTheDocument();
+    expect(screen.getByText('취향을 알려주면 추천해드립니다')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '취향 설정하기' })).toHaveAttribute(
       'href',
       '/mypage/taste',
@@ -92,14 +92,14 @@ describe('DiggingSection', () => {
     renderSection({ homeData });
 
     // then
-    expect(screen.getByText('당신을 위한 디깅')).toBeInTheDocument();
+    expect(screen.getByText('레코드러버님을 위한 추천')).toBeInTheDocument();
     expect(screen.getByText('판 A')).toBeInTheDocument();
     expect(screen.getByText('인기 상품')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '취향 설정하기' })).toHaveAttribute(
       'href',
       '/mypage/taste',
     );
-    expect(screen.queryByText('취향을 알려주면 판을 골라드려요')).not.toBeInTheDocument();
+    expect(screen.queryByText('취향을 알려주면 추천해드립니다')).not.toBeInTheDocument();
   });
 
   it('추천 상품과 이유 배지를 최대 2개까지 렌더한다', () => {
@@ -138,7 +138,7 @@ describe('DiggingSection', () => {
     renderSection({ homeData });
 
     // then
-    expect(screen.getByText('당신을 위한 디깅')).toBeInTheDocument();
+    expect(screen.getByText('레코드러버님을 위한 추천')).toBeInTheDocument();
     expect(screen.getByText('판 A')).toBeInTheDocument();
     expect(screen.getByText('판 B')).toBeInTheDocument();
     expect(screen.getByText('취향 장르')).toBeInTheDocument();
