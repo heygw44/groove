@@ -33,6 +33,26 @@ const NAV_ITEMS: MyPageNavItem[] = [
     ),
   },
   {
+    to: '/notifications',
+    label: '알림',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M5 8.5a5 5 0 0 1 10 0c0 3 1 4.2 1.5 4.8H3.5C4 12.7 5 11.5 5 8.5Z" />
+        <path d="M8.3 15.8a1.8 1.8 0 0 0 3.4 0" />
+      </svg>
+    ),
+  },
+  {
     to: '/orders',
     label: '주문 내역',
     icon: (
