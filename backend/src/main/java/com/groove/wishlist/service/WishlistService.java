@@ -101,6 +101,14 @@ public class WishlistService {
 		wishlistRepository.delete(wishlist);
 	}
 
+	@Transactional
+	public WishlistItemResponse changeAlert(Long memberId, Long productId, boolean alertEnabled) {
+		Wishlist wishlist = wishlistRepository.findByMemberIdAndProductId(memberId, productId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.WISHLIST_NOT_FOUND));
+		wishlist.changeAlert(alertEnabled);
+		return WishlistItemResponse.from(wishlist, findThumbnailUrl(productId), findStockQuantity(productId));
+	}
+
 	private int findStockQuantity(Long productId) {
 		return stockRepository.findByProductId(productId).map(Stock::getQuantity).orElse(0);
 	}
