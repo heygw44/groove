@@ -19,3 +19,11 @@ export const markNotificationRead = async (id: number) => {
 export const markAllNotificationsRead = async () => {
   await client.patch<ApiResponse<void>>('/members/me/notifications/read-all');
 };
+
+export const deleteNotification = async (id: number) => {
+  await client.delete<ApiResponse<void>>(`/notifications/${id}`);
+};
+
+export const deleteReadNotifications = async () => {
+  await client.delete<ApiResponse<void>>('/members/me/notifications/read');
+};

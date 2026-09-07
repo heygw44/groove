@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -210,6 +211,83 @@ class NotificationControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(notificationService, never()).markAllRead(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("DELETE /api/v1/notifications/{id}")
+	class Delete {
+
+		@Test
+		@DisplayName("본인 알림이면 200 을 반환하고 삭제한다")
+		void deletesWhenOwner() throws Exception {
+			// when & then
+			mockMvc.perform(delete("/api/v1/notifications/301").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.success", is(true)));
+			verify(notificationService).delete(1L, 301L);
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 알림이면 404 NOTIFICATION_NOT_FOUND 를 반환한다")
+		void returnsNotFoundWhenNotificationMissing() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND))
+					.given(notificationService).delete(1L, 301L);
+
+			// when & then
+			mockMvc.perform(delete("/api/v1/notifications/301").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isNotFound())
+					.andExpect(jsonPath("$.error.code", is("NOTIFICATION_NOT_FOUND")));
+		}
+
+		@Test
+		@DisplayName("본인 알림이 아니면 403 NOTIFICATION_FORBIDDEN 을 반환한다")
+		void returnsForbiddenWhenNotOwner() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.NOTIFICATION_FORBIDDEN))
+					.given(notificationService).delete(1L, 301L);
+
+			// when & then
+			mockMvc.perform(delete("/api/v1/notifications/301").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("NOTIFICATION_FORBIDDEN")));
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(delete("/api/v1/notifications/301"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(notificationService, never()).delete(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("DELETE /api/v1/members/me/notifications/read")
+	class DeleteRead {
+
+		@Test
+		@DisplayName("인증된 요청이면 200 을 반환하고 읽은 알림을 일괄 삭제한다")
+		void deletesReadNotifications() throws Exception {
+			// when & then
+			mockMvc.perform(delete("/api/v1/members/me/notifications/read")
+							.header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.success", is(true)));
+			verify(notificationService).deleteRead(1L);
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(delete("/api/v1/members/me/notifications/read"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(notificationService, never()).deleteRead(any());
 		}
 	}
 }

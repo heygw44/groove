@@ -1,5 +1,6 @@
 package com.groove.notification.controller;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -57,6 +58,20 @@ public class NotificationController {
 	@PatchMapping("/members/me/notifications/read-all")
 	public ApiResponse<Void> markAllRead(@AuthMember LoginMember loginMember) {
 		notificationService.markAllRead(loginMember.id());
+		return ApiResponse.ok();
+	}
+
+	@Operation(summary = "알림 삭제")
+	@DeleteMapping("/notifications/{id}")
+	public ApiResponse<Void> delete(@AuthMember LoginMember loginMember, @PathVariable Long id) {
+		notificationService.delete(loginMember.id(), id);
+		return ApiResponse.ok();
+	}
+
+	@Operation(summary = "읽은 알림 일괄 삭제")
+	@DeleteMapping("/members/me/notifications/read")
+	public ApiResponse<Void> deleteRead(@AuthMember LoginMember loginMember) {
+		notificationService.deleteRead(loginMember.id());
 		return ApiResponse.ok();
 	}
 }

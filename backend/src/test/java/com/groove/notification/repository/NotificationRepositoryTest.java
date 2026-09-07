@@ -153,4 +153,30 @@ class NotificationRepositoryTest extends DataJpaTestSupport {
 					.isNull();
 		}
 	}
+
+	@Nested
+	@DisplayName("deleteAllByMemberIdAndReadAtIsNotNull()")
+	class DeleteAllByMemberIdAndReadAtIsNotNull {
+
+		@Test
+		@DisplayName("읽은 알림만 삭제하고 안 읽은 알림은 남긴다")
+		void deletesOnlyReadNotifications() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("notification-repo-deleteread@groove.com"));
+			Product product = createProduct("deleteread");
+
+			Notification read = notificationRepository.save(NotificationFixture.forProduct(member, product));
+			read.markRead(LocalDateTime.now());
+			notificationRepository.save(read);
+			Notification unread = notificationRepository.save(NotificationFixture.forProduct(member, product));
+
+			// when
+			int deleted = notificationRepository.deleteAllByMemberIdAndReadAtIsNotNull(member.getId());
+
+			// then
+			assertThat(deleted).isEqualTo(1);
+			assertThat(notificationRepository.findById(read.getId())).isEmpty();
+			assertThat(notificationRepository.findById(unread.getId())).isPresent();
+		}
+	}
 }
