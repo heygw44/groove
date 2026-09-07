@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { NotificationRow } from '@/components/notification/NotificationRow';
 import {
+  useDeleteNotification,
+  useDeleteReadNotifications,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
 } from '@/hooks/mutations/useNotificationMutations';
@@ -24,6 +28,7 @@ export default function NotificationListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const page = parsePage(searchParams);
   const unreadOnly = searchParams.get('unreadOnly') === 'true';
+  const [isDeleteReadOpen, setIsDeleteReadOpen] = useState(false);
 
   const { showToast } = useToast();
   const { data, isPending, isError, isPlaceholderData, refetch } = useNotifications({
@@ -33,6 +38,8 @@ export default function NotificationListPage() {
   });
   const markReadMutation = useMarkNotificationRead();
   const markAllReadMutation = useMarkAllNotificationsRead();
+  const deleteMutation = useDeleteNotification();
+  const deleteReadMutation = useDeleteReadNotifications();
 
   const updatePage = (nextPage: number) => {
     setSearchParams((prev) => {
@@ -67,6 +74,37 @@ export default function NotificationListPage() {
     markReadMutation.mutate({ id });
   };
 
+  const handleDelete = (id: number) => {
+    // 지금 페이지의 마지막 한 건을 지우는 경우, 삭제 후 목록이 비므로 이전 페이지로 내려간다.
+    const isLastItemOnPage = data?.content.length === 1 && page > 0;
+
+    deleteMutation.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          showToast('success', '알림을 삭제했습니다.');
+          if (isLastItemOnPage) {
+            updatePage(page - 1);
+          }
+        },
+        onError: (error) => showToast('error', getErrorMessage(error)),
+      },
+    );
+  };
+
+  const handleDeleteRead = () => {
+    deleteReadMutation.mutate(undefined, {
+      onSuccess: () => {
+        setIsDeleteReadOpen(false);
+        showToast('success', '읽은 알림을 모두 삭제했습니다.');
+      },
+      onError: (error) => {
+        setIsDeleteReadOpen(false);
+        showToast('error', getErrorMessage(error));
+      },
+    });
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between gap-4">
@@ -87,6 +125,14 @@ export default function NotificationListPage() {
             disabled={markAllReadMutation.isPending}
           >
             전체 읽음
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsDeleteReadOpen(true)}
+            disabled={deleteReadMutation.isPending}
+          >
+            읽은 알림 지우기
           </Button>
         </div>
       </div>
@@ -118,7 +164,12 @@ export default function NotificationListPage() {
           <div className={isPlaceholderData ? 'opacity-60' : ''}>
             <div className="divide-y divide-line">
               {data.content.map((item) => (
-                <NotificationRow key={item.id} item={item} onRead={handleRead} />
+                <NotificationRow
+                  key={item.id}
+                  item={item}
+                  onRead={handleRead}
+                  onDelete={handleDelete}
+                />
               ))}
             </div>
 
@@ -128,6 +179,15 @@ export default function NotificationListPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={isDeleteReadOpen}
+        onClose={() => setIsDeleteReadOpen(false)}
+        onConfirm={handleDeleteRead}
+        title="읽은 알림을 모두 삭제하시겠습니까?"
+        description="읽은 알림이 전부 사라집니다. 되돌릴 수 없습니다."
+        pending={deleteReadMutation.isPending}
+      />
     </div>
   );
 }
