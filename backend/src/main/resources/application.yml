@@ -76,6 +76,12 @@ discogs:
   base-url: https://api.discogs.com
   token: ${DISCOGS_TOKEN}   # 환경변수 필수. 로컬 기본값은 application-local.yml
   user-agent: "GrooveLP/1.0 +https://groove-lp.duckdns.org"
+  # 토스와 같은 전역 spring.http.client 값을 쓰지 않도록 분리한다.
+  read-timeout: 5s
+  retry:
+    # 순간적 연결 끊김만 되받는다. 404/429 는 대상이 아니고, 배치 재시도(catalog.import.retry-limit)와 곱해진다.
+    max-attempts: 2
+    backoff: 300ms
 
 file:
   upload-path: ${FILE_UPLOAD_PATH:./uploads}

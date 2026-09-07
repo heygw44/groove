@@ -7,8 +7,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -149,20 +147,6 @@ class DiscogsRateLimiterTest {
 		@Override
 		public Instant instant() {
 			return instant;
-		}
-	}
-
-	private static final class RecordingSleeper implements Sleeper {
-
-		private final List<Duration> sleptDurations = new ArrayList<>();
-
-		@Override
-		public void sleep(Duration duration) {
-			sleptDurations.add(duration);
-		}
-
-		private List<Duration> sleptDurations() {
-			return sleptDurations;
 		}
 	}
 }

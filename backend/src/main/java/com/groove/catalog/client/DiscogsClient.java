@@ -5,6 +5,8 @@ import java.util.function.Supplier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -12,6 +14,7 @@ import org.springframework.web.client.RestClientResponseException;
 import com.groove.catalog.client.dto.DiscogsMasterVersionsResponse;
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.client.dto.DiscogsSearchResponse;
+import com.groove.catalog.config.DiscogsProperties;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 
@@ -32,15 +35,20 @@ public class DiscogsClient implements PressingLookupClient {
 
 	private final RestClient restClient;
 	private final DiscogsRateLimiter rateLimiter;
+	private final Sleeper sleeper;
+	private final DiscogsProperties.Retry retry;
 
-	public DiscogsClient(RestClient discogsRestClient, DiscogsRateLimiter rateLimiter) {
+	public DiscogsClient(RestClient discogsRestClient, DiscogsRateLimiter rateLimiter, Sleeper sleeper,
+			DiscogsProperties properties) {
 		this.restClient = discogsRestClient;
 		this.rateLimiter = rateLimiter;
+		this.sleeper = sleeper;
+		this.retry = properties.retry();
 	}
 
 	@Override
 	public DiscogsSearchResponse search(String barcode, String catalogNo, String query, int page) {
-		return call(() -> restClient.get()
+		return call("search", () -> restClient.get()
 				.uri(uriBuilder -> {
 					uriBuilder.path(SEARCH_PATH)
 							.queryParam("type", "release")
@@ -63,7 +71,7 @@ public class DiscogsClient implements PressingLookupClient {
 
 	@Override
 	public DiscogsReleaseResponse getRelease(long releaseId) {
-		return call(() -> restClient.get()
+		return call("getRelease", () -> restClient.get()
 				.uri(RELEASE_PATH, releaseId)
 				.retrieve()
 				.toEntity(DiscogsReleaseResponse.class), ErrorCode.CATALOG_RELEASE_NOT_FOUND);
@@ -71,7 +79,7 @@ public class DiscogsClient implements PressingLookupClient {
 
 	@Override
 	public DiscogsMasterVersionsResponse getMasterVersions(long masterId, int page) {
-		return call(() -> restClient.get()
+		return call("getMasterVersions", () -> restClient.get()
 				.uri(uriBuilder -> uriBuilder.path(MASTER_VERSIONS_PATH)
 						.queryParam("page", page + 1)
 						.queryParam("per_page", PER_PAGE)
@@ -80,7 +88,24 @@ public class DiscogsClient implements PressingLookupClient {
 				.toEntity(DiscogsMasterVersionsResponse.class), ErrorCode.CATALOG_RELEASE_NOT_FOUND);
 	}
 
-	private <T> T call(Supplier<ResponseEntity<T>> request, ErrorCode notFoundErrorCode) {
+	private <T> T call(String operation, Supplier<ResponseEntity<T>> request, ErrorCode notFoundErrorCode) {
+		int attempt = 0;
+		while (true) {
+			attempt++;
+			try {
+				return execute(request, notFoundErrorCode);
+			} catch (RestClientException ex) {
+				if (attempt >= retry.maxAttempts() || !isRetryable(ex)) {
+					throw toLookupFailed(operation, attempt, ex);
+				}
+				log.warn("Discogs 일시 오류로 재시도합니다: operation={} attempt={}/{} type={} message={}",
+						operation, attempt, retry.maxAttempts(), ex.getClass().getSimpleName(), ex.getMessage());
+				sleeper.sleep(retry.backoff());
+			}
+		}
+	}
+
+	private <T> T execute(Supplier<ResponseEntity<T>> request, ErrorCode notFoundErrorCode) {
 		rateLimiter.acquire();
 		try {
 			ResponseEntity<T> response = request.get();
@@ -97,14 +122,22 @@ public class DiscogsClient implements PressingLookupClient {
 			rateLimiter.blockFor(retryAfter);
 			log.warn("Discogs 레이트리밋 초과: retryAfter={}", retryAfter);
 			throw new BusinessException(ErrorCode.CATALOG_RATE_LIMITED);
-		} catch (RestClientResponseException ex) {
-			log.warn("Discogs API 오류 응답: status={}", ex.getStatusCode());
-			throw new BusinessException(ErrorCode.CATALOG_LOOKUP_FAILED,
-					"DISCOGS " + ex.getStatusCode() + " 응답을 받았습니다.");
-		} catch (RestClientException ex) {
-			log.warn("Discogs API 통신 실패", ex);
-			throw new BusinessException(ErrorCode.CATALOG_LOOKUP_FAILED, "DISCOGS 통신 실패: " + ex.getMessage());
 		}
+	}
+
+	private boolean isRetryable(RestClientException ex) {
+		return ex instanceof ResourceAccessException || ex instanceof HttpServerErrorException;
+	}
+
+	private BusinessException toLookupFailed(String operation, int attempts, RestClientException ex) {
+		if (ex instanceof RestClientResponseException responseException) {
+			log.warn("Discogs API 오류 응답: operation={} attempts={} status={}",
+					operation, attempts, responseException.getStatusCode());
+			return new BusinessException(ErrorCode.CATALOG_LOOKUP_FAILED,
+					"DISCOGS " + responseException.getStatusCode() + " 응답을 받았습니다.");
+		}
+		log.warn("Discogs API 통신 실패: operation={} attempts={}", operation, attempts, ex);
+		return new BusinessException(ErrorCode.CATALOG_LOOKUP_FAILED, "DISCOGS 통신 실패: " + ex.getMessage());
 	}
 
 	private void updateRemaining(ResponseEntity<?> response) {
