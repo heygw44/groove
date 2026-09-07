@@ -26,9 +26,11 @@ public interface LimitedDropRepository extends JpaRepository<LimitedDrop, Long> 
 
 	boolean existsByProductIdAndStatusNot(Long productId, LimitedDropStatus status);
 
-	@EntityGraph(attributePaths = "product")
+	// 상세 응답이 product.artist.name 까지 읽으므로 아티스트도 함께 건다.
+	@EntityGraph(attributePaths = {"product", "product.artist"})
 	Optional<LimitedDrop> findWithProductById(Long id);
 
+	// 구매 경로라 artist 는 넣지 않는다. PESSIMISTIC_WRITE 에 fetch join 을 더하면 조인된 행까지 잠긴다.
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@EntityGraph(attributePaths = "product")
 	@Query("select d from LimitedDrop d where d.id = :id")
