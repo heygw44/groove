@@ -191,4 +191,68 @@ class NotificationServiceTest {
 			verify(notificationRepository).markAllRead(eq(MEMBER_ID), any());
 		}
 	}
+
+	@Nested
+	@DisplayName("delete()")
+	class Delete {
+
+		@Test
+		@DisplayName("본인 알림이면 삭제한다")
+		void deletesWhenOwner() {
+			// given
+			Notification notification = NotificationFixture.withId(NotificationFixture.forProduct(member, product),
+					NOTIFICATION_ID);
+			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.of(notification));
+
+			// when
+			notificationService.delete(MEMBER_ID, NOTIFICATION_ID);
+
+			// then
+			verify(notificationRepository).delete(notification);
+		}
+
+		@Test
+		@DisplayName("알림이 없으면 NOTIFICATION_NOT_FOUND 예외를 던진다")
+		void throwsWhenNotFound() {
+			// given
+			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> notificationService.delete(MEMBER_ID, NOTIFICATION_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("본인 알림이 아니면 NOTIFICATION_FORBIDDEN 예외를 던진다")
+		void throwsWhenNotOwner() {
+			// given
+			Notification notification = NotificationFixture.withId(NotificationFixture.forProduct(other, product),
+					NOTIFICATION_ID);
+			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.of(notification));
+
+			// when & then
+			assertThatThrownBy(() -> notificationService.delete(MEMBER_ID, NOTIFICATION_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.NOTIFICATION_FORBIDDEN);
+			verify(notificationRepository, never()).delete(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("deleteRead()")
+	class DeleteRead {
+
+		@Test
+		@DisplayName("리포지토리의 읽은 알림 일괄 삭제를 호출한다")
+		void callsBulkDelete() {
+			// when
+			notificationService.deleteRead(MEMBER_ID);
+
+			// then
+			verify(notificationRepository).deleteAllByMemberIdAndReadAtIsNotNull(MEMBER_ID);
+		}
+	}
 }

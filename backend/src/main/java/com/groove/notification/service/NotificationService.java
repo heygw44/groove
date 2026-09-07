@@ -52,4 +52,19 @@ public class NotificationService {
 	public void markAllRead(Long memberId) {
 		notificationRepository.markAllRead(memberId, LocalDateTime.now(clock));
 	}
+
+	@Transactional
+	public void delete(Long memberId, Long notificationId) {
+		Notification notification = notificationRepository.findById(notificationId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+		if (!notification.getMember().getId().equals(memberId)) {
+			throw new BusinessException(ErrorCode.NOTIFICATION_FORBIDDEN);
+		}
+		notificationRepository.delete(notification);
+	}
+
+	@Transactional
+	public void deleteRead(Long memberId) {
+		notificationRepository.deleteAllByMemberIdAndReadAtIsNotNull(memberId);
+	}
 }
