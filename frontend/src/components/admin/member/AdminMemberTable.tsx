@@ -1,7 +1,7 @@
 import { Button } from '@/components/common/Button';
 import { MEMBER_ROLE_LABELS } from '@/constants/adminAudit';
 import type { AdminMemberSummary } from '@/types/adminMember';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 import { MemberStatusBadge } from './MemberStatusBadge';
@@ -44,7 +44,7 @@ export function AdminMemberTable({ members, onSelect }: AdminMemberTableProps) {
                 <MemberStatusBadge status={member.status} />
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                {formatDate(member.createdAt)}
+                {formatServerDate(member.createdAt)}
               </td>
               <td className="py-2.5 pr-3 text-right tabular-nums">{member.orderCount}건</td>
               <td className="py-2.5 pr-3 text-right tabular-nums">

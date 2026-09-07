@@ -1,11 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { useUnreadNotificationCount } from '@/hooks/queries/useUnreadNotificationCount';
-
-const MAX_DISPLAY_COUNT = 99;
-
-const formatBadgeCount = (count: number): string =>
-  count > MAX_DISPLAY_COUNT ? `${MAX_DISPLAY_COUNT}+` : String(count);
+import { formatBadgeCount } from '@/utils/notification';
 
 export function NotificationBell() {
   const { data } = useUnreadNotificationCount();

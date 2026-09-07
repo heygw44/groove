@@ -20,7 +20,7 @@ import { adminOrderKeys } from '@/hooks/queries/queryKeys';
 import { useAdminOrder } from '@/hooks/queries/useAdminOrder';
 import type { OrderStatus } from '@/types/order';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import { ADMIN_ORDER_TRANSITIONS, ORDER_STATUS_LABEL } from '@/utils/orderStatus';
 
 interface AdminOrderDetailDrawerProps {
@@ -115,7 +115,9 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
           <div>
             <div className="flex items-center gap-2">
               <OrderStatusBadge status={detail.status} />
-              <span className="text-xs text-content-muted">{formatDateTime(detail.createdAt)}</span>
+              <span className="text-xs text-content-muted">
+                {formatServerDateTime(detail.createdAt)}
+              </span>
             </div>
             <p className="mt-2 break-all text-sm text-content">
               {detail.memberEmail}
@@ -123,7 +125,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
             </p>
             {detail.status === 'CANCELED' && (
               <p className="mt-2 text-sm text-danger">
-                {detail.canceledAt && `${formatDateTime(detail.canceledAt)} 취소`}
+                {detail.canceledAt && `${formatServerDateTime(detail.canceledAt)} 취소`}
                 {detail.cancelReason && ` · ${detail.cancelReason}`}
               </p>
             )}

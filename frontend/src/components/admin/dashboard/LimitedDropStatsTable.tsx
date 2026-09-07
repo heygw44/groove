@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
 import type { LimitedDropStats } from '@/types/adminStats';
 import { formatDuration } from '@/utils/adminStatsFilters';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 
 interface LimitedDropStatsTableProps {
   items: LimitedDropStats[];
@@ -76,10 +76,10 @@ export function LimitedDropStatsTable({ items }: LimitedDropStatsTableProps) {
                     {attempts !== undefined ? `${attempts.competitionRate.toFixed(1)}:1` : '-'}
                   </td>
                   <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                    {formatDateTime(item.openAt)}
+                    {formatServerDateTime(item.openAt)}
                   </td>
                   <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                    {formatDateTime(item.closeAt)}
+                    {formatServerDateTime(item.closeAt)}
                   </td>
                   <td className="py-2.5 pr-3 text-content-muted">
                     {item.soldOutSeconds !== undefined ? formatDuration(item.soldOutSeconds) : '-'}

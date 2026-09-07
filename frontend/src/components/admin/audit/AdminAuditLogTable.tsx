@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { AUDIT_ACTION_LABELS, AUDIT_TARGET_TYPE_LABELS } from '@/constants/adminAudit';
 import type { AdminAuditLog } from '@/types/adminAuditLog';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 
 import { AuditDetailCell } from './AuditDetailCell';
 
@@ -16,10 +16,7 @@ function AuditTargetCell({ log }: { log: AdminAuditLog }) {
 
   if (log.targetType === 'PRODUCT') {
     return (
-      <Link
-        to={`/admin/products/${log.targetId}/edit`}
-        className="text-content hover:text-accent"
-      >
+      <Link to={`/admin/products/${log.targetId}/edit`} className="text-content hover:text-accent">
         {label}
       </Link>
     );
@@ -46,7 +43,7 @@ export function AdminAuditLogTable({ logs }: AdminAuditLogTableProps) {
           {logs.map((log) => (
             <tr key={log.id} className="border-b border-line last:border-0">
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                {formatDateTime(log.createdAt)}
+                {formatServerDateTime(log.createdAt)}
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap">
                 {log.adminNickname} #{log.adminId}

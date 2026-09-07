@@ -26,7 +26,7 @@ export default function NotificationListPage() {
   const unreadOnly = searchParams.get('unreadOnly') === 'true';
 
   const { showToast } = useToast();
-  const { data, isPending, isError, refetch } = useNotifications({
+  const { data, isPending, isError, isPlaceholderData, refetch } = useNotifications({
     page,
     size: PAGE_SIZE,
     unreadOnly,
@@ -115,7 +115,7 @@ export default function NotificationListPage() {
         )}
 
         {!isPending && !isError && data && data.content.length > 0 && (
-          <div>
+          <div className={isPlaceholderData ? 'opacity-60' : ''}>
             <div className="divide-y divide-line">
               {data.content.map((item) => (
                 <NotificationRow key={item.id} item={item} onRead={handleRead} />

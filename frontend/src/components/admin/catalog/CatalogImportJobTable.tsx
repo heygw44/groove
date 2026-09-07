@@ -1,7 +1,7 @@
 import { CatalogImportJobStatusBadge } from '@/components/admin/catalog/CatalogImportJobStatusBadge';
 import { Button } from '@/components/common/Button';
 import type { CatalogImportJob } from '@/types/catalog';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 
 interface CatalogImportJobTableProps {
   items: CatalogImportJob[];
@@ -53,10 +53,10 @@ export function CatalogImportJobTable({
                 {job.filterCount}
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                {job.startedAt ? formatDateTime(job.startedAt) : '-'}
+                {job.startedAt ? formatServerDateTime(job.startedAt) : '-'}
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                {job.endedAt ? formatDateTime(job.endedAt) : '-'}
+                {job.endedAt ? formatServerDateTime(job.endedAt) : '-'}
               </td>
               <td className="py-2.5 pr-3 text-content-muted" title={job.exitMessage}>
                 {truncateExitMessage(job.exitMessage) ?? '-'}

@@ -6,7 +6,7 @@ import type {
   AdminCouponSummary,
   AdminCouponUpdateRequest,
 } from '@/types/coupon';
-import { getServerNow } from '@/utils/serverTime';
+import { getServerNow, toServerMs } from '@/utils/serverTime';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 0/O, 1/I 처럼 헷갈리는 글자는 뺐다.
 
@@ -206,5 +206,6 @@ export const getAdminCouponDisplayStatus = (
   if (coupon.status === 'DISABLED') {
     return 'DISABLED';
   }
-  return new Date(coupon.expiresAt) <= now ? 'EXPIRED' : 'ACTIVE';
+  // expiresAt 은 오프셋 없는 서버 LocalDateTime 이라 KST 로 해석해야 now(서버 시각)와 기준이 맞는다.
+  return toServerMs(coupon.expiresAt) <= now.getTime() ? 'EXPIRED' : 'ACTIVE';
 };

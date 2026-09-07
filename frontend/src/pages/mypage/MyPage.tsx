@@ -4,7 +4,7 @@ import { PasswordChangeForm } from '@/components/mypage/PasswordChangeForm';
 import { SectionCard } from '@/components/mypage/SectionCard';
 import { WithdrawSection } from '@/components/mypage/WithdrawSection';
 import { useMe } from '@/hooks/queries/useMe';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 
 export default function MyPage() {
   const { data: member, isPending, isError } = useMe();
@@ -31,7 +31,7 @@ export default function MyPage() {
           </div>
           <div className="flex items-baseline gap-4">
             <dt className="w-20 shrink-0 text-content-muted">가입일</dt>
-            <dd className="m-0">{formatDate(member.createdAt)}</dd>
+            <dd className="m-0">{formatServerDate(member.createdAt)}</dd>
           </div>
         </dl>
       </SectionCard>

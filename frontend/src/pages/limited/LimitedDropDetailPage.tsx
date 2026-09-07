@@ -21,7 +21,7 @@ import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 import { classifyPurchaseError, getDropPhase, getPurchaseButtonState } from '@/utils/limitedDrop';
 import { applyServerTime, toServerMs } from '@/utils/serverTime';
@@ -211,19 +211,15 @@ export default function LimitedDropDetailPage() {
         </div>
         <div className="flex gap-2">
           <dt className="w-24 shrink-0 text-content-muted">오픈</dt>
-          <dd className="m-0">{formatDateTime(drop.openAt)}</dd>
+          <dd className="m-0">{formatServerDateTime(drop.openAt)}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="w-24 shrink-0 text-content-muted">마감</dt>
-          <dd className="m-0">{formatDateTime(drop.closeAt)}</dd>
+          <dd className="m-0">{formatServerDateTime(drop.closeAt)}</dd>
         </div>
       </dl>
 
-      <Button
-        className="mt-8 w-full"
-        disabled={buttonState.disabled}
-        onClick={handlePurchaseClick}
-      >
+      <Button className="mt-8 w-full" disabled={buttonState.disabled} onClick={handlePurchaseClick}>
         {buttonState.label}
       </Button>
 

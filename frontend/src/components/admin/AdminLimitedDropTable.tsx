@@ -1,7 +1,7 @@
 import { Button } from '@/components/common/Button';
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
 import type { AdminLimitedDropSummary } from '@/types/limitedDrop';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 
 interface AdminLimitedDropTableProps {
   drops: AdminLimitedDropSummary[];
@@ -49,10 +49,10 @@ export function AdminLimitedDropTable({
                   <DropStatusBadge status={drop.status} />
                 </td>
                 <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                  {formatDateTime(drop.openAt)}
+                  {formatServerDateTime(drop.openAt)}
                 </td>
                 <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                  {formatDateTime(drop.closeAt)}
+                  {formatServerDateTime(drop.closeAt)}
                 </td>
                 <td className="py-2.5 pr-3">
                   <div className="flex items-center gap-1.5">
