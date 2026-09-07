@@ -29,7 +29,7 @@ export function AdminLimitedDropDetailDrawer({
       onClose={onClose}
       side="right"
       size="lg"
-      title={detail?.productTitle ?? '한정반 드롭 상세'}
+      title={detail?.productTitle ?? '한정반 상세'}
     >
       {isPending && (
         <div className="flex min-h-48 items-center justify-center">
@@ -39,7 +39,7 @@ export function AdminLimitedDropDetailDrawer({
 
       {!isPending && isError && (
         <EmptyState
-          title="드롭 정보를 불러오지 못했습니다."
+          title="한정반 정보를 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -73,25 +73,25 @@ export function AdminLimitedDropDetailDrawer({
           </div>
 
           <div className="rounded-lg border border-line p-4">
-            <p className="mb-2 text-sm font-bold">재고 대조</p>
+            <p className="mb-2 text-sm font-bold">재고 비교</p>
             <div className="flex items-center gap-6 text-sm">
               <div>
-                <p className="text-content-muted">DB 남은 수량</p>
+                <p className="text-content-muted">실제 재고</p>
                 <p className="text-base font-semibold">{detail.dbRemaining}</p>
               </div>
               <div>
-                <p className="text-content-muted">Redis 카운터</p>
+                <p className="text-content-muted">선점 재고</p>
                 <p className="text-base font-semibold">{detail.redisRemaining ?? '없음'}</p>
               </div>
             </div>
             {detail.redisRemaining === undefined && (
               <p className="mt-2 text-xs text-content-muted">
-                카운터 없음 (OPEN 상태가 아니거나 초기화 전)
+                선점 재고 없음 (OPEN 상태가 아니거나 초기화 전)
               </p>
             )}
             {isMismatched && (
               <p className="mt-2 rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">
-                불일치 — 강제 오픈으로 카운터를 DB 기준으로 재초기화할 수 있습니다.
+                불일치 — 강제 오픈으로 선점 재고를 실제 재고 기준으로 재초기화할 수 있습니다.
               </p>
             )}
           </div>

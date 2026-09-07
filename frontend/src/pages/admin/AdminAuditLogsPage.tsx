@@ -22,10 +22,7 @@ export default function AdminAuditLogsPage() {
     toAdminAuditLogListParams(filters),
   );
 
-  const updateFilters = (
-    patch: Partial<AdminAuditLogFilters>,
-    options?: { replace?: boolean },
-  ) => {
+  const updateFilters = (patch: Partial<AdminAuditLogFilters>, options?: { replace?: boolean }) => {
     setSearchParams(serializeAdminAuditLogFilters({ ...filters, ...patch, page: 0 }), options);
   };
 
@@ -56,7 +53,7 @@ export default function AdminAuditLogsPage() {
 
       {!isPending && isError && (
         <EmptyState
-          title="감사 로그를 불러오지 못했습니다."
+          title="감사 로그를 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -67,7 +64,7 @@ export default function AdminAuditLogsPage() {
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (
-        <EmptyState title="조건에 맞는 감사 로그가 없습니다." />
+        <EmptyState title="조건에 맞는 감사 로그가 없습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length > 0 && (

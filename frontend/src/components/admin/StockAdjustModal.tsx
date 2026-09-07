@@ -8,6 +8,7 @@ import { FormError } from '@/components/common/FormError';
 import { Input } from '@/components/common/Input';
 import { Modal } from '@/components/common/Modal';
 import { useToast } from '@/components/common/toastContext';
+import { PRODUCT_STATUS_META } from '@/constants/product';
 import { useAdjustStock } from '@/hooks/mutations/useAdminProductMutations';
 import { stockAdjustSchema, type StockAdjustFormValues } from '@/schemas/product';
 import type { AdminProductSummary } from '@/types/product';
@@ -25,12 +26,6 @@ const EMPTY_VALUES: StockAdjustFormValues = {
   reason: '',
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  ON_SALE: '판매중',
-  SOLD_OUT: '품절',
-  HIDDEN: '숨김',
-};
-
 const CHANGE_TYPE_OPTIONS: {
   value: StockAdjustFormValues['changeType'];
   label: string;
@@ -41,7 +36,7 @@ const CHANGE_TYPE_OPTIONS: {
   {
     value: 'ADJUST',
     label: '조정',
-    help: '입력한 수량으로 맞춥니다. 1 이상만 가능하며, 0으로 만들려면 출고를 사용하세요.',
+    help: '입력한 수량으로 맞춥니다. 0으로 만들려면 출고를 사용해주세요.',
   },
 ];
 
@@ -92,7 +87,7 @@ export function StockAdjustModal({ open, onClose, product }: StockAdjustModalPro
         onSuccess: (result) => {
           showToast(
             'success',
-            `재고 ${result.quantity}개 (${STATUS_LABEL[result.productStatus] ?? result.productStatus})`,
+            `재고 ${result.quantity}개 (${PRODUCT_STATUS_META[result.productStatus].label})`,
           );
           onClose();
         },

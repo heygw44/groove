@@ -34,7 +34,7 @@ export function DailySalesChart({ data }: DailySalesChartProps) {
   );
 
   if (data.length === 0 || isAllZero) {
-    return <EmptyState title="해당 기간의 매출 데이터가 없습니다." />;
+    return <EmptyState title="해당 기간의 매출 데이터가 없습니다" />;
   }
 
   return (

@@ -20,12 +20,12 @@ const DIALOG_TEXT: Record<
   { title: string; description: string; confirmLabel: string }
 > = {
   SUSPENDED: {
-    title: '이 회원을 정지할까요?',
-    description: '정지하면 로그인이 막히고 진행 중인 세션도 즉시 끊깁니다.',
+    title: '이 회원을 정지하시겠습니까?',
+    description: '정지하면 로그인이 막히고 로그인된 기기에서도 즉시 로그아웃됩니다.',
     confirmLabel: '정지',
   },
   ACTIVE: {
-    title: '이 회원의 정지를 해제할까요?',
+    title: '이 회원의 정지를 해제하시겠습니까?',
     description: '해제하면 즉시 다시 로그인할 수 있습니다.',
     confirmLabel: '해제',
   },

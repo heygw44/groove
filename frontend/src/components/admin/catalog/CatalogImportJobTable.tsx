@@ -31,7 +31,7 @@ export function CatalogImportJobTable({
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
             <th scope="col" className="py-2 pr-3 font-medium">
-              잡 실행 ID
+              실행 번호
             </th>
             <th scope="col" className="py-2 pr-3 font-medium">
               마스터 ID
@@ -52,7 +52,7 @@ export function CatalogImportJobTable({
               실패 사유
             </th>
             <th scope="col" className="py-2 pr-3 font-medium">
-              액션
+              관리
             </th>
           </tr>
         </thead>

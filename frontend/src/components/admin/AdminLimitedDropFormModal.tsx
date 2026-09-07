@@ -94,7 +94,7 @@ export function AdminLimitedDropFormModal({ open, onClose, drop }: AdminLimitedD
     if (!isEdit) {
       createMutation.mutate(toAdminLimitedDropCreatePayload(values), {
         onSuccess: () => {
-          showToast('success', '한정반 드롭을 등록했습니다.');
+          showToast('success', '한정반을 등록했습니다.');
           onClose();
         },
         onError: handleError,
@@ -117,7 +117,7 @@ export function AdminLimitedDropFormModal({ open, onClose, drop }: AdminLimitedD
       { id: drop.id, payload },
       {
         onSuccess: () => {
-          showToast('success', '한정반 드롭을 수정했습니다.');
+          showToast('success', '한정반을 수정했습니다.');
           onClose();
         },
         onError: handleError,
@@ -129,7 +129,7 @@ export function AdminLimitedDropFormModal({ open, onClose, drop }: AdminLimitedD
     <Modal
       open={open}
       onClose={onClose}
-      title={isEdit ? '한정반 드롭 수정' : '한정반 드롭 등록'}
+      title={isEdit ? '한정반 수정' : '한정반 등록'}
       size="md"
       footer={
         <>

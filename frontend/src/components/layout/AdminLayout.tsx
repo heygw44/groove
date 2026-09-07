@@ -56,7 +56,7 @@ const NAV_ITEMS: AdminNavItem[] = [
   },
   {
     to: '/admin/catalog/import-jobs',
-    label: '적재 잡',
+    label: '카탈로그 수집',
     icon: (
       <svg
         width="16"
@@ -138,7 +138,7 @@ const NAV_ITEMS: AdminNavItem[] = [
   },
   {
     to: '/admin/limited-drops',
-    label: '한정반',
+    label: '한정반 판매',
     icon: (
       <svg
         width="16"

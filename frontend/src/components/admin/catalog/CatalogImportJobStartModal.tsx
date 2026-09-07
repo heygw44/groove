@@ -69,7 +69,7 @@ export function CatalogImportJobStartModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="잡 실행"
+      title="수집 실행"
       size="sm"
       footer={
         <>

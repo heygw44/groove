@@ -56,7 +56,7 @@ export default function AdminCatalogImportJobsPage() {
 
     restartMutation.mutate(restartTarget.jobExecutionId, {
       onSuccess: () => {
-        showToast('success', '잡을 재시작했습니다.');
+        showToast('success', '수집을 다시 시작했습니다.');
         setRestartTarget(undefined);
       },
       onError: (error) => {
@@ -70,12 +70,12 @@ export default function AdminCatalogImportJobsPage() {
     <div>
       <div className="mb-4 flex items-end justify-between gap-6">
         <div>
-          <h2 className="text-[17px] font-bold tracking-tight">적재 잡 관리</h2>
+          <h2 className="text-[17px] font-bold tracking-tight">카탈로그 수집 이력</h2>
           <p className="mt-1.5 text-sm text-content-muted">
             {isPending ? '불러오는 중…' : `총 ${data?.totalElements ?? 0}개`}
           </p>
         </div>
-        <Button onClick={() => setStarting(true)}>잡 실행</Button>
+        <Button onClick={() => setStarting(true)}>수집 실행</Button>
       </div>
 
       {isPending && (
@@ -86,7 +86,7 @@ export default function AdminCatalogImportJobsPage() {
 
       {!isPending && isError && (
         <EmptyState
-          title="적재 잡 목록을 불러오지 못했습니다."
+          title="수집 이력을 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -97,7 +97,7 @@ export default function AdminCatalogImportJobsPage() {
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (
-        <EmptyState title="실행된 적재 잡이 없습니다." />
+        <EmptyState title="아직 수집 이력이 없습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length > 0 && (
@@ -113,7 +113,7 @@ export default function AdminCatalogImportJobsPage() {
       <CatalogImportJobStartModal
         open={starting}
         onClose={() => setStarting(false)}
-        onStarted={() => showToast('success', '잡을 실행했습니다.')}
+        onStarted={() => showToast('success', '수집을 시작했습니다.')}
         onError={(message) => showToast('error', message)}
       />
 
@@ -121,7 +121,7 @@ export default function AdminCatalogImportJobsPage() {
         open={Boolean(restartTarget)}
         onClose={() => setRestartTarget(undefined)}
         onConfirm={handleConfirmRestart}
-        title="적재 잡을 재시작하시겠습니까?"
+        title="수집 작업을 재시작하시겠습니까?"
         description="실패한 지점부터 이어서 실행됩니다."
         confirmLabel="재시작"
         variant="primary"

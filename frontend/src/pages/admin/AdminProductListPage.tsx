@@ -150,7 +150,7 @@ export default function AdminProductListPage() {
 
       {!isPending && isError && (
         <EmptyState
-          title="상품을 불러오지 못했습니다."
+          title="상품을 불러오지 못했습니다"
           description="잠시 후 다시 시도해주세요."
           action={
             <Button variant="secondary" onClick={() => refetch()}>
@@ -161,7 +161,7 @@ export default function AdminProductListPage() {
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (
-        <EmptyState title="조건에 맞는 상품이 없습니다." />
+        <EmptyState title="조건에 맞는 상품이 없습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length > 0 && (
@@ -190,7 +190,7 @@ export default function AdminProductListPage() {
         open={Boolean(hiding)}
         onClose={() => setHiding(undefined)}
         onConfirm={handleHide}
-        title="상품을 숨길까요?"
+        title="상품을 숨기시겠습니까?"
         description={
           hiding
             ? `'${hiding.title}' 상품이 판매 목록에서 사라집니다. 숨긴 상품은 목록에서 복구할 수 있습니다.`
@@ -204,7 +204,7 @@ export default function AdminProductListPage() {
         open={Boolean(restoring)}
         onClose={() => setRestoring(undefined)}
         onConfirm={handleRestore}
-        title="상품을 복구할까요?"
+        title="상품을 복구하시겠습니까?"
         description={
           restoring
             ? `'${restoring.title}' 상품이 다시 노출됩니다. 재고가 있으면 판매중, 없으면 품절 상태로 돌아갑니다.`

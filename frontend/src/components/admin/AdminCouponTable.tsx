@@ -40,7 +40,7 @@ export function AdminCouponTable({ coupons, onEdit, onDisable }: AdminCouponTabl
               상태
             </th>
             <th scope="col" className="py-2 pr-3 font-medium">
-              액션
+              관리
             </th>
           </tr>
         </thead>
