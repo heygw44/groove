@@ -1,10 +1,12 @@
 package com.groove.order.service;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,7 @@ import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.entity.StockHistory;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.notification.service.RestockEvent;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItem;
 
@@ -33,6 +36,7 @@ public class OrderStockService {
 
 	private final StockRepository stockRepository;
 	private final StockHistoryRepository stockHistoryRepository;
+	private final ApplicationEventPublisher eventPublisher;
 
 	@Transactional
 	public void deduct(Order order) {
@@ -54,8 +58,11 @@ public class OrderStockService {
 	@Transactional
 	public void restore(Order order) {
 		Map<Long, Stock> stocksByProductId = lockStocks(order);
+		Map<Long, Integer> quantitiesBeforeRestore = new LinkedHashMap<>();
 		for (OrderItem item : sortedItems(order)) {
-			stocksByProductId.get(item.getProduct().getId()).increase(item.getQuantity());
+			Stock stock = stocksByProductId.get(item.getProduct().getId());
+			quantitiesBeforeRestore.put(item.getProduct().getId(), stock.getQuantity());
+			stock.increase(item.getQuantity());
 		}
 
 		// 이력 INSERT 가 stock 행에 FK 공유 락을 잡아 UPDATE 와 데드락이 나므로 재고 UPDATE 를 먼저 flush 한다.
@@ -65,6 +72,14 @@ public class OrderStockService {
 			Stock stock = stocksByProductId.get(item.getProduct().getId());
 			stockHistoryRepository.save(StockHistory.of(stock, StockChangeType.CANCEL, item.getQuantity(),
 					STOCK_CANCEL_REASON_PREFIX + order.getOrderNumber()));
+		}
+
+		// 이 경로는 비관적 락으로 재고를 직접 조작해 StockService.adjust() 의 재입고 이벤트 발행을 타지 않으므로 여기서 발행한다.
+		for (Map.Entry<Long, Integer> entry : quantitiesBeforeRestore.entrySet()) {
+			Stock stock = stocksByProductId.get(entry.getKey());
+			if (entry.getValue() == 0 && stock.getQuantity() > 0) {
+				eventPublisher.publishEvent(new RestockEvent(entry.getKey(), stock.getProduct().getTitle()));
+			}
 		}
 	}
 
