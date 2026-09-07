@@ -19,3 +19,9 @@ export const buildNotificationLink = (item: NotificationItem): string | undefine
   }
   return item.productId !== undefined ? `/products/${item.productId}` : undefined;
 };
+
+export const MAX_DISPLAY_COUNT = 99;
+
+/** 배지에 찍기엔 너무 큰 안 읽음 수는 상한 뒤에 + 를 붙여 자른다. */
+export const formatBadgeCount = (count: number): string =>
+  count > MAX_DISPLAY_COUNT ? `${MAX_DISPLAY_COUNT}+` : String(count);

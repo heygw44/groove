@@ -4,6 +4,7 @@ import type { NotificationItem } from '@/types/notification';
 import {
   buildNotificationLink,
   buildNotificationMessage,
+  formatBadgeCount,
   isUnreadNotification,
 } from '@/utils/notification';
 
@@ -99,5 +100,17 @@ describe('buildNotificationLink()', () => {
 
     // when & then
     expect(buildNotificationLink(notification)).toBeUndefined();
+  });
+});
+
+describe('formatBadgeCount()', () => {
+  it('99 이하면 숫자를 그대로 문자열로 돌려준다', () => {
+    // when & then
+    expect(formatBadgeCount(99)).toBe('99');
+  });
+
+  it('99 를 넘으면 99+ 로 자른다', () => {
+    // when & then
+    expect(formatBadgeCount(1234)).toBe('99+');
   });
 });

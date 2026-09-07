@@ -8,6 +8,7 @@ import { useLogout } from '@/hooks/mutations/useAuthMutations';
 import { useCart } from '@/hooks/queries/useCart';
 import { useUnreadNotificationCount } from '@/hooks/queries/useUnreadNotificationCount';
 import { useAuthStore } from '@/store/authStore';
+import { formatBadgeCount } from '@/utils/notification';
 
 interface NavItem {
   to: string;
@@ -58,7 +59,7 @@ export function Header() {
     'aria-label': item.badge ? `${item.label} ${item.badge}개` : undefined,
   });
 
-  const countBadge = (count: number) => (
+  const countBadge = (count: number | string) => (
     <span className="rounded-full bg-accent px-1.5 text-[11px] text-accent-content">{count}</span>
   );
 
@@ -164,12 +165,16 @@ export function Header() {
               </p>
               <Link
                 to="/notifications"
-                aria-label={notificationCount > 0 ? `알림 ${notificationCount}개` : undefined}
+                aria-label={
+                  notificationCount > 0
+                    ? `알림 ${formatBadgeCount(notificationCount)}개`
+                    : undefined
+                }
                 className="flex items-center gap-2 py-2.5 text-content"
               >
                 알림
                 {notificationCount > 0 && (
-                  <span className="ml-1">{countBadge(notificationCount)}</span>
+                  <span className="ml-1">{countBadge(formatBadgeCount(notificationCount))}</span>
                 )}
               </Link>
               <Link to="/mypage" className="py-2.5 text-content">
