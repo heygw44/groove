@@ -28,8 +28,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
+import com.groove.fixture.MemberFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
+import com.groove.fixture.WishlistFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
@@ -37,6 +39,7 @@ import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.service.LimitedDropService;
+import com.groove.member.entity.Member;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSearchRequest;
@@ -51,6 +54,7 @@ import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.recommend.service.ProductViewedEvent;
+import com.groove.wishlist.entity.Wishlist;
 import com.groove.wishlist.repository.WishlistRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -293,25 +297,68 @@ class ProductServiceTest {
 		}
 
 		@Test
-		@DisplayName("memberId 가 있으면 wishlisted 를 조회해 내려준다")
-		void returnsWishlistedWhenMemberIdPresent() {
+		@DisplayName("위시에 담고 알림을 켠 회원이면 wishlisted 와 alertEnabled 를 true 로 내려준다")
+		void returnsWishlistedAndAlertEnabledWhenWatching() {
 			// given
 			Artist artist = ArtistFixture.withId(artist(), 1L);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), 13L);
+			Member member = MemberFixture.withId(MemberFixture.create(), 1L);
+			Wishlist wishlist = WishlistFixture.create(member, product);
 			given(productRepository.findDetailById(13L)).willReturn(Optional.of(product));
 			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(13L)).willReturn(List.of());
 			given(stockRepository.findByProductId(13L)).willReturn(Optional.empty());
-			given(wishlistRepository.existsByMemberIdAndProductId(1L, 13L)).willReturn(true);
+			given(wishlistRepository.findByMemberIdAndProductId(1L, 13L)).willReturn(Optional.of(wishlist));
 
 			// when
 			ProductDetailResponse response = productService.getDetail(13L, 1L);
 
 			// then
 			assertThat(response.wishlisted()).isTrue();
+			assertThat(response.alertEnabled()).isTrue();
 		}
 
 		@Test
-		@DisplayName("memberId 가 없으면 wishlisted 가 null 이고 위시리스트를 조회하지 않는다")
+		@DisplayName("위시에 담고 알림을 끈 회원이면 alertEnabled 를 false 로 내려준다")
+		void returnsAlertDisabledWhenWatchingWithAlertOff() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 18L);
+			Member member = MemberFixture.withId(MemberFixture.create(), 1L);
+			Wishlist wishlist = WishlistFixture.create(member, product);
+			wishlist.changeAlert(false);
+			given(productRepository.findDetailById(18L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(18L)).willReturn(List.of());
+			given(stockRepository.findByProductId(18L)).willReturn(Optional.empty());
+			given(wishlistRepository.findByMemberIdAndProductId(1L, 18L)).willReturn(Optional.of(wishlist));
+
+			// when
+			ProductDetailResponse response = productService.getDetail(18L, 1L);
+
+			// then
+			assertThat(response.alertEnabled()).isFalse();
+		}
+
+		@Test
+		@DisplayName("위시에 없으면 wishlisted 는 false, alertEnabled 는 null 이다")
+		void returnsNullAlertEnabledWhenNotWishlisted() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 13L);
+			given(productRepository.findDetailById(13L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(13L)).willReturn(List.of());
+			given(stockRepository.findByProductId(13L)).willReturn(Optional.empty());
+			given(wishlistRepository.findByMemberIdAndProductId(1L, 13L)).willReturn(Optional.empty());
+
+			// when
+			ProductDetailResponse response = productService.getDetail(13L, 1L);
+
+			// then
+			assertThat(response.wishlisted()).isFalse();
+			assertThat(response.alertEnabled()).isNull();
+		}
+
+		@Test
+		@DisplayName("memberId 가 없으면 wishlisted 와 alertEnabled 가 모두 null 이고 위시리스트를 조회하지 않는다")
 		void skipsWishlistLookupWhenMemberIdAbsent() {
 			// given
 			Artist artist = ArtistFixture.withId(artist(), 1L);
@@ -325,7 +372,8 @@ class ProductServiceTest {
 
 			// then
 			assertThat(response.wishlisted()).isNull();
-			verify(wishlistRepository, never()).existsByMemberIdAndProductId(any(), any());
+			assertThat(response.alertEnabled()).isNull();
+			verify(wishlistRepository, never()).findByMemberIdAndProductId(any(), any());
 		}
 
 		@Test

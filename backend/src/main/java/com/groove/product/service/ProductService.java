@@ -3,6 +3,7 @@ package com.groove.product.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import com.groove.product.mapper.ProductSearchMapper;
 import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
 import com.groove.recommend.service.ProductViewedEvent;
+import com.groove.wishlist.entity.Wishlist;
 import com.groove.wishlist.repository.WishlistRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -64,13 +66,18 @@ public class ProductService {
 		int stockQuantity = stockRepository.findByProductId(id)
 				.map(Stock::getQuantity)
 				.orElse(0);
-		Boolean wishlisted = memberId == null ? null : wishlistRepository.existsByMemberIdAndProductId(memberId, id);
+		// alertEnabled 도 함께 내려야 해서 exists 대신 find 로 한 번에 조회한다.
+		Optional<Wishlist> wishlist = memberId == null
+				? Optional.empty()
+				: wishlistRepository.findByMemberIdAndProductId(memberId, id);
+		Boolean wishlisted = memberId == null ? null : wishlist.isPresent();
+		Boolean alertEnabled = wishlist.map(Wishlist::isAlertEnabled).orElse(null);
 		ProductDetailResponse.LimitedDropSummary limitedDrop = limitedDropService.findSummaryForProduct(id)
 				.orElse(null);
 		long pressingCount = productRepository.countByAlbumIdAndStatusNot(product.getAlbum().getId(),
 				ProductStatus.HIDDEN);
 		ProductDetailResponse response = ProductDetailResponse.from(product, images, stockQuantity, wishlisted,
-				limitedDrop, (int) pressingCount);
+				alertEnabled, limitedDrop, (int) pressingCount);
 		eventPublisher.publishEvent(new ProductViewedEvent(memberId, id, LocalDateTime.now(clock)));
 		return response;
 	}
