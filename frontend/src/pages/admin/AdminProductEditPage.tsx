@@ -1,9 +1,10 @@
 import axios from 'axios';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 
 import { ProductForm } from '@/components/admin/ProductForm';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { LinkButton } from '@/components/common/LinkButton';
 import { Spinner } from '@/components/common/Spinner';
 import { useAdminProduct } from '@/hooks/queries/useAdminProduct';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
@@ -35,9 +36,9 @@ export default function AdminProductEditPage() {
       <EmptyState
         title="상품을 찾을 수 없습니다."
         action={
-          <Link to="/admin/products">
-            <Button variant="secondary">상품 목록으로</Button>
-          </Link>
+          <LinkButton to="/admin/products" variant="secondary">
+            상품 목록으로
+          </LinkButton>
         }
       />
     );

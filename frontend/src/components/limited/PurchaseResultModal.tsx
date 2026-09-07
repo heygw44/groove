@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom';
-
 import { Button } from '@/components/common/Button';
+import { LinkButton } from '@/components/common/LinkButton';
 import { Modal } from '@/components/common/Modal';
 
 interface PurchaseResultModalProps {
@@ -34,11 +33,7 @@ export function PurchaseResultModal({
           <Button variant="secondary" onClick={onClose}>
             확인
           </Button>
-          {linkTo && (
-            <Link to={linkTo}>
-              <Button>{linkLabel}</Button>
-            </Link>
-          )}
+          {linkTo && <LinkButton to={linkTo}>{linkLabel}</LinkButton>}
         </>
       }
     />

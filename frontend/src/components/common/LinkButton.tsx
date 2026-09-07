@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { Link, type LinkProps } from 'react-router-dom';
 
 import {
   BUTTON_BASE_CLASS,
@@ -8,27 +9,26 @@ import {
   type ButtonVariant,
 } from '@/components/common/buttonStyles';
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface LinkButtonProps extends LinkProps {
   children: ReactNode;
   variant?: ButtonVariant;
   size?: ButtonSize;
 }
 
-export function Button({
+/** Button 과 같은 스타일을 쓰는 링크. <a> 안에 <button> 을 중첩시키지 않으려고 분리했다. */
+export function LinkButton({
   children,
   variant = 'primary',
   size = 'md',
   className = '',
-  type = 'button',
   ...rest
-}: ButtonProps) {
+}: LinkButtonProps) {
   return (
-    <button
-      type={type}
+    <Link
       className={`${BUTTON_BASE_CLASS} ${BUTTON_VARIANT_CLASS[variant]} ${BUTTON_SIZE_CLASS[size]} ${className}`}
       {...rest}
     >
       {children}
-    </button>
+    </Link>
   );
 }
