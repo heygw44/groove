@@ -46,6 +46,7 @@ public class AdminLimitedDropService {
 	private final ProductRepository productRepository;
 	private final StockService stockService;
 	private final LimitedDropRedisService limitedDropRedisService;
+	private final LimitedDropStatFlusher limitedDropStatFlusher;
 	private final AdminAuditLogService adminAuditLogService;
 
 	@Transactional
@@ -120,21 +121,25 @@ public class AdminLimitedDropService {
 
 	@Transactional
 	public AdminLimitedDropResponse close(Long adminId, Long dropId) {
-		LimitedDrop drop = limitedDropRepository.findWithProductById(dropId)
+		// 스케줄러 close 와 동시에 마감되면 stat 이 두 번 INSERT 될 수 있어 findWithProductById 대신 락을 잡는다.
+		LimitedDrop drop = limitedDropRepository.findByIdForUpdate(dropId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.LIMITED_DROP_NOT_FOUND));
 
 		if (drop.getStatus() == LimitedDropStatus.CLOSED) {
-			limitedDropRedisService.clear(drop.getId());
+			// 빈 집계는 flushAndClear 가 안전하게 건너뛰고, flush 가 밀렸던 경우의 복구 경로가 된다.
+			limitedDropStatFlusher.flushAndClear(drop);
 			return AdminLimitedDropResponse.from(drop);
 		}
 
 		LimitedDropStatus previous = drop.getStatus();
-		drop.close();
 		// DB 재고는 남은 수량을 그대로 보존한다.
-		limitedDropRedisService.clear(drop.getId());
+		drop.close();
 
 		adminAuditLogService.record(adminId, AdminAuditAction.LIMITED_DROP_CLOSE, AdminAuditTargetType.LIMITED_DROP,
 				dropId, previous.name() + "->" + LimitedDropStatus.CLOSED.name());
+
+		// 감사 로그 실패로 롤백되기 전에 Redis 키를 지우면 집계가 통째로 날아가므로 감사 로그 뒤에 flush 한다.
+		limitedDropStatFlusher.flushAndClear(drop);
 
 		return AdminLimitedDropResponse.from(drop);
 	}

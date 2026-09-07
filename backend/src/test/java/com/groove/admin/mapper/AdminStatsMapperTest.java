@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,7 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
-import com.groove.admin.dto.LimitedDropStatsResponse;
+import com.groove.admin.dto.LimitedDropStatsRow;
 import com.groove.admin.dto.PopularProductResponse;
 import com.groove.admin.dto.PopularProductSortType;
 import com.groove.admin.dto.PopularProductStatsCondition;
@@ -27,7 +28,9 @@ import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
+import com.groove.limited.entity.LimitedAttemptResult;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedDropStat;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.entity.LimitedPurchase;
 import com.groove.member.entity.Member;
@@ -317,10 +320,10 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			LocalDateTime lastPurchaseCreatedAt = em.find(LimitedPurchase.class, purchase2.getId()).getCreatedAt();
 
 			// when
-			List<LimitedDropStatsResponse> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
 
 			// then
-			LimitedDropStatsResponse own = result.stream()
+			LimitedDropStatsRow own = result.stream()
 					.filter(row -> row.dropId().equals(drop.getId()))
 					.findFirst()
 					.orElseThrow();
@@ -344,16 +347,75 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsResponse> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
 
 			// then
-			LimitedDropStatsResponse own = result.stream()
+			LimitedDropStatsRow own = result.stream()
 					.filter(row -> row.dropId().equals(drop.getId()))
 					.findFirst()
 					.orElseThrow();
 			assertThat(own.soldOutAt()).isNull();
 			assertThat(own.soldOutSeconds()).isNull();
 			assertThat(own.sellRate()).isEqualTo(25.0);
+		}
+
+		@Test
+		@DisplayName("limited_drop_stat 행이 없으면 실패 집계 4개 컬럼이 전부 null 이다")
+		void returnsNullFailureCountsWhenNoStatRow() {
+			// given
+			Product product = ProductFixture.create(artist, "ASM No Stat Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+			em.persist(drop);
+			em.flush();
+			em.clear();
+
+			// when
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+
+			// then
+			LimitedDropStatsRow own = result.stream()
+					.filter(row -> row.dropId().equals(drop.getId()))
+					.findFirst()
+					.orElseThrow();
+			assertThat(own.soldOutCount()).isNull();
+			assertThat(own.alreadyPurchasedCount()).isNull();
+			assertThat(own.notOpenCount()).isNull();
+			assertThat(own.closedCount()).isNull();
+		}
+
+		@Test
+		@DisplayName("limited_drop_stat 행이 있으면 LEFT JOIN 으로 실패 집계 4개 컬럼을 채운다")
+		void returnsFailureCountsFromStatRow() {
+			// given
+			Product product = ProductFixture.create(artist, "ASM Stat Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+			LimitedDropFixture.withStatus(drop, LimitedDropStatus.CLOSED);
+			em.persist(drop);
+			Map<LimitedAttemptResult, Long> counts = Map.of(
+					LimitedAttemptResult.SOLD_OUT, 3L,
+					LimitedAttemptResult.ALREADY_PURCHASED, 2L,
+					LimitedAttemptResult.NOT_OPEN, 1L,
+					LimitedAttemptResult.CLOSED, 4L);
+			em.persist(LimitedDropStat.of(drop, counts, LocalDateTime.now()));
+			em.flush();
+			em.clear();
+
+			// when
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+
+			// then
+			LimitedDropStatsRow own = result.stream()
+					.filter(row -> row.dropId().equals(drop.getId()))
+					.findFirst()
+					.orElseThrow();
+			assertThat(own.soldOutCount()).isEqualTo(3L);
+			assertThat(own.alreadyPurchasedCount()).isEqualTo(2L);
+			assertThat(own.notOpenCount()).isEqualTo(1L);
+			assertThat(own.closedCount()).isEqualTo(4L);
 		}
 
 		@Test
@@ -379,11 +441,11 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsResponse> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
 
 			// then
 			List<Long> ownOrder = result.stream()
-					.map(LimitedDropStatsResponse::dropId)
+					.map(LimitedDropStatsRow::dropId)
 					.filter(id -> id.equals(oldDrop.getId()) || id.equals(newDrop.getId()))
 					.toList();
 			assertThat(ownOrder).containsExactly(newDrop.getId(), oldDrop.getId());

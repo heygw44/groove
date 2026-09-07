@@ -19,6 +19,7 @@ public class LimitedDropScheduleService {
 
 	private final LimitedDropRepository limitedDropRepository;
 	private final LimitedDropRedisService limitedDropRedisService;
+	private final LimitedDropStatFlusher limitedDropStatFlusher;
 
 	@Transactional
 	public boolean open(Long dropId, LocalDateTime now) {
@@ -43,7 +44,7 @@ public class LimitedDropScheduleService {
 		}
 		LimitedDrop drop = found.get();
 		drop.close();
-		limitedDropRedisService.clear(drop.getId());
+		limitedDropStatFlusher.flushAndClear(drop);
 		return true;
 	}
 

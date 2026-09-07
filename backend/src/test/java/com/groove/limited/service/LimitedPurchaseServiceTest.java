@@ -30,7 +30,9 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.limited.config.LimitedProperties;
 import com.groove.limited.dto.LimitedPurchaseResponse;
+import com.groove.limited.entity.LimitedAttemptResult;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -77,6 +79,7 @@ class LimitedPurchaseServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_NOT_OPEN);
 			verify(limitedDropRedisService, never()).reserve(any(), any());
+			verify(limitedDropRedisService).recordAttempt(1L, LimitedAttemptResult.NOT_OPEN);
 		}
 
 		@Test
@@ -84,8 +87,7 @@ class LimitedPurchaseServiceTest {
 		void throwsWhenClosed() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.open(product(), 10), 2L);
-			LimitedDropFixture.withStatus(drop,
-					com.groove.limited.entity.LimitedDropStatus.CLOSED);
+			LimitedDropFixture.withStatus(drop, LimitedDropStatus.CLOSED);
 			given(limitedDropRepository.findById(2L)).willReturn(Optional.of(drop));
 
 			// when & then
@@ -94,6 +96,7 @@ class LimitedPurchaseServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_CLOSED);
 			verify(limitedDropRedisService, never()).reserve(any(), any());
+			verify(limitedDropRedisService, never()).recordAttempt(any(), any());
 		}
 
 		@Test
@@ -110,6 +113,7 @@ class LimitedPurchaseServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_ALREADY_PURCHASED);
 			verify(limitedPurchaseWriter, never()).write(any(), any(), any());
+			verify(limitedDropRedisService).recordAttempt(3L, LimitedAttemptResult.ALREADY_PURCHASED);
 		}
 
 		@Test
@@ -125,6 +129,7 @@ class LimitedPurchaseServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_SOLD_OUT);
+			verify(limitedDropRedisService).recordAttempt(4L, LimitedAttemptResult.SOLD_OUT);
 		}
 
 		@Test
@@ -146,6 +151,22 @@ class LimitedPurchaseServiceTest {
 		}
 
 		@Test
+		@DisplayName("Writer 에서 BusinessException 이 아닌 런타임 예외가 나도 Redis 선점을 되돌리고 예외를 그대로 던진다")
+		void releasesReservationWhenWriterThrowsNonBusinessException() {
+			// given
+			LimitedDrop drop = openDrop(9L);
+			given(limitedDropRepository.findById(9L)).willReturn(Optional.of(drop));
+			given(limitedDropRedisService.reserve(9L, 10L)).willReturn(LimitedDropRedisService.ReserveResult.OK);
+			given(limitedPurchaseWriter.write(9L, 10L, 20L))
+					.willThrow(new IllegalStateException("DB 커넥션 끊김"));
+
+			// when & then
+			assertThatThrownBy(() -> limitedPurchaseService.purchase(9L, 10L, 20L))
+					.isInstanceOf(IllegalStateException.class);
+			verify(limitedDropRedisService).release(9L, 10L);
+		}
+
+		@Test
 		@DisplayName("정상 흐름이면 Writer 결과를 그대로 반환한다")
 		void returnsWriterResultOnSuccess() {
 			// given
@@ -162,6 +183,7 @@ class LimitedPurchaseServiceTest {
 			// then
 			assertThat(result).isEqualTo(response);
 			verify(limitedDropRedisService, never()).release(any(), any());
+			verify(limitedDropRedisService, never()).recordAttempt(any(), any());
 		}
 	}
 
