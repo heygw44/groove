@@ -1,5 +1,6 @@
 package com.groove.recommend.service;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -119,6 +120,10 @@ public class RecommendService {
 		List<ProductFeature> seeds = List.of(target);
 		Set<Long> excludeIds = new HashSet<>();
 		excludeIds.add(productId);
+		// 같은 앨범의 다른 프레싱은 전 차원이 일치해 관련 상품 최상단을 채운다. 상세에 이미 "다른 프레싱" 섹션이 있어 앨범 단위로 뺀다.
+		features.values().stream()
+				.filter(feature -> Objects.equals(target.albumId(), feature.albumId()))
+				.forEach(feature -> excludeIds.add(feature.id()));
 		Map<Long, Double> coPurchaseScores;
 
 		if (memberId == null) {
@@ -211,15 +216,28 @@ public class RecommendService {
 	private List<RankedCandidate> rank(Map<Long, ProductFeature> features, TasteSignal taste,
 			Collection<ProductFeature> seeds, Set<Long> recentOnlySeedIds, Map<Long, Double> coPurchaseScores,
 			Set<Long> excludeIds, int size) {
-		return features.values().stream()
+		List<RankedCandidate> sorted = features.values().stream()
 				.filter(feature -> !feature.hidden())
 				.filter(feature -> !excludeIds.contains(feature.id()))
 				.map(feature -> new RankedCandidate(feature, recommendScorer.score(feature, taste, seeds,
 						recentOnlySeedIds, coPurchaseScores.getOrDefault(feature.id(), 0.0))))
 				.filter(candidate -> candidate.score().totalScore() > 0)
 				.sorted(RANKING_COMPARATOR)
-				.limit(size)
 				.toList();
+
+		// 같은 앨범의 다른 프레싱은 나란히 상위를 차지하므로 앨범당 점수 1위만 남긴다. size 로 자르기 전에 걸러야 목록이 짧아지지 않는다.
+		Set<Long> seenAlbumIds = new HashSet<>();
+		List<RankedCandidate> picked = new ArrayList<>(size);
+		for (RankedCandidate candidate : sorted) {
+			if (!seenAlbumIds.add(candidate.feature().albumId())) {
+				continue;
+			}
+			picked.add(candidate);
+			if (picked.size() == size) {
+				break;
+			}
+		}
+		return picked;
 	}
 
 	private List<RecommendItemResponse> toItems(List<RankedCandidate> ranked, Long memberId) {

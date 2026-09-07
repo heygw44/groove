@@ -8,8 +8,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
@@ -95,6 +98,50 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 			assertThat(metrics.recallAtK()).isGreaterThan(metrics.randomBaseline() * 3);
 			assertThat(metrics.recallAtK()).isGreaterThan(metrics.popularityRecallAtK());
+		}
+	}
+
+	@Nested
+	@DisplayName("recommendRelated()")
+	class RecommendRelated {
+
+		@Test
+		@Transactional
+		@DisplayName("멀티 프레싱 앨범 상품을 기준으로 추천하면 같은 앨범은 빠지고 결과 앨범이 중복되지 않는다")
+		void excludesSameAlbumAndDedupsAlbumsAmongCandidates() {
+			// given
+			Map<Long, Long> albumIdByProductId = new LinkedHashMap<>();
+			Map<Long, List<Long>> productIdsByAlbumId = new LinkedHashMap<>();
+			for (Object[] row : productIdsWithAlbumIds()) {
+				Long productId = (Long)row[0];
+				Long albumId = (Long)row[1];
+				albumIdByProductId.put(productId, albumId);
+				productIdsByAlbumId.computeIfAbsent(albumId, key -> new ArrayList<>()).add(productId);
+			}
+			Optional<Map.Entry<Long, List<Long>>> multiPressingAlbum = productIdsByAlbumId.entrySet().stream()
+					.filter(entry -> entry.getValue().size() >= 2)
+					.findFirst();
+			assertThat(multiPressingAlbum).isPresent();
+			Long targetAlbumId = multiPressingAlbum.get().getKey();
+			Long targetProductId = multiPressingAlbum.get().getValue().get(0);
+
+			// when
+			List<RecommendItemResponse> items = recommendService.recommendRelated(targetProductId, null, TOP_K);
+
+			// then
+			List<Long> resultAlbumIds = items.stream()
+					.map(item -> item.product().id())
+					.map(albumIdByProductId::get)
+					.toList();
+			assertThat(resultAlbumIds).doesNotContain(targetAlbumId);
+			assertThat(resultAlbumIds).doesNotHaveDuplicates();
+		}
+
+		private List<Object[]> productIdsWithAlbumIds() {
+			return entityManager
+					.createQuery("select p.id, p.album.id from Product p where p.status <> :hidden", Object[].class)
+					.setParameter("hidden", ProductStatus.HIDDEN)
+					.getResultList();
 		}
 	}
 
