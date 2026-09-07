@@ -11,7 +11,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 비동기 실행기 설정. 상품 조회 로그처럼 유실돼도 되는 부가 작업을 요청 스레드와 분리하고, 카탈로그 적재 배치 잡을 별도 스레드에서 돌리기 위해 쓴다.
+ * 비동기 실행기 설정. 상품 조회 로그·알림 적재처럼 유실돼도 되는 부가 작업을 요청 스레드와 분리하고, 카탈로그 적재 배치 잡을 별도 스레드에서 돌리기 위해 쓴다.
  *
  * <p>Executor 빈을 직접 정의하면 Boot 의 TaskExecutionAutoConfiguration 이 백오프해 MVC 비동기 요청(@Async 가 아닌
  * Callable/StreamingResponseBody 등)의 기본 실행기가 SimpleAsyncTaskExecutor 로 폴백된다. 현재 그런 컨트롤러가 없어
@@ -34,7 +34,23 @@ public class AsyncConfig {
 		// @TransactionalEventListener(AFTER_COMMIT) 의 @Async 제출은 원 트랜잭션이 커밋된 요청 스레드에서 실행된다.
 		// 기본 AbortPolicy 는 큐가 가득 차면 RejectedExecutionException 을 던지는데, 그게 그대로 전파되면
 		// 상품 상세 응답이 500 이 된다. 조회 로그는 유실돼도 되는 데이터라 로그만 남기고 조용히 버린다.
-		executor.setRejectedExecutionHandler(rejectedTaskLogger());
+		executor.setRejectedExecutionHandler(rejectedTaskLogger("viewLogExecutor"));
+		executor.setWaitForTasksToCompleteOnShutdown(true);
+		executor.setAwaitTerminationSeconds(5);
+		executor.initialize();
+		return executor;
+	}
+
+	@Bean
+	public ThreadPoolTaskExecutor notificationExecutor() {
+		ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+		// 상품 상세 조회 트래픽이 밀리면 viewLogExecutor 큐가 먼저 찬다. 알림 적재가 같은 큐를 쓰면
+		// 재고 변경·가격 인하처럼 드물게 일어나는 이벤트가 조회 로그에 밀려 버려질 수 있어 큐를 분리한다.
+		executor.setCorePoolSize(1);
+		executor.setMaxPoolSize(1);
+		executor.setQueueCapacity(500);
+		executor.setThreadNamePrefix("groove-notification-");
+		executor.setRejectedExecutionHandler(rejectedTaskLogger("notificationExecutor"));
 		executor.setWaitForTasksToCompleteOnShutdown(true);
 		executor.setAwaitTerminationSeconds(5);
 		executor.initialize();
@@ -57,12 +73,12 @@ public class AsyncConfig {
 		return executor;
 	}
 
-	private RejectedExecutionHandler rejectedTaskLogger() {
-		return (runnable, executor) -> log.warn("viewLogExecutor 큐 포화로 작업을 버림. activeCount={}, queueSize={}",
+	private RejectedExecutionHandler rejectedTaskLogger(String executorName) {
+		return (runnable, executor) -> log.warn("{} 큐 포화로 작업을 버림. activeCount={}, queueSize={}", executorName,
 				executor.getActiveCount(), executor.getQueue().size());
 	}
 
 	// AsyncConfigurer 를 구현해 getAsyncUncaughtExceptionHandler() 로 2차 방어선을 두는 대신,
-	// 리스너(ProductViewLogWriter) 본문의 try/catch 로만 예외를 삼킨다. 여기서 다루는 비동기 작업이 하나뿐이라
-	// 전역 핸들러를 별도로 두는 것보다 호출부에서 바로 처리하는 쪽이 더 단순하다.
+	// 리스너(ProductViewLogWriter, NotificationEventListener) 본문의 try/catch 로만 예외를 삼킨다.
+	// 호출부에서 바로 처리하는 쪽이 전역 핸들러를 두는 것보다 단순하다.
 }
