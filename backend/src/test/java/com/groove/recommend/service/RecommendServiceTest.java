@@ -131,7 +131,12 @@ class RecommendServiceTest {
 
 	private static ProductFeatureRow row(Long id, Long artistId, ProductStatus status, Double averageRating,
 			LocalDateTime createdAt) {
-		return new ProductFeatureRow(id, artistId, null, null, averageRating, createdAt, status, null);
+		return rowInAlbum(id, id, artistId, status, averageRating, createdAt);
+	}
+
+	private static ProductFeatureRow rowInAlbum(Long id, Long albumId, Long artistId, ProductStatus status,
+			Double averageRating, LocalDateTime createdAt) {
+		return new ProductFeatureRow(id, albumId, artistId, null, null, averageRating, createdAt, status, null);
 	}
 
 	private static ProductSummaryResponse summary(Long id) {
@@ -357,6 +362,50 @@ class RecommendServiceTest {
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
 			verify(recommendQueryMapper, never()).findProductFeatures();
 		}
+
+		@Test
+		@DisplayName("위시한 상품과 같은 앨범의 다른 프레싱은 후보에서 제외되지 않는다")
+		void keepsOtherPressingsOfOwnedAlbumAsCandidates() {
+			// given
+			long albumId = 1000L;
+			givenNoTasteProfile(MEMBER_ID);
+			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of(10L));
+			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+					.willReturn(List.of());
+			given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					rowInAlbum(10L, albumId, 7L, ProductStatus.ON_SALE, null, NOW),
+					rowInAlbum(11L, albumId, 7L, ProductStatus.ON_SALE, null, NOW)));
+			given(boughtTogetherRedisService.findScores(Set.of(10L))).willReturn(Map.of());
+			given(recommendQueryMapper.findSummariesByIds(List.of(11L), MEMBER_ID))
+					.willReturn(List.of(summary(11L)));
+
+			// when
+			HomeRecommendResponse response = recommendService.recommendHome(MEMBER_ID, null);
+
+			// then
+			assertThat(response.items()).extracting(item -> item.product().id()).containsExactly(11L);
+		}
+
+		@Test
+		@DisplayName("같은 앨범 프레싱이 여러 개 후보에 있어도 결과에는 앨범당 1건만 담긴다")
+		void keepsOnlyOnePressingPerAlbumInHomeResults() {
+			// given
+			long albumId = 2000L;
+			givenNoSeeds();
+			givenTasteProfile(MEMBER_ID, Set.of(1L), Set.of(), Set.of());
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					rowInAlbum(700L, albumId, 1L, ProductStatus.ON_SALE, 4.5, NOW),
+					rowInAlbum(701L, albumId, 1L, ProductStatus.ON_SALE, 3.0, NOW)));
+			given(recommendQueryMapper.findSummariesByIds(List.of(700L), MEMBER_ID))
+					.willReturn(List.of(summary(700L)));
+
+			// when
+			HomeRecommendResponse response = recommendService.recommendHome(MEMBER_ID, null);
+
+			// then
+			assertThat(response.items()).extracting(item -> item.product().id()).containsExactly(700L);
+		}
 	}
 
 	@Nested
@@ -486,6 +535,66 @@ class RecommendServiceTest {
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
 			verify(recommendQueryMapper, never()).findProductFeatures();
 		}
+
+		@Test
+		@DisplayName("대상 상품과 같은 앨범의 다른 프레싱은 추천 결과에서 제외된다")
+		void excludesSameAlbumPressings() {
+			// given
+			long albumId = 500L;
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					rowInAlbum(PRODUCT_ID, albumId, 1L, ProductStatus.ON_SALE, null, NOW),
+					rowInAlbum(51L, albumId, 1L, ProductStatus.ON_SALE, null, NOW),
+					row(60L, 1L, ProductStatus.ON_SALE, null, NOW)));
+			given(recommendQueryMapper.findSummariesByIds(List.of(60L), null))
+					.willReturn(List.of(summary(60L)));
+
+			// when
+			List<RecommendItemResponse> items = recommendService.recommendRelated(PRODUCT_ID, null, null);
+
+			// then
+			assertThat(items).extracting(item -> item.product().id()).containsExactly(60L);
+		}
+
+		@Test
+		@DisplayName("다른 앨범의 프레싱이 여러 개면 점수 상위 1건만 남는다")
+		void keepsOnlyTopScoredPressingPerAlbum() {
+			// given
+			long otherAlbumId = 600L;
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					row(PRODUCT_ID, 1L, ProductStatus.ON_SALE, null, NOW),
+					rowInAlbum(61L, otherAlbumId, 1L, ProductStatus.ON_SALE, 3.0, NOW),
+					rowInAlbum(62L, otherAlbumId, 1L, ProductStatus.ON_SALE, 5.0, NOW)));
+			given(recommendQueryMapper.findSummariesByIds(List.of(62L), null))
+					.willReturn(List.of(summary(62L)));
+
+			// when
+			List<RecommendItemResponse> items = recommendService.recommendRelated(PRODUCT_ID, null, null);
+
+			// then
+			assertThat(items).extracting(item -> item.product().id()).containsExactly(62L);
+		}
+
+		@Test
+		@DisplayName("앨범 축약으로 후보가 줄어도 서로 다른 앨범을 채워 요청한 size 만큼 반환한다")
+		void fillsUpToRequestedSizeAfterAlbumDedup() {
+			// given
+			long albumB = 600L;
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					row(PRODUCT_ID, 1L, ProductStatus.ON_SALE, null, NOW),
+					rowInAlbum(61L, albumB, 1L, ProductStatus.ON_SALE, 5.0, NOW),
+					rowInAlbum(62L, albumB, 1L, ProductStatus.ON_SALE, 4.9, NOW),
+					rowInAlbum(63L, albumB, 1L, ProductStatus.ON_SALE, 4.8, NOW),
+					row(70L, 1L, ProductStatus.ON_SALE, 4.0, NOW),
+					row(80L, 1L, ProductStatus.ON_SALE, 3.0, NOW)));
+			given(recommendQueryMapper.findSummariesByIds(List.of(61L, 70L, 80L), null))
+					.willReturn(List.of(summary(61L), summary(70L), summary(80L)));
+
+			// when
+			List<RecommendItemResponse> items = recommendService.recommendRelated(PRODUCT_ID, null, 3);
+
+			// then
+			assertThat(items).extracting(item -> item.product().id()).containsExactly(61L, 70L, 80L);
+		}
 	}
 
 	@Nested
@@ -494,7 +603,7 @@ class RecommendServiceTest {
 
 		private static ProductFeatureRow rowWithGenreAndDecade(Long id, Long artistId, String genreIds,
 				Integer releaseYear) {
-			return new ProductFeatureRow(id, artistId, null, releaseYear, null, NOW, ProductStatus.ON_SALE,
+			return new ProductFeatureRow(id, id, artistId, null, releaseYear, null, NOW, ProductStatus.ON_SALE,
 					genreIds);
 		}
 

@@ -31,7 +31,7 @@ class RecommendScorerTest {
 	}
 
 	private ProductFeature feature(Long id, Long artistId, Long labelId, Set<Long> genreIds, Decade decade) {
-		return new ProductFeature(id, artistId, labelId, genreIds, decade, 4.0, NOW, false);
+		return new ProductFeature(id, id, artistId, labelId, genreIds, decade, 4.0, NOW, false);
 	}
 
 	@Nested

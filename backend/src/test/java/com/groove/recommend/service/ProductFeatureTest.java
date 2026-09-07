@@ -27,7 +27,7 @@ class ProductFeatureTest {
 		@DisplayName("장르 CSV 를 id 집합으로, 발매 연도를 연대로 바꾼다")
 		void parsesGenreCsvAndDecade() {
 			// given
-			ProductFeatureRow row = new ProductFeatureRow(1L, 10L, 20L, 1975, 4.5, CREATED_AT,
+			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, 20L, 1975, 4.5, CREATED_AT,
 					ProductStatus.ON_SALE, "3,1,5");
 
 			// when
@@ -35,6 +35,7 @@ class ProductFeatureTest {
 
 			// then
 			assertThat(feature.id()).isEqualTo(1L);
+			assertThat(feature.albumId()).isEqualTo(2L);
 			assertThat(feature.artistId()).isEqualTo(10L);
 			assertThat(feature.labelId()).isEqualTo(20L);
 			assertThat(feature.genreIds()).containsExactlyInAnyOrder(1L, 3L, 5L);
@@ -50,7 +51,7 @@ class ProductFeatureTest {
 		@DisplayName("장르 CSV 가 비어 있으면 빈 집합으로 만든다")
 		void returnsEmptyGenreIdsWhenCsvBlank(String genreIds) {
 			// given
-			ProductFeatureRow row = new ProductFeatureRow(1L, 10L, null, null, null, CREATED_AT,
+			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, null, null, null, CREATED_AT,
 					ProductStatus.HIDDEN, genreIds);
 
 			// when
