@@ -12,8 +12,11 @@ import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchRequest;
+import com.groove.product.dto.ProductSuggestionRequest;
+import com.groove.product.dto.ProductSuggestionResponse;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.service.ProductService;
+import com.groove.product.service.ProductSuggestService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -28,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class ProductController {
 
 	private final ProductService productService;
+	private final ProductSuggestService productSuggestService;
 
 	@Operation(summary = "상품 목록 검색", description = "로그인 시 wishlisted 포함")
 	@SecurityRequirements
@@ -36,6 +40,13 @@ public class ProductController {
 			@Valid @ModelAttribute ProductSearchRequest request,
 			@AuthMember(required = false) LoginMember loginMember) {
 		return ApiResponse.ok(productService.search(request, memberIdOf(loginMember)));
+	}
+
+	@Operation(summary = "검색어 자동완성", description = "상품·아티스트 제안을 한 번에 반환")
+	@SecurityRequirements
+	@GetMapping("/suggestions")
+	public ApiResponse<ProductSuggestionResponse> suggest(@Valid @ModelAttribute ProductSuggestionRequest request) {
+		return ApiResponse.ok(productSuggestService.suggest(request.keyword()));
 	}
 
 	@Operation(summary = "상품 상세 조회", description = "로그인 시 wishlisted 포함")
