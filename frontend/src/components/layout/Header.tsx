@@ -1,8 +1,9 @@
-import { useId, useState } from 'react';
+import { useId, useState, type KeyboardEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { Drawer } from '@/components/common/Drawer';
+import { HeaderSearch } from '@/components/layout/HeaderSearch';
 import { NotificationBell } from '@/components/notification/NotificationBell';
 import { useLogout } from '@/hooks/mutations/useAuthMutations';
 import { useCart } from '@/hooks/queries/useCart';
@@ -29,19 +30,29 @@ export function Header() {
   const notificationCount = unreadCount?.count ?? 0;
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const { pathname } = useLocation();
   const mobileMenuId = useId();
+  const mobileSearchId = useId();
 
   /*
-   * 메뉴에서 링크를 누르면 화면만 바뀌고 드로어가 남아 있으면 안 된다.
+   * 메뉴에서 링크를 누르면 화면만 바뀌고 드로어/검색 줄이 남아 있으면 안 된다.
    * 렌더 중 이전 값과 비교해 setState 하는 건 React 공식 패턴 - effect 로 하면
-   * 드로어가 한 프레임 깜빡이고 set-state-in-effect 경고도 뜬다.
+   * 한 프레임 깜빡이고 set-state-in-effect 경고도 뜬다.
    */
   const [prevPathname, setPrevPathname] = useState(pathname);
   if (pathname !== prevPathname) {
     setPrevPathname(pathname);
     setIsMenuOpen(false);
+    setIsMobileSearchOpen(false);
   }
+
+  // 드롭다운이 이미 닫힌 상태에서 온 Esc 만 여기까지 버블된다(HeaderSearch 가 열려 있으면 자기 것부터 닫는다).
+  const handleMobileSearchKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      setIsMobileSearchOpen(false);
+    }
+  };
 
   const navItems: NavItem[] = [
     { to: '/products', label: '상품' },
@@ -65,11 +76,15 @@ export function Header() {
   );
 
   return (
-    <header className="border-b border-line bg-surface">
+    // 검색 드롭다운(z-10)이 상품 카드의 위시 버튼(같은 z-10)에 가리지 않게
+    // 헤더를 쌓임 맥락으로 올린다. Drawer·Modal(z-50)보다는 아래다.
+    <header className="relative z-20 border-b border-line bg-surface">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-3">
         <Link to="/" className="text-lg font-bold tracking-[0.14em] text-content">
           GROOVE
         </Link>
+
+        <HeaderSearch className="hidden md:block md:max-w-md md:flex-1" />
 
         <nav className="hidden items-center gap-5 text-sm text-content-muted md:flex">
           {navItems.map((item) => (
@@ -120,6 +135,29 @@ export function Header() {
 
         <button
           type="button"
+          aria-label="검색 열기"
+          aria-expanded={isMobileSearchOpen}
+          aria-controls={mobileSearchId}
+          onClick={() => setIsMobileSearchOpen((prev) => !prev)}
+          className="rounded-md p-1.5 text-content-muted hover:bg-surface-muted hover:text-content md:hidden"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <circle cx="9" cy="9" r="6" />
+            <path d="m17 17-4-4" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
           aria-label={isMenuOpen ? '메뉴 닫기' : '메뉴 열기'}
           aria-expanded={isMenuOpen}
           aria-controls={mobileMenuId}
@@ -142,6 +180,23 @@ export function Header() {
           </svg>
         </button>
       </div>
+
+      {isMobileSearchOpen && (
+        <div
+          id={mobileSearchId}
+          onKeyDown={handleMobileSearchKeyDown}
+          className="flex items-center gap-2 border-t border-line px-4 py-2.5 md:hidden"
+        >
+          <HeaderSearch autoFocus className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setIsMobileSearchOpen(false)}
+            className="shrink-0 text-sm text-content-muted hover:text-content"
+          >
+            취소
+          </button>
+        </div>
+      )}
 
       <Drawer open={isMenuOpen} onClose={() => setIsMenuOpen(false)} title="메뉴" side="right">
         <div id={mobileMenuId}>
