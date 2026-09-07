@@ -339,7 +339,7 @@ class ProductServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
-			verify(eventPublisher, never()).publishEvent(any());
+			verify(eventPublisher, never()).publishEvent(any(ProductViewedEvent.class));
 		}
 
 		@Test
@@ -356,7 +356,7 @@ class ProductServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_HIDDEN);
-			verify(eventPublisher, never()).publishEvent(any());
+			verify(eventPublisher, never()).publishEvent(any(ProductViewedEvent.class));
 		}
 
 		@Test
