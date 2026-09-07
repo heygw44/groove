@@ -7,12 +7,8 @@ export function RecommendReasonBadge({ reason }: { reason: RecommendReason }) {
 }
 
 export function RecommendReasonBadges({ reasons }: { reasons: RecommendReason[] }) {
-  if (reasons.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
+    <div className="mt-1.5 flex h-5 flex-nowrap gap-1 overflow-hidden">
       {reasons.slice(0, MAX_REASON_BADGES).map((reason) => (
         <RecommendReasonBadge key={reason} reason={reason} />
       ))}

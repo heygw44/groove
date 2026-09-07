@@ -14,10 +14,11 @@ describe('RecommendReasonBadge', () => {
 });
 
 describe('RecommendReasonBadges', () => {
-  it('빈 배열이면 아무것도 렌더하지 않는다', () => {
+  it('빈 배열이어도 카드 정렬을 위해 자리는 유지한다', () => {
     const { container } = render(<RecommendReasonBadges reasons={[]} />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(container.firstChild).not.toBeNull();
+    expect(container.firstChild).toBeEmptyDOMElement();
   });
 
   it('3개를 넘기면 최대 2개만 렌더한다', () => {

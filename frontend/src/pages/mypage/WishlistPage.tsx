@@ -4,9 +4,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
-import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
-import { WishlistCard } from '@/components/wishlist/WishlistCard';
+import { WishlistCard, WishlistCardSkeleton } from '@/components/wishlist/WishlistCard';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
 import { useToggleWishlist } from '@/hooks/mutations/useWishlistMutations';
 import { useWishlist } from '@/hooks/queries/useWishlist';
@@ -74,8 +73,10 @@ export default function WishlistPage() {
 
       <div className="mt-3">
         {isPending && (
-          <div className="flex min-h-48 items-center justify-center">
-            <Spinner />
+          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: PAGE_SIZE }, (_, index) => (
+              <WishlistCardSkeleton key={index} />
+            ))}
           </div>
         )}
 
