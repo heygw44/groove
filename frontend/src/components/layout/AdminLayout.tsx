@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { PageContainer } from '@/components/common/PageContainer';
+
 interface AdminNavItem {
   to: string;
   label: string;
@@ -179,7 +181,7 @@ const NAV_ITEMS: AdminNavItem[] = [
 
 export function AdminLayout() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
+    <PageContainer size="xl">
       <h1 className="mb-6 text-2xl font-bold tracking-tight">관리자</h1>
 
       <div className="grid gap-6 md:grid-cols-[196px_minmax(0,1fr)] md:gap-11">
@@ -207,6 +209,6 @@ export function AdminLayout() {
           <Outlet />
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

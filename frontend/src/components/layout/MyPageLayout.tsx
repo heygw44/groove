@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { PageContainer } from '@/components/common/PageContainer';
+
 interface MyPageNavItem {
   to: string;
   label: string;
@@ -153,7 +155,7 @@ const NAV_ITEMS: MyPageNavItem[] = [
 
 export function MyPageLayout() {
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <PageContainer size="md">
       <h1 className="mb-6 text-2xl font-bold tracking-tight">마이페이지</h1>
 
       <div className="grid gap-6 md:grid-cols-[196px_minmax(0,1fr)] md:gap-11">
@@ -181,6 +183,6 @@ export function MyPageLayout() {
           <Outlet />
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

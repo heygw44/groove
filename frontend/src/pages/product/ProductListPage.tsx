@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { Drawer } from '@/components/common/Drawer';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { Pagination } from '@/components/common/Pagination';
 import { ActiveFilterChips } from '@/components/product/ActiveFilterChips';
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
@@ -41,7 +42,7 @@ export default function ProductListPage() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <PageContainer>
       <h1 className="mb-6 text-2xl font-bold tracking-tight">상품 목록</h1>
 
       <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -135,6 +136,6 @@ export default function ProductListPage() {
       <Drawer open={isFilterDrawerOpen} onClose={() => setIsFilterDrawerOpen(false)} title="필터">
         {filterPanel}
       </Drawer>
-    </div>
+    </PageContainer>
   );
 }
