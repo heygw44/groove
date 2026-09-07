@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ import com.groove.global.common.PageResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.inventory.service.StockService;
+import com.groove.notification.service.PriceDropEvent;
 import com.groove.product.dto.AdminProductResponse;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
@@ -54,6 +56,7 @@ public class AdminProductService {
 	private final StockRepository stockRepository;
 	private final StockService stockService;
 	private final AdminAuditLogService adminAuditLogService;
+	private final ApplicationEventPublisher eventPublisher;
 
 	@Transactional
 	public AdminProductResponse create(Long adminId, ProductCreateRequest request) {
@@ -131,8 +134,16 @@ public class AdminProductService {
 			changedFields.add("barcode");
 		}
 
+		BigDecimal oldPrice = product.getPrice();
 		product.updateInfo(title, artist, label, releaseDate, pressingInfo, colorVariant, country, pressingYear,
 				catalogNo, barcode, editionType, price, description);
+
+		// changedFields 는 coalesce() 가 "값이 왔는지"만 보고 채우므로 가격이 그대로여도 "price" 가 남는다.
+		// 인하 여부는 반드시 compareTo 로 비교한다. BigDecimal 은 스케일이 달라도(1000 vs 1000.00)
+		// 값이 같으면 equals 는 다르다고 판단하므로 여기서 쓰면 안 된다.
+		if (request.price() != null && oldPrice.compareTo(price) > 0) {
+			eventPublisher.publishEvent(new PriceDropEvent(product.getId(), product.getTitle()));
+		}
 
 		if (request.genreIds() != null) {
 			product.replaceGenres(findGenres(request.genreIds()));
