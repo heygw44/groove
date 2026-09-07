@@ -127,13 +127,13 @@ export default function OrderDetailPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <Link to="/orders" className="text-sm text-content-muted">
         ← 주문 내역
       </Link>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h1 className="font-mono text-lg font-bold">{order.orderNumber}</h1>
+        <h2 className="font-mono text-lg font-bold">{order.orderNumber}</h2>
         <OrderStatusBadge status={order.status} />
         {order.limitedDropId !== undefined && (
           <Link to={`/limited-drops/${order.limitedDropId}`}>

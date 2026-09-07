@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { useConfirmPayment } from '@/hooks/mutations/usePaymentMutations';
@@ -45,36 +46,42 @@ export default function PaymentSuccessPage() {
 
   if (!params) {
     return (
-      <EmptyState
-        title="잘못된 접근입니다"
-        action={
-          <Button variant="secondary" onClick={() => navigate('/orders')}>
-            주문 내역으로
-          </Button>
-        }
-      />
+      <PageContainer size="sm">
+        <EmptyState
+          title="잘못된 접근입니다"
+          action={
+            <Button variant="secondary" onClick={() => navigate('/orders')}>
+              주문 내역으로
+            </Button>
+          }
+        />
+      </PageContainer>
     );
   }
 
   if (confirmError) {
     const backTo = params.orderRef ? `/orders/${params.orderRef}` : '/orders';
     return (
-      <EmptyState
-        title="결제 승인에 실패했습니다"
-        description={getErrorMessage(confirmError)}
-        action={
-          <Button variant="secondary" onClick={() => navigate(backTo)}>
-            주문으로 돌아가기
-          </Button>
-        }
-      />
+      <PageContainer size="sm">
+        <EmptyState
+          title="결제 승인에 실패했습니다"
+          description={getErrorMessage(confirmError)}
+          action={
+            <Button variant="secondary" onClick={() => navigate(backTo)}>
+              주문으로 돌아가기
+            </Button>
+          }
+        />
+      </PageContainer>
     );
   }
 
   return (
-    <div className="flex min-h-64 flex-col items-center justify-center gap-3">
-      <Spinner size="lg" />
-      <p className="text-sm text-content-muted">결제를 승인하고 있습니다. 창을 닫지 마세요.</p>
-    </div>
+    <PageContainer size="sm">
+      <div className="flex min-h-64 flex-col items-center justify-center gap-3">
+        <Spinner size="lg" />
+        <p className="text-sm text-content-muted">결제를 승인하고 있습니다. 창을 닫지 마세요.</p>
+      </div>
+    </PageContainer>
   );
 }

@@ -69,7 +69,7 @@
 		LIMIT #{limit}
 	</select>
 
-	<resultMap id="limitedDropStatsMap" type="com.groove.admin.dto.LimitedDropStatsResponse">
+	<resultMap id="limitedDropStatsMap" type="com.groove.admin.dto.LimitedDropStatsRow">
 		<constructor>
 			<arg column="id" javaType="java.lang.Long"/>
 			<arg column="title" javaType="java.lang.String"/>
@@ -81,10 +81,17 @@
 			<arg column="close_at" javaType="java.time.LocalDateTime"/>
 			<arg column="sold_out_at" javaType="java.time.LocalDateTime"/>
 			<arg column="sold_out_seconds" javaType="java.lang.Long"/>
+			<arg column="sold_out_count" javaType="java.lang.Long"/>
+			<arg column="already_purchased_count" javaType="java.lang.Long"/>
+			<arg column="not_open_count" javaType="java.lang.Long"/>
+			<arg column="closed_count" javaType="java.lang.Long"/>
 		</constructor>
 	</resultMap>
 
-	<!-- sold_out_at 은 별도 컬럼이 없어 SOLD_OUT 상태일 때만 마지막 구매 시각으로 파생한다. -->
+	<!--
+		sold_out_at 은 별도 컬럼이 없어 SOLD_OUT 상태일 때만 마지막 구매 시각으로 파생한다.
+		limited_drop_stat 은 마감된 드롭의 실패 집계 스냅샷이라 LEFT JOIN 으로 붙이고, 없으면 4개 컬럼 모두 null 이다.
+	-->
 	<select id="findLimitedDropStats" resultMap="limitedDropStatsMap">
 		SELECT
 			ld.id, pr.title, ld.status, ld.total_quantity, ld.sold_count,
@@ -96,9 +103,11 @@
 			CASE WHEN ld.status = 'SOLD_OUT'
 				THEN TIMESTAMPDIFF(SECOND, ld.open_at,
 					(SELECT MAX(lp.created_at) FROM limited_purchase lp WHERE lp.drop_id = ld.id))
-			END AS sold_out_seconds
+			END AS sold_out_seconds,
+			lds.sold_out_count, lds.already_purchased_count, lds.not_open_count, lds.closed_count
 		FROM limited_drop ld
 		JOIN product pr ON pr.id = ld.product_id
+		LEFT JOIN limited_drop_stat lds ON lds.drop_id = ld.id
 		ORDER BY ld.open_at DESC, ld.id DESC
 	</select>
 

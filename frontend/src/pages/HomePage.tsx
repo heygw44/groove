@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
+import { PageContainer } from '@/components/common/PageContainer';
 import { LimitedDropBanner } from '@/components/limited/LimitedDropBanner';
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
 import { DiggingSection } from '@/components/recommend/DiggingSection';
@@ -30,7 +31,7 @@ export default function HomePage() {
   const hasBanner = Boolean(bannerDrop);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <PageContainer>
       {bannerDrop && <LimitedDropBanner drop={bannerDrop} nowMs={nowMs} />}
 
       <DiggingSection className={hasBanner ? 'mt-10' : undefined} />
@@ -56,6 +57,6 @@ export default function HomePage() {
             ))}
         </div>
       </section>
-    </div>
+    </PageContainer>
   );
 }

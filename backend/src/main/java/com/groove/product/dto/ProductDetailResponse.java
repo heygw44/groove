@@ -31,11 +31,12 @@ public record ProductDetailResponse(
 		Double averageRating,
 		long reviewCount,
 		Boolean wishlisted,
+		Boolean alertEnabled,
 		LimitedDropSummary limitedDrop
 ) {
 
 	public static ProductDetailResponse from(Product product, List<ProductImage> images, int stockQuantity,
-		Boolean wishlisted, LimitedDropSummary limitedDrop, int pressingCount) {
+		Boolean wishlisted, Boolean alertEnabled, LimitedDropSummary limitedDrop, int pressingCount) {
 		LabelSummary label = product.getLabel() == null
 				? null
 				: new LabelSummary(product.getLabel().getId(), product.getLabel().getName());
@@ -71,6 +72,7 @@ public record ProductDetailResponse(
 				product.getAverageRating() == null ? null : product.getAverageRating().doubleValue(),
 				product.getReviewCount(),
 				wishlisted,
+				alertEnabled,
 				limitedDrop);
 	}
 

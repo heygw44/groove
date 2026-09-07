@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +17,7 @@ import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
 import com.groove.wishlist.dto.WishlistAddRequest;
+import com.groove.wishlist.dto.WishlistAlertRequest;
 import com.groove.wishlist.dto.WishlistItemResponse;
 import com.groove.wishlist.dto.WishlistSearchRequest;
 import com.groove.wishlist.service.WishlistService;
@@ -53,5 +55,12 @@ public class WishlistController {
 	public ApiResponse<Void> remove(@AuthMember LoginMember loginMember, @PathVariable Long productId) {
 		wishlistService.remove(loginMember.id(), productId);
 		return ApiResponse.ok();
+	}
+
+	@Operation(summary = "위시리스트 알림 수신 토글")
+	@PatchMapping("/{productId}/alert")
+	public ApiResponse<WishlistItemResponse> changeAlert(@AuthMember LoginMember loginMember,
+			@PathVariable Long productId, @Valid @RequestBody WishlistAlertRequest request) {
+		return ApiResponse.ok(wishlistService.changeAlert(loginMember.id(), productId, request.alertEnabled()));
 	}
 }

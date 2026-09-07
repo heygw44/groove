@@ -6,6 +6,7 @@ import { CartSummary } from '@/components/cart/CartSummary';
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { useRemoveCartItem, useUpdateCartItemQuantity } from '@/hooks/mutations/useCartMutations';
@@ -79,23 +80,27 @@ export default function CartPage() {
 
   if (isPending) {
     return (
-      <div className="flex min-h-64 items-center justify-center">
-        <Spinner size="lg" />
-      </div>
+      <PageContainer size="md">
+        <div className="flex min-h-64 items-center justify-center">
+          <Spinner size="lg" />
+        </div>
+      </PageContainer>
     );
   }
 
   if (isError || !cart) {
     return (
-      <EmptyState
-        title="장바구니를 불러오지 못했습니다"
-        action={<Button onClick={() => refetch()}>다시 시도</Button>}
-      />
+      <PageContainer size="md">
+        <EmptyState
+          title="장바구니를 불러오지 못했습니다"
+          action={<Button onClick={() => refetch()}>다시 시도</Button>}
+        />
+      </PageContainer>
     );
   }
 
   return (
-    <div>
+    <PageContainer size="md">
       <h1 className="text-xl font-bold">장바구니</h1>
 
       {items.length === 0 ? (
@@ -153,6 +158,6 @@ export default function CartPage() {
         confirmLabel="삭제"
         pending={removeMutation.isPending}
       />
-    </div>
+    </PageContainer>
   );
 }

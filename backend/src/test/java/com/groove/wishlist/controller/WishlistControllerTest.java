@@ -3,6 +3,7 @@ package com.groove.wishlist.controller;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -42,6 +44,7 @@ import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
 import com.groove.product.entity.ProductStatus;
 import com.groove.wishlist.dto.WishlistAddRequest;
+import com.groove.wishlist.dto.WishlistAlertRequest;
 import com.groove.wishlist.dto.WishlistItemResponse;
 import com.groove.wishlist.service.WishlistService;
 
@@ -71,7 +74,7 @@ class WishlistControllerTest {
 
 	private WishlistItemResponse sampleItemResponse() {
 		return new WishlistItemResponse(10L, 100L, "Kind of Blue", "Miles Davis", "https://cdn.groove.com/0.jpg",
-				new BigDecimal("45000"), ProductStatus.ON_SALE, 5, LocalDateTime.now());
+				new BigDecimal("45000"), ProductStatus.ON_SALE, 5, true, LocalDateTime.now());
 	}
 
 	@Nested
@@ -207,6 +210,68 @@ class WishlistControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(wishlistService, never()).remove(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("PATCH /api/v1/wishlist/{productId}/alert")
+	class ChangeAlert {
+
+		@Test
+		@DisplayName("유효한 요청이면 200 과 갱신된 항목을 반환한다")
+		void changesAlert() throws Exception {
+			// given
+			given(wishlistService.changeAlert(eq(1L), eq(100L), eq(false))).willReturn(sampleItemResponse());
+
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/100/alert")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new WishlistAlertRequest(false))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.productId", is(100)));
+			verify(wishlistService).changeAlert(1L, 100L, false);
+		}
+
+		@Test
+		@DisplayName("alertEnabled 가 없으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenAlertEnabledMissing() throws Exception {
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/100/alert")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new WishlistAlertRequest(null))))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("alertEnabled")));
+		}
+
+		@Test
+		@DisplayName("등록되지 않은 상품이면 404 WISHLIST_NOT_FOUND 를 반환한다")
+		void returnsNotFoundWhenNotRegistered() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.WISHLIST_NOT_FOUND))
+					.given(wishlistService).changeAlert(eq(1L), eq(100L), eq(false));
+
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/100/alert")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new WishlistAlertRequest(false))))
+					.andExpect(status().isNotFound())
+					.andExpect(jsonPath("$.error.code", is("WISHLIST_NOT_FOUND")));
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/100/alert")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new WishlistAlertRequest(false))))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(wishlistService, never()).changeAlert(any(), any(), anyBoolean());
 		}
 	}
 }

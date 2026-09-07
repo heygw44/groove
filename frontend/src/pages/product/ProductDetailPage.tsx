@@ -5,7 +5,9 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { StarRatingDisplay } from '@/components/common/StarRating';
+import { AlbumWatchButton } from '@/components/notification/AlbumWatchButton';
 import { AlbumPressingsSection } from '@/components/product/AlbumPressingsSection';
 import { PressingSpecTable } from '@/components/product/PressingSpecTable';
 import { ProductDetailSkeleton } from '@/components/product/ProductDetailSkeleton';
@@ -46,9 +48,9 @@ export default function ProductDetailPage() {
 
   if (isPending) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8">
+      <PageContainer>
         <ProductDetailSkeleton />
-      </div>
+      </PageContainer>
     );
   }
 
@@ -59,7 +61,7 @@ export default function ProductDetailPage() {
 
   if (isError || !product) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8">
+      <PageContainer>
         <EmptyState
           title="상품을 불러오지 못했습니다."
           description={getErrorMessage(error)}
@@ -69,12 +71,12 @@ export default function ProductDetailPage() {
             </Button>
           }
         />
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <PageContainer>
       <Link to="/products" className="text-sm text-content-muted">
         ← 상품 목록
       </Link>
@@ -131,9 +133,12 @@ export default function ProductDetailPage() {
         <p className="mt-10 whitespace-pre-line text-sm text-content">{product.description}</p>
       )}
 
-      {product.album.pressingCount > 1 && (
-        <AlbumPressingsSection albumId={product.album.id} currentProductId={product.id} />
-      )}
+      <AlbumPressingsSection
+        albumId={product.album.id}
+        currentProductId={product.id}
+        hasOtherPressings={product.album.pressingCount > 1}
+        action={<AlbumWatchButton albumId={product.album.id} albumTitle={product.album.title} />}
+      />
 
       <RelatedProductsSection productId={product.id} />
 
@@ -142,6 +147,6 @@ export default function ProductDetailPage() {
         averageRating={product.averageRating}
         reviewCount={product.reviewCount ?? 0}
       />
-    </div>
+    </PageContainer>
   );
 }

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { PageContainer } from '@/components/common/PageContainer';
+
 interface MyPageNavItem {
   to: string;
   label: string;
@@ -27,6 +29,26 @@ const NAV_ITEMS: MyPageNavItem[] = [
       >
         <circle cx="10" cy="7" r="3.2" />
         <path d="M4 16.5c0-2.6 2.7-4.2 6-4.2s6 1.6 6 4.2" />
+      </svg>
+    ),
+  },
+  {
+    to: '/notifications',
+    label: '알림',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M5 8.5a5 5 0 0 1 10 0c0 3 1 4.2 1.5 4.8H3.5C4 12.7 5 11.5 5 8.5Z" />
+        <path d="M8.3 15.8a1.8 1.8 0 0 0 3.4 0" />
       </svg>
     ),
   },
@@ -153,7 +175,7 @@ const NAV_ITEMS: MyPageNavItem[] = [
 
 export function MyPageLayout() {
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <PageContainer size="md">
       <h1 className="mb-6 text-2xl font-bold tracking-tight">마이페이지</h1>
 
       <div className="grid gap-6 md:grid-cols-[196px_minmax(0,1fr)] md:gap-11">
@@ -181,6 +203,6 @@ export function MyPageLayout() {
           <Outlet />
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

@@ -182,7 +182,7 @@ class AdminStatsControllerTest {
 			// given
 			LimitedDropStatsResponse response = new LimitedDropStatsResponse(1L, "그루브 앨범", LimitedDropStatus.OPEN,
 					10, 3, 30.0, LocalDateTime.of(2026, 9, 1, 10, 0), LocalDateTime.of(2026, 9, 2, 10, 0), null,
-					null);
+					null, null);
 			given(adminStatsService.getLimitedDropStats()).willReturn(List.of(response));
 
 			// when & then

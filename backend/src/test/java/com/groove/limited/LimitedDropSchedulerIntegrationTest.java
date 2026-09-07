@@ -25,10 +25,13 @@ import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.dto.LimitedPurchaseResponse;
+import com.groove.limited.entity.LimitedAttemptResult;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedDropStat;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.repository.LimitedDropStatRepository;
 import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.limited.scheduler.LimitedDropScheduler;
 import com.groove.limited.service.LimitedDropRedisService;
@@ -70,6 +73,9 @@ class LimitedDropSchedulerIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private LimitedPurchaseRepository limitedPurchaseRepository;
+
+	@Autowired
+	private LimitedDropStatRepository limitedDropStatRepository;
 
 	@Autowired
 	private LimitedDropRedisService limitedDropRedisService;
@@ -160,6 +166,43 @@ class LimitedDropSchedulerIntegrationTest extends IntegrationTestSupport {
 			assertThat(reloaded.getStatus()).isEqualTo(LimitedDropStatus.CLOSED);
 			assertThat(redisTemplate.hasKey(LimitedDropRedisService.stockKey(saved.getId()))).isFalse();
 			assertThat(redisTemplate.hasKey(LimitedDropRedisService.buyersKey(saved.getId()))).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("마감 시 집계 flush")
+	class FlushStatOnClose {
+
+		@Test
+		@DisplayName("마감되면 attempts 집계가 limited_drop_stat 에 저장되고 Redis attempts 키가 지워진다")
+		void flushesAttemptsAndClearsRedisWhenDropCloses() {
+			// given
+			Product product = createProduct();
+			stockRepository.saveAndFlush(StockFixture.create(product, 10));
+			LocalDateTime now = LocalDateTime.now(clock);
+			LimitedDrop drop = LimitedDropFixture.open(product, 10);
+			LimitedDropFixture.withOpenAt(drop, now.minusHours(1));
+			LimitedDropFixture.withCloseAt(drop, now.minusMinutes(1));
+			LimitedDrop saved = limitedDropRepository.saveAndFlush(drop);
+			Long dropId = saved.getId();
+			limitedDropRedisService.clear(dropId);
+			limitedDropRedisService.initStock(dropId, 10);
+			redisTemplate.opsForHash().increment(LimitedDropRedisService.attemptsKey(dropId),
+					LimitedAttemptResult.SOLD_OUT.name(), 3);
+			redisTemplate.opsForHash().increment(LimitedDropRedisService.attemptsKey(dropId),
+					LimitedAttemptResult.ALREADY_PURCHASED.name(), 2);
+
+			// when
+			limitedDropScheduler.run();
+
+			// then
+			LimitedDropStat stat = limitedDropStatRepository.findByDropId(dropId).orElseThrow();
+			assertThat(stat.getSoldOutCount()).isEqualTo(3);
+			assertThat(stat.getAlreadyPurchasedCount()).isEqualTo(2);
+			assertThat(redisTemplate.hasKey(LimitedDropRedisService.attemptsKey(dropId))).isFalse();
+			assertThat(redisTemplate.hasKey(LimitedDropRedisService.stockKey(dropId))).isFalse();
+
+			limitedDropRedisService.clear(dropId);
 		}
 	}
 

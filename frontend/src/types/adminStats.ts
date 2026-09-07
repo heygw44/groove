@@ -23,6 +23,17 @@ export interface PopularProduct {
   orderCount: number;
 }
 
+export interface LimitedDropAttempts {
+  attemptCount: number;
+  successCount: number;
+  soldOutCount: number;
+  alreadyPurchasedCount: number;
+  notOpenCount: number;
+  closedCount: number;
+  /** N:1 의 N (배수). sellRate 와 달리 퍼센트가 아니다. */
+  competitionRate: number;
+}
+
 export interface LimitedDropStats {
   dropId: number;
   productTitle: string;
@@ -35,6 +46,8 @@ export interface LimitedDropStats {
   closeAt: string;
   soldOutAt?: string;
   soldOutSeconds?: number;
+  /** 기능 이전 마감 드롭·시도 없는 드롭·Redis 조회 실패 시 생략된다. */
+  attempts?: LimitedDropAttempts;
 }
 
 export interface StatsPeriodParams {

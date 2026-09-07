@@ -2,15 +2,20 @@ package com.groove.catalog.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+import java.net.SocketException;
+import java.time.Duration;
 
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
@@ -25,11 +30,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
 import com.groove.catalog.client.dto.DiscogsSearchResponse;
+import com.groove.catalog.config.DiscogsProperties;
 import com.groove.fixture.DiscogsFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -46,6 +53,7 @@ class DiscogsClientTest {
 
 	private MockRestServiceServer server;
 	private DiscogsClient discogsClient;
+	private RecordingSleeper sleeper;
 
 	@BeforeEach
 	void setUp() {
@@ -54,7 +62,10 @@ class DiscogsClientTest {
 				.defaultHeader(HttpHeaders.AUTHORIZATION, "Discogs token=" + TOKEN)
 				.defaultHeader(HttpHeaders.USER_AGENT, USER_AGENT);
 		server = MockRestServiceServer.bindTo(builder).build();
-		discogsClient = new DiscogsClient(builder.build(), rateLimiter);
+		sleeper = new RecordingSleeper();
+		discogsClient = new DiscogsClient(builder.build(), rateLimiter, sleeper,
+				new DiscogsProperties(BASE_URL, TOKEN, USER_AGENT, Duration.ofSeconds(5),
+						new DiscogsProperties.Retry(2, Duration.ofMillis(50))));
 	}
 
 	@AfterEach
@@ -105,6 +116,7 @@ class DiscogsClientTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.CATALOG_LOOKUP_FAILED);
+			assertThat(sleeper.sleptDurations()).isEmpty();
 		}
 
 		@Test
@@ -120,13 +132,14 @@ class DiscogsClientTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.CATALOG_RATE_LIMITED);
 			verify(rateLimiter).blockFor(3);
+			assertThat(sleeper.sleptDurations()).isEmpty();
 		}
 
 		@Test
-		@DisplayName("500 응답이면 CATALOG_LOOKUP_FAILED 로 변환한다")
-		void translatesServerErrorToLookupFailed() {
+		@DisplayName("500 응답이면 재시도한 뒤 CATALOG_LOOKUP_FAILED 로 변환한다")
+		void retriesServerErrorThenTranslatesToLookupFailed() {
 			// given
-			server.expect(requestTo(Matchers.startsWith(BASE_URL + "/database/search")))
+			server.expect(ExpectedCount.times(2), requestTo(Matchers.startsWith(BASE_URL + "/database/search")))
 					.andRespond(withServerError());
 
 			// when & then
@@ -134,6 +147,7 @@ class DiscogsClientTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.CATALOG_LOOKUP_FAILED);
+			verify(rateLimiter, times(2)).acquire();
 		}
 	}
 
@@ -170,6 +184,41 @@ class DiscogsClientTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.CATALOG_RELEASE_NOT_FOUND);
+			assertThat(sleeper.sleptDurations()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("연결이 끊기면 한 번 재시도해서 성공한다")
+		void retriesOnceOnConnectionResetThenSucceeds() {
+			// given
+			server.expect(requestTo(BASE_URL + "/releases/249504"))
+					.andRespond(withException(new SocketException("Connection reset")));
+			server.expect(requestTo(BASE_URL + "/releases/249504"))
+					.andRespond(withSuccess(DiscogsFixture.RELEASE_RESPONSE_JSON, MediaType.APPLICATION_JSON));
+
+			// when
+			DiscogsReleaseResponse response = discogsClient.getRelease(249504L);
+
+			// then
+			assertThat(response.id()).isEqualTo(249504L);
+			verify(rateLimiter, times(2)).acquire();
+			assertThat(sleeper.sleptDurations()).containsExactly(Duration.ofMillis(50));
+		}
+
+		@Test
+		@DisplayName("재시도 한도를 소진하면 CATALOG_LOOKUP_FAILED 를 던진다")
+		void throwsLookupFailedWhenRetriesExhausted() {
+			// given
+			server.expect(ExpectedCount.times(2), requestTo(BASE_URL + "/releases/249504"))
+					.andRespond(withException(new SocketException("Connection reset")));
+
+			// when & then
+			assertThatThrownBy(() -> discogsClient.getRelease(249504L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.CATALOG_LOOKUP_FAILED);
+			verify(rateLimiter, times(2)).acquire();
+			assertThat(sleeper.sleptDurations()).hasSize(1);
 		}
 	}
 }

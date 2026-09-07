@@ -5,6 +5,7 @@ import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { CouponSection } from '@/components/order/CouponSection';
@@ -181,23 +182,27 @@ export default function OrderFormPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-64 items-center justify-center">
-        <Spinner size="lg" />
-      </div>
+      <PageContainer size="md">
+        <div className="flex min-h-64 items-center justify-center">
+          <Spinner size="lg" />
+        </div>
+      </PageContainer>
     );
   }
 
   if (isError) {
     return (
-      <EmptyState
-        title="주문서를 불러오지 못했습니다"
-        action={<Button onClick={handleRetry}>다시 시도</Button>}
-      />
+      <PageContainer size="md">
+        <EmptyState
+          title="주문서를 불러오지 못했습니다"
+          action={<Button onClick={handleRetry}>다시 시도</Button>}
+        />
+      </PageContainer>
     );
   }
 
   return (
-    <div>
+    <PageContainer size="md">
       <h1 className="text-xl font-bold">주문서</h1>
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_320px]">
@@ -252,6 +257,6 @@ export default function OrderFormPage() {
         confirmLabel="나가기"
         variant="primary"
       />
-    </div>
+    </PageContainer>
   );
 }

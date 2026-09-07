@@ -3,8 +3,10 @@ import { Link, useLocation } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { Drawer } from '@/components/common/Drawer';
+import { NotificationBell } from '@/components/notification/NotificationBell';
 import { useLogout } from '@/hooks/mutations/useAuthMutations';
 import { useCart } from '@/hooks/queries/useCart';
+import { useUnreadNotificationCount } from '@/hooks/queries/useUnreadNotificationCount';
 import { useAuthStore } from '@/store/authStore';
 
 interface NavItem {
@@ -21,6 +23,9 @@ export function Header() {
   // enabled 가 로그인 여부로 이미 걸려 있어 비로그인일 때는 호출만 되고 요청은 나가지 않는다.
   const { data: cart } = useCart();
   const cartItemCount = cart?.items.length ?? 0;
+  // NotificationBell 도 같은 쿼리를 호출하지만 React Query 가 키를 dedup 해 요청은 한 번만 나간다.
+  const { data: unreadCount } = useUnreadNotificationCount();
+  const notificationCount = unreadCount?.count ?? 0;
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { pathname } = useLocation();
@@ -83,6 +88,7 @@ export function Header() {
             <div className="h-8 w-40 animate-pulse rounded-md bg-surface-muted" />
           ) : isLoggedIn ? (
             <>
+              <NotificationBell />
               <Link to="/mypage" className="text-content-muted hover:text-content">
                 마이페이지
               </Link>
@@ -156,6 +162,16 @@ export function Header() {
               <p className="text-content-muted">
                 <b className="font-medium text-content">{member?.nickname}</b>님
               </p>
+              <Link
+                to="/notifications"
+                aria-label={notificationCount > 0 ? `알림 ${notificationCount}개` : undefined}
+                className="flex items-center gap-2 py-2.5 text-content"
+              >
+                알림
+                {notificationCount > 0 && (
+                  <span className="ml-1">{countBadge(notificationCount)}</span>
+                )}
+              </Link>
               <Link to="/mypage" className="py-2.5 text-content">
                 마이페이지
               </Link>

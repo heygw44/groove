@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -81,6 +83,9 @@ class AdminLimitedDropServiceTest {
 	LimitedDropRedisService limitedDropRedisService;
 
 	@Mock
+	LimitedDropStatFlusher limitedDropStatFlusher;
+
+	@Mock
 	AdminAuditLogService adminAuditLogService;
 
 	AdminLimitedDropService adminLimitedDropService;
@@ -90,7 +95,8 @@ class AdminLimitedDropServiceTest {
 	@BeforeEach
 	void setUp() {
 		adminLimitedDropService = new AdminLimitedDropService(limitedDropRepository, limitedPurchaseRepository,
-				productRepository, stockService, limitedDropRedisService, adminAuditLogService);
+				productRepository, stockService, limitedDropRedisService, limitedDropStatFlusher,
+				adminAuditLogService);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 	}
@@ -340,7 +346,7 @@ class AdminLimitedDropServiceTest {
 		@DisplayName("존재하지 않는 드롭이면 LIMITED_DROP_NOT_FOUND 예외를 던진다")
 		void throwsWhenDropNotFound() {
 			// given
-			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.empty());
+			given(limitedDropRepository.findByIdForUpdate(DROP_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> adminLimitedDropService.close(ADMIN_ID, DROP_ID))
@@ -350,20 +356,21 @@ class AdminLimitedDropServiceTest {
 		}
 
 		@Test
-		@DisplayName("OPEN 상태면 CLOSED로 전이하고 Redis 키를 지우고 감사 로그를 남긴다")
-		void closesDropAndClearsRedisWhenOpen() {
+		@DisplayName("OPEN 상태면 CLOSED로 전이하고 감사 로그를 남긴 뒤 집계를 flush 한다")
+		void closesDropAndFlushesStatAfterAuditLogWhenOpen() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.open(product, 100), DROP_ID);
-			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
+			given(limitedDropRepository.findByIdForUpdate(DROP_ID)).willReturn(Optional.of(drop));
 			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
 
 			// when
 			AdminLimitedDropResponse response = adminLimitedDropService.close(ADMIN_ID, DROP_ID);
 
 			// then
-			verify(limitedDropRedisService).clear(DROP_ID);
-			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_CLOSE),
+			InOrder inOrder = inOrder(adminAuditLogService, limitedDropStatFlusher);
+			inOrder.verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_CLOSE),
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
+			inOrder.verify(limitedDropStatFlusher).flushAndClear(drop);
 			assertThat(detailCaptor.getValue()).isEqualTo("OPEN->CLOSED");
 			assertThat(response.status()).isEqualTo(LimitedDropStatus.CLOSED);
 		}
@@ -375,7 +382,7 @@ class AdminLimitedDropServiceTest {
 			LimitedDrop drop = LimitedDropFixture.withId(
 					LimitedDropFixture.withStatus(LimitedDropFixture.scheduled(product), LimitedDropStatus.SOLD_OUT),
 					DROP_ID);
-			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
+			given(limitedDropRepository.findByIdForUpdate(DROP_ID)).willReturn(Optional.of(drop));
 			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
 
 			// when
@@ -388,33 +395,33 @@ class AdminLimitedDropServiceTest {
 		}
 
 		@Test
-		@DisplayName("이미 CLOSED이면 Redis 키만 지우고 감사 로그 없이 예외 없이 동작한다")
+		@DisplayName("이미 CLOSED이면 집계를 flush 하되 감사 로그 없이 예외 없이 동작한다")
 		void isIdempotentWhenAlreadyClosed() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.withId(
 					LimitedDropFixture.withStatus(LimitedDropFixture.scheduled(product), LimitedDropStatus.CLOSED),
 					DROP_ID);
-			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
+			given(limitedDropRepository.findByIdForUpdate(DROP_ID)).willReturn(Optional.of(drop));
 
 			// when & then
 			assertThatCode(() -> adminLimitedDropService.close(ADMIN_ID, DROP_ID)).doesNotThrowAnyException();
-			verify(limitedDropRedisService).clear(DROP_ID);
+			verify(limitedDropStatFlusher).flushAndClear(drop);
 			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
 		}
 
 		@Test
-		@DisplayName("SCHEDULED 상태면 LIMITED_INVALID_STATUS 예외를 던지고 Redis를 지우지 않는다")
+		@DisplayName("SCHEDULED 상태면 LIMITED_INVALID_STATUS 예외를 던지고 집계를 flush 하지 않는다")
 		void throwsWhenDropIsScheduled() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.scheduled(product), DROP_ID);
-			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
+			given(limitedDropRepository.findByIdForUpdate(DROP_ID)).willReturn(Optional.of(drop));
 
 			// when & then
 			assertThatThrownBy(() -> adminLimitedDropService.close(ADMIN_ID, DROP_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_INVALID_STATUS);
-			verify(limitedDropRedisService, never()).clear(any());
+			verify(limitedDropStatFlusher, never()).flushAndClear(any());
 		}
 	}
 

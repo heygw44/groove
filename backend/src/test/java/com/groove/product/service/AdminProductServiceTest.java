@@ -19,9 +19,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openapitools.jackson.nullable.JsonNullable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -42,6 +44,7 @@ import com.groove.global.common.PageResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.inventory.service.StockService;
+import com.groove.notification.service.PriceDropEvent;
 import com.groove.product.dto.AdminProductResponse;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
@@ -90,12 +93,16 @@ class AdminProductServiceTest {
 	@Mock
 	AdminAuditLogService adminAuditLogService;
 
+	@Mock
+	ApplicationEventPublisher eventPublisher;
+
 	AdminProductService adminProductService;
 
 	@BeforeEach
 	void setUp() {
 		adminProductService = new AdminProductService(productRepository, albumRepository, artistRepository,
-				labelRepository, genreRepository, stockRepository, stockService, adminAuditLogService);
+				labelRepository, genreRepository, stockRepository, stockService, adminAuditLogService,
+				eventPublisher);
 	}
 
 	@Nested
@@ -355,6 +362,83 @@ class AdminProductServiceTest {
 
 			// then
 			assertThat(response.label().name()).isEqualTo("Impulse!");
+		}
+
+		@Test
+		@DisplayName("가격을 내리면 PriceDropEvent 를 발행한다")
+		void publishesPriceDropWhenPriceLowered() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = priceUpdateRequest(new BigDecimal("40000"));
+
+			// when
+			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			ArgumentCaptor<PriceDropEvent> captor = ArgumentCaptor.forClass(PriceDropEvent.class);
+			verify(eventPublisher).publishEvent(captor.capture());
+			assertThat(captor.getValue().productId()).isEqualTo(PRODUCT_ID);
+			assertThat(captor.getValue().productTitle()).isEqualTo(product.getTitle());
+		}
+
+		@Test
+		@DisplayName("가격을 올리면 PriceDropEvent 를 발행하지 않는다")
+		void doesNotPublishPriceDropWhenPriceRaised() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = priceUpdateRequest(new BigDecimal("50000"));
+
+			// when
+			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			verify(eventPublisher, never()).publishEvent(any(PriceDropEvent.class));
+		}
+
+		@Test
+		@DisplayName("같은 가격을 스케일만 다르게 다시 보내면 PriceDropEvent 를 발행하지 않는다")
+		void doesNotPublishPriceDropWhenPriceUnchangedWithDifferentScale() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = priceUpdateRequest(new BigDecimal("45000.00"));
+
+			// when
+			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			verify(eventPublisher, never()).publishEvent(any(PriceDropEvent.class));
+		}
+
+		@Test
+		@DisplayName("price 가 없으면 PriceDropEvent 를 발행하지 않는다")
+		void doesNotPublishPriceDropWhenPriceAbsent() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
+
+			// when
+			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			verify(eventPublisher, never()).publishEvent(any(PriceDropEvent.class));
+		}
+
+		private ProductUpdateRequest priceUpdateRequest(BigDecimal price) {
+			return new ProductUpdateRequest(null, null, JsonNullable.undefined(), null, null, null, null, price,
+					null, null, JsonNullable.undefined(), JsonNullable.undefined(), JsonNullable.undefined(),
+					JsonNullable.undefined(), null);
 		}
 	}
 

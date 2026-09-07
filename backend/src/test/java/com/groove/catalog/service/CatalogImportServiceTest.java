@@ -16,8 +16,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -32,6 +35,7 @@ import com.groove.catalog.dto.CatalogImportResult;
 import com.groove.fixture.DiscogsFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.notification.service.NewPressingEvent;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.ProductRepository;
 
@@ -56,11 +60,17 @@ class CatalogImportServiceTest {
 	@Mock
 	TransactionTemplate transactionTemplate;
 
+	@Mock
+	ApplicationEventPublisher eventPublisher;
+
+	@Captor
+	ArgumentCaptor<NewPressingEvent> eventCaptor;
+
 	final DiscogsReleaseMapper mapper = new DiscogsReleaseMapper();
 
 	CatalogImportService service() {
 		return new CatalogImportService(client, productRepository, genreRepository, mapper, registrar,
-				adminAuditLogService, transactionTemplate);
+				adminAuditLogService, transactionTemplate, eventPublisher);
 	}
 
 	@Nested
@@ -80,6 +90,7 @@ class CatalogImportServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.CATALOG_ALREADY_IMPORTED);
 			verify(client, never()).getRelease(anyLong());
+			verify(eventPublisher, never()).publishEvent(any(NewPressingEvent.class));
 		}
 
 		@Test
@@ -100,6 +111,7 @@ class CatalogImportServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
+			verify(eventPublisher, never()).publishEvent(any(NewPressingEvent.class));
 		}
 
 		@Test
@@ -111,7 +123,7 @@ class CatalogImportServiceTest {
 					List.of("LP"), "5012394144777", List.of("Jazz"), List.of());
 			given(client.getRelease(249504L)).willReturn(release);
 			given(genreRepository.findAllByOrderByNameAsc()).willReturn(List.of());
-			given(registrar.register(any())).willReturn(new CatalogImportResult(733L, 310L));
+			given(registrar.register(any())).willReturn(new CatalogImportResult(733L, 310L, "Kind Of Blue"));
 			given(transactionTemplate.execute(any())).willAnswer(invocation -> {
 				TransactionCallback<CatalogImportResult> callback = invocation.getArgument(0);
 				return callback.doInTransaction(null);
@@ -127,6 +139,9 @@ class CatalogImportServiceTest {
 			verify(client, times(1)).getRelease(249504L);
 			verify(adminAuditLogService).record(1L, AdminAuditAction.PRODUCT_IMPORT, AdminAuditTargetType.PRODUCT,
 					733L, "discogsReleaseId=249504");
+			verify(eventPublisher).publishEvent(eventCaptor.capture());
+			assertThat(eventCaptor.getValue().albumId()).isEqualTo(310L);
+			assertThat(eventCaptor.getValue().albumTitle()).isEqualTo("Kind Of Blue");
 		}
 	}
 }

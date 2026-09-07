@@ -11,3 +11,8 @@ export const addWishlist = (productId: number) =>
 export const removeWishlist = async (productId: number) => {
   await client.delete<ApiResponse<void>>(`/wishlist/${productId}`);
 };
+
+export const changeWishlistAlert = (productId: number, alertEnabled: boolean) =>
+  unwrap(
+    client.patch<ApiResponse<WishlistItem>>(`/wishlist/${productId}/alert`, { alertEnabled }),
+  );

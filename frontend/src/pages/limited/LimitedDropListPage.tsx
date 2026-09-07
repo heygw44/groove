@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { PageContainer } from '@/components/common/PageContainer';
 import { Spinner } from '@/components/common/Spinner';
 import { LimitedDropCard } from '@/components/limited/LimitedDropCard';
 import { useLimitedDrops } from '@/hooks/queries/useLimitedDrops';
@@ -53,7 +54,7 @@ export default function LimitedDropListPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <PageContainer>
       <h1 className="text-xl font-bold">한정반 드롭</h1>
 
       <div role="tablist" aria-label="한정반 상태" className="mt-5 flex gap-1">
@@ -109,6 +110,6 @@ export default function LimitedDropListPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 }
