@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
-import { Spinner } from '@/components/common/Spinner';
+import { Skeleton } from '@/components/common/Skeleton';
 import { CouponCard } from '@/components/coupon/CouponCard';
 import { CouponIssueForm } from '@/components/coupon/CouponIssueForm';
 import { CouponStatusTabs } from '@/components/coupon/CouponStatusTabs';
@@ -16,6 +16,23 @@ const EMPTY_MESSAGE: Record<MemberCouponStatus, string> = {
   used: '사용한 쿠폰이 없습니다.',
   expired: '만료된 쿠폰이 없습니다.',
 };
+
+const SKELETON_COUNT = 4;
+
+function CouponCardSkeleton() {
+  return (
+    <div className="rounded-lg border border-line bg-surface p-4">
+      <div className="flex items-start justify-between gap-2">
+        <Skeleton className="h-4 w-2/5" />
+        <Skeleton className="h-5 w-14" />
+      </div>
+      <Skeleton className="mt-2 h-7 w-1/3" />
+      <Skeleton className="mt-1.5 h-3 w-3/5" />
+      <Skeleton className="mt-2 h-3 w-2/5" />
+      <Skeleton className="mt-1.5 h-3 w-1/3" />
+    </div>
+  );
+}
 
 export default function CouponBoxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,8 +60,10 @@ export default function CouponBoxPage() {
 
       <div className="mt-3">
         {isPending && (
-          <div className="flex min-h-48 items-center justify-center">
-            <Spinner />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {Array.from({ length: SKELETON_COUNT }, (_, index) => (
+              <CouponCardSkeleton key={index} />
+            ))}
           </div>
         )}
 

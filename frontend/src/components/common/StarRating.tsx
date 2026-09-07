@@ -3,9 +3,12 @@ type StarRatingSize = 'sm' | 'md';
 const STAR_PATH =
   'M12 2.5l2.9 6.02 6.6.86-4.86 4.53 1.28 6.58L12 17.77l-5.92 2.72 1.28-6.58L2.5 9.38l6.6-.86z';
 
-const SIZE_CLASS: Record<StarRatingSize, string> = {
-  sm: 'h-3.5 w-3.5',
-  md: 'h-5 w-5',
+/** gap-0.5 의 실제 px 값. 오버레이 폭을 px 로 계산할 때 별 개수만큼 더해야 한다. */
+const STAR_GAP_PX = 2;
+
+const SIZE_CLASS: Record<StarRatingSize, { className: string; px: number }> = {
+  sm: { className: 'h-3.5 w-3.5', px: 14 },
+  md: { className: 'h-5 w-5', px: 20 },
 };
 
 interface StarRatingDisplayProps {
@@ -15,11 +18,21 @@ interface StarRatingDisplayProps {
 
 /** 평점 표시 전용. 회색 별 5개 위에 같은 별 5개를 액센트 색으로 겹쳐 소수점만큼만 보이게 자른다. */
 export function StarRatingDisplay({ value, size = 'md' }: StarRatingDisplayProps) {
-  const starClass = SIZE_CLASS[size];
+  const { className: starClass, px: starPx } = SIZE_CLASS[size];
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const filled = Math.min(Math.max(safeValue, 0), 5);
+  /* 오버레이 폭은 % 가 아니라 px 로: 별 svg 는 shrink-0 이라 부모 폭이 아니라 이 값만큼만 넓어져야 한다. */
+  const fillWidth = filled * starPx + Math.max(Math.ceil(filled) - 1, 0) * STAR_GAP_PX;
+
   const stars = (colorClass: string) => (
     <span className={`flex gap-0.5 ${colorClass}`} aria-hidden>
       {Array.from({ length: 5 }).map((_, index) => (
-        <svg key={index} viewBox="0 0 24 24" fill="currentColor" className={starClass}>
+        <svg
+          key={index}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className={`shrink-0 ${starClass}`}
+        >
           <path d={STAR_PATH} />
         </svg>
       ))}
@@ -27,11 +40,11 @@ export function StarRatingDisplay({ value, size = 'md' }: StarRatingDisplayProps
   );
 
   return (
-    <span role="img" aria-label={`별점 ${value.toFixed(1)}점`} className="relative inline-flex">
+    <span role="img" aria-label={`별점 ${safeValue.toFixed(1)}점`} className="relative inline-flex">
       {stars('text-line-strong')}
       <span
-        className="absolute inset-0 overflow-hidden"
-        style={{ width: `${(value / 5) * 100}%` }}
+        className="absolute left-0 top-0 bottom-0 overflow-hidden"
+        style={{ width: `${fillWidth}px` }}
       >
         {stars('text-accent')}
       </span>

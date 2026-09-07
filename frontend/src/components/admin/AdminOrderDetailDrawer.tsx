@@ -117,7 +117,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
               <OrderStatusBadge status={detail.status} />
               <span className="text-xs text-content-muted">{formatDateTime(detail.createdAt)}</span>
             </div>
-            <p className="mt-2 text-sm text-content">
+            <p className="mt-2 break-all text-sm text-content">
               {detail.memberEmail}
               <span className="ml-1.5 text-content-muted">(회원 ID {detail.memberId})</span>
             </p>

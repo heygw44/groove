@@ -32,7 +32,7 @@ export function NotificationBell() {
         <path d="M8.3 15.8a1.8 1.8 0 0 0 3.4 0" />
       </svg>
       {count > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1.5 text-[11px] text-accent-content">
+        <span className="absolute -right-1.5 -top-1.5 flex min-w-4 justify-center rounded-full bg-accent px-1 text-[11px] text-accent-content">
           {formatBadgeCount(count)}
         </span>
       )}

@@ -52,10 +52,10 @@ export function CatalogImportJobTable({
                 read {job.readCount} · write {job.writeCount} · skip {job.skipCount} · filter{' '}
                 {job.filterCount}
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
                 {job.startedAt ? formatDateTime(job.startedAt) : '-'}
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
                 {job.endedAt ? formatDateTime(job.endedAt) : '-'}
               </td>
               <td className="py-2.5 pr-3 text-content-muted" title={job.exitMessage}>

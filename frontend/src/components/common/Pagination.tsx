@@ -44,7 +44,7 @@ export function Pagination({ page, totalPages, onChange, siblingCount = 1 }: Pag
   const current1 = page + 1;
   const items = buildPageItems(current1, totalPages, siblingCount);
   const buttonBase =
-    'flex h-9 w-9 items-center justify-center rounded-md text-sm disabled:cursor-not-allowed disabled:opacity-40';
+    'flex h-9 min-w-9 items-center justify-center rounded-md px-1 text-sm disabled:cursor-not-allowed disabled:opacity-40';
 
   return (
     <nav aria-label="페이지" className="flex items-center justify-center gap-1">
@@ -63,7 +63,7 @@ export function Pagination({ page, totalPages, onChange, siblingCount = 1 }: Pag
           <span
             key={`ellipsis-${index}`}
             aria-hidden
-            className="flex h-9 w-9 items-center justify-center text-sm text-content-subtle"
+            className="flex h-9 min-w-9 items-center justify-center px-1 text-sm text-content-subtle"
           >
             …
           </span>

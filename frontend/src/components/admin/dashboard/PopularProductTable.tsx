@@ -42,18 +42,20 @@ export function PopularProductTable({ items, sort, onSortChange }: PopularProduc
           <table className="min-w-[720px] w-full text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs text-content-muted">
-                <th className="py-2 pr-3 font-medium">순위</th>
+                <th className="py-2 pr-3 text-right font-medium">순위</th>
                 <th className="py-2 pr-3 font-medium">상품</th>
                 <th className="py-2 pr-3 font-medium">아티스트</th>
-                <th className="py-2 pr-3 font-medium">판매 수량</th>
-                <th className="py-2 pr-3 font-medium">매출</th>
-                <th className="py-2 pr-3 font-medium">주문 수</th>
+                <th className="py-2 pr-3 text-right font-medium">판매 수량</th>
+                <th className="py-2 pr-3 text-right font-medium">매출</th>
+                <th className="py-2 pr-3 text-right font-medium">주문 수</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item, index) => (
                 <tr key={item.productId} className="border-b border-line last:border-0">
-                  <td className="py-2.5 pr-3 text-content-muted">{index + 1}</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums text-content-muted">
+                    {index + 1}
+                  </td>
                   <td className="py-2.5 pr-3">
                     <Link
                       to={`/admin/products/${item.productId}/edit`}
@@ -63,9 +65,11 @@ export function PopularProductTable({ items, sort, onSortChange }: PopularProduc
                     </Link>
                   </td>
                   <td className="py-2.5 pr-3 text-content-muted">{item.artistName}</td>
-                  <td className="py-2.5 pr-3">{item.soldQuantity}개</td>
-                  <td className="py-2.5 pr-3">{formatPrice(item.salesAmount)}</td>
-                  <td className="py-2.5 pr-3">{item.orderCount}건</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums">{item.soldQuantity}개</td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums">
+                    {formatPrice(item.salesAmount)}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums">{item.orderCount}건</td>
                 </tr>
               ))}
             </tbody>

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
-import { Spinner } from '@/components/common/Spinner';
+import { Skeleton } from '@/components/common/Skeleton';
 import { OrderCard } from '@/components/order/OrderCard';
 import { OrderStatusTabs } from '@/components/order/OrderStatusTabs';
 import { useOrders } from '@/hooks/queries/useOrders';
@@ -13,6 +13,25 @@ import {
   serializeOrderListFilters,
   toOrderListParams,
 } from '@/utils/orderFilters';
+
+const SKELETON_COUNT = 5;
+
+function OrderCardSkeleton() {
+  return (
+    <li className="flex items-center gap-4 rounded-lg border border-line bg-surface px-5 py-4">
+      <Skeleton className="h-16 w-16 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <Skeleton className="h-3 w-1/3" />
+        <Skeleton className="mt-1.5 h-4 w-2/3" />
+        <Skeleton className="mt-1.5 h-3 w-1/4" />
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <Skeleton className="h-5 w-14" />
+        <Skeleton className="h-4 w-16" />
+      </div>
+    </li>
+  );
+}
 
 export default function OrderListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -45,9 +64,11 @@ export default function OrderListPage() {
 
       <div className="mt-3">
         {isPending && (
-          <div className="flex min-h-48 items-center justify-center">
-            <Spinner />
-          </div>
+          <ul className="flex flex-col gap-3">
+            {Array.from({ length: SKELETON_COUNT }, (_, index) => (
+              <OrderCardSkeleton key={index} />
+            ))}
+          </ul>
         )}
 
         {!isPending && isError && (

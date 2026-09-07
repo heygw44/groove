@@ -17,8 +17,8 @@ export function AdminOrderTable({ orders, onSelect }: AdminOrderTableProps) {
           <tr className="border-b border-line text-xs text-content-muted">
             <th className="py-2 pr-3 font-medium">주문번호</th>
             <th className="py-2 pr-3 font-medium">회원</th>
-            <th className="py-2 pr-3 font-medium">금액</th>
-            <th className="py-2 pr-3 font-medium">상품 수</th>
+            <th className="py-2 pr-3 text-right font-medium">금액</th>
+            <th className="py-2 pr-3 text-right font-medium">상품 수</th>
             <th className="py-2 pr-3 font-medium">상태</th>
             <th className="py-2 pr-3 font-medium">주문일시</th>
             <th className="py-2 pr-3 font-medium">상세</th>
@@ -37,12 +37,16 @@ export function AdminOrderTable({ orders, onSelect }: AdminOrderTableProps) {
                 </button>
               </td>
               <td className="py-2.5 pr-3 text-content-muted">{order.memberEmail}</td>
-              <td className="py-2.5 pr-3">{formatPrice(order.finalAmount)}</td>
-              <td className="py-2.5 pr-3">{order.itemCount}건</td>
+              <td className="py-2.5 pr-3 text-right tabular-nums">
+                {formatPrice(order.finalAmount)}
+              </td>
+              <td className="py-2.5 pr-3 text-right tabular-nums">{order.itemCount}건</td>
               <td className="py-2.5 pr-3">
                 <OrderStatusBadge status={order.status} />
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">{formatDateTime(order.createdAt)}</td>
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                {formatDateTime(order.createdAt)}
+              </td>
               <td className="py-2.5 pr-3">
                 <Button variant="secondary" size="sm" onClick={() => onSelect(order)}>
                   상세

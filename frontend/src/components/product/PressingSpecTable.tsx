@@ -42,7 +42,7 @@ export function PressingSpecTable({
           .filter((row) => row.value !== undefined)
           .map((row) => (
             <div key={row.term} className="flex gap-2">
-              <dt className="w-24 shrink-0 text-content-muted">{row.term}</dt>
+              <dt className="w-28 shrink-0 text-content-muted">{row.term}</dt>
               <dd className="m-0">{row.value}</dd>
             </div>
           ))}

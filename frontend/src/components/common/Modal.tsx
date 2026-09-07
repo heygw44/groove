@@ -79,13 +79,15 @@ export function Modal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`w-full ${SIZE_CLASS[size]} overflow-hidden bg-surface shadow-2xl outline-none ${
-          placement === 'bottom' ? 'rounded-t-lg sm:rounded-lg' : 'rounded-lg'
+        className={`flex w-full flex-col ${SIZE_CLASS[size]} overflow-hidden bg-surface shadow-2xl outline-none ${
+          placement === 'bottom'
+            ? 'max-h-[85dvh] rounded-t-lg sm:rounded-lg'
+            : 'max-h-[calc(100dvh-2rem)] rounded-lg'
         }`}
       >
-        <div className="flex items-start justify-between gap-4 px-6 pt-5">
-          <div>
-            <h2 id={titleId} className="text-lg font-bold tracking-tight">
+        <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-5">
+          <div className="min-w-0">
+            <h2 id={titleId} className="min-w-0 truncate text-lg font-bold tracking-tight">
               {title}
             </h2>
             {description && (
@@ -98,7 +100,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="닫기"
-            className="-mr-1 rounded-md p-1 text-content-subtle hover:bg-surface-muted hover:text-content"
+            className="-mr-1 shrink-0 rounded-md p-1 text-content-subtle hover:bg-surface-muted hover:text-content"
           >
             <svg
               width="18"
@@ -116,10 +118,10 @@ export function Modal({
           </button>
         </div>
 
-        {children && <div className="px-6 py-5">{children}</div>}
+        {children && <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>}
 
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-line bg-surface-sunken px-6 py-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-line bg-surface-sunken px-6 py-4">
             {footer}
           </div>
         )}

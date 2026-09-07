@@ -24,9 +24,9 @@ export function ReviewItem({ review, onEdit, onDelete, editing = false, editForm
       }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <StarRatingDisplay value={review.rating} size="sm" />
-          <span className="text-sm font-medium text-content">{review.nickname}</span>
+          <span className="truncate text-sm font-medium text-content">{review.nickname}</span>
           <span className="text-xs text-content-muted">
             {formatDate(review.createdAt)}
             {isEdited && ' (수정됨)'}

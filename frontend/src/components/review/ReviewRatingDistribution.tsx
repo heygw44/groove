@@ -19,7 +19,7 @@ export function ReviewRatingDistribution({ distribution }: ReviewRatingDistribut
         const percent = Math.round((count / total) * 100);
         return (
           <div key={rating} className="flex items-center gap-2 text-xs">
-            <span className="w-6 shrink-0 text-content-muted">{rating}점</span>
+            <span className="w-6 shrink-0 tabular-nums text-content-muted">{rating}점</span>
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted">
               <div
                 role="progressbar"
@@ -31,8 +31,12 @@ export function ReviewRatingDistribution({ distribution }: ReviewRatingDistribut
                 style={{ width: `${percent}%` }}
               />
             </div>
-            <span className="w-9 shrink-0 text-right text-content-muted">{percent}%</span>
-            <span className="w-14 shrink-0 text-content-muted">({count}개)</span>
+            <span className="w-9 shrink-0 text-right tabular-nums text-content-muted">
+              {percent}%
+            </span>
+            <span className="min-w-14 w-auto shrink-0 tabular-nums text-content-muted">
+              ({count}개)
+            </span>
           </div>
         );
       })}

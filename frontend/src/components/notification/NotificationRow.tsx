@@ -32,7 +32,7 @@ export function NotificationRow({ item, onRead }: NotificationRowProps) {
           unread ? 'bg-accent' : 'bg-transparent'
         }`}
       />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <p className={`text-sm ${unread ? 'font-medium text-content' : 'text-content-muted'}`}>
           {buildNotificationMessage(item)}
         </p>

@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { ToastContext, type ToastType } from '@/components/common/toastContext';
 
@@ -25,22 +26,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`rounded-md px-4 py-2 text-sm text-white shadow-lg ${
-              toast.type === 'success'
-                ? 'bg-success'
-                : toast.type === 'error'
-                  ? 'bg-danger'
-                  : 'bg-content'
-            }`}
-          >
-            {toast.message}
-          </div>
-        ))}
-      </div>
+      {createPortal(
+        /* Modal/Drawer 도 document.body 에 z-50 으로 포털되므로, 열려 있는 동안에도 보이려면 더 높은 z 가 필요하다. */
+        <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`max-w-sm break-words rounded-md px-4 py-2 text-sm text-white shadow-lg ${
+                toast.type === 'success'
+                  ? 'bg-success'
+                  : toast.type === 'error'
+                    ? 'bg-danger'
+                    : 'bg-content'
+              }`}
+            >
+              {toast.message}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
     </ToastContext.Provider>
   );
 }

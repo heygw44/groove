@@ -20,9 +20,9 @@ export function AdminCouponTable({ coupons, onEdit, onDisable }: AdminCouponTabl
           <tr className="border-b border-line text-xs text-content-muted">
             <th className="py-2 pr-3 font-medium">코드</th>
             <th className="py-2 pr-3 font-medium">이름</th>
-            <th className="py-2 pr-3 font-medium">할인</th>
-            <th className="py-2 pr-3 font-medium">최소 주문</th>
-            <th className="py-2 pr-3 font-medium">발급/사용</th>
+            <th className="py-2 pr-3 text-right font-medium">할인</th>
+            <th className="py-2 pr-3 text-right font-medium">최소 주문</th>
+            <th className="py-2 pr-3 text-right font-medium">발급/사용</th>
             <th className="py-2 pr-3 font-medium">만료일</th>
             <th className="py-2 pr-3 font-medium">상태</th>
             <th className="py-2 pr-3 font-medium">액션</th>
@@ -36,11 +36,13 @@ export function AdminCouponTable({ coupons, onEdit, onDisable }: AdminCouponTabl
               <tr key={coupon.id} className="border-b border-line last:border-0">
                 <td className="py-2.5 pr-3 font-mono text-xs">{coupon.code}</td>
                 <td className="py-2.5 pr-3 text-content">{coupon.name}</td>
-                <td className="py-2.5 pr-3">{formatCouponDiscount(coupon)}</td>
-                <td className="py-2.5 pr-3">
+                <td className="py-2.5 pr-3 text-right tabular-nums">
+                  {formatCouponDiscount(coupon)}
+                </td>
+                <td className="py-2.5 pr-3 text-right tabular-nums">
                   {coupon.minOrderAmount === 0 ? '-' : formatPrice(coupon.minOrderAmount)}
                 </td>
-                <td className="py-2.5 pr-3">
+                <td className="py-2.5 pr-3 text-right tabular-nums">
                   <p>
                     {coupon.issuedCount} / {coupon.usedCount}
                   </p>
@@ -48,7 +50,9 @@ export function AdminCouponTable({ coupons, onEdit, onDisable }: AdminCouponTabl
                     <p className="text-xs text-content-muted">한도 {coupon.totalQuantity}</p>
                   )}
                 </td>
-                <td className="py-2.5 pr-3 text-content-muted">{formatDateTime(coupon.expiresAt)}</td>
+                <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
+                  {formatDateTime(coupon.expiresAt)}
+                </td>
                 <td className="py-2.5 pr-3">
                   <AdminCouponStatusBadge status={displayStatus} />
                 </td>
