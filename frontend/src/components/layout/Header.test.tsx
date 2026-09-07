@@ -158,5 +158,21 @@ describe('Header', () => {
       expect(searchToggle).toHaveAttribute('aria-expanded', 'false');
       expect(screen.getAllByRole('combobox')).toHaveLength(1);
     });
+
+    it('제안 목록이 없을 때 Esc 를 누르면 검색줄이 바로 닫힌다', async () => {
+      // given - 두 글자 미만이라 드롭다운이 뜨지 않는 상태
+      const user = userEvent.setup();
+      renderHeader();
+      await user.click(screen.getByRole('button', { name: '검색 열기' }));
+
+      // when
+      await user.keyboard('{Escape}');
+
+      // then
+      expect(screen.getByRole('button', { name: '검색 열기' })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+    });
   });
 });

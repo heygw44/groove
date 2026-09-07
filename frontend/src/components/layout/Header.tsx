@@ -76,7 +76,9 @@ export function Header() {
   );
 
   return (
-    <header className="border-b border-line bg-surface">
+    // 검색 드롭다운(z-10)이 상품 카드의 위시 버튼(같은 z-10)에 가리지 않게
+    // 헤더를 쌓임 맥락으로 올린다. Drawer·Modal(z-50)보다는 아래다.
+    <header className="relative z-20 border-b border-line bg-surface">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-3">
         <Link to="/" className="text-lg font-bold tracking-[0.14em] text-content">
           GROOVE

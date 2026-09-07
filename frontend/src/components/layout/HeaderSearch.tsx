@@ -99,6 +99,8 @@ export function HeaderSearch({ autoFocus = false, className = '' }: HeaderSearch
     });
   };
 
+  const showDropdown = open && trimmedKeyword.length >= MIN_KEYWORD_LENGTH;
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -120,8 +122,8 @@ export function HeaderSearch({ autoFocus = false, className = '' }: HeaderSearch
       }
       return;
     }
-    if (event.key === 'Escape' && open) {
-      // 드롭다운만 닫는다. 열려 있지 않았다면 상위(모바일 검색 줄)로 그대로 버블시켜 거기서 닫게 한다.
+    if (event.key === 'Escape' && showDropdown) {
+      // 드롭다운이 보일 때만 그것부터 닫는다. 안 보이면 상위(모바일 검색 줄)로 버블시켜 거기서 닫게 한다.
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);
@@ -129,7 +131,6 @@ export function HeaderSearch({ autoFocus = false, className = '' }: HeaderSearch
   };
 
   const activeOptionId = activeIndex !== null ? `${listboxId}-option-${activeIndex}` : undefined;
-  const showDropdown = open && trimmedKeyword.length >= MIN_KEYWORD_LENGTH;
 
   const optionClassName = (active: boolean) =>
     `flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-muted ${
