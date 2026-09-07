@@ -48,7 +48,7 @@ public class CatalogImportRegistrar {
 		Product saved = productRepository.save(product);
 		stockService.create(saved, 0);
 
-		return new CatalogImportResult(saved.getId(), album.getId());
+		return new CatalogImportResult(saved.getId(), album.getId(), album.getTitle());
 	}
 
 	private Artist resolveArtist(String artistName) {
