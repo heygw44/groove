@@ -4,6 +4,7 @@ import type { PopularProductParams, StatsPeriodParams } from '@/types/adminStats
 import type { CatalogImportJobListParams, CatalogLookupParams } from '@/types/catalog';
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
+import type { NotificationListParams } from '@/types/notification';
 import type { AdminOrderListParams, OrderListParams } from '@/types/order';
 import type {
   AdminAlbumListParams,
@@ -162,4 +163,15 @@ export const adminCatalogLookupKeys = {
   list: (params: CatalogLookupParams) => ['adminCatalogLookup', params] as const,
   release: (discogsReleaseId: number) =>
     ['adminCatalogRelease', discogsReleaseId] as const,
+};
+
+export const notificationKeys = {
+  all: ['notifications'] as const,
+  unreadCount: ['notifications', 'unreadCount'] as const,
+  lists: ['notifications', 'list'] as const,
+  list: (params: NotificationListParams) => ['notifications', 'list', params] as const,
+};
+
+export const albumWatchKeys = {
+  all: ['albumWatches'] as const,
 };
