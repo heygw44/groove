@@ -63,22 +63,6 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'orders',
-        element: (
-          <PrivateRoute>
-            <OrderListPage />
-          </PrivateRoute>
-        ),
-      },
-      {
-        path: 'orders/:id',
-        element: (
-          <PrivateRoute>
-            <OrderDetailPage />
-          </PrivateRoute>
-        ),
-      },
-      {
         path: 'payments/success',
         element: (
           <PrivateRoute>
@@ -97,19 +81,25 @@ export const router = createBrowserRouter([
       { path: 'login', element: <LoginPage /> },
       { path: 'signup', element: <SignupPage /> },
       {
-        path: 'mypage',
         element: (
           <PrivateRoute>
             <MyPageLayout />
           </PrivateRoute>
         ),
         children: [
-          { index: true, element: <MyPage /> },
-          { path: 'addresses', element: <AddressListPage /> },
-          { path: 'wishlist', element: <WishlistPage /> },
-          { path: 'coupons', element: <CouponBoxPage /> },
-          { path: 'taste', element: <TastePage /> },
-          { path: 'recent', element: <RecentViewsPage /> },
+          {
+            path: 'mypage',
+            children: [
+              { index: true, element: <MyPage /> },
+              { path: 'addresses', element: <AddressListPage /> },
+              { path: 'wishlist', element: <WishlistPage /> },
+              { path: 'coupons', element: <CouponBoxPage /> },
+              { path: 'taste', element: <TastePage /> },
+              { path: 'recent', element: <RecentViewsPage /> },
+            ],
+          },
+          { path: 'orders', element: <OrderListPage /> },
+          { path: 'orders/:id', element: <OrderDetailPage /> },
         ],
       },
       {
