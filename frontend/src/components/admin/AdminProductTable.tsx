@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ProductStatusBadge } from '@/components/admin/ProductStatusBadge';
 import { Button } from '@/components/common/Button';
 import type { AdminProductSummary } from '@/types/product';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface AdminProductTableProps {
@@ -61,7 +61,7 @@ export function AdminProductTable({
                 {product.stockQuantity ?? '—'}
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                {formatDate(product.createdAt)}
+                {formatServerDate(product.createdAt)}
               </td>
               <td className="py-2.5 pr-3">
                 <div className="flex items-center gap-1.5">

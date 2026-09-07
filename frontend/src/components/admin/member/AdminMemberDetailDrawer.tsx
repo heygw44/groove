@@ -14,7 +14,7 @@ import { useAdminMember } from '@/hooks/queries/useAdminMembers';
 import { useAuthStore } from '@/store/authStore';
 import type { AdminMemberChangeableStatus } from '@/types/adminMember';
 import { getErrorMessage } from '@/utils/apiError';
-import { formatDate, formatDateTime } from '@/utils/formatDate';
+import { formatServerDate, formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 import { MemberStatusBadge } from './MemberStatusBadge';
@@ -55,7 +55,10 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
       { memberId, status: dialogStatus, reason },
       {
         onSuccess: () => {
-          showToast('success', dialogStatus === 'SUSPENDED' ? '회원을 정지했습니다.' : '정지를 해제했습니다.');
+          showToast(
+            'success',
+            dialogStatus === 'SUSPENDED' ? '회원을 정지했습니다.' : '정지를 해제했습니다.',
+          );
           setDialogStatus(undefined);
         },
         onError: (error) => {
@@ -101,7 +104,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
             </div>
             <p className="mt-2 text-sm font-medium text-content">{detail.nickname}</p>
             <p className="text-xs text-content-muted">
-              가입일 {formatDate(detail.createdAt)}
+              가입일 {formatServerDate(detail.createdAt)}
             </p>
           </div>
 
@@ -145,7 +148,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
                     <div className="shrink-0 text-right">
                       <p className="font-medium">{formatPrice(order.finalAmount)}</p>
                       <p className="text-xs text-content-muted">
-                        {formatDateTime(order.createdAt)}
+                        {formatServerDateTime(order.createdAt)}
                       </p>
                     </div>
                   </li>

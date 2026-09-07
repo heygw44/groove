@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import type { OrderSummary } from '@/types/order';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface OrderCardProps {
@@ -51,7 +51,7 @@ export function OrderCard({ order }: OrderCardProps) {
         <div className="min-w-0 flex-1">
           <p className="font-mono text-xs text-content-muted">{order.orderNumber}</p>
           <p className="mt-0.5 truncate text-sm font-medium text-content">{productLabel}</p>
-          <p className="mt-1 text-xs text-content-muted">{formatDateTime(order.createdAt)}</p>
+          <p className="mt-1 text-xs text-content-muted">{formatServerDateTime(order.createdAt)}</p>
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-2">

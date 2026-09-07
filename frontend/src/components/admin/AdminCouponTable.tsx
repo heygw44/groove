@@ -3,7 +3,7 @@ import { Button } from '@/components/common/Button';
 import { getAdminCouponDisplayStatus } from '@/schemas/adminCoupon';
 import type { AdminCouponSummary } from '@/types/coupon';
 import { formatCouponDiscount } from '@/utils/coupon';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface AdminCouponTableProps {
@@ -51,7 +51,7 @@ export function AdminCouponTable({ coupons, onEdit, onDisable }: AdminCouponTabl
                   )}
                 </td>
                 <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                  {formatDateTime(coupon.expiresAt)}
+                  {formatServerDateTime(coupon.expiresAt)}
                 </td>
                 <td className="py-2.5 pr-3">
                   <AdminCouponStatusBadge status={displayStatus} />

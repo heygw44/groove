@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Modal } from '@/components/common/Modal';
 import type { AvailableCoupon } from '@/types/coupon';
 import { formatCouponDiscount } from '@/utils/coupon';
-import { formatDate } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface CouponSelectModalProps {
@@ -114,7 +114,9 @@ export function CouponSelectModal({
                   최소 주문 금액 {formatPrice(coupon.minOrderAmount)}
                 </p>
               )}
-              <p className="text-xs text-content-subtle">만료 {formatDate(coupon.expiresAt)}</p>
+              <p className="text-xs text-content-subtle">
+                만료 {formatServerDate(coupon.expiresAt)}
+              </p>
             </div>
             <span className="shrink-0 text-sm font-bold text-content">
               -{formatPrice(coupon.expectedDiscount)}

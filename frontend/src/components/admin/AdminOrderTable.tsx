@@ -1,7 +1,7 @@
 import { Button } from '@/components/common/Button';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import type { AdminOrderSummary } from '@/types/order';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface AdminOrderTableProps {
@@ -45,7 +45,7 @@ export function AdminOrderTable({ orders, onSelect }: AdminOrderTableProps) {
                 <OrderStatusBadge status={order.status} />
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
-                {formatDateTime(order.createdAt)}
+                {formatServerDateTime(order.createdAt)}
               </td>
               <td className="py-2.5 pr-3">
                 <Button variant="secondary" size="sm" onClick={() => onSelect(order)}>

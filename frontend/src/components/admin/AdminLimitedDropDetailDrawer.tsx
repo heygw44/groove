@@ -7,7 +7,7 @@ import { Spinner } from '@/components/common/Spinner';
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { useAdminLimitedDrop } from '@/hooks/queries/useAdminLimitedDrops';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 
 interface AdminLimitedDropDetailDrawerProps {
   dropId?: number;
@@ -55,7 +55,7 @@ export function AdminLimitedDropDetailDrawer({
             <div className="flex items-center gap-2">
               <DropStatusBadge status={detail.status} />
               <span className="text-xs text-content-muted">
-                등록 {formatDateTime(detail.createdAt)}
+                등록 {formatServerDateTime(detail.createdAt)}
               </span>
             </div>
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
@@ -66,9 +66,9 @@ export function AdminLimitedDropDetailDrawer({
               <dt className="text-content-muted">1인 한도</dt>
               <dd>{detail.perMemberLimit}</dd>
               <dt className="text-content-muted">오픈 시각</dt>
-              <dd>{formatDateTime(detail.openAt)}</dd>
+              <dd>{formatServerDateTime(detail.openAt)}</dd>
               <dt className="text-content-muted">마감 시각</dt>
-              <dd>{formatDateTime(detail.closeAt)}</dd>
+              <dd>{formatServerDateTime(detail.closeAt)}</dd>
             </dl>
           </div>
 
@@ -135,7 +135,7 @@ export function AdminLimitedDropDetailDrawer({
                           )}
                         </td>
                         <td className="py-2.5 pr-3 text-content-muted">
-                          {formatDateTime(purchase.purchasedAt)}
+                          {formatServerDateTime(purchase.purchasedAt)}
                         </td>
                       </tr>
                     ))}
