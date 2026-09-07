@@ -15,7 +15,11 @@ const baseAlbum: Omit<AlbumDetail, 'pressings'> = {
   artist: { id: 1, name: 'Miles Davis' },
 };
 
-const renderSection = (album: AlbumDetail, currentProductId: number) => {
+const renderSection = (
+  album: AlbumDetail,
+  currentProductId: number,
+  hasOtherPressings = true,
+) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(albumKeys.detail(album.id), album);
   useAuthStore.setState({ accessToken: null, member: null, isBootstrapping: false });
@@ -24,7 +28,12 @@ const renderSection = (album: AlbumDetail, currentProductId: number) => {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <MemoryRouter>
-          <AlbumPressingsSection albumId={album.id} currentProductId={currentProductId} />
+          <AlbumPressingsSection
+            albumId={album.id}
+            currentProductId={currentProductId}
+            hasOtherPressings={hasOtherPressings}
+            action={<button type="button">구독</button>}
+          />
         </MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>,
@@ -64,7 +73,7 @@ describe('AlbumPressingsSection', () => {
     expect(screen.getByText('재발매 프레싱')).toBeInTheDocument();
   });
 
-  it('다른 프레싱이 없으면 아무것도 렌더하지 않는다', () => {
+  it('다른 프레싱이 없어도 헤딩과 action 은 남는다', () => {
     // given
     const album: AlbumDetail = {
       ...baseAlbum,
@@ -84,7 +93,42 @@ describe('AlbumPressingsSection', () => {
     renderSection(album, 1);
 
     // then
-    expect(screen.queryByText('이 앨범의 다른 프레싱')).not.toBeInTheDocument();
+    expect(screen.getByText('이 앨범의 다른 프레싱')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '구독' })).toBeInTheDocument();
+    expect(screen.getByText('아직 다른 프레싱이 없어요.')).toBeInTheDocument();
+  });
+
+  it('hasOtherPressings 가 false 면 조회 없이 안내 문구를 보여준다', () => {
+    // given
+    const album: AlbumDetail = {
+      ...baseAlbum,
+      pressings: [
+        {
+          id: 1,
+          title: '현재 프레싱',
+          artistName: 'Miles Davis',
+          price: 30000,
+          status: 'ON_SALE',
+          editionType: 'ORIGINAL',
+        },
+        {
+          id: 2,
+          title: '재발매 프레싱',
+          artistName: 'Miles Davis',
+          price: 25000,
+          status: 'ON_SALE',
+          editionType: 'REISSUE',
+        },
+      ],
+    };
+
+    // when
+    renderSection(album, 1, false);
+
+    // then
+    expect(screen.getByText('이 앨범의 다른 프레싱')).toBeInTheDocument();
+    expect(screen.getByText('아직 다른 프레싱이 없어요.')).toBeInTheDocument();
+    expect(screen.queryByText('재발매 프레싱')).not.toBeInTheDocument();
   });
 
   it('국가·연도·에디션 메타가 보인다', () => {

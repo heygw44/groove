@@ -7,6 +7,7 @@ import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
 import { StarRatingDisplay } from '@/components/common/StarRating';
+import { AlbumWatchButton } from '@/components/notification/AlbumWatchButton';
 import { AlbumPressingsSection } from '@/components/product/AlbumPressingsSection';
 import { PressingSpecTable } from '@/components/product/PressingSpecTable';
 import { ProductDetailSkeleton } from '@/components/product/ProductDetailSkeleton';
@@ -132,9 +133,12 @@ export default function ProductDetailPage() {
         <p className="mt-10 whitespace-pre-line text-sm text-content">{product.description}</p>
       )}
 
-      {product.album.pressingCount > 1 && (
-        <AlbumPressingsSection albumId={product.album.id} currentProductId={product.id} />
-      )}
+      <AlbumPressingsSection
+        albumId={product.album.id}
+        currentProductId={product.id}
+        hasOtherPressings={product.album.pressingCount > 1}
+        action={<AlbumWatchButton albumId={product.album.id} albumTitle={product.album.title} />}
+      />
 
       <RelatedProductsSection productId={product.id} />
 

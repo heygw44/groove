@@ -1,11 +1,12 @@
 import type { QueryKey } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { addWishlist, removeWishlist } from '@/api/wishlist';
+import { addWishlist, changeWishlistAlert, removeWishlist } from '@/api/wishlist';
 import { productKeys, recommendKeys, wishlistKeys } from '@/hooks/queries/queryKeys';
 import type { PageResponse } from '@/types/api';
 import type { ProductDetail, ProductSummary } from '@/types/product';
 import type { HomeRecommendResponse, RecommendItem } from '@/types/recommend';
+import type { WishlistItem } from '@/types/wishlist';
 import { getErrorCode } from '@/utils/apiError';
 import { patchRecommendWishlisted } from '@/utils/recommend';
 
@@ -50,9 +51,12 @@ export const useToggleWishlist = () => {
         queryKey: recommendKeys.all,
       });
 
+      // 서버는 위시에 담을 때 alertEnabled 를 true 로 만든다. 상세는 재조회하지 않으니
+      // 여기서 같이 맞춰두지 않으면 알림 토글이 꺼진 채로 보인다.
       queryClient.setQueryData<ProductDetail>(
         productKeys.detail(productId),
-        (old) => old && { ...old, wishlisted: !wishlisted },
+        (old) =>
+          old && { ...old, wishlisted: !wishlisted, alertEnabled: wishlisted ? undefined : true },
       );
       queryClient.setQueriesData<PageResponse<ProductSummary>>(
         { queryKey: productKeys.all },
@@ -97,6 +101,71 @@ export const useToggleWishlist = () => {
       // 추천은 위시 신호를 서버가 반영하므로 stale 로 만들되, 지금 화면에서 바로 재조회하면
       // 방금 하트를 누른 카드가 후보에서 빠져 사라지므로 다음 진입 때 새로 받게 한다.
       queryClient.invalidateQueries({ queryKey: recommendKeys.all, refetchType: 'none' });
+    },
+  });
+};
+
+interface ChangeWishlistAlertVariables {
+  productId: number;
+  /** 토글이 아니라 값 지정 API 라 여기 들어오는 값이 곧 바꾸고 싶은 새 상태다. */
+  alertEnabled: boolean;
+}
+
+interface ChangeWishlistAlertContext {
+  hadDetail: boolean;
+  previousDetail?: ProductDetail;
+  previousLists: Array<[QueryKey, PageResponse<WishlistItem> | undefined]>;
+}
+
+export const useChangeWishlistAlert = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ productId, alertEnabled }: ChangeWishlistAlertVariables) =>
+      changeWishlistAlert(productId, alertEnabled),
+    onMutate: async ({
+      productId,
+      alertEnabled,
+    }): Promise<ChangeWishlistAlertContext> => {
+      await queryClient.cancelQueries({ queryKey: productKeys.detail(productId) });
+      await queryClient.cancelQueries({ queryKey: wishlistKeys.all });
+
+      const hadDetail = queryClient.getQueryState(productKeys.detail(productId)) !== undefined;
+      const previousDetail = queryClient.getQueryData<ProductDetail>(productKeys.detail(productId));
+      const previousLists = queryClient.getQueriesData<PageResponse<WishlistItem>>({
+        queryKey: wishlistKeys.all,
+      });
+
+      queryClient.setQueryData<ProductDetail>(
+        productKeys.detail(productId),
+        (old) => old && { ...old, alertEnabled },
+      );
+      queryClient.setQueriesData<PageResponse<WishlistItem>>(
+        { queryKey: wishlistKeys.all },
+        (old) =>
+          old && {
+            ...old,
+            content: old.content.map((item) =>
+              item.productId === productId ? { ...item, alertEnabled } : item,
+            ),
+          },
+      );
+
+      return { hadDetail, previousDetail, previousLists };
+    },
+    onError: (_error, { productId }, context) => {
+      if (!context) {
+        return;
+      }
+      if (context.hadDetail) {
+        queryClient.setQueryData(productKeys.detail(productId), context.previousDetail);
+      }
+      context.previousLists.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: wishlistKeys.all });
     },
   });
 };

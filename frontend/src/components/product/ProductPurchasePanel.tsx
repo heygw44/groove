@@ -7,9 +7,10 @@ import { useToast } from '@/components/common/toastContext';
 import { QuantitySelector } from '@/components/product/QuantitySelector';
 import { WishButton } from '@/components/product/WishButton';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
+import { useChangeWishlistAlert } from '@/hooks/mutations/useWishlistMutations';
 import { useAuthStore } from '@/store/authStore';
 import type { ProductDetail } from '@/types/product';
-import { getErrorMessage } from '@/utils/apiError';
+import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatPrice } from '@/utils/formatPrice';
 
 const LOW_STOCK_THRESHOLD = 5;
@@ -26,6 +27,7 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
   const { showToast } = useToast();
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
   const addCartItemMutation = useAddCartItem();
+  const changeAlertMutation = useChangeWishlistAlert();
 
   const requireLogin = () => {
     if (isLoggedIn) {
@@ -54,6 +56,22 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
       return;
     }
     navigate('/orders/new', { state: { productId: product.id, quantity } });
+  };
+
+  const handleToggleAlert = () => {
+    const nextAlertEnabled = !product.alertEnabled;
+    changeAlertMutation.mutate(
+      { productId: product.id, alertEnabled: nextAlertEnabled },
+      {
+        onError: (error) => {
+          const code = getErrorCode(error);
+          // 위시에서 이미 빠진 상태라 서버 상태가 곧 우리가 보여주려던 값이다.
+          if (code !== 'WISHLIST_NOT_FOUND') {
+            showToast('error', getErrorMessage(error));
+          }
+        },
+      },
+    );
   };
 
   return (
@@ -105,6 +123,19 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
           </span>
           <WishButton size="md" productId={product.id} wishlisted={product.wishlisted} />
         </div>
+      )}
+
+      {product.wishlisted && (
+        <label className="flex items-center gap-2 text-sm text-content-muted">
+          <input
+            type="checkbox"
+            checked={Boolean(product.alertEnabled)}
+            disabled={changeAlertMutation.isPending}
+            onChange={handleToggleAlert}
+            className="h-4 w-4 rounded border-line-strong"
+          />
+          재입고·가격 인하 알림 받기
+        </label>
       )}
     </div>
   );

@@ -26,11 +26,13 @@ import RecentViewsPage from '@/pages/mypage/RecentViewsPage';
 import TastePage from '@/pages/mypage/TastePage';
 import WishlistPage from '@/pages/mypage/WishlistPage';
 import NotFoundPage from '@/pages/NotFoundPage';
+import NotificationListPage from '@/pages/notification/NotificationListPage';
 import OrderDetailPage from '@/pages/order/OrderDetailPage';
 import OrderFormPage from '@/pages/order/OrderFormPage';
 import OrderListPage from '@/pages/order/OrderListPage';
 import PaymentFailPage from '@/pages/payment/PaymentFailPage';
 import PaymentSuccessPage from '@/pages/payment/PaymentSuccessPage';
+import AlbumDetailPage from '@/pages/product/AlbumDetailPage';
 import ProductDetailPage from '@/pages/product/ProductDetailPage';
 import ProductListPage from '@/pages/product/ProductListPage';
 import { AdminRoute } from '@/routes/AdminRoute';
@@ -80,6 +82,7 @@ export const router = createBrowserRouter([
       },
       { path: 'login', element: <LoginPage /> },
       { path: 'signup', element: <SignupPage /> },
+      { path: 'albums/:id', element: <AlbumDetailPage /> },
       {
         element: (
           <PrivateRoute>
@@ -100,6 +103,7 @@ export const router = createBrowserRouter([
           },
           { path: 'orders', element: <OrderListPage /> },
           { path: 'orders/:id', element: <OrderDetailPage /> },
+          { path: 'notifications', element: <NotificationListPage /> },
         ],
       },
       {

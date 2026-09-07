@@ -73,6 +73,8 @@ export interface ProductDetail {
   averageRating?: number;
   reviewCount?: number;
   wishlisted?: boolean;
+  /** 위시에 없으면 이 값도 없다. */
+  alertEnabled?: boolean;
   limitedDrop?: ProductLimitedDropSummary;
 }
 

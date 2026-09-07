@@ -9,6 +9,7 @@ export interface WishlistItem {
   price: number;
   productStatus: ProductStatus;
   stockQuantity: number;
+  alertEnabled: boolean;
   createdAt: string;
 }
 
