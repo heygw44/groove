@@ -138,7 +138,7 @@ const NAV_ITEMS: AdminNavItem[] = [
   },
   {
     to: '/admin/limited-drops',
-    label: '한정반 판매',
+    label: '한정반',
     icon: (
       <svg
         width="16"
