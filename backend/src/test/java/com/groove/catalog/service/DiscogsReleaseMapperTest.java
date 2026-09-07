@@ -3,6 +3,7 @@ package com.groove.catalog.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -78,6 +80,76 @@ class DiscogsReleaseMapperTest {
 			// then
 			assertThat(response.alreadyImported()).isTrue();
 			assertThat(response.discogsReleaseId()).isEqualTo(1L);
+		}
+
+		@Test
+		@DisplayName("title 이 null 이면 아티스트와 제목 모두 null 로 매핑한다")
+		void mapsNullArtistAndTitleWhenTitleIsNull() {
+			// given
+			DiscogsSearchResponse.Result result = DiscogsFixture.searchResult(1L, null, "2015");
+
+			// when
+			CatalogLookupResponse response = mapper.toLookup(result, false);
+
+			// then
+			assertThat(response.artist()).isNull();
+			assertThat(response.title()).isNull();
+		}
+
+		@Test
+		@DisplayName("year 가 null 이면 null 로 매핑한다")
+		void mapsNullYearToNull() {
+			// given
+			DiscogsSearchResponse.Result result = DiscogsFixture.searchResult(1L, "Title", null);
+
+			// when
+			CatalogLookupResponse response = mapper.toLookup(result, false);
+
+			// then
+			assertThat(response.year()).isNull();
+		}
+
+		@Test
+		@DisplayName("label 목록이 null 이면 label 을 null 로 매핑한다")
+		void mapsNullLabelWhenLabelListIsNull() {
+			// given
+			DiscogsSearchResponse.Result result = DiscogsFixture.searchResult(1L, "Title", "2015", null,
+					"https://i.discogs.com/thumb.jpeg");
+
+			// when
+			CatalogLookupResponse response = mapper.toLookup(result, false);
+
+			// then
+			assertThat(response.label()).isNull();
+		}
+
+		@Test
+		@DisplayName("label 목록이 비어 있으면 label 을 null 로 매핑한다")
+		void mapsNullLabelWhenLabelListIsEmpty() {
+			// given
+			DiscogsSearchResponse.Result result = DiscogsFixture.searchResult(1L, "Title", "2015", List.of(),
+					"https://i.discogs.com/thumb.jpeg");
+
+			// when
+			CatalogLookupResponse response = mapper.toLookup(result, false);
+
+			// then
+			assertThat(response.label()).isNull();
+		}
+
+		@ParameterizedTest
+		@NullAndEmptySource
+		@DisplayName("thumb 가 null 이거나 비어 있으면 null 로 매핑한다")
+		void mapsBlankOrNullThumbToNull(String thumb) {
+			// given
+			DiscogsSearchResponse.Result result = DiscogsFixture.searchResult(1L, "Title", "2015",
+					List.of("Columbia"), thumb);
+
+			// when
+			CatalogLookupResponse response = mapper.toLookup(result, false);
+
+			// then
+			assertThat(response.thumbUrl()).isNull();
 		}
 	}
 
@@ -200,6 +272,178 @@ class DiscogsReleaseMapperTest {
 
 			// then
 			assertThat(detail.artistName()).isEqualTo("Nirvana");
+		}
+
+		@ParameterizedTest
+		@CsvSource({
+			", ",
+			"0, ",
+			"-5, "
+		})
+		@DisplayName("year 가 없거나 0 이하이면 pressingYear 를 null 로 매핑한다")
+		void mapsPressingYearToNullWhenYearIsMissingOrNonPositive(Integer year, Integer expectedPressingYear) {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", "Columbia", "CS 8163",
+					List.of("LP"), null, List.of(), List.of(), year);
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.pressingYear()).isEqualTo(expectedPressingYear);
+		}
+
+		@Test
+		@DisplayName("artists/labels/formats/identifiers/images/genres/styles 가 모두 null 이면 안전하게 기본값으로 매핑한다")
+		void mapsAllFieldsToNullOrDefaultWhenCollectionsAreNull() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(249504L, "Kind Of Blue", null, null,
+					"Germany", 1959, null, null, null, null, null, 21247L, null);
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.artistName()).isNull();
+			assertThat(detail.labelName()).isNull();
+			assertThat(detail.catalogNo()).isNull();
+			assertThat(detail.editionType()).isEqualTo(EditionType.STANDARD);
+			assertThat(detail.barcode()).isNull();
+			assertThat(detail.genreNames()).isEmpty();
+			assertThat(detail.imageUrl()).isNull();
+			assertThat(detail.description()).isNull();
+		}
+
+		@Test
+		@DisplayName("artists 목록이 비어 있으면 아티스트명을 null 로 매핑한다")
+		void mapsNullArtistNameWhenArtistsListIsEmpty() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse(null, "Columbia", "CS 8163",
+					List.of("LP"), null, List.of(), List.of());
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.artistName()).isNull();
+		}
+
+		@Test
+		@DisplayName("아티스트 이름이 null 이면 아티스트명을 null 로 매핑한다")
+		void mapsNullArtistNameWhenNameFieldIsNull() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(249504L, "Kind Of Blue",
+					List.of(new DiscogsReleaseResponse.Artist(null)), List.of(), "Germany", 1959, List.of(),
+					List.of(), List.of(), List.of(), List.of(), 21247L, null);
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.artistName()).isNull();
+		}
+
+		@Test
+		@DisplayName("labels 목록이 비어 있으면 레이블명과 카탈로그번호를 null 로 매핑한다")
+		void mapsNullLabelNameWhenLabelsListIsEmpty() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", null, "CS 8163",
+					List.of("LP"), null, List.of(), List.of());
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.labelName()).isNull();
+			assertThat(detail.catalogNo()).isNull();
+		}
+
+		@Test
+		@DisplayName("바코드 값이 null 이면 건너뛰고 다음 바코드를 찾는다")
+		void skipsNullBarcodeValueAndFindsNext() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(249504L, "Kind Of Blue",
+					List.of(new DiscogsReleaseResponse.Artist("Miles Davis")),
+					List.of(new DiscogsReleaseResponse.Label("Columbia", "CS 8163")), "Germany", 1959, List.of(),
+					List.of(), List.of(new DiscogsReleaseResponse.Format("Vinyl", List.of())),
+					List.of(new DiscogsReleaseResponse.Identifier("Barcode", null),
+							new DiscogsReleaseResponse.Identifier("Barcode", "5012394144777")),
+					List.of(), 21247L, null);
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.barcode()).isEqualTo("5012394144777");
+		}
+
+		@Test
+		@DisplayName("공백/하이픈만 있는 바코드 값은 건너뛰고 다음 바코드를 찾는다")
+		void skipsBlankBarcodeValueAndFindsNext() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(249504L, "Kind Of Blue",
+					List.of(new DiscogsReleaseResponse.Artist("Miles Davis")),
+					List.of(new DiscogsReleaseResponse.Label("Columbia", "CS 8163")), "Germany", 1959, List.of(),
+					List.of(), List.of(new DiscogsReleaseResponse.Format("Vinyl", List.of())),
+					List.of(new DiscogsReleaseResponse.Identifier("Barcode", " - "),
+							new DiscogsReleaseResponse.Identifier("Barcode", "5012394144777")),
+					List.of(), 21247L, null);
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.barcode()).isEqualTo("5012394144777");
+		}
+
+		@Test
+		@DisplayName("genres/styles 안의 null 항목은 건너뛴다")
+		void skipsNullGenreCandidates() {
+			// given
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse("Miles Davis", "Columbia", "CS 8163",
+					List.of("LP"), null, Arrays.asList(null, "Jazz"), List.of());
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of("Jazz"));
+
+			// then
+			assertThat(detail.genreNames()).containsExactly("Jazz");
+		}
+
+		@Test
+		@DisplayName("images 목록이 비어 있으면 이미지 URL 을 null 로 매핑한다")
+		void mapsNullImageUrlWhenImagesListIsEmpty() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(249504L, "Kind Of Blue",
+					List.of(new DiscogsReleaseResponse.Artist("Miles Davis")),
+					List.of(new DiscogsReleaseResponse.Label("Columbia", "CS 8163")), "Germany", 1959, List.of(),
+					List.of(), List.of(new DiscogsReleaseResponse.Format("Vinyl", List.of())), List.of(), List.of(),
+					21247L, null);
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.imageUrl()).isNull();
+		}
+
+		@Test
+		@DisplayName("primary 타입 이미지가 없으면 첫 번째 이미지를 사용한다")
+		void fallsBackToFirstImageWhenNoPrimaryType() {
+			// given
+			DiscogsReleaseResponse release = new DiscogsReleaseResponse(249504L, "Kind Of Blue",
+					List.of(new DiscogsReleaseResponse.Artist("Miles Davis")),
+					List.of(new DiscogsReleaseResponse.Label("Columbia", "CS 8163")), "Germany", 1959, List.of(),
+					List.of(), List.of(new DiscogsReleaseResponse.Format("Vinyl", List.of())), List.of(),
+					List.of(new DiscogsReleaseResponse.Image("secondary", "https://i.discogs.com/secondary.jpeg",
+							null)),
+					21247L, null);
+
+			// when
+			CatalogReleaseDetailResponse detail = mapper.toDetail(release, List.of());
+
+			// then
+			assertThat(detail.imageUrl()).isEqualTo("https://i.discogs.com/secondary.jpeg");
 		}
 	}
 

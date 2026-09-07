@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -22,11 +24,16 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openapitools.jackson.nullable.JsonNullable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.coupon.dto.AdminCouponResponse;
+import com.groove.coupon.dto.AdminCouponSummaryResponse;
 import com.groove.coupon.dto.CouponCreateRequest;
 import com.groove.coupon.dto.CouponUpdateRequest;
 import com.groove.coupon.entity.Coupon;
@@ -36,6 +43,7 @@ import com.groove.coupon.repository.CouponRepository;
 import com.groove.fixture.CouponFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 
 @ExtendWith(MockitoExtension.class)
 class AdminCouponServiceTest {
@@ -264,6 +272,171 @@ class AdminCouponServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COUPON_DISCOUNT_LOCKED);
+		}
+
+		@Test
+		@DisplayName("discountValue 만 오면 나머지 할인 조건은 유지한 채 값만 바꾼다")
+		void updatesOnlyDiscountValueWhenOthersOmitted() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.fixed("ONLYVALUE1", BigDecimal.valueOf(1000)),
+					COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, BigDecimal.valueOf(2000), null,
+					JsonNullable.undefined(), JsonNullable.undefined(), null, null);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.discountValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("discountValue");
+		}
+
+		@Test
+		@DisplayName("minOrderAmount 만 오면 나머지 할인 조건은 유지한 채 값만 바꾼다")
+		void updatesOnlyMinOrderAmountWhenOthersOmitted() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.fixed("ONLYMIN1", BigDecimal.valueOf(1000)),
+					COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, BigDecimal.valueOf(5000),
+					JsonNullable.undefined(), JsonNullable.undefined(), null, null);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.minOrderAmount()).isEqualByComparingTo(BigDecimal.valueOf(5000));
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("minOrderAmount");
+		}
+
+		@Test
+		@DisplayName("maxDiscountAmount 필드 자체가 null 이면(JsonNullable 이 아니면) 기존 값을 유지한다")
+		void keepsMaxDiscountAmountWhenFieldItselfIsNull() {
+			// given
+			Coupon coupon = CouponFixture.withId(
+					CouponFixture.rate("RAWNULLCAP1", BigDecimal.valueOf(10), BigDecimal.valueOf(5000)), COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, null,
+					JsonNullable.undefined(), null, null);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.maxDiscountAmount()).isEqualByComparingTo(BigDecimal.valueOf(5000));
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("totalQuantity 필드 자체가 null 이면(JsonNullable 이 아니면) 기존 값을 유지한다")
+		void keepsTotalQuantityWhenFieldItselfIsNull() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.withTotalQuantity("RAWNULLQTY1", 100), COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(),
+					null, null, null);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.totalQuantity()).isEqualTo(100);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("status 가 현재 상태와 같으면 변경으로 취급하지 않는다")
+		void doesNotMarkStatusChangedWhenStatusUnchanged() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.fixed("SAMESTATUS1", BigDecimal.valueOf(1000)),
+					COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(),
+					JsonNullable.undefined(), null, CouponStatus.ACTIVE);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.status()).isEqualTo(CouponStatus.ACTIVE);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("status 를 DISABLED 로 바꾸면 update() 로도 비활성화된다")
+		void disablesCouponViaUpdateWhenStatusSetToDisabled() {
+			// given
+			Coupon coupon = CouponFixture.withId(CouponFixture.fixed("VIAUPDATE1", BigDecimal.valueOf(1000)),
+					COUPON_ID);
+			given(couponRepository.findById(COUPON_ID)).willReturn(Optional.of(coupon));
+			CouponUpdateRequest request = new CouponUpdateRequest(null, null, null, null, JsonNullable.undefined(),
+					JsonNullable.undefined(), null, CouponStatus.DISABLED);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminCouponResponse response = adminCouponService.update(ADMIN_ID, COUPON_ID, request);
+
+			// then
+			assertThat(response.status()).isEqualTo(CouponStatus.DISABLED);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
+					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("status");
+		}
+	}
+
+	@Nested
+	@DisplayName("getList()")
+	class GetList {
+
+		@Test
+		@DisplayName("상태와 페이지 정보를 그대로 리포지토리에 전달한다")
+		void passesStatusAndPageableIntoRepository() {
+			// given
+			Pageable pageable = PageRequest.of(0, 20);
+			AdminCouponSummaryResponse summary = new AdminCouponSummaryResponse(COUPON_ID, "WELCOME1000", "테스트 쿠폰",
+					DiscountType.FIXED, BigDecimal.valueOf(1000), BigDecimal.ZERO, null, null, 0, 0L,
+					LocalDateTime.now().plusDays(7), CouponStatus.ACTIVE, LocalDateTime.now());
+			Page<AdminCouponSummaryResponse> page = new PageImpl<>(List.of(summary), pageable, 1);
+			given(couponRepository.findAdminSummaries(eq(CouponStatus.ACTIVE), eq(pageable))).willReturn(page);
+
+			// when
+			PageResponse<AdminCouponSummaryResponse> result = adminCouponService.getList(CouponStatus.ACTIVE,
+					pageable);
+
+			// then
+			assertThat(result.content()).containsExactly(summary);
+			verify(couponRepository).findAdminSummaries(CouponStatus.ACTIVE, pageable);
+		}
+
+		@Test
+		@DisplayName("상태가 없으면 null 로 리포지토리에 전달한다")
+		void passesNullStatusWhenAbsent() {
+			// given
+			Pageable pageable = PageRequest.of(0, 20);
+			given(couponRepository.findAdminSummaries(isNull(), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			// when
+			adminCouponService.getList(null, pageable);
+
+			// then
+			verify(couponRepository).findAdminSummaries(null, pageable);
 		}
 	}
 

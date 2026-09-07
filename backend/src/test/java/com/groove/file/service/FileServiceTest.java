@@ -80,6 +80,34 @@ class FileServiceTest {
 			verify(fileStorage).store(eq(file), eq(extension));
 		}
 
+		@Test
+		@DisplayName("확장자가 대문자여도 소문자로 정규화해 저장소에 전달한다")
+		void normalizesUppercaseExtensionToLowercase() {
+			// given
+			MockMultipartFile file = FileFixture.image("COVER.JPG", "image/jpeg", "content".getBytes());
+			given(fileStorage.store(any(), eq("jpg"))).willReturn("2026/09/02/uuid.jpg");
+
+			// when
+			fileService.uploadImage(file);
+
+			// then
+			verify(fileStorage).store(eq(file), eq("jpg"));
+		}
+
+		@Test
+		@DisplayName("파일명에 점이 여러 개면 마지막 구간만 확장자로 본다")
+		void extractsExtensionFromLastDotWhenMultipleDots() {
+			// given
+			MockMultipartFile file = FileFixture.image("cover.final.jpg", "image/jpeg", "content".getBytes());
+			given(fileStorage.store(any(), eq("jpg"))).willReturn("2026/09/02/uuid.jpg");
+
+			// when
+			fileService.uploadImage(file);
+
+			// then
+			verify(fileStorage).store(eq(file), eq("jpg"));
+		}
+
 		@ParameterizedTest
 		@DisplayName("허용되지 않은 확장자면 FILE_INVALID_FORMAT 예외를 던진다")
 		@ValueSource(strings = {"gif", "svg", "exe"})
@@ -99,6 +127,45 @@ class FileServiceTest {
 		void throwsWhenNoExtension() {
 			// given
 			MockMultipartFile file = FileFixture.image("cover", "image/jpeg", "content".getBytes());
+
+			// when & then
+			assertThatThrownBy(() -> fileService.uploadImage(file))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.FILE_INVALID_FORMAT);
+		}
+
+		@Test
+		@DisplayName("파일명이 점으로 끝나면 FILE_INVALID_FORMAT 예외를 던진다")
+		void throwsWhenFilenameEndsWithDot() {
+			// given
+			MockMultipartFile file = FileFixture.image("cover.", "image/jpeg", "content".getBytes());
+
+			// when & then
+			assertThatThrownBy(() -> fileService.uploadImage(file))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.FILE_INVALID_FORMAT);
+		}
+
+		@Test
+		@DisplayName("파일명이 없으면 FILE_INVALID_FORMAT 예외를 던진다")
+		void throwsWhenFilenameIsNull() {
+			// given
+			MockMultipartFile file = FileFixture.image(null, "image/jpeg", "content".getBytes());
+
+			// when & then
+			assertThatThrownBy(() -> fileService.uploadImage(file))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.FILE_INVALID_FORMAT);
+		}
+
+		@Test
+		@DisplayName("파일명이 공백뿐이면 FILE_INVALID_FORMAT 예외를 던진다")
+		void throwsWhenFilenameIsBlank() {
+			// given
+			MockMultipartFile file = FileFixture.image("   ", "image/jpeg", "content".getBytes());
 
 			// when & then
 			assertThatThrownBy(() -> fileService.uploadImage(file))
@@ -157,6 +224,32 @@ class FileServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.FILE_EMPTY);
+		}
+
+		@Test
+		@DisplayName("파일 자체가 null 이면 FILE_EMPTY 예외를 던진다")
+		void throwsWhenFileIsNull() {
+			// when & then
+			assertThatThrownBy(() -> fileService.uploadImage(null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.FILE_EMPTY);
+		}
+
+		@Test
+		@DisplayName("base-url 끝에 슬래시가 있어도 슬래시를 하나로 정리해 url 을 만든다")
+		void buildsUrlWithoutDoubleSlashWhenBaseUrlEndsWithSlash() {
+			// given
+			FileProperties fileProperties = new FileProperties("./uploads", "http://localhost:8080/uploads/");
+			FileService serviceWithTrailingSlash = new FileService(fileStorage, fileProperties);
+			MockMultipartFile file = FileFixture.image();
+			given(fileStorage.store(eq(file), eq("jpg"))).willReturn("2026/09/02/uuid.jpg");
+
+			// when
+			FileUploadResponse response = serviceWithTrailingSlash.uploadImage(file);
+
+			// then
+			assertThat(response.url()).isEqualTo("http://localhost:8080/uploads/2026/09/02/uuid.jpg");
 		}
 	}
 }
