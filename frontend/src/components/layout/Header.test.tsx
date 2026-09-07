@@ -135,4 +135,28 @@ describe('Header', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
   });
+
+  describe('모바일 검색', () => {
+    it('돋보기를 누르면 검색줄이 열리고 다시 누르면 닫힌다', async () => {
+      // given
+      const user = userEvent.setup();
+      renderHeader();
+      const searchToggle = screen.getByRole('button', { name: '검색 열기' });
+      expect(searchToggle).toHaveAttribute('aria-expanded', 'false');
+
+      // when
+      await user.click(searchToggle);
+
+      // then
+      expect(searchToggle).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getAllByRole('combobox')).toHaveLength(2);
+
+      // when
+      await user.click(screen.getByRole('button', { name: '취소' }));
+
+      // then
+      expect(searchToggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getAllByRole('combobox')).toHaveLength(1);
+    });
+  });
 });
