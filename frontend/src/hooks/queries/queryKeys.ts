@@ -1,6 +1,7 @@
 import type { AdminAuditLogListParams } from '@/types/adminAuditLog';
 import type { AdminMemberListParams } from '@/types/adminMember';
 import type { PopularProductParams, StatsPeriodParams } from '@/types/adminStats';
+import type { AlbumWatchListParams } from '@/types/albumWatch';
 import type { CatalogImportJobListParams, CatalogLookupParams } from '@/types/catalog';
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
@@ -30,6 +31,8 @@ export const productKeys = {
   all: ['products'] as const,
   list: (params: ProductListParams) => ['products', params] as const,
   detail: (id: number) => ['product', id] as const,
+  // 상세 캐시 전체를 훑어야 하는 호출(같은 앨범을 참조하는 여러 프레싱 패치)이 쓴다.
+  details: ['product'] as const,
 };
 
 // 'products' 트리 밖에 둔다. useToggleWishlist 낙관적 갱신이 ['products'] 캐시를 전부 PageResponse 로 가정하고 훑기 때문이다.
@@ -171,6 +174,8 @@ export const notificationKeys = {
 
 export const albumWatchKeys = {
   all: ['albumWatches'] as const,
+  lists: ['albumWatches', 'list'] as const,
+  list: (params: AlbumWatchListParams) => ['albumWatches', 'list', params] as const,
 };
 
 // 'products' 트리 밖에 둔다. useToggleWishlist 낙관적 갱신이 ['products'] 캐시를 전부 PageResponse 로 가정하고 훑기 때문이다.

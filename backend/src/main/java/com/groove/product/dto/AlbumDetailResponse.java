@@ -10,16 +10,18 @@ public record AlbumDetailResponse(
 		ProductDetailResponse.ArtistSummary artist,
 		Integer originalReleaseYear,
 		String description,
-		List<ProductSummaryResponse> pressings
+		List<ProductSummaryResponse> pressings,
+		Boolean watched
 ) {
 
-	public static AlbumDetailResponse from(Album album, List<ProductSummaryResponse> pressings) {
+	public static AlbumDetailResponse from(Album album, List<ProductSummaryResponse> pressings, Boolean watched) {
 		return new AlbumDetailResponse(
 				album.getId(),
 				album.getTitle(),
 				new ProductDetailResponse.ArtistSummary(album.getArtist().getId(), album.getArtist().getName()),
 				album.getOriginalReleaseYear(),
 				album.getDescription(),
-				pressings);
+				pressings,
+				watched);
 	}
 }

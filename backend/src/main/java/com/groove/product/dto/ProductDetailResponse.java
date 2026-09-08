@@ -36,12 +36,13 @@ public record ProductDetailResponse(
 ) {
 
 	public static ProductDetailResponse from(Product product, List<ProductImage> images, int stockQuantity,
-		Boolean wishlisted, Boolean alertEnabled, LimitedDropSummary limitedDrop, int pressingCount) {
+		Boolean wishlisted, Boolean alertEnabled, LimitedDropSummary limitedDrop, int pressingCount,
+		Boolean watched) {
 		LabelSummary label = product.getLabel() == null
 				? null
 				: new LabelSummary(product.getLabel().getId(), product.getLabel().getName());
 		AlbumSummary album = new AlbumSummary(product.getAlbum().getId(), product.getAlbum().getTitle(),
-				product.getAlbum().getOriginalReleaseYear(), pressingCount);
+				product.getAlbum().getOriginalReleaseYear(), pressingCount, watched);
 		PressingSummary pressing = new PressingSummary(product.getCountry(), product.getPressingYear(),
 				product.getCatalogNo(), product.getBarcode(), product.getEditionType(),
 				product.getDiscogsReleaseId());
@@ -76,7 +77,8 @@ public record ProductDetailResponse(
 				limitedDrop);
 	}
 
-	public record AlbumSummary(Long id, String title, Integer originalReleaseYear, int pressingCount) {
+	public record AlbumSummary(Long id, String title, Integer originalReleaseYear, int pressingCount,
+			Boolean watched) {
 	}
 
 	public record PressingSummary(String country, Integer pressingYear, String catalogNo, String barcode,

@@ -1,18 +1,18 @@
 package com.groove.notification.service;
 
-import java.util.List;
-
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
-import com.groove.notification.dto.AlbumWatchListResponse;
 import com.groove.notification.dto.AlbumWatchResponse;
+import com.groove.notification.dto.AlbumWatchSearchRequest;
 import com.groove.notification.entity.AlbumWatch;
 import com.groove.notification.repository.AlbumWatchRepository;
 import com.groove.product.entity.Album;
@@ -57,12 +57,10 @@ public class AlbumWatchService {
 		albumWatchRepository.delete(albumWatch);
 	}
 
-	public AlbumWatchListResponse getMyWatches(Long memberId) {
-		List<AlbumWatchResponse> content = albumWatchRepository
-				.findAllByMemberIdOrderByCreatedAtDescIdDesc(memberId).stream()
-				.map(AlbumWatchResponse::from)
-				.toList();
-		return AlbumWatchListResponse.of(content);
+	public PageResponse<AlbumWatchResponse> getMyWatches(Long memberId, AlbumWatchSearchRequest request) {
+		Page<AlbumWatchResponse> page = albumWatchRepository.findAllByMemberId(memberId, request.toPageable())
+				.map(AlbumWatchResponse::from);
+		return PageResponse.from(page);
 	}
 
 	private Member findActiveMember(Long memberId) {

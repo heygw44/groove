@@ -15,6 +15,7 @@ import com.groove.global.common.PageResponse;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.service.LimitedDropService;
+import com.groove.notification.repository.AlbumWatchRepository;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSearchRequest;
@@ -43,6 +44,7 @@ public class ProductService {
 	private final StockRepository stockRepository;
 	private final WishlistRepository wishlistRepository;
 	private final LimitedDropService limitedDropService;
+	private final AlbumWatchRepository albumWatchRepository;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
 
@@ -76,8 +78,11 @@ public class ProductService {
 				.orElse(null);
 		long pressingCount = productRepository.countByAlbumIdAndStatusNot(product.getAlbum().getId(),
 				ProductStatus.HIDDEN);
+		Boolean watched = memberId == null
+				? null
+				: albumWatchRepository.existsByMemberIdAndAlbumId(memberId, product.getAlbum().getId());
 		ProductDetailResponse response = ProductDetailResponse.from(product, images, stockQuantity, wishlisted,
-				alertEnabled, limitedDrop, (int) pressingCount);
+				alertEnabled, limitedDrop, (int) pressingCount, watched);
 		eventPublisher.publishEvent(new ProductViewedEvent(memberId, id, LocalDateTime.now(clock)));
 		return response;
 	}

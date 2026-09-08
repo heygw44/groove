@@ -40,6 +40,7 @@ import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.service.LimitedDropService;
 import com.groove.member.entity.Member;
+import com.groove.notification.repository.AlbumWatchRepository;
 import com.groove.product.dto.ProductDetailResponse;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSearchRequest;
@@ -82,6 +83,9 @@ class ProductServiceTest {
 	private LimitedDropService limitedDropService;
 
 	@Mock
+	private AlbumWatchRepository albumWatchRepository;
+
+	@Mock
 	private ApplicationEventPublisher eventPublisher;
 
 	private ProductService productService;
@@ -89,7 +93,8 @@ class ProductServiceTest {
 	@BeforeEach
 	void setUp() {
 		productService = new ProductService(productSearchMapper, productRepository, productImageRepository,
-				stockRepository, wishlistRepository, limitedDropService, eventPublisher, FIXED_CLOCK);
+				stockRepository, wishlistRepository, limitedDropService, albumWatchRepository, eventPublisher,
+				FIXED_CLOCK);
 	}
 
 	@Nested
@@ -255,6 +260,62 @@ class ProductServiceTest {
 			assertThat(event.memberId()).isEqualTo(7L);
 			assertThat(event.productId()).isEqualTo(10L);
 			assertThat(event.viewedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
+		}
+
+		@Test
+		@DisplayName("구독한 앨범이면 album.watched 가 true 다")
+		void returnsAlbumWatchedTrueWhenSubscribed() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			ReflectionTestUtils.setField(product.getAlbum(), "id", 5L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+			given(albumWatchRepository.existsByMemberIdAndAlbumId(7L, 5L)).willReturn(true);
+
+			// when
+			ProductDetailResponse response = productService.getDetail(10L, 7L);
+
+			// then
+			assertThat(response.album().watched()).isTrue();
+		}
+
+		@Test
+		@DisplayName("구독하지 않은 앨범이면 album.watched 가 false 다")
+		void returnsAlbumWatchedFalseWhenNotSubscribed() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			ReflectionTestUtils.setField(product.getAlbum(), "id", 5L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+			given(albumWatchRepository.existsByMemberIdAndAlbumId(7L, 5L)).willReturn(false);
+
+			// when
+			ProductDetailResponse response = productService.getDetail(10L, 7L);
+
+			// then
+			assertThat(response.album().watched()).isFalse();
+		}
+
+		@Test
+		@DisplayName("비로그인 조회면 album.watched 가 null 이고 구독 여부를 조회하지 않는다")
+		void returnsAlbumWatchedNullWhenGuest() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+
+			// when
+			ProductDetailResponse response = productService.getDetail(10L, null);
+
+			// then
+			assertThat(response.album().watched()).isNull();
+			verify(albumWatchRepository, never()).existsByMemberIdAndAlbumId(any(), any());
 		}
 
 		@Test

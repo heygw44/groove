@@ -30,12 +30,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.groove.auth.jwt.JwtProvider;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
-import com.groove.notification.dto.AlbumWatchListResponse;
 import com.groove.notification.dto.AlbumWatchResponse;
 import com.groove.notification.service.AlbumWatchService;
 
@@ -164,7 +164,8 @@ class AlbumWatchControllerTest {
 		@DisplayName("인증된 요청이면 200 과 구독 목록을 반환한다")
 		void returnsMyWatches() throws Exception {
 			// given
-			given(albumWatchService.getMyWatches(1L)).willReturn(AlbumWatchListResponse.of(List.of(sampleResponse())));
+			given(albumWatchService.getMyWatches(eq(1L), any()))
+					.willReturn(PageResponse.of(List.of(sampleResponse()), 0, 20, 1));
 
 			// when & then
 			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, bearer()))
@@ -179,7 +180,17 @@ class AlbumWatchControllerTest {
 			mockMvc.perform(get(BASE_URL))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(albumWatchService, never()).getMyWatches(any());
+			verify(albumWatchService, never()).getMyWatches(any(), any());
+		}
+
+		@Test
+		@DisplayName("size 가 100 을 초과하면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenSizeExceedsLimit() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, bearer()).param("size", "101"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(albumWatchService, never()).getMyWatches(any(), any());
 		}
 	}
 }

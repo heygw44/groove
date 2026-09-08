@@ -5,6 +5,7 @@ export interface AlbumWatch {
   createdAt: string;
 }
 
-export interface AlbumWatchListResponse {
-  content: AlbumWatch[];
+export interface AlbumWatchListParams {
+  page?: number;
+  size?: number;
 }

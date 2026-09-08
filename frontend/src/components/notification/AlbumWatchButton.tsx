@@ -3,26 +3,30 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/common/Button';
 import { useToast } from '@/components/common/toastContext';
 import { useToggleAlbumWatch } from '@/hooks/mutations/useAlbumWatchMutations';
-import { useAlbumWatches } from '@/hooks/queries/useAlbumWatches';
 import { useAuthStore } from '@/store/authStore';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 
 interface AlbumWatchButtonProps {
   albumId: number;
   albumTitle: string;
+  /** 앨범/상품 상세 응답에 실려 오는 값. 비로그인이면 null. */
+  watched?: boolean;
   className?: string;
 }
 
-export function AlbumWatchButton({ albumId, albumTitle, className = '' }: AlbumWatchButtonProps) {
+export function AlbumWatchButton({
+  albumId,
+  albumTitle,
+  watched,
+  className = '',
+}: AlbumWatchButtonProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
-  const { data } = useAlbumWatches();
   const toggle = useToggleAlbumWatch();
 
-  // 서버에 단건 조회 API 가 없어 전체 구독 목록에서 albumId 를 찾아 구독 여부를 판단한다.
-  const watched = Boolean(data?.content.some((watch) => watch.albumId === albumId));
+  const isWatched = watched === true;
 
   const handleClick = () => {
     if (!isLoggedIn) {
@@ -32,7 +36,7 @@ export function AlbumWatchButton({ albumId, albumTitle, className = '' }: AlbumW
     }
 
     toggle.mutate(
-      { albumId, albumTitle, watched },
+      { albumId, albumTitle, watched: isWatched },
       {
         onError: (error) => {
           const code = getErrorCode(error);
@@ -48,12 +52,12 @@ export function AlbumWatchButton({ albumId, albumTitle, className = '' }: AlbumW
     <Button
       variant="secondary"
       size="sm"
-      aria-pressed={watched}
+      aria-pressed={isWatched}
       loading={toggle.isPending}
       onClick={handleClick}
-      className={`${watched ? 'border-content text-content' : ''} ${className}`}
+      className={`${isWatched ? 'border-content text-content' : ''} ${className}`}
     >
-      {watched ? '알림 받는 중' : '새 에디션 알림 받기'}
+      {isWatched ? '알림 받는 중' : '새 에디션 알림 받기'}
     </Button>
   );
 }
