@@ -126,7 +126,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 M1)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -156,6 +156,7 @@ case_desc() {
 	N3) echo "안읽음 개수 (NotificationRepository.countByMemberIdAndReadAtIsNull)" ;;
 	S1) echo "관리자 통계 일별 매출 최근 30일 (AdminStatsMapper.xml findDailySales)" ;;
 	S2) echo "관리자 통계 오늘 요약 (before: 스칼라 서브쿼리 2개 / after: 파생 테이블 병합, AdminStatsMapper.xml findSummary)" ;;
+	M1) echo "회원 상세 활동 요약 (before: memberOrderStats 파생 테이블 / after: 상관 서브쿼리, MemberQueryMapper.xml findActivitySummary)" ;;
 	*) echo "?" ;;
 	esac
 }
@@ -268,7 +269,7 @@ backfill_sold_quantity() {
 seed() {
 	local member_n artist_n label_n album_n product_n orders_n order_item_n payment_n
 	local review_n notification_n wishlist_n coupon_n member_coupon_n
-	local review_heavy_n notification_heavy_n member_today_n
+	local review_heavy_n notification_heavy_n member_today_n member_coupon_heavy_n
 	# review 헤비 케이스가 product 1 에 이미 쓴 member_id 1~6 과 겹치지 않도록 회원 수를 넉넉히 늘린다.
 	member_n=$(scaled_count 40000)
 	artist_n=$(scaled_count 2000)
@@ -286,6 +287,7 @@ seed() {
 	review_heavy_n=$(scaled_count 20000)
 	notification_heavy_n=$(scaled_count 50000)
 	member_today_n=$(scaled_count 5000)
+	member_coupon_heavy_n=$(scaled_count 400)
 
 	# payment.order_id 를 n 그대로 1:1 매핑하므로 orders 건수를 넘으면 FK 위반이 난다.
 	if [ "${payment_n}" -gt "${orders_n}" ]; then
@@ -297,10 +299,16 @@ seed() {
 		member_coupon_n="${member_n}"
 	fi
 
+	# coupon_id=2 부터 채우므로 coupon 건수(coupon_n - 1)를 넘으면 FK 위반이 난다.
+	if [ "${member_coupon_heavy_n}" -gt $((coupon_n - 1)) ]; then
+		member_coupon_heavy_n=$((coupon_n - 1))
+	fi
+
 	local max_needed=0 c
 	for c in "${member_n}" "${artist_n}" "${label_n}" "${album_n}" "${product_n}" \
 		"${orders_n}" "${order_item_n}" "${payment_n}" "${review_n}" "${notification_n}" "${wishlist_n}" \
-		"${coupon_n}" "${member_coupon_n}" "${review_heavy_n}" "${notification_heavy_n}" "${member_today_n}"; do
+		"${coupon_n}" "${member_coupon_n}" "${review_heavy_n}" "${notification_heavy_n}" "${member_today_n}" \
+		"${member_coupon_heavy_n}"; do
 		if [ "${c}" -gt "${max_needed}" ]; then
 			max_needed="${c}"
 		fi
@@ -466,6 +474,24 @@ seed() {
 		FROM numbers WHERE n <= ${member_coupon_n};
 	"
 	echo "[시드] member_coupon ${member_coupon_n}건 (member_id=n 이라 uk_member_coupon_member_coupon 이 저절로 지켜진다)"
+
+	mysql_perf "
+		-- 기본 시드는 회원당 쿠폰 최대 1장이라 M1(findActivitySummary) 상관 서브쿼리 효과가 안 드러난다.
+		-- TARGET_MEMBER_ID 에 쿠폰을 몰아준다. coupon_id 는 2 부터 시작해 (1,1) 과 충돌을 피한다.
+		INSERT INTO member_coupon (member_id, coupon_id, used, issued_at, used_at, used_order_id,
+			created_at, updated_at)
+		SELECT
+			${TARGET_MEMBER_ID},
+			n + 1,
+			IF(n % 5 = 0, 1, 0),
+			DATE_SUB(NOW(6), INTERVAL (n % 365) DAY),
+			IF(n % 5 = 0, DATE_SUB(NOW(6), INTERVAL (n % 300) DAY), NULL),
+			NULL,
+			NOW(6),
+			NOW(6)
+		FROM numbers WHERE n <= ${member_coupon_heavy_n};
+	"
+	echo "[시드] member_coupon(member_id=${TARGET_MEMBER_ID} 헤비) ${member_coupon_heavy_n}건"
 
 	mysql_perf "
 		INSERT INTO orders (order_number, member_id, total_amount, discount_amount, final_amount, status,
@@ -1047,6 +1073,59 @@ get_case_sql() {
 					WHERE p.status IN ('DONE', 'CANCELED')
 					AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY
 				) t
+			SQL
+		fi
+		;;
+	M1)
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- MemberQueryMapper.xml findActivitySummary, member_id=${TARGET_MEMBER_ID}
+				-- (before: memberOrderStats 파생 테이블, 전 회원 GROUP BY 후 한 행만 남긴다)
+				SELECT
+					COALESCE(o.order_count, 0) AS order_count,
+					COALESCE(pay.total_payment_amount, 0) AS total_payment_amount,
+					COALESCE(mc.usable_coupon_count, 0) AS usable_coupon_count
+				FROM member m
+				LEFT JOIN (
+					SELECT member_id, COUNT(*) AS order_count
+					FROM orders
+					WHERE status NOT IN ('PENDING', 'CANCELED')
+					GROUP BY member_id
+				) o ON o.member_id = m.id
+				LEFT JOIN (
+					SELECT o2.member_id, SUM(p.amount) AS total_payment_amount
+					FROM payment p
+					JOIN orders o2 ON o2.id = p.order_id
+					WHERE p.status = 'DONE'
+					GROUP BY o2.member_id
+				) pay ON pay.member_id = m.id
+				LEFT JOIN (
+					SELECT mc2.member_id, COUNT(*) AS usable_coupon_count
+					FROM member_coupon mc2
+					JOIN coupon c ON c.id = mc2.coupon_id
+					WHERE mc2.used = 0 AND c.status = 'ACTIVE' AND c.expires_at > NOW(6)
+					GROUP BY mc2.member_id
+				) mc ON mc.member_id = m.id
+				WHERE m.id = ${TARGET_MEMBER_ID}
+			SQL
+		else
+			cat <<-SQL
+				-- MemberQueryMapper.xml findActivitySummary, member_id=${TARGET_MEMBER_ID}
+				-- (after: 상관 서브쿼리, 회원 조건이 안쪽으로 들어간다)
+				SELECT
+					(SELECT COUNT(*) FROM orders o
+						WHERE o.member_id = m.id
+						AND o.status NOT IN ('PENDING', 'CANCELED')) AS order_count,
+					COALESCE((SELECT SUM(p.amount) FROM payment p
+						JOIN orders o2 ON o2.id = p.order_id
+						WHERE o2.member_id = m.id
+						AND p.status = 'DONE'), 0) AS total_payment_amount,
+					(SELECT COUNT(*) FROM member_coupon mc2
+						JOIN coupon c ON c.id = mc2.coupon_id
+						WHERE mc2.member_id = m.id
+						AND mc2.used = 0 AND c.status = 'ACTIVE' AND c.expires_at > NOW(6)) AS usable_coupon_count
+				FROM member m
+				WHERE m.id = ${TARGET_MEMBER_ID}
 			SQL
 		fi
 		;;
