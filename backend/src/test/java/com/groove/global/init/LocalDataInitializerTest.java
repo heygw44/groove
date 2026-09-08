@@ -24,6 +24,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
@@ -79,6 +81,12 @@ class LocalDataInitializerTest {
 	@Mock
 	SalesAggregationService salesAggregationService;
 
+	@Mock
+	PlatformTransactionManager transactionManager;
+
+	@Mock
+	TransactionStatus transactionStatus;
+
 	private final Clock clock = Clock.fixed(Instant.parse("2026-09-08T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
 	/** 이름/키로 찾지 못하면 넘겨받은 엔티티를 그대로 저장한 것처럼 되돌려준다. 미사용 시 실패하지 않게 lenient 로 둔다. */
@@ -89,6 +97,7 @@ class LocalDataInitializerTest {
 		lenient().when(artistRepository.save(any(Artist.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		lenient().when(albumRepository.save(any(Album.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		lenient().when(productRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+		lenient().when(transactionManager.getTransaction(any())).thenReturn(transactionStatus);
 	}
 
 	@Nested
@@ -197,6 +206,6 @@ class LocalDataInitializerTest {
 	private LocalDataInitializer newInitializer() {
 		return new LocalDataInitializer(genreRepository, labelRepository, artistRepository, albumRepository,
 				productRepository, stockService, localDemoDataSeederProvider, localSignalSeederProvider,
-				salesAggregationService, clock);
+				salesAggregationService, clock, transactionManager);
 	}
 }

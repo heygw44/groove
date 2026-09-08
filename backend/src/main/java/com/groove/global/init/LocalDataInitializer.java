@@ -11,9 +11,12 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.groove.global.init.SeedCatalog.AlbumSeed;
 import com.groove.inventory.service.StockService;
@@ -64,6 +67,7 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private final ObjectProvider<LocalSignalSeeder> localSignalSeederProvider;
 	private final SalesAggregationService salesAggregationService;
 	private final Clock clock;
+	private final PlatformTransactionManager transactionManager;
 
 	@Override
 	@Transactional
@@ -97,10 +101,22 @@ public class LocalDataInitializer implements ApplicationRunner {
 		});
 	}
 
+	/**
+	 * {@code afterCommit()} 콜백 안에서는 원래 트랜잭션의 동기화가 아직 정리되지 않은 채 남아 있어,
+	 * {@link SalesAggregationService#aggregateDate} 의 {@code PROPAGATION_REQUIRED} 가 새 트랜잭션을 열지
+	 * 못하고 {@code TransactionRequiredException} 이 난다. {@link com.groove.admin.service.AdminAuditLogWriter}
+	 * 와 같은 이유로 {@code PROPAGATION_REQUIRES_NEW} 를 명시해 남은 동기화를 무시하고 매 날짜마다 새
+	 * 트랜잭션을 연다 — 날짜 하나씩 커밋해 롱 트랜잭션을 피하는 원래 설계({@link SalesAggregationService} 상단 주석)도
+	 * 그대로 유지된다.
+	 */
 	private void runStatsBackfill() {
 		LocalDate today = LocalDate.now(clock);
+		DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
+		definition.setPropagationBehavior(DefaultTransactionDefinition.PROPAGATION_REQUIRES_NEW);
+		TransactionTemplate requiresNew = new TransactionTemplate(transactionManager, definition);
 		for (int i = STATS_BACKFILL_DAYS - 1; i >= 0; i--) {
-			salesAggregationService.aggregateDate(today.minusDays(i));
+			LocalDate saleDate = today.minusDays(i);
+			requiresNew.executeWithoutResult(status -> salesAggregationService.aggregateDate(saleDate));
 		}
 		log.info("더미 매출 통계를 백필했다: {}일", STATS_BACKFILL_DAYS);
 	}
