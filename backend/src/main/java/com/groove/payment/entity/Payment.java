@@ -41,7 +41,10 @@ import lombok.NoArgsConstructor;
 			@UniqueConstraint(name = "uk_payment_key", columnNames = "payment_key"),
 			@UniqueConstraint(name = "uk_payment_toss_order_id", columnNames = "toss_order_id")
 		},
-		indexes = @Index(name = "idx_payment_approved_at", columnList = "approved_at"))
+		indexes = {
+			@Index(name = "idx_payment_approved_at", columnList = "approved_at"),
+			@Index(name = "idx_payment_canceled_at", columnList = "canceled_at")
+		})
 public class Payment extends BaseTimeEntity {
 
 	private static final int MAX_FAIL_REASON_LENGTH = 300;
