@@ -120,6 +120,8 @@ function createProduct(adminToken, artistId) {
     artistId,
     price: 45000,
     initialStock: STOCK,
+    // 상품은 앨범에 속해야 한다. 부하 테스트용 상품은 매번 새 앨범으로 만든다.
+    newAlbum: { title: `LIMITED-LOADTEST-ALBUM-${Date.now()}` },
   }), { headers: authHeader(adminToken), tags: { name: 'setup_product_create' } });
 
   if (res.status !== 201) {
