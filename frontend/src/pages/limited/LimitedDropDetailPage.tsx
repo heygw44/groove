@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
-import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { CountdownTimer } from '@/components/limited/CountdownTimer';
@@ -107,14 +107,10 @@ export default function LimitedDropDetailPage() {
   if (isError || !drop || !phase) {
     return (
       <PageContainer size="sm">
-        <EmptyState
-          title="한정반 정보를 불러오지 못했습니다"
-          description={getErrorMessage(error)}
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
+        <QueryErrorState
+          error={error}
+          onRetry={refetch}
+          title="한정반 정보를 불러오지 못했습니다."
         />
       </PageContainer>
     );

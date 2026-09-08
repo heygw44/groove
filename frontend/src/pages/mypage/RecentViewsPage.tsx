@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
 
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
 import { useRecentViews } from '@/hooks/queries/useRecentViews';
-import { getErrorMessage } from '@/utils/apiError';
 
 export default function RecentViewsPage() {
   const { data, isPending, isError, error, refetch } = useRecentViews();
@@ -25,14 +24,10 @@ export default function RecentViewsPage() {
       )}
 
       {!isPending && isError && (
-        <EmptyState
-          title="최근 본 상품을 불러오지 못했습니다"
-          description={getErrorMessage(error)}
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
+        <QueryErrorState
+          error={error}
+          onRetry={refetch}
+          title="최근 본 상품을 불러오지 못했습니다."
         />
       )}
 

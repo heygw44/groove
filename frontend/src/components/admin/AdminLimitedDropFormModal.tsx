@@ -136,7 +136,7 @@ export function AdminLimitedDropFormModal({ open, onClose, drop }: AdminLimitedD
           <Button variant="secondary" onClick={onClose} disabled={isBusy}>
             취소
           </Button>
-          <Button type="submit" form="admin-limited-drop-form" disabled={isBusy}>
+          <Button type="submit" form="admin-limited-drop-form" loading={isBusy}>
             저장
           </Button>
         </>

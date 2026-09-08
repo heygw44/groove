@@ -1,3 +1,4 @@
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { NicknameForm } from '@/components/mypage/NicknameForm';
 import { PasswordChangeForm } from '@/components/mypage/PasswordChangeForm';
@@ -7,7 +8,7 @@ import { useMe } from '@/hooks/queries/useMe';
 import { formatServerDate } from '@/utils/formatDate';
 
 export default function MyPage() {
-  const { data: member, isPending, isError } = useMe();
+  const { data: member, isPending, isError, error, refetch } = useMe();
 
   if (isPending) {
     return (
@@ -18,7 +19,9 @@ export default function MyPage() {
   }
 
   if (isError || !member) {
-    return <p className="text-sm text-danger">내 정보를 불러오지 못했습니다.</p>;
+    return (
+      <QueryErrorState error={error} onRetry={refetch} title="내 정보를 불러오지 못했습니다." />
+    );
   }
 
   return (

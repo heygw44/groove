@@ -4,10 +4,10 @@ import { useSearchParams } from 'react-router-dom';
 import { AdminMemberDetailDrawer } from '@/components/admin/member/AdminMemberDetailDrawer';
 import { AdminMemberFilterBar } from '@/components/admin/member/AdminMemberFilterBar';
 import { AdminMemberTable } from '@/components/admin/member/AdminMemberTable';
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
-import { Spinner } from '@/components/common/Spinner';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useAdminMembers } from '@/hooks/queries/useAdminMembers';
 import type { AdminMemberSummary } from '@/types/adminMember';
 import {
@@ -23,7 +23,7 @@ export default function AdminMembersPage() {
 
   const [selectedMemberId, setSelectedMemberId] = useState<number>();
 
-  const { data, isPending, isError, isPlaceholderData, refetch } = useAdminMembers(
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminMembers(
     toAdminMemberListParams(filters),
   );
 
@@ -52,22 +52,10 @@ export default function AdminMembersPage() {
         <AdminMemberFilterBar filters={filters} onChange={updateFilters} />
       </div>
 
-      {isPending && (
-        <div className="flex min-h-48 items-center justify-center">
-          <Spinner />
-        </div>
-      )}
+      {isPending && <TableSkeleton columns={7} />}
 
       {!isPending && isError && (
-        <EmptyState
-          title="회원을 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="회원을 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (

@@ -8,8 +8,9 @@ import { PopularProductTable } from '@/components/admin/dashboard/PopularProduct
 import { StatCard } from '@/components/admin/dashboard/StatCard';
 import { StatsPeriodSelector } from '@/components/admin/dashboard/StatsPeriodSelector';
 import { Button } from '@/components/common/Button';
-import { EmptyState } from '@/components/common/EmptyState';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { adminStatsKeys } from '@/hooks/queries/queryKeys';
 import {
   useAdminDailySales,
@@ -73,14 +74,10 @@ export default function AdminDashboardPage() {
         )}
 
         {!summaryQuery.isPending && summaryQuery.isError && (
-          <EmptyState
+          <QueryErrorState
+            error={summaryQuery.error}
+            onRetry={summaryQuery.refetch}
             title="요약 정보를 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => summaryQuery.refetch()}>
-                다시 시도
-              </Button>
-            }
           />
         )}
 
@@ -111,14 +108,10 @@ export default function AdminDashboardPage() {
         )}
 
         {!dailySalesQuery.isPending && dailySalesQuery.isError && (
-          <EmptyState
+          <QueryErrorState
+            error={dailySalesQuery.error}
+            onRetry={dailySalesQuery.refetch}
             title="매출 데이터를 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => dailySalesQuery.refetch()}>
-                다시 시도
-              </Button>
-            }
           />
         )}
 
@@ -132,21 +125,13 @@ export default function AdminDashboardPage() {
       <section className="flex flex-col gap-4">
         <h3 className="text-sm font-bold text-content">인기 상품</h3>
 
-        {popularProductsQuery.isPending && (
-          <div className="flex min-h-48 items-center justify-center">
-            <Spinner />
-          </div>
-        )}
+        {popularProductsQuery.isPending && <TableSkeleton columns={6} />}
 
         {!popularProductsQuery.isPending && popularProductsQuery.isError && (
-          <EmptyState
+          <QueryErrorState
+            error={popularProductsQuery.error}
+            onRetry={popularProductsQuery.refetch}
             title="인기 상품을 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => popularProductsQuery.refetch()}>
-                다시 시도
-              </Button>
-            }
           />
         )}
 
@@ -166,21 +151,13 @@ export default function AdminDashboardPage() {
       <section className="flex flex-col gap-4">
         <h3 className="text-sm font-bold text-content">한정반 현황</h3>
 
-        {limitedDropsQuery.isPending && (
-          <div className="flex min-h-48 items-center justify-center">
-            <Spinner />
-          </div>
-        )}
+        {limitedDropsQuery.isPending && <TableSkeleton columns={8} />}
 
         {!limitedDropsQuery.isPending && limitedDropsQuery.isError && (
-          <EmptyState
+          <QueryErrorState
+            error={limitedDropsQuery.error}
+            onRetry={limitedDropsQuery.refetch}
             title="한정반 현황을 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => limitedDropsQuery.refetch()}>
-                다시 시도
-              </Button>
-            }
           />
         )}
 

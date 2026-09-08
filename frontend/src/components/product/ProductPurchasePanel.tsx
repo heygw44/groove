@@ -117,7 +117,8 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
             <Button
               variant="secondary"
               className="w-full"
-              disabled={isSoldOut || addCartItemMutation.isPending}
+              disabled={isSoldOut}
+              loading={addCartItemMutation.isPending}
               onClick={handleAddToCart}
             >
               장바구니

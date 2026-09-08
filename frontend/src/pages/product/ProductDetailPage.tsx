@@ -3,9 +3,8 @@ import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
-import { Button } from '@/components/common/Button';
-import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { StarRatingDisplay } from '@/components/common/StarRating';
 import { AlbumWatchButton } from '@/components/notification/AlbumWatchButton';
 import { AlbumPressingsSection } from '@/components/product/AlbumPressingsSection';
@@ -17,7 +16,7 @@ import { RelatedProductsSection } from '@/components/recommend/RelatedProductsSe
 import { ReviewSection } from '@/components/review/ReviewSection';
 import { useProduct } from '@/hooks/queries/useProduct';
 import NotFoundPage from '@/pages/NotFoundPage';
-import { getErrorCode, getErrorMessage } from '@/utils/apiError';
+import { getErrorCode } from '@/utils/apiError';
 
 const NOT_FOUND_CODES = new Set(['PRODUCT_NOT_FOUND', 'PRODUCT_HIDDEN']);
 
@@ -62,15 +61,7 @@ export default function ProductDetailPage() {
   if (isError || !product) {
     return (
       <PageContainer>
-        <EmptyState
-          title="상품을 불러오지 못했습니다"
-          description={getErrorMessage(error)}
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="상품을 불러오지 못했습니다." />
       </PageContainer>
     );
   }

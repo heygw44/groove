@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Select } from '@/components/common/Select';
 import { Spinner } from '@/components/common/Spinner';
 import { ReviewItem } from '@/components/review/ReviewItem';
@@ -33,7 +33,7 @@ export function ReviewList({
   onDelete,
   renderEditForm,
 }: ReviewListProps) {
-  const { data, isPending, isError, isPlaceholderData, refetch } = useReviews(productId, {
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useReviews(productId, {
     sort,
     page,
     size: REVIEW_PAGE_SIZE,
@@ -64,15 +64,7 @@ export function ReviewList({
         )}
 
         {!isPending && isError && (
-          <EmptyState
-            title="리뷰를 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                다시 시도
-              </Button>
-            }
-          />
+          <QueryErrorState error={error} onRetry={refetch} title="리뷰를 불러오지 못했습니다" />
         )}
 
         {!isPending && !isError && data && data.content.length === 0 && (

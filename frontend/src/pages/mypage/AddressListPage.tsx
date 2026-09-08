@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { AddressCard } from '@/components/mypage/AddressCard';
@@ -20,7 +21,7 @@ export default function AddressListPage() {
   const [deleting, setDeleting] = useState<Address | undefined>(undefined);
 
   const { showToast } = useToast();
-  const { data: addresses, isPending, isError } = useAddresses();
+  const { data: addresses, isPending, isError, error, refetch } = useAddresses();
   const deleteMutation = useDeleteAddress();
   const setDefaultMutation = useSetDefaultAddress();
 
@@ -66,7 +67,9 @@ export default function AddressListPage() {
   }
 
   if (isError || !addresses) {
-    return <p className="text-sm text-danger">배송지를 불러오지 못했습니다.</p>;
+    return (
+      <QueryErrorState error={error} onRetry={refetch} title="배송지를 불러오지 못했습니다." />
+    );
   }
 
   const isFull = addresses.length >= MAX_ADDRESS_COUNT;
@@ -116,6 +119,9 @@ export default function AddressListPage() {
               onDelete={setDeleting}
               onSetDefault={handleSetDefault}
               disabled={setDefaultMutation.isPending || deleteMutation.isPending}
+              settingDefault={
+                setDefaultMutation.isPending && setDefaultMutation.variables === address.id
+              }
             />
           ))}
         </div>

@@ -114,7 +114,7 @@ export default function SignupPage() {
             />
           </Field>
 
-          <Button type="submit" className="mt-1 w-full" disabled={isSubmitting}>
+          <Button type="submit" className="mt-1 w-full" loading={isSubmitting}>
             가입하기
           </Button>
         </form>

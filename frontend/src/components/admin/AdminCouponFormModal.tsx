@@ -134,7 +134,7 @@ export function AdminCouponFormModal({ open, onClose, coupon }: AdminCouponFormM
           <Button variant="secondary" onClick={onClose} disabled={isBusy}>
             취소
           </Button>
-          <Button type="submit" form="admin-coupon-form" disabled={isBusy}>
+          <Button type="submit" form="admin-coupon-form" loading={isBusy}>
             저장
           </Button>
         </>

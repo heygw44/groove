@@ -110,7 +110,7 @@ export function StockAdjustModal({ open, onClose, product }: StockAdjustModalPro
           <Button variant="secondary" onClick={onClose} disabled={isBusy}>
             취소
           </Button>
-          <Button type="submit" form="stock-adjust-form" disabled={isBusy}>
+          <Button type="submit" form="stock-adjust-form" loading={isBusy}>
             저장
           </Button>
         </>

@@ -1,9 +1,8 @@
 import { useSearchParams } from 'react-router-dom';
 
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
-import { Skeleton } from '@/components/common/Skeleton';
-import { CouponCard } from '@/components/coupon/CouponCard';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { CouponCard, CouponCardSkeleton } from '@/components/coupon/CouponCard';
 import { CouponIssueForm } from '@/components/coupon/CouponIssueForm';
 import { CouponStatusTabs } from '@/components/coupon/CouponStatusTabs';
 import { SectionCard } from '@/components/mypage/SectionCard';
@@ -19,26 +18,11 @@ const EMPTY_MESSAGE: Record<MemberCouponStatus, string> = {
 
 const SKELETON_COUNT = 4;
 
-function CouponCardSkeleton() {
-  return (
-    <div className="rounded-lg border border-line bg-surface p-4">
-      <div className="flex items-start justify-between gap-2">
-        <Skeleton className="h-4 w-2/5" />
-        <Skeleton className="h-5 w-14" />
-      </div>
-      <Skeleton className="mt-2 h-7 w-1/3" />
-      <Skeleton className="mt-1.5 h-3 w-3/5" />
-      <Skeleton className="mt-2 h-3 w-2/5" />
-      <Skeleton className="mt-1.5 h-3 w-1/3" />
-    </div>
-  );
-}
-
 export default function CouponBoxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const status = parseMemberCouponStatus(searchParams);
 
-  const { data, isPending, isError, refetch } = useMyCoupons(status);
+  const { data, isPending, isError, error, refetch } = useMyCoupons(status);
 
   const updateStatus = (nextStatus: MemberCouponStatus) => {
     setSearchParams(serializeMemberCouponStatus(nextStatus));
@@ -68,15 +52,7 @@ export default function CouponBoxPage() {
         )}
 
         {!isPending && isError && (
-          <EmptyState
-            title="쿠폰을 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                다시 시도
-              </Button>
-            }
-          />
+          <QueryErrorState error={error} onRetry={refetch} title="쿠폰을 불러오지 못했습니다." />
         )}
 
         {!isPending && !isError && data && data.length === 0 && (

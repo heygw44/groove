@@ -108,7 +108,7 @@ export function ReviewForm({
       </Field>
 
       <div className="flex gap-2">
-        <Button type="submit" disabled={isBusy}>
+        <Button type="submit" loading={isBusy}>
           {submitLabel}
         </Button>
         {onCancel && (

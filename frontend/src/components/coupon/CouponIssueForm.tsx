@@ -57,7 +57,7 @@ export function CouponIssueForm() {
               onChange(e);
             }}
           />
-          <Button type="submit" disabled={isSubmitting} className="shrink-0">
+          <Button type="submit" loading={isSubmitting} className="shrink-0">
             등록
           </Button>
         </div>

@@ -76,7 +76,7 @@ export function CatalogImportJobStartModal({
           <Button variant="secondary" onClick={onClose} disabled={isBusy}>
             취소
           </Button>
-          <Button type="submit" form="catalog-import-job-start-form" disabled={isBusy}>
+          <Button type="submit" form="catalog-import-job-start-form" loading={isBusy}>
             실행
           </Button>
         </>
