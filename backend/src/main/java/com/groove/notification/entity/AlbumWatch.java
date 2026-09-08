@@ -13,6 +13,7 @@ import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -27,7 +28,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = PROTECTED)
 @Table(name = "album_watch",
 		uniqueConstraints = @UniqueConstraint(name = "uk_album_watch_member_album",
-				columnNames = {"member_id", "album_id"}))
+				columnNames = {"member_id", "album_id"}),
+		indexes = @Index(name = "idx_album_watch_member_created", columnList = "member_id, created_at"))
 public class AlbumWatch extends BaseTimeEntity {
 
 	@Id

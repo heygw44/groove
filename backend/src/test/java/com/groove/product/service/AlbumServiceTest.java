@@ -2,9 +2,11 @@ package com.groove.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
@@ -26,6 +28,7 @@ import com.groove.fixture.ArtistFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.notification.repository.AlbumWatchRepository;
 import com.groove.product.dto.AdminAlbumSummaryResponse;
 import com.groove.product.dto.AlbumDetailResponse;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -45,11 +48,14 @@ class AlbumServiceTest {
 	@Mock
 	private ProductSearchMapper productSearchMapper;
 
+	@Mock
+	private AlbumWatchRepository albumWatchRepository;
+
 	private AlbumService albumService;
 
 	@BeforeEach
 	void setUp() {
-		albumService = new AlbumService(albumRepository, productSearchMapper);
+		albumService = new AlbumService(albumRepository, productSearchMapper, albumWatchRepository);
 	}
 
 	@Nested
@@ -69,7 +75,7 @@ class AlbumServiceTest {
 			given(productSearchMapper.findAlbumPressings(5L)).willReturn(List.of(pressing));
 
 			// when
-			AlbumDetailResponse response = albumService.getDetail(5L);
+			AlbumDetailResponse response = albumService.getDetail(5L, null);
 
 			// then
 			assertThat(response.id()).isEqualTo(5L);
@@ -85,10 +91,61 @@ class AlbumServiceTest {
 			given(albumRepository.findWithArtistById(99L)).willReturn(Optional.empty());
 
 			// when & then
-			assertThatThrownBy(() -> albumService.getDetail(99L))
+			assertThatThrownBy(() -> albumService.getDetail(99L, null))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ALBUM_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("구독한 앨범이면 watched 가 true 다")
+		void returnsWatchedTrueWhenSubscribed() {
+			// given
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist, "Kind Of Blue"), 5L);
+			given(albumRepository.findWithArtistById(5L)).willReturn(Optional.of(album));
+			given(productSearchMapper.findAlbumPressings(5L)).willReturn(List.of());
+			given(albumWatchRepository.existsByMemberIdAndAlbumId(1L, 5L)).willReturn(true);
+
+			// when
+			AlbumDetailResponse response = albumService.getDetail(5L, 1L);
+
+			// then
+			assertThat(response.watched()).isTrue();
+		}
+
+		@Test
+		@DisplayName("구독하지 않은 앨범이면 watched 가 false 다")
+		void returnsWatchedFalseWhenNotSubscribed() {
+			// given
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist, "Kind Of Blue"), 5L);
+			given(albumRepository.findWithArtistById(5L)).willReturn(Optional.of(album));
+			given(productSearchMapper.findAlbumPressings(5L)).willReturn(List.of());
+			given(albumWatchRepository.existsByMemberIdAndAlbumId(1L, 5L)).willReturn(false);
+
+			// when
+			AlbumDetailResponse response = albumService.getDetail(5L, 1L);
+
+			// then
+			assertThat(response.watched()).isFalse();
+		}
+
+		@Test
+		@DisplayName("비로그인이면 watched 가 null 이고 구독 여부를 조회하지 않는다")
+		void returnsWatchedNullWhenGuest() {
+			// given
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist, "Kind Of Blue"), 5L);
+			given(albumRepository.findWithArtistById(5L)).willReturn(Optional.of(album));
+			given(productSearchMapper.findAlbumPressings(5L)).willReturn(List.of());
+
+			// when
+			AlbumDetailResponse response = albumService.getDetail(5L, null);
+
+			// then
+			assertThat(response.watched()).isNull();
+			verify(albumWatchRepository, never()).existsByMemberIdAndAlbumId(any(), any());
 		}
 	}
 
