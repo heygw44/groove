@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.stats.mapper.SalesAggregationQueryMapper">
+
+	<resultMap id="dailySalesAggregateMap" type="com.groove.stats.dto.DailySalesAggregateRow">
+		<constructor>
+			<arg column="order_count" javaType="_long"/>
+			<arg column="sales_amount" javaType="java.math.BigDecimal"/>
+			<arg column="cancel_count" javaType="_long"/>
+			<arg column="cancel_amount" javaType="java.math.BigDecimal"/>
+		</constructor>
+	</resultMap>
+
+	<!--
+		AdminStatsMapper.findDailySales 의 UNION ALL 을 하루로 좁힌 것이다.
+		order_count 는 payment 승인 건수(status IN ('DONE', 'CANCELED'))이고, 취소된 결제도 승인일 기준
+		건수에 그대로 남는다 — 순매출 개념을 넣지 않고 취소는 cancel_count/cancel_amount 로 취소일에 따로 센다.
+		GROUP BY 없는 스칼라 서브쿼리 두 개라 매칭 행이 0건이어도 항상 정확히 1행이 나온다.
+	-->
+	<select id="findDailySalesOf" resultMap="dailySalesAggregateMap">
+		SELECT
+			COALESCE(o.order_count, 0) AS order_count,
+			COALESCE(o.sales_amount, 0) AS sales_amount,
+			COALESCE(c.cancel_count, 0) AS cancel_count,
+			COALESCE(c.cancel_amount, 0) AS cancel_amount
+		FROM (
+			SELECT COUNT(*) AS order_count, SUM(p.amount) AS sales_amount
+			FROM payment p
+			WHERE p.status IN ('DONE', 'CANCELED')
+			AND p.approved_at &gt;= #{saleDate} AND p.approved_at &lt; #{saleDate} + INTERVAL 1 DAY
+		) o,
+		(
+			SELECT COUNT(*) AS cancel_count, SUM(p.amount) AS cancel_amount
+			FROM payment p
+			WHERE p.status = 'CANCELED'
+			AND p.canceled_at &gt;= #{saleDate} AND p.canceled_at &lt; #{saleDate} + INTERVAL 1 DAY
+		) c
+	</select>
+
+	<resultMap id="productSalesAggregateMap" type="com.groove.stats.dto.ProductSalesAggregateRow">
+		<constructor>
+			<arg column="product_id" javaType="java.lang.Long"/>
+			<arg column="sold_quantity" javaType="_long"/>
+			<arg column="sales_amount" javaType="java.math.BigDecimal"/>
+			<arg column="order_count" javaType="_long"/>
+		</constructor>
+	</resultMap>
+
+	<!--
+		AdminStatsMapper.findPopularProducts 의 집계식을 하루로 좁힌 것이다. product/artist 조인은 집계에
+		필요 없어 뺀다. 판매가 없는 상품은 행 자체를 만들지 않는다(sales_daily_product 행 정책과 동일).
+		product_id 오름차순 정렬 — 사전 집계 테이블에 청크 단위로 커밋할 때 데드락을 피하는 데 쓴다.
+	-->
+	<select id="findProductSalesOf" resultMap="productSalesAggregateMap">
+		SELECT
+			oi.product_id,
+			SUM(oi.quantity) AS sold_quantity,
+			SUM(oi.price_snapshot * oi.quantity) AS sales_amount,
+			COUNT(DISTINCT o.id) AS order_count
+		FROM order_item oi
+		JOIN orders o ON o.id = oi.order_id
+		JOIN payment p ON p.order_id = o.id
+		WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+		AND p.approved_at &gt;= #{saleDate} AND p.approved_at &lt; #{saleDate} + INTERVAL 1 DAY
+		GROUP BY oi.product_id
+		ORDER BY oi.product_id ASC
+	</select>
+
+</mapper>
