@@ -72,7 +72,7 @@ fi
 # --after-ddl 을 한 번도 안 줬으면 기본값 하나만 넣는다. bash 3.2 는 길이 0 배열을 그냥 확인하는
 # 건 괜찮지만 그 상태로 "${AFTER_DDLS[@]}" 를 펼치면 set -u 에서 죽으므로, 항목을 채운 뒤에만 펼친다.
 if [ ${#AFTER_DDLS[@]} -eq 0 ]; then
-	AFTER_DDLS=("${MIGRATION_DIR}/V13__admin_stats_period_index.sql")
+	AFTER_DDLS=("${MIGRATION_DIR}/V14__album_watch_member_created_index.sql")
 fi
 
 RUN_BEFORE=false
@@ -126,7 +126,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 M1)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 M1 W1 W2)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -157,6 +157,8 @@ case_desc() {
 	S1) echo "관리자 통계 일별 매출 최근 30일 (AdminStatsMapper.xml findDailySales)" ;;
 	S2) echo "관리자 통계 오늘 요약 (before: 스칼라 서브쿼리 2개 / after: 파생 테이블 병합, AdminStatsMapper.xml findSummary)" ;;
 	M1) echo "회원 상세 활동 요약 (before: memberOrderStats 파생 테이블 / after: 상관 서브쿼리, MemberQueryMapper.xml findActivitySummary)" ;;
+	W1) echo "앨범 구독 목록 (AlbumWatchRepository.findAllByMemberId, EntityGraph album)" ;;
+	W2) echo "앨범 구독 개수 (AlbumWatchRepository.findAllByMemberId 페이징 count)" ;;
 	*) echo "?" ;;
 	esac
 }
@@ -268,8 +270,8 @@ backfill_sold_quantity() {
 
 seed() {
 	local member_n artist_n label_n album_n product_n orders_n order_item_n payment_n
-	local review_n notification_n wishlist_n coupon_n member_coupon_n
-	local review_heavy_n notification_heavy_n member_today_n member_coupon_heavy_n
+	local review_n notification_n wishlist_n coupon_n member_coupon_n album_watch_n
+	local review_heavy_n notification_heavy_n member_today_n member_coupon_heavy_n album_watch_heavy_n
 	# review 헤비 케이스가 product 1 에 이미 쓴 member_id 1~6 과 겹치지 않도록 회원 수를 넉넉히 늘린다.
 	member_n=$(scaled_count 40000)
 	artist_n=$(scaled_count 2000)
@@ -284,10 +286,12 @@ seed() {
 	wishlist_n=$(scaled_count 100000)
 	coupon_n=$(scaled_count 500)
 	member_coupon_n=$(scaled_count 20000)
+	album_watch_n=$(scaled_count 100000)
 	review_heavy_n=$(scaled_count 20000)
 	notification_heavy_n=$(scaled_count 50000)
 	member_today_n=$(scaled_count 5000)
 	member_coupon_heavy_n=$(scaled_count 400)
+	album_watch_heavy_n=$(scaled_count 3000)
 
 	# payment.order_id 를 n 그대로 1:1 매핑하므로 orders 건수를 넘으면 FK 위반이 난다.
 	if [ "${payment_n}" -gt "${orders_n}" ]; then
@@ -304,11 +308,26 @@ seed() {
 		member_coupon_heavy_n=$((coupon_n - 1))
 	fi
 
+	# album_watch 기본 블록은 회원을 먼저 순환시켜(member_id = (n-1)%member_n + 1) 회원마다
+	# 앨범을 몇 개씩만 배정한다. 위시리스트처럼 회원을 앞자리로 두면(FLOOR((n-1)/album_n)+1)
+	# member_id=1 이 첫 구간에서 album_n 개를 통째로 가져가버려 uk_album_watch_member_album 때문에
+	# 아래 헤비 블록을 넣을 album_id 가 남지 않는다. album_watch_base_max_album 은 기본 블록이
+	# TARGET_MEMBER_ID 에 실제로 쓰는 album_id 최댓값이라, 헤비 블록은 그 다음 번호부터 이어 붙인다.
+	local album_watch_base_max_album
+	album_watch_base_max_album=$(( (album_watch_n + member_n - 1) / member_n ))
+	if [ "${album_watch_base_max_album}" -gt "${album_n}" ]; then
+		album_watch_n=$((album_n * member_n))
+		album_watch_base_max_album="${album_n}"
+	fi
+	if [ $((album_watch_base_max_album + album_watch_heavy_n)) -gt "${album_n}" ]; then
+		album_watch_heavy_n=$((album_n - album_watch_base_max_album))
+	fi
+
 	local max_needed=0 c
 	for c in "${member_n}" "${artist_n}" "${label_n}" "${album_n}" "${product_n}" \
 		"${orders_n}" "${order_item_n}" "${payment_n}" "${review_n}" "${notification_n}" "${wishlist_n}" \
 		"${coupon_n}" "${member_coupon_n}" "${review_heavy_n}" "${notification_heavy_n}" "${member_today_n}" \
-		"${member_coupon_heavy_n}"; do
+		"${member_coupon_heavy_n}" "${album_watch_n}" "${album_watch_heavy_n}"; do
 		if [ "${c}" -gt "${max_needed}" ]; then
 			max_needed="${c}"
 		fi
@@ -641,12 +660,40 @@ seed() {
 		FROM numbers WHERE n <= ${wishlist_n};
 	"
 	echo "[시드] wishlist ${wishlist_n}건"
+
+	mysql_perf "
+		-- uk_album_watch_member_album (member_id, album_id) 충돌을 피하려고 회원을 앞자리로
+		-- 순환시켜 회원마다 앨범 몇 개씩만 배정한다(위쪽 album_watch_base_max_album 계산 참고)
+		INSERT INTO album_watch (member_id, album_id, created_at, updated_at)
+		SELECT
+			((n - 1) % ${member_n}) + 1,
+			FLOOR((n - 1) / ${member_n}) + 1,
+			DATE_SUB(NOW(6), INTERVAL (n % 730) DAY),
+			NOW(6)
+		FROM numbers WHERE n <= ${album_watch_n};
+	"
+	echo "[시드] album_watch ${album_watch_n}건"
+
+	mysql_perf "
+		-- filesort 대상을 키우는 헤비 케이스: 균등 분포만으로는 회원당 구독이 몇 건뿐이라
+		-- (member_id, created_at) 정렬 비용이 안 드러난다. TARGET_MEMBER_ID 에 구독을 몰아준다.
+		-- album_id 는 기본 블록이 TARGET_MEMBER_ID 에 이미 쓴 앨범 수(album_watch_base_max_album)
+		-- 다음 번호부터 시작해 위 기본 블록과 충돌하지 않는다.
+		INSERT INTO album_watch (member_id, album_id, created_at, updated_at)
+		SELECT
+			${TARGET_MEMBER_ID},
+			${album_watch_base_max_album} + n,
+			DATE_SUB(NOW(6), INTERVAL (n % 730) DAY),
+			NOW(6)
+		FROM numbers WHERE n <= ${album_watch_heavy_n};
+	"
+	echo "[시드] album_watch(member_id=${TARGET_MEMBER_ID} 헤비) ${album_watch_heavy_n}건"
 }
 
 analyze_tables() {
 	echo "[통계] ANALYZE TABLE 실행"
 	mysql_perf "ANALYZE TABLE member, artist, label, genre, album, product, product_genre, product_image,
-		orders, order_item, payment, review, notification, wishlist, coupon, member_coupon;" > /dev/null
+		orders, order_item, payment, review, notification, wishlist, coupon, member_coupon, album_watch;" > /dev/null
 }
 
 # EXPLAIN ANALYZE 결과 텍스트의 첫 줄에서 접근 방식과 마지막 actual time 값을 뽑는다.
@@ -1128,6 +1175,23 @@ get_case_sql() {
 				WHERE m.id = ${TARGET_MEMBER_ID}
 			SQL
 		fi
+		;;
+	W1)
+		cat <<-SQL
+			-- AlbumWatchRepository.findAllByMemberId, @EntityGraph(album), member_id=${TARGET_MEMBER_ID}
+			SELECT aw.id, aw.created_at, a.id, a.title
+			FROM album_watch aw
+			JOIN album a ON a.id = aw.album_id
+			WHERE aw.member_id = ${TARGET_MEMBER_ID}
+			ORDER BY aw.created_at DESC, aw.id DESC
+			LIMIT 20 OFFSET 0
+		SQL
+		;;
+	W2)
+		cat <<-SQL
+			-- AlbumWatchRepository.findAllByMemberId 의 Page 카운트, member_id=${TARGET_MEMBER_ID}
+			SELECT COUNT(*) FROM album_watch WHERE member_id = ${TARGET_MEMBER_ID}
+		SQL
 		;;
 	*)
 		echo "알 수 없는 케이스: ${id}" >&2
