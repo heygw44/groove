@@ -9,6 +9,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.IntStream;
@@ -38,6 +41,7 @@ import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.stats.service.SalesAggregationService;
 
 @ExtendWith(MockitoExtension.class)
 class LocalDataInitializerTest {
@@ -71,6 +75,11 @@ class LocalDataInitializerTest {
 
 	@Mock
 	ObjectProvider<LocalSignalSeeder> localSignalSeederProvider;
+
+	@Mock
+	SalesAggregationService salesAggregationService;
+
+	private final Clock clock = Clock.fixed(Instant.parse("2026-09-08T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
 	/** 이름/키로 찾지 못하면 넘겨받은 엔티티를 그대로 저장한 것처럼 되돌려준다. 미사용 시 실패하지 않게 lenient 로 둔다. */
 	@BeforeEach
@@ -187,6 +196,7 @@ class LocalDataInitializerTest {
 
 	private LocalDataInitializer newInitializer() {
 		return new LocalDataInitializer(genreRepository, labelRepository, artistRepository, albumRepository,
-				productRepository, stockService, localDemoDataSeederProvider, localSignalSeederProvider);
+				productRepository, stockService, localDemoDataSeederProvider, localSignalSeederProvider,
+				salesAggregationService, clock);
 	}
 }

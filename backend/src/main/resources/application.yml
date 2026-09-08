@@ -27,7 +27,7 @@ spring:
     scheduling:
       thread-name-prefix: groove-scheduler-
       pool:
-        size: 2
+        size: 4
   servlet:
     multipart:
       max-file-size: 5MB

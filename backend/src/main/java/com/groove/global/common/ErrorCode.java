@@ -133,7 +133,10 @@ public enum ErrorCode {
 
 	// ===== ADMIN =====
 	ADMIN_CANNOT_MODIFY_SELF(HttpStatus.FORBIDDEN, "자기 자신의 상태는 변경할 수 없습니다."),
-	ADMIN_CANNOT_MODIFY_ADMIN(HttpStatus.FORBIDDEN, "다른 관리자의 상태는 변경할 수 없습니다.");
+	ADMIN_CANNOT_MODIFY_ADMIN(HttpStatus.FORBIDDEN, "다른 관리자의 상태는 변경할 수 없습니다."),
+
+	// ===== STATS =====
+	STATS_AGGREGATION_RUNNING(HttpStatus.CONFLICT, "매출 집계가 이미 실행 중입니다. 잠시 후 다시 시도해주세요.");
 
 	private final HttpStatus status;
 	private final String message;
