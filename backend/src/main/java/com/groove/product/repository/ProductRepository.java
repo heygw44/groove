@@ -18,6 +18,7 @@ import com.groove.product.entity.ProductStatus;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
+	// images 는 일부러 뺐다. productGenres 와 컬렉션 두 개를 동시에 fetch join 하면 카테시안 곱이 된다.
 	@EntityGraph(attributePaths = {"album", "artist", "label", "productGenres", "productGenres.genre"})
 	Optional<Product> findDetailById(Long id);
 

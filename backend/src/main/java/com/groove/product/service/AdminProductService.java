@@ -84,7 +84,7 @@ public class AdminProductService {
 
 	@Transactional
 	public AdminProductResponse update(Long adminId, Long productId, ProductUpdateRequest request) {
-		Product product = productRepository.findById(productId)
+		Product product = productRepository.findDetailById(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
 		List<String> changedFields = new ArrayList<>();
@@ -175,7 +175,7 @@ public class AdminProductService {
 	}
 
 	public AdminProductResponse getDetail(Long productId) {
-		Product product = productRepository.findById(productId)
+		Product product = productRepository.findDetailById(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 		Stock stock = stockRepository.findByProductId(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
@@ -185,7 +185,7 @@ public class AdminProductService {
 
 	@Transactional
 	public AdminProductResponse restore(Long adminId, Long productId) {
-		Product product = productRepository.findById(productId)
+		Product product = productRepository.findDetailById(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 		Stock stock = stockRepository.findByProductId(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));

@@ -9,6 +9,9 @@ spring:
   jpa:
     properties:
       hibernate:
+        # @EntityGraph 가 빠진 지연 연관이 목록 크기만큼 쿼리를 내는 걸 막는 안전망.
+        # 로컬에만 있으면 결함이 개발 중에는 가려지고 운영에서만 드러나므로 전 프로파일 공통으로 둔다.
+        default_batch_fetch_size: 100
         type:
           # ERD 의 BOOLEAN 컬럼과 맞춘다. Hibernate 기본값은 MySQL 에서 BIT(1) 이라 DDL 이 달라진다.
           preferred_boolean_jdbc_type: TINYINT
