@@ -44,6 +44,7 @@ import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.service.ProductSalesStatsUpdater;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentConfirmWriterTest {
@@ -58,6 +59,9 @@ class PaymentConfirmWriterTest {
 	@Mock
 	PaymentRepository paymentRepository;
 
+	@Mock
+	ProductSalesStatsUpdater productSalesStatsUpdater;
+
 	PaymentConfirmWriter writer;
 
 	Member member;
@@ -69,7 +73,7 @@ class PaymentConfirmWriterTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
-		writer = new PaymentConfirmWriter(orderRepository, paymentRepository, clock);
+		writer = new PaymentConfirmWriter(orderRepository, paymentRepository, productSalesStatsUpdater, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
@@ -284,6 +288,23 @@ class PaymentConfirmWriterTest {
 			assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
 			verify(paymentRepository).flush();
+		}
+
+		@Test
+		@DisplayName("결제를 승인하면 판매 수량을 재계산한다")
+		void refreshesSoldQuantityOnApproval() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 14L);
+			given(paymentRepository.findById(14L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, order.getOrderNumber(),
+					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
+
+			// when
+			writer.approve(14L, PaymentFixture.PAYMENT_KEY, result);
+
+			// then
+			verify(productSalesStatsUpdater).refreshFor(order);
 		}
 
 		@Test

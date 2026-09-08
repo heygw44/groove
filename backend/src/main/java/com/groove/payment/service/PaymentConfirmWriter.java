@@ -20,6 +20,7 @@ import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
+import com.groove.product.service.ProductSalesStatsUpdater;
 
 import lombok.RequiredArgsConstructor;
 
@@ -30,6 +31,7 @@ public class PaymentConfirmWriter {
 
 	private final OrderRepository orderRepository;
 	private final PaymentRepository paymentRepository;
+	private final ProductSalesStatsUpdater productSalesStatsUpdater;
 	private final Clock clock;
 
 	@Transactional
@@ -90,6 +92,8 @@ public class PaymentConfirmWriter {
 
 		// 재고는 여기서 건드리지 않는다. 차감과 OUT 이력은 주문 생성 시 이미 기록됐고, 승인 확정용
 		// StockChangeType 을 새로 추가하면 운영 DB 의 Hibernate enum CHECK 제약을 갱신해야 한다.
+
+		productSalesStatsUpdater.refreshFor(order);
 		return PaymentConfirmResponse.from(payment);
 	}
 

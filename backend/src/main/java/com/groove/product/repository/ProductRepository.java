@@ -54,6 +54,22 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 			""", nativeQuery = true)
 	void refreshReviewStats(@Param("productId") Long productId);
 
+	// 델타 누적이 아니라 재계산이라 훅이 한 번 빠져도 다음 호출이 실제 집계로 되돌린다.
+	// flushAutomatically 는 정확성 조건이다. 주문 상태 변경이 먼저 반영돼야 서브쿼리가 새 상태를 본다.
+	// clearAutomatically 는 켜지 않는다. 취소 경로는 이 UPDATE 뒤에도 order 의 lazy 연관을 계속 읽는다.
+	@Modifying(flushAutomatically = true)
+	@Query(value = """
+			UPDATE product p
+			SET p.sold_quantity = (
+				SELECT COALESCE(SUM(oi.quantity), 0)
+				FROM order_item oi
+				JOIN orders o ON o.id = oi.order_id
+				WHERE oi.product_id = p.id
+				AND o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED'))
+			WHERE p.id IN (:productIds)
+			""", nativeQuery = true)
+	void refreshSoldQuantities(@Param("productIds") Collection<Long> productIds);
+
 	@Query("SELECT p.discogsReleaseId FROM Product p WHERE p.discogsReleaseId IN :ids")
 	List<Long> findExistingDiscogsReleaseIds(@Param("ids") Collection<Long> ids);
 

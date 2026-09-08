@@ -75,6 +75,7 @@ import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
+import com.groove.product.service.ProductSalesStatsUpdater;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -127,6 +128,9 @@ class OrderServiceTest {
 	@Mock
 	PaymentCancelHook paymentCancelHook;
 
+	@Mock
+	ProductSalesStatsUpdater productSalesStatsUpdater;
+
 	OrderService orderService;
 
 	Member member;
@@ -150,7 +154,7 @@ class OrderServiceTest {
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, limitedPurchaseWriter, limitedReleaseSynchronizer, cartItemRepository,
 				memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper,
-				paymentRepository, paymentCancelHook, clock);
+				paymentRepository, paymentCancelHook, productSalesStatsUpdater, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -642,6 +646,37 @@ class OrderServiceTest {
 			// then
 			verify(orderStockService).restore(order);
 			verify(paymentCancelHook).onPaidOrderCanceled(order);
+		}
+
+		@Test
+		@DisplayName("PAID 주문을 취소하면 판매 수량을 재계산한다")
+		void refreshesSoldQuantityWhenPaidOrderCanceled() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 507L);
+			order.markPaid();
+			given(orderRepository.findByIdForUpdate(507L)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsByIdAndMemberId(507L, MEMBER_ID)).willReturn(Optional.of(order));
+
+			// when
+			orderService.cancel(MEMBER_ID, 507L, null);
+
+			// then
+			verify(productSalesStatsUpdater).refreshFor(order);
+		}
+
+		@Test
+		@DisplayName("PENDING 주문을 취소하면 판매 수량을 재계산하지 않는다")
+		void skipsSoldQuantityRefreshWhenPendingOrderCanceled() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 508L);
+			given(orderRepository.findByIdForUpdate(508L)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsByIdAndMemberId(508L, MEMBER_ID)).willReturn(Optional.of(order));
+
+			// when
+			orderService.cancel(MEMBER_ID, 508L, null);
+
+			// then
+			verify(productSalesStatsUpdater, never()).refreshFor(any());
 		}
 
 		@Test
