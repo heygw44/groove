@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { PageContainer } from '@/components/common/PageContainer';
+import { RouteFallback } from '@/components/common/RouteFallback';
 
 interface MyPageNavItem {
   to: string;
@@ -200,7 +202,9 @@ export function MyPageLayout() {
         </nav>
 
         <div className="flex flex-col gap-5">
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </div>
       </div>
     </PageContainer>

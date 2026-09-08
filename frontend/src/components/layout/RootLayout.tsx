@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 
+import { RouteFallback } from '@/components/common/RouteFallback';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
 import { TasteOnboardingModal } from '@/components/recommend/TasteOnboardingModal';
@@ -15,7 +17,9 @@ export function RootLayout() {
       </a>
       <Header />
       <main id="main" tabIndex={-1} className="flex-1 outline-none">
-        <Outlet />
+        <Suspense fallback={<RouteFallback />}>
+          <Outlet />
+        </Suspense>
       </main>
       <Footer />
       <TasteOnboardingModal />
