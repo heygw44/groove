@@ -12,6 +12,8 @@ import type {
   LimitedDropStats,
   PopularProductStats,
   PopularProductParams,
+  ReconcileLog,
+  ReconcileLogListParams,
   StatsPeriodParams,
 } from '@/types/adminStats';
 import type { ApiResponse, PageResponse } from '@/types/api';
@@ -147,6 +149,13 @@ export const getAdminPopularProducts = (params: PopularProductParams) =>
 
 export const getAdminLimitedDropStats = () =>
   unwrap(client.get<ApiResponse<LimitedDropStats[]>>('/admin/stats/limited-drops'));
+
+export const getAdminReconcileLogs = (params: ReconcileLogListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<ReconcileLog>>>('/admin/stats/reconcile-logs', {
+      params,
+    }),
+  );
 
 export const getAdminMembers = (params: AdminMemberListParams) =>
   unwrap(

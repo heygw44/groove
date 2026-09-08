@@ -136,4 +136,24 @@ describe('formatRelativeFromNow()', () => {
     // then
     expect(result).toBe('방금 전');
   });
+
+  /*
+   * aggregatedAt 은 서버가 내려주는 오프셋 없는 LocalDateTime 문자열이다.
+   * new Date(iso) 로 그대로 파싱하면 호스트(브라우저) 타임존으로 해석돼, 개발 머신처럼
+   * 호스트가 KST 면 우연히 맞아떨어지고 그 외 타임존에서만 값이 틀어진다. NOW 와
+   * aggregatedAt 을 둘 다 실제 시각(오프셋 포함/미포함)으로 고정해두면, 이 함수가
+   * toServerMs 대신 new Date() 를 쓰는 순간 기대값과 어긋나 호스트 타임존과 무관하게
+   * 결정적으로 재현된다.
+   */
+  it('오프셋 없는 서버 LocalDateTime 문자열도 KST 로 해석한다(호스트 타임존과 무관)', () => {
+    // given
+    stubServerNow(NOW);
+    const aggregatedAtWithoutOffset = '2026-09-05T11:00:00';
+
+    // when
+    const result = formatRelativeFromNow(aggregatedAtWithoutOffset);
+
+    // then
+    expect(result).toBe('1시간 전');
+  });
 });

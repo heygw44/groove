@@ -30,7 +30,10 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 회원에게 발행된 알림 한 건. product/album 중 정확히 하나만 값을 가지는 건 서비스 계층이 보장한다. */
+/**
+ * 회원에게 발행된 알림 한 건. product/album 이 배타적으로 하나만 값을 가지거나(상품/앨범 알림) 둘 다 비는지
+ * (관리자 대상 시스템 알림) 는 서비스 계층이 보장한다.
+ */
 @Entity
 @Getter
 @NoArgsConstructor(access = PROTECTED)
@@ -92,6 +95,15 @@ public class Notification extends BaseTimeEntity {
 				.member(member)
 				.album(album)
 				.type(NotificationType.NEW_PRESSING)
+				.titleSnapshot(titleSnapshot)
+				.build();
+	}
+
+	/** product/album 어느 쪽과도 연관되지 않는 관리자 대상 시스템 알림(예: 매출 대사 불일치). */
+	public static Notification forSystem(Member member, NotificationType type, String titleSnapshot) {
+		return Notification.builder()
+				.member(member)
+				.type(type)
 				.titleSnapshot(titleSnapshot)
 				.build();
 	}
