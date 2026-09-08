@@ -134,6 +134,17 @@ jobs:
           target: "/opt/groove"
           overwrite: true
 
+      - name: Upload ops scripts
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "scripts/backup.sh"
+          target: "/opt/groove/scripts"
+          strip_components: 1
+          overwrite: true
+
       - name: Restart containers
         uses: appleboy/ssh-action@v1
         env:
@@ -146,6 +157,8 @@ jobs:
           envs: GHCR_PAT,GHCR_USER
           script: |
             set -e
+            # scp 는 실행 비트를 보존하지 않는다.
+            chmod +x /opt/groove/scripts/*.sh
             echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd /opt/groove
             docker compose -f docker-compose.prod.yml pull
