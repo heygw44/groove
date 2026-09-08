@@ -2,10 +2,12 @@ package com.groove.admin.controller;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -21,10 +23,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
 import com.groove.admin.dto.LimitedDropStatsResponse;
@@ -39,6 +43,9 @@ import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.member.entity.MemberRole;
+import com.groove.stats.dto.SalesAggregationRequest;
+import com.groove.stats.dto.SalesAggregationResponse;
+import com.groove.stats.service.SalesAggregationAdminService;
 
 @WebMvcTest(AdminStatsController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -54,8 +61,14 @@ class AdminStatsControllerTest {
 	@Autowired
 	JwtProvider jwtProvider;
 
+	@Autowired
+	ObjectMapper objectMapper;
+
 	@MockitoBean
 	AdminStatsService adminStatsService;
+
+	@MockitoBean
+	SalesAggregationAdminService salesAggregationAdminService;
 
 	private String adminToken() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.ADMIN);
@@ -249,6 +262,96 @@ class AdminStatsControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(adminStatsService, never()).getSummary();
+		}
+	}
+
+	@Nested
+	@DisplayName("POST /api/v1/admin/stats/aggregations")
+	class Aggregate {
+
+		@Test
+		@DisplayName("관리자면 200 과 처리한 날짜 수를 반환한다")
+		void returnsAggregatedDaysForAdmin() throws Exception {
+			// given
+			SalesAggregationRequest request = new SalesAggregationRequest(LocalDate.of(2026, 8, 1),
+					LocalDate.of(2026, 8, 31));
+			given(salesAggregationAdminService.aggregate(anyLong(), any())).willReturn(
+					new SalesAggregationResponse(31));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/aggregations")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.aggregatedDays", is(31)));
+		}
+
+		@Test
+		@DisplayName("이미 실행 중이면 409 STATS_AGGREGATION_RUNNING 을 반환한다")
+		void returnsConflictWhenAlreadyRunning() throws Exception {
+			// given
+			SalesAggregationRequest request = new SalesAggregationRequest(LocalDate.of(2026, 8, 1),
+					LocalDate.of(2026, 8, 31));
+			given(salesAggregationAdminService.aggregate(anyLong(), any())).willThrow(
+					new BusinessException(ErrorCode.STATS_AGGREGATION_RUNNING));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/aggregations")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("STATS_AGGREGATION_RUNNING")));
+		}
+
+		@Test
+		@DisplayName("필수값이 없으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenMissingField() throws Exception {
+			// given
+			SalesAggregationRequest request = new SalesAggregationRequest(null, LocalDate.of(2026, 8, 31));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/aggregations")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(salesAggregationAdminService, never()).aggregate(anyLong(), any());
+		}
+
+		@Test
+		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
+		void returnsForbiddenForUser() throws Exception {
+			// given
+			SalesAggregationRequest request = new SalesAggregationRequest(LocalDate.of(2026, 8, 1),
+					LocalDate.of(2026, 8, 31));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/aggregations")
+							.header(HttpHeaders.AUTHORIZATION, userToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(salesAggregationAdminService, never()).aggregate(anyLong(), any());
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// given
+			SalesAggregationRequest request = new SalesAggregationRequest(LocalDate.of(2026, 8, 1),
+					LocalDate.of(2026, 8, 31));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/aggregations")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(salesAggregationAdminService, never()).aggregate(anyLong(), any());
 		}
 	}
 
