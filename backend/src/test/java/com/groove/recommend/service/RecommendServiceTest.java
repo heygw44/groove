@@ -9,6 +9,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +38,7 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.ProductStatus;
+import com.groove.recommend.config.RecommendProperties;
 import com.groove.recommend.dto.HomeRecommendResponse;
 import com.groove.recommend.dto.ProductFeatureRow;
 import com.groove.recommend.dto.RecommendItemResponse;
@@ -91,7 +94,10 @@ class RecommendServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		recommendService = new RecommendService(recommendQueryMapper, new RecommendScorer(),
+		// TTL 0 인 캐시라 기존 검증(호출마다 findProductFeatures() 재조회) 이 그대로 유지된다.
+		ProductFeatureCache productFeatureCache = new ProductFeatureCache(recommendQueryMapper,
+				new RecommendProperties(Duration.ZERO), Clock.systemDefaultZone());
+		recommendService = new RecommendService(recommendQueryMapper, new RecommendScorer(), productFeatureCache,
 				boughtTogetherRedisService, recentViewService, wishlistRepository, orderItemRepository,
 				memberTasteProfileRepository, memberTasteGenreRepository, memberTasteArtistRepository,
 				memberTasteDecadeRepository);
@@ -697,6 +703,43 @@ class RecommendServiceTest {
 
 			// then
 			assertThat(result).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("피처 캐시 히트/미스 동일성")
+	class FeatureCacheConsistency {
+
+		@Test
+		@DisplayName("피처 캐시가 히트해도 미스일 때와 같은 추천 결과를 반환한다")
+		void returnsSameResultRegardlessOfCacheHitOrMiss() {
+			// given
+			givenTasteProfile(MEMBER_ID, Set.of(5L), Set.of(), Set.of());
+			givenNoSeeds();
+			given(recommendQueryMapper.findProductFeatures())
+					.willReturn(List.of(row(50L, 5L, ProductStatus.ON_SALE, 4.0, NOW)));
+			given(recommendQueryMapper.findSummariesByIds(List.of(50L), MEMBER_ID))
+					.willReturn(List.of(summary(50L)));
+
+			RecommendService missService = recommendServiceWithFeatureCacheTtl(Duration.ZERO);
+			RecommendService hitService = recommendServiceWithFeatureCacheTtl(Duration.ofMinutes(1));
+
+			// when
+			hitService.recommendHome(MEMBER_ID, null);
+			HomeRecommendResponse hitResult = hitService.recommendHome(MEMBER_ID, null);
+			HomeRecommendResponse missResult = missService.recommendHome(MEMBER_ID, null);
+
+			// then
+			assertThat(hitResult).isEqualTo(missResult);
+		}
+
+		private RecommendService recommendServiceWithFeatureCacheTtl(Duration ttl) {
+			ProductFeatureCache featureCache = new ProductFeatureCache(recommendQueryMapper,
+					new RecommendProperties(ttl), Clock.systemDefaultZone());
+			return new RecommendService(recommendQueryMapper, new RecommendScorer(), featureCache,
+					boughtTogetherRedisService, recentViewService, wishlistRepository, orderItemRepository,
+					memberTasteProfileRepository, memberTasteGenreRepository, memberTasteArtistRepository,
+					memberTasteDecadeRepository);
 		}
 	}
 }

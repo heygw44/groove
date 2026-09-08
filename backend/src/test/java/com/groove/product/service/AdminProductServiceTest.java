@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
@@ -60,6 +61,7 @@ import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.recommend.service.ProductCatalogChangedEvent;
 
 @ExtendWith(MockitoExtension.class)
 class AdminProductServiceTest {
@@ -133,6 +135,7 @@ class AdminProductServiceTest {
 			verify(stockService).create(saved, request.initialStock());
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_CREATE,
 					AdminAuditTargetType.PRODUCT, saved.getId(), null);
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -433,10 +436,34 @@ class AdminProductServiceTest {
 			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
 
 			// then
-			ArgumentCaptor<PriceDropEvent> captor = ArgumentCaptor.forClass(PriceDropEvent.class);
-			verify(eventPublisher).publishEvent(captor.capture());
-			assertThat(captor.getValue().productId()).isEqualTo(PRODUCT_ID);
-			assertThat(captor.getValue().productTitle()).isEqualTo(product.getTitle());
+			// update() 는 가격 인하와 무관하게 캐시 무효화 이벤트도 함께 발행하므로, 발행된 이벤트 전체에서
+			// PriceDropEvent 만 골라 검증한다.
+			ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+			verify(eventPublisher, times(2)).publishEvent(captor.capture());
+			PriceDropEvent priceDropEvent = captor.getAllValues().stream()
+					.filter(PriceDropEvent.class::isInstance)
+					.map(PriceDropEvent.class::cast)
+					.findFirst()
+					.orElseThrow();
+			assertThat(priceDropEvent.productId()).isEqualTo(PRODUCT_ID);
+			assertThat(priceDropEvent.productTitle()).isEqualTo(product.getTitle());
+		}
+
+		@Test
+		@DisplayName("성공하면 상품 변경 여부와 무관하게 추천 특성 캐시 무효화 이벤트를 발행한다")
+		void publishesCatalogChangedEvent() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
+
+			// when
+			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -768,6 +795,7 @@ class AdminProductServiceTest {
 			assertThat(product.isHidden()).isTrue();
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_HIDE,
 					AdminAuditTargetType.PRODUCT, PRODUCT_ID, null);
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -857,6 +885,7 @@ class AdminProductServiceTest {
 			assertThat(response.status()).isEqualTo(ProductStatus.ON_SALE);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_RESTORE,
 					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "ON_SALE");
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test

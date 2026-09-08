@@ -41,6 +41,12 @@ file:
   upload-path: ${java.io.tmpdir}/groove-test-uploads
   base-url: http://localhost:8080/uploads
 
+# 통합 테스트는 리포지토리로 상품을 심고 곧바로 추천 API 를 호출하므로 캐시를 꺼서 오래된 스냅샷을 안 본다.
+# 캐시 동작 자체는 ProductFeatureCacheTest 로 별도 검증한다.
+groove:
+  recommend:
+    feature-cache-ttl: 0s
+
 logging:
   level:
     com.groove: INFO
