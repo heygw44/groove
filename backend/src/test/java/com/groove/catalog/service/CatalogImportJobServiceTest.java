@@ -39,9 +39,11 @@ import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.catalog.batch.CatalogImportJobConfig;
+import com.groove.catalog.dto.CatalogImportJobHistoryRow;
 import com.groove.catalog.dto.CatalogImportJobRequest;
 import com.groove.catalog.dto.CatalogImportJobResponse;
 import com.groove.catalog.dto.CatalogImportJobStartResponse;
+import com.groove.catalog.mapper.CatalogImportJobQueryMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
@@ -65,11 +67,14 @@ class CatalogImportJobServiceTest {
 	JobOperator jobOperator;
 
 	@Mock
+	CatalogImportJobQueryMapper catalogImportJobQueryMapper;
+
+	@Mock
 	AdminAuditLogService adminAuditLogService;
 
 	CatalogImportJobService service() {
 		return new CatalogImportJobService(discogsMasterImportJob, jobLauncher, jobExplorer, jobOperator,
-				adminAuditLogService, FIXED_CLOCK);
+				catalogImportJobQueryMapper, adminAuditLogService, FIXED_CLOCK);
 	}
 
 	private JobInstance jobInstance(long id) {
@@ -172,11 +177,10 @@ class CatalogImportJobServiceTest {
 			given(jobExplorer.getJobInstanceCount(CatalogImportJobConfig.JOB_NAME)).willReturn(1L);
 			JobInstance instance = jobInstance(1L);
 			given(jobExplorer.getJobInstances(CatalogImportJobConfig.JOB_NAME, 0, 20)).willReturn(List.of(instance));
-			JobParameters params = new JobParametersBuilder()
-					.addLong(CatalogImportJobConfig.PARAM_MASTER_ID, 21247L)
-					.toJobParameters();
-			JobExecution execution = jobExecution(88L, instance, params, BatchStatus.STARTED);
-			given(jobExplorer.getJobExecutions(instance)).willReturn(List.of(execution));
+			CatalogImportJobHistoryRow row = new CatalogImportJobHistoryRow(1L, 88L, BatchStatus.STARTED, null, null,
+					null, 21247L, 5L, 10L, 8L, 1L, 0L, 0L, 0L, null);
+			given(catalogImportJobQueryMapper.findLatestExecutions(List.of(1L), CatalogImportJobConfig.PARAM_MASTER_ID))
+					.willReturn(List.of(row));
 
 			// when
 			PageResponse<CatalogImportJobResponse> result = service().list(0, 20);
@@ -194,7 +198,8 @@ class CatalogImportJobServiceTest {
 			given(jobExplorer.getJobInstanceCount(CatalogImportJobConfig.JOB_NAME)).willReturn(1L);
 			JobInstance instance = jobInstance(1L);
 			given(jobExplorer.getJobInstances(CatalogImportJobConfig.JOB_NAME, 0, 20)).willReturn(List.of(instance));
-			given(jobExplorer.getJobExecutions(instance)).willReturn(List.of());
+			given(catalogImportJobQueryMapper.findLatestExecutions(List.of(1L), CatalogImportJobConfig.PARAM_MASTER_ID))
+					.willReturn(List.of());
 
 			// when
 			PageResponse<CatalogImportJobResponse> result = service().list(0, 20);

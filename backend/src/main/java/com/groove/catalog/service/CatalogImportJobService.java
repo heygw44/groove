@@ -3,8 +3,11 @@ package com.groove.catalog.service;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.Job;
@@ -27,9 +30,11 @@ import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.catalog.batch.CatalogImportJobConfig;
+import com.groove.catalog.dto.CatalogImportJobHistoryRow;
 import com.groove.catalog.dto.CatalogImportJobRequest;
 import com.groove.catalog.dto.CatalogImportJobResponse;
 import com.groove.catalog.dto.CatalogImportJobStartResponse;
+import com.groove.catalog.mapper.CatalogImportJobQueryMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
@@ -45,6 +50,7 @@ public class CatalogImportJobService {
 	private final JobLauncher jobLauncher;
 	private final JobExplorer jobExplorer;
 	private final JobOperator jobOperator;
+	private final CatalogImportJobQueryMapper catalogImportJobQueryMapper;
 	private final AdminAuditLogService adminAuditLogService;
 	private final Clock clock;
 
@@ -86,10 +92,7 @@ public class CatalogImportJobService {
 		}
 
 		List<JobInstance> instances = jobExplorer.getJobInstances(CatalogImportJobConfig.JOB_NAME, page * size, size);
-		List<CatalogImportJobResponse> content = instances.stream()
-				.map(this::latestExecutionResponse)
-				.filter(Objects::nonNull)
-				.toList();
+		List<CatalogImportJobResponse> content = latestExecutionResponses(instances);
 
 		return PageResponse.of(content, page, size, total);
 	}
@@ -116,12 +119,27 @@ public class CatalogImportJobService {
 		return new CatalogImportJobStartResponse(newExecutionId);
 	}
 
-	private CatalogImportJobResponse latestExecutionResponse(JobInstance instance) {
-		List<JobExecution> executions = jobExplorer.getJobExecutions(instance);
-		if (executions.isEmpty()) {
-			return null;
+	/**
+	 * 인스턴스마다 {@code jobExplorer.getJobExecutions()} 를 반복 호출하던 N+1 을 매퍼 한 번 호출로 대체한다.
+	 * 매퍼 결과를 인스턴스 id 로 그룹핑한 뒤, {@code instances} 가 준 정렬 순서(인스턴스 id 내림차순)를 그대로 지킨다.
+	 */
+	private List<CatalogImportJobResponse> latestExecutionResponses(List<JobInstance> instances) {
+		if (instances.isEmpty()) {
+			return List.of();
 		}
-		return CatalogImportJobResponse.from(executions.get(0));
+
+		List<Long> instanceIds = instances.stream().map(JobInstance::getInstanceId).toList();
+		List<CatalogImportJobHistoryRow> rows = catalogImportJobQueryMapper.findLatestExecutions(instanceIds,
+				CatalogImportJobConfig.PARAM_MASTER_ID);
+		Map<Long, List<CatalogImportJobHistoryRow>> rowsByInstanceId = rows.stream()
+				.collect(Collectors.groupingBy(CatalogImportJobHistoryRow::jobInstanceId, LinkedHashMap::new,
+						Collectors.toList()));
+
+		return instanceIds.stream()
+				.map(rowsByInstanceId::get)
+				.filter(Objects::nonNull)
+				.map(CatalogImportJobResponse::fromRows)
+				.toList();
 	}
 
 	private JobExecution findExecution(Long jobExecutionId) {
