@@ -72,7 +72,7 @@ fi
 # --after-ddl 을 한 번도 안 줬으면 기본값 하나만 넣는다. bash 3.2 는 길이 0 배열을 그냥 확인하는
 # 건 괜찮지만 그 상태로 "${AFTER_DDLS[@]}" 를 펼치면 set -u 에서 죽으므로, 항목을 채운 뒤에만 펼친다.
 if [ ${#AFTER_DDLS[@]} -eq 0 ]; then
-	AFTER_DDLS=("${MIGRATION_DIR}/V12__product_sold_quantity.sql")
+	AFTER_DDLS=("${MIGRATION_DIR}/V13__admin_stats_period_index.sql")
 fi
 
 RUN_BEFORE=false
@@ -126,7 +126,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -154,6 +154,8 @@ case_desc() {
 	N1) echo "알림 목록 전체 (NotificationRepository.findAllByMemberId)" ;;
 	N2) echo "알림 목록 안읽음만 (NotificationRepository.findAllByMemberIdAndReadAtIsNull)" ;;
 	N3) echo "안읽음 개수 (NotificationRepository.countByMemberIdAndReadAtIsNull)" ;;
+	S1) echo "관리자 통계 일별 매출 최근 30일 (AdminStatsMapper.xml findDailySales)" ;;
+	S2) echo "관리자 통계 오늘 요약 (before: 스칼라 서브쿼리 2개 / after: 파생 테이블 병합, AdminStatsMapper.xml findSummary)" ;;
 	*) echo "?" ;;
 	esac
 }
@@ -266,7 +268,7 @@ backfill_sold_quantity() {
 seed() {
 	local member_n artist_n label_n album_n product_n orders_n order_item_n payment_n
 	local review_n notification_n wishlist_n coupon_n member_coupon_n
-	local review_heavy_n notification_heavy_n
+	local review_heavy_n notification_heavy_n member_today_n
 	# review 헤비 케이스가 product 1 에 이미 쓴 member_id 1~6 과 겹치지 않도록 회원 수를 넉넉히 늘린다.
 	member_n=$(scaled_count 40000)
 	artist_n=$(scaled_count 2000)
@@ -283,6 +285,7 @@ seed() {
 	member_coupon_n=$(scaled_count 20000)
 	review_heavy_n=$(scaled_count 20000)
 	notification_heavy_n=$(scaled_count 50000)
+	member_today_n=$(scaled_count 5000)
 
 	# payment.order_id 를 n 그대로 1:1 매핑하므로 orders 건수를 넘으면 FK 위반이 난다.
 	if [ "${payment_n}" -gt "${orders_n}" ]; then
@@ -297,7 +300,7 @@ seed() {
 	local max_needed=0 c
 	for c in "${member_n}" "${artist_n}" "${label_n}" "${album_n}" "${product_n}" \
 		"${orders_n}" "${order_item_n}" "${payment_n}" "${review_n}" "${notification_n}" "${wishlist_n}" \
-		"${coupon_n}" "${member_coupon_n}" "${review_heavy_n}" "${notification_heavy_n}"; do
+		"${coupon_n}" "${member_coupon_n}" "${review_heavy_n}" "${notification_heavy_n}" "${member_today_n}"; do
 		if [ "${c}" -gt "${max_needed}" ]; then
 			max_needed="${c}"
 		fi
@@ -340,6 +343,22 @@ seed() {
 		FROM numbers WHERE n <= ${member_n};
 	"
 	echo "[시드] member ${member_n}건"
+
+	mysql_perf "
+		-- 오늘 가입 헤비 케이스: 기본 시드는 created_at 이 730일 균등이라 하루치가 너무 적어(회원수/730)
+		-- findSummary 의 '오늘 가입 회원' 집계에서 인덱스 효과가 드러나지 않는다. id 는 기존 회원 뒤에 붙인다.
+		INSERT INTO member (email, password, nickname, role, status, created_at, updated_at)
+		SELECT
+			CONCAT('perftoday', n, '@groove.local'),
+			'perfdummypasswordhash0000000000000000000000000000',
+			CONCAT('todaydigger', n),
+			'USER',
+			'ACTIVE',
+			DATE_ADD(CURDATE(), INTERVAL (n % 1440) MINUTE),
+			NOW(6)
+		FROM numbers WHERE n <= ${member_today_n};
+	"
+	echo "[시드] member(오늘 가입 헤비) ${member_today_n}건"
 
 	mysql_perf "
 		INSERT INTO artist (name, name_en, description, created_at, updated_at)
@@ -973,6 +992,63 @@ get_case_sql() {
 			-- NotificationRepository.countByMemberIdAndReadAtIsNull, member_id=${TARGET_MEMBER_ID}
 			SELECT COUNT(*) FROM notification WHERE member_id = ${TARGET_MEMBER_ID} AND read_at IS NULL
 		SQL
+		;;
+	S1)
+		cat <<-SQL
+			-- AdminStatsMapper.xml findDailySales, 최근 30일
+			SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
+				SUM(d.cancel_amount) AS cancel_amount
+			FROM (
+				SELECT DATE(p.approved_at) AS sale_date, 1 AS order_count, p.amount AS sales_amount, 0 AS cancel_amount
+				FROM payment p
+				WHERE p.status IN ('DONE', 'CANCELED')
+				AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
+				UNION ALL
+				SELECT DATE(p.canceled_at), 0, 0, p.amount
+				FROM payment p
+				WHERE p.status = 'CANCELED'
+				AND p.canceled_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.canceled_at < NOW(6)
+			) d
+			GROUP BY d.sale_date
+			ORDER BY d.sale_date
+		SQL
+		;;
+	S2)
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- AdminStatsMapper.xml findSummary, 오늘 (before: 스칼라 서브쿼리 2개)
+				SELECT
+					COALESCE((SELECT SUM(p.amount) FROM payment p
+						WHERE p.status IN ('DONE', 'CANCELED')
+						AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY), 0)
+						AS today_sales_amount,
+					(SELECT COUNT(*) FROM payment p
+						WHERE p.status IN ('DONE', 'CANCELED')
+						AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY)
+						AS today_order_count,
+					(SELECT COUNT(*) FROM member m
+						WHERE m.created_at >= CURDATE() AND m.created_at < CURDATE() + INTERVAL 1 DAY)
+						AS today_new_member_count,
+					(SELECT COUNT(*) FROM orders o WHERE o.status = 'PENDING') AS pending_order_count
+			SQL
+		else
+			cat <<-SQL
+				-- AdminStatsMapper.xml findSummary, 오늘 (after: 파생 테이블 병합)
+				SELECT
+					COALESCE(t.sales_amount, 0) AS today_sales_amount,
+					COALESCE(t.order_count, 0) AS today_order_count,
+					(SELECT COUNT(*) FROM member m
+						WHERE m.created_at >= CURDATE() AND m.created_at < CURDATE() + INTERVAL 1 DAY)
+						AS today_new_member_count,
+					(SELECT COUNT(*) FROM orders o WHERE o.status = 'PENDING') AS pending_order_count
+				FROM (
+					SELECT SUM(p.amount) AS sales_amount, COUNT(*) AS order_count
+					FROM payment p
+					WHERE p.status IN ('DONE', 'CANCELED')
+					AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY
+				) t
+			SQL
+		fi
 		;;
 	*)
 		echo "알 수 없는 케이스: ${id}" >&2

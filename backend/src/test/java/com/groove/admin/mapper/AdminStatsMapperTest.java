@@ -489,5 +489,49 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			assertThat(result.todayNewMemberCount()).isZero();
 			assertThat(result.pendingOrderCount()).isGreaterThanOrEqualTo(1);
 		}
+
+		@Test
+		@DisplayName("당일 승인된 결제가 없으면 매출과 건수를 0으로 채운 1행을 반환한다")
+		void returnsZeroRowWhenNoPaymentApprovedToday() {
+			// given
+			LocalDateTime todayStart = LocalDateTime.of(2032, 1, 1, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2032, 1, 2, 0, 0);
+
+			// when
+			AdminStatsSummaryResponse result = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			// then
+			assertThat(result).isNotNull();
+			assertThat(result.todaySalesAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+			assertThat(result.todayOrderCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("취소된 결제도 승인일 기준으로 오늘 매출에 포함한다")
+		void countsCanceledPaymentAmountInTodaySales() {
+			// given
+			LocalDateTime todayStart = LocalDateTime.of(2032, 2, 1, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2032, 2, 2, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Canceled Product", new BigDecimal("15000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+
+			Order order = OrderFixture.create(member, "20320201-ASMSUM005");
+			order.addItem(product, 1);
+			OrderFixture.markPaid(order);
+			em.persist(order);
+			em.persist(PaymentFixture.canceledAt(order, "asm-summary-key-5",
+					LocalDateTime.of(2032, 2, 1, 9, 0), LocalDateTime.of(2032, 2, 1, 12, 0)));
+
+			em.flush();
+			em.clear();
+
+			// when
+			AdminStatsSummaryResponse result = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			// then
+			assertThat(result.todaySalesAmount()).isEqualByComparingTo(new BigDecimal("15000"));
+			assertThat(result.todayOrderCount()).isEqualTo(1);
+		}
 	}
 }
