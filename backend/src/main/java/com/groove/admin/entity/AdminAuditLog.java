@@ -52,7 +52,8 @@ public class AdminAuditLog extends BaseTimeEntity {
 	@Column(name = "target_type", nullable = false, length = 30)
 	private AdminAuditTargetType targetType;
 
-	@Column(name = "target_id", nullable = false)
+	/** {@link AdminAuditTargetType#SALES_AGGREGATION} 처럼 대상 엔티티가 없는 시스템 범위 행위는 null 이다. */
+	@Column(name = "target_id")
 	private Long targetId;
 
 	@Column(columnDefinition = "TEXT")

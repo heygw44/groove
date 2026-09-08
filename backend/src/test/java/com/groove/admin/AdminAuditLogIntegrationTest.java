@@ -28,7 +28,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditLog;
+import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.repository.AdminAuditLogRepository;
+import com.groove.admin.service.AdminAuditLogService;
 import com.groove.auth.jwt.JwtProvider;
 import com.groove.coupon.dto.CouponCreateRequest;
 import com.groove.coupon.entity.DiscountType;
@@ -85,6 +87,9 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	AdminAuditLogRepository adminAuditLogRepository;
+
+	@Autowired
+	AdminAuditLogService adminAuditLogService;
 
 	@Nested
 	@DisplayName("여러 관리자 경로에서 감사 로그를 남긴다")
@@ -220,6 +225,29 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 			assertThat(stockRepository.findWithProductByProductId(product.getId()).orElseThrow().getQuantity())
 					.isEqualTo(15);
 			assertThat(adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(NON_EXISTENT_ADMIN_ID)).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("대상 엔티티가 없는 감사 행위")
+	class RecordsWithoutTargetEntity {
+
+		@Test
+		@DisplayName("targetId 가 null 이어도 감사 로그가 저장된다")
+		void savesLogWhenTargetIdIsNull() {
+			// given
+			Member admin = memberRepository.save(
+					Member.create("audit-sales-agg-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+
+			// when
+			adminAuditLogService.record(admin.getId(), AdminAuditAction.SALES_AGGREGATION_RUN,
+					AdminAuditTargetType.SALES_AGGREGATION, null, "from=2032-01-01,to=2032-01-01");
+
+			// then
+			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
+			assertThat(logs).hasSize(1);
+			assertThat(logs.get(0).getTargetId()).isNull();
+			assertThat(logs.get(0).getTargetType()).isEqualTo(AdminAuditTargetType.SALES_AGGREGATION);
 		}
 	}
 
