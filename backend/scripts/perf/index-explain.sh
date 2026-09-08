@@ -126,7 +126,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 M1 W1 W2)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -154,8 +154,9 @@ case_desc() {
 	N1) echo "알림 목록 전체 (NotificationRepository.findAllByMemberId)" ;;
 	N2) echo "알림 목록 안읽음만 (NotificationRepository.findAllByMemberIdAndReadAtIsNull)" ;;
 	N3) echo "안읽음 개수 (NotificationRepository.countByMemberIdAndReadAtIsNull)" ;;
-	S1) echo "관리자 통계 일별 매출 최근 30일 (AdminStatsMapper.xml findDailySales)" ;;
+	S1) echo "관리자 통계 일별 매출 최근 30일 (before: payment UNION ALL + DATE() GROUP BY / after: sales_daily 범위 조회, AdminStatsMapper.xml findDailySales)" ;;
 	S2) echo "관리자 통계 오늘 요약 (before: 스칼라 서브쿼리 2개 / after: 파생 테이블 병합, AdminStatsMapper.xml findSummary)" ;;
+	S3) echo "관리자 통계 인기 상품 최근 30일 (before: 4중 조인 GROUP BY / after: sales_daily_product 파생 테이블 LIMIT, AdminStatsMapper.xml findPopularProducts)" ;;
 	M1) echo "회원 상세 활동 요약 (before: memberOrderStats 파생 테이블 / after: 상관 서브쿼리, MemberQueryMapper.xml findActivitySummary)" ;;
 	W1) echo "앨범 구독 목록 (AlbumWatchRepository.findAllByMemberId, EntityGraph album)" ;;
 	W2) echo "앨범 구독 개수 (AlbumWatchRepository.findAllByMemberId 페이징 count)" ;;
@@ -265,6 +266,52 @@ backfill_sold_quantity() {
 		      where o.status in ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
 		      group by oi.product_id) s on s.product_id = p.id
 		set p.sold_quantity = s.q;
+	"
+}
+
+# V15 도 after 단계에서야 sales_daily/sales_daily_product 테이블을 만든다. --after-ddl 로 테이블만
+# 세우면 빈 테이블이라 S1/S3 after 측정이 무의미해서(옵티마이저가 빈 테이블은 다르게 풀어 시간도
+# 실행계획도 거짓말이 된다), 여기서 원본(payment/order_item)을 SalesAggregationQueryMapper.xml 의
+# findDailySalesOf/findProductSalesOf 와 같은 집계식으로 한 번에 INSERT ... SELECT 해 채운다(그 두 쿼리는
+# 하루 단위 파라미터라 배치가 날짜별로 호출하지만, 여기서는 시드가 커버하는 기간 전체를 날짜로 GROUP BY
+# 해 같은 결과를 한 번에 낸다). backfill_sold_quantity 와 같은 성격이라 테이블 존재를 먼저 확인한다.
+backfill_sales_daily() {
+	local has_table
+	has_table=$(mysql_perf "SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = '${PERF_SCHEMA}' AND table_name = 'sales_daily';")
+	if [ "${has_table}" != "1" ]; then
+		return 0
+	fi
+	echo "  - sales_daily / sales_daily_product 백필"
+	mysql_perf "
+		insert into sales_daily (sale_date, order_count, sales_amount, cancel_count, cancel_amount,
+			aggregated_at, created_at, updated_at)
+		select d.sale_date, SUM(d.order_count), SUM(d.sales_amount), SUM(d.cancel_count), SUM(d.cancel_amount),
+			NOW(6), NOW(6), NOW(6)
+		from (
+			select DATE(p.approved_at) as sale_date, COUNT(*) as order_count, SUM(p.amount) as sales_amount,
+				0 as cancel_count, 0 as cancel_amount
+			from payment p
+			where p.status in ('DONE', 'CANCELED') and p.approved_at is not null
+			group by DATE(p.approved_at)
+			union all
+			select DATE(p.canceled_at), 0, 0, COUNT(*), SUM(p.amount)
+			from payment p
+			where p.status = 'CANCELED' and p.canceled_at is not null
+			group by DATE(p.canceled_at)
+		) d
+		group by d.sale_date;
+	"
+	mysql_perf "
+		insert into sales_daily_product (sale_date, product_id, sold_quantity, sales_amount, order_count,
+			aggregated_at, created_at, updated_at)
+		select DATE(p.approved_at) as sale_date, oi.product_id, SUM(oi.quantity),
+			SUM(oi.price_snapshot * oi.quantity), COUNT(DISTINCT o.id), NOW(6), NOW(6), NOW(6)
+		from order_item oi
+		join orders o on o.id = oi.order_id
+		join payment p on p.order_id = o.id
+		where o.status in ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED') and p.approved_at is not null
+		group by DATE(p.approved_at), oi.product_id;
 	"
 }
 
@@ -1067,24 +1114,34 @@ get_case_sql() {
 		SQL
 		;;
 	S1)
-		cat <<-SQL
-			-- AdminStatsMapper.xml findDailySales, 최근 30일
-			SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
-				SUM(d.cancel_amount) AS cancel_amount
-			FROM (
-				SELECT DATE(p.approved_at) AS sale_date, 1 AS order_count, p.amount AS sales_amount, 0 AS cancel_amount
-				FROM payment p
-				WHERE p.status IN ('DONE', 'CANCELED')
-				AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
-				UNION ALL
-				SELECT DATE(p.canceled_at), 0, 0, p.amount
-				FROM payment p
-				WHERE p.status = 'CANCELED'
-				AND p.canceled_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.canceled_at < NOW(6)
-			) d
-			GROUP BY d.sale_date
-			ORDER BY d.sale_date
-		SQL
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- AdminStatsMapper.xml findDailySales, 최근 30일 (before: payment UNION ALL + DATE() GROUP BY)
+				SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
+					SUM(d.cancel_amount) AS cancel_amount
+				FROM (
+					SELECT DATE(p.approved_at) AS sale_date, 1 AS order_count, p.amount AS sales_amount, 0 AS cancel_amount
+					FROM payment p
+					WHERE p.status IN ('DONE', 'CANCELED')
+					AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
+					UNION ALL
+					SELECT DATE(p.canceled_at), 0, 0, p.amount
+					FROM payment p
+					WHERE p.status = 'CANCELED'
+					AND p.canceled_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.canceled_at < NOW(6)
+				) d
+				GROUP BY d.sale_date
+				ORDER BY d.sale_date
+			SQL
+		else
+			cat <<-SQL
+				-- AdminStatsMapper.xml findDailySales, 최근 30일 (after: sales_daily 를 sale_date 범위로 읽는다)
+				SELECT s.sale_date, s.order_count, s.sales_amount, s.cancel_amount
+				FROM sales_daily s
+				WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND s.sale_date <= CURDATE()
+				ORDER BY s.sale_date
+			SQL
+		fi
 		;;
 	S2)
 		if [ "${phase}" = before ]; then
@@ -1120,6 +1177,47 @@ get_case_sql() {
 					WHERE p.status IN ('DONE', 'CANCELED')
 					AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY
 				) t
+			SQL
+		fi
+		;;
+	S3)
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- AdminStatsMapper.xml findPopularProducts, 최근 30일 (before: 4중 조인 GROUP BY)
+				SELECT
+					pr.id, pr.title, a.name AS artist_name,
+					SUM(oi.quantity) AS sold_quantity,
+					SUM(oi.price_snapshot * oi.quantity) AS sales_amount,
+					COUNT(DISTINCT o.id) AS order_count
+				FROM order_item oi
+				JOIN orders o ON o.id = oi.order_id
+				JOIN payment p ON p.order_id = o.id
+				JOIN product pr ON pr.id = oi.product_id
+				JOIN artist a ON a.id = pr.artist_id
+				WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+				AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
+				GROUP BY pr.id, pr.title, a.name
+				ORDER BY sold_quantity DESC, sales_amount DESC, pr.id DESC
+				LIMIT 10
+			SQL
+		else
+			cat <<-SQL
+				-- AdminStatsMapper.xml findPopularProducts, 최근 30일
+				-- (after: sales_daily_product 를 상품 단위로 합산한 파생 테이블에서 정렬·LIMIT 을 먼저 끝내고
+				-- product/artist 는 그 결과에만 조인한다)
+				SELECT pr.id, pr.title, a.name AS artist_name, t.sold_quantity, t.sales_amount, t.order_count
+				FROM (
+					SELECT s.product_id, SUM(s.sold_quantity) AS sold_quantity,
+						SUM(s.sales_amount) AS sales_amount, SUM(s.order_count) AS order_count
+					FROM sales_daily_product s
+					WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND s.sale_date <= CURDATE()
+					GROUP BY s.product_id
+					ORDER BY sold_quantity DESC, sales_amount DESC, s.product_id DESC
+					LIMIT 10
+				) t
+				JOIN product pr ON pr.id = t.product_id
+				JOIN artist a ON a.id = pr.artist_id
+				ORDER BY t.sold_quantity DESC, t.sales_amount DESC, pr.id DESC
 			SQL
 		fi
 		;;
@@ -1293,6 +1391,7 @@ main() {
 			mysql_perf_file "${ddl}"
 		done
 		backfill_sold_quantity
+		backfill_sales_daily
 		analyze_tables
 		echo "  - after 단계"
 		local id2
