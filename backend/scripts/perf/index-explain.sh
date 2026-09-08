@@ -5,8 +5,12 @@
 # 합성 데이터를 수십만 건 채운 뒤, 인덱스 DDL 적용 전(before)/후(after)를 같은 방식으로 재서 비교한다.
 # 개발 DB(groove)는 절대 건드리지 않는다 — groove_perf 는 스키마명이 하드코딩되어 있다.
 #
+# --after-ddl 로 지정한 마이그레이션은 after 단계 진입 시점에 순서대로(sort -V) 적용한다.
+# 여러 번 지정하면 누적되며, 그중 하나가 product.sold_quantity 컬럼처럼 컬럼 자체를 새로 만드는 경우
+# 그 컬럼에 의존하는 백필/시드 보정도 after 단계에서만 돌려야 한다(자세한 내용은 각 지점의 주석 참고).
+#
 # 사용법:
-#   index-explain.sh [--scale N] [--after-ddl 파일] [--out 파일] [--keep] [--phase before|after|both]
+#   index-explain.sh [--scale N] [--after-ddl 파일]... [--out 파일] [--keep] [--phase before|after|both]
 set -euo pipefail
 
 # OrbStack 은 DOCKER_HOST 를 별도로 export 해야 docker CLI 가 데몬을 찾는다.
@@ -24,7 +28,9 @@ BACKEND_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MIGRATION_DIR="${BACKEND_DIR}/src/main/resources/db/migration"
 
 SCALE="1.0"
-AFTER_DDL="${MIGRATION_DIR}/V11__query_index_tuning.sql"
+# macOS 기본 bash 3.2 는 연관 배열이 없어도 일반(인덱스) 배열은 쓸 수 있다. --after-ddl 을
+# 여러 번 넘기면 이 배열에 누적된다.
+AFTER_DDLS=()
 OUT_FILE=""
 KEEP=false
 PHASE="both"
@@ -36,7 +42,7 @@ while [ $# -gt 0 ]; do
 		shift 2
 		;;
 	--after-ddl)
-		AFTER_DDL="$2"
+		AFTER_DDLS+=("$2")
 		shift 2
 		;;
 	--out)
@@ -63,6 +69,12 @@ if ! [[ "${SCALE}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
 	exit 1
 fi
 
+# --after-ddl 을 한 번도 안 줬으면 기본값 하나만 넣는다. bash 3.2 는 길이 0 배열을 그냥 확인하는
+# 건 괜찮지만 그 상태로 "${AFTER_DDLS[@]}" 를 펼치면 set -u 에서 죽으므로, 항목을 채운 뒤에만 펼친다.
+if [ ${#AFTER_DDLS[@]} -eq 0 ]; then
+	AFTER_DDLS=("${MIGRATION_DIR}/V12__product_sold_quantity.sql")
+fi
+
 RUN_BEFORE=false
 RUN_AFTER=false
 case "${PHASE}" in
@@ -82,12 +94,28 @@ both)
 	;;
 esac
 
-if [ ! -f "${AFTER_DDL}" ]; then
+# 존재하는 파일만 절대 경로로 정규화해 남긴다. 정규화가 없으면 상대 경로로 넘긴 마이그레이션이
+# apply_migrations 의 절대 경로와 문자열 비교에서 어긋나 before 단계에도 적용된다.
+# 결과가 빈 배열이면 AFTER_DDLS 는 그대로 두고(항상 최소 1개는 들고 있어야 이후
+# "${AFTER_DDLS[@]}" 펼치기가 bash 3.2 에서 안전하다) after 단계 자체를 건너뛴다.
+EXISTING_AFTER_DDLS=()
+for _ddl in "${AFTER_DDLS[@]}"; do
+	if [ -f "${_ddl}" ]; then
+		EXISTING_AFTER_DDLS+=("$(cd "$(dirname "${_ddl}")" && pwd)/$(basename "${_ddl}")")
+	else
+		echo "[안내] --after-ddl 파일이 없습니다(${_ddl})."
+	fi
+done
+unset _ddl
+
+if [ ${#EXISTING_AFTER_DDLS[@]} -eq 0 ]; then
 	if [ "${RUN_AFTER}" = true ]; then
-		echo "[안내] --after-ddl 파일이 없습니다(${AFTER_DDL}). after 단계를 건너뛰고 before 만 측정합니다."
+		echo "[안내] 적용할 after-ddl 파일이 없어 after 단계를 건너뛰고 before 만 측정합니다."
 	fi
 	RUN_AFTER=false
 	RUN_BEFORE=true
+else
+	AFTER_DDLS=("${EXISTING_AFTER_DDLS[@]}")
 fi
 
 # 검색 케이스 고정값
@@ -108,7 +136,7 @@ case_desc() {
 	P2) echo "상품 검색 키워드 LATEST, keyword=Pressing 12 (ProductSearchMapper.xml searchProducts)" ;;
 	P3) echo "상품 검색 장르 2개+가격대 LATEST (ProductSearchMapper.xml searchProducts)" ;;
 	P4) echo "상품 검색 가격대 PRICE_ASC (ProductSearchMapper.xml searchProducts)" ;;
-	P5) echo "상품 검색 POPULAR (ProductSearchMapper.xml searchProducts)" ;;
+	P5) echo "상품 검색 POPULAR (before: 파생 테이블 집계 / after: product.sold_quantity)" ;;
 	P6) echo "상품 검색 RATING, 깊은 페이지 offset=1000 (ProductSearchMapper.xml searchProducts)" ;;
 	P7) echo "상품 검색 countProducts 무필터 (ProductSearchMapper.xml countProducts)" ;;
 	O1) echo "내 주문 목록, status 없음 (OrderQueryMapper.xml findMyOrders)" ;;
@@ -183,6 +211,18 @@ scaled_count() {
 	}'
 }
 
+# AFTER_DDLS 목록에 파일이 들어있는지 확인한다. AFTER_DDLS 는 항상 최소 1개를 들고 있으므로
+# "${AFTER_DDLS[@]}" 를 펼쳐도 bash 3.2 nounset 에서 안전하다.
+is_after_ddl() {
+	local target="$1" candidate
+	for candidate in "${AFTER_DDLS[@]}"; do
+		if [ "${candidate}" = "${target}" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 apply_migrations() {
 	local file base
 	for file in $(find "${MIGRATION_DIR}" -maxdepth 1 -name 'V*.sql' | sort -V); do
@@ -192,7 +232,7 @@ apply_migrations() {
 			echo "  건너뜀: ${base}"
 			continue
 		fi
-		if [ "${file}" = "${AFTER_DDL}" ]; then
+		if is_after_ddl "${file}"; then
 			# after 단계에서 적용할 마이그레이션을 여기서 미리 넣으면 before 가 이미 변경된 상태가 된다.
 			echo "  건너뜀: ${base} (after 단계에서 적용)"
 			continue
@@ -200,6 +240,27 @@ apply_migrations() {
 		echo "  적용: ${base}"
 		mysql_perf_file "${file}"
 	done
+}
+
+# V12 가 after 단계에서야 product.sold_quantity 컬럼을 만들기 때문에, 시드 INSERT 에는 이 컬럼 값을
+# 리터럴로 박지 않고 여기서 실제 백필 문장(V12 와 동일)을 한 번 돌려 분포를 맞춘다. --after-ddl 로
+# V12 를 안 넣은 조합에서는 컬럼 자체가 없어 그대로 돌리면 에러가 나므로, 컬럼 존재를 먼저 확인한다.
+backfill_sold_quantity() {
+	local has_column
+	has_column=$(mysql_perf "SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema = '${PERF_SCHEMA}' AND table_name = 'product' AND column_name = 'sold_quantity';")
+	if [ "${has_column}" != "1" ]; then
+		return 0
+	fi
+	echo "  - product.sold_quantity 백필"
+	mysql_perf "
+		update product p
+		join (select oi.product_id, sum(oi.quantity) as q
+		      from order_item oi join orders o on o.id = oi.order_id
+		      where o.status in ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+		      group by oi.product_id) s on s.product_id = p.id
+		set p.sold_quantity = s.q;
+	"
 }
 
 seed() {
@@ -569,8 +630,10 @@ parse_summary() {
 }
 
 # 케이스별 SQL. mapper XML/리포지토리에서 그대로 복사하고 파라미터만 리터럴로 치환했다.
+# phase 는 대부분 케이스에서 안 쓰인다(before/after 가 같은 SQL 을 쓰고 인덱스 DDL 만 다름).
+# P5 처럼 쿼리 자체를 재작성하는 케이스만 phase 로 갈라 서로 다른 SQL 을 낸다.
 get_case_sql() {
-	local id="$1"
+	local id="$1" phase="${2:-after}"
 	case "${id}" in
 	P1)
 		cat <<-SQL
@@ -658,30 +721,50 @@ get_case_sql() {
 		SQL
 		;;
 	P5)
-		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=POPULAR
-			SELECT
-				p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-				p.color_variant, p.pressing_info, p.status,
-				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
-					AS thumbnail_url,
-				p.avg_rating AS average_rating, p.review_count AS review_count,
-				p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-				NULL AS wishlisted
-			FROM product p
-			JOIN artist a ON a.id = p.artist_id
-			LEFT JOIN label l ON l.id = p.label_id
-			LEFT JOIN (
-				SELECT oi.product_id, SUM(oi.quantity) AS sold_quantity
-				FROM order_item oi
-				JOIN orders o ON o.id = oi.order_id
-				WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
-				GROUP BY oi.product_id
-			) sold ON sold.product_id = p.id
-			WHERE p.status <> 'HIDDEN'
-			ORDER BY COALESCE(sold.sold_quantity, 0) DESC, p.review_count DESC, p.created_at DESC, p.id DESC
-			LIMIT 20 OFFSET 0
-		SQL
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- ProductSearchMapper.xml searchProducts, sort=POPULAR (before: order_item 파생 테이블 집계)
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
+						AS thumbnail_url,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					NULL AS wishlisted
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				LEFT JOIN (
+					SELECT oi.product_id, SUM(oi.quantity) AS sold_quantity
+					FROM order_item oi
+					JOIN orders o ON o.id = oi.order_id
+					WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+					GROUP BY oi.product_id
+				) sold ON sold.product_id = p.id
+				WHERE p.status <> 'HIDDEN'
+				ORDER BY COALESCE(sold.sold_quantity, 0) DESC, p.review_count DESC, p.created_at DESC, p.id DESC
+				LIMIT 20 OFFSET 0
+			SQL
+		else
+			cat <<-SQL
+				-- ProductSearchMapper.xml searchProducts, sort=POPULAR (after: product.sold_quantity 비정규화 컬럼)
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
+						AS thumbnail_url,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					NULL AS wishlisted
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				WHERE p.status <> 'HIDDEN'
+				ORDER BY p.sold_quantity DESC, p.review_count DESC, p.created_at DESC, p.id DESC
+				LIMIT 20 OFFSET 0
+			SQL
+		fi
 		;;
 	P6)
 		cat <<-SQL
@@ -901,7 +984,7 @@ get_case_sql() {
 run_case() {
 	local phase="$1" id="$2"
 	local sql tree analyze summary i
-	sql="$(get_case_sql "${id}")"
+	sql="$(get_case_sql "${id}" "${phase}")"
 
 	for i in 1 2 3; do
 		mysql_perf "${sql}" > /dev/null
@@ -938,9 +1021,9 @@ report() {
 	echo "- 생성 시각: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 	echo "- scale: ${SCALE}"
 	if [ "${RUN_AFTER}" = true ]; then
-		echo "- after-ddl: ${AFTER_DDL}"
+		echo "- after-ddl: ${AFTER_DDLS[*]}"
 	else
-		echo "- after-ddl: 없음 (${AFTER_DDL} 파일이 없어 before 만 측정)"
+		echo "- after-ddl: 없음 (지정한 파일이 없어 before 만 측정)"
 	fi
 	echo
 	echo "## 요약"
@@ -985,8 +1068,12 @@ main() {
 		done
 	fi
 	if [ "${RUN_AFTER}" = true ]; then
-		echo "  - after-ddl 적용: ${AFTER_DDL}"
-		mysql_perf_file "${AFTER_DDL}"
+		local ddl
+		for ddl in $(printf '%s\n' "${AFTER_DDLS[@]}" | sort -V); do
+			echo "  - after-ddl 적용: ${ddl}"
+			mysql_perf_file "${ddl}"
+		done
+		backfill_sold_quantity
 		analyze_tables
 		echo "  - after 단계"
 		local id2
