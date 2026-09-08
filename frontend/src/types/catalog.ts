@@ -18,6 +18,8 @@ export interface ProductAlbumSummary {
   originalReleaseYear?: number;
   /** HIDDEN 을 제외한 같은 앨범의 프레싱 수(자기 자신 포함). */
   pressingCount: number;
+  /** 비로그인이면 null. */
+  watched?: boolean;
 }
 
 export interface AlbumArtistSummary {
@@ -32,6 +34,8 @@ export interface AlbumDetail {
   originalReleaseYear?: number;
   description?: string;
   pressings: ProductSummary[];
+  /** 비로그인이면 null. */
+  watched?: boolean;
 }
 
 export interface CatalogLookupParams {

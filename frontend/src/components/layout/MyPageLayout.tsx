@@ -94,6 +94,26 @@ const NAV_ITEMS: MyPageNavItem[] = [
     ),
   },
   {
+    to: '/mypage/album-watches',
+    label: '구독한 앨범',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="10" cy="10" r="7.5" />
+        <circle cx="10" cy="10" r="2" />
+      </svg>
+    ),
+  },
+  {
     to: '/mypage/coupons',
     label: '쿠폰함',
     icon: (

@@ -125,7 +125,13 @@ export default function ProductDetailPage() {
         albumId={product.album.id}
         currentProductId={product.id}
         hasOtherPressings={product.album.pressingCount > 1}
-        action={<AlbumWatchButton albumId={product.album.id} albumTitle={product.album.title} />}
+        action={
+          <AlbumWatchButton
+            albumId={product.album.id}
+            albumTitle={product.album.title}
+            watched={product.album.watched}
+          />
+        }
       />
 
       <RelatedProductsSection productId={product.id} />

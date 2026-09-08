@@ -18,6 +18,7 @@ export const CartPage = lazy(() => import('@/pages/cart/CartPage'));
 export const LimitedDropDetailPage = lazy(() => import('@/pages/limited/LimitedDropDetailPage'));
 export const LimitedDropListPage = lazy(() => import('@/pages/limited/LimitedDropListPage'));
 export const AddressListPage = lazy(() => import('@/pages/mypage/AddressListPage'));
+export const AlbumWatchListPage = lazy(() => import('@/pages/mypage/AlbumWatchListPage'));
 export const CouponBoxPage = lazy(() => import('@/pages/mypage/CouponBoxPage'));
 export const MyPage = lazy(() => import('@/pages/mypage/MyPage'));
 export const RecentViewsPage = lazy(() => import('@/pages/mypage/RecentViewsPage'));

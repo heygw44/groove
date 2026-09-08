@@ -79,7 +79,7 @@ export default function AlbumDetailPage() {
             <p className="mt-0.5 text-sm text-content-muted">{album.originalReleaseYear}</p>
           )}
         </div>
-        <AlbumWatchButton albumId={album.id} albumTitle={album.title} />
+        <AlbumWatchButton albumId={album.id} albumTitle={album.title} watched={album.watched} />
       </div>
 
       {album.description && (

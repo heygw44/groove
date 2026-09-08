@@ -198,6 +198,7 @@ backend/scripts/perf/index-explain.sh
 | 관리자 통계, 일별 매출 최근 30일 | 23.2ms | 5.34ms | `payment` 15만 행 풀스캔(취소 브랜치) → `idx_payment_canceled_at` range 488행 |
 | 관리자 통계, 오늘 가입 회원 수 | 3.9ms | 0.547ms | `member` 45,000행 풀스캔 → `idx_member_created` 커버링 range 5,054행 |
 | 관리자 회원 상세, 활동 요약 | 384ms | 8.2ms | 전 회원 집계 후 한 행 추출(`orders` 20만·`payment` 15만) → 회원 조건을 서브쿼리 안으로, 해당 회원 2,000행 |
+| 앨범 구독 목록 | 1.03ms | 0.163ms | 회원 구독 3,003행 읽고 filesort → `idx_album_watch_member_created` 역순 20행 |
 
 - 상품 목록 기본 정렬이 `idx_product_status_created (status, created_at)` 를 못 타는 건 조건이 `status <> 'HIDDEN'` 이라 선두 컬럼이 비등가이기 때문이다. 등가가 아니면 뒤 컬럼의 정렬 순서를 보장할 수 없어 옵티마이저가 인덱스를 통째로 포기한다.
 - 가격순 정렬(`ORDER BY price ASC, id DESC`)과 리뷰 평점순(`ORDER BY rating DESC, created_at DESC, id DESC`)에는 인덱스를 넣지 않았다. 2차 정렬 키의 방향이 반대라 오름차순 인덱스로는 정렬을 받을 수 없다. 실제로 `(price)` 는 옵티마이저가 후보로 올리지도 않았고(18.5 → 18.7ms), `(product_id, rating)` 은 선택은 됐지만 `created_at` 정렬이 남아 시간이 그대로였다(11.2 → 11.7ms). 방향별로 인덱스를 따로 두면 해결되지만 정렬 옵션이 다섯 개라 인덱스도 다섯 개가 된다.

@@ -6,20 +6,15 @@ import { describe, expect, it } from 'vitest';
 
 import { ToastProvider } from '@/components/common/Toast';
 import { AlbumWatchButton } from '@/components/notification/AlbumWatchButton';
-import { albumWatchKeys } from '@/hooks/queries/queryKeys';
 import { useAuthStore } from '@/store/authStore';
-import type { AlbumWatchListResponse } from '@/types/albumWatch';
 
 interface RenderOptions {
   isLoggedIn?: boolean;
-  watches?: AlbumWatchListResponse;
+  watched?: boolean;
 }
 
-const renderButton = ({ isLoggedIn = true, watches }: RenderOptions = {}) => {
+const renderButton = ({ isLoggedIn = true, watched }: RenderOptions = {}) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  if (watches) {
-    queryClient.setQueryData(albumWatchKeys.all, watches);
-  }
   useAuthStore.setState({
     accessToken: isLoggedIn ? 'token' : null,
     member: null,
@@ -33,7 +28,9 @@ const renderButton = ({ isLoggedIn = true, watches }: RenderOptions = {}) => {
           <Routes>
             <Route
               path="/albums/:id"
-              element={<AlbumWatchButton albumId={10} albumTitle="Kind of Blue" />}
+              element={
+                <AlbumWatchButton albumId={10} albumTitle="Kind of Blue" watched={watched} />
+              }
             />
             <Route path="/login" element={<p>로그인 페이지</p>} />
           </Routes>
@@ -46,9 +43,7 @@ const renderButton = ({ isLoggedIn = true, watches }: RenderOptions = {}) => {
 describe('AlbumWatchButton', () => {
   it('구독 중이면 알림 받는 중 라벨과 aria-pressed=true 를 보여준다', () => {
     // given & when
-    renderButton({
-      watches: { content: [{ id: 1, albumId: 10, albumTitle: 'Kind of Blue', createdAt: '2026-01-01T00:00:00' }] },
-    });
+    renderButton({ watched: true });
 
     // then
     const button = screen.getByRole('button', { name: '알림 받는 중' });
@@ -57,7 +52,16 @@ describe('AlbumWatchButton', () => {
 
   it('미구독이면 새 에디션 알림 받기 라벨과 aria-pressed=false 를 보여준다', () => {
     // given & when
-    renderButton({ watches: { content: [] } });
+    renderButton({ watched: false });
+
+    // then
+    const button = screen.getByRole('button', { name: '새 에디션 알림 받기' });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('비로그인이라 watched 가 없으면 미구독으로 보여준다', () => {
+    // given & when
+    renderButton({ isLoggedIn: false });
 
     // then
     const button = screen.getByRole('button', { name: '새 에디션 알림 받기' });
