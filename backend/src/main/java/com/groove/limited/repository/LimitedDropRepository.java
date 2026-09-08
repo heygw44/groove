@@ -30,9 +30,9 @@ public interface LimitedDropRepository extends JpaRepository<LimitedDrop, Long> 
 	@EntityGraph(attributePaths = {"product", "product.artist"})
 	Optional<LimitedDrop> findWithProductById(Long id);
 
-	// 구매 경로라 artist 는 넣지 않는다. PESSIMISTIC_WRITE 에 fetch join 을 더하면 조인된 행까지 잠긴다.
+	// product 를 fetch join 하면 MySQL 의 for update(of 절 없음)가 조인된 product 행까지 잠근다.
+	// performance_schema.data_locks 로 실측: product PRIMARY 에 X,REC_NOT_GAP 락이 잡혀 있었다. 그래서 뗐다.
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@EntityGraph(attributePaths = "product")
 	@Query("select d from LimitedDrop d where d.id = :id")
 	Optional<LimitedDrop> findByIdForUpdate(@Param("id") Long id);
 
