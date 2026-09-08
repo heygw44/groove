@@ -7,6 +7,7 @@ interface AddressCardProps {
   onDelete: (address: Address) => void;
   onSetDefault: (address: Address) => void;
   disabled?: boolean;
+  settingDefault?: boolean;
 }
 
 export function AddressCard({
@@ -15,6 +16,7 @@ export function AddressCard({
   onDelete,
   onSetDefault,
   disabled = false,
+  settingDefault = false,
 }: AddressCardProps) {
   return (
     <article className="flex flex-col gap-4 rounded-lg border border-line bg-surface px-6 py-5 sm:flex-row sm:items-start sm:justify-between sm:gap-7">
@@ -46,6 +48,7 @@ export function AddressCard({
             size="sm"
             onClick={() => onSetDefault(address)}
             disabled={disabled}
+            loading={settingDefault}
           >
             기본으로 지정
           </Button>

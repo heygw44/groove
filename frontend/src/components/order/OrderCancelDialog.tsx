@@ -47,7 +47,7 @@ export function OrderCancelDialog({
           <Button
             variant="danger"
             onClick={() => onConfirm(reason.trim() || undefined)}
-            disabled={pending}
+            loading={pending}
           >
             주문 취소
           </Button>

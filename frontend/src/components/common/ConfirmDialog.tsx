@@ -34,7 +34,7 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={onClose} disabled={pending}>
             취소
           </Button>
-          <Button variant={variant} onClick={onConfirm} disabled={pending}>
+          <Button variant={variant} onClick={onConfirm} loading={pending}>
             {confirmLabel}
           </Button>
         </>

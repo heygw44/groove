@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 
 import { CartItemRow } from '@/components/cart/CartItemRow';
 import { CartSummary } from '@/components/cart/CartSummary';
-import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { LinkButton } from '@/components/common/LinkButton';
 import { PageContainer } from '@/components/common/PageContainer';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { useRemoveCartItem, useUpdateCartItemQuantity } from '@/hooks/mutations/useCartMutations';
@@ -17,7 +17,7 @@ import { getErrorMessage } from '@/utils/apiError';
 import { isCartItemSoldOut, sumSelectedSubtotal } from '@/utils/cart';
 
 export default function CartPage() {
-  const { data: cart, isPending, isError, refetch } = useCart();
+  const { data: cart, isPending, isError, error, refetch } = useCart();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const updateQuantityMutation = useUpdateCartItemQuantity();
@@ -92,11 +92,7 @@ export default function CartPage() {
   if (isError || !cart) {
     return (
       <PageContainer size="md">
-        <EmptyState
-          title="장바구니를 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={<Button onClick={() => refetch()}>다시 시도</Button>}
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="장바구니를 불러오지 못했습니다." />
       </PageContainer>
     );
   }

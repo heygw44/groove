@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
 
-import { Button } from '@/components/common/Button';
 import { Drawer } from '@/components/common/Drawer';
-import { EmptyState } from '@/components/common/EmptyState';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
@@ -18,7 +17,7 @@ export function AdminLimitedDropDetailDrawer({
   dropId,
   onClose,
 }: AdminLimitedDropDetailDrawerProps) {
-  const { data: detail, isPending, isError, refetch } = useAdminLimitedDrop(dropId);
+  const { data: detail, isPending, isError, error, refetch } = useAdminLimitedDrop(dropId);
 
   const isMismatched =
     detail?.redisRemaining !== undefined && detail.redisRemaining !== detail.dbRemaining;
@@ -38,14 +37,10 @@ export function AdminLimitedDropDetailDrawer({
       )}
 
       {!isPending && isError && (
-        <EmptyState
+        <QueryErrorState
+          error={error}
+          onRetry={refetch}
           title="한정반 정보를 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
         />
       )}
 

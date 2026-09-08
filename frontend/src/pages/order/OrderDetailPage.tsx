@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
-import { EmptyState } from '@/components/common/EmptyState';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { OrderCancelDialog } from '@/components/order/OrderCancelDialog';
@@ -90,17 +90,7 @@ export default function OrderDetailPage() {
   }
 
   if (isError || !order) {
-    return (
-      <EmptyState
-        title="주문을 불러오지 못했습니다"
-        description={getErrorMessage(error)}
-        action={
-          <Button variant="secondary" onClick={() => refetch()}>
-            다시 시도
-          </Button>
-        }
-      />
-    );
+    return <QueryErrorState error={error} onRetry={refetch} title="주문을 불러오지 못했습니다." />;
   }
 
   const orderItems: OrderSummaryItem[] = order.items.map((item) => ({

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { AlbumWatchButton } from '@/components/notification/AlbumWatchButton';
 import { ProductCard } from '@/components/product/ProductCard';
@@ -16,7 +17,7 @@ export default function AlbumDetailPage() {
   const isValidId = idParam !== undefined && ID_PATTERN.test(idParam);
   const id = isValidId ? Number(idParam) : -1;
 
-  const { data: album, isPending, isError } = useAlbum(id);
+  const { data: album, isPending, isError, error, refetch } = useAlbum(id);
 
   useEffect(() => {
     if (!album) {
@@ -63,11 +64,7 @@ export default function AlbumDetailPage() {
   if (isError || !album) {
     return (
       <PageContainer>
-        <EmptyState
-          title="앨범 정보를 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={backToProducts}
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="앨범 정보를 불러오지 못했습니다." />
       </PageContainer>
     );
   }

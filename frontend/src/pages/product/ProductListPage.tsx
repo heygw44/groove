@@ -5,6 +5,7 @@ import { Drawer } from '@/components/common/Drawer';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
 import { Pagination } from '@/components/common/Pagination';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { ActiveFilterChips } from '@/components/product/ActiveFilterChips';
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
 import { ProductFilterPanel } from '@/components/product/ProductFilterPanel';
@@ -20,7 +21,7 @@ export default function ProductListPage() {
   const { filters, update, setPage, reset } = useProductFilters();
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
-  const { data, isPending, isError, isPlaceholderData, refetch } = useProducts(
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useProducts(
     toProductListParams(filters),
   );
   const { data: selectedArtist } = useArtist(filters.artistId);
@@ -86,15 +87,7 @@ export default function ProductListPage() {
           )}
 
           {!isPending && isError && (
-            <EmptyState
-              title="상품을 불러오지 못했습니다"
-              description="잠시 후 다시 시도해주세요."
-              action={
-                <Button variant="secondary" onClick={() => refetch()}>
-                  다시 시도
-                </Button>
-              }
-            />
+            <QueryErrorState error={error} onRetry={refetch} title="상품을 불러오지 못했습니다." />
           )}
 
           {!isPending && !isError && data && data.content.length === 0 && (

@@ -2,10 +2,10 @@ import { useSearchParams } from 'react-router-dom';
 
 import { AdminAuditLogFilterBar } from '@/components/admin/audit/AdminAuditLogFilterBar';
 import { AdminAuditLogTable } from '@/components/admin/audit/AdminAuditLogTable';
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
-import { Spinner } from '@/components/common/Spinner';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useAdminAuditLogs } from '@/hooks/queries/useAdminAuditLogs';
 import {
   parseAdminAuditLogFilters,
@@ -18,7 +18,7 @@ export default function AdminAuditLogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseAdminAuditLogFilters(searchParams);
 
-  const { data, isPending, isError, isPlaceholderData, refetch } = useAdminAuditLogs(
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminAuditLogs(
     toAdminAuditLogListParams(filters),
   );
 
@@ -45,22 +45,10 @@ export default function AdminAuditLogsPage() {
         <AdminAuditLogFilterBar filters={filters} onChange={updateFilters} />
       </div>
 
-      {isPending && (
-        <div className="flex min-h-48 items-center justify-center">
-          <Spinner />
-        </div>
-      )}
+      {isPending && <TableSkeleton columns={6} />}
 
       {!isPending && isError && (
-        <EmptyState
-          title="감사 로그를 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="감사 로그를 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (

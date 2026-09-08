@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { Drawer } from '@/components/common/Drawer';
-import { EmptyState } from '@/components/common/EmptyState';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { MEMBER_ROLE_LABELS } from '@/constants/adminAudit';
@@ -29,7 +29,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const me = useAuthStore((s) => s.member);
-  const { data: detail, isPending, isError, refetch } = useAdminMember(memberId ?? 0);
+  const { data: detail, isPending, isError, error, refetch } = useAdminMember(memberId ?? 0);
   const changeStatusMutation = useChangeMemberStatus();
 
   const [dialogStatus, setDialogStatus] = useState<AdminMemberChangeableStatus>();
@@ -84,15 +84,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
       )}
 
       {!isPending && isError && (
-        <EmptyState
-          title="회원 정보를 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="회원 정보를 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && detail && (

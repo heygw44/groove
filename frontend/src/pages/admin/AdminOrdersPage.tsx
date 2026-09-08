@@ -4,10 +4,10 @@ import { useSearchParams } from 'react-router-dom';
 import { AdminOrderDetailDrawer } from '@/components/admin/AdminOrderDetailDrawer';
 import { AdminOrderFilterBar } from '@/components/admin/AdminOrderFilterBar';
 import { AdminOrderTable } from '@/components/admin/AdminOrderTable';
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
-import { Spinner } from '@/components/common/Spinner';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useAdminOrders } from '@/hooks/queries/useAdminOrders';
 import type { AdminOrderSummary } from '@/types/order';
 import {
@@ -23,7 +23,7 @@ export default function AdminOrdersPage() {
 
   const [selectedOrderId, setSelectedOrderId] = useState<number>();
 
-  const { data, isPending, isError, isPlaceholderData, refetch } = useAdminOrders(
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminOrders(
     toAdminOrderListParams(filters),
   );
 
@@ -52,22 +52,10 @@ export default function AdminOrdersPage() {
         <AdminOrderFilterBar filters={filters} onChange={updateFilters} />
       </div>
 
-      {isPending && (
-        <div className="flex min-h-48 items-center justify-center">
-          <Spinner />
-        </div>
-      )}
+      {isPending && <TableSkeleton columns={7} />}
 
       {!isPending && isError && (
-        <EmptyState
-          title="주문을 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="주문을 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (

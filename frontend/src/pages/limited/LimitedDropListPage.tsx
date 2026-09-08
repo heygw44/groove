@@ -1,15 +1,14 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { LimitedDropCard } from '@/components/limited/LimitedDropCard';
 import { useLimitedDrops } from '@/hooks/queries/useLimitedDrops';
 import { useServerNow } from '@/hooks/useServerNow';
 import type { LimitedDropSummary } from '@/types/limitedDrop';
-import { getErrorMessage } from '@/utils/apiError';
 import { applyServerTime } from '@/utils/serverTime';
 
 type ListTab = 'ongoing' | 'upcoming';
@@ -86,14 +85,10 @@ export default function LimitedDropListPage() {
         )}
 
         {!isPending && isError && (
-          <EmptyState
-            title="한정반 목록을 불러오지 못했습니다"
-            description={getErrorMessage(error)}
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                다시 시도
-              </Button>
-            }
+          <QueryErrorState
+            error={error}
+            onRetry={refetch}
+            title="한정반 목록을 불러오지 못했습니다."
           />
         )}
 

@@ -120,7 +120,7 @@ export function TasteProfileForm({ profile, onSaved, submitLabel = '저장' }: T
         />
       </Field>
 
-      <Button type="submit" disabled={isPending}>
+      <Button type="submit" loading={isPending}>
         {submitLabel}
       </Button>
     </form>

@@ -68,7 +68,7 @@ export default function LoginPage() {
             />
           </Field>
 
-          <Button type="submit" className="mt-1 w-full" disabled={isSubmitting}>
+          <Button type="submit" className="mt-1 w-full" loading={isSubmitting}>
             로그인
           </Button>
         </form>

@@ -103,7 +103,7 @@ export function AddressFormModal({ open, onClose, address }: AddressFormModalPro
           <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
             취소
           </Button>
-          <Button type="submit" form="address-form" disabled={isSubmitting}>
+          <Button type="submit" form="address-form" loading={isSubmitting}>
             저장
           </Button>
         </>

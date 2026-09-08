@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { LimitedDropBanner } from '@/components/limited/LimitedDropBanner';
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
 import { DiggingSection } from '@/components/recommend/DiggingSection';
@@ -22,6 +22,7 @@ export default function HomePage() {
     data: productData,
     isPending: isProductPending,
     isError: isProductError,
+    error: productError,
     refetch: refetchProducts,
   } = useProducts({
     sort: 'latest',
@@ -63,14 +64,10 @@ export default function HomePage() {
         )}
 
         {!isProductPending && isProductError && (
-          <EmptyState
-            title="새로 나온 앨범을 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => refetchProducts()}>
-                다시 시도
-              </Button>
-            }
+          <QueryErrorState
+            error={productError}
+            onRetry={refetchProducts}
+            title="새로 나온 앨범을 불러오지 못했습니다."
           />
         )}
 

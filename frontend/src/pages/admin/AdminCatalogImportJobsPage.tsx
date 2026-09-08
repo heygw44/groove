@@ -7,7 +7,8 @@ import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
-import { Spinner } from '@/components/common/Spinner';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useToast } from '@/components/common/toastContext';
 import { useRestartCatalogImportJob } from '@/hooks/mutations/useAdminCatalogMutations';
 import { useAdminCatalogImportJobs } from '@/hooks/queries/useAdminCatalogImportJobs';
@@ -31,10 +32,12 @@ export default function AdminCatalogImportJobsPage() {
   const [restartTarget, setRestartTarget] = useState<CatalogImportJob | undefined>(undefined);
 
   const { showToast } = useToast();
-  const { data, isPending, isError, isPlaceholderData, refetch } = useAdminCatalogImportJobs({
-    page,
-    size: PAGE_SIZE,
-  });
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminCatalogImportJobs(
+    {
+      page,
+      size: PAGE_SIZE,
+    },
+  );
   const restartMutation = useRestartCatalogImportJob();
 
   const updatePage = (nextPage: number) => {
@@ -78,22 +81,10 @@ export default function AdminCatalogImportJobsPage() {
         <Button onClick={() => setStarting(true)}>수집 실행</Button>
       </div>
 
-      {isPending && (
-        <div className="flex min-h-48 items-center justify-center">
-          <Spinner />
-        </div>
-      )}
+      {isPending && <TableSkeleton columns={8} />}
 
       {!isPending && isError && (
-        <EmptyState
-          title="수집 이력을 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="수집 이력을 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (

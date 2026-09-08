@@ -49,7 +49,7 @@ export function AlbumWatchButton({ albumId, albumTitle, className = '' }: AlbumW
       variant="secondary"
       size="sm"
       aria-pressed={watched}
-      disabled={toggle.isPending}
+      loading={toggle.isPending}
       onClick={handleClick}
       className={`${watched ? 'border-content text-content' : ''} ${className}`}
     >

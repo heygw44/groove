@@ -4,8 +4,8 @@ import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
-import { EmptyState } from '@/components/common/EmptyState';
 import { PageContainer } from '@/components/common/PageContainer';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { CouponSection } from '@/components/order/CouponSection';
@@ -46,6 +46,7 @@ export default function OrderFormPage() {
     data: addresses,
     isPending: isAddressesPending,
     isError: isAddressesError,
+    error: addressesError,
     refetch: refetchAddresses,
   } = useAddresses();
 
@@ -128,6 +129,13 @@ export default function OrderFormPage() {
         ? productQuery.isError || isAddressesError
         : false;
 
+  const formError =
+    draft?.kind === 'cart'
+      ? (cartQuery.error ?? addressesError)
+      : draft?.kind === 'direct'
+        ? (productQuery.error ?? addressesError)
+        : undefined;
+
   const handleRetry = () => {
     if (draft?.kind === 'cart') {
       cartQuery.refetch();
@@ -193,10 +201,10 @@ export default function OrderFormPage() {
   if (isError) {
     return (
       <PageContainer size="md">
-        <EmptyState
-          title="주문서를 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={<Button onClick={handleRetry}>다시 시도</Button>}
+        <QueryErrorState
+          error={formError}
+          onRetry={handleRetry}
+          title="주문서를 불러오지 못했습니다."
         />
       </PageContainer>
     );
@@ -238,11 +246,8 @@ export default function OrderFormPage() {
           <Button
             className="mt-5 w-full"
             onClick={handleSubmit}
-            disabled={
-              effectiveSelectedId === undefined ||
-              orderItems.length === 0 ||
-              createOrderMutation.isPending
-            }
+            disabled={effectiveSelectedId === undefined || orderItems.length === 0}
+            loading={createOrderMutation.isPending}
           >
             주문하기
           </Button>
