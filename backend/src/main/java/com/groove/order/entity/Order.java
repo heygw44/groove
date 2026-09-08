@@ -49,8 +49,9 @@ import lombok.NoArgsConstructor;
 		uniqueConstraints = @UniqueConstraint(name = "uk_orders_order_number", columnNames = "order_number"),
 		indexes = {
 			@Index(name = "idx_orders_member_created", columnList = "member_id, created_at"),
-			@Index(name = "idx_orders_status", columnList = "status"),
-			@Index(name = "idx_orders_status_expires", columnList = "status, expires_at")
+			@Index(name = "idx_orders_status_expires", columnList = "status, expires_at"),
+			@Index(name = "idx_orders_created", columnList = "created_at"),
+			@Index(name = "idx_orders_status_created", columnList = "status, created_at")
 		})
 public class Order extends BaseTimeEntity {
 

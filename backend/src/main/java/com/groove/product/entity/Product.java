@@ -44,13 +44,13 @@ import lombok.NoArgsConstructor;
 @Table(name = "product",
 		uniqueConstraints = @UniqueConstraint(name = "uk_product_discogs_release", columnNames = "discogs_release_id"),
 		indexes = {
-			@Index(name = "idx_product_title_artist", columnList = "title, artist_id"),
 			@Index(name = "idx_product_status_created", columnList = "status, created_at"),
 			@Index(name = "idx_product_artist", columnList = "artist_id"),
 			@Index(name = "idx_product_label", columnList = "label_id"),
 			@Index(name = "idx_product_album", columnList = "album_id"),
 			@Index(name = "idx_product_barcode", columnList = "barcode"),
-			@Index(name = "idx_product_catalog_no", columnList = "catalog_no_normalized")
+			@Index(name = "idx_product_catalog_no", columnList = "catalog_no_normalized"),
+			@Index(name = "idx_product_created", columnList = "created_at")
 		})
 public class Product extends BaseTimeEntity {
 
