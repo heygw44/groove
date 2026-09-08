@@ -31,8 +31,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
+import com.groove.admin.dto.DailySalesStatsResponse;
 import com.groove.admin.dto.LimitedDropStatsResponse;
 import com.groove.admin.dto.PopularProductResponse;
+import com.groove.admin.dto.PopularProductStatsResponse;
 import com.groove.admin.service.AdminStatsService;
 import com.groove.auth.jwt.JwtProvider;
 import com.groove.global.common.BusinessException;
@@ -83,18 +85,21 @@ class AdminStatsControllerTest {
 	class GetDailySales {
 
 		@Test
-		@DisplayName("관리자면 200 과 일별 매출 목록을 반환한다")
+		@DisplayName("관리자면 200 과 일별 매출 목록·기준시각을 반환한다")
 		void returnsDailySalesForAdmin() throws Exception {
 			// given
-			DailySalesResponse response = new DailySalesResponse(LocalDate.of(2026, 9, 5), 2,
+			DailySalesResponse row = new DailySalesResponse(LocalDate.of(2026, 9, 5), 2,
 					new BigDecimal("60000"), BigDecimal.ZERO);
-			given(adminStatsService.getDailySales(any())).willReturn(List.of(response));
+			LocalDateTime aggregatedAt = LocalDateTime.of(2026, 9, 5, 10, 15);
+			DailySalesStatsResponse response = DailySalesStatsResponse.of(List.of(row), aggregatedAt);
+			given(adminStatsService.getDailySales(any())).willReturn(response);
 
 			// when & then
 			mockMvc.perform(get(BASE_URL + "/daily-sales").header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.success", is(true)))
-					.andExpect(jsonPath("$.data[0].orderCount", is(2)));
+					.andExpect(jsonPath("$.data.items[0].orderCount", is(2)))
+					.andExpect(jsonPath("$.data.aggregatedAt", is("2026-09-05T10:15:00")));
 		}
 
 		@Test
@@ -135,18 +140,21 @@ class AdminStatsControllerTest {
 	class GetPopularProducts {
 
 		@Test
-		@DisplayName("관리자면 200 과 인기 상품 목록을 반환한다")
+		@DisplayName("관리자면 200 과 인기 상품 목록·기준시각을 반환한다")
 		void returnsPopularProductsForAdmin() throws Exception {
 			// given
-			PopularProductResponse response = new PopularProductResponse(1L, "그루브 앨범", "그루브 아티스트", 5,
+			PopularProductResponse row = new PopularProductResponse(1L, "그루브 앨범", "그루브 아티스트", 5,
 					new BigDecimal("250000"), 3);
-			given(adminStatsService.getPopularProducts(any())).willReturn(List.of(response));
+			LocalDateTime aggregatedAt = LocalDateTime.of(2026, 9, 5, 10, 15);
+			PopularProductStatsResponse response = PopularProductStatsResponse.of(List.of(row), aggregatedAt);
+			given(adminStatsService.getPopularProducts(any())).willReturn(response);
 
 			// when & then
 			mockMvc.perform(get(BASE_URL + "/popular-products").header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.success", is(true)))
-					.andExpect(jsonPath("$.data[0].productTitle", is("그루브 앨범")));
+					.andExpect(jsonPath("$.data.items[0].productTitle", is("그루브 앨범")))
+					.andExpect(jsonPath("$.data.aggregatedAt", is("2026-09-05T10:15:00")));
 		}
 
 		@Test

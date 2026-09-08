@@ -8,9 +8,9 @@ import type {
 } from '@/types/adminMember';
 import type {
   AdminStatsSummary,
-  DailySales,
+  DailySalesStats,
   LimitedDropStats,
-  PopularProduct,
+  PopularProductStats,
   PopularProductParams,
   StatsPeriodParams,
 } from '@/types/adminStats';
@@ -133,14 +133,14 @@ export const getAdminStatsSummary = () =>
 
 export const getAdminDailySales = (params: StatsPeriodParams) =>
   unwrap(
-    client.get<ApiResponse<DailySales[]>>('/admin/stats/daily-sales', {
+    client.get<ApiResponse<DailySalesStats>>('/admin/stats/daily-sales', {
       params,
     }),
   );
 
 export const getAdminPopularProducts = (params: PopularProductParams) =>
   unwrap(
-    client.get<ApiResponse<PopularProduct[]>>('/admin/stats/popular-products', {
+    client.get<ApiResponse<PopularProductStats>>('/admin/stats/popular-products', {
       params,
     }),
   );

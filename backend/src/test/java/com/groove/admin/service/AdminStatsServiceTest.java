@@ -28,11 +28,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
+import com.groove.admin.dto.DailySalesStatsResponse;
 import com.groove.admin.dto.LimitedDropStatsResponse;
 import com.groove.admin.dto.PopularProductResponse;
 import com.groove.admin.dto.PopularProductSortType;
 import com.groove.admin.dto.PopularProductStatsCondition;
 import com.groove.admin.dto.PopularProductStatsRequest;
+import com.groove.admin.dto.PopularProductStatsResponse;
 import com.groove.admin.dto.StatsPeriodRequest;
 import com.groove.admin.mapper.AdminStatsMapper;
 import com.groove.global.common.BusinessException;
@@ -70,13 +72,12 @@ class AdminStatsServiceTest {
 			given(adminStatsMapper.findDailySales(any(), any())).willReturn(List.of());
 
 			// when
-			List<DailySalesResponse> result = adminStatsService.getDailySales(new StatsPeriodRequest(null, null));
+			DailySalesStatsResponse result = adminStatsService.getDailySales(new StatsPeriodRequest(null, null));
 
 			// then
-			verify(adminStatsMapper).findDailySales(today.minusDays(29).atStartOfDay(),
-					today.plusDays(1).atStartOfDay());
-			assertThat(result).hasSize(30);
-			assertThat(result).allSatisfy(row -> {
+			verify(adminStatsMapper).findDailySales(today.minusDays(29), today);
+			assertThat(result.items()).hasSize(30);
+			assertThat(result.items()).allSatisfy(row -> {
 				assertThat(row.orderCount()).isZero();
 				assertThat(row.salesAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 				assertThat(row.cancelAmount()).isEqualByComparingTo(BigDecimal.ZERO);
@@ -94,7 +95,7 @@ class AdminStatsServiceTest {
 			adminStatsService.getDailySales(new StatsPeriodRequest(from, null));
 
 			// then
-			verify(adminStatsMapper).findDailySales(from.atStartOfDay(), today.plusDays(1).atStartOfDay());
+			verify(adminStatsMapper).findDailySales(from, today);
 		}
 
 		@Test
@@ -108,7 +109,7 @@ class AdminStatsServiceTest {
 			adminStatsService.getDailySales(new StatsPeriodRequest(null, to));
 
 			// then
-			verify(adminStatsMapper).findDailySales(to.minusDays(29).atStartOfDay(), to.plusDays(1).atStartOfDay());
+			verify(adminStatsMapper).findDailySales(to.minusDays(29), to);
 		}
 
 		@Test
@@ -121,13 +122,42 @@ class AdminStatsServiceTest {
 			given(adminStatsMapper.findDailySales(any(), any())).willReturn(List.of(existing));
 
 			// when
-			List<DailySalesResponse> result = adminStatsService.getDailySales(new StatsPeriodRequest(from, today));
+			DailySalesStatsResponse result = adminStatsService.getDailySales(new StatsPeriodRequest(from, today));
 
 			// then
-			assertThat(result).hasSize(3);
-			assertThat(result.get(0)).isEqualTo(existing);
-			assertThat(result.get(1).orderCount()).isZero();
-			assertThat(result.get(2).orderCount()).isZero();
+			assertThat(result.items()).hasSize(3);
+			assertThat(result.items().get(0)).isEqualTo(existing);
+			assertThat(result.items().get(1).orderCount()).isZero();
+			assertThat(result.items().get(2).orderCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("매퍼가 반환한 기준시각을 응답에 그대로 담는다")
+		void carriesAggregatedAtFromMapper() {
+			// given
+			LocalDateTime aggregatedAt = LocalDateTime.of(2026, 9, 4, 14, 50);
+			given(adminStatsMapper.findDailySales(any(), any())).willReturn(List.of());
+			given(adminStatsMapper.findAggregatedAt(any(), any())).willReturn(aggregatedAt);
+
+			// when
+			DailySalesStatsResponse result = adminStatsService.getDailySales(new StatsPeriodRequest(null, null));
+
+			// then
+			assertThat(result.aggregatedAt()).isEqualTo(aggregatedAt);
+		}
+
+		@Test
+		@DisplayName("매퍼가 null 을 반환하면 기준시각도 null 로 응답한다")
+		void carriesNullAggregatedAtFromMapper() {
+			// given
+			given(adminStatsMapper.findDailySales(any(), any())).willReturn(List.of());
+			given(adminStatsMapper.findAggregatedAt(any(), any())).willReturn(null);
+
+			// when
+			DailySalesStatsResponse result = adminStatsService.getDailySales(new StatsPeriodRequest(null, null));
+
+			// then
+			assertThat(result.aggregatedAt()).isNull();
 		}
 
 		@Test
@@ -167,11 +197,11 @@ class AdminStatsServiceTest {
 			given(adminStatsMapper.findDailySales(any(), any())).willReturn(List.of());
 
 			// when
-			List<DailySalesResponse> result = adminStatsService.getDailySales(request);
+			DailySalesStatsResponse result = adminStatsService.getDailySales(request);
 
 			// then
-			assertThat(result).hasSize(365);
-			verify(adminStatsMapper).findDailySales(from.atStartOfDay(), today.plusDays(1).atStartOfDay());
+			assertThat(result.items()).hasSize(365);
+			verify(adminStatsMapper).findDailySales(from, today);
 		}
 	}
 
@@ -195,6 +225,25 @@ class AdminStatsServiceTest {
 			verify(adminStatsMapper).findPopularProducts(captor.capture());
 			assertThat(captor.getValue().limit()).isEqualTo(10);
 			assertThat(captor.getValue().sort()).isEqualTo(PopularProductSortType.QUANTITY);
+		}
+
+		@Test
+		@DisplayName("매퍼 결과를 items 로, 기준시각을 aggregatedAt 으로 담아 반환한다")
+		void wrapsItemsAndAggregatedAt() {
+			// given
+			PopularProductResponse row = new PopularProductResponse(1L, "그루브 앨범", "그루브 아티스트", 5,
+					new BigDecimal("250000"), 3);
+			LocalDateTime aggregatedAt = LocalDateTime.of(2026, 9, 4, 14, 50);
+			given(adminStatsMapper.findPopularProducts(any())).willReturn(List.of(row));
+			given(adminStatsMapper.findAggregatedAt(any(), any())).willReturn(aggregatedAt);
+			PopularProductStatsRequest request = new PopularProductStatsRequest(null, null, null, null);
+
+			// when
+			PopularProductStatsResponse result = adminStatsService.getPopularProducts(request);
+
+			// then
+			assertThat(result.items()).containsExactly(row);
+			assertThat(result.aggregatedAt()).isEqualTo(aggregatedAt);
 		}
 
 		@Test

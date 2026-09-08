@@ -10,10 +10,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.groove.admin.dto.AdminStatsSummaryResponse;
-import com.groove.admin.dto.DailySalesResponse;
+import com.groove.admin.dto.DailySalesStatsResponse;
 import com.groove.admin.dto.LimitedDropStatsResponse;
-import com.groove.admin.dto.PopularProductResponse;
 import com.groove.admin.dto.PopularProductStatsRequest;
+import com.groove.admin.dto.PopularProductStatsResponse;
 import com.groove.admin.dto.StatsPeriodRequest;
 import com.groove.admin.service.AdminStatsService;
 import com.groove.auth.LoginMember;
@@ -39,13 +39,13 @@ public class AdminStatsController {
 
 	@Operation(summary = "일별 매출 통계")
 	@GetMapping("/daily-sales")
-	public ApiResponse<List<DailySalesResponse>> getDailySales(@ModelAttribute StatsPeriodRequest request) {
+	public ApiResponse<DailySalesStatsResponse> getDailySales(@ModelAttribute StatsPeriodRequest request) {
 		return ApiResponse.ok(adminStatsService.getDailySales(request));
 	}
 
 	@Operation(summary = "인기 상품 통계")
 	@GetMapping("/popular-products")
-	public ApiResponse<List<PopularProductResponse>> getPopularProducts(
+	public ApiResponse<PopularProductStatsResponse> getPopularProducts(
 			@ModelAttribute PopularProductStatsRequest request) {
 		return ApiResponse.ok(adminStatsService.getPopularProducts(request));
 	}
