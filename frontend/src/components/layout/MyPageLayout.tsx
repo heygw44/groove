@@ -201,7 +201,7 @@ export function MyPageLayout() {
           ))}
         </nav>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           <Suspense fallback={<RouteFallback />}>
             <Outlet />
           </Suspense>
