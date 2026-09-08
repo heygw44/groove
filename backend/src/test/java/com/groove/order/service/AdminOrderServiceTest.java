@@ -55,6 +55,7 @@ import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.service.ProductSalesStatsUpdater;
 
 @ExtendWith(MockitoExtension.class)
 class AdminOrderServiceTest {
@@ -84,6 +85,9 @@ class AdminOrderServiceTest {
 	@Mock
 	LimitedReleaseSynchronizer limitedReleaseSynchronizer;
 
+	@Mock
+	ProductSalesStatsUpdater productSalesStatsUpdater;
+
 	AdminOrderService adminOrderService;
 
 	Member member;
@@ -95,7 +99,8 @@ class AdminOrderServiceTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		adminOrderService = new AdminOrderService(orderRepository, orderQueryMapper, orderStockService,
-				paymentCancelHook, adminAuditLogService, limitedPurchaseWriter, limitedReleaseSynchronizer, clock);
+				paymentCancelHook, adminAuditLogService, limitedPurchaseWriter, limitedReleaseSynchronizer,
+				productSalesStatsUpdater, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
@@ -224,6 +229,38 @@ class AdminOrderServiceTest {
 		}
 
 		@Test
+		@DisplayName("PAID 주문을 CANCELED 로 바꾸면 판매 수량을 재계산한다")
+		void refreshesSoldQuantityWhenPaidOrderCanceled() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
+
+			// when
+			adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
+
+			// then
+			verify(productSalesStatsUpdater).refreshFor(order);
+		}
+
+		@Test
+		@DisplayName("PREPARING 주문을 CANCELED 로 바꾸면 판매 수량을 재계산한다")
+		void refreshesSoldQuantityWhenPreparingOrderCanceled() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PREPARING);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
+
+			// when
+			adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
+
+			// then
+			verify(productSalesStatsUpdater).refreshFor(order);
+		}
+
+		@Test
 		@DisplayName("SHIPPED 를 CANCELED 로 바꾸려 하면 ORDER_INVALID_STATUS_TRANSITION 예외를 던지고 재고를 건드리지 않는다")
 		void throwsWhenTransitionNotAllowed() {
 			// given
@@ -257,6 +294,22 @@ class AdminOrderServiceTest {
 			// then
 			verify(orderStockService, never()).restore(any());
 			verify(paymentCancelHook, never()).onPaidOrderCanceled(any());
+		}
+
+		@Test
+		@DisplayName("PAID 를 PREPARING 으로 바꾸면 판매 수량을 재계산하지 않는다")
+		void skipsSoldQuantityRefreshWhenPaidMovesToPreparing() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
+
+			// when
+			adminOrderService.changeStatus(ADMIN_ID, ORDER_ID, request);
+
+			// then
+			verify(productSalesStatsUpdater, never()).refreshFor(any());
 		}
 
 		@Test

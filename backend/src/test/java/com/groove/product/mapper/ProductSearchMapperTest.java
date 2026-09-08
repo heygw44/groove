@@ -548,6 +548,9 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			order.addItem(em.find(Product.class, product.getId()), quantity);
 			OrderFixture.markPaid(order);
 			em.persist(order);
+			// markPaid 는 리플렉션으로 status 만 세팅해 서비스 훅(ProductSalesStatsUpdater)을 안 타므로
+			// 매퍼가 읽는 product.sold_quantity 를 직접 재계산해준다.
+			productRepository.refreshSoldQuantities(List.of(product.getId()));
 		}
 
 		@Test
