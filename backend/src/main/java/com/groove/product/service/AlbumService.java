@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.notification.repository.AlbumWatchRepository;
 import com.groove.product.dto.AdminAlbumSummaryResponse;
 import com.groove.product.dto.AlbumDetailResponse;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -28,12 +29,16 @@ public class AlbumService {
 
 	private final AlbumRepository albumRepository;
 	private final ProductSearchMapper productSearchMapper;
+	private final AlbumWatchRepository albumWatchRepository;
 
-	public AlbumDetailResponse getDetail(Long id) {
+	public AlbumDetailResponse getDetail(Long id, Long memberId) {
 		Album album = albumRepository.findWithArtistById(id)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ALBUM_NOT_FOUND));
 		List<ProductSummaryResponse> pressings = productSearchMapper.findAlbumPressings(id);
-		return AlbumDetailResponse.from(album, pressings);
+		Boolean watched = memberId == null
+				? null
+				: albumWatchRepository.existsByMemberIdAndAlbumId(memberId, id);
+		return AlbumDetailResponse.from(album, pressings, watched);
 	}
 
 	public PageResponse<AdminAlbumSummaryResponse> getAdminList(String keyword, Pageable pageable) {

@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
-import { Spinner } from '@/components/common/Spinner';
+import { RouteFallback } from '@/components/common/RouteFallback';
 import { useAuthStore } from '@/store/authStore';
 
 interface AdminRouteProps {
@@ -15,11 +15,7 @@ export function AdminRoute({ children }: AdminRouteProps) {
   const location = useLocation();
 
   if (isBootstrapping) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <RouteFallback />;
   }
 
   if (!accessToken) {

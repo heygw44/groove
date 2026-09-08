@@ -44,13 +44,15 @@ import lombok.NoArgsConstructor;
 @Table(name = "product",
 		uniqueConstraints = @UniqueConstraint(name = "uk_product_discogs_release", columnNames = "discogs_release_id"),
 		indexes = {
-			@Index(name = "idx_product_title_artist", columnList = "title, artist_id"),
 			@Index(name = "idx_product_status_created", columnList = "status, created_at"),
 			@Index(name = "idx_product_artist", columnList = "artist_id"),
 			@Index(name = "idx_product_label", columnList = "label_id"),
 			@Index(name = "idx_product_album", columnList = "album_id"),
 			@Index(name = "idx_product_barcode", columnList = "barcode"),
-			@Index(name = "idx_product_catalog_no", columnList = "catalog_no_normalized")
+			@Index(name = "idx_product_catalog_no", columnList = "catalog_no_normalized"),
+			@Index(name = "idx_product_created", columnList = "created_at"),
+			@Index(name = "idx_product_sold_review_created",
+					columnList = "sold_quantity, review_count, created_at, id")
 		})
 public class Product extends BaseTimeEntity {
 
@@ -125,6 +127,12 @@ public class Product extends BaseTimeEntity {
 	@ColumnDefault("0")
 	private int reviewCount;
 
+	// 인기순 정렬용 비정규화 컬럼. refreshSoldQuantities 로만 갱신하므로 updatable=false 로 막아
+	// 다른 필드 변경에 딸려가는 전 컬럼 UPDATE 가 이 값을 옛 값으로 되쓰지 못하게 한다.
+	@Column(name = "sold_quantity", nullable = false, updatable = false)
+	@ColumnDefault("0")
+	private long soldQuantity;
+
 	@OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<ProductGenre> productGenres = new ArrayList<>();
 
@@ -155,6 +163,7 @@ public class Product extends BaseTimeEntity {
 		this.description = description;
 		this.discogsReleaseId = discogsReleaseId;
 		this.reviewCount = 0;
+		this.soldQuantity = 0;
 	}
 
 	public static Product create(Album album, String title, Artist artist, Label label, LocalDate releaseDate,

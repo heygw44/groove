@@ -5,6 +5,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.groove.auth.LoginMember;
+import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.product.dto.AlbumDetailResponse;
 import com.groove.product.service.AlbumService;
@@ -22,10 +24,15 @@ public class AlbumController {
 
 	private final AlbumService albumService;
 
-	@Operation(summary = "앨범 상세 + 프레싱 목록 조회")
+	@Operation(summary = "앨범 상세 + 프레싱 목록 조회", description = "로그인 시 watched 포함")
 	@SecurityRequirements
 	@GetMapping("/{id}")
-	public ApiResponse<AlbumDetailResponse> getDetail(@PathVariable Long id) {
-		return ApiResponse.ok(albumService.getDetail(id));
+	public ApiResponse<AlbumDetailResponse> getDetail(@PathVariable Long id,
+			@AuthMember(required = false) LoginMember loginMember) {
+		return ApiResponse.ok(albumService.getDetail(id, memberIdOf(loginMember)));
+	}
+
+	private static Long memberIdOf(LoginMember loginMember) {
+		return loginMember == null ? null : loginMember.id();
 	}
 }

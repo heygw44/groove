@@ -1,11 +1,10 @@
 import { useSearchParams } from 'react-router-dom';
 
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
-import { Skeleton } from '@/components/common/Skeleton';
-import { OrderCard } from '@/components/order/OrderCard';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { OrderCard, OrderCardSkeleton } from '@/components/order/OrderCard';
 import { OrderStatusTabs } from '@/components/order/OrderStatusTabs';
 import { useOrders } from '@/hooks/queries/useOrders';
 import type { OrderStatus } from '@/types/order';
@@ -17,28 +16,11 @@ import {
 
 const SKELETON_COUNT = 5;
 
-function OrderCardSkeleton() {
-  return (
-    <li className="flex items-center gap-4 rounded-lg border border-line bg-surface px-5 py-4">
-      <Skeleton className="h-16 w-16 shrink-0" />
-      <div className="min-w-0 flex-1">
-        <Skeleton className="h-3 w-1/3" />
-        <Skeleton className="mt-1.5 h-4 w-2/3" />
-        <Skeleton className="mt-1.5 h-3 w-1/4" />
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-2">
-        <Skeleton className="h-5 w-14" />
-        <Skeleton className="h-4 w-16" />
-      </div>
-    </li>
-  );
-}
-
 export default function OrderListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseOrderListFilters(searchParams);
 
-  const { data, isPending, isError, isPlaceholderData, refetch } = useOrders(
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useOrders(
     toOrderListParams(filters),
   );
 
@@ -73,14 +55,10 @@ export default function OrderListPage() {
         )}
 
         {!isPending && isError && (
-          <EmptyState
-            title="주문 내역을 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                다시 시도
-              </Button>
-            }
+          <QueryErrorState
+            error={error}
+            onRetry={refetch}
+            title="주문 내역을 불러오지 못했습니다."
           />
         )}
 

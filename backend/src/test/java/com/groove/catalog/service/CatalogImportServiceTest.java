@@ -143,5 +143,86 @@ class CatalogImportServiceTest {
 			assertThat(eventCaptor.getValue().albumId()).isEqualTo(310L);
 			assertThat(eventCaptor.getValue().albumTitle()).isEqualTo("Kind Of Blue");
 		}
+
+		@Test
+		@DisplayName("제목이 null 이면 CATALOG_LOOKUP_FAILED 예외를 던진다")
+		void throwsWhenTitleIsNull() {
+			// given
+			given(productRepository.existsByDiscogsReleaseId(249504L)).willReturn(false);
+			DiscogsReleaseResponse release = vinylRelease(null, "Miles Davis");
+			given(client.getRelease(249504L)).willReturn(release);
+			given(genreRepository.findAllByOrderByNameAsc()).willReturn(List.of());
+			CatalogImportRequest request = new CatalogImportRequest(249504L, BigDecimal.valueOf(45000));
+
+			// when & then
+			assertThatThrownBy(() -> service().importRelease(1L, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.CATALOG_LOOKUP_FAILED);
+			verify(registrar, never()).register(any());
+		}
+
+		@Test
+		@DisplayName("제목이 비어 있으면 CATALOG_LOOKUP_FAILED 예외를 던진다")
+		void throwsWhenTitleIsBlank() {
+			// given
+			given(productRepository.existsByDiscogsReleaseId(249504L)).willReturn(false);
+			DiscogsReleaseResponse release = vinylRelease("  ", "Miles Davis");
+			given(client.getRelease(249504L)).willReturn(release);
+			given(genreRepository.findAllByOrderByNameAsc()).willReturn(List.of());
+			CatalogImportRequest request = new CatalogImportRequest(249504L, BigDecimal.valueOf(45000));
+
+			// when & then
+			assertThatThrownBy(() -> service().importRelease(1L, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.CATALOG_LOOKUP_FAILED);
+			verify(registrar, never()).register(any());
+		}
+
+		@Test
+		@DisplayName("아티스트가 없으면 CATALOG_LOOKUP_FAILED 예외를 던진다")
+		void throwsWhenArtistNameIsNull() {
+			// given
+			given(productRepository.existsByDiscogsReleaseId(249504L)).willReturn(false);
+			DiscogsReleaseResponse release = vinylRelease("Kind Of Blue", null);
+			given(client.getRelease(249504L)).willReturn(release);
+			given(genreRepository.findAllByOrderByNameAsc()).willReturn(List.of());
+			CatalogImportRequest request = new CatalogImportRequest(249504L, BigDecimal.valueOf(45000));
+
+			// when & then
+			assertThatThrownBy(() -> service().importRelease(1L, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.CATALOG_LOOKUP_FAILED);
+			verify(registrar, never()).register(any());
+		}
+
+		@Test
+		@DisplayName("아티스트명이 비어 있으면 CATALOG_LOOKUP_FAILED 예외를 던진다")
+		void throwsWhenArtistNameIsBlank() {
+			// given
+			given(productRepository.existsByDiscogsReleaseId(249504L)).willReturn(false);
+			DiscogsReleaseResponse release = vinylRelease("Kind Of Blue", "  ");
+			given(client.getRelease(249504L)).willReturn(release);
+			given(genreRepository.findAllByOrderByNameAsc()).willReturn(List.of());
+			CatalogImportRequest request = new CatalogImportRequest(249504L, BigDecimal.valueOf(45000));
+
+			// when & then
+			assertThatThrownBy(() -> service().importRelease(1L, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.CATALOG_LOOKUP_FAILED);
+			verify(registrar, never()).register(any());
+		}
+
+		private DiscogsReleaseResponse vinylRelease(String title, String artistName) {
+			List<DiscogsReleaseResponse.Artist> artists = artistName == null ? List.of()
+					: List.of(new DiscogsReleaseResponse.Artist(artistName));
+			return new DiscogsReleaseResponse(249504L, title, artists,
+					List.of(new DiscogsReleaseResponse.Label("Columbia", "CS 8163")), "US", 1959, List.of("Jazz"),
+					List.of(), List.of(new DiscogsReleaseResponse.Format("Vinyl", List.of())), List.of(), List.of(),
+					21247L, "Discogs 원본 노트");
+		}
 	}
 }

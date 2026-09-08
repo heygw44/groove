@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+		PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+		"https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.groove.catalog.mapper.CatalogImportJobQueryMapper">
+
+	<resultMap id="catalogImportJobHistoryRowMap" type="com.groove.catalog.dto.CatalogImportJobHistoryRow">
+		<constructor>
+			<arg column="job_instance_id" javaType="java.lang.Long"/>
+			<arg column="job_execution_id" javaType="java.lang.Long"/>
+			<arg column="status" javaType="org.springframework.batch.core.BatchStatus"/>
+			<arg column="start_time" javaType="java.time.LocalDateTime"/>
+			<arg column="end_time" javaType="java.time.LocalDateTime"/>
+			<arg column="job_exit_message" javaType="java.lang.String"/>
+			<arg column="discogs_master_id" javaType="java.lang.Long"/>
+			<arg column="step_execution_id" javaType="java.lang.Long"/>
+			<arg column="read_count" javaType="java.lang.Long"/>
+			<arg column="write_count" javaType="java.lang.Long"/>
+			<arg column="filter_count" javaType="java.lang.Long"/>
+			<arg column="read_skip_count" javaType="java.lang.Long"/>
+			<arg column="write_skip_count" javaType="java.lang.Long"/>
+			<arg column="process_skip_count" javaType="java.lang.Long"/>
+			<arg column="step_exit_message" javaType="java.lang.String"/>
+		</constructor>
+	</resultMap>
+
+	<!--
+		인스턴스별 최신 실행(MAX(JOB_EXECUTION_ID))만 골라 파라미터·스텝을 붙인다.
+		BATCH_JOB_EXECUTION_PARAMS 는 masterIdParameterName 한 줄만 LEFT JOIN 하고,
+		BATCH_STEP_EXECUTION 은 스텝 수만큼 행이 늘어나며 응답에서 Java 로 합산한다.
+		BATCH_*_EXECUTION_CONTEXT 는 응답에 쓰지 않아 아예 조회하지 않는다.
+	-->
+	<select id="findLatestExecutions" resultMap="catalogImportJobHistoryRowMap">
+		SELECT
+			je.JOB_INSTANCE_ID AS job_instance_id,
+			je.JOB_EXECUTION_ID AS job_execution_id,
+			je.STATUS AS status,
+			je.START_TIME AS start_time,
+			je.END_TIME AS end_time,
+			je.EXIT_MESSAGE AS job_exit_message,
+			jp.PARAMETER_VALUE AS discogs_master_id,
+			se.STEP_EXECUTION_ID AS step_execution_id,
+			se.READ_COUNT AS read_count,
+			se.WRITE_COUNT AS write_count,
+			se.FILTER_COUNT AS filter_count,
+			se.READ_SKIP_COUNT AS read_skip_count,
+			se.WRITE_SKIP_COUNT AS write_skip_count,
+			se.PROCESS_SKIP_COUNT AS process_skip_count,
+			se.EXIT_MESSAGE AS step_exit_message
+		FROM BATCH_JOB_EXECUTION je
+		JOIN (
+			SELECT JOB_INSTANCE_ID, MAX(JOB_EXECUTION_ID) AS JOB_EXECUTION_ID
+			FROM BATCH_JOB_EXECUTION
+			WHERE JOB_INSTANCE_ID IN
+			<foreach item="jobInstanceId" collection="jobInstanceIds" open="(" separator="," close=")">
+				#{jobInstanceId}
+			</foreach>
+			GROUP BY JOB_INSTANCE_ID
+		) latest ON latest.JOB_INSTANCE_ID = je.JOB_INSTANCE_ID AND latest.JOB_EXECUTION_ID = je.JOB_EXECUTION_ID
+		LEFT JOIN BATCH_JOB_EXECUTION_PARAMS jp
+			ON jp.JOB_EXECUTION_ID = je.JOB_EXECUTION_ID AND jp.PARAMETER_NAME = #{masterIdParameterName}
+		LEFT JOIN BATCH_STEP_EXECUTION se ON se.JOB_EXECUTION_ID = je.JOB_EXECUTION_ID
+		ORDER BY je.JOB_EXECUTION_ID, se.STEP_EXECUTION_ID
+	</select>
+
+</mapper>

@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { PageContainer } from '@/components/common/PageContainer';
+import { RouteFallback } from '@/components/common/RouteFallback';
 
 interface MyPageNavItem {
   to: string;
@@ -88,6 +90,26 @@ const NAV_ITEMS: MyPageNavItem[] = [
         aria-hidden
       >
         <path d="M10 17s-6.2-3.8-8.3-7.7C.5 6.7 1.8 3.8 4.6 3.1c1.7-.4 3.4.3 4.4 1.7.3.4.6.9.8 1.4.2-.5.5-1 .8-1.4 1-1.4 2.7-2.1 4.4-1.7 2.8.7 4.1 3.6 2.9 5.9-2.1 3.9-8.3 7.7-8.3 7.7Z" />
+      </svg>
+    ),
+  },
+  {
+    to: '/mypage/album-watches',
+    label: '구독한 앨범',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="10" cy="10" r="7.5" />
+        <circle cx="10" cy="10" r="2" />
       </svg>
     ),
   },
@@ -199,8 +221,10 @@ export function MyPageLayout() {
           ))}
         </nav>
 
-        <div className="flex flex-col gap-5">
-          <Outlet />
+        <div className="flex min-w-0 flex-col gap-5">
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </div>
       </div>
     </PageContainer>

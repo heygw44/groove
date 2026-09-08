@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
@@ -60,6 +61,7 @@ import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.recommend.service.ProductCatalogChangedEvent;
 
 @ExtendWith(MockitoExtension.class)
 class AdminProductServiceTest {
@@ -133,6 +135,7 @@ class AdminProductServiceTest {
 			verify(stockService).create(saved, request.initialStock());
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_CREATE,
 					AdminAuditTargetType.PRODUCT, saved.getId(), null);
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -224,6 +227,61 @@ class AdminProductServiceTest {
 			verify(albumRepository).save(any());
 			verify(albumRepository, never()).findById(any());
 		}
+
+		@Test
+		@DisplayName("존재하지 않는 앨범 id 면 ALBUM_NOT_FOUND 예외를 던진다")
+		void throwsWhenAlbumNotFound() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			ProductCreateRequest request = ProductFixture.createRequest(ARTIST_ID, null, List.of());
+			given(artistRepository.findById(ARTIST_ID)).willReturn(Optional.of(artist));
+			given(albumRepository.findById(1L)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.create(ADMIN_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ALBUM_NOT_FOUND);
+			verify(productRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 레이블이면 LABEL_NOT_FOUND 예외를 던진다")
+		void throwsWhenLabelNotFound() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			ProductCreateRequest request = ProductFixture.createRequest(ARTIST_ID, LABEL_ID, List.of());
+			given(artistRepository.findById(ARTIST_ID)).willReturn(Optional.of(artist));
+			given(labelRepository.findById(LABEL_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.create(ADMIN_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.LABEL_NOT_FOUND);
+			verify(productRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("genreIds 와 imageUrls 가 모두 null 이면 장르와 이미지 없이 생성한다")
+		void createsProductWithoutGenresOrImagesWhenBothNull() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Album album = AlbumFixture.create(artist);
+			ProductCreateRequest request = ProductFixture.createRequest(ARTIST_ID, null, null, null);
+			given(artistRepository.findById(ARTIST_ID)).willReturn(Optional.of(artist));
+			given(albumRepository.findById(1L)).willReturn(Optional.of(album));
+			Product saved = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.save(any())).willReturn(saved);
+			given(stockService.create(any(), anyInt())).willReturn(StockFixture.create(saved, 10));
+
+			// when
+			AdminProductResponse response = adminProductService.create(ADMIN_ID, request);
+
+			// then
+			assertThat(response.stockQuantity()).isEqualTo(10);
+			verify(genreRepository, never()).findAllById(any());
+		}
 	}
 
 	@Nested
@@ -234,7 +292,7 @@ class AdminProductServiceTest {
 		@DisplayName("존재하지 않는 상품이면 PRODUCT_NOT_FOUND 예외를 던진다")
 		void throwsWhenProductNotFound() {
 			// given
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.empty());
 			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
 
 			// when & then
@@ -250,7 +308,7 @@ class AdminProductServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
 
@@ -271,7 +329,7 @@ class AdminProductServiceTest {
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 			product.addImage("https://cdn.groove.com/old.jpg", 0);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = ProductFixture.updateRequest(null, null, null);
 
@@ -291,7 +349,7 @@ class AdminProductServiceTest {
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 			Genre jazz = GenreFixture.create("Jazz");
 			product.addGenre(jazz);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
 
@@ -311,7 +369,7 @@ class AdminProductServiceTest {
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist, LabelFixture.create()),
 					PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = ProductFixture.updateRequestWithLabel(JsonNullable.of(null));
 
@@ -332,7 +390,7 @@ class AdminProductServiceTest {
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Label label = LabelFixture.create();
 			Product product = ProductFixture.withId(ProductFixture.create(artist, label), PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
 
@@ -352,7 +410,7 @@ class AdminProductServiceTest {
 			Product product = ProductFixture.withId(ProductFixture.create(artist, LabelFixture.create()),
 					PRODUCT_ID);
 			Label newLabel = LabelFixture.withId(LabelFixture.create("Impulse!"), LABEL_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			given(labelRepository.findById(LABEL_ID)).willReturn(Optional.of(newLabel));
 			ProductUpdateRequest request = ProductFixture.updateRequestWithLabel(JsonNullable.of(LABEL_ID));
@@ -370,7 +428,7 @@ class AdminProductServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = priceUpdateRequest(new BigDecimal("40000"));
 
@@ -378,10 +436,34 @@ class AdminProductServiceTest {
 			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
 
 			// then
-			ArgumentCaptor<PriceDropEvent> captor = ArgumentCaptor.forClass(PriceDropEvent.class);
-			verify(eventPublisher).publishEvent(captor.capture());
-			assertThat(captor.getValue().productId()).isEqualTo(PRODUCT_ID);
-			assertThat(captor.getValue().productTitle()).isEqualTo(product.getTitle());
+			// update() 는 가격 인하와 무관하게 캐시 무효화 이벤트도 함께 발행하므로, 발행된 이벤트 전체에서
+			// PriceDropEvent 만 골라 검증한다.
+			ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+			verify(eventPublisher, times(2)).publishEvent(captor.capture());
+			PriceDropEvent priceDropEvent = captor.getAllValues().stream()
+					.filter(PriceDropEvent.class::isInstance)
+					.map(PriceDropEvent.class::cast)
+					.findFirst()
+					.orElseThrow();
+			assertThat(priceDropEvent.productId()).isEqualTo(PRODUCT_ID);
+			assertThat(priceDropEvent.productTitle()).isEqualTo(product.getTitle());
+		}
+
+		@Test
+		@DisplayName("성공하면 상품 변경 여부와 무관하게 추천 특성 캐시 무효화 이벤트를 발행한다")
+		void publishesCatalogChangedEvent() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
+
+			// when
+			adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -390,7 +472,7 @@ class AdminProductServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = priceUpdateRequest(new BigDecimal("50000"));
 
@@ -407,7 +489,7 @@ class AdminProductServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = priceUpdateRequest(new BigDecimal("45000.00"));
 
@@ -424,7 +506,7 @@ class AdminProductServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
 
@@ -435,8 +517,260 @@ class AdminProductServiceTest {
 			verify(eventPublisher, never()).publishEvent(any(PriceDropEvent.class));
 		}
 
+		@Test
+		@DisplayName("재고가 없으면 STOCK_NOT_FOUND 예외를 던진다")
+		void throwsWhenStockNotFound() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
+			ProductUpdateRequest request = ProductFixture.emptyUpdateRequest();
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.update(ADMIN_ID, PRODUCT_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.STOCK_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("artistId 를 전달하면 아티스트를 교체한다")
+		void replacesArtistWhenArtistIdGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			Artist newArtist = ArtistFixture.withId(ArtistFixture.create("John Coltrane"), 30L);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			given(artistRepository.findById(30L)).willReturn(Optional.of(newArtist));
+			ProductUpdateRequest request = artistUpdateRequest(30L);
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.artist().name()).isEqualTo("John Coltrane");
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("artist");
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 artistId 면 ARTIST_NOT_FOUND 예외를 던진다")
+		void throwsWhenArtistIdGivenButNotFound() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(artistRepository.findById(30L)).willReturn(Optional.empty());
+			ProductUpdateRequest request = artistUpdateRequest(30L);
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.update(ADMIN_ID, PRODUCT_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ARTIST_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("genreIds 에 값이 있으면 장르를 교체한다")
+		void replacesGenresWhenGenreIdsGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			Genre jazz = GenreFixture.withId(GenreFixture.create("Jazz"), 1L);
+			Genre soul = GenreFixture.withId(GenreFixture.create("Soul"), 2L);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			given(genreRepository.findAllById(any())).willReturn(List.of(jazz, soul));
+			ProductUpdateRequest request = ProductFixture.updateRequest(null, null, List.of(1L, 2L));
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.genres()).extracting(AdminProductResponse.GenreSummary::name)
+					.containsExactlyInAnyOrder("Jazz", "Soul");
+		}
+
+		@Test
+		@DisplayName("country 에 값이 있으면 교체한다")
+		void updatesCountryWhenValueGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithCountry(JsonNullable.of("JP"));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.country()).isEqualTo("JP");
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("country");
+		}
+
+		@Test
+		@DisplayName("country 를 명시적으로 null 로 보내면 해제한다")
+		void clearsCountryWhenExplicitNullGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithCountry(JsonNullable.of(null));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.country()).isNull();
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("country");
+		}
+
+		@Test
+		@DisplayName("pressingYear 에 값이 있으면 교체한다")
+		void updatesPressingYearWhenValueGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithPressingYear(JsonNullable.of(1999));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.pressingYear()).isEqualTo(1999);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("pressingYear");
+		}
+
+		@Test
+		@DisplayName("pressingYear 를 명시적으로 null 로 보내면 해제한다")
+		void clearsPressingYearWhenExplicitNullGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithPressingYear(JsonNullable.of(null));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.pressingYear()).isNull();
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("pressingYear");
+		}
+
+		@Test
+		@DisplayName("catalogNo 에 값이 있으면 교체한다")
+		void updatesCatalogNoWhenValueGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithCatalogNo(JsonNullable.of("MPS 8163"));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.catalogNo()).isEqualTo("MPS 8163");
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("catalogNo");
+		}
+
+		@Test
+		@DisplayName("catalogNo 를 명시적으로 null 로 보내면 해제한다")
+		void clearsCatalogNoWhenExplicitNullGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithCatalogNo(JsonNullable.of(null));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.catalogNo()).isNull();
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("catalogNo");
+		}
+
+		@Test
+		@DisplayName("barcode 에 값이 있으면 교체한다")
+		void updatesBarcodeWhenValueGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithBarcode(JsonNullable.of("999990123456"));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.barcode()).isEqualTo("999990123456");
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("barcode");
+		}
+
+		@Test
+		@DisplayName("barcode 를 명시적으로 null 로 보내면 해제한다")
+		void clearsBarcodeWhenExplicitNullGiven() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
+			ProductUpdateRequest request = ProductFixture.updateRequestWithBarcode(JsonNullable.of(null));
+			ArgumentCaptor<String> detailCaptor = ArgumentCaptor.forClass(String.class);
+
+			// when
+			AdminProductResponse response = adminProductService.update(ADMIN_ID, PRODUCT_ID, request);
+
+			// then
+			assertThat(response.barcode()).isNull();
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
+			assertThat(detailCaptor.getValue()).isEqualTo("barcode");
+		}
+
 		private ProductUpdateRequest priceUpdateRequest(BigDecimal price) {
 			return new ProductUpdateRequest(null, null, JsonNullable.undefined(), null, null, null, null, price,
+					null, null, JsonNullable.undefined(), JsonNullable.undefined(), JsonNullable.undefined(),
+					JsonNullable.undefined(), null);
+		}
+
+		private ProductUpdateRequest artistUpdateRequest(Long artistId) {
+			return new ProductUpdateRequest(null, artistId, JsonNullable.undefined(), null, null, null, null, null,
 					null, null, JsonNullable.undefined(), JsonNullable.undefined(), JsonNullable.undefined(),
 					JsonNullable.undefined(), null);
 		}
@@ -461,6 +795,7 @@ class AdminProductServiceTest {
 			assertThat(product.isHidden()).isTrue();
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_HIDE,
 					AdminAuditTargetType.PRODUCT, PRODUCT_ID, null);
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -488,7 +823,7 @@ class AdminProductServiceTest {
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 			product.hide();
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 
 			// when
@@ -502,13 +837,29 @@ class AdminProductServiceTest {
 		@DisplayName("존재하지 않는 상품이면 PRODUCT_NOT_FOUND 예외를 던진다")
 		void throwsWhenProductNotFound() {
 			// given
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> adminProductService.getDetail(PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("재고가 없으면 STOCK_NOT_FOUND 예외를 던진다")
+		void throwsWhenStockNotFound() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.getDetail(PRODUCT_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.STOCK_NOT_FOUND);
 		}
 	}
 
@@ -523,7 +874,7 @@ class AdminProductServiceTest {
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 			product.hide();
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID))
 					.willReturn(Optional.of(StockFixture.create(product, 10)));
 
@@ -534,6 +885,7 @@ class AdminProductServiceTest {
 			assertThat(response.status()).isEqualTo(ProductStatus.ON_SALE);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_RESTORE,
 					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "ON_SALE");
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -543,7 +895,7 @@ class AdminProductServiceTest {
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 			product.hide();
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID))
 					.willReturn(Optional.of(StockFixture.create(product, 0)));
 
@@ -562,7 +914,7 @@ class AdminProductServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ARTIST_ID);
 			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(StockFixture.create(product)));
 
 			// when & then
@@ -576,13 +928,30 @@ class AdminProductServiceTest {
 		@DisplayName("존재하지 않는 상품이면 PRODUCT_NOT_FOUND 예외를 던진다")
 		void throwsWhenProductNotFound() {
 			// given
-			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> adminProductService.restore(ADMIN_ID, PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("재고가 없으면 STOCK_NOT_FOUND 예외를 던진다")
+		void throwsWhenStockNotFound() {
+			// given
+			Artist artist = ArtistFixture.withId(ARTIST_ID);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
+			product.hide();
+			given(productRepository.findDetailById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(stockRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> adminProductService.restore(ADMIN_ID, PRODUCT_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.STOCK_NOT_FOUND);
 		}
 	}
 

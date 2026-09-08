@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
 
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.AlbumWatchFixture;
@@ -27,10 +28,11 @@ import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
-import com.groove.notification.dto.AlbumWatchListResponse;
 import com.groove.notification.dto.AlbumWatchResponse;
+import com.groove.notification.dto.AlbumWatchSearchRequest;
 import com.groove.notification.entity.AlbumWatch;
 import com.groove.notification.repository.AlbumWatchRepository;
 import com.groove.product.entity.Album;
@@ -174,35 +176,40 @@ class AlbumWatchServiceTest {
 	@DisplayName("getMyWatches()")
 	class GetMyWatches {
 
+		private final AlbumWatchSearchRequest request = new AlbumWatchSearchRequest(0, 20);
+
 		@Test
 		@DisplayName("내 구독 목록을 등록일 내림차순으로 반환한다")
 		void returnsMyWatches() {
 			// given
 			AlbumWatch albumWatch = AlbumWatchFixture.withId(AlbumWatchFixture.create(member, album),
 					ALBUM_WATCH_ID);
-			given(albumWatchRepository.findAllByMemberIdOrderByCreatedAtDescIdDesc(MEMBER_ID))
-					.willReturn(List.of(albumWatch));
+			given(albumWatchRepository.findAllByMemberId(MEMBER_ID, request.toPageable()))
+					.willReturn(new PageImpl<>(List.of(albumWatch), request.toPageable(), 1));
 
 			// when
-			AlbumWatchListResponse response = albumWatchService.getMyWatches(MEMBER_ID);
+			PageResponse<AlbumWatchResponse> response = albumWatchService.getMyWatches(MEMBER_ID, request);
 
 			// then
 			assertThat(response.content()).hasSize(1);
 			assertThat(response.content().get(0).albumId()).isEqualTo(ALBUM_ID);
+			assertThat(response.totalElements()).isEqualTo(1);
+			assertThat(response.totalPages()).isEqualTo(1);
 		}
 
 		@Test
 		@DisplayName("구독한 앨범이 없으면 빈 목록을 반환한다")
 		void returnsEmptyListWhenNoWatches() {
 			// given
-			given(albumWatchRepository.findAllByMemberIdOrderByCreatedAtDescIdDesc(MEMBER_ID))
-					.willReturn(List.of());
+			given(albumWatchRepository.findAllByMemberId(MEMBER_ID, request.toPageable()))
+					.willReturn(new PageImpl<>(List.of(), request.toPageable(), 0));
 
 			// when
-			AlbumWatchListResponse response = albumWatchService.getMyWatches(MEMBER_ID);
+			PageResponse<AlbumWatchResponse> response = albumWatchService.getMyWatches(MEMBER_ID, request);
 
 			// then
 			assertThat(response.content()).isEmpty();
+			assertThat(response.totalElements()).isZero();
 		}
 	}
 }

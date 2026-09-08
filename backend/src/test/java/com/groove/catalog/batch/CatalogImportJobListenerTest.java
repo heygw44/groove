@@ -30,6 +30,7 @@ import com.groove.notification.service.NewPressingEvent;
 import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
 import com.groove.product.repository.AlbumRepository;
+import com.groove.recommend.service.ProductCatalogChangedEvent;
 
 @ExtendWith(MockitoExtension.class)
 class CatalogImportJobListenerTest {
@@ -44,7 +45,7 @@ class CatalogImportJobListenerTest {
 	private CatalogImportJobListener listener;
 
 	@Captor
-	private ArgumentCaptor<NewPressingEvent> eventCaptor;
+	private ArgumentCaptor<NewPressingEvent> newPressingEventCaptor;
 
 	private JobExecution jobExecution(long masterId) {
 		JobInstance instance = new JobInstance(1L, CatalogImportJobConfig.JOB_NAME);
@@ -72,9 +73,27 @@ class CatalogImportJobListenerTest {
 			listener.afterJob(execution);
 
 			// then
-			verify(eventPublisher).publishEvent(eventCaptor.capture());
-			assertThat(eventCaptor.getValue().albumId()).isEqualTo(3L);
-			assertThat(eventCaptor.getValue().albumTitle()).isEqualTo(album.getTitle());
+			verify(eventPublisher).publishEvent(newPressingEventCaptor.capture());
+			assertThat(newPressingEventCaptor.getValue().albumId()).isEqualTo(3L);
+			assertThat(newPressingEventCaptor.getValue().albumTitle()).isEqualTo(album.getTitle());
+		}
+
+		@Test
+		@DisplayName("적재된 프레싱이 있으면 추천 특성 캐시 무효화 이벤트도 발행한다")
+		void publishesCatalogChangedWhenAnyWritten() {
+			// given
+			JobExecution execution = jobExecution(21247L);
+			StepExecution step = execution.createStepExecution("step1");
+			step.setWriteCount(3);
+			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
+			Album album = AlbumFixture.withId(AlbumFixture.create(artist), 3L);
+			given(albumRepository.findByDiscogsMasterId(21247L)).willReturn(Optional.of(album));
+
+			// when
+			listener.afterJob(execution);
+
+			// then
+			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test
@@ -91,6 +110,7 @@ class CatalogImportJobListenerTest {
 			// then
 			verify(albumRepository, never()).findByDiscogsMasterId(any());
 			verify(eventPublisher, never()).publishEvent(any(NewPressingEvent.class));
+			verify(eventPublisher, never()).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
 		@Test

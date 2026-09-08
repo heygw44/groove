@@ -76,20 +76,24 @@
 		<include refid="adminMembersWhere"/>
 	</select>
 
+	<!-- 회원 한 명분 조회라 memberOrderStats(전 회원 GROUP BY) 대신 상관 서브쿼리로 조건을 안쪽에 밀어 넣는다 -->
 	<select id="findActivitySummary" resultMap="adminMemberActivitySummaryMap">
 		SELECT
-			COALESCE(o.order_count, 0) AS order_count,
-			COALESCE(pay.total_payment_amount, 0) AS total_payment_amount,
-			COALESCE(mc.usable_coupon_count, 0) AS usable_coupon_count
+			<!-- idx_orders_member_created (member_id, created_at) 선두 컬럼으로 좁힌다 -->
+			(SELECT COUNT(*) FROM orders o
+				WHERE o.member_id = m.id
+				AND o.status NOT IN ('PENDING', 'CANCELED')) AS order_count,
+			<!-- orders 를 회원으로 좁힌 뒤 uk_payment_order (order_id) 유니크로 1건씩 붙는다 -->
+			COALESCE((SELECT SUM(p.amount) FROM payment p
+				JOIN orders o2 ON o2.id = p.order_id
+				WHERE o2.member_id = m.id
+				AND p.status = 'DONE'), 0) AS total_payment_amount,
+			<!-- uk_member_coupon_member_coupon (member_id, coupon_id) 좌측 프리픽스로 좁힌다 -->
+			(SELECT COUNT(*) FROM member_coupon mc2
+				JOIN coupon c ON c.id = mc2.coupon_id
+				WHERE mc2.member_id = m.id
+				AND mc2.used = 0 AND c.status = 'ACTIVE' AND c.expires_at &gt; #{now}) AS usable_coupon_count
 		FROM member m
-		<include refid="memberOrderStats"/>
-		LEFT JOIN (
-			SELECT mc2.member_id, COUNT(*) AS usable_coupon_count
-			FROM member_coupon mc2
-			JOIN coupon c ON c.id = mc2.coupon_id
-			WHERE mc2.used = 0 AND c.status = 'ACTIVE' AND c.expires_at &gt; #{now}
-			GROUP BY mc2.member_id
-		) mc ON mc.member_id = m.id
 		WHERE m.id = #{memberId}
 	</select>
 

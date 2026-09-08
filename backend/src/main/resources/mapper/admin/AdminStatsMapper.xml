@@ -122,15 +122,18 @@
 
 	<select id="findSummary" resultMap="statsSummaryMap">
 		SELECT
-			COALESCE((SELECT SUM(p.amount) FROM payment p
-				WHERE p.status IN ('DONE', 'CANCELED')
-				AND p.approved_at &gt;= #{todayStart} AND p.approved_at &lt; #{tomorrowStart}), 0) AS today_sales_amount,
-			(SELECT COUNT(*) FROM payment p
-				WHERE p.status IN ('DONE', 'CANCELED')
-				AND p.approved_at &gt;= #{todayStart} AND p.approved_at &lt; #{tomorrowStart}) AS today_order_count,
+			COALESCE(t.sales_amount, 0) AS today_sales_amount,
+			COALESCE(t.order_count, 0) AS today_order_count,
 			(SELECT COUNT(*) FROM member m
 				WHERE m.created_at &gt;= #{todayStart} AND m.created_at &lt; #{tomorrowStart}) AS today_new_member_count,
 			(SELECT COUNT(*) FROM orders o WHERE o.status = 'PENDING') AS pending_order_count
+		FROM (
+			<!-- GROUP BY 없는 집계라 매칭 행이 0건이어도 NULL 값 1행이 나와 항상 정확히 1행 보장이 유지된다. -->
+			SELECT SUM(p.amount) AS sales_amount, COUNT(*) AS order_count
+			FROM payment p
+			WHERE p.status IN ('DONE', 'CANCELED')
+			AND p.approved_at &gt;= #{todayStart} AND p.approved_at &lt; #{tomorrowStart}
+		) t
 	</select>
 
 </mapper>

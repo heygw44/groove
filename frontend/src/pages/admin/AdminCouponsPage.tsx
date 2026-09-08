@@ -7,8 +7,9 @@ import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Select } from '@/components/common/Select';
-import { Spinner } from '@/components/common/Spinner';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useToast } from '@/components/common/toastContext';
 import { useDisableAdminCoupon } from '@/hooks/mutations/useAdminCouponMutations';
 import { useAdminCoupons } from '@/hooks/queries/useAdminCoupons';
@@ -49,7 +50,7 @@ export default function AdminCouponsPage() {
   const [disabling, setDisabling] = useState<AdminCouponSummary | undefined>(undefined);
 
   const { showToast } = useToast();
-  const { data, isPending, isError, isPlaceholderData, refetch } = useAdminCoupons({
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminCoupons({
     status,
     page,
     size: PAGE_SIZE,
@@ -123,22 +124,10 @@ export default function AdminCouponsPage() {
         </div>
       </div>
 
-      {isPending && (
-        <div className="flex min-h-48 items-center justify-center">
-          <Spinner />
-        </div>
-      )}
+      {isPending && <TableSkeleton columns={8} />}
 
       {!isPending && isError && (
-        <EmptyState
-          title="쿠폰을 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="쿠폰을 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (

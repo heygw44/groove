@@ -172,6 +172,40 @@ k6 run --summary-export scripts/k6/results/product-list.json scripts/k6/product-
 
 3,000건 규모의 p95 재측정은 Discogs 배치 적재로 실데이터가 쌓인 뒤 진행한다.
 
+### 조회 인덱스 실행계획
+
+운영 데이터(상품 273건)에서는 옵티마이저가 거의 항상 풀스캔을 고르고 그게 실제로 싸서, 실행계획만으로는 인덱스가 일하는지 노는지 구분되지 않는다. 그래서 버려도 되는 스키마에 마이그레이션으로 운영과 같은 스키마를 세우고 합성 데이터를 채운 뒤 잰다. 아래는 상품 5만·주문 20만·리뷰 30만·알림 50만 규모에서 같은 조건으로 세 번 측정한 중앙값이다.
+
+```bash
+docker compose up -d
+backend/scripts/perf/index-explain.sh
+```
+
+스크립트가 `groove_perf` 스키마를 만들어 `V1`부터 마이그레이션을 적용하고, 시드를 채우고, `V11__query_index_tuning.sql` 적용 전후의 `EXPLAIN ANALYZE` 를 각각 뜬 뒤 스키마를 지운다. 개발 DB `groove` 는 건드리지 않는다. 다른 인덱스를 시험하려면 후보 DDL 을 `--after-ddl` 로 넘긴다.
+
+문제는 전부 같은 모양이었다 — 정렬 키를 선두로 갖는 인덱스가 없어 테이블을 통째로 읽고 `filesort` 로 넘어간 뒤, 정작 20건만 떼어낸다.
+
+| 케이스 | 변경 전 | 변경 후 | 접근 경로 |
+|---|---:|---:|---|
+| 관리자 주문 목록, 무필터 | 63.3ms | 0.080ms | 풀스캔+filesort → `idx_orders_created` 역순 스캔 |
+| 관리자 주문 목록, 키워드 | 64.5ms | 0.834ms | 풀스캔+filesort → `idx_orders_created` 역순 스캔 |
+| 관리자 주문 목록, 최근 30일 | 32.0ms | 0.399ms | 풀스캔+filesort → `idx_orders_created` 범위 스캔 |
+| 관리자 주문 목록, 상태 필터 | 30.5ms | 0.342ms | 4만 행+filesort → `idx_orders_status_created` |
+| 상품 목록, 최신순 | 31.7ms | 0.122ms | 풀스캔+filesort → `idx_product_created` 역순 스캔 |
+| 상품 목록, 장르+가격대 | 20.6ms | 0.679ms | 풀스캔+filesort → `idx_product_created` 역순 스캔 |
+| 안 읽은 알림 목록 | 0.731ms | 0.091ms | 512행+filesort → `idx_notification_member_read_created` |
+| 상품 목록, 인기순 | 2127ms | 0.114ms | `order_item` 42만 행 파생 테이블 집계 → `product.sold_quantity` 비정규화 컬럼, `idx_product_sold_review_created` 역순 스캔 |
+| 관리자 통계, 일별 매출 최근 30일 | 23.2ms | 5.34ms | `payment` 15만 행 풀스캔(취소 브랜치) → `idx_payment_canceled_at` range 488행 |
+| 관리자 통계, 오늘 가입 회원 수 | 3.9ms | 0.547ms | `member` 45,000행 풀스캔 → `idx_member_created` 커버링 range 5,054행 |
+| 관리자 회원 상세, 활동 요약 | 384ms | 8.2ms | 전 회원 집계 후 한 행 추출(`orders` 20만·`payment` 15만) → 회원 조건을 서브쿼리 안으로, 해당 회원 2,000행 |
+| 앨범 구독 목록 | 1.03ms | 0.163ms | 회원 구독 3,003행 읽고 filesort → `idx_album_watch_member_created` 역순 20행 |
+
+- 상품 목록 기본 정렬이 `idx_product_status_created (status, created_at)` 를 못 타는 건 조건이 `status <> 'HIDDEN'` 이라 선두 컬럼이 비등가이기 때문이다. 등가가 아니면 뒤 컬럼의 정렬 순서를 보장할 수 없어 옵티마이저가 인덱스를 통째로 포기한다.
+- 가격순 정렬(`ORDER BY price ASC, id DESC`)과 리뷰 평점순(`ORDER BY rating DESC, created_at DESC, id DESC`)에는 인덱스를 넣지 않았다. 2차 정렬 키의 방향이 반대라 오름차순 인덱스로는 정렬을 받을 수 없다. 실제로 `(price)` 는 옵티마이저가 후보로 올리지도 않았고(18.5 → 18.7ms), `(product_id, rating)` 은 선택은 됐지만 `created_at` 정렬이 남아 시간이 그대로였다(11.2 → 11.7ms). 방향별로 인덱스를 따로 두면 해결되지만 정렬 옵션이 다섯 개라 인덱스도 다섯 개가 된다.
+- 지운 인덱스는 셋이다. `idx_product_title_artist` 는 검색과 자동완성이 전부 `title LIKE '%키워드%'` 라 선두 인덱스로 범위를 못 좁히고(앨범 중복 판별의 등가 조회는 `album` 쪽 인덱스가 맡는다), 지워도 계획과 시간이 그대로였다. `idx_notification_member_read` 는 새 3컬럼 인덱스의 좌측 프리픽스다. `idx_orders_status` 는 필터·조인 경로에서 `idx_orders_status_expires` 가 대체하지만, 인기순 정렬의 판매량 집계가 이 인덱스를 커버링 풀스캔하고 있어서 그 구간만 427 → 522ms 로 늘어난다. `status` 는 값이 7개뿐이라 커버링 스캔 말고는 쓸 데가 없고, 손해 보는 쿼리 자체가 아래 이유로 1.5~2.5초짜리라 90ms 는 묻힌다고 보고 지웠다. 그 판매량 집계가 아래처럼 사라지면서 이 손해도 같이 없어졌다.
+
+인기순 정렬(1.5~2.5초)은 인덱스로 못 고치는 문제였다. 상품별 판매 수량을 구하는 파생 테이블(`order_item` 42만 행 집계)을 요청마다 통째로 materialize 하는 게 원인이라, 정렬 키 자체를 `product.sold_quantity` 컬럼으로 비정규화하고(`V12__product_sold_quantity.sql`) 판매량이 바뀌는 시점에만 갱신하는 쪽으로 바꿨다. 정렬 키(`sold_quantity, review_count, created_at, id`)가 전부 DESC 라 인덱스 하나로 정렬까지 끝난다. 관리자 주문 전체 건수(45.7ms)는 여전히 페이지네이션 총 개수라 20만 행을 다 세야 해서 인덱스로 줄일 수 없고, 후속 과제로 남아 있다.
+
 ## 추천 품질
 
 추천은 학습 모델 없이 가중치 합산 규칙으로 만든다. 규칙이 무작위 나열보다 낫다는 걸 보이려고 홀드아웃 방식으로 측정한다. 시드 회원의 위시리스트에서 20%를 떼어 없는 것처럼 만들고, 남은 신호(취향 프로필·나머지 위시·구매 이력·공동구매)만으로 추천을 계산한 다음, 떼어놓은 상품이 상위 10개 안에 들어오는지 센다.

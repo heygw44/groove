@@ -75,7 +75,8 @@ export function WishlistCard({
         <Button
           size="sm"
           className="flex-1"
-          disabled={soldOut || addingToCart}
+          disabled={soldOut}
+          loading={addingToCart}
           onClick={onAddToCart}
         >
           장바구니 담기

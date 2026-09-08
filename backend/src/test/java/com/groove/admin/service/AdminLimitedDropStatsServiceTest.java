@@ -141,5 +141,54 @@ class AdminLimitedDropStatsServiceTest {
 			// then
 			assertThat(result.get(0).attempts().competitionRate()).isZero();
 		}
+
+		@Test
+		@DisplayName("soldOutCount 만 없고 나머지 실패 집계가 있으면 attempts 는 null 이 아니다")
+		void treatsAttemptsAsNotNullWhenOnlyAlreadyPurchasedCountPresent() {
+			// given
+			LimitedDropStatsRow row = rowOf(LimitedDropStatus.CLOSED, 10, 5, null, 3L, null, null);
+			given(adminStatsMapper.findLimitedDropStats()).willReturn(List.of(row));
+
+			// when
+			List<LimitedDropStatsResponse> result = adminLimitedDropStatsService.getLimitedDropStats();
+
+			// then
+			assertThat(result.get(0).attempts()).isNotNull();
+			assertThat(result.get(0).attempts().soldOutCount()).isZero();
+			assertThat(result.get(0).attempts().alreadyPurchasedCount()).isEqualTo(3);
+			assertThat(result.get(0).attempts().attemptCount()).isEqualTo(8);
+		}
+
+		@Test
+		@DisplayName("soldOutCount 와 alreadyPurchasedCount 만 없고 notOpenCount 가 있으면 attempts 는 null 이 아니다")
+		void treatsAttemptsAsNotNullWhenOnlyNotOpenCountPresent() {
+			// given
+			LimitedDropStatsRow row = rowOf(LimitedDropStatus.CLOSED, 10, 5, null, null, 2L, null);
+			given(adminStatsMapper.findLimitedDropStats()).willReturn(List.of(row));
+
+			// when
+			List<LimitedDropStatsResponse> result = adminLimitedDropStatsService.getLimitedDropStats();
+
+			// then
+			assertThat(result.get(0).attempts()).isNotNull();
+			assertThat(result.get(0).attempts().notOpenCount()).isEqualTo(2);
+			assertThat(result.get(0).attempts().attemptCount()).isEqualTo(7);
+		}
+
+		@Test
+		@DisplayName("closedCount 만 있고 나머지 실패 집계가 없으면 attempts 는 null 이 아니다")
+		void treatsAttemptsAsNotNullWhenOnlyClosedCountPresent() {
+			// given
+			LimitedDropStatsRow row = rowOf(LimitedDropStatus.CLOSED, 10, 5, null, null, null, 1L);
+			given(adminStatsMapper.findLimitedDropStats()).willReturn(List.of(row));
+
+			// when
+			List<LimitedDropStatsResponse> result = adminLimitedDropStatsService.getLimitedDropStats();
+
+			// then
+			assertThat(result.get(0).attempts()).isNotNull();
+			assertThat(result.get(0).attempts().closedCount()).isEqualTo(1);
+			assertThat(result.get(0).attempts().attemptCount()).isEqualTo(6);
+		}
 	}
 }

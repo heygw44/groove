@@ -2,12 +2,12 @@ import axios from 'axios';
 import { useParams } from 'react-router-dom';
 
 import { ProductForm } from '@/components/admin/ProductForm';
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { LinkButton } from '@/components/common/LinkButton';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useAdminProduct } from '@/hooks/queries/useAdminProduct';
-import { getErrorCode, getErrorMessage } from '@/utils/apiError';
+import { getErrorCode } from '@/utils/apiError';
 
 const ID_PATTERN = /^\d+$/;
 
@@ -19,7 +19,16 @@ export default function AdminProductEditPage() {
   const { data: product, isPending, isError, error, refetch } = useAdminProduct(id);
 
   if (!isValidId) {
-    return <p className="text-sm text-danger">존재하지 않는 상품입니다.</p>;
+    return (
+      <EmptyState
+        title="존재하지 않는 상품입니다"
+        action={
+          <LinkButton to="/admin/products" variant="secondary">
+            상품 목록으로
+          </LinkButton>
+        }
+      />
+    );
   }
 
   if (isPending) {
@@ -45,17 +54,7 @@ export default function AdminProductEditPage() {
   }
 
   if (isError || !product) {
-    return (
-      <EmptyState
-        title="상품을 불러오지 못했습니다"
-        description={getErrorMessage(error)}
-        action={
-          <Button variant="secondary" onClick={() => refetch()}>
-            다시 시도
-          </Button>
-        }
-      />
-    );
+    return <QueryErrorState error={error} onRetry={refetch} title="상품을 불러오지 못했습니다" />;
   }
 
   return (

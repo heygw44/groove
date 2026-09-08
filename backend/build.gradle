@@ -127,7 +127,9 @@ jacocoTestReport {
 }
 
 jacocoTestCoverageVerification {
-    // service 클래스 라인 커버리지 70% 게이트. check 에 연결되어 위반 시 빌드가 실패한다.
+    // service 클래스 단위 게이트. check 에 연결되어 위반 시 빌드가 실패한다.
+    // 실측이 라인 97%/브랜치 87% 라 기존 70% 는 회귀를 잡지 못했다. 최저 클래스 기준으로 다시 잠근다.
+    // 브랜치가 없는 클래스(서비스 패키지의 record·이벤트·인터페이스)는 COVEREDRATIO 가 NaN 이라 위반으로 잡히지 않는다.
     dependsOn test
     violationRules {
         rule {
@@ -136,7 +138,12 @@ jacocoTestCoverageVerification {
             limit {
                 counter = 'LINE'
                 value = 'COVEREDRATIO'
-                minimum = 0.70
+                minimum = 0.85
+            }
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 0.75
             }
         }
     }

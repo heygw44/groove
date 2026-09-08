@@ -24,6 +24,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
+import com.groove.product.service.ProductSalesStatsUpdater;
 
 import lombok.RequiredArgsConstructor;
 
@@ -40,6 +41,7 @@ public class AdminOrderService {
 	private final AdminAuditLogService adminAuditLogService;
 	private final LimitedPurchaseWriter limitedPurchaseWriter;
 	private final LimitedReleaseSynchronizer limitedReleaseSynchronizer;
+	private final ProductSalesStatsUpdater productSalesStatsUpdater;
 	private final Clock clock;
 
 	public PageResponse<AdminOrderSummaryResponse> getList(AdminOrderSearchRequest request) {
@@ -76,6 +78,7 @@ public class AdminOrderService {
 					.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
 			if (previous == OrderStatus.PAID || previous == OrderStatus.PREPARING) {
 				canceledPaymentId = paymentCancelHook.onPaidOrderCanceled(order);
+				productSalesStatsUpdater.refreshFor(order);
 			}
 		}
 

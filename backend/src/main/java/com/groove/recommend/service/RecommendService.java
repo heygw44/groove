@@ -22,7 +22,6 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.recommend.dto.HomeRecommendResponse;
-import com.groove.recommend.dto.ProductFeatureRow;
 import com.groove.recommend.dto.RecommendItemResponse;
 import com.groove.recommend.dto.RecommendReason;
 import com.groove.recommend.dto.TasteMatchResponse;
@@ -59,6 +58,7 @@ public class RecommendService {
 
 	private final RecommendQueryMapper recommendQueryMapper;
 	private final RecommendScorer recommendScorer;
+	private final ProductFeatureCache productFeatureCache;
 	private final BoughtTogetherRedisService boughtTogetherRedisService;
 	private final RecentViewService recentViewService;
 	private final WishlistRepository wishlistRepository;
@@ -192,14 +192,8 @@ public class RecommendService {
 		return new TasteSignal(artistIds, genreIds, decades);
 	}
 
-	// 상품이 수백 개 규모라 캐시 없이 요청마다 findProductFeatures() 를 한 번 읽어 쓴다.
 	private Map<Long, ProductFeature> loadFeatures() {
-		Map<Long, ProductFeature> features = new LinkedHashMap<>();
-		for (ProductFeatureRow row : recommendQueryMapper.findProductFeatures()) {
-			ProductFeature feature = ProductFeature.from(row);
-			features.put(feature.id(), feature);
-		}
-		return features;
+		return productFeatureCache.get();
 	}
 
 	private Map<Long, Double> aggregateCoPurchaseScores(Set<Long> seedIds) {

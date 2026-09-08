@@ -14,17 +14,22 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.LabelFixture;
 import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.ReviewFixture;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderStatus;
+import com.groove.order.repository.OrderRepository;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
@@ -70,6 +75,9 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 
 	@Autowired
 	private ReviewRepository reviewRepository;
+
+	@Autowired
+	private OrderRepository orderRepository;
 
 	@Autowired
 	private EntityManager entityManager;
@@ -405,6 +413,116 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			// then
 			assertThat(afterDeletingAll.getAverageRating()).isNull();
 			assertThat(afterDeletingAll.getReviewCount()).isZero();
+		}
+	}
+
+	@Nested
+	@DisplayName("refreshSoldQuantities()")
+	class RefreshSoldQuantities {
+
+		@Test
+		@DisplayName("PAID 이상 상태의 주문 수량만 더하고 PENDING·CANCELED 는 빼고 계산한다")
+		void countsOnlyPaidOrLaterStatuses() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product createdProduct = ProductFixture.create(artist, "Sold Qty Status Product");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
+			saveOrder(product, 3, OrderStatus.PAID);
+			saveOrder(product, 2, OrderStatus.PREPARING);
+			saveOrder(product, 1, OrderStatus.SHIPPED);
+			saveOrder(product, 4, OrderStatus.DELIVERED);
+			saveOrder(product, 100, OrderStatus.PENDING);
+			saveOrder(product, 100, OrderStatus.CANCELED);
+
+			// when
+			productRepository.refreshSoldQuantities(List.of(product.getId()));
+			entityManager.clear();
+			Product refreshed = productRepository.findById(product.getId()).orElseThrow();
+
+			// then
+			assertThat(refreshed.getSoldQuantity()).isEqualTo(10L);
+		}
+
+		@Test
+		@DisplayName("판매량이 있던 상품의 주문이 전부 취소되면 0 으로 되돌아간다")
+		void resetsToZeroWhenAllOrdersCanceled() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product createdProduct = ProductFixture.create(artist, "Sold Qty Reset Product");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
+			Order order = saveOrder(product, 5, OrderStatus.PAID);
+			productRepository.refreshSoldQuantities(List.of(product.getId()));
+			entityManager.clear();
+			Product afterFirstOrder = productRepository.findById(product.getId()).orElseThrow();
+			assertThat(afterFirstOrder.getSoldQuantity()).isEqualTo(5L);
+
+			// when
+			Order managedOrder = orderRepository.findById(order.getId()).orElseThrow();
+			ReflectionTestUtils.setField(managedOrder, "status", OrderStatus.CANCELED);
+			productRepository.refreshSoldQuantities(List.of(product.getId()));
+			entityManager.clear();
+			Product afterCancel = productRepository.findById(product.getId()).orElseThrow();
+
+			// then
+			assertThat(afterCancel.getSoldQuantity()).isZero();
+		}
+
+		@Test
+		@DisplayName("두 번 호출해도 결과가 같다")
+		void isIdempotentWhenCalledTwice() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product createdProduct = ProductFixture.create(artist, "Sold Qty Idempotent Product");
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
+			saveOrder(product, 7, OrderStatus.PAID);
+
+			// when
+			productRepository.refreshSoldQuantities(List.of(product.getId()));
+			entityManager.clear();
+			Product afterFirstCall = productRepository.findById(product.getId()).orElseThrow();
+			productRepository.refreshSoldQuantities(List.of(product.getId()));
+			entityManager.clear();
+			Product afterSecondCall = productRepository.findById(product.getId()).orElseThrow();
+
+			// then
+			assertThat(afterFirstCall.getSoldQuantity()).isEqualTo(7L);
+			assertThat(afterSecondCall.getSoldQuantity()).isEqualTo(7L);
+		}
+
+		@Test
+		@DisplayName("여러 상품 id 를 한 번에 넘기면 전부 갱신된다")
+		void refreshesEveryGivenProductInOneCall() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product createdFirst = ProductFixture.create(artist, "Sold Qty Batch Product A");
+			albumRepository.save(createdFirst.getAlbum());
+			Product first = productRepository.save(createdFirst);
+			Product createdSecond = ProductFixture.create(artist, "Sold Qty Batch Product B");
+			albumRepository.save(createdSecond.getAlbum());
+			Product second = productRepository.save(createdSecond);
+			saveOrder(first, 6, OrderStatus.PAID);
+			saveOrder(second, 9, OrderStatus.PAID);
+
+			// when
+			productRepository.refreshSoldQuantities(List.of(first.getId(), second.getId()));
+			entityManager.clear();
+			Product refreshedFirst = productRepository.findById(first.getId()).orElseThrow();
+			Product refreshedSecond = productRepository.findById(second.getId()).orElseThrow();
+
+			// then
+			assertThat(refreshedFirst.getSoldQuantity()).isEqualTo(6L);
+			assertThat(refreshedSecond.getSoldQuantity()).isEqualTo(9L);
+		}
+
+		private Order saveOrder(Product product, int quantity, OrderStatus status) {
+			Member buyer = memberRepository.save(MemberFixture.create("sold-qty-" + System.nanoTime() + "@x.com"));
+			Order order = OrderFixture.create(buyer, "20260908-SQ" + System.nanoTime() % 100000);
+			order.addItem(product, quantity);
+			ReflectionTestUtils.setField(order, "status", status);
+			return orderRepository.save(order);
 		}
 	}
 

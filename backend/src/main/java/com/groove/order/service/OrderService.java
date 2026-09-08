@@ -42,6 +42,7 @@ import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
+import com.groove.product.service.ProductSalesStatsUpdater;
 
 import lombok.RequiredArgsConstructor;
 
@@ -66,6 +67,7 @@ public class OrderService {
 	private final OrderQueryMapper orderQueryMapper;
 	private final PaymentRepository paymentRepository;
 	private final PaymentCancelHook paymentCancelHook;
+	private final ProductSalesStatsUpdater productSalesStatsUpdater;
 	private final Clock clock;
 
 	@Transactional
@@ -143,6 +145,9 @@ public class OrderService {
 
 		if (previousStatus == OrderStatus.PAID) {
 			paymentCancelHook.onPaidOrderCanceled(order);
+			// paymentCancelHook 은 같은 트랜잭션에서 토스에 HTTP 호출을 하므로, 판매량 재계산을
+			// 그 앞에 두면 인기 상품 한 행의 X 락을 외부 API 왕복 내내 물게 된다. 반드시 뒤에 둔다.
+			productSalesStatsUpdater.refreshFor(order);
 		}
 		Long limitedDropId = limitedRelease.map(LimitedRelease::dropId).orElse(null);
 		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId));

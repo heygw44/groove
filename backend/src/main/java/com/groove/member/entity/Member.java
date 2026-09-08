@@ -18,6 +18,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Builder;
@@ -28,7 +29,9 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = PROTECTED)
-@Table(name = "member", uniqueConstraints = @UniqueConstraint(name = "uk_member_email", columnNames = "email"))
+@Table(name = "member",
+		uniqueConstraints = @UniqueConstraint(name = "uk_member_email", columnNames = "email"),
+		indexes = @Index(name = "idx_member_created", columnList = "created_at"))
 public class Member extends BaseTimeEntity {
 
 	@Id

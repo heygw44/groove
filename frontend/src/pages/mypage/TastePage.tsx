@@ -1,9 +1,7 @@
-import { Button } from '@/components/common/Button';
-import { EmptyState } from '@/components/common/EmptyState';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Skeleton } from '@/components/common/Skeleton';
 import { TasteProfileForm } from '@/components/recommend/TasteProfileForm';
 import { useTasteProfile } from '@/hooks/queries/useTasteProfile';
-import { getErrorMessage } from '@/utils/apiError';
 
 export default function TastePage() {
   const { data, isPending, isError, error, refetch } = useTasteProfile();
@@ -25,15 +23,7 @@ export default function TastePage() {
         )}
 
         {!isPending && isError && (
-          <EmptyState
-            title="취향을 불러오지 못했습니다"
-            description={getErrorMessage(error)}
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                다시 시도
-              </Button>
-            }
-          />
+          <QueryErrorState error={error} onRetry={refetch} title="취향을 불러오지 못했습니다." />
         )}
 
         {!isPending && !isError && <TasteProfileForm profile={data} />}

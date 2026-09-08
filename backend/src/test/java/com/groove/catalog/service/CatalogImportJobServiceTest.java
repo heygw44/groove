@@ -32,14 +32,18 @@ import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.batch.core.launch.NoSuchJobException;
+import org.springframework.batch.core.launch.NoSuchJobExecutionException;
+import org.springframework.batch.core.repository.JobRestartException;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.catalog.batch.CatalogImportJobConfig;
+import com.groove.catalog.dto.CatalogImportJobHistoryRow;
 import com.groove.catalog.dto.CatalogImportJobRequest;
 import com.groove.catalog.dto.CatalogImportJobResponse;
 import com.groove.catalog.dto.CatalogImportJobStartResponse;
+import com.groove.catalog.mapper.CatalogImportJobQueryMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
@@ -63,11 +67,14 @@ class CatalogImportJobServiceTest {
 	JobOperator jobOperator;
 
 	@Mock
+	CatalogImportJobQueryMapper catalogImportJobQueryMapper;
+
+	@Mock
 	AdminAuditLogService adminAuditLogService;
 
 	CatalogImportJobService service() {
 		return new CatalogImportJobService(discogsMasterImportJob, jobLauncher, jobExplorer, jobOperator,
-				adminAuditLogService, FIXED_CLOCK);
+				catalogImportJobQueryMapper, adminAuditLogService, FIXED_CLOCK);
 	}
 
 	private JobInstance jobInstance(long id) {
@@ -126,6 +133,22 @@ class CatalogImportJobServiceTest {
 			verify(adminAuditLogService).record(1L, AdminAuditAction.CATALOG_IMPORT_JOB_START,
 					AdminAuditTargetType.CATALOG_IMPORT_JOB, 88L, "discogsMasterId=21247");
 		}
+
+		@Test
+		@DisplayName("잡 실행이 실패하면 CATALOG_IMPORT_JOB_RUNNING 예외를 던진다")
+		void throwsWhenJobLauncherFails() throws Exception {
+			// given
+			given(jobExplorer.findRunningJobExecutions(CatalogImportJobConfig.JOB_NAME)).willReturn(Set.of());
+			given(jobLauncher.run(eq(discogsMasterImportJob), any()))
+					.willThrow(new JobRestartException("이미 완료된 잡"));
+			CatalogImportJobRequest request = new CatalogImportJobRequest(21247L, BigDecimal.valueOf(45000));
+
+			// when & then
+			assertThatThrownBy(() -> service().start(1L, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.CATALOG_IMPORT_JOB_RUNNING);
+		}
 	}
 
 	@Nested
@@ -154,11 +177,10 @@ class CatalogImportJobServiceTest {
 			given(jobExplorer.getJobInstanceCount(CatalogImportJobConfig.JOB_NAME)).willReturn(1L);
 			JobInstance instance = jobInstance(1L);
 			given(jobExplorer.getJobInstances(CatalogImportJobConfig.JOB_NAME, 0, 20)).willReturn(List.of(instance));
-			JobParameters params = new JobParametersBuilder()
-					.addLong(CatalogImportJobConfig.PARAM_MASTER_ID, 21247L)
-					.toJobParameters();
-			JobExecution execution = jobExecution(88L, instance, params, BatchStatus.STARTED);
-			given(jobExplorer.getJobExecutions(instance)).willReturn(List.of(execution));
+			CatalogImportJobHistoryRow row = new CatalogImportJobHistoryRow(1L, 88L, BatchStatus.STARTED, null, null,
+					null, 21247L, 5L, 10L, 8L, 1L, 0L, 0L, 0L, null);
+			given(catalogImportJobQueryMapper.findLatestExecutions(List.of(1L), CatalogImportJobConfig.PARAM_MASTER_ID))
+					.willReturn(List.of(row));
 
 			// when
 			PageResponse<CatalogImportJobResponse> result = service().list(0, 20);
@@ -167,6 +189,24 @@ class CatalogImportJobServiceTest {
 			assertThat(result.content()).hasSize(1);
 			assertThat(result.content().get(0).jobExecutionId()).isEqualTo(88L);
 			assertThat(result.content().get(0).discogsMasterId()).isEqualTo(21247L);
+		}
+
+		@Test
+		@DisplayName("실행 이력이 없는 인스턴스는 결과에서 제외한다")
+		void skipsInstancesWithNoExecutions() throws Exception {
+			// given
+			given(jobExplorer.getJobInstanceCount(CatalogImportJobConfig.JOB_NAME)).willReturn(1L);
+			JobInstance instance = jobInstance(1L);
+			given(jobExplorer.getJobInstances(CatalogImportJobConfig.JOB_NAME, 0, 20)).willReturn(List.of(instance));
+			given(catalogImportJobQueryMapper.findLatestExecutions(List.of(1L), CatalogImportJobConfig.PARAM_MASTER_ID))
+					.willReturn(List.of());
+
+			// when
+			PageResponse<CatalogImportJobResponse> result = service().list(0, 20);
+
+			// then
+			assertThat(result.content()).isEmpty();
+			assertThat(result.totalElements()).isEqualTo(1L);
 		}
 	}
 
@@ -201,6 +241,26 @@ class CatalogImportJobServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.CATALOG_IMPORT_JOB_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("존재하면 실행 결과를 매핑해 반환한다")
+		void returnsResponseWhenFound() {
+			// given
+			JobInstance instance = jobInstance(1L);
+			JobParameters params = new JobParametersBuilder()
+					.addLong(CatalogImportJobConfig.PARAM_MASTER_ID, 21247L)
+					.toJobParameters();
+			JobExecution execution = jobExecution(88L, instance, params, BatchStatus.COMPLETED);
+			given(jobExplorer.getJobExecution(88L)).willReturn(execution);
+
+			// when
+			CatalogImportJobResponse response = service().get(88L);
+
+			// then
+			assertThat(response.jobExecutionId()).isEqualTo(88L);
+			assertThat(response.discogsMasterId()).isEqualTo(21247L);
+			assertThat(response.status()).isEqualTo(BatchStatus.COMPLETED);
 		}
 	}
 
@@ -242,6 +302,24 @@ class CatalogImportJobServiceTest {
 			// then
 			assertThat(response.jobExecutionId()).isEqualTo(89L);
 			verify(jobOperator).restart(1L);
+		}
+
+		@Test
+		@DisplayName("jobOperator 재시작이 실패하면 COMMON_CONFLICT 예외를 던진다")
+		void throwsWhenJobOperatorFails() throws Exception {
+			// given
+			JobInstance instance = jobInstance(1L);
+			JobExecution execution = jobExecution(1L, instance,
+					new JobParametersBuilder().toJobParameters(), BatchStatus.FAILED);
+			execution.setExitStatus(ExitStatus.FAILED);
+			given(jobExplorer.getJobExecution(1L)).willReturn(execution);
+			given(jobOperator.restart(1L)).willThrow(new NoSuchJobExecutionException("실행 이력 없음"));
+
+			// when & then
+			assertThatThrownBy(() -> service().restart(1L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_CONFLICT);
 		}
 	}
 }

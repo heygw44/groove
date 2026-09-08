@@ -5,6 +5,7 @@ import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { NotificationRow } from '@/components/notification/NotificationRow';
@@ -31,7 +32,7 @@ export default function NotificationListPage() {
   const [isDeleteReadOpen, setIsDeleteReadOpen] = useState(false);
 
   const { showToast } = useToast();
-  const { data, isPending, isError, isPlaceholderData, refetch } = useNotifications({
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useNotifications({
     page,
     size: PAGE_SIZE,
     unreadOnly,
@@ -122,7 +123,7 @@ export default function NotificationListPage() {
             variant="secondary"
             size="sm"
             onClick={handleMarkAllRead}
-            disabled={markAllReadMutation.isPending}
+            loading={markAllReadMutation.isPending}
           >
             전체 읽음
           </Button>
@@ -145,15 +146,7 @@ export default function NotificationListPage() {
         )}
 
         {!isPending && isError && (
-          <EmptyState
-            title="알림을 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                다시 시도
-              </Button>
-            }
-          />
+          <QueryErrorState error={error} onRetry={refetch} title="알림을 불러오지 못했습니다." />
         )}
 
         {!isPending && !isError && data && data.content.length === 0 && (

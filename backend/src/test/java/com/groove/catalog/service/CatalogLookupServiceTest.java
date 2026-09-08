@@ -105,6 +105,42 @@ class CatalogLookupServiceTest {
 			// then
 			verify(client).search("5012394144777", null, null, 2);
 		}
+
+		@Test
+		@DisplayName("results 가 null 이면 빈 목록으로 매핑한다")
+		void returnsEmptyContentWhenResultsIsNull() {
+			// given
+			CatalogLookupRequest request = new CatalogLookupRequest(null, null, "nirvana", 0);
+			DiscogsSearchResponse response = new DiscogsSearchResponse(
+					new DiscogsSearchResponse.Pagination(1, 1, 20, 0), null);
+			given(client.search(null, null, "nirvana", 0)).willReturn(response);
+
+			// when
+			PageResponse<CatalogLookupResponse> page = catalogLookupService.lookup(request);
+
+			// then
+			assertThat(page.content()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("pagination 이 null 이면 결과 개수를 총 개수로 사용한다")
+		void usesContentSizeAsTotalWhenPaginationIsNull() {
+			// given
+			CatalogLookupRequest request = new CatalogLookupRequest(null, null, "nirvana", 0);
+			DiscogsSearchResponse.Result result = DiscogsFixture.searchResult(7097051L, "Nirvana - Nevermind", "2015");
+			DiscogsSearchResponse response = new DiscogsSearchResponse(null, List.of(result));
+			CatalogLookupResponse mapped = new CatalogLookupResponse(7097051L, "Nevermind", "Nirvana", 2015, "US",
+					"CS 8163", "DGC", "https://thumb", false);
+			given(client.search(null, null, "nirvana", 0)).willReturn(response);
+			given(productRepository.findExistingDiscogsReleaseIds(anyList())).willReturn(List.of());
+			given(mapper.toLookup(result, false)).willReturn(mapped);
+
+			// when
+			PageResponse<CatalogLookupResponse> page = catalogLookupService.lookup(request);
+
+			// then
+			assertThat(page.totalElements()).isEqualTo(1);
+		}
 	}
 
 	@Nested

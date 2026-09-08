@@ -3,6 +3,7 @@ package com.groove.notification.controller;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,12 +13,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.groove.auth.LoginMember;
 import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
-import com.groove.notification.dto.AlbumWatchListResponse;
+import com.groove.global.common.PageResponse;
 import com.groove.notification.dto.AlbumWatchResponse;
+import com.groove.notification.dto.AlbumWatchSearchRequest;
 import com.groove.notification.service.AlbumWatchService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @Tag(name = "AlbumWatch", description = "앨범 새 프레싱 알림 구독")
@@ -44,7 +47,8 @@ public class AlbumWatchController {
 
 	@Operation(summary = "내 앨범 구독 목록 조회")
 	@GetMapping
-	public ApiResponse<AlbumWatchListResponse> getMyWatches(@AuthMember LoginMember loginMember) {
-		return ApiResponse.ok(albumWatchService.getMyWatches(loginMember.id()));
+	public ApiResponse<PageResponse<AlbumWatchResponse>> getMyWatches(@AuthMember LoginMember loginMember,
+			@Valid @ModelAttribute AlbumWatchSearchRequest request) {
+		return ApiResponse.ok(albumWatchService.getMyWatches(loginMember.id(), request));
 	}
 }

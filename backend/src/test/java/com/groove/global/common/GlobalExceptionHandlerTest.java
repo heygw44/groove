@@ -7,14 +7,21 @@ import java.sql.SQLException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.MethodParameter;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.groove.coupon.entity.Coupon;
 import com.groove.inventory.entity.Stock;
@@ -22,6 +29,51 @@ import com.groove.inventory.entity.Stock;
 class GlobalExceptionHandlerTest {
 
 	GlobalExceptionHandler globalExceptionHandler = new GlobalExceptionHandler();
+
+	@Nested
+	@DisplayName("handleValidation()")
+	class HandleValidation {
+
+		@Test
+		@DisplayName("필드 오류에 기본 메시지가 있으면 그대로 반환한다")
+		void returnsFieldErrorMessageWhenPresent() throws NoSuchMethodException {
+			// given
+			MethodArgumentNotValidException exception = validationException("이메일 형식이 올바르지 않습니다.");
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleValidation(exception);
+
+			// then
+			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+			assertThat(response.getBody().error().fieldErrors())
+					.extracting("reason")
+					.containsExactly("이메일 형식이 올바르지 않습니다.");
+		}
+
+		@Test
+		@DisplayName("필드 오류에 기본 메시지가 없으면 invalid 로 대체한다")
+		void fallsBackToInvalidWhenMessageMissing() throws NoSuchMethodException {
+			// given
+			MethodArgumentNotValidException exception = validationException(null);
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleValidation(exception);
+
+			// then
+			assertThat(response.getBody().error().fieldErrors())
+					.extracting("reason")
+					.containsExactly("invalid");
+		}
+
+		private MethodArgumentNotValidException validationException(String defaultMessage)
+				throws NoSuchMethodException {
+			BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "target");
+			bindingResult.addError(new FieldError("target", "email", null, false, null, null, defaultMessage));
+			MethodParameter methodParameter = new MethodParameter(
+					GlobalExceptionHandlerTest.class.getDeclaredMethod("dummyTarget", String.class), 0);
+			return new MethodArgumentNotValidException(methodParameter, bindingResult);
+		}
+	}
 
 	@Nested
 	@DisplayName("handleInvalidInput()")
@@ -59,6 +111,44 @@ class GlobalExceptionHandlerTest {
 			// then
 			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.FILE_SIZE_EXCEEDED.name());
+		}
+	}
+
+	@Nested
+	@DisplayName("handleNotFound()")
+	class HandleNotFound {
+
+		@Test
+		@DisplayName("정적 리소스를 찾지 못하면 404 COMMON_RESOURCE_NOT_FOUND 를 반환한다")
+		void returnsResourceNotFound() {
+			// given
+			NoResourceFoundException exception = new NoResourceFoundException(HttpMethod.GET, "static/missing.png");
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleNotFound(exception);
+
+			// then
+			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.COMMON_RESOURCE_NOT_FOUND.name());
+		}
+	}
+
+	@Nested
+	@DisplayName("handleAccessDenied()")
+	class HandleAccessDenied {
+
+		@Test
+		@DisplayName("접근 권한이 없으면 403 AUTH_FORBIDDEN 을 반환한다")
+		void returnsForbidden() {
+			// given
+			AccessDeniedException exception = new AccessDeniedException("접근 거부");
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleAccessDenied(exception);
+
+			// then
+			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.AUTH_FORBIDDEN.name());
 		}
 	}
 
@@ -211,5 +301,8 @@ class GlobalExceptionHandlerTest {
 			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
 			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.COMMON_CONFLICT.name());
 		}
+	}
+
+	private void dummyTarget(String value) {
 	}
 }

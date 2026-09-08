@@ -320,5 +320,48 @@ class MemberQueryMapperTest extends MybatisTestSupport {
 			assertThat(result.orderCount()).isEqualTo(1);
 			assertThat(result.totalPaymentAmount()).isEqualByComparingTo(PRODUCT_PRICE);
 		}
+
+		@Test
+		@DisplayName("다른 회원의 주문·결제·쿠폰이 섞이지 않는다")
+		void excludesOtherMembersActivity() {
+			// given
+			Member target = MemberFixture.create("mqm-iso-target@groove.com");
+			Member other = MemberFixture.create("mqm-iso-other@groove.com");
+			em.persist(target);
+			em.persist(other);
+			em.flush();
+			paidOrderWithDonePayment(target, "20260905-MQMISO001");
+			paidOrderWithDonePayment(other, "20260905-MQMISO002");
+			paidOrderWithDonePayment(other, "20260905-MQMISO003");
+
+			Coupon targetCoupon = CouponFixture.fixed("MQM-ISO-TARGET", new BigDecimal("1000"));
+			Coupon otherCoupon = CouponFixture.fixed("MQM-ISO-OTHER", new BigDecimal("1000"));
+			em.persist(targetCoupon);
+			em.persist(otherCoupon);
+			em.persist(MemberCouponFixture.create(target, targetCoupon));
+			em.persist(MemberCouponFixture.create(other, otherCoupon));
+			em.flush();
+			em.clear();
+
+			// when
+			AdminMemberActivitySummary result = memberQueryMapper.findActivitySummary(target.getId(),
+					LocalDateTime.now());
+
+			// then
+			assertThat(result.orderCount()).isEqualTo(1);
+			assertThat(result.totalPaymentAmount()).isEqualByComparingTo(PRODUCT_PRICE);
+			assertThat(result.usableCouponCount()).isEqualTo(1L);
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 회원이면 null 을 반환한다")
+		void returnsNullWhenMemberDoesNotExist() {
+			// when
+			AdminMemberActivitySummary result = memberQueryMapper.findActivitySummary(999_999_999L,
+					LocalDateTime.now());
+
+			// then
+			assertThat(result).isNull();
+		}
 	}
 }

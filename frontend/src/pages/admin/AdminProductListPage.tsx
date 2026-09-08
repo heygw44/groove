@@ -3,13 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 
 import { AdminProductTable } from '@/components/admin/AdminProductTable';
 import { StockAdjustModal } from '@/components/admin/StockAdjustModal';
-import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Select } from '@/components/common/Select';
-import { Spinner } from '@/components/common/Spinner';
+import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useToast } from '@/components/common/toastContext';
 import { useHideProduct, useRestoreProduct } from '@/hooks/mutations/useAdminProductMutations';
 import { useAdminProducts } from '@/hooks/queries/useAdminProducts';
@@ -51,7 +51,7 @@ export default function AdminProductListPage() {
   const [restoring, setRestoring] = useState<AdminProductSummary | undefined>(undefined);
 
   const { showToast } = useToast();
-  const { data, isPending, isError, isPlaceholderData, refetch } = useAdminProducts({
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminProducts({
     status,
     page,
     size: PAGE_SIZE,
@@ -142,22 +142,10 @@ export default function AdminProductListPage() {
         </div>
       </div>
 
-      {isPending && (
-        <div className="flex min-h-48 items-center justify-center">
-          <Spinner />
-        </div>
-      )}
+      {isPending && <TableSkeleton columns={7} />}
 
       {!isPending && isError && (
-        <EmptyState
-          title="상품을 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="상품을 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (

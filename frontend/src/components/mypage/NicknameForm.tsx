@@ -53,7 +53,7 @@ export function NicknameForm({ nickname }: NicknameFormProps) {
         <Input id="nickname" invalid={Boolean(errors.nickname)} {...register('nickname')} />
       </Field>
       <div>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" loading={isSubmitting}>
           저장
         </Button>
       </div>

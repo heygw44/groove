@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { useToast } from '@/components/common/toastContext';
 import { WishlistCard, WishlistCardSkeleton } from '@/components/wishlist/WishlistCard';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
@@ -25,7 +25,7 @@ export default function WishlistPage() {
   const [addingProductId, setAddingProductId] = useState<number | undefined>(undefined);
 
   const { showToast } = useToast();
-  const { data, isPending, isError, isPlaceholderData, refetch } = useWishlist({
+  const { data, isPending, isError, error, isPlaceholderData, refetch } = useWishlist({
     page,
     size: PAGE_SIZE,
   });
@@ -82,15 +82,7 @@ export default function WishlistPage() {
         )}
 
         {!isPending && isError && (
-          <EmptyState
-            title="찜 목록을 불러오지 못했습니다"
-            description="잠시 후 다시 시도해주세요."
-            action={
-              <Button variant="secondary" onClick={() => refetch()}>
-                다시 시도
-              </Button>
-            }
-          />
+          <QueryErrorState error={error} onRetry={refetch} title="찜 목록을 불러오지 못했습니다." />
         )}
 
         {!isPending && !isError && data && data.content.length === 0 && (

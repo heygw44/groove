@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Drawer } from '@/components/common/Drawer';
-import { EmptyState } from '@/components/common/EmptyState';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Select } from '@/components/common/Select';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
@@ -33,7 +33,7 @@ const STALE_STATUS_CODES = new Set(['ORDER_INVALID_STATUS_TRANSITION', 'ORDER_NO
 export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDrawerProps) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const { data: detail, isPending, isError, refetch } = useAdminOrder(orderId ?? 0);
+  const { data: detail, isPending, isError, error, refetch } = useAdminOrder(orderId ?? 0);
   const changeStatusMutation = useChangeAdminOrderStatus();
 
   const [nextStatus, setNextStatus] = useState<OrderStatus | ''>('');
@@ -99,15 +99,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
       )}
 
       {!isPending && isError && (
-        <EmptyState
-          title="주문 정보를 불러오지 못했습니다"
-          description="잠시 후 다시 시도해주세요."
-          action={
-            <Button variant="secondary" onClick={() => refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
+        <QueryErrorState error={error} onRetry={refetch} title="주문 정보를 불러오지 못했습니다" />
       )}
 
       {!isPending && !isError && detail && (

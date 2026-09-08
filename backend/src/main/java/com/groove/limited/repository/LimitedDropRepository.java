@@ -26,11 +26,13 @@ public interface LimitedDropRepository extends JpaRepository<LimitedDrop, Long> 
 
 	boolean existsByProductIdAndStatusNot(Long productId, LimitedDropStatus status);
 
-	@EntityGraph(attributePaths = "product")
+	// 상세 응답이 product.artist.name 까지 읽으므로 아티스트도 함께 건다.
+	@EntityGraph(attributePaths = {"product", "product.artist"})
 	Optional<LimitedDrop> findWithProductById(Long id);
 
+	// product 를 fetch join 하면 MySQL 의 for update(of 절 없음)가 조인된 product 행까지 잠근다.
+	// performance_schema.data_locks 로 실측: product PRIMARY 에 X,REC_NOT_GAP 락이 잡혀 있었다. 그래서 뗐다.
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
-	@EntityGraph(attributePaths = "product")
 	@Query("select d from LimitedDrop d where d.id = :id")
 	Optional<LimitedDrop> findByIdForUpdate(@Param("id") Long id);
 

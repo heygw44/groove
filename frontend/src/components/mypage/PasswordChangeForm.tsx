@@ -91,7 +91,7 @@ export function PasswordChangeForm() {
       </Field>
 
       <div>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" loading={isSubmitting}>
           비밀번호 변경
         </Button>
       </div>

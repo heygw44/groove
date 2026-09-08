@@ -39,6 +39,7 @@ import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.recommend.service.ProductCatalogChangedEvent;
 
 import lombok.RequiredArgsConstructor;
 
@@ -78,13 +79,14 @@ public class AdminProductService {
 
 		adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_CREATE, AdminAuditTargetType.PRODUCT,
 				saved.getId(), null);
+		eventPublisher.publishEvent(new ProductCatalogChangedEvent());
 
 		return AdminProductResponse.from(saved, stock.getQuantity());
 	}
 
 	@Transactional
 	public AdminProductResponse update(Long adminId, Long productId, ProductUpdateRequest request) {
-		Product product = productRepository.findById(productId)
+		Product product = productRepository.findDetailById(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
 		List<String> changedFields = new ArrayList<>();
@@ -160,6 +162,7 @@ public class AdminProductService {
 
 		adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_UPDATE, AdminAuditTargetType.PRODUCT,
 				productId, String.join(",", changedFields));
+		eventPublisher.publishEvent(new ProductCatalogChangedEvent());
 
 		return AdminProductResponse.from(product, stock.getQuantity());
 	}
@@ -172,10 +175,11 @@ public class AdminProductService {
 
 		adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_HIDE, AdminAuditTargetType.PRODUCT, productId,
 				null);
+		eventPublisher.publishEvent(new ProductCatalogChangedEvent());
 	}
 
 	public AdminProductResponse getDetail(Long productId) {
-		Product product = productRepository.findById(productId)
+		Product product = productRepository.findDetailById(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 		Stock stock = stockRepository.findByProductId(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
@@ -185,7 +189,7 @@ public class AdminProductService {
 
 	@Transactional
 	public AdminProductResponse restore(Long adminId, Long productId) {
-		Product product = productRepository.findById(productId)
+		Product product = productRepository.findDetailById(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 		Stock stock = stockRepository.findByProductId(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
@@ -194,6 +198,7 @@ public class AdminProductService {
 
 		adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_RESTORE, AdminAuditTargetType.PRODUCT,
 				productId, product.getStatus().name());
+		eventPublisher.publishEvent(new ProductCatalogChangedEvent());
 
 		return AdminProductResponse.from(product, stock.getQuantity());
 	}

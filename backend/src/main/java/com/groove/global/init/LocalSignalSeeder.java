@@ -115,6 +115,9 @@ public class LocalSignalSeeder {
 
 		seedViewLogs(demoMembers, products, now);
 
+		// 로컬은 Flyway 가 꺼져 있어 V12 백필이 안 돈다. 여기서 만든 주문이 없으면 인기순 정렬이 전부 0 이 된다.
+		productRepository.refreshSoldQuantities(products.stream().map(Product::getId).toList());
+
 		log.info("취향/행동 신호를 시딩했다: 회원 {}명, 주문 {}건", MEMBER_COUNT, orderSequence);
 	}
 

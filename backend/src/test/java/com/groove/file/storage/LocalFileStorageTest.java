@@ -1,6 +1,10 @@
 package com.groove.file.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,9 +18,12 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.groove.file.config.FileProperties;
 import com.groove.fixture.FileFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 
 class LocalFileStorageTest {
 
@@ -43,6 +50,22 @@ class LocalFileStorageTest {
 			// then
 			assertThat(Files.isDirectory(tempDir.resolve("uploads"))).isTrue();
 		}
+
+		@Test
+		@DisplayName("루트 경로 자리에 파일이 있어 디렉터리를 만들 수 없으면 FILE_UPLOAD_FAILED 예외를 던진다")
+		void throwsWhenRootDirectoryCreationFails() throws IOException {
+			// given: 업로드 루트가 되어야 할 경로에 이미 일반 파일이 있어 디렉터리 생성이 막힌다
+			Path blocked = tempDir.resolve("blocked-file");
+			Files.createFile(blocked);
+			FileProperties fileProperties = new FileProperties(blocked.toString(), "http://localhost:8080/uploads");
+			LocalFileStorage storage = new LocalFileStorage(fileProperties);
+
+			// when & then
+			assertThatThrownBy(storage::init)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.FILE_UPLOAD_FAILED);
+		}
 	}
 
 	@Nested
@@ -67,6 +90,20 @@ class LocalFileStorageTest {
 			Path saved = tempDir.resolve("uploads").resolve(key);
 			assertThat(Files.exists(saved)).isTrue();
 			assertThat(Files.readAllBytes(saved)).isEqualTo(content);
+		}
+
+		@Test
+		@DisplayName("파일 전송이 실패하면 FILE_UPLOAD_FAILED 예외를 던진다")
+		void throwsWhenTransferFails() throws IOException {
+			// given
+			MultipartFile file = mock(MultipartFile.class);
+			doThrow(new IOException("전송 실패")).when(file).transferTo(any(Path.class));
+
+			// when & then
+			assertThatThrownBy(() -> localFileStorage.store(file, "png"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.FILE_UPLOAD_FAILED);
 		}
 	}
 }

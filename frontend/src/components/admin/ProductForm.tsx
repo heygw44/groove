@@ -403,7 +403,7 @@ function ProductFormBody({ product, genres, labels }: ProductFormBodyProps) {
         >
           취소
         </Button>
-        <Button type="submit" disabled={isSubmitting || isMutating}>
+        <Button type="submit" loading={isSubmitting || isMutating}>
           {isEdit ? '수정' : '등록'}
         </Button>
       </div>

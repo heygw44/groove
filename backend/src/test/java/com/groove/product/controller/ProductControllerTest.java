@@ -284,7 +284,7 @@ class ProductControllerTest {
 		void returnsDetailWithoutAuthentication() throws Exception {
 			// given
 			ProductDetailResponse response = new ProductDetailResponse(1L, "Kind of Blue",
-					new ProductDetailResponse.AlbumSummary(5L, "Kind of Blue", 1959, 1),
+					new ProductDetailResponse.AlbumSummary(5L, "Kind of Blue", 1959, 1, null),
 					new ProductDetailResponse.ArtistSummary(12L, "Miles Davis"),
 					new ProductDetailResponse.LabelSummary(7L, "Columbia"),
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
@@ -320,7 +320,7 @@ class ProductControllerTest {
 		void passesMemberIdWhenAuthenticated() throws Exception {
 			// given
 			ProductDetailResponse response = new ProductDetailResponse(1L, "Kind of Blue",
-					new ProductDetailResponse.AlbumSummary(5L, "Kind of Blue", 1959, 1),
+					new ProductDetailResponse.AlbumSummary(5L, "Kind of Blue", 1959, 1, null),
 					new ProductDetailResponse.ArtistSummary(12L, "Miles Davis"),
 					new ProductDetailResponse.LabelSummary(7L, "Columbia"),
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
