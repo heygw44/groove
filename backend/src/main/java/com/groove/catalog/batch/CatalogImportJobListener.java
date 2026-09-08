@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import com.groove.notification.service.NewPressingEvent;
 import com.groove.product.entity.Album;
 import com.groove.product.repository.AlbumRepository;
+import com.groove.recommend.service.ProductCatalogChangedEvent;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,7 @@ public class CatalogImportJobListener implements JobExecutionListener {
 		// FAILED 로 끝나도 청크 커밋으로 실제 적재된 프레싱이 있으면 알려야 하므로 status 로 거르지 않는다.
 		if (writeCount > 0) {
 			publishNewPressingEvent(masterId);
+			eventPublisher.publishEvent(new ProductCatalogChangedEvent());
 		}
 	}
 
