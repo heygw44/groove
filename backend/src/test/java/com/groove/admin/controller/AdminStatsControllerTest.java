@@ -39,15 +39,18 @@ import com.groove.admin.service.AdminStatsService;
 import com.groove.auth.jwt.JwtProvider;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.member.entity.MemberRole;
+import com.groove.stats.dto.ReconcileLogResponse;
 import com.groove.stats.dto.SalesAggregationRequest;
 import com.groove.stats.dto.SalesAggregationResponse;
 import com.groove.stats.service.SalesAggregationAdminService;
+import com.groove.stats.service.SalesReconcileLogQueryService;
 
 @WebMvcTest(AdminStatsController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -71,6 +74,9 @@ class AdminStatsControllerTest {
 
 	@MockitoBean
 	SalesAggregationAdminService salesAggregationAdminService;
+
+	@MockitoBean
+	SalesReconcileLogQueryService salesReconcileLogQueryService;
 
 	private String adminToken() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.ADMIN);
@@ -360,6 +366,49 @@ class AdminStatsControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(salesAggregationAdminService, never()).aggregate(anyLong(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/admin/stats/reconcile-logs")
+	class GetReconcileLogs {
+
+		@Test
+		@DisplayName("관리자면 200 과 대사 로그 목록을 반환한다")
+		void returnsReconcileLogsForAdmin() throws Exception {
+			// given
+			ReconcileLogResponse row = new ReconcileLogResponse(1L, LocalDate.of(2031, 3, 15),
+					"DAILY_ORDER_COUNT", "CRITICAL", new BigDecimal("1"), new BigDecimal("2"), false,
+					LocalDateTime.of(2031, 3, 16, 5, 0));
+			PageResponse<ReconcileLogResponse> response = PageResponse.of(List.of(row), 0, 20, 1);
+			given(salesReconcileLogQueryService.getList(any())).willReturn(response);
+
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/reconcile-logs").header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.success", is(true)))
+					.andExpect(jsonPath("$.data.content[0].metric", is("DAILY_ORDER_COUNT")))
+					.andExpect(jsonPath("$.data.content[0].repaired", is(false)));
+		}
+
+		@Test
+		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
+		void returnsForbiddenForUser() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/reconcile-logs").header(HttpHeaders.AUTHORIZATION, userToken()))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(salesReconcileLogQueryService, never()).getList(any());
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/reconcile-logs"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(salesReconcileLogQueryService, never()).getList(any());
 		}
 	}
 

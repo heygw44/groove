@@ -19,9 +19,13 @@ import com.groove.admin.service.AdminStatsService;
 import com.groove.auth.LoginMember;
 import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
+import com.groove.global.common.PageResponse;
+import com.groove.stats.dto.ReconcileLogResponse;
+import com.groove.stats.dto.ReconcileLogSearchRequest;
 import com.groove.stats.dto.SalesAggregationRequest;
 import com.groove.stats.dto.SalesAggregationResponse;
 import com.groove.stats.service.SalesAggregationAdminService;
+import com.groove.stats.service.SalesReconcileLogQueryService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,6 +40,7 @@ public class AdminStatsController {
 
 	private final AdminStatsService adminStatsService;
 	private final SalesAggregationAdminService salesAggregationAdminService;
+	private final SalesReconcileLogQueryService salesReconcileLogQueryService;
 
 	@Operation(summary = "일별 매출 통계")
 	@GetMapping("/daily-sales")
@@ -67,5 +72,12 @@ public class AdminStatsController {
 	public ApiResponse<SalesAggregationResponse> aggregate(@AuthMember LoginMember loginMember,
 			@Valid @RequestBody SalesAggregationRequest request) {
 		return ApiResponse.ok(salesAggregationAdminService.aggregate(loginMember.id(), request));
+	}
+
+	@Operation(summary = "매출 대사 로그 조회", description = "최근 35일 대사 배치가 남긴 불일치 이력을 조회한다")
+	@GetMapping("/reconcile-logs")
+	public ApiResponse<PageResponse<ReconcileLogResponse>> getReconcileLogs(
+			@Valid @ModelAttribute ReconcileLogSearchRequest request) {
+		return ApiResponse.ok(salesReconcileLogQueryService.getList(request));
 	}
 }

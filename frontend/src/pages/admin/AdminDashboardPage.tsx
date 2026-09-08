@@ -6,6 +6,8 @@ import { AsOfBadge } from '@/components/admin/dashboard/AsOfBadge';
 import { DailySalesChart } from '@/components/admin/dashboard/DailySalesChart';
 import { LimitedDropStatsTable } from '@/components/admin/dashboard/LimitedDropStatsTable';
 import { PopularProductTable } from '@/components/admin/dashboard/PopularProductTable';
+import { ReconcileAlertBanner } from '@/components/admin/dashboard/ReconcileAlertBanner';
+import { ReconcileLogSection } from '@/components/admin/dashboard/ReconcileLogSection';
 import { StatCard } from '@/components/admin/dashboard/StatCard';
 import { StatsPeriodSelector } from '@/components/admin/dashboard/StatsPeriodSelector';
 import { Button } from '@/components/common/Button';
@@ -60,6 +62,8 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <ReconcileAlertBanner />
+
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-[17px] font-bold tracking-tight">대시보드</h2>
         <Button variant="secondary" size="sm" onClick={handleRefresh}>
@@ -176,6 +180,8 @@ export default function AdminDashboardPage() {
           <LimitedDropStatsTable items={limitedDropsQuery.data} />
         )}
       </section>
+
+      <ReconcileLogSection />
     </div>
   );
 }

@@ -71,3 +71,33 @@ export interface PopularProductParams extends StatsPeriodParams {
   limit?: number;
   sort?: PopularProductSort;
 }
+
+export type ReconcileMetric =
+  | 'DAILY_ORDER_COUNT'
+  | 'DAILY_SALES_AMOUNT'
+  | 'DAILY_CANCEL_COUNT'
+  | 'DAILY_CANCEL_AMOUNT'
+  | 'PRODUCT_SOLD_QUANTITY'
+  | 'PRODUCT_SALES_AMOUNT'
+  | 'PRODUCT_ORDER_COUNT';
+
+export type ReconcileSeverity = 'WARN' | 'CRITICAL';
+
+export interface ReconcileLog {
+  id: number;
+  saleDate: string;
+  metric: ReconcileMetric;
+  severity: ReconcileSeverity;
+  /** 원본을 다시 계산한 값. */
+  expectedValue: number;
+  /** 집계 테이블에 있던(어긋난) 값. */
+  actualValue: number;
+  repaired: boolean;
+  createdAt: string;
+}
+
+export interface ReconcileLogListParams {
+  repaired?: boolean;
+  page: number;
+  size?: number;
+}
