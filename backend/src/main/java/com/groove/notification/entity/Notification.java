@@ -37,7 +37,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "notification",
 		indexes = {
 			@Index(name = "idx_notification_member_created", columnList = "member_id, created_at"),
-			@Index(name = "idx_notification_member_read", columnList = "member_id, read_at")
+			@Index(name = "idx_notification_member_read_created", columnList = "member_id, read_at, created_at")
 		})
 public class Notification extends BaseTimeEntity {
 
