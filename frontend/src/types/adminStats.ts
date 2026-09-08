@@ -50,6 +50,16 @@ export interface LimitedDropStats {
   attempts?: LimitedDropAttempts;
 }
 
+export interface DailySalesStats {
+  items: DailySales[];
+  aggregatedAt: string | null;
+}
+
+export interface PopularProductStats {
+  items: PopularProduct[];
+  aggregatedAt: string | null;
+}
+
 export interface StatsPeriodParams {
   from?: string;
   to?: string;

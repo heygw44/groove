@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
+import { AsOfBadge } from '@/components/admin/dashboard/AsOfBadge';
 import { DailySalesChart } from '@/components/admin/dashboard/DailySalesChart';
 import { LimitedDropStatsTable } from '@/components/admin/dashboard/LimitedDropStatsTable';
 import { PopularProductTable } from '@/components/admin/dashboard/PopularProductTable';
@@ -97,7 +98,12 @@ export default function AdminDashboardPage() {
 
       <section className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-bold text-content">일별 매출</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-content">일별 매출</h3>
+            {dailySalesQuery.data && (
+              <AsOfBadge aggregatedAt={dailySalesQuery.data.aggregatedAt} />
+            )}
+          </div>
           <StatsPeriodSelector value={period} onChange={handlePeriodChange} />
         </div>
 
@@ -117,13 +123,18 @@ export default function AdminDashboardPage() {
 
         {!dailySalesQuery.isPending && !dailySalesQuery.isError && dailySalesQuery.data && (
           <div className={dailySalesQuery.isPlaceholderData ? 'opacity-60' : ''}>
-            <DailySalesChart data={dailySalesQuery.data} />
+            <DailySalesChart data={dailySalesQuery.data.items} />
           </div>
         )}
       </section>
 
       <section className="flex flex-col gap-4">
-        <h3 className="text-sm font-bold text-content">인기 상품</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-bold text-content">인기 상품</h3>
+          {popularProductsQuery.data && (
+            <AsOfBadge aggregatedAt={popularProductsQuery.data.aggregatedAt} />
+          )}
+        </div>
 
         {popularProductsQuery.isPending && <TableSkeleton columns={6} />}
 
@@ -140,7 +151,7 @@ export default function AdminDashboardPage() {
           popularProductsQuery.data && (
             <div className={popularProductsQuery.isPlaceholderData ? 'opacity-60' : ''}>
               <PopularProductTable
-                items={popularProductsQuery.data}
+                items={popularProductsQuery.data.items}
                 sort={sort}
                 onSortChange={setSort}
               />

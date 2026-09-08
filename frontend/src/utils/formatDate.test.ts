@@ -1,11 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   formatDate,
   formatDateTime,
+  formatRelativeFromNow,
   formatServerDate,
   formatServerDateTime,
 } from '@/utils/formatDate';
+import * as serverTime from '@/utils/serverTime';
 
 // TZ 모호성을 피하려고 문자열이 아니라 로컬 Date 객체를 직접 만든다.
 const FIXED_DATE = new Date(2026, 8, 3, 9, 5);
@@ -90,5 +92,48 @@ describe('formatServerDate() / formatServerDateTime()', () => {
 
     // then
     expect(result).toBe(formatDateTime(new Date(isoWithOffset)));
+  });
+});
+
+describe('formatRelativeFromNow()', () => {
+  const NOW = '2026-09-05T12:00:00+09:00';
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const stubServerNow = (iso: string) => {
+    vi.spyOn(serverTime, 'getServerNowMs').mockReturnValue(new Date(iso).getTime());
+  };
+
+  it.each([
+    ['0초 전은 방금 전으로 표기한다', '2026-09-05T12:00:00+09:00', '방금 전'],
+    ['59초 전은 방금 전으로 표기한다', '2026-09-05T11:59:01+09:00', '방금 전'],
+    ['1분 전부터 분 단위로 표기한다', '2026-09-05T11:59:00+09:00', '1분 전'],
+    ['59분 전은 분 단위로 표기한다', '2026-09-05T11:01:00+09:00', '59분 전'],
+    ['1시간 전부터 시간 단위로 표기한다', '2026-09-05T11:00:00+09:00', '1시간 전'],
+    ['23시간 전은 시간 단위로 표기한다', '2026-09-04T13:00:00+09:00', '23시간 전'],
+    ['24시간 전부터 일 단위로 표기한다', '2026-09-04T12:00:00+09:00', '1일 전'],
+  ])('%s', (_label, aggregatedAt, expected) => {
+    // given
+    stubServerNow(NOW);
+
+    // when
+    const result = formatRelativeFromNow(aggregatedAt);
+
+    // then
+    expect(result).toBe(expected);
+  });
+
+  it('시계 오차로 미래 시각이 나오면 방금 전으로 접는다', () => {
+    // given
+    stubServerNow(NOW);
+    const futureIso = '2026-09-05T12:05:00+09:00';
+
+    // when
+    const result = formatRelativeFromNow(futureIso);
+
+    // then
+    expect(result).toBe('방금 전');
   });
 });
