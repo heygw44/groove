@@ -35,6 +35,9 @@ import com.groove.support.IntegrationTestSupport;
 class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 
 	private static final BigDecimal PRICE = new BigDecimal("30000");
+	// 후보 정렬이 discogs_synced_at 오름차순이라, 공유 테스트 DB 에 다른 테스트가 커밋해 둔 stale 상품보다
+	// 확실히 앞에 서도록 극단적으로 오래된 값을 쓴다. 예산(회당 3건) 안에 이 테스트 상품이 들어가야 한다.
+	private static final int STALE_YEARS = 50;
 
 	@Autowired
 	private DiscogsResyncScheduler discogsResyncScheduler;
@@ -92,7 +95,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("예산 상한을 넘겨 호출하지 않는다")
 		void doesNotExceedBudgetPerRun() {
 			// given: view_count·discogs_synced_at 이 전부 같아 id 오름차순(입력 순)으로 정렬된다
-			LocalDateTime veryStale = LocalDateTime.now(clock).minusYears(1);
+			LocalDateTime veryStale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
 			List<Product> products = new ArrayList<>();
 			for (int i = 0; i < 5; i++) {
 				long releaseId = 91_000_001L + i;
@@ -106,18 +109,20 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 			discogsResyncScheduler.resyncPriority();
 
 			// then
+			// 후보 조회는 전역이라 어떤 상품이 뽑혔는지는 공유 DB 상태에 따라 달라진다. 예산을 지켰는지만 잰다.
+			assertThat(fake.totalReleaseCalls()).isEqualTo(3);
 			long processed = products.stream()
 					.map(p -> productRepository.findById(p.getId()).orElseThrow())
 					.filter(p -> p.getDiscogsSyncedAt() != null && p.getDiscogsSyncedAt().isAfter(veryStale))
 					.count();
-			assertThat(processed).isEqualTo(3);
+			assertThat(processed).isLessThanOrEqualTo(3);
 		}
 
 		@Test
 		@DisplayName("건별 실패가 나머지 처리를 막지 않는다")
 		void continuesProcessingAfterIndividualFailure() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusDays(1);
+			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
 			long failingReleaseId = 92_000_001L;
 			long okReleaseId = 92_000_002L;
 			Product failingProduct = persistStaleProduct("Failing", failingReleaseId, stale);
@@ -141,7 +146,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("404 상품은 참조를 끊고 후보에서 영구히 빠진다")
 		void removesNotFoundProductFromCandidatesPermanently() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusDays(1);
+			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
 			long releaseId = 93_000_001L;
 			Product product = persistStaleProduct("NotFound", releaseId, stale);
 			fake.markNotFound(releaseId);
@@ -165,7 +170,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("변경 건수가 있으면 ProductCatalogChangedEvent 를 발행한다")
 		void publishesEventWhenFieldsChanged() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusDays(1);
+			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
 			long releaseId = 94_000_001L;
 			persistStaleProduct("Changed", releaseId, stale);
 			fake.addRelease(DiscogsFixture.releaseResponse(releaseId, 21247L, "Miles Davis", "Columbia",
@@ -183,7 +188,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("변경 건수가 없으면 ProductCatalogChangedEvent 를 발행하지 않는다")
 		void doesNotPublishEventWhenNothingChanged() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusDays(1);
+			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
 			long releaseId = 95_000_001L;
 			persistStaleProduct("Unchanged", releaseId, stale);
 			fake.addRelease(DiscogsFixture.releaseResponse(releaseId, 21247L, "Miles Davis", "Columbia", "CS 8163",

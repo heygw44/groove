@@ -62,6 +62,11 @@ public class FakePressingLookupClient implements PressingLookupClient {
 		return releaseCalls.getOrDefault(releaseId, 0);
 	}
 
+	/** 어떤 릴리즈가 뽑혔는지와 무관하게 회당 호출 예산을 지켰는지 재는 용도. */
+	public int totalReleaseCalls() {
+		return releaseCalls.values().stream().mapToInt(Integer::intValue).sum();
+	}
+
 	@Override
 	public synchronized DiscogsMasterVersionsResponse getMasterVersions(long masterId, int page) {
 		masterPageCalls.merge(masterId + ":" + page, 1, Integer::sum);
