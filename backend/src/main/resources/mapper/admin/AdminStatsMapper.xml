@@ -13,23 +13,12 @@
 		</constructor>
 	</resultMap>
 
-	<!-- 승인 행과 취소 행을 UNION ALL 로 합쳐 날짜별로 집계한다. 승인일 매출/취소일 취소액이 서로 다른 날일 수 있다. -->
+	<!-- sales_daily 는 sale_date 가 PK 라 range 스캔으로 끝나고 정렬도 공짜다. -->
 	<select id="findDailySales" resultMap="dailySalesMap">
-		SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
-			SUM(d.cancel_amount) AS cancel_amount
-		FROM (
-			SELECT DATE(p.approved_at) AS sale_date, 1 AS order_count, p.amount AS sales_amount, 0 AS cancel_amount
-			FROM payment p
-			WHERE p.status IN ('DONE', 'CANCELED')
-			AND p.approved_at &gt;= #{fromAt} AND p.approved_at &lt; #{toExclusiveAt}
-			UNION ALL
-			SELECT DATE(p.canceled_at), 0, 0, p.amount
-			FROM payment p
-			WHERE p.status = 'CANCELED'
-			AND p.canceled_at &gt;= #{fromAt} AND p.canceled_at &lt; #{toExclusiveAt}
-		) d
-		GROUP BY d.sale_date
-		ORDER BY d.sale_date
+		SELECT s.sale_date, s.order_count, s.sales_amount, s.cancel_amount
+		FROM sales_daily s
+		WHERE s.sale_date &gt;= #{from} AND s.sale_date &lt;= #{to}
+		ORDER BY s.sale_date
 	</select>
 
 	<resultMap id="popularProductMap" type="com.groove.admin.dto.PopularProductResponse">
@@ -43,30 +32,47 @@
 		</constructor>
 	</resultMap>
 
+	<!--
+		정렬·LIMIT 을 파생 테이블 t 안에서 먼저 끝내고 product/artist 조인은 그 결과 행에만 건다(4중 조인 → 2중).
+		sales_daily_product 의 order_count 는 배치가 날짜별로 이미 COUNT(DISTINCT o.id) 로 낸 값이라, 기간 합산은
+		SUM 으로 충분하다 — 결제는 approved_at 하루에만 귀속되므로 같은 주문이 여러 날짜에 걸쳐 중복되지 않는다.
+	-->
 	<select id="findPopularProducts" parameterType="com.groove.admin.dto.PopularProductStatsCondition"
 			resultMap="popularProductMap">
-		SELECT
-			pr.id, pr.title, a.name AS artist_name,
-			SUM(oi.quantity) AS sold_quantity,
-			SUM(oi.price_snapshot * oi.quantity) AS sales_amount,
-			COUNT(DISTINCT o.id) AS order_count
-		FROM order_item oi
-		JOIN orders o ON o.id = oi.order_id
-		JOIN payment p ON p.order_id = o.id
-		JOIN product pr ON pr.id = oi.product_id
+		SELECT pr.id, pr.title, a.name AS artist_name, t.sold_quantity, t.sales_amount, t.order_count
+		FROM (
+			SELECT s.product_id, SUM(s.sold_quantity) AS sold_quantity,
+				SUM(s.sales_amount) AS sales_amount, SUM(s.order_count) AS order_count
+			FROM sales_daily_product s
+			WHERE s.sale_date &gt;= #{from} AND s.sale_date &lt;= #{to}
+			GROUP BY s.product_id
+			<choose>
+				<when test="sort.name() == 'SALES'">
+					ORDER BY sales_amount DESC, sold_quantity DESC, s.product_id DESC
+				</when>
+				<otherwise>
+					ORDER BY sold_quantity DESC, sales_amount DESC, s.product_id DESC
+				</otherwise>
+			</choose>
+			LIMIT #{limit}
+		) t
+		JOIN product pr ON pr.id = t.product_id
 		JOIN artist a ON a.id = pr.artist_id
-		WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
-		AND p.approved_at &gt;= #{fromAt} AND p.approved_at &lt; #{toExclusiveAt}
-		GROUP BY pr.id, pr.title, a.name
 		<choose>
 			<when test="sort.name() == 'SALES'">
-				ORDER BY sales_amount DESC, sold_quantity DESC, pr.id DESC
+				ORDER BY t.sales_amount DESC, t.sold_quantity DESC, pr.id DESC
 			</when>
 			<otherwise>
-				ORDER BY sold_quantity DESC, sales_amount DESC, pr.id DESC
+				ORDER BY t.sold_quantity DESC, t.sales_amount DESC, pr.id DESC
 			</otherwise>
 		</choose>
-		LIMIT #{limit}
+	</select>
+
+	<!-- 기간 내 가장 오래된 집계 시각을 보수적으로 표기한다. 기간 내 행이 없으면 MIN 이 NULL 을 낸다. -->
+	<select id="findAggregatedAt" resultType="java.time.LocalDateTime">
+		SELECT MIN(s.aggregated_at)
+		FROM sales_daily s
+		WHERE s.sale_date &gt;= #{from} AND s.sale_date &lt;= #{to}
 	</select>
 
 	<resultMap id="limitedDropStatsMap" type="com.groove.admin.dto.LimitedDropStatsRow">
@@ -89,26 +95,26 @@
 	</resultMap>
 
 	<!--
-		sold_out_at 은 별도 컬럼이 없어 SOLD_OUT 상태일 때만 마지막 구매 시각으로 파생한다.
+		sold_out_at 은 비정규화 컬럼(limited_drop.sold_out_at)을 그대로 읽는다 — 상태 전이(recordSale/restoreSale)
+		시점에 엔티티가 채우고 지우므로, 행마다 상관 서브쿼리를 두 번 돌리던 이전 버전과 값은 같다.
 		limited_drop_stat 은 마감된 드롭의 실패 집계 스냅샷이라 LEFT JOIN 으로 붙이고, 없으면 4개 컬럼 모두 null 이다.
 	-->
 	<select id="findLimitedDropStats" resultMap="limitedDropStatsMap">
 		SELECT
 			ld.id, pr.title, ld.status, ld.total_quantity, ld.sold_count,
 			ROUND(ld.sold_count * 100 / ld.total_quantity, 1) AS sell_rate,
-			ld.open_at, ld.close_at,
-			CASE WHEN ld.status = 'SOLD_OUT'
-				THEN (SELECT MAX(lp.created_at) FROM limited_purchase lp WHERE lp.drop_id = ld.id)
-			END AS sold_out_at,
-			CASE WHEN ld.status = 'SOLD_OUT'
-				THEN TIMESTAMPDIFF(SECOND, ld.open_at,
-					(SELECT MAX(lp.created_at) FROM limited_purchase lp WHERE lp.drop_id = ld.id))
-			END AS sold_out_seconds,
+			ld.open_at, ld.close_at, ld.sold_out_at,
+			TIMESTAMPDIFF(SECOND, ld.open_at, ld.sold_out_at) AS sold_out_seconds,
 			lds.sold_out_count, lds.already_purchased_count, lds.not_open_count, lds.closed_count
 		FROM limited_drop ld
 		JOIN product pr ON pr.id = ld.product_id
 		LEFT JOIN limited_drop_stat lds ON lds.drop_id = ld.id
 		ORDER BY ld.open_at DESC, ld.id DESC
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countLimitedDropStats" resultType="_long">
+		SELECT COUNT(*) FROM limited_drop
 	</select>
 
 	<resultMap id="statsSummaryMap" type="com.groove.admin.dto.AdminStatsSummaryResponse">

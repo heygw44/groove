@@ -126,7 +126,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 M1 W1 W2)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -154,11 +154,13 @@ case_desc() {
 	N1) echo "알림 목록 전체 (NotificationRepository.findAllByMemberId)" ;;
 	N2) echo "알림 목록 안읽음만 (NotificationRepository.findAllByMemberIdAndReadAtIsNull)" ;;
 	N3) echo "안읽음 개수 (NotificationRepository.countByMemberIdAndReadAtIsNull)" ;;
-	S1) echo "관리자 통계 일별 매출 최근 30일 (AdminStatsMapper.xml findDailySales)" ;;
+	S1) echo "관리자 통계 일별 매출 최근 30일 (before: payment UNION ALL + DATE() GROUP BY / after: sales_daily 범위 조회, AdminStatsMapper.xml findDailySales)" ;;
 	S2) echo "관리자 통계 오늘 요약 (before: 스칼라 서브쿼리 2개 / after: 파생 테이블 병합, AdminStatsMapper.xml findSummary)" ;;
+	S3) echo "관리자 통계 인기 상품 최근 30일 (before: 4중 조인 GROUP BY / after: sales_daily_product 파생 테이블 LIMIT, AdminStatsMapper.xml findPopularProducts)" ;;
 	M1) echo "회원 상세 활동 요약 (before: memberOrderStats 파생 테이블 / after: 상관 서브쿼리, MemberQueryMapper.xml findActivitySummary)" ;;
 	W1) echo "앨범 구독 목록 (AlbumWatchRepository.findAllByMemberId, EntityGraph album)" ;;
 	W2) echo "앨범 구독 개수 (AlbumWatchRepository.findAllByMemberId 페이징 count)" ;;
+	L1) echo "관리자 한정반 드롭 통계 첫 페이지, open_at DESC (before: 상관 서브쿼리 2회+페이징 없음 / after: sold_out_at 컬럼+LIMIT 20, AdminStatsMapper.xml findLimitedDropStats)" ;;
 	*) echo "?" ;;
 	esac
 }
@@ -268,10 +270,75 @@ backfill_sold_quantity() {
 	"
 }
 
+# V15 도 after 단계에서야 sales_daily/sales_daily_product 테이블을 만든다. --after-ddl 로 테이블만
+# 세우면 빈 테이블이라 S1/S3 after 측정이 무의미해서(옵티마이저가 빈 테이블은 다르게 풀어 시간도
+# 실행계획도 거짓말이 된다), 여기서 원본(payment/order_item)을 SalesAggregationQueryMapper.xml 의
+# findDailySalesOf/findProductSalesOf 와 같은 집계식으로 한 번에 INSERT ... SELECT 해 채운다(그 두 쿼리는
+# 하루 단위 파라미터라 배치가 날짜별로 호출하지만, 여기서는 시드가 커버하는 기간 전체를 날짜로 GROUP BY
+# 해 같은 결과를 한 번에 낸다). backfill_sold_quantity 와 같은 성격이라 테이블 존재를 먼저 확인한다.
+backfill_sales_daily() {
+	local has_table
+	has_table=$(mysql_perf "SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = '${PERF_SCHEMA}' AND table_name = 'sales_daily';")
+	if [ "${has_table}" != "1" ]; then
+		return 0
+	fi
+	echo "  - sales_daily / sales_daily_product 백필"
+	mysql_perf "
+		insert into sales_daily (sale_date, order_count, sales_amount, cancel_count, cancel_amount,
+			aggregated_at, created_at, updated_at)
+		select d.sale_date, SUM(d.order_count), SUM(d.sales_amount), SUM(d.cancel_count), SUM(d.cancel_amount),
+			NOW(6), NOW(6), NOW(6)
+		from (
+			select DATE(p.approved_at) as sale_date, COUNT(*) as order_count, SUM(p.amount) as sales_amount,
+				0 as cancel_count, 0 as cancel_amount
+			from payment p
+			where p.status in ('DONE', 'CANCELED') and p.approved_at is not null
+			group by DATE(p.approved_at)
+			union all
+			select DATE(p.canceled_at), 0, 0, COUNT(*), SUM(p.amount)
+			from payment p
+			where p.status = 'CANCELED' and p.canceled_at is not null
+			group by DATE(p.canceled_at)
+		) d
+		group by d.sale_date;
+	"
+	mysql_perf "
+		insert into sales_daily_product (sale_date, product_id, sold_quantity, sales_amount, order_count,
+			aggregated_at, created_at, updated_at)
+		select DATE(p.approved_at) as sale_date, oi.product_id, SUM(oi.quantity),
+			SUM(oi.price_snapshot * oi.quantity), COUNT(DISTINCT o.id), NOW(6), NOW(6), NOW(6)
+		from order_item oi
+		join orders o on o.id = oi.order_id
+		join payment p on p.order_id = o.id
+		where o.status in ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED') and p.approved_at is not null
+		group by DATE(p.approved_at), oi.product_id;
+	"
+}
+
+# V17 이 after 단계에서야 limited_drop.sold_out_at 컬럼을 만든다. 마이그레이션 자체와 같은 조건(SOLD_OUT 만)
+# 으로 백필해야 L1 after 케이스가 실제 운영과 같은 값을 읽는다. backfill_sold_quantity 와 같은 성격이라
+# 컬럼 존재를 먼저 확인한다.
+backfill_limited_drop_sold_out_at() {
+	local has_column
+	has_column=$(mysql_perf "SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema = '${PERF_SCHEMA}' AND table_name = 'limited_drop' AND column_name = 'sold_out_at';")
+	if [ "${has_column}" != "1" ]; then
+		return 0
+	fi
+	echo "  - limited_drop.sold_out_at 백필"
+	mysql_perf "
+		update limited_drop ld
+		set ld.sold_out_at = (select max(lp.created_at) from limited_purchase lp where lp.drop_id = ld.id)
+		where ld.status = 'SOLD_OUT';
+	"
+}
+
 seed() {
 	local member_n artist_n label_n album_n product_n orders_n order_item_n payment_n
 	local review_n notification_n wishlist_n coupon_n member_coupon_n album_watch_n
 	local review_heavy_n notification_heavy_n member_today_n member_coupon_heavy_n album_watch_heavy_n
+	local limited_drop_n limited_drop_total_quantity limited_drop_soldout_n limited_purchase_n
 	# review 헤비 케이스가 product 1 에 이미 쓴 member_id 1~6 과 겹치지 않도록 회원 수를 넉넉히 늘린다.
 	member_n=$(scaled_count 40000)
 	artist_n=$(scaled_count 2000)
@@ -292,6 +359,15 @@ seed() {
 	member_today_n=$(scaled_count 5000)
 	member_coupon_heavy_n=$(scaled_count 400)
 	album_watch_heavy_n=$(scaled_count 3000)
+	# 상태 분포를 n % 100 구간으로 나누므로(70% CLOSED/15% SOLD_OUT/10% OPEN/5% SCHEDULED) 100의 배수로 맞춘다.
+	limited_drop_n=$(( $(scaled_count 5000) / 100 * 100 ))
+	if [ "${limited_drop_n}" -lt 100 ]; then
+		limited_drop_n=100
+	fi
+	limited_drop_total_quantity=50
+	# SOLD_OUT 15% 구간(n % 100 이 70~84)의 드롭 수 = 블록(100개) 당 15개.
+	limited_drop_soldout_n=$(( (limited_drop_n / 100) * 15 ))
+	limited_purchase_n=$(( limited_drop_soldout_n * limited_drop_total_quantity ))
 
 	# payment.order_id 를 n 그대로 1:1 매핑하므로 orders 건수를 넘으면 FK 위반이 난다.
 	if [ "${payment_n}" -gt "${orders_n}" ]; then
@@ -327,7 +403,8 @@ seed() {
 	for c in "${member_n}" "${artist_n}" "${label_n}" "${album_n}" "${product_n}" \
 		"${orders_n}" "${order_item_n}" "${payment_n}" "${review_n}" "${notification_n}" "${wishlist_n}" \
 		"${coupon_n}" "${member_coupon_n}" "${review_heavy_n}" "${notification_heavy_n}" "${member_today_n}" \
-		"${member_coupon_heavy_n}" "${album_watch_n}" "${album_watch_heavy_n}"; do
+		"${member_coupon_heavy_n}" "${album_watch_n}" "${album_watch_heavy_n}" \
+		"${limited_drop_n}" "${limited_purchase_n}"; do
 		if [ "${c}" -gt "${max_needed}" ]; then
 			max_needed="${c}"
 		fi
@@ -688,12 +765,71 @@ seed() {
 		FROM numbers WHERE n <= ${album_watch_heavy_n};
 	"
 	echo "[시드] album_watch(member_id=${TARGET_MEMBER_ID} 헤비) ${album_watch_heavy_n}건"
+
+	mysql_perf "
+		-- 상태 분포 70% CLOSED / 15% SOLD_OUT / 10% OPEN / 5% SCHEDULED (n % 100 구간).
+		-- product_id = n 으로 uk_limited_drop_product 를 그대로 만족시킨다.
+		INSERT INTO limited_drop (product_id, total_quantity, per_member_limit, open_at, close_at, status,
+			sold_count, created_at, updated_at)
+		SELECT
+			n,
+			${limited_drop_total_quantity},
+			1,
+			DATE_SUB(NOW(6), INTERVAL (n % 400) DAY),
+			DATE_ADD(DATE_SUB(NOW(6), INTERVAL (n % 400) DAY), INTERVAL 30 MINUTE),
+			CASE
+				WHEN n % 100 < 70 THEN 'CLOSED'
+				WHEN n % 100 < 85 THEN 'SOLD_OUT'
+				WHEN n % 100 < 95 THEN 'OPEN'
+				ELSE 'SCHEDULED'
+			END,
+			CASE
+				WHEN n % 100 < 70 THEN FLOOR(${limited_drop_total_quantity} * 0.6)
+				WHEN n % 100 < 85 THEN ${limited_drop_total_quantity}
+				WHEN n % 100 < 95 THEN FLOOR(${limited_drop_total_quantity} * 0.2)
+				ELSE 0
+			END,
+			NOW(6),
+			NOW(6)
+		FROM numbers WHERE n <= ${limited_drop_n};
+	"
+	echo "[시드] limited_drop ${limited_drop_n}건"
+
+	mysql_perf "
+		-- SOLD_OUT 드롭(n % 100 이 70~84, 100개 블록당 15개)마다 total_quantity 만큼 구매 이력을 채운다.
+		-- k 번째 SOLD_OUT 드롭의 실제 drop_id(=product_id=n)는 블록 15개 단위로 70..84 를 반복해 되짚는다.
+		INSERT INTO limited_purchase (drop_id, member_id, quantity, created_at, updated_at)
+		SELECT t.drop_id, t.member_id, 1,
+			DATE_ADD(DATE_SUB(NOW(6), INTERVAL (t.drop_id % 400) DAY), INTERVAL t.member_id MINUTE),
+			NOW(6)
+		FROM (
+			SELECT
+				(FLOOR((n - 1) / ${limited_drop_total_quantity}) DIV 15) * 100 + 70
+					+ (FLOOR((n - 1) / ${limited_drop_total_quantity}) MOD 15) AS drop_id,
+				((n - 1) % ${limited_drop_total_quantity}) + 1 AS member_id
+			FROM numbers WHERE n <= ${limited_purchase_n}
+		) t;
+	"
+	echo "[시드] limited_purchase(SOLD_OUT 드롭 ${limited_drop_soldout_n}개) ${limited_purchase_n}건"
+
+	mysql_perf "
+		-- limited_drop_stat 은 CLOSED 로 마감될 때 Redis 시도 집계를 옮겨 담는 테이블이라, CLOSED 드롭에만 1행씩
+		-- 있다. 이 테이블을 비워두면 findLimitedDropStats 의 LEFT JOIN 이 옵티마이저에게 사실상 빈 테이블
+		-- 조인으로 보여 해시 조인을 고르게 만들고, 그 경로에서는 open_at 인덱스가 있어도 안 쓰인다
+		-- (해시 조인은 ld 를 인덱스 순서로 읽을 이유가 없다) — 실측이 왜곡되므로 반드시 채운다.
+		INSERT INTO limited_drop_stat (drop_id, sold_out_count, already_purchased_count, not_open_count,
+			closed_count, flushed_at, created_at, updated_at)
+		SELECT id, 5, 2, 1, 0, NOW(6), NOW(6), NOW(6)
+		FROM limited_drop WHERE status = 'CLOSED';
+	"
+	echo "[시드] limited_drop_stat(CLOSED 드롭) $(( (limited_drop_n / 100) * 70 ))건"
 }
 
 analyze_tables() {
 	echo "[통계] ANALYZE TABLE 실행"
 	mysql_perf "ANALYZE TABLE member, artist, label, genre, album, product, product_genre, product_image,
-		orders, order_item, payment, review, notification, wishlist, coupon, member_coupon, album_watch;" > /dev/null
+		orders, order_item, payment, review, notification, wishlist, coupon, member_coupon, album_watch,
+		limited_drop, limited_purchase, limited_drop_stat;" > /dev/null
 }
 
 # EXPLAIN ANALYZE 결과 텍스트의 첫 줄에서 접근 방식과 마지막 actual time 값을 뽑는다.
@@ -1067,24 +1203,34 @@ get_case_sql() {
 		SQL
 		;;
 	S1)
-		cat <<-SQL
-			-- AdminStatsMapper.xml findDailySales, 최근 30일
-			SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
-				SUM(d.cancel_amount) AS cancel_amount
-			FROM (
-				SELECT DATE(p.approved_at) AS sale_date, 1 AS order_count, p.amount AS sales_amount, 0 AS cancel_amount
-				FROM payment p
-				WHERE p.status IN ('DONE', 'CANCELED')
-				AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
-				UNION ALL
-				SELECT DATE(p.canceled_at), 0, 0, p.amount
-				FROM payment p
-				WHERE p.status = 'CANCELED'
-				AND p.canceled_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.canceled_at < NOW(6)
-			) d
-			GROUP BY d.sale_date
-			ORDER BY d.sale_date
-		SQL
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- AdminStatsMapper.xml findDailySales, 최근 30일 (before: payment UNION ALL + DATE() GROUP BY)
+				SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
+					SUM(d.cancel_amount) AS cancel_amount
+				FROM (
+					SELECT DATE(p.approved_at) AS sale_date, 1 AS order_count, p.amount AS sales_amount, 0 AS cancel_amount
+					FROM payment p
+					WHERE p.status IN ('DONE', 'CANCELED')
+					AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
+					UNION ALL
+					SELECT DATE(p.canceled_at), 0, 0, p.amount
+					FROM payment p
+					WHERE p.status = 'CANCELED'
+					AND p.canceled_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.canceled_at < NOW(6)
+				) d
+				GROUP BY d.sale_date
+				ORDER BY d.sale_date
+			SQL
+		else
+			cat <<-SQL
+				-- AdminStatsMapper.xml findDailySales, 최근 30일 (after: sales_daily 를 sale_date 범위로 읽는다)
+				SELECT s.sale_date, s.order_count, s.sales_amount, s.cancel_amount
+				FROM sales_daily s
+				WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND s.sale_date <= CURDATE()
+				ORDER BY s.sale_date
+			SQL
+		fi
 		;;
 	S2)
 		if [ "${phase}" = before ]; then
@@ -1120,6 +1266,47 @@ get_case_sql() {
 					WHERE p.status IN ('DONE', 'CANCELED')
 					AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY
 				) t
+			SQL
+		fi
+		;;
+	S3)
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- AdminStatsMapper.xml findPopularProducts, 최근 30일 (before: 4중 조인 GROUP BY)
+				SELECT
+					pr.id, pr.title, a.name AS artist_name,
+					SUM(oi.quantity) AS sold_quantity,
+					SUM(oi.price_snapshot * oi.quantity) AS sales_amount,
+					COUNT(DISTINCT o.id) AS order_count
+				FROM order_item oi
+				JOIN orders o ON o.id = oi.order_id
+				JOIN payment p ON p.order_id = o.id
+				JOIN product pr ON pr.id = oi.product_id
+				JOIN artist a ON a.id = pr.artist_id
+				WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+				AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
+				GROUP BY pr.id, pr.title, a.name
+				ORDER BY sold_quantity DESC, sales_amount DESC, pr.id DESC
+				LIMIT 10
+			SQL
+		else
+			cat <<-SQL
+				-- AdminStatsMapper.xml findPopularProducts, 최근 30일
+				-- (after: sales_daily_product 를 상품 단위로 합산한 파생 테이블에서 정렬·LIMIT 을 먼저 끝내고
+				-- product/artist 는 그 결과에만 조인한다)
+				SELECT pr.id, pr.title, a.name AS artist_name, t.sold_quantity, t.sales_amount, t.order_count
+				FROM (
+					SELECT s.product_id, SUM(s.sold_quantity) AS sold_quantity,
+						SUM(s.sales_amount) AS sales_amount, SUM(s.order_count) AS order_count
+					FROM sales_daily_product s
+					WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND s.sale_date <= CURDATE()
+					GROUP BY s.product_id
+					ORDER BY sold_quantity DESC, sales_amount DESC, s.product_id DESC
+					LIMIT 10
+				) t
+				JOIN product pr ON pr.id = t.product_id
+				JOIN artist a ON a.id = pr.artist_id
+				ORDER BY t.sold_quantity DESC, t.sales_amount DESC, pr.id DESC
 			SQL
 		fi
 		;;
@@ -1192,6 +1379,44 @@ get_case_sql() {
 			-- AlbumWatchRepository.findAllByMemberId 의 Page 카운트, member_id=${TARGET_MEMBER_ID}
 			SELECT COUNT(*) FROM album_watch WHERE member_id = ${TARGET_MEMBER_ID}
 		SQL
+		;;
+	L1)
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- AdminStatsMapper.xml findLimitedDropStats (before: 상관 서브쿼리 2회, 페이징 없음)
+				SELECT
+					ld.id, pr.title, ld.status, ld.total_quantity, ld.sold_count,
+					ROUND(ld.sold_count * 100 / ld.total_quantity, 1) AS sell_rate,
+					ld.open_at, ld.close_at,
+					CASE WHEN ld.status = 'SOLD_OUT'
+						THEN (SELECT MAX(lp.created_at) FROM limited_purchase lp WHERE lp.drop_id = ld.id)
+					END AS sold_out_at,
+					CASE WHEN ld.status = 'SOLD_OUT'
+						THEN TIMESTAMPDIFF(SECOND, ld.open_at,
+							(SELECT MAX(lp.created_at) FROM limited_purchase lp WHERE lp.drop_id = ld.id))
+					END AS sold_out_seconds,
+					lds.sold_out_count, lds.already_purchased_count, lds.not_open_count, lds.closed_count
+				FROM limited_drop ld
+				JOIN product pr ON pr.id = ld.product_id
+				LEFT JOIN limited_drop_stat lds ON lds.drop_id = ld.id
+				ORDER BY ld.open_at DESC, ld.id DESC
+			SQL
+		else
+			cat <<-SQL
+				-- AdminStatsMapper.xml findLimitedDropStats (after: sold_out_at 비정규화 컬럼 + LIMIT 20 OFFSET 0)
+				SELECT
+					ld.id, pr.title, ld.status, ld.total_quantity, ld.sold_count,
+					ROUND(ld.sold_count * 100 / ld.total_quantity, 1) AS sell_rate,
+					ld.open_at, ld.close_at, ld.sold_out_at,
+					TIMESTAMPDIFF(SECOND, ld.open_at, ld.sold_out_at) AS sold_out_seconds,
+					lds.sold_out_count, lds.already_purchased_count, lds.not_open_count, lds.closed_count
+				FROM limited_drop ld
+				JOIN product pr ON pr.id = ld.product_id
+				LEFT JOIN limited_drop_stat lds ON lds.drop_id = ld.id
+				ORDER BY ld.open_at DESC, ld.id DESC
+				LIMIT 20 OFFSET 0
+			SQL
+		fi
 		;;
 	*)
 		echo "알 수 없는 케이스: ${id}" >&2
@@ -1293,6 +1518,8 @@ main() {
 			mysql_perf_file "${ddl}"
 		done
 		backfill_sold_quantity
+		backfill_sales_daily
+		backfill_limited_drop_sold_out_at
 		analyze_tables
 		echo "  - after 단계"
 		local id2

@@ -1,4 +1,4 @@
-import { toServerMs } from '@/utils/serverTime';
+import { getServerNowMs, toServerMs } from '@/utils/serverTime';
 
 /**
  * 이미 오프셋이 붙은 문자열(Z, ±hh:mm)이나 Date 객체 전용이다. 서버가 내려주는
@@ -35,6 +35,31 @@ export function formatServerDate(iso: string): string {
 /** 서버 LocalDateTime 문자열(오프셋 없음) 전용. toServerMs 로 KST 해석한 뒤 formatDateTime 을 재사용한다. */
 export function formatServerDateTime(iso: string): string {
   return formatDateTime(new Date(toServerMs(iso)));
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * 집계 시각(서버 LocalDateTime 문자열, 오프셋 없음) 을 "N분 전" 형태의 상대 시간으로
+ * 표기한다. toServerMs 로 KST 해석한 값을 대상 시각으로 쓰고, 기준 시각은 getServerNowMs()
+ * - 클라이언트 시계가 틀어져 있어도 값이 정확해야 하기 때문이다.
+ * 시계 오차로 미래 시각이 나오면(음수 경과) "방금 전" 으로 접는다.
+ */
+export function formatRelativeFromNow(iso: string): string {
+  const elapsedMs = getServerNowMs() - toServerMs(iso);
+
+  if (elapsedMs < MINUTE_MS) {
+    return '방금 전';
+  }
+  if (elapsedMs < HOUR_MS) {
+    return `${Math.floor(elapsedMs / MINUTE_MS)}분 전`;
+  }
+  if (elapsedMs < DAY_MS) {
+    return `${Math.floor(elapsedMs / HOUR_MS)}시간 전`;
+  }
+  return `${Math.floor(elapsedMs / DAY_MS)}일 전`;
 }
 
 /** datetime-local input 의 min/value 속성은 로컬 시각 "YYYY-MM-DDTHH:mm" 형식을 요구한다. */

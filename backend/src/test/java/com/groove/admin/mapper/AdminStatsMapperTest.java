@@ -1,6 +1,7 @@
 package com.groove.admin.mapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -23,7 +24,6 @@ import com.groove.admin.dto.PopularProductSortType;
 import com.groove.admin.dto.PopularProductStatsCondition;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
-import com.groove.fixture.LimitedPurchaseFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.PaymentFixture;
@@ -32,12 +32,13 @@ import com.groove.limited.entity.LimitedAttemptResult;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStat;
 import com.groove.limited.entity.LimitedDropStatus;
-import com.groove.limited.entity.LimitedPurchase;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.payment.entity.Payment;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.stats.entity.SalesDaily;
+import com.groove.stats.entity.SalesDailyProduct;
 import com.groove.support.MybatisTestSupport;
 
 import jakarta.persistence.EntityManager;
@@ -45,8 +46,8 @@ import jakarta.persistence.EntityManager;
 /** 공유 테스트 DB 에 다른 테스트가 남긴 결제/주문/한정반이 섞이므로 이 테스트만 쓰는 먼 기간·자기 id 로만 단언한다. */
 class AdminStatsMapperTest extends MybatisTestSupport {
 
-	private static final LocalDateTime FAR_PERIOD_FROM = LocalDateTime.of(2031, 3, 1, 0, 0);
-	private static final LocalDateTime FAR_PERIOD_TO_EXCLUSIVE = LocalDateTime.of(2031, 4, 1, 0, 0);
+	private static final LocalDate FAR_PERIOD_FROM = LocalDate.of(2031, 3, 1);
+	private static final LocalDate FAR_PERIOD_TO = LocalDate.of(2031, 3, 31);
 
 	@Autowired
 	private AdminStatsMapper adminStatsMapper;
@@ -81,52 +82,25 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 	class FindDailySales {
 
 		@Test
-		@DisplayName("승인일에 매출을, 취소일에 취소액을 집계하고 기간 밖은 제외한다")
-		void aggregatesByApprovedAndCanceledDate() {
+		@DisplayName("기간 내 sales_daily 행을 sale_date 오름차순으로 반환하고 기간 밖은 제외한다")
+		void returnsRowsInRangeOrderedByDate() {
 			// given
-			Product product = ProductFixture.create(artist, "ASM Daily Sales", new BigDecimal("30000"));
-			em.persist(product.getAlbum());
-			em.persist(product);
-
-			Order first = OrderFixture.create(member, "20310302-ASM00001");
-			first.addItem(product, 1);
-			OrderFixture.markPaid(first);
-			em.persist(first);
-			em.persist(PaymentFixture.approvedAt(first, "asm-daily-key-1",
-					LocalDateTime.of(2031, 3, 2, 10, 0)));
-
-			Order second = OrderFixture.create(member, "20310302-ASM00002");
-			second.addItem(product, 1);
-			OrderFixture.markPaid(second);
-			em.persist(second);
-			em.persist(PaymentFixture.approvedAt(second, "asm-daily-key-2",
-					LocalDateTime.of(2031, 3, 2, 12, 0)));
-
-			Order third = OrderFixture.create(member, "20310303-ASM00003");
-			third.addItem(product, 1);
-			OrderFixture.markPaid(third);
-			em.persist(third);
-			em.persist(PaymentFixture.canceledAt(third, "asm-daily-key-3",
-					LocalDateTime.of(2031, 3, 3, 9, 0), LocalDateTime.of(2031, 3, 5, 15, 0)));
-
-			Order outOfRange = OrderFixture.create(member, "20310410-ASM00004");
-			outOfRange.addItem(product, 1);
-			OrderFixture.markPaid(outOfRange);
-			em.persist(outOfRange);
-			em.persist(PaymentFixture.approvedAt(outOfRange, "asm-daily-key-4",
-					LocalDateTime.of(2031, 4, 10, 0, 0)));
-
+			LocalDateTime aggregatedAt = LocalDateTime.of(2031, 3, 20, 3, 0);
+			em.persist(SalesDaily.of(LocalDate.of(2031, 3, 2), 2, new BigDecimal("60000"), 0, BigDecimal.ZERO,
+					aggregatedAt));
+			em.persist(SalesDaily.of(LocalDate.of(2031, 3, 3), 1, new BigDecimal("30000"), 1,
+					new BigDecimal("30000"), aggregatedAt));
+			em.persist(SalesDaily.of(LocalDate.of(2031, 4, 10), 5, new BigDecimal("100000"), 0, BigDecimal.ZERO,
+					aggregatedAt));
 			em.flush();
 			em.clear();
 
 			// when
-			List<DailySalesResponse> result = adminStatsMapper.findDailySales(FAR_PERIOD_FROM, FAR_PERIOD_TO_EXCLUSIVE);
+			List<DailySalesResponse> result = adminStatsMapper.findDailySales(FAR_PERIOD_FROM, FAR_PERIOD_TO);
 
 			// then
 			assertThat(result).extracting(DailySalesResponse::date)
-					.doesNotContain(LocalDate.of(2031, 4, 10))
-					.doesNotContain(LocalDate.of(2031, 3, 4));
-			assertThat(result).isSortedAccordingTo((a, b) -> a.date().compareTo(b.date()));
+					.containsExactly(LocalDate.of(2031, 3, 2), LocalDate.of(2031, 3, 3));
 
 			DailySalesResponse march02 = findByDate(result, LocalDate.of(2031, 3, 2));
 			assertThat(march02.orderCount()).isEqualTo(2);
@@ -136,12 +110,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			DailySalesResponse march03 = findByDate(result, LocalDate.of(2031, 3, 3));
 			assertThat(march03.orderCount()).isEqualTo(1);
 			assertThat(march03.salesAmount()).isEqualByComparingTo(new BigDecimal("30000"));
-			assertThat(march03.cancelAmount()).isEqualByComparingTo(BigDecimal.ZERO);
-
-			DailySalesResponse march05 = findByDate(result, LocalDate.of(2031, 3, 5));
-			assertThat(march05.orderCount()).isZero();
-			assertThat(march05.salesAmount()).isEqualByComparingTo(BigDecimal.ZERO);
-			assertThat(march05.cancelAmount()).isEqualByComparingTo(new BigDecimal("30000"));
+			assertThat(march03.cancelAmount()).isEqualByComparingTo(new BigDecimal("30000"));
 		}
 
 		private DailySalesResponse findByDate(List<DailySalesResponse> result, LocalDate date) {
@@ -149,6 +118,42 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 					.filter(row -> row.date().equals(date))
 					.findFirst()
 					.orElseThrow();
+		}
+	}
+
+	@Nested
+	@DisplayName("findAggregatedAt()")
+	class FindAggregatedAt {
+
+		@Test
+		@DisplayName("기간 내 가장 오래된 aggregated_at 을 반환한다")
+		void returnsOldestAggregatedAtInRange() {
+			// given
+			LocalDateTime older = LocalDateTime.of(2031, 3, 2, 3, 0);
+			LocalDateTime newer = LocalDateTime.of(2031, 3, 3, 3, 30);
+			em.persist(SalesDaily.of(LocalDate.of(2031, 3, 2), 1, new BigDecimal("10000"), 0, BigDecimal.ZERO,
+					newer));
+			em.persist(SalesDaily.of(LocalDate.of(2031, 3, 3), 1, new BigDecimal("10000"), 0, BigDecimal.ZERO,
+					older));
+			em.flush();
+			em.clear();
+
+			// when
+			LocalDateTime result = adminStatsMapper.findAggregatedAt(FAR_PERIOD_FROM, FAR_PERIOD_TO);
+
+			// then
+			assertThat(result.truncatedTo(ChronoUnit.SECONDS)).isEqualTo(older.truncatedTo(ChronoUnit.SECONDS));
+		}
+
+		@Test
+		@DisplayName("기간 내 행이 없으면 null 을 반환한다")
+		void returnsNullWhenNoRowInRange() {
+			// when
+			LocalDateTime result = adminStatsMapper.findAggregatedAt(LocalDate.of(2033, 1, 1),
+					LocalDate.of(2033, 1, 31));
+
+			// then
+			assertThat(result).isNull();
 		}
 	}
 
@@ -172,33 +177,21 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.persist(productC.getAlbum());
 			em.persist(productC);
 
-			// PAID: A x 3
-			Order paidOrder = OrderFixture.create(member, "20310310-ASMPOP001");
-			paidOrder.addItem(productA, 3);
-			OrderFixture.markPaid(paidOrder);
-			em.persist(paidOrder);
-			em.persist(PaymentFixture.approvedAt(paidOrder, "asm-pop-key-1", LocalDateTime.of(2031, 3, 10, 10, 0)));
+			LocalDateTime aggregatedAt = LocalDateTime.of(2031, 3, 20, 3, 0);
 
-			// DELIVERED: A x 1 + B x 5
-			Order deliveredOrder = OrderFixture.create(member, "20310311-ASMPOP002");
-			deliveredOrder.addItem(productA, 1);
-			deliveredOrder.addItem(productB, 5);
-			OrderFixture.markDelivered(deliveredOrder);
-			em.persist(deliveredOrder);
-			em.persist(PaymentFixture.approvedAt(deliveredOrder, "asm-pop-key-2",
-					LocalDateTime.of(2031, 3, 11, 10, 0)));
+			// A: 3(3/10) + 1(3/11) = 4개, 매출 200000
+			em.persist(SalesDailyProduct.of(LocalDate.of(2031, 3, 10), productA, 3, new BigDecimal("150000"), 1,
+					aggregatedAt));
+			em.persist(SalesDailyProduct.of(LocalDate.of(2031, 3, 11), productA, 1, new BigDecimal("50000"), 1,
+					aggregatedAt));
 
-			// PENDING: C x 10, no payment
-			Order pendingOrder = OrderFixture.create(member, "20310312-ASMPOP003");
-			pendingOrder.addItem(productC, 10);
-			em.persist(pendingOrder);
+			// B: 5개(3/11), 매출 50000 - 수량은 더 많지만 매출은 A 보다 적다
+			em.persist(SalesDailyProduct.of(LocalDate.of(2031, 3, 11), productB, 5, new BigDecimal("50000"), 1,
+					aggregatedAt));
 
-			// CANCELED: B x 9, payment canceled
-			Order canceledOrder = OrderFixture.create(member, "20310313-ASMPOP004");
-			canceledOrder.addItem(productB, 9);
-			em.persist(canceledOrder);
-			em.persist(PaymentFixture.canceledAt(canceledOrder, "asm-pop-key-3",
-					LocalDateTime.of(2031, 3, 13, 10, 0), LocalDateTime.of(2031, 3, 14, 10, 0)));
+			// C: 기간 밖(4월) 이라 제외되어야 한다
+			em.persist(SalesDailyProduct.of(LocalDate.of(2031, 4, 5), productC, 10, new BigDecimal("200000"), 1,
+					aggregatedAt));
 
 			em.flush();
 			em.clear();
@@ -209,11 +202,11 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
-		@DisplayName("PAID·PREPARING·SHIPPED·DELIVERED 만 집계하고 quantity 정렬이면 판매 수량 내림차순으로 반환한다")
-		void aggregatesPaidStatusesAndSortsByQuantity() {
+		@DisplayName("기간 내 날짜별 행을 상품 단위로 합산하고 quantity 정렬이면 판매 수량 내림차순으로 반환한다")
+		void aggregatesAcrossDatesAndSortsByQuantity() {
 			// given
-			PopularProductStatsCondition condition = new PopularProductStatsCondition(FAR_PERIOD_FROM,
-					FAR_PERIOD_TO_EXCLUSIVE, 100, PopularProductSortType.QUANTITY);
+			PopularProductStatsCondition condition = new PopularProductStatsCondition(FAR_PERIOD_FROM, FAR_PERIOD_TO,
+					100, PopularProductSortType.QUANTITY);
 
 			// when
 			List<PopularProductResponse> result = adminStatsMapper.findPopularProducts(condition);
@@ -224,12 +217,9 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 					.toList();
 			assertThat(own).extracting(PopularProductResponse::productId)
 					.containsExactly(productB.getId(), productA.getId());
-			assertThat(own).filteredOn(row -> row.productId().equals(productB.getId()))
-					.extracting(PopularProductResponse::soldQuantity)
-					.containsExactly(5L);
 			assertThat(own).filteredOn(row -> row.productId().equals(productA.getId()))
-					.extracting(PopularProductResponse::soldQuantity)
-					.containsExactly(4L);
+					.extracting(PopularProductResponse::soldQuantity, PopularProductResponse::orderCount)
+					.containsExactly(tuple(4L, 2L));
 			assertThat(result).extracting(PopularProductResponse::productId).doesNotContain(productC.getId());
 		}
 
@@ -237,8 +227,8 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		@DisplayName("sales 정렬이면 매출액 내림차순으로 반환한다")
 		void sortsBySalesAmount() {
 			// given
-			PopularProductStatsCondition condition = new PopularProductStatsCondition(FAR_PERIOD_FROM,
-					FAR_PERIOD_TO_EXCLUSIVE, 100, PopularProductSortType.SALES);
+			PopularProductStatsCondition condition = new PopularProductStatsCondition(FAR_PERIOD_FROM, FAR_PERIOD_TO,
+					100, PopularProductSortType.SALES);
 
 			// when
 			List<PopularProductResponse> result = adminStatsMapper.findPopularProducts(condition);
@@ -255,8 +245,8 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		@DisplayName("limit 을 지정하면 그 개수만큼만 반환한다")
 		void limitsResultCount() {
 			// given
-			PopularProductStatsCondition condition = new PopularProductStatsCondition(FAR_PERIOD_FROM,
-					FAR_PERIOD_TO_EXCLUSIVE, 1, PopularProductSortType.QUANTITY);
+			PopularProductStatsCondition condition = new PopularProductStatsCondition(FAR_PERIOD_FROM, FAR_PERIOD_TO,
+					1, PopularProductSortType.QUANTITY);
 
 			// when
 			List<PopularProductResponse> result = adminStatsMapper.findPopularProducts(condition);
@@ -269,9 +259,8 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		@DisplayName("기간 밖이면 결과가 없다")
 		void returnsEmptyWhenPeriodOutOfRange() {
 			// given
-			PopularProductStatsCondition condition = new PopularProductStatsCondition(
-					LocalDateTime.of(2031, 5, 1, 0, 0), LocalDateTime.of(2031, 6, 1, 0, 0), 100,
-					PopularProductSortType.QUANTITY);
+			PopularProductStatsCondition condition = new PopularProductStatsCondition(LocalDate.of(2031, 5, 1),
+					LocalDate.of(2031, 5, 31), 100, PopularProductSortType.QUANTITY);
 
 			// when
 			List<PopularProductResponse> result = adminStatsMapper.findPopularProducts(condition);
@@ -285,8 +274,12 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 	@DisplayName("findLimitedDropStats()")
 	class FindLimitedDropStats {
 
+		// 공유 DB 에 다른 테스트가 남긴 드롭이 섞이므로, 개별 필드 검증은 own id 필터로 하되
+		// size 를 크게 잡아 own 드롭이 페이지 밖으로 밀려나지 않게 한다.
+		private static final int LARGE_SIZE = 10_000;
+
 		@Test
-		@DisplayName("SOLD_OUT 드롭은 마지막 구매 시각을 soldOutAt 으로, 판매율을 계산해 반환한다")
+		@DisplayName("SOLD_OUT 드롭은 저장된 매진 시각으로 soldOutSeconds 를 계산하고 판매율도 계산해 반환한다")
 		void returnsSoldOutAtAndSellRateForSoldOutDrop() {
 			// given
 			Product product = ProductFixture.create(artist, "ASM Sold Out Drop", new BigDecimal("40000"));
@@ -297,30 +290,14 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			LimitedDropFixture.withCloseAt(drop, LocalDateTime.now().plusHours(1));
 			LimitedDropFixture.withSoldCount(drop, 2);
 			LimitedDropFixture.withStatus(drop, LimitedDropStatus.SOLD_OUT);
+			LocalDateTime soldOutAt = drop.getOpenAt().plusMinutes(30);
+			LimitedDropFixture.withSoldOutAt(drop, soldOutAt);
 			em.persist(drop);
-
-			Member otherMember = MemberFixture.create("admin-stats-drop-member@groove.com");
-			em.persist(otherMember);
-
-			Order order1 = OrderFixture.create(member, "20310320-ASMDROP001");
-			order1.addItem(product, 1);
-			em.persist(order1);
-			LimitedPurchase purchase1 = LimitedPurchaseFixture.create(drop, member, order1, 1);
-			em.persist(purchase1);
-			em.flush();
-
-			Order order2 = OrderFixture.create(otherMember, "20310320-ASMDROP002");
-			order2.addItem(product, 1);
-			em.persist(order2);
-			LimitedPurchase purchase2 = LimitedPurchaseFixture.create(drop, otherMember, order2, 1);
-			em.persist(purchase2);
 			em.flush();
 			em.clear();
 
-			LocalDateTime lastPurchaseCreatedAt = em.find(LimitedPurchase.class, purchase2.getId()).getCreatedAt();
-
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -328,8 +305,40 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 					.findFirst()
 					.orElseThrow();
 			assertThat(own.soldOutAt().truncatedTo(ChronoUnit.SECONDS))
-					.isEqualTo(lastPurchaseCreatedAt.truncatedTo(ChronoUnit.SECONDS));
-			assertThat(own.soldOutSeconds()).isPositive();
+					.isEqualTo(soldOutAt.truncatedTo(ChronoUnit.SECONDS));
+			assertThat(own.soldOutSeconds()).isEqualTo(1800L);
+			assertThat(own.sellRate()).isEqualTo(100.0);
+		}
+
+		@Test
+		@DisplayName("매진 상태로 마감된 CLOSED 드롭도 저장된 매진 시각으로 soldOutSeconds 를 계산한다")
+		void returnsSoldOutAtForClosedDropThatSoldOut() {
+			// given
+			Product product = ProductFixture.create(artist, "ASM Closed Sold Out Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			LimitedDrop drop = LimitedDropFixture.open(product, 2);
+			LimitedDropFixture.withOpenAt(drop, LocalDateTime.now().minusHours(2));
+			LimitedDropFixture.withCloseAt(drop, LocalDateTime.now().minusHours(1));
+			LimitedDropFixture.withSoldCount(drop, 2);
+			LimitedDropFixture.withStatus(drop, LimitedDropStatus.CLOSED);
+			LocalDateTime soldOutAt = drop.getOpenAt().plusMinutes(30);
+			LimitedDropFixture.withSoldOutAt(drop, soldOutAt);
+			em.persist(drop);
+			em.flush();
+			em.clear();
+
+			// when
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
+
+			// then
+			LimitedDropStatsRow own = result.stream()
+					.filter(row -> row.dropId().equals(drop.getId()))
+					.findFirst()
+					.orElseThrow();
+			assertThat(own.soldOutAt().truncatedTo(ChronoUnit.SECONDS))
+					.isEqualTo(soldOutAt.truncatedTo(ChronoUnit.SECONDS));
+			assertThat(own.soldOutSeconds()).isEqualTo(1800L);
 			assertThat(own.sellRate()).isEqualTo(100.0);
 		}
 
@@ -347,7 +356,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -372,7 +381,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -405,7 +414,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -441,7 +450,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			List<Long> ownOrder = result.stream()
@@ -449,6 +458,73 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 					.filter(id -> id.equals(oldDrop.getId()) || id.equals(newDrop.getId()))
 					.toList();
 			assertThat(ownOrder).containsExactly(newDrop.getId(), oldDrop.getId());
+		}
+
+		@Test
+		@DisplayName("size·offset 으로 페이지 경계를 나눈다")
+		void splitsPagesByOffsetAndSize() {
+			// given: 다른 테스트의 2031년대 픽스처보다도 뒤로 밀리지 않도록 그보다 먼 시각을 쓴다
+			Product product1 = ProductFixture.create(artist, "ASM Page Drop 1", new BigDecimal("40000"));
+			Product product2 = ProductFixture.create(artist, "ASM Page Drop 2", new BigDecimal("40000"));
+			Product product3 = ProductFixture.create(artist, "ASM Page Drop 3", new BigDecimal("40000"));
+			em.persist(product1.getAlbum());
+			em.persist(product1);
+			em.persist(product2.getAlbum());
+			em.persist(product2);
+			em.persist(product3.getAlbum());
+			em.persist(product3);
+
+			LimitedDrop drop1 = LimitedDropFixture.open(product1, 10);
+			LimitedDropFixture.withOpenAt(drop1, LocalDateTime.of(9999, 12, 31, 23, 59, 59));
+			em.persist(drop1);
+
+			LimitedDrop drop2 = LimitedDropFixture.open(product2, 10);
+			LimitedDropFixture.withOpenAt(drop2, LocalDateTime.of(9999, 12, 31, 23, 59, 58));
+			em.persist(drop2);
+
+			LimitedDrop drop3 = LimitedDropFixture.open(product3, 10);
+			LimitedDropFixture.withOpenAt(drop3, LocalDateTime.of(9999, 12, 31, 23, 59, 57));
+			em.persist(drop3);
+
+			em.flush();
+			em.clear();
+
+			// when
+			List<LimitedDropStatsRow> firstPage = adminStatsMapper.findLimitedDropStats(0, 2);
+			List<LimitedDropStatsRow> secondPage = adminStatsMapper.findLimitedDropStats(2, 2);
+
+			// then
+			assertThat(firstPage).extracting(LimitedDropStatsRow::dropId)
+					.containsExactly(drop1.getId(), drop2.getId());
+			assertThat(secondPage.get(0).dropId()).isEqualTo(drop3.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("countLimitedDropStats()")
+	class CountLimitedDropStats {
+
+		@Test
+		@DisplayName("전체 드롭 수는 findLimitedDropStats 전체 조회 결과 개수와 같다")
+		void matchesFindResultSize() {
+			// given: 필터가 없는 카운트라 own id 로 좁힐 수 없으므로, 같은 트랜잭션에서 조회한 findLimitedDropStats
+			// 전체 결과 크기와 비교한다. count 를 두 번 호출하면 MyBatis 로컬 캐시가 두 번째 호출을 캐시된 값으로
+			// 되돌려주므로(같은 세션 안에서 JPA 로 끼워 넣은 변경은 이 캐시를 못 지운다) 한 번만 호출한다.
+			Product product = ProductFixture.create(artist, "ASM Count Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+			em.persist(drop);
+			em.flush();
+			em.clear();
+
+			// when
+			long count = adminStatsMapper.countLimitedDropStats();
+			List<LimitedDropStatsRow> all = adminStatsMapper.findLimitedDropStats(0, (int) count);
+
+			// then
+			assertThat(all).hasSize((int) count);
+			assertThat(all).extracting(LimitedDropStatsRow::dropId).contains(drop.getId());
 		}
 	}
 

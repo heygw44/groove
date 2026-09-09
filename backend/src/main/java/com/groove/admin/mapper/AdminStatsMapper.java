@@ -1,5 +1,6 @@
 package com.groove.admin.mapper;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,12 +17,16 @@ import com.groove.admin.dto.PopularProductStatsCondition;
 @Mapper
 public interface AdminStatsMapper {
 
-	List<DailySalesResponse> findDailySales(@Param("fromAt") LocalDateTime fromAt,
-			@Param("toExclusiveAt") LocalDateTime toExclusiveAt);
+	List<DailySalesResponse> findDailySales(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
 	List<PopularProductResponse> findPopularProducts(PopularProductStatsCondition condition);
 
-	List<LimitedDropStatsRow> findLimitedDropStats();
+	/** 기간 내 가장 오래된 집계 시각. {@code sales_daily} 에 기간 내 행이 하나도 없으면 null 이다. */
+	LocalDateTime findAggregatedAt(@Param("from") LocalDate from, @Param("to") LocalDate to);
+
+	List<LimitedDropStatsRow> findLimitedDropStats(@Param("offset") int offset, @Param("size") int size);
+
+	long countLimitedDropStats();
 
 	AdminStatsSummaryResponse findSummary(@Param("todayStart") LocalDateTime todayStart,
 			@Param("tomorrowStart") LocalDateTime tomorrowStart);

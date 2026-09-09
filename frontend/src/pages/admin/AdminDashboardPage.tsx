@@ -2,9 +2,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
+import { AsOfBadge } from '@/components/admin/dashboard/AsOfBadge';
 import { DailySalesChart } from '@/components/admin/dashboard/DailySalesChart';
-import { LimitedDropStatsTable } from '@/components/admin/dashboard/LimitedDropStatsTable';
+import { LimitedDropStatsSection } from '@/components/admin/dashboard/LimitedDropStatsSection';
 import { PopularProductTable } from '@/components/admin/dashboard/PopularProductTable';
+import { ReconcileAlertBanner } from '@/components/admin/dashboard/ReconcileAlertBanner';
+import { ReconcileLogSection } from '@/components/admin/dashboard/ReconcileLogSection';
 import { StatCard } from '@/components/admin/dashboard/StatCard';
 import { StatsPeriodSelector } from '@/components/admin/dashboard/StatsPeriodSelector';
 import { Button } from '@/components/common/Button';
@@ -14,7 +17,6 @@ import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { adminStatsKeys } from '@/hooks/queries/queryKeys';
 import {
   useAdminDailySales,
-  useAdminLimitedDropStats,
   useAdminPopularProducts,
   useAdminStatsSummary,
 } from '@/hooks/queries/useAdminStats';
@@ -55,10 +57,10 @@ export default function AdminDashboardPage() {
     limit: POPULAR_PRODUCT_LIMIT,
     sort,
   });
-  const limitedDropsQuery = useAdminLimitedDropStats();
-
   return (
     <div className="flex flex-col gap-8">
+      <ReconcileAlertBanner />
+
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-[17px] font-bold tracking-tight">대시보드</h2>
         <Button variant="secondary" size="sm" onClick={handleRefresh}>
@@ -97,7 +99,12 @@ export default function AdminDashboardPage() {
 
       <section className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-bold text-content">일별 매출</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-content">일별 매출</h3>
+            {dailySalesQuery.data && (
+              <AsOfBadge aggregatedAt={dailySalesQuery.data.aggregatedAt} />
+            )}
+          </div>
           <StatsPeriodSelector value={period} onChange={handlePeriodChange} />
         </div>
 
@@ -117,13 +124,18 @@ export default function AdminDashboardPage() {
 
         {!dailySalesQuery.isPending && !dailySalesQuery.isError && dailySalesQuery.data && (
           <div className={dailySalesQuery.isPlaceholderData ? 'opacity-60' : ''}>
-            <DailySalesChart data={dailySalesQuery.data} />
+            <DailySalesChart data={dailySalesQuery.data.items} />
           </div>
         )}
       </section>
 
       <section className="flex flex-col gap-4">
-        <h3 className="text-sm font-bold text-content">인기 상품</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-bold text-content">인기 상품</h3>
+          {popularProductsQuery.data && (
+            <AsOfBadge aggregatedAt={popularProductsQuery.data.aggregatedAt} />
+          )}
+        </div>
 
         {popularProductsQuery.isPending && <TableSkeleton columns={6} />}
 
@@ -140,7 +152,7 @@ export default function AdminDashboardPage() {
           popularProductsQuery.data && (
             <div className={popularProductsQuery.isPlaceholderData ? 'opacity-60' : ''}>
               <PopularProductTable
-                items={popularProductsQuery.data}
+                items={popularProductsQuery.data.items}
                 sort={sort}
                 onSortChange={setSort}
               />
@@ -148,23 +160,9 @@ export default function AdminDashboardPage() {
           )}
       </section>
 
-      <section className="flex flex-col gap-4">
-        <h3 className="text-sm font-bold text-content">한정반 현황</h3>
+      <LimitedDropStatsSection />
 
-        {limitedDropsQuery.isPending && <TableSkeleton columns={8} />}
-
-        {!limitedDropsQuery.isPending && limitedDropsQuery.isError && (
-          <QueryErrorState
-            error={limitedDropsQuery.error}
-            onRetry={limitedDropsQuery.refetch}
-            title="한정반 현황을 불러오지 못했습니다"
-          />
-        )}
-
-        {!limitedDropsQuery.isPending && !limitedDropsQuery.isError && limitedDropsQuery.data && (
-          <LimitedDropStatsTable items={limitedDropsQuery.data} />
-        )}
-      </section>
+      <ReconcileLogSection />
     </div>
   );
 }

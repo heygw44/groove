@@ -1,11 +1,11 @@
 package com.groove.admin.dto;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 /** {@link com.groove.admin.mapper.AdminStatsMapper#findPopularProducts} 조회 조건. */
 public record PopularProductStatsCondition(
-		LocalDateTime fromAt,
-		LocalDateTime toExclusiveAt,
+		LocalDate from,
+		LocalDate to,
 		int limit,
 		PopularProductSortType sort
 ) {

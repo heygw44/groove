@@ -46,6 +46,11 @@ public final class LimitedDropFixture {
 		return drop;
 	}
 
+	public static LimitedDrop withSoldOutAt(LimitedDrop drop, LocalDateTime soldOutAt) {
+		ReflectionTestUtils.setField(drop, "soldOutAt", soldOutAt);
+		return drop;
+	}
+
 	public static LimitedDrop withOpenAt(LimitedDrop drop, LocalDateTime openAt) {
 		ReflectionTestUtils.setField(drop, "openAt", openAt);
 		return drop;

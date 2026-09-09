@@ -41,3 +41,6 @@ scripts/k6/results/*
 
 # Claude 작업 지침 (개인용, 비공개)
 CLAUDE.md
+
+# 실행계획 측정 결과 (리포트는 docs/portfolio 로 옮겨 남긴다)
+backend/scripts/perf/results/

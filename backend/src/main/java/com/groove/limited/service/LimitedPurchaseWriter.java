@@ -53,7 +53,8 @@ public class LimitedPurchaseWriter {
 	public LimitedPurchaseResponse write(Long dropId, Long memberId, Long addressId) {
 		LimitedDrop drop = limitedDropRepository.findByIdForUpdate(dropId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.LIMITED_DROP_NOT_FOUND));
-		drop.validatePurchasable(LocalDateTime.now(clock));
+		LocalDateTime now = LocalDateTime.now(clock);
+		drop.validatePurchasable(now);
 
 		Member member = findActiveMember(memberId);
 		Address address = addressRepository.findByIdAndMemberId(addressId, memberId)
@@ -72,7 +73,7 @@ public class LimitedPurchaseWriter {
 		}
 
 		String orderNumber = orderNumberGenerator.generate();
-		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), LocalDateTime.now(clock));
+		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), now);
 		order.addItem(drop.getProduct(), PURCHASE_QUANTITY);
 		orderRepository.save(order);
 
@@ -82,7 +83,7 @@ public class LimitedPurchaseWriter {
 				STOCK_OUT_REASON_PREFIX + orderNumber));
 
 		purchase.attachOrder(order);
-		drop.recordSale(PURCHASE_QUANTITY);
+		drop.recordSale(PURCHASE_QUANTITY, now);
 
 		return new LimitedPurchaseResponse(order.getId(), order.getOrderNumber(), order.getFinalAmount(),
 				order.getExpiresAt());

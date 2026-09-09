@@ -1,6 +1,7 @@
 package com.groove.global.init;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
@@ -10,7 +11,12 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.groove.global.init.SeedCatalog.AlbumSeed;
 import com.groove.inventory.service.StockService;
@@ -26,6 +32,7 @@ import com.groove.product.repository.ArtistRepository;
 import com.groove.product.repository.GenreRepository;
 import com.groove.product.repository.LabelRepository;
 import com.groove.product.repository.ProductRepository;
+import com.groove.stats.service.SalesAggregationService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +54,9 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private static final List<String> EXTRA_PRESSING_COUNTRIES = List.of("Japan", "UK", "Germany");
 	private static final List<String> EXTRA_PRESSING_COLORS = List.of("Clear", "Translucent Blue", "Red");
 
+	/** {@link LocalSignalSeeder} 가 결제 승인일을 흩뿌리는 창과 같은 길이만큼 통계를 백필한다. */
+	private static final int STATS_BACKFILL_DAYS = 90;
+
 	private final GenreRepository genreRepository;
 	private final LabelRepository labelRepository;
 	private final ArtistRepository artistRepository;
@@ -55,6 +65,9 @@ public class LocalDataInitializer implements ApplicationRunner {
 	private final StockService stockService;
 	private final ObjectProvider<LocalDemoDataSeeder> localDemoDataSeederProvider;
 	private final ObjectProvider<LocalSignalSeeder> localSignalSeederProvider;
+	private final SalesAggregationService salesAggregationService;
+	private final Clock clock;
+	private final PlatformTransactionManager transactionManager;
 
 	@Override
 	@Transactional
@@ -67,7 +80,45 @@ public class LocalDataInitializer implements ApplicationRunner {
 		LocalSignalSeeder localSignalSeeder = localSignalSeederProvider.getIfAvailable();
 		if (localSignalSeeder != null) {
 			localSignalSeeder.seed(demoMembers);
+			backfillStatsAfterCommit();
 		}
+	}
+
+	/**
+	 * {@code run()} 은 통째로 하나의 트랜잭션이라, 그 안에서 바로 집계를 돌리면 JPA 가 아직 flush 하지 않은
+	 * 주문/결제가 MyBatis 읽기 쿼리에 보이지 않을 수 있다. 커밋된 뒤에만 실행되도록 미룬다.
+	 */
+	private void backfillStatsAfterCommit() {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			runStatsBackfill();
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCommit() {
+				runStatsBackfill();
+			}
+		});
+	}
+
+	/**
+	 * {@code afterCommit()} 콜백 안에서는 원래 트랜잭션의 동기화가 아직 정리되지 않은 채 남아 있어,
+	 * {@link SalesAggregationService#aggregateDate} 의 {@code PROPAGATION_REQUIRED} 가 새 트랜잭션을 열지
+	 * 못하고 {@code TransactionRequiredException} 이 난다. {@link com.groove.admin.service.AdminAuditLogWriter}
+	 * 와 같은 이유로 {@code PROPAGATION_REQUIRES_NEW} 를 명시해 남은 동기화를 무시하고 매 날짜마다 새
+	 * 트랜잭션을 연다 — 날짜 하나씩 커밋해 롱 트랜잭션을 피하는 원래 설계({@link SalesAggregationService} 상단 주석)도
+	 * 그대로 유지된다.
+	 */
+	private void runStatsBackfill() {
+		LocalDate today = LocalDate.now(clock);
+		DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
+		definition.setPropagationBehavior(DefaultTransactionDefinition.PROPAGATION_REQUIRES_NEW);
+		TransactionTemplate requiresNew = new TransactionTemplate(transactionManager, definition);
+		for (int i = STATS_BACKFILL_DAYS - 1; i >= 0; i--) {
+			LocalDate saleDate = today.minusDays(i);
+			requiresNew.executeWithoutResult(status -> salesAggregationService.aggregateDate(saleDate));
+		}
+		log.info("더미 매출 통계를 백필했다: {}일", STATS_BACKFILL_DAYS);
 	}
 
 	/** 레이블/아티스트는 이름, 앨범은 (title, artistId) 로 find-or-create 해 파트별로 멱등하게 동작한다. */

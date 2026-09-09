@@ -10,5 +10,8 @@ public enum NotificationType {
 	PRICE_DROP,
 
 	/** 구독 중인 앨범에 새 프레싱이 등록됐을 때. */
-	NEW_PRESSING
+	NEW_PRESSING,
+
+	/** 매출 대사에서 재계산으로도 못 고친 불일치가 발견됐을 때(관리자 전용). */
+	STATS_MISMATCH
 }

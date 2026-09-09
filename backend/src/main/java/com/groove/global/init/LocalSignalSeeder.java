@@ -20,6 +20,8 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Product;
@@ -63,9 +65,14 @@ public class LocalSignalSeeder {
 	static final int ORDER_ITEM_MAX = 3;
 	static final int VIEW_LOG_COUNT = 12;
 
+	/** 매출 사전 집계 백필이 90일 창을 쓰므로 결제 승인일도 같은 범위에 흩뿌린다. */
+	static final int PAYMENT_BACKFILL_DAYS = 90;
+
 	private static final String EMAIL_FORMAT = "digger%02d@groove.com";
 	private static final String NICKNAME_FORMAT = "디거%02d";
 	private static final String ORDER_NUMBER_FORMAT = "SD%06d";
+	private static final String PAYMENT_KEY_FORMAT = "seed_payment_%06d";
+	private static final String PAYMENT_METHOD = "카드";
 	private static final int MAX_TASTE_ARTISTS = 2;
 	private static final int MAX_TASTE_DECADES = 2;
 
@@ -77,6 +84,7 @@ public class LocalSignalSeeder {
 	private final ProductRepository productRepository;
 	private final WishlistRepository wishlistRepository;
 	private final OrderRepository orderRepository;
+	private final PaymentRepository paymentRepository;
 	private final MemberTasteProfileRepository memberTasteProfileRepository;
 	private final MemberTasteGenreRepository memberTasteGenreRepository;
 	private final MemberTasteArtistRepository memberTasteArtistRepository;
@@ -179,11 +187,18 @@ public class LocalSignalSeeder {
 
 			sequence++;
 			String orderNumber = String.format(Locale.ROOT, ORDER_NUMBER_FORMAT, sequence);
-			Order order = Order.create(orderNumber, member, dummyAddress(member), now);
+			// 매출 통계 백필이 최근 90일을 다시 채우므로, 주문·결제 승인 시각도 이 창 안에 흩어 놓는다.
+			LocalDateTime orderedAt = now.minusDays(random.nextInt(PAYMENT_BACKFILL_DAYS))
+					.minusHours(random.nextInt(24));
+			Order order = Order.create(orderNumber, member, dummyAddress(member), orderedAt);
 			// 시드 주문은 재고를 차감하지 않는다. 추천 신호가 목적이고 재고 정합성은 주문 도메인 테스트가 다룬다.
 			items.forEach(product -> order.addItem(product, 1));
 			order.markPaid();
 			orderRepository.save(order);
+
+			Payment payment = Payment.ready(order);
+			payment.approve(String.format(Locale.ROOT, PAYMENT_KEY_FORMAT, sequence), PAYMENT_METHOD, orderedAt);
+			paymentRepository.save(payment);
 		}
 		return sequence;
 	}

@@ -41,6 +41,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Product;
@@ -77,6 +78,9 @@ class LocalSignalSeederTest {
 
 	@Mock
 	OrderRepository orderRepository;
+
+	@Mock
+	PaymentRepository paymentRepository;
 
 	@Mock
 	MemberTasteProfileRepository memberTasteProfileRepository;
@@ -306,7 +310,7 @@ class LocalSignalSeederTest {
 
 	private LocalSignalSeeder newSeeder() {
 		return new LocalSignalSeeder(memberRepository, passwordEncoder, productRepository, wishlistRepository,
-				orderRepository, memberTasteProfileRepository, memberTasteGenreRepository, memberTasteArtistRepository,
-				memberTasteDecadeRepository, productViewLogRepository);
+				orderRepository, paymentRepository, memberTasteProfileRepository, memberTasteGenreRepository,
+				memberTasteArtistRepository, memberTasteDecadeRepository, productViewLogRepository);
 	}
 }

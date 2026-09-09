@@ -4,11 +4,17 @@ import {
   getAdminDailySales,
   getAdminLimitedDropStats,
   getAdminPopularProducts,
+  getAdminReconcileLogs,
   getAdminStatsSummary,
 } from '@/api/admin';
 import { adminStatsKeys } from '@/hooks/queries/queryKeys';
 import { useAuthStore } from '@/store/authStore';
-import type { PopularProductParams, StatsPeriodParams } from '@/types/adminStats';
+import type {
+  LimitedDropStatsListParams,
+  PopularProductParams,
+  ReconcileLogListParams,
+  StatsPeriodParams,
+} from '@/types/adminStats';
 
 const useAdminAuthGate = () => {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -48,12 +54,24 @@ export const useAdminPopularProducts = (params: PopularProductParams) => {
   });
 };
 
-export const useAdminLimitedDropStats = () => {
+export const useAdminLimitedDropStats = (params: LimitedDropStatsListParams) => {
   const enabled = useAdminAuthGate();
 
   return useQuery({
-    queryKey: adminStatsKeys.limitedDrops,
-    queryFn: () => getAdminLimitedDropStats(),
+    queryKey: adminStatsKeys.limitedDrops(params),
+    queryFn: () => getAdminLimitedDropStats(params),
     enabled,
+    placeholderData: keepPreviousData,
+  });
+};
+
+export const useAdminReconcileLogs = (params: ReconcileLogListParams) => {
+  const enabled = useAdminAuthGate();
+
+  return useQuery({
+    queryKey: adminStatsKeys.reconcileLogs(params),
+    queryFn: () => getAdminReconcileLogs(params),
+    enabled,
+    placeholderData: keepPreviousData,
   });
 };

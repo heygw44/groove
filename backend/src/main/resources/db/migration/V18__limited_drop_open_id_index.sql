@@ -1,0 +1,11 @@
+-- findLimitedDropStats 의 ORDER BY open_at DESC, id DESC 는 기존 idx_limited_drop_status_open
+-- (status, open_at)를 못 쓴다(등가 필터가 없는 status 가 선두 컬럼이라 필터/정렬 모두에 못 쓰임).
+-- 인덱스 없이는 limited_drop 을 통째로 읽어 정렬한 뒤에야 LIMIT 을 적용한다.
+--
+-- 실측(groove_perf, 드롭 5,000건 + CLOSED 드롭당 limited_drop_stat 1행, index-explain.sh L1 케이스):
+-- 인덱스 추가 전: Table scan on ld -> Sort: ld.open_at DESC, ld.id DESC, limit input to 20 row(s) per chunk
+--   (actual time 1.57ms)
+-- 인덱스 추가 후: Index scan on ld using idx_limited_drop_open_id (reverse), Sort 노드 자체가 사라진다
+--   (actual time 0.097ms)
+-- type 이 테이블 풀스캔에서 인덱스 역순 스캔으로 바뀌고 Sort 노드가 없어져 약 16배 빨라진다.
+create index idx_limited_drop_open_id on limited_drop (open_at, id);

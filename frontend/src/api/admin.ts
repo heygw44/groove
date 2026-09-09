@@ -8,10 +8,13 @@ import type {
 } from '@/types/adminMember';
 import type {
   AdminStatsSummary,
-  DailySales,
+  DailySalesStats,
   LimitedDropStats,
-  PopularProduct,
+  LimitedDropStatsListParams,
+  PopularProductStats,
   PopularProductParams,
+  ReconcileLog,
+  ReconcileLogListParams,
   StatsPeriodParams,
 } from '@/types/adminStats';
 import type { ApiResponse, PageResponse } from '@/types/api';
@@ -133,20 +136,31 @@ export const getAdminStatsSummary = () =>
 
 export const getAdminDailySales = (params: StatsPeriodParams) =>
   unwrap(
-    client.get<ApiResponse<DailySales[]>>('/admin/stats/daily-sales', {
+    client.get<ApiResponse<DailySalesStats>>('/admin/stats/daily-sales', {
       params,
     }),
   );
 
 export const getAdminPopularProducts = (params: PopularProductParams) =>
   unwrap(
-    client.get<ApiResponse<PopularProduct[]>>('/admin/stats/popular-products', {
+    client.get<ApiResponse<PopularProductStats>>('/admin/stats/popular-products', {
       params,
     }),
   );
 
-export const getAdminLimitedDropStats = () =>
-  unwrap(client.get<ApiResponse<LimitedDropStats[]>>('/admin/stats/limited-drops'));
+export const getAdminLimitedDropStats = (params: LimitedDropStatsListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<LimitedDropStats>>>('/admin/stats/limited-drops', {
+      params,
+    }),
+  );
+
+export const getAdminReconcileLogs = (params: ReconcileLogListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<ReconcileLog>>>('/admin/stats/reconcile-logs', {
+      params,
+    }),
+  );
 
 export const getAdminMembers = (params: AdminMemberListParams) =>
   unwrap(

@@ -2,6 +2,7 @@ package com.groove.admin.service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -12,16 +13,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
+import com.groove.admin.dto.DailySalesStatsResponse;
+import com.groove.admin.dto.LimitedDropStatsRequest;
 import com.groove.admin.dto.LimitedDropStatsResponse;
 import com.groove.admin.dto.PopularProductResponse;
 import com.groove.admin.dto.PopularProductSortType;
 import com.groove.admin.dto.PopularProductStatsCondition;
 import com.groove.admin.dto.PopularProductStatsRequest;
+import com.groove.admin.dto.PopularProductStatsResponse;
 import com.groove.admin.dto.StatsPeriod;
 import com.groove.admin.dto.StatsPeriodRequest;
 import com.groove.admin.mapper.AdminStatsMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -38,29 +43,36 @@ public class AdminStatsService {
 	private final AdminLimitedDropStatsService adminLimitedDropStatsService;
 	private final Clock clock;
 
-	public List<DailySalesResponse> getDailySales(StatsPeriodRequest request) {
+	public DailySalesStatsResponse getDailySales(StatsPeriodRequest request) {
 		StatsPeriod period = StatsPeriod.resolve(request.from(), request.to(), LocalDate.now(clock));
-		List<DailySalesResponse> rows = adminStatsMapper.findDailySales(period.fromAt(), period.toExclusiveAt());
+		List<DailySalesResponse> rows = adminStatsMapper.findDailySales(period.from(), period.to());
 		Map<LocalDate, DailySalesResponse> rowsByDate = rows.stream()
 				.collect(Collectors.toMap(DailySalesResponse::date, Function.identity()));
 
-		return period.dates().stream()
+		List<DailySalesResponse> items = period.dates().stream()
 				.map(date -> rowsByDate.getOrDefault(date, DailySalesResponse.empty(date)))
 				.toList();
+		LocalDateTime aggregatedAt = adminStatsMapper.findAggregatedAt(period.from(), period.to());
+
+		return DailySalesStatsResponse.of(items, aggregatedAt);
 	}
 
-	public List<PopularProductResponse> getPopularProducts(PopularProductStatsRequest request) {
+	public PopularProductStatsResponse getPopularProducts(PopularProductStatsRequest request) {
 		StatsPeriod period = StatsPeriod.resolve(request.from(), request.to(), LocalDate.now(clock));
 		int limit = resolveLimit(request.limit());
 		PopularProductSortType sort = PopularProductSortType.from(request.sort());
-		PopularProductStatsCondition condition = new PopularProductStatsCondition(period.fromAt(),
-				period.toExclusiveAt(), limit, sort);
+		PopularProductStatsCondition condition = new PopularProductStatsCondition(period.from(), period.to(),
+				limit, sort);
 
-		return adminStatsMapper.findPopularProducts(condition);
+		List<PopularProductResponse> items = adminStatsMapper.findPopularProducts(condition);
+		// 두 지표 모두 같은 배치가 채우므로 sales_daily 기준시각으로 통일한다.
+		LocalDateTime aggregatedAt = adminStatsMapper.findAggregatedAt(period.from(), period.to());
+
+		return PopularProductStatsResponse.of(items, aggregatedAt);
 	}
 
-	public List<LimitedDropStatsResponse> getLimitedDropStats() {
-		return adminLimitedDropStatsService.getLimitedDropStats();
+	public PageResponse<LimitedDropStatsResponse> getLimitedDropStats(LimitedDropStatsRequest request) {
+		return adminLimitedDropStatsService.getLimitedDropStats(request);
 	}
 
 	public AdminStatsSummaryResponse getSummary() {
