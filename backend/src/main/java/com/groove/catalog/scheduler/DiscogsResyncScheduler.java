@@ -1,17 +1,16 @@
 package com.groove.catalog.scheduler;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.groove.catalog.client.PressingLookupClient;
 import com.groove.catalog.client.dto.DiscogsReleaseResponse;
+import com.groove.catalog.config.CatalogFreshnessProperties;
 import com.groove.catalog.config.CatalogResyncProperties;
 import com.groove.catalog.dto.DiscogsResyncCandidate;
 import com.groove.catalog.dto.DiscogsResyncOutcome;
@@ -46,12 +45,9 @@ public class DiscogsResyncScheduler {
 	private final DiscogsResyncLock discogsResyncLock;
 	private final PressingLookupClient pressingLookupClient;
 	private final CatalogResyncProperties properties;
+	private final CatalogFreshnessProperties freshnessProperties;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Clock clock;
-
-	// 신선도 TTL 을 관리하는 별도 설정 클래스에 의존하지 않고 프로퍼티 값만 직접 참조한다.
-	@Value("${groove.catalog.freshness.ttl}")
-	private Duration freshnessTtl;
 
 	/** 조회수 우선순위 재검증. 회당 예산(maxCallsPerRun)만큼만 부른다. */
 	@Scheduled(fixedDelayString = "${groove.catalog.resync.interval}", initialDelay = 30_000)
@@ -73,7 +69,7 @@ public class DiscogsResyncScheduler {
 
 	private void runPriority() {
 		LocalDateTime now = LocalDateTime.now(clock);
-		LocalDateTime staleBefore = now.minus(freshnessTtl);
+		LocalDateTime staleBefore = now.minus(freshnessProperties.ttl());
 		LocalDateTime viewSince = now.minus(properties.viewWindow());
 		checkBudgetAlert(staleBefore);
 
@@ -87,7 +83,7 @@ public class DiscogsResyncScheduler {
 
 	private void runSweep() {
 		LocalDateTime now = LocalDateTime.now(clock);
-		LocalDateTime staleBefore = now.minus(freshnessTtl);
+		LocalDateTime staleBefore = now.minus(freshnessProperties.ttl());
 		checkBudgetAlert(staleBefore);
 
 		long startedAt = System.currentTimeMillis();
@@ -164,7 +160,7 @@ public class DiscogsResyncScheduler {
 		long intervalSeconds = Math.max(1, properties.interval().getSeconds());
 		double ratePerSecond = (double) properties.maxCallsPerRun() / intervalSeconds;
 		double estimatedSeconds = totalCandidates / ratePerSecond;
-		long ttlSeconds = freshnessTtl.getSeconds();
+		long ttlSeconds = freshnessProperties.ttl().getSeconds();
 		if (estimatedSeconds > ttlSeconds) {
 			log.error("재검증 주기가 신선도 TTL 을 초과한다 candidates={} estimatedMinutes={} ttlMinutes={}",
 					totalCandidates, Math.round(estimatedSeconds / 60.0), ttlSeconds / 60);
