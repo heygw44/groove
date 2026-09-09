@@ -6,19 +6,20 @@ Java 17 / Spring Boot 3.5 + React 18로 만든 LP 이커머스다. 한정반(Lim
 
 **https://groove-lp.duckdns.org**
 
-실제 카탈로그 273건, 리뷰 546건이 올라가 있다.
+Discogs에서 적재한 실제 카탈로그가 올라가 있다 — 앨범 210종 · 프레싱 273건, 리뷰 546건.
 
 ## 주요 화면
 
 | | |
 |---|---|
-| ![홈](.github/assets/home.jpg) 홈 · 한정반 배너 · 개인화 추천 | ![상품 상세](.github/assets/product-detail.jpg) 상품 상세 |
-| ![한정반](.github/assets/limited-drop.jpg) 한정반 드롭 | ![장바구니](.github/assets/cart.jpg) 장바구니 |
-| ![관리자 상품 관리](.github/assets/admin-products.jpg) 관리자 · 상품 관리 | |
+| ![홈](.github/assets/home.jpg) 홈 · 한정반 배너 · 개인화 추천 | ![상품 목록](.github/assets/product-list.jpg) 상품 목록 · 앨범당 대표 프레싱으로 축약 |
+| ![상품 상세](.github/assets/product-detail.jpg) 상품 상세 · 프레싱 스펙과 다른 에디션 | ![한정반](.github/assets/limited-drop.jpg) 한정반 드롭 |
+| ![장바구니](.github/assets/cart.jpg) 장바구니 | ![관리자 상품 관리](.github/assets/admin-products.jpg) 관리자 · 상품 관리 |
 
 ## 주요 기능
 
-- **상품 탐색** — 장르·아티스트·가격대 필터, 바코드/카탈로그 번호/키워드 검색
+- **상품 탐색** — 장르·아티스트·가격대 필터, 바코드/카탈로그 번호/키워드 검색. 같은 앨범의 프레싱이 목록을 채우지 않게 앨범당 대표 1건으로 축약하고, 카드에 "다른 에디션 N종"으로 나머지를 알린다
+- **카탈로그(Discogs)** — 프레싱 스펙(국가·연도·카탈로그 번호·바코드)을 Discogs에서 적재하고 5분 주기로 재검증한다. 약관상 원본보다 6시간 이상 오래된 정보는 표시할 수 없어, TTL이 지난 상품은 서버가 해당 필드를 비우고 화면에 "최신 정보를 확인하는 중입니다"를 띄운다
 - **추천** — 취향 프로필(장르·아티스트·연대)과 최근 본 상품·구매·위시리스트 같은 행동 신호를 가중치 합산해 홈에 "OO님을 위한 추천"으로 보여준다. 학습 모델 없이도 무작위 대비 8.9배, 인기순 대비 5.6배 recall@10을 낸다
 - **한정반(Limited Drop)** — 선착순 구매. Redis Lua로 1차 필터링하고 DB 트랜잭션으로 재확인하는 이중 방어로 초과 판매 0건을 유지한다
 - **주문·결제** — 장바구니, Toss Payments 결제 승인/취소, 쿠폰
@@ -64,13 +65,13 @@ flowchart LR
 
     User -->|HTTPS| Nginx
     Backend -->|결제 승인·취소| Toss
-    Backend -. 카탈로그 배치 .-> Discogs
+    Backend -. 카탈로그 적재·재검증 .-> Discogs
     Build -->|이미지 push| GHCR
     Build -->|dist scp| Static
     GHCR -. pull .-> Backend
 ```
 
-MySQL·Redis·백엔드가 EC2 한 대에 같이 떠 있고, 백엔드 컨테이너는 루프백에만 바인딩해 외부에서는 Nginx를 거쳐야만 닿는다. 배포는 `main` 푸시 → CI 게이트 → 백엔드 이미지를 GHCR로 push, 프론트는 빌드 산출물을 EC2로 직접 scp하는 두 경로로 나뉜다. 배포 중에는 보안그룹 22번을 GitHub Actions 러너 IP에만 열었다가 끝나면 회수하고, 헬스체크(`/api/v1/health`)가 통과해야 배포가 끝난다.
+MySQL·Redis·백엔드가 EC2 한 대에 같이 떠 있고, 백엔드 컨테이너는 루프백에만 바인딩해 외부에서는 Nginx를 거쳐야만 닿는다. 한 대에 몰려 있는 만큼 주기 작업끼리 서로를 굶기지 않게, Discogs 재검증과 매출 집계는 MySQL named lock을 각각 다른 이름(`groove:discogs-resync`, `groove:sales-agg`)으로 잡는다. 배포는 `main` 푸시 → CI 게이트 → 백엔드 이미지를 GHCR로 push, 프론트는 빌드 산출물을 EC2로 직접 scp하는 두 경로로 나뉜다. 배포 중에는 보안그룹 22번을 GitHub Actions 러너 IP에만 열었다가 끝나면 회수하고, 헬스체크(`/api/v1/health`)가 통과해야 배포가 끝난다.
 
 ## 로컬 실행
 
