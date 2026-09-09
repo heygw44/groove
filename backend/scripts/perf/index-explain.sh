@@ -126,19 +126,20 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
 case_desc() {
 	case "$1" in
-	P1) echo "상품 검색 기본 목록 LATEST, 필터 없음 (ProductSearchMapper.xml searchProducts)" ;;
-	P2) echo "상품 검색 키워드 LATEST, keyword=Pressing 12 (ProductSearchMapper.xml searchProducts)" ;;
-	P3) echo "상품 검색 장르 2개+가격대 LATEST (ProductSearchMapper.xml searchProducts)" ;;
-	P4) echo "상품 검색 가격대 PRICE_ASC (ProductSearchMapper.xml searchProducts)" ;;
-	P5) echo "상품 검색 POPULAR (before: 파생 테이블 집계 / after: product.sold_quantity)" ;;
-	P6) echo "상품 검색 RATING, 깊은 페이지 offset=1000 (ProductSearchMapper.xml searchProducts)" ;;
-	P7) echo "상품 검색 countProducts 무필터 (ProductSearchMapper.xml countProducts)" ;;
+	P1) echo "상품 검색 LATEST, 필터 없음 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
+	P2) echo "상품 검색 LATEST, keyword=Pressing 12 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
+	P3) echo "상품 검색 LATEST, 장르 2개+가격대 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
+	P4) echo "상품 검색 PRICE_ASC, 가격대 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
+	P5) echo "상품 검색 POPULAR (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
+	P6) echo "상품 검색 RATING (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
+	P7) echo "상품 검색 countProducts, 무필터 (album_id DISTINCT, ProductSearchMapper.xml countProducts)" ;;
+	P8) echo "상품 검색 PRICE_DESC, 필터 없음 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
 	O1) echo "내 주문 목록, status 없음 (OrderQueryMapper.xml findMyOrders)" ;;
 	O2) echo "내 주문 목록, status=DELIVERED (OrderQueryMapper.xml findMyOrders)" ;;
 	O3) echo "내 주문 countMyOrders (OrderQueryMapper.xml countMyOrders)" ;;
@@ -343,8 +344,14 @@ seed() {
 	member_n=$(scaled_count 40000)
 	artist_n=$(scaled_count 2000)
 	label_n=$(scaled_count 200)
-	album_n=$(scaled_count 30000)
 	product_n=$(scaled_count 50000)
+	# album_id 를 균등하게 뿌리면 searchProducts 의 대표 프레싱 축약(ROW_NUMBER() OVER (PARTITION BY album_id))이
+	# 앨범마다 한두 건만 접고 끝나 인덱스 후보의 효과가 안 드러난다.
+	# 100 건짜리 블록 안에서 앞 40건은 앨범 1개씩(단반 프레싱), 다음 24건은 2건씩, 다음 16건은 4건씩,
+	# 다음 16건은 8건씩, 마지막 4건은 한 앨범에 몰아 앨범당 1~8장으로 치우치게 심는다.
+	# 블록당 앨범 수 = 40 + 12 + 4 + 2 + 1 = 59 (ALBUM_BLOCK_LOCALS).
+	readonly ALBUM_BLOCK_LOCALS=59
+	album_n=$(( ( (product_n + 99) / 100 ) * ALBUM_BLOCK_LOCALS ))
 	orders_n=$(scaled_count 200000)
 	order_item_n=$(scaled_count 500000)
 	payment_n=$(scaled_count 150000)
@@ -491,7 +498,14 @@ seed() {
 			avg_rating, review_count, created_at, updated_at)
 		SELECT
 			CONCAT('Perf Pressing ', n),
-			((n - 1) % ${album_n}) + 1,
+			((n - 1) DIV 100) * ${ALBUM_BLOCK_LOCALS} + 1 +
+				CASE
+					WHEN (n - 1) % 100 < 40 THEN (n - 1) % 100
+					WHEN (n - 1) % 100 < 64 THEN 40 + FLOOR(((n - 1) % 100 - 40) / 2)
+					WHEN (n - 1) % 100 < 80 THEN 52 + FLOOR(((n - 1) % 100 - 64) / 4)
+					WHEN (n - 1) % 100 < 96 THEN 56 + FLOOR(((n - 1) % 100 - 80) / 8)
+					ELSE 58
+				END,
 			((n - 1) % ${artist_n}) + 1,
 			((n - 1) % ${label_n}) + 1,
 			'180g',
@@ -866,19 +880,34 @@ get_case_sql() {
 	P1)
 		cat <<-SQL
 			-- ProductSearchMapper.xml searchProducts, sort=LATEST, 필터 없음, memberId=NULL
+			-- (대표 프레싱 축약: 파생 테이블 + ROW_NUMBER() OVER (PARTITION BY album_id))
 			SELECT
-				p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-				p.color_variant, p.pressing_info, p.status,
-				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
+				t.id, t.title, t.artist_name, t.label_name, t.price,
+				t.color_variant, t.pressing_info, t.status,
+				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0)
 					AS thumbnail_url,
-				p.avg_rating AS average_rating, p.review_count AS review_count,
-				p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-				NULL AS wishlisted
-			FROM product p
-			JOIN artist a ON a.id = p.artist_id
-			LEFT JOIN label l ON l.id = p.label_id
-			WHERE p.status <> 'HIDDEN'
-			ORDER BY p.created_at DESC, p.id DESC
+				t.average_rating, t.review_count, NULL AS wishlisted,
+				t.country, t.pressing_year, t.edition_type, t.album_id,
+				t.album_match_count - 1 AS other_pressing_count
+			FROM (
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					p.album_id AS album_id, p.created_at AS created_at, p.sold_quantity AS sold_quantity,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.album_id
+						ORDER BY (p.status = 'SOLD_OUT'), p.created_at DESC, p.id DESC
+					) AS rn,
+					COUNT(*) OVER (PARTITION BY p.album_id) AS album_match_count
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				WHERE p.status <> 'HIDDEN'
+			) t
+			WHERE t.rn = 1
+			ORDER BY t.created_at DESC, t.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
@@ -886,19 +915,33 @@ get_case_sql() {
 		cat <<-SQL
 			-- ProductSearchMapper.xml searchProducts, sort=LATEST, keyword='Pressing 12'
 			SELECT
-				p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-				p.color_variant, p.pressing_info, p.status,
-				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
+				t.id, t.title, t.artist_name, t.label_name, t.price,
+				t.color_variant, t.pressing_info, t.status,
+				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0)
 					AS thumbnail_url,
-				p.avg_rating AS average_rating, p.review_count AS review_count,
-				p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-				NULL AS wishlisted
-			FROM product p
-			JOIN artist a ON a.id = p.artist_id
-			LEFT JOIN label l ON l.id = p.label_id
-			WHERE p.status <> 'HIDDEN'
-			AND (p.title LIKE '%Pressing 12%' OR a.name LIKE '%Pressing 12%')
-			ORDER BY p.created_at DESC, p.id DESC
+				t.average_rating, t.review_count, NULL AS wishlisted,
+				t.country, t.pressing_year, t.edition_type, t.album_id,
+				t.album_match_count - 1 AS other_pressing_count
+			FROM (
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					p.album_id AS album_id, p.created_at AS created_at, p.sold_quantity AS sold_quantity,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.album_id
+						ORDER BY (p.status = 'SOLD_OUT'), p.created_at DESC, p.id DESC
+					) AS rn,
+					COUNT(*) OVER (PARTITION BY p.album_id) AS album_match_count
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				WHERE p.status <> 'HIDDEN'
+				AND (p.title LIKE '%Pressing 12%' OR a.name LIKE '%Pressing 12%')
+			) t
+			WHERE t.rn = 1
+			ORDER BY t.created_at DESC, t.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
@@ -907,24 +950,38 @@ get_case_sql() {
 			-- ProductSearchMapper.xml searchProducts, sort=LATEST, genreIds=(${GENRE_ID_1},${GENRE_ID_2}),
 			-- price 30000~60000
 			SELECT
-				p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-				p.color_variant, p.pressing_info, p.status,
-				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
+				t.id, t.title, t.artist_name, t.label_name, t.price,
+				t.color_variant, t.pressing_info, t.status,
+				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0)
 					AS thumbnail_url,
-				p.avg_rating AS average_rating, p.review_count AS review_count,
-				p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-				NULL AS wishlisted
-			FROM product p
-			JOIN artist a ON a.id = p.artist_id
-			LEFT JOIN label l ON l.id = p.label_id
-			WHERE p.status <> 'HIDDEN'
-			AND EXISTS (
-				SELECT 1 FROM product_genre pg
-				WHERE pg.product_id = p.id
-				AND pg.genre_id IN (${GENRE_ID_1}, ${GENRE_ID_2})
-			)
-			AND p.price >= 30000 AND p.price <= 60000
-			ORDER BY p.created_at DESC, p.id DESC
+				t.average_rating, t.review_count, NULL AS wishlisted,
+				t.country, t.pressing_year, t.edition_type, t.album_id,
+				t.album_match_count - 1 AS other_pressing_count
+			FROM (
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					p.album_id AS album_id, p.created_at AS created_at, p.sold_quantity AS sold_quantity,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.album_id
+						ORDER BY (p.status = 'SOLD_OUT'), p.created_at DESC, p.id DESC
+					) AS rn,
+					COUNT(*) OVER (PARTITION BY p.album_id) AS album_match_count
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				WHERE p.status <> 'HIDDEN'
+				AND EXISTS (
+					SELECT 1 FROM product_genre pg
+					WHERE pg.product_id = p.id
+					AND pg.genre_id IN (${GENRE_ID_1}, ${GENRE_ID_2})
+				)
+				AND p.price >= 30000 AND p.price <= 60000
+			) t
+			WHERE t.rn = 1
+			ORDER BY t.created_at DESC, t.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
@@ -932,95 +989,145 @@ get_case_sql() {
 		cat <<-SQL
 			-- ProductSearchMapper.xml searchProducts, sort=PRICE_ASC, price 30000~60000
 			SELECT
-				p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-				p.color_variant, p.pressing_info, p.status,
-				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
+				t.id, t.title, t.artist_name, t.label_name, t.price,
+				t.color_variant, t.pressing_info, t.status,
+				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0)
 					AS thumbnail_url,
-				p.avg_rating AS average_rating, p.review_count AS review_count,
-				p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-				NULL AS wishlisted
-			FROM product p
-			JOIN artist a ON a.id = p.artist_id
-			LEFT JOIN label l ON l.id = p.label_id
-			WHERE p.status <> 'HIDDEN'
-			AND p.price >= 30000 AND p.price <= 60000
-			ORDER BY p.price ASC, p.id DESC
+				t.average_rating, t.review_count, NULL AS wishlisted,
+				t.country, t.pressing_year, t.edition_type, t.album_id,
+				t.album_match_count - 1 AS other_pressing_count
+			FROM (
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					p.album_id AS album_id, p.created_at AS created_at, p.sold_quantity AS sold_quantity,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.album_id
+						ORDER BY (p.status = 'SOLD_OUT'), p.price ASC, p.id DESC
+					) AS rn,
+					COUNT(*) OVER (PARTITION BY p.album_id) AS album_match_count
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				WHERE p.status <> 'HIDDEN'
+				AND p.price >= 30000 AND p.price <= 60000
+			) t
+			WHERE t.rn = 1
+			ORDER BY t.price ASC, t.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	P5)
-		if [ "${phase}" = before ]; then
-			cat <<-SQL
-				-- ProductSearchMapper.xml searchProducts, sort=POPULAR (before: order_item 파생 테이블 집계)
+		cat <<-SQL
+			-- ProductSearchMapper.xml searchProducts, sort=POPULAR, 필터 없음 (product.sold_quantity 비정규화 컬럼)
+			SELECT
+				t.id, t.title, t.artist_name, t.label_name, t.price,
+				t.color_variant, t.pressing_info, t.status,
+				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0)
+					AS thumbnail_url,
+				t.average_rating, t.review_count, NULL AS wishlisted,
+				t.country, t.pressing_year, t.edition_type, t.album_id,
+				t.album_match_count - 1 AS other_pressing_count
+			FROM (
 				SELECT
 					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
 					p.color_variant, p.pressing_info, p.status,
-					(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
-						AS thumbnail_url,
 					p.avg_rating AS average_rating, p.review_count AS review_count,
 					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-					NULL AS wishlisted
-				FROM product p
-				JOIN artist a ON a.id = p.artist_id
-				LEFT JOIN label l ON l.id = p.label_id
-				LEFT JOIN (
-					SELECT oi.product_id, SUM(oi.quantity) AS sold_quantity
-					FROM order_item oi
-					JOIN orders o ON o.id = oi.order_id
-					WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
-					GROUP BY oi.product_id
-				) sold ON sold.product_id = p.id
-				WHERE p.status <> 'HIDDEN'
-				ORDER BY COALESCE(sold.sold_quantity, 0) DESC, p.review_count DESC, p.created_at DESC, p.id DESC
-				LIMIT 20 OFFSET 0
-			SQL
-		else
-			cat <<-SQL
-				-- ProductSearchMapper.xml searchProducts, sort=POPULAR (after: product.sold_quantity 비정규화 컬럼)
-				SELECT
-					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-					p.color_variant, p.pressing_info, p.status,
-					(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
-						AS thumbnail_url,
-					p.avg_rating AS average_rating, p.review_count AS review_count,
-					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-					NULL AS wishlisted
+					p.album_id AS album_id, p.created_at AS created_at, p.sold_quantity AS sold_quantity,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.album_id
+						ORDER BY (p.status = 'SOLD_OUT'), p.sold_quantity DESC, p.review_count DESC,
+							p.created_at DESC, p.id DESC
+					) AS rn,
+					COUNT(*) OVER (PARTITION BY p.album_id) AS album_match_count
 				FROM product p
 				JOIN artist a ON a.id = p.artist_id
 				LEFT JOIN label l ON l.id = p.label_id
 				WHERE p.status <> 'HIDDEN'
-				ORDER BY p.sold_quantity DESC, p.review_count DESC, p.created_at DESC, p.id DESC
-				LIMIT 20 OFFSET 0
-			SQL
-		fi
+			) t
+			WHERE t.rn = 1
+			ORDER BY t.sold_quantity DESC, t.review_count DESC, t.created_at DESC, t.id DESC
+			LIMIT 20 OFFSET 0
+		SQL
 		;;
 	P6)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=RATING, 깊은 페이지 offset=1000
+			-- ProductSearchMapper.xml searchProducts, sort=RATING, 필터 없음
 			SELECT
-				p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
-				p.color_variant, p.pressing_info, p.status,
-				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = p.id AND i.sort_order = 0)
+				t.id, t.title, t.artist_name, t.label_name, t.price,
+				t.color_variant, t.pressing_info, t.status,
+				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0)
 					AS thumbnail_url,
-				p.avg_rating AS average_rating, p.review_count AS review_count,
-				p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
-				NULL AS wishlisted
-			FROM product p
-			JOIN artist a ON a.id = p.artist_id
-			LEFT JOIN label l ON l.id = p.label_id
-			WHERE p.status <> 'HIDDEN'
-			ORDER BY p.avg_rating DESC, p.review_count DESC, p.created_at DESC, p.id DESC
-			LIMIT 20 OFFSET 1000
+				t.average_rating, t.review_count, NULL AS wishlisted,
+				t.country, t.pressing_year, t.edition_type, t.album_id,
+				t.album_match_count - 1 AS other_pressing_count
+			FROM (
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					p.album_id AS album_id, p.created_at AS created_at, p.sold_quantity AS sold_quantity,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.album_id
+						ORDER BY (p.status = 'SOLD_OUT'), p.avg_rating DESC, p.review_count DESC,
+							p.created_at DESC, p.id DESC
+					) AS rn,
+					COUNT(*) OVER (PARTITION BY p.album_id) AS album_match_count
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				WHERE p.status <> 'HIDDEN'
+			) t
+			WHERE t.rn = 1
+			ORDER BY t.average_rating DESC, t.review_count DESC, t.created_at DESC, t.id DESC
+			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	P7)
 		cat <<-SQL
-			-- ProductSearchMapper.xml countProducts, 무필터
-			SELECT COUNT(*)
+			-- ProductSearchMapper.xml countProducts, 무필터 (albumId 필터가 없으면 COUNT(DISTINCT album_id))
+			SELECT COUNT(DISTINCT p.album_id)
 			FROM product p
 			JOIN artist a ON a.id = p.artist_id
 			LEFT JOIN label l ON l.id = p.label_id
 			WHERE p.status <> 'HIDDEN'
+		SQL
+		;;
+	P8)
+		cat <<-SQL
+			-- ProductSearchMapper.xml searchProducts, sort=PRICE_DESC, 필터 없음
+			SELECT
+				t.id, t.title, t.artist_name, t.label_name, t.price,
+				t.color_variant, t.pressing_info, t.status,
+				(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0)
+					AS thumbnail_url,
+				t.average_rating, t.review_count, NULL AS wishlisted,
+				t.country, t.pressing_year, t.edition_type, t.album_id,
+				t.album_match_count - 1 AS other_pressing_count
+			FROM (
+				SELECT
+					p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+					p.color_variant, p.pressing_info, p.status,
+					p.avg_rating AS average_rating, p.review_count AS review_count,
+					p.country AS country, p.pressing_year AS pressing_year, p.edition_type AS edition_type,
+					p.album_id AS album_id, p.created_at AS created_at, p.sold_quantity AS sold_quantity,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.album_id
+						ORDER BY (p.status = 'SOLD_OUT'), p.price DESC, p.id DESC
+					) AS rn,
+					COUNT(*) OVER (PARTITION BY p.album_id) AS album_match_count
+				FROM product p
+				JOIN artist a ON a.id = p.artist_id
+				LEFT JOIN label l ON l.id = p.label_id
+				WHERE p.status <> 'HIDDEN'
+			) t
+			WHERE t.rn = 1
+			ORDER BY t.price DESC, t.id DESC
+			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	O1)
