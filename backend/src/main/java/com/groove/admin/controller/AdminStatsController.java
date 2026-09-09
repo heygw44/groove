@@ -1,7 +1,5 @@
 package com.groove.admin.controller;
 
-import java.util.List;
-
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesStatsResponse;
+import com.groove.admin.dto.LimitedDropStatsRequest;
 import com.groove.admin.dto.LimitedDropStatsResponse;
 import com.groove.admin.dto.PopularProductStatsRequest;
 import com.groove.admin.dto.PopularProductStatsResponse;
@@ -57,8 +56,9 @@ public class AdminStatsController {
 
 	@Operation(summary = "한정반 드롭 현황 통계")
 	@GetMapping("/limited-drops")
-	public ApiResponse<List<LimitedDropStatsResponse>> getLimitedDropStats() {
-		return ApiResponse.ok(adminStatsService.getLimitedDropStats());
+	public ApiResponse<PageResponse<LimitedDropStatsResponse>> getLimitedDropStats(
+			@Valid @ModelAttribute LimitedDropStatsRequest request) {
+		return ApiResponse.ok(adminStatsService.getLimitedDropStats(request));
 	}
 
 	@Operation(summary = "대시보드 요약 카드")

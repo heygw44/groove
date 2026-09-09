@@ -38,7 +38,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = PROTECTED)
 @Table(name = "limited_drop",
 		uniqueConstraints = @UniqueConstraint(name = "uk_limited_drop_product", columnNames = "product_id"),
-		indexes = @Index(name = "idx_limited_drop_status_open", columnList = "status, open_at"))
+		indexes = {
+			@Index(name = "idx_limited_drop_status_open", columnList = "status, open_at"),
+			@Index(name = "idx_limited_drop_open_id", columnList = "open_at, id")
+		})
 public class LimitedDrop extends BaseTimeEntity {
 
 	@Id
@@ -71,6 +74,9 @@ public class LimitedDrop extends BaseTimeEntity {
 	@Column(name = "sold_count", nullable = false)
 	@ColumnDefault("0")
 	private int soldCount;
+
+	@Column(name = "sold_out_at")
+	private LocalDateTime soldOutAt;
 
 	@Builder(access = PRIVATE)
 	private LimitedDrop(Product product, int totalQuantity, int perMemberLimit, LocalDateTime openAt,
@@ -117,11 +123,12 @@ public class LimitedDrop extends BaseTimeEntity {
 		this.status = LimitedDropStatus.OPEN;
 	}
 
-	public void markSoldOut() {
+	public void markSoldOut(LocalDateTime now) {
 		if (this.status != LimitedDropStatus.OPEN) {
 			throw new BusinessException(ErrorCode.LIMITED_INVALID_STATUS);
 		}
 		this.status = LimitedDropStatus.SOLD_OUT;
+		this.soldOutAt = now;
 	}
 
 	public void close() {
@@ -144,7 +151,7 @@ public class LimitedDrop extends BaseTimeEntity {
 		}
 	}
 
-	public void recordSale(int quantity) {
+	public void recordSale(int quantity, LocalDateTime now) {
 		if (quantity <= 0) {
 			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
 		}
@@ -153,12 +160,14 @@ public class LimitedDrop extends BaseTimeEntity {
 		}
 		this.soldCount += quantity;
 		if (this.soldCount == this.totalQuantity && this.status == LimitedDropStatus.OPEN) {
-			markSoldOut();
+			markSoldOut(now);
 		}
 	}
 
 	/**
 	 * PENDING 주문 만료 등으로 선점을 되돌린다. 마감 시각이 지났으면 SOLD_OUT 을 OPEN 으로 되돌리지 않는다.
+	 * OPEN 으로 돌아가면 매진이 취소된 것이므로 soldOutAt 도 함께 지운다 — 안 지우면 이후 다시 매진되지
+	 * 않은 채 마감돼도 예전 매진 시각이 그대로 남는다.
 	 */
 	public void restoreSale(int quantity, LocalDateTime now) {
 		if (quantity <= 0 || this.soldCount - quantity < 0) {
@@ -167,6 +176,7 @@ public class LimitedDrop extends BaseTimeEntity {
 		this.soldCount -= quantity;
 		if (this.status == LimitedDropStatus.SOLD_OUT && now.isBefore(this.closeAt)) {
 			this.status = LimitedDropStatus.OPEN;
+			this.soldOutAt = null;
 		}
 	}
 

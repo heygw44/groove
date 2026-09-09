@@ -240,7 +240,7 @@ class LimitedPurchaseWriterTest {
 			LimitedDrop drop = openDrop(product, 5L);
 			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
 			LimitedPurchase purchase = LimitedPurchaseFixture.create(drop, member);
-			drop.recordSale(1);
+			drop.recordSale(1, LocalDateTime.now(clock));
 			given(limitedPurchaseRepository.findByOrderId(100L)).willReturn(Optional.of(purchase));
 			given(limitedDropRepository.findByIdForUpdate(5L)).willReturn(Optional.of(drop));
 

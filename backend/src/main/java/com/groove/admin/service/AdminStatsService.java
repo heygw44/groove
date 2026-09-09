@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
 import com.groove.admin.dto.DailySalesStatsResponse;
+import com.groove.admin.dto.LimitedDropStatsRequest;
 import com.groove.admin.dto.LimitedDropStatsResponse;
 import com.groove.admin.dto.PopularProductResponse;
 import com.groove.admin.dto.PopularProductSortType;
@@ -25,6 +26,7 @@ import com.groove.admin.dto.StatsPeriodRequest;
 import com.groove.admin.mapper.AdminStatsMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -69,8 +71,8 @@ public class AdminStatsService {
 		return PopularProductStatsResponse.of(items, aggregatedAt);
 	}
 
-	public List<LimitedDropStatsResponse> getLimitedDropStats() {
-		return adminLimitedDropStatsService.getLimitedDropStats();
+	public PageResponse<LimitedDropStatsResponse> getLimitedDropStats(LimitedDropStatsRequest request) {
+		return adminLimitedDropStatsService.getLimitedDropStats(request);
 	}
 
 	public AdminStatsSummaryResponse getSummary() {

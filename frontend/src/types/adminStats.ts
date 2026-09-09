@@ -101,3 +101,8 @@ export interface ReconcileLogListParams {
   page: number;
   size?: number;
 }
+
+export interface LimitedDropStatsListParams {
+  page: number;
+  size?: number;
+}

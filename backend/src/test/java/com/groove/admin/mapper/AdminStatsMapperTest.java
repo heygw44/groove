@@ -24,7 +24,6 @@ import com.groove.admin.dto.PopularProductSortType;
 import com.groove.admin.dto.PopularProductStatsCondition;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
-import com.groove.fixture.LimitedPurchaseFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.PaymentFixture;
@@ -33,7 +32,6 @@ import com.groove.limited.entity.LimitedAttemptResult;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStat;
 import com.groove.limited.entity.LimitedDropStatus;
-import com.groove.limited.entity.LimitedPurchase;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.payment.entity.Payment;
@@ -276,8 +274,12 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 	@DisplayName("findLimitedDropStats()")
 	class FindLimitedDropStats {
 
+		// 공유 DB 에 다른 테스트가 남긴 드롭이 섞이므로, 개별 필드 검증은 own id 필터로 하되
+		// size 를 크게 잡아 own 드롭이 페이지 밖으로 밀려나지 않게 한다.
+		private static final int LARGE_SIZE = 10_000;
+
 		@Test
-		@DisplayName("SOLD_OUT 드롭은 마지막 구매 시각을 soldOutAt 으로, 판매율을 계산해 반환한다")
+		@DisplayName("SOLD_OUT 드롭은 저장된 매진 시각으로 soldOutSeconds 를 계산하고 판매율도 계산해 반환한다")
 		void returnsSoldOutAtAndSellRateForSoldOutDrop() {
 			// given
 			Product product = ProductFixture.create(artist, "ASM Sold Out Drop", new BigDecimal("40000"));
@@ -288,30 +290,14 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			LimitedDropFixture.withCloseAt(drop, LocalDateTime.now().plusHours(1));
 			LimitedDropFixture.withSoldCount(drop, 2);
 			LimitedDropFixture.withStatus(drop, LimitedDropStatus.SOLD_OUT);
+			LocalDateTime soldOutAt = drop.getOpenAt().plusMinutes(30);
+			LimitedDropFixture.withSoldOutAt(drop, soldOutAt);
 			em.persist(drop);
-
-			Member otherMember = MemberFixture.create("admin-stats-drop-member@groove.com");
-			em.persist(otherMember);
-
-			Order order1 = OrderFixture.create(member, "20310320-ASMDROP001");
-			order1.addItem(product, 1);
-			em.persist(order1);
-			LimitedPurchase purchase1 = LimitedPurchaseFixture.create(drop, member, order1, 1);
-			em.persist(purchase1);
-			em.flush();
-
-			Order order2 = OrderFixture.create(otherMember, "20310320-ASMDROP002");
-			order2.addItem(product, 1);
-			em.persist(order2);
-			LimitedPurchase purchase2 = LimitedPurchaseFixture.create(drop, otherMember, order2, 1);
-			em.persist(purchase2);
 			em.flush();
 			em.clear();
 
-			LocalDateTime lastPurchaseCreatedAt = em.find(LimitedPurchase.class, purchase2.getId()).getCreatedAt();
-
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -319,8 +305,40 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 					.findFirst()
 					.orElseThrow();
 			assertThat(own.soldOutAt().truncatedTo(ChronoUnit.SECONDS))
-					.isEqualTo(lastPurchaseCreatedAt.truncatedTo(ChronoUnit.SECONDS));
-			assertThat(own.soldOutSeconds()).isPositive();
+					.isEqualTo(soldOutAt.truncatedTo(ChronoUnit.SECONDS));
+			assertThat(own.soldOutSeconds()).isEqualTo(1800L);
+			assertThat(own.sellRate()).isEqualTo(100.0);
+		}
+
+		@Test
+		@DisplayName("매진 상태로 마감된 CLOSED 드롭도 저장된 매진 시각으로 soldOutSeconds 를 계산한다")
+		void returnsSoldOutAtForClosedDropThatSoldOut() {
+			// given
+			Product product = ProductFixture.create(artist, "ASM Closed Sold Out Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			LimitedDrop drop = LimitedDropFixture.open(product, 2);
+			LimitedDropFixture.withOpenAt(drop, LocalDateTime.now().minusHours(2));
+			LimitedDropFixture.withCloseAt(drop, LocalDateTime.now().minusHours(1));
+			LimitedDropFixture.withSoldCount(drop, 2);
+			LimitedDropFixture.withStatus(drop, LimitedDropStatus.CLOSED);
+			LocalDateTime soldOutAt = drop.getOpenAt().plusMinutes(30);
+			LimitedDropFixture.withSoldOutAt(drop, soldOutAt);
+			em.persist(drop);
+			em.flush();
+			em.clear();
+
+			// when
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
+
+			// then
+			LimitedDropStatsRow own = result.stream()
+					.filter(row -> row.dropId().equals(drop.getId()))
+					.findFirst()
+					.orElseThrow();
+			assertThat(own.soldOutAt().truncatedTo(ChronoUnit.SECONDS))
+					.isEqualTo(soldOutAt.truncatedTo(ChronoUnit.SECONDS));
+			assertThat(own.soldOutSeconds()).isEqualTo(1800L);
 			assertThat(own.sellRate()).isEqualTo(100.0);
 		}
 
@@ -338,7 +356,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -363,7 +381,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -396,7 +414,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			LimitedDropStatsRow own = result.stream()
@@ -432,7 +450,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats();
+			List<LimitedDropStatsRow> result = adminStatsMapper.findLimitedDropStats(0, LARGE_SIZE);
 
 			// then
 			List<Long> ownOrder = result.stream()
@@ -440,6 +458,73 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 					.filter(id -> id.equals(oldDrop.getId()) || id.equals(newDrop.getId()))
 					.toList();
 			assertThat(ownOrder).containsExactly(newDrop.getId(), oldDrop.getId());
+		}
+
+		@Test
+		@DisplayName("size·offset 으로 페이지 경계를 나눈다")
+		void splitsPagesByOffsetAndSize() {
+			// given: 다른 테스트의 2031년대 픽스처보다도 뒤로 밀리지 않도록 그보다 먼 시각을 쓴다
+			Product product1 = ProductFixture.create(artist, "ASM Page Drop 1", new BigDecimal("40000"));
+			Product product2 = ProductFixture.create(artist, "ASM Page Drop 2", new BigDecimal("40000"));
+			Product product3 = ProductFixture.create(artist, "ASM Page Drop 3", new BigDecimal("40000"));
+			em.persist(product1.getAlbum());
+			em.persist(product1);
+			em.persist(product2.getAlbum());
+			em.persist(product2);
+			em.persist(product3.getAlbum());
+			em.persist(product3);
+
+			LimitedDrop drop1 = LimitedDropFixture.open(product1, 10);
+			LimitedDropFixture.withOpenAt(drop1, LocalDateTime.of(9999, 12, 31, 23, 59, 59));
+			em.persist(drop1);
+
+			LimitedDrop drop2 = LimitedDropFixture.open(product2, 10);
+			LimitedDropFixture.withOpenAt(drop2, LocalDateTime.of(9999, 12, 31, 23, 59, 58));
+			em.persist(drop2);
+
+			LimitedDrop drop3 = LimitedDropFixture.open(product3, 10);
+			LimitedDropFixture.withOpenAt(drop3, LocalDateTime.of(9999, 12, 31, 23, 59, 57));
+			em.persist(drop3);
+
+			em.flush();
+			em.clear();
+
+			// when
+			List<LimitedDropStatsRow> firstPage = adminStatsMapper.findLimitedDropStats(0, 2);
+			List<LimitedDropStatsRow> secondPage = adminStatsMapper.findLimitedDropStats(2, 2);
+
+			// then
+			assertThat(firstPage).extracting(LimitedDropStatsRow::dropId)
+					.containsExactly(drop1.getId(), drop2.getId());
+			assertThat(secondPage.get(0).dropId()).isEqualTo(drop3.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("countLimitedDropStats()")
+	class CountLimitedDropStats {
+
+		@Test
+		@DisplayName("전체 드롭 수는 findLimitedDropStats 전체 조회 결과 개수와 같다")
+		void matchesFindResultSize() {
+			// given: 필터가 없는 카운트라 own id 로 좁힐 수 없으므로, 같은 트랜잭션에서 조회한 findLimitedDropStats
+			// 전체 결과 크기와 비교한다. count 를 두 번 호출하면 MyBatis 로컬 캐시가 두 번째 호출을 캐시된 값으로
+			// 되돌려주므로(같은 세션 안에서 JPA 로 끼워 넣은 변경은 이 캐시를 못 지운다) 한 번만 호출한다.
+			Product product = ProductFixture.create(artist, "ASM Count Drop", new BigDecimal("40000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+			em.persist(drop);
+			em.flush();
+			em.clear();
+
+			// when
+			long count = adminStatsMapper.countLimitedDropStats();
+			List<LimitedDropStatsRow> all = adminStatsMapper.findLimitedDropStats(0, (int) count);
+
+			// then
+			assertThat(all).hasSize((int) count);
+			assertThat(all).extracting(LimitedDropStatsRow::dropId).contains(drop.getId());
 		}
 	}
 

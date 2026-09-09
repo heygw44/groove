@@ -10,6 +10,7 @@ import {
 import { adminStatsKeys } from '@/hooks/queries/queryKeys';
 import { useAuthStore } from '@/store/authStore';
 import type {
+  LimitedDropStatsListParams,
   PopularProductParams,
   ReconcileLogListParams,
   StatsPeriodParams,
@@ -53,13 +54,14 @@ export const useAdminPopularProducts = (params: PopularProductParams) => {
   });
 };
 
-export const useAdminLimitedDropStats = () => {
+export const useAdminLimitedDropStats = (params: LimitedDropStatsListParams) => {
   const enabled = useAdminAuthGate();
 
   return useQuery({
-    queryKey: adminStatsKeys.limitedDrops,
-    queryFn: () => getAdminLimitedDropStats(),
+    queryKey: adminStatsKeys.limitedDrops(params),
+    queryFn: () => getAdminLimitedDropStats(params),
     enabled,
+    placeholderData: keepPreviousData,
   });
 };
 

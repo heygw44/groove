@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { AsOfBadge } from '@/components/admin/dashboard/AsOfBadge';
 import { DailySalesChart } from '@/components/admin/dashboard/DailySalesChart';
-import { LimitedDropStatsTable } from '@/components/admin/dashboard/LimitedDropStatsTable';
+import { LimitedDropStatsSection } from '@/components/admin/dashboard/LimitedDropStatsSection';
 import { PopularProductTable } from '@/components/admin/dashboard/PopularProductTable';
 import { ReconcileAlertBanner } from '@/components/admin/dashboard/ReconcileAlertBanner';
 import { ReconcileLogSection } from '@/components/admin/dashboard/ReconcileLogSection';
@@ -17,7 +17,6 @@ import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { adminStatsKeys } from '@/hooks/queries/queryKeys';
 import {
   useAdminDailySales,
-  useAdminLimitedDropStats,
   useAdminPopularProducts,
   useAdminStatsSummary,
 } from '@/hooks/queries/useAdminStats';
@@ -58,8 +57,6 @@ export default function AdminDashboardPage() {
     limit: POPULAR_PRODUCT_LIMIT,
     sort,
   });
-  const limitedDropsQuery = useAdminLimitedDropStats();
-
   return (
     <div className="flex flex-col gap-8">
       <ReconcileAlertBanner />
@@ -163,23 +160,7 @@ export default function AdminDashboardPage() {
           )}
       </section>
 
-      <section className="flex flex-col gap-4">
-        <h3 className="text-sm font-bold text-content">한정반 현황</h3>
-
-        {limitedDropsQuery.isPending && <TableSkeleton columns={8} />}
-
-        {!limitedDropsQuery.isPending && limitedDropsQuery.isError && (
-          <QueryErrorState
-            error={limitedDropsQuery.error}
-            onRetry={limitedDropsQuery.refetch}
-            title="한정반 현황을 불러오지 못했습니다"
-          />
-        )}
-
-        {!limitedDropsQuery.isPending && !limitedDropsQuery.isError && limitedDropsQuery.data && (
-          <LimitedDropStatsTable items={limitedDropsQuery.data} />
-        )}
-      </section>
+      <LimitedDropStatsSection />
 
       <ReconcileLogSection />
     </div>

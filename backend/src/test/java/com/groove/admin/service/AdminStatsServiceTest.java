@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.groove.admin.dto.AdminStatsSummaryResponse;
 import com.groove.admin.dto.DailySalesResponse;
 import com.groove.admin.dto.DailySalesStatsResponse;
+import com.groove.admin.dto.LimitedDropStatsRequest;
 import com.groove.admin.dto.LimitedDropStatsResponse;
 import com.groove.admin.dto.PopularProductResponse;
 import com.groove.admin.dto.PopularProductSortType;
@@ -39,6 +40,7 @@ import com.groove.admin.dto.StatsPeriodRequest;
 import com.groove.admin.mapper.AdminStatsMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageResponse;
 import com.groove.limited.entity.LimitedDropStatus;
 
 @ExtendWith(MockitoExtension.class)
@@ -324,13 +326,15 @@ class AdminStatsServiceTest {
 			LimitedDropStatsResponse response = new LimitedDropStatsResponse(1L, "그루브 앨범",
 					LimitedDropStatus.OPEN, 10, 3, 30.0, LocalDateTime.now(),
 					LocalDateTime.now().plusDays(1), null, null, null);
-			given(adminLimitedDropStatsService.getLimitedDropStats()).willReturn(List.of(response));
+			LimitedDropStatsRequest request = new LimitedDropStatsRequest(0, 20);
+			PageResponse<LimitedDropStatsResponse> page = PageResponse.of(List.of(response), 0, 20, 1);
+			given(adminLimitedDropStatsService.getLimitedDropStats(request)).willReturn(page);
 
 			// when
-			List<LimitedDropStatsResponse> result = adminStatsService.getLimitedDropStats();
+			PageResponse<LimitedDropStatsResponse> result = adminStatsService.getLimitedDropStats(request);
 
 			// then
-			assertThat(result).containsExactly(response);
+			assertThat(result).isEqualTo(page);
 		}
 	}
 }

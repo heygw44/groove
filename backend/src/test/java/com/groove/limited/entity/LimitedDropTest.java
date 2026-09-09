@@ -136,16 +136,18 @@ class LimitedDropTest {
 	class MarkSoldOut {
 
 		@Test
-		@DisplayName("OPEN 상태면 SOLD_OUT 으로 바뀐다")
+		@DisplayName("OPEN 상태면 SOLD_OUT 으로 바뀌고 매진 시각이 채워진다")
 		void changesToSoldOutWhenOpen() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 10);
+			LocalDateTime now = drop.getOpenAt().plusMinutes(5);
 
 			// when
-			drop.markSoldOut();
+			drop.markSoldOut(now);
 
 			// then
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.SOLD_OUT);
+			assertThat(drop.getSoldOutAt()).isEqualTo(now);
 		}
 
 		@ParameterizedTest
@@ -156,7 +158,7 @@ class LimitedDropTest {
 			LimitedDrop drop = LimitedDropFixture.withStatus(LimitedDropFixture.scheduled(product), status);
 
 			// when & then
-			assertThatThrownBy(drop::markSoldOut)
+			assertThatThrownBy(() -> drop.markSoldOut(LocalDateTime.now()))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_INVALID_STATUS);
@@ -259,7 +261,7 @@ class LimitedDropTest {
 		void throwsSoldOutWhenSoldOut() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 10);
-			drop.markSoldOut();
+			drop.markSoldOut(drop.getOpenAt().plusMinutes(1));
 
 			// when & then
 			assertThatThrownBy(() -> drop.validatePurchasable(drop.getOpenAt().plusMinutes(1)))
@@ -302,24 +304,39 @@ class LimitedDropTest {
 			LimitedDrop drop = LimitedDropFixture.open(product, 10);
 
 			// when
-			drop.recordSale(3);
+			drop.recordSale(3, drop.getOpenAt().plusMinutes(1));
 
 			// then
 			assertThat(drop.getSoldCount()).isEqualTo(3);
 		}
 
 		@Test
-		@DisplayName("마지막 남은 수량까지 판매하면 SOLD_OUT 으로 자동 전이한다")
+		@DisplayName("마지막 남은 수량까지 판매하면 SOLD_OUT 으로 자동 전이하고 매진 시각이 채워진다")
 		void transitionsToSoldOutWhenReachedTotalQuantity() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+			LocalDateTime now = drop.getOpenAt().plusMinutes(1);
 
 			// when
-			drop.recordSale(5);
+			drop.recordSale(5, now);
 
 			// then
 			assertThat(drop.getSoldCount()).isEqualTo(5);
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.SOLD_OUT);
+			assertThat(drop.getSoldOutAt()).isEqualTo(now);
+		}
+
+		@Test
+		@DisplayName("매진에 이르지 않으면 매진 시각이 채워지지 않는다")
+		void doesNotSetSoldOutAtWhenNotReachedTotalQuantity() {
+			// given
+			LimitedDrop drop = LimitedDropFixture.open(product, 5);
+
+			// when
+			drop.recordSale(3, drop.getOpenAt().plusMinutes(1));
+
+			// then
+			assertThat(drop.getSoldOutAt()).isNull();
 		}
 
 		@Test
@@ -329,7 +346,7 @@ class LimitedDropTest {
 			LimitedDrop drop = LimitedDropFixture.open(product, 5);
 
 			// when & then
-			assertThatThrownBy(() -> drop.recordSale(6))
+			assertThatThrownBy(() -> drop.recordSale(6, drop.getOpenAt().plusMinutes(1)))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_SOLD_OUT);
@@ -342,7 +359,7 @@ class LimitedDropTest {
 			LimitedDrop drop = LimitedDropFixture.open(product, 5);
 
 			// when & then
-			assertThatThrownBy(() -> drop.recordSale(0))
+			assertThatThrownBy(() -> drop.recordSale(0, drop.getOpenAt().plusMinutes(1)))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
@@ -358,7 +375,7 @@ class LimitedDropTest {
 		void decreasesSoldCount() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 10);
-			drop.recordSale(3);
+			drop.recordSale(3, drop.getOpenAt().plusMinutes(1));
 
 			// when
 			drop.restoreSale(1, drop.getOpenAt().plusMinutes(1));
@@ -368,11 +385,11 @@ class LimitedDropTest {
 		}
 
 		@Test
-		@DisplayName("마감 시각 전 SOLD_OUT 상태에서 복구하면 OPEN 으로 되돌아간다")
+		@DisplayName("마감 시각 전 SOLD_OUT 상태에서 복구하면 OPEN 으로 되돌아가고 매진 시각이 지워진다")
 		void revertsToOpenWhenSoldOutBeforeCloseAt() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 5);
-			drop.recordSale(5);
+			drop.recordSale(5, drop.getOpenAt().plusMinutes(1));
 
 			// when
 			drop.restoreSale(1, drop.getCloseAt().minusMinutes(1));
@@ -380,14 +397,16 @@ class LimitedDropTest {
 			// then
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
 			assertThat(drop.getSoldCount()).isEqualTo(4);
+			assertThat(drop.getSoldOutAt()).isNull();
 		}
 
 		@Test
-		@DisplayName("마감 시각이 지난 SOLD_OUT 상태에서 복구해도 SOLD_OUT 을 유지한다")
+		@DisplayName("마감 시각이 지난 SOLD_OUT 상태에서 복구해도 SOLD_OUT 과 매진 시각을 유지한다")
 		void staysSoldOutWhenCloseAtPassed() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 5);
-			drop.recordSale(5);
+			LocalDateTime soldOutAt = drop.getOpenAt().plusMinutes(1);
+			drop.recordSale(5, soldOutAt);
 
 			// when
 			drop.restoreSale(1, drop.getCloseAt().plusMinutes(1));
@@ -395,6 +414,7 @@ class LimitedDropTest {
 			// then
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.SOLD_OUT);
 			assertThat(drop.getSoldCount()).isEqualTo(4);
+			assertThat(drop.getSoldOutAt()).isEqualTo(soldOutAt);
 		}
 
 		@Test
@@ -402,7 +422,7 @@ class LimitedDropTest {
 		void staysClosedWhenAlreadyClosed() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 5);
-			drop.recordSale(3);
+			drop.recordSale(3, drop.getOpenAt().plusMinutes(1));
 			drop.close();
 
 			// when
@@ -418,7 +438,7 @@ class LimitedDropTest {
 		void staysOpenWhenAlreadyOpen() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 10);
-			drop.recordSale(3);
+			drop.recordSale(3, drop.getOpenAt().plusMinutes(1));
 
 			// when
 			drop.restoreSale(1, drop.getOpenAt().plusMinutes(1));
@@ -433,7 +453,7 @@ class LimitedDropTest {
 		void throwsWhenQuantityExceedsSoldCount() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 10);
-			drop.recordSale(2);
+			drop.recordSale(2, drop.getOpenAt().plusMinutes(1));
 
 			// when & then
 			assertThatThrownBy(() -> drop.restoreSale(3, drop.getOpenAt().plusMinutes(1)))
@@ -452,7 +472,7 @@ class LimitedDropTest {
 		void calculatesRemainingQuantity() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.open(product, 10);
-			drop.recordSale(3);
+			drop.recordSale(3, drop.getOpenAt().plusMinutes(1));
 
 			// when & then
 			assertThat(drop.remainingQuantity()).isEqualTo(7);

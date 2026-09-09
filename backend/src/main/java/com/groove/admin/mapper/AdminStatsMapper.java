@@ -24,7 +24,9 @@ public interface AdminStatsMapper {
 	/** 기간 내 가장 오래된 집계 시각. {@code sales_daily} 에 기간 내 행이 하나도 없으면 null 이다. */
 	LocalDateTime findAggregatedAt(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
-	List<LimitedDropStatsRow> findLimitedDropStats();
+	List<LimitedDropStatsRow> findLimitedDropStats(@Param("offset") int offset, @Param("size") int size);
+
+	long countLimitedDropStats();
 
 	AdminStatsSummaryResponse findSummary(@Param("todayStart") LocalDateTime todayStart,
 			@Param("tomorrowStart") LocalDateTime tomorrowStart);
