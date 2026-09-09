@@ -77,13 +77,14 @@ class ProductControllerTest {
 	private ProductSummaryResponse sampleSummary() {
 		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
 				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
-				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, null, "US", 1959, EditionType.STANDARD);
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, null, "US", 1959, EditionType.STANDARD, 1L, 0);
 	}
 
 	private ProductSummaryResponse sampleSummary(Boolean wishlisted) {
 		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
 				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
-				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, wishlisted, "US", 1959, EditionType.STANDARD);
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, wishlisted, "US", 1959, EditionType.STANDARD, 1L,
+				0);
 	}
 
 	@Nested

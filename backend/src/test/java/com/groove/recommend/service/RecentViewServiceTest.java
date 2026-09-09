@@ -44,7 +44,7 @@ class RecentViewServiceTest {
 
 	private ProductSummaryResponse summary(Long id) {
 		return new ProductSummaryResponse(id, "title-" + id, "artist", "label", BigDecimal.TEN, "Black", "180g",
-				ProductStatus.ON_SALE, "thumb", 4.5, 3L, null, null, null, null);
+				ProductStatus.ON_SALE, "thumb", 4.5, 3L, null, null, null, null, id, 0);
 	}
 
 	@Nested

@@ -645,7 +645,9 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		@DisplayName("pressingYearFrom·pressingYearTo 로 필터링하면 연도 범위 내 프레싱만 반환한다")
 		void filtersByPressingYearRange() {
 			// given
-			ProductSearchCondition cond = pressingCondition(null, null, null, null, null, null, 1990, 2023, null,
+			// decoy(2000년)는 jpRemaster 와 같은 앨범이라 범위에 같이 걸리면 대표 프레싱 축약으로 하나만 남는다.
+			// 하한을 2010으로 둬 decoy 를 범위 밖으로 빼고 jpRemaster 만 남긴다.
+			ProductSearchCondition cond = pressingCondition(null, null, null, null, null, null, 2010, 2023, null,
 					null, null, ProductSortType.LATEST, 0, 20, null);
 
 			// when
@@ -731,6 +733,152 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 	}
 
 	@Nested
+	@DisplayName("앨범 대표 프레싱 축약")
+	class AlbumDedup {
+
+		private static final String DEDUP_KEYWORD = "SMTD";
+
+		private Album album;
+		private Product soldOutCheapest;
+		private Product onSaleMid;
+		private Product onSaleExpensive;
+		private Product otherAlbumProduct;
+
+		@BeforeEach
+		void setUpDedup() {
+			Artist artist = ArtistFixture.create("SMTD Artist");
+			em.persist(artist);
+			album = AlbumFixture.create(artist, "SMTD Dedup Album");
+			em.persist(album);
+
+			soldOutCheapest = ProductFixture.createPressing(album, artist, "SMTD Sold Out Cheapest",
+					new BigDecimal("10000"), "US", 2000, "SMTD-1", "9990000000021", EditionType.STANDARD);
+			soldOutCheapest.markSoldOut();
+			onSaleMid = ProductFixture.createPressing(album, artist, "SMTD On Sale Mid", new BigDecimal("20000"),
+					"US", 2010, "SMTD-2", "9990000000022", EditionType.STANDARD);
+			onSaleExpensive = ProductFixture.createPressing(album, artist, "SMTD On Sale Expensive",
+					new BigDecimal("30000"), "JP", 2020, "SMTD-3", "9990000000023", EditionType.STANDARD);
+			em.persist(soldOutCheapest);
+			em.persist(onSaleMid);
+			em.persist(onSaleExpensive);
+
+			otherAlbumProduct = ProductFixture.create(artist, "SMTD Other Album", new BigDecimal("15000"));
+			em.persist(otherAlbumProduct.getAlbum());
+			em.persist(otherAlbumProduct);
+			em.flush();
+			em.clear();
+		}
+
+		private ProductSearchCondition dedupCondition(ProductSortType sort) {
+			return condition(DEDUP_KEYWORD, null, null, null, null, null, sort, 0, 20);
+		}
+
+		@Test
+		@DisplayName("같은 album_id 의 프레싱은 대표 1건으로 축약된다")
+		void collapsesSameAlbumToOneRow() {
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(
+					dedupCondition(ProductSortType.LATEST));
+
+			// then
+			assertThat(result).hasSize(2);
+			assertThat(result).extracting(ProductSummaryResponse::id).contains(otherAlbumProduct.getId());
+			assertThat(result).extracting(ProductSummaryResponse::id)
+					.containsAnyOf(soldOutCheapest.getId(), onSaleMid.getId(), onSaleExpensive.getId());
+		}
+
+		@Test
+		@DisplayName("PRICE_ASC 정렬이면 품절이 아니라 판매 가능한 것 중 최저가가 대표가 된다")
+		void picksCheapestSellableAsRepresentativeOnPriceAscending() {
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(
+					dedupCondition(ProductSortType.PRICE_ASC));
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).contains(onSaleMid.getId())
+					.doesNotContain(soldOutCheapest.getId(), onSaleExpensive.getId());
+		}
+
+		@Test
+		@DisplayName("정렬을 바꾸면 대표가 바뀐다")
+		void changesRepresentativeWhenSortChanges() {
+			// when
+			ProductSummaryResponse ascRepresentative = productSearchMapper
+					.searchProducts(dedupCondition(ProductSortType.PRICE_ASC)).stream()
+					.filter(r -> r.id().equals(onSaleMid.getId()) || r.id().equals(onSaleExpensive.getId())
+							|| r.id().equals(soldOutCheapest.getId()))
+					.findFirst().orElseThrow();
+			ProductSummaryResponse descRepresentative = productSearchMapper
+					.searchProducts(dedupCondition(ProductSortType.PRICE_DESC)).stream()
+					.filter(r -> r.id().equals(onSaleMid.getId()) || r.id().equals(onSaleExpensive.getId())
+							|| r.id().equals(soldOutCheapest.getId()))
+					.findFirst().orElseThrow();
+
+			// then
+			assertThat(ascRepresentative.id()).isEqualTo(onSaleMid.getId());
+			assertThat(descRepresentative.id()).isEqualTo(onSaleExpensive.getId());
+		}
+
+		@Test
+		@DisplayName("otherPressingCount 는 현재 필터를 만족하는 같은 앨범의 다른 프레싱 수다")
+		void countsOtherPressingsWithinCurrentFilterOnly() {
+			// given: country=US 로 좁히면 album 내에서는 soldOutCheapest, onSaleMid 만 필터를 통과한다
+			ProductSearchCondition cond = pressingCondition(DEDUP_KEYWORD, null, null, null, null, "US", null, null,
+					null, null, null, ProductSortType.PRICE_ASC, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			ProductSummaryResponse representative = result.stream().filter(r -> r.id().equals(onSaleMid.getId()))
+					.findFirst().orElseThrow();
+			assertThat(representative.otherPressingCount()).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("필터를 만족하는 프레싱이 이 상품 하나뿐이면 otherPressingCount 는 0이다")
+		void otherPressingCountIsZeroWhenAlone() {
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(dedupCondition(
+					ProductSortType.LATEST));
+
+			// then
+			assertThat(result).filteredOn(r -> r.id().equals(otherAlbumProduct.getId()))
+					.extracting(ProductSummaryResponse::otherPressingCount)
+					.containsExactly(0);
+		}
+
+		@Test
+		@DisplayName("albumId 필터가 걸리면 축약되지 않고 otherPressingCount 는 0이다")
+		void doesNotDedupeWhenAlbumIdFilterApplied() {
+			// given
+			ProductSearchCondition cond = pressingCondition(null, null, null, null, album.getId(), null, null, null,
+					null, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id)
+					.containsExactlyInAnyOrder(soldOutCheapest.getId(), onSaleMid.getId(), onSaleExpensive.getId());
+			assertThat(result).extracting(ProductSummaryResponse::otherPressingCount).containsOnly(0);
+		}
+
+		@Test
+		@DisplayName("countProducts() 는 축약 후 서로 다른 album_id 개수를 반환한다")
+		void countsDistinctAlbumsAfterDedup() {
+			// when
+			long count = productSearchMapper.countProducts(dedupCondition(ProductSortType.LATEST));
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(
+					dedupCondition(ProductSortType.LATEST));
+
+			// then
+			assertThat(count).isEqualTo(2);
+			assertThat(count).isEqualTo(result.size());
+		}
+	}
+
+	@Nested
 	@DisplayName("findAlbumPressings()")
 	class FindAlbumPressings {
 
@@ -793,6 +941,16 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result).extracting(ProductSummaryResponse::id).doesNotContain(kindOfBlue.getId());
+		}
+
+		@Test
+		@DisplayName("otherPressingCount 는 항상 0이다")
+		void alwaysReturnsZeroOtherPressingCount() {
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.findAlbumPressings(album.getId());
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::otherPressingCount).containsOnly(0);
 		}
 	}
 
@@ -885,6 +1043,36 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(result).extracting(ProductSuggestionResponse.Item::id)
 					.containsExactly(titlePrefixMatch.getId(), artistPrefixMatch.getId());
+		}
+
+		@Test
+		@DisplayName("같은 앨범의 프레싱 여러 개가 매칭되어도 대표 1건만 반환해 자동완성 칸을 독점하지 않는다")
+		void collapsesSameAlbumPressingsToOneSlot() {
+			// given
+			Artist sameAlbumArtist = ArtistFixture.create("SGT Same Album Artist");
+			em.persist(sameAlbumArtist);
+			Album sharedAlbum = AlbumFixture.create(sameAlbumArtist, "SGT Shared Album");
+			em.persist(sharedAlbum);
+			Product pressing1 = ProductFixture.createPressing(sharedAlbum, sameAlbumArtist, "SGT Pressing One",
+					new BigDecimal("10000"), "US", 2000, "SGT-1", "9990000000031", EditionType.STANDARD);
+			Product pressing2 = ProductFixture.createPressing(sharedAlbum, sameAlbumArtist, "SGT Pressing Two",
+					new BigDecimal("20000"), "JP", 2010, "SGT-2", "9990000000032", EditionType.STANDARD);
+			Product pressing3 = ProductFixture.createPressing(sharedAlbum, sameAlbumArtist, "SGT Pressing Three",
+					new BigDecimal("30000"), "KR", 2020, "SGT-3", "9990000000033", EditionType.STANDARD);
+			em.persist(pressing1);
+			em.persist(pressing2);
+			em.persist(pressing3);
+			em.flush();
+			em.clear();
+
+			// when
+			List<ProductSuggestionResponse.Item> result = productSearchMapper.suggestProducts(SUGGEST_KEYWORD, 5);
+
+			// then
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id)
+					.filteredOn(id -> id.equals(pressing1.getId()) || id.equals(pressing2.getId())
+							|| id.equals(pressing3.getId()))
+					.hasSize(1);
 		}
 	}
 }

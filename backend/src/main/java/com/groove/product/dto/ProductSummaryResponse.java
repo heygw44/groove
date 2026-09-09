@@ -20,6 +20,8 @@ public record ProductSummaryResponse(
 		Boolean wishlisted,
 		String country,
 		Integer pressingYear,
-		EditionType editionType
+		EditionType editionType,
+		Long albumId,
+		int otherPressingCount
 ) {
 }

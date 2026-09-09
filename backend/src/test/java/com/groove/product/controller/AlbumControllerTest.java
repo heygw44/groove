@@ -66,7 +66,7 @@ class AlbumControllerTest {
 			// given
 			ProductSummaryResponse pressing = new ProductSummaryResponse(10L, "Kind of Blue", "Miles Davis",
 					"Columbia", new BigDecimal("42000"), "Standard Black", "180g", ProductStatus.ON_SALE, null, null,
-					0, null, "US", 1959, EditionType.ORIGINAL);
+					0, null, "US", 1959, EditionType.ORIGINAL, 5L, 0);
 			AlbumDetailResponse response = new AlbumDetailResponse(5L, "Kind Of Blue",
 					new ProductDetailResponse.ArtistSummary(1L, "Miles Davis"), 1959, "설명", List.of(pressing), null);
 			given(albumService.getDetail(eq(5L), isNull())).willReturn(response);
@@ -97,7 +97,7 @@ class AlbumControllerTest {
 			// given
 			ProductSummaryResponse pressing = new ProductSummaryResponse(10L, "Kind of Blue", "Miles Davis",
 					"Columbia", new BigDecimal("42000"), "Standard Black", "180g", ProductStatus.ON_SALE, null, null,
-					0, null, "US", 1959, EditionType.ORIGINAL);
+					0, null, "US", 1959, EditionType.ORIGINAL, 5L, 0);
 			AlbumDetailResponse response = new AlbumDetailResponse(5L, "Kind Of Blue",
 					new ProductDetailResponse.ArtistSummary(1L, "Miles Davis"), 1959, "설명", List.of(pressing), true);
 			given(albumService.getDetail(eq(5L), eq(1L))).willReturn(response);
