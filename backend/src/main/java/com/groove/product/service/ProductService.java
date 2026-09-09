@@ -9,6 +9,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.groove.catalog.service.CatalogFreshness;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
@@ -46,6 +47,7 @@ public class ProductService {
 	private final LimitedDropService limitedDropService;
 	private final AlbumWatchRepository albumWatchRepository;
 	private final ApplicationEventPublisher eventPublisher;
+	private final CatalogFreshness catalogFreshness;
 	private final Clock clock;
 
 	public PageResponse<ProductSummaryResponse> search(ProductSearchRequest request, Long memberId) {
@@ -82,7 +84,7 @@ public class ProductService {
 				? null
 				: albumWatchRepository.existsByMemberIdAndAlbumId(memberId, product.getAlbum().getId());
 		ProductDetailResponse response = ProductDetailResponse.from(product, images, stockQuantity, wishlisted,
-				alertEnabled, limitedDrop, (int) pressingCount, watched);
+				alertEnabled, limitedDrop, (int) pressingCount, watched, catalogFreshness.isStale(product));
 		eventPublisher.publishEvent(new ProductViewedEvent(memberId, id, LocalDateTime.now(clock)));
 		return response;
 	}

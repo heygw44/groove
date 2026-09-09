@@ -291,7 +291,7 @@ class ProductControllerTest {
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
 					null, "180g", "Standard Black",
 					new ProductDetailResponse.PressingSummary("US", 1959, "CS 8163", "888880123456",
-							EditionType.STANDARD, null),
+							EditionType.STANDARD, null, false),
 					new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
 					10, null, 0L, null, null, null);
@@ -327,7 +327,7 @@ class ProductControllerTest {
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
 					null, "180g", "Standard Black",
 					new ProductDetailResponse.PressingSummary("US", 1959, "CS 8163", "888880123456",
-							EditionType.STANDARD, null),
+							EditionType.STANDARD, null, false),
 					new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
 					10, null, 0L, true, true, null);
