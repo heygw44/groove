@@ -19,6 +19,7 @@ import com.groove.catalog.client.dto.DiscogsSearchResponse;
 import com.groove.catalog.dto.CatalogImportItem;
 import com.groove.catalog.dto.CatalogLookupResponse;
 import com.groove.catalog.dto.CatalogReleaseDetailResponse;
+import com.groove.catalog.dto.DiscogsResyncFields;
 import com.groove.product.entity.EditionType;
 
 /** Discogs 원본 응답을 카탈로그 DTO 로 옮기는 순수 변환 로직. */
@@ -68,6 +69,13 @@ public class DiscogsReleaseMapper {
 				resolvePressingYear(release), firstCatalogNo(release.labels()), firstBarcode(release.identifiers()),
 				resolveEditionType(release.formats()),
 				matchGenreNames(release.genres(), release.styles(), knownGenreNames), price);
+	}
+
+	/** Discogs 재검증(단건 재조회)이 갱신할 다섯 필드만 뽑는다. title 등 나머지 필드는 아예 만들지 않는다. */
+	public DiscogsResyncFields toResyncFields(DiscogsReleaseResponse release) {
+		return new DiscogsResyncFields(release.country(), resolvePressingYear(release),
+				firstCatalogNo(release.labels()), firstBarcode(release.identifiers()),
+				resolveEditionType(release.formats()));
 	}
 
 	public boolean isVinyl(DiscogsReleaseResponse release) {

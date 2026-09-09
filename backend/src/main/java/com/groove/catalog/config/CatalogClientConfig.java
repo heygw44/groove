@@ -15,7 +15,8 @@ import com.groove.global.common.ErrorCode;
 
 @Configuration
 @EnableConfigurationProperties({
-	DiscogsProperties.class, CatalogImportProperties.class, CatalogFreshnessProperties.class})
+	DiscogsProperties.class, CatalogImportProperties.class, CatalogFreshnessProperties.class,
+	CatalogResyncProperties.class})
 public class CatalogClientConfig {
 
 	@Bean
