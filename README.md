@@ -6,15 +6,15 @@ Java 17 / Spring Boot 3.5 + React 18로 만든 LP 이커머스다. 한정반(Lim
 
 **https://groove-lp.duckdns.org**
 
-실제 카탈로그 273건, 리뷰 546건이 올라가 있다.
+Discogs에서 적재한 실제 카탈로그가 올라가 있다 — 앨범 210종 · 프레싱 273건, 리뷰 546건.
 
 ## 주요 화면
 
 | | |
 |---|---|
-| ![홈](.github/assets/home.jpg) 홈 · 한정반 배너 · 개인화 추천 | ![상품 상세](.github/assets/product-detail.jpg) 상품 상세 |
-| ![한정반](.github/assets/limited-drop.jpg) 한정반 드롭 | ![장바구니](.github/assets/cart.jpg) 장바구니 |
-| ![관리자 상품 관리](.github/assets/admin-products.jpg) 관리자 · 상품 관리 | |
+| ![홈](.github/assets/home.jpg) 홈 · 한정반 배너 · 개인화 추천 | ![상품 목록](.github/assets/product-list.jpg) 상품 목록 · 앨범당 대표 프레싱으로 축약 |
+| ![상품 상세](.github/assets/product-detail.jpg) 상품 상세 · 프레싱 스펙과 다른 에디션 | ![한정반](.github/assets/limited-drop.jpg) 한정반 드롭 |
+| ![장바구니](.github/assets/cart.jpg) 장바구니 | ![관리자 상품 관리](.github/assets/admin-products.jpg) 관리자 · 상품 관리 |
 
 ## 주요 기능
 
