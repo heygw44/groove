@@ -80,9 +80,10 @@ dependencies {
 }
 
 tasks.named('test') {
-    // precision 태그는 추천 품질 측정용이라 일반 빌드/CI 에서는 뺀다. ./gradlew precisionAt10 으로 따로 돈다.
+    // precision/throughput 태그는 품질·성능 측정용이라 일반 빌드/CI 에서는 뺀다.
+    // ./gradlew precisionAt10 / discogsResyncThroughput 으로 따로 돈다.
     useJUnitPlatform {
-        excludeTags 'precision'
+        excludeTags 'precision', 'throughput'
     }
     finalizedBy jacocoTestReport
 }
@@ -94,6 +95,20 @@ tasks.register('precisionAt10', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform {
         includeTags 'precision'
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
+}
+
+tasks.register('discogsResyncThroughput', Test) {
+    group = 'verification'
+    description = 'Discogs 재검증 apply() 1만 건 반복의 건별 로컬 오버헤드를 레이트리밋 상수와 비교해 잰다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'throughput'
     }
     testLogging {
         showStandardStreams = true

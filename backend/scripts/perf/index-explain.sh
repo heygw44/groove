@@ -126,7 +126,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1 D1 D2)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -162,6 +162,8 @@ case_desc() {
 	W1) echo "앨범 구독 목록 (AlbumWatchRepository.findAllByMemberId, EntityGraph album)" ;;
 	W2) echo "앨범 구독 개수 (AlbumWatchRepository.findAllByMemberId 페이징 count)" ;;
 	L1) echo "관리자 한정반 드롭 통계 첫 페이지, open_at DESC (before: 상관 서브쿼리 2회+페이징 없음 / after: sold_out_at 컬럼+LIMIT 20, AdminStatsMapper.xml findLimitedDropStats)" ;;
+	D1) echo "Discogs 재검증 우선순위 후보, viewPriority=true (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml findCandidates)" ;;
+	D2) echo "Discogs 재검증 야간 스윕 후보, viewPriority=false (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml findCandidates)" ;;
 	*) echo "?" ;;
 	esac
 }
@@ -340,6 +342,7 @@ seed() {
 	local review_n notification_n wishlist_n coupon_n member_coupon_n album_watch_n
 	local review_heavy_n notification_heavy_n member_today_n member_coupon_heavy_n album_watch_heavy_n
 	local limited_drop_n limited_drop_total_quantity limited_drop_soldout_n limited_purchase_n
+	local view_log_n view_log_hot_n hot_product_n
 	# review 헤비 케이스가 product 1 에 이미 쓴 member_id 1~6 과 겹치지 않도록 회원 수를 넉넉히 늘린다.
 	member_n=$(scaled_count 40000)
 	artist_n=$(scaled_count 2000)
@@ -375,6 +378,14 @@ seed() {
 	# SOLD_OUT 15% 구간(n % 100 이 70~84)의 드롭 수 = 블록(100개) 당 15개.
 	limited_drop_soldout_n=$(( (limited_drop_n / 100) * 15 ))
 	limited_purchase_n=$(( limited_drop_soldout_n * limited_drop_total_quantity ))
+	# D1(findCandidates viewPriority=true) 의 조회수 집계 편중용. 상위 2% 상품에 최근 7일
+	# 윈도우(view-window) 안의 조회를 몰아준다.
+	view_log_n=$(scaled_count 800000)
+	view_log_hot_n=$(scaled_count 200000)
+	hot_product_n=$(( (product_n + 49) / 50 ))
+	if [ "${hot_product_n}" -lt 1 ]; then
+		hot_product_n=1
+	fi
 
 	# payment.order_id 를 n 그대로 1:1 매핑하므로 orders 건수를 넘으면 FK 위반이 난다.
 	if [ "${payment_n}" -gt "${orders_n}" ]; then
@@ -411,7 +422,7 @@ seed() {
 		"${orders_n}" "${order_item_n}" "${payment_n}" "${review_n}" "${notification_n}" "${wishlist_n}" \
 		"${coupon_n}" "${member_coupon_n}" "${review_heavy_n}" "${notification_heavy_n}" "${member_today_n}" \
 		"${member_coupon_heavy_n}" "${album_watch_n}" "${album_watch_heavy_n}" \
-		"${limited_drop_n}" "${limited_purchase_n}"; do
+		"${limited_drop_n}" "${limited_purchase_n}" "${view_log_n}" "${view_log_hot_n}"; do
 		if [ "${c}" -gt "${max_needed}" ]; then
 			max_needed="${c}"
 		fi
@@ -525,6 +536,23 @@ seed() {
 		FROM numbers WHERE n <= ${product_n};
 	"
 	echo "[시드] product ${product_n}건"
+
+	mysql_perf "
+		-- Discogs 재검증 후보(D1/D2): 상품마다 유일한 release id 를 부여한다(uk_product_discogs_release).
+		UPDATE product SET discogs_release_id = id;
+	"
+	echo "[시드] product.discogs_release_id 전건 배정"
+
+	mysql_perf "
+		-- 과거 며칠에 걸쳐 흩어진 동기화 시각. TTL(groove.catalog.freshness.ttl=6h) 보다 훨씬 오래돼
+		-- 전건이 stale 후보가 되게 한다 - 규모가 커질수록 후보 선정 쿼리가 실제로 얼마나 훑어야
+		-- 하는지를 그대로 드러내려는 의도다. 5%는 NULL(한 번도 동기화 안 된 상태)로 남겨
+		-- IS NULL 분기도 실측에 반영한다.
+		UPDATE product
+		SET discogs_synced_at = CASE WHEN id % 20 = 0 THEN NULL
+			ELSE DATE_SUB(NOW(6), INTERVAL (1 + id % 5) DAY) END;
+	"
+	echo "[시드] product.discogs_synced_at 배정(1~5일 전 분산, 5% NULL)"
 
 	GENRE_ID_1=$(mysql_perf "SELECT MIN(id) FROM genre;")
 	local genre_count
@@ -781,6 +809,33 @@ seed() {
 	echo "[시드] album_watch(member_id=${TARGET_MEMBER_ID} 헤비) ${album_watch_heavy_n}건"
 
 	mysql_perf "
+		-- 기준선: 최근 60일에 걸쳐 전 상품에 고르게 조회 이력을 채운다. 대부분 findCandidates 의
+		-- 최근 7일 윈도우 밖이라 view_count 집계에는 안 잡히지만, LEFT JOIN 이 실제로 훑어야 하는
+		-- product_view_log 규모는 이 기준선이 만든다.
+		INSERT INTO product_view_log (member_id, product_id, viewed_at)
+		SELECT
+			((n - 1) % ${member_n}) + 1,
+			((n - 1) % ${product_n}) + 1,
+			DATE_SUB(NOW(6), INTERVAL (n % 60) DAY)
+		FROM numbers WHERE n <= ${view_log_n};
+	"
+	echo "[시드] product_view_log(기준선) ${view_log_n}건"
+
+	mysql_perf "
+		-- 편중 케이스: 상위 ${hot_product_n}개 상품(product_id 1~${hot_product_n}, 전체의 2%)에
+		-- 최근 7일 윈도우 안의 조회를 몰아준다. 균등 분포면 view_count 집계가 다 고만고만해
+		-- LEFT JOIN 이 사실상 빈 집계처럼 보여 filesort 여부가 안 드러난다(query-index-audit.md 가
+		-- album_id 균등 배정에서 이미 겪은 함정과 같다).
+		INSERT INTO product_view_log (member_id, product_id, viewed_at)
+		SELECT
+			((n - 1) % ${member_n}) + 1,
+			((n - 1) % ${hot_product_n}) + 1,
+			DATE_SUB(NOW(6), INTERVAL (n % 7) DAY)
+		FROM numbers WHERE n <= ${view_log_hot_n};
+	"
+	echo "[시드] product_view_log(상위 ${hot_product_n}개 상품 편중) ${view_log_hot_n}건"
+
+	mysql_perf "
 		-- 상태 분포 70% CLOSED / 15% SOLD_OUT / 10% OPEN / 5% SCHEDULED (n % 100 구간).
 		-- product_id = n 으로 uk_limited_drop_product 를 그대로 만족시킨다.
 		INSERT INTO limited_drop (product_id, total_quantity, per_member_limit, open_at, close_at, status,
@@ -839,11 +894,33 @@ seed() {
 	echo "[시드] limited_drop_stat(CLOSED 드롭) $(( (limited_drop_n / 100) * 70 ))건"
 }
 
+# idx_product_resync(discogs_release_id, discogs_synced_at) 는 V19 에 이미 들어가 있어 다른 인덱스
+# 후보처럼 --after-ddl 로 없다가 생기는 파일이 아니다. D1/D2(findCandidates) 의 before/after 를 실제로
+# 갈라 재려면 여기서 직접 드롭했다가(before) 다시 만든다(after). 이미 없거나 있으면 그대로 둔다.
+resync_index_exists() {
+	mysql_perf "SELECT COUNT(*) FROM information_schema.statistics
+		WHERE table_schema = '${PERF_SCHEMA}' AND table_name = 'product' AND index_name = 'idx_product_resync';"
+}
+
+drop_resync_index_if_exists() {
+	if [ "$(resync_index_exists)" != "0" ]; then
+		echo "  - idx_product_resync 삭제 (D1/D2 before 측정용)"
+		mysql_perf "ALTER TABLE product DROP INDEX idx_product_resync;"
+	fi
+}
+
+recreate_resync_index_if_missing() {
+	if [ "$(resync_index_exists)" = "0" ]; then
+		echo "  - idx_product_resync 재생성 (D1/D2 after 측정용)"
+		mysql_perf "ALTER TABLE product ADD INDEX idx_product_resync (discogs_release_id, discogs_synced_at);"
+	fi
+}
+
 analyze_tables() {
 	echo "[통계] ANALYZE TABLE 실행"
 	mysql_perf "ANALYZE TABLE member, artist, label, genre, album, product, product_genre, product_image,
 		orders, order_item, payment, review, notification, wishlist, coupon, member_coupon, album_watch,
-		limited_drop, limited_purchase, limited_drop_stat;" > /dev/null
+		limited_drop, limited_purchase, limited_drop_stat, product_view_log;" > /dev/null
 }
 
 # EXPLAIN ANALYZE 결과 텍스트의 첫 줄에서 접근 방식과 마지막 actual time 값을 뽑는다.
@@ -1525,6 +1602,37 @@ get_case_sql() {
 			SQL
 		fi
 		;;
+	D1)
+		cat <<-SQL
+			-- DiscogsResyncMapper.xml findCandidates, viewPriority=true, visibleOnly=true, limit=150
+			-- (5분 x maxCallsPerRun=150 = 우선순위 재검증 회당 예산, application.yml groove.catalog.resync)
+			SELECT p.id, p.discogs_release_id
+			FROM product p
+			LEFT JOIN (
+				SELECT product_id, COUNT(*) AS view_count, MAX(viewed_at) AS last_viewed_at
+				FROM product_view_log
+				WHERE viewed_at >= DATE_SUB(NOW(6), INTERVAL 7 DAY)
+				GROUP BY product_id
+			) v ON v.product_id = p.id
+			WHERE p.discogs_release_id IS NOT NULL
+			AND (p.discogs_synced_at IS NULL OR p.discogs_synced_at < DATE_SUB(NOW(6), INTERVAL 6 HOUR))
+			AND p.status <> 'HIDDEN'
+			ORDER BY v.view_count DESC, v.last_viewed_at DESC, p.discogs_synced_at ASC, p.id ASC
+			LIMIT 150
+		SQL
+		;;
+	D2)
+		cat <<-SQL
+			-- DiscogsResyncMapper.xml findCandidates, viewPriority=false, visibleOnly=false, limit=150
+			-- (야간 스윕. HIDDEN 포함, discogs_synced_at 오름차순이라 다음 실행 맨 앞에 자동으로 이어붙는다)
+			SELECT p.id, p.discogs_release_id
+			FROM product p
+			WHERE p.discogs_release_id IS NOT NULL
+			AND (p.discogs_synced_at IS NULL OR p.discogs_synced_at < DATE_SUB(NOW(6), INTERVAL 6 HOUR))
+			ORDER BY p.discogs_synced_at ASC, p.id ASC
+			LIMIT 150
+		SQL
+		;;
 	*)
 		echo "알 수 없는 케이스: ${id}" >&2
 		exit 1
@@ -1612,6 +1720,7 @@ main() {
 	echo "[5/6] 실행계획 측정"
 	BODY_TMP=$(mktemp)
 	if [ "${RUN_BEFORE}" = true ]; then
+		drop_resync_index_if_exists
 		echo "  - before 단계"
 		local id
 		for id in "${CASE_IDS[@]}"; do
@@ -1627,6 +1736,7 @@ main() {
 		backfill_sold_quantity
 		backfill_sales_daily
 		backfill_limited_drop_sold_out_at
+		recreate_resync_index_if_missing
 		analyze_tables
 		echo "  - after 단계"
 		local id2
