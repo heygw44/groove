@@ -30,7 +30,7 @@ export function PressingSpecTable({
     { term: '발매일', value: releaseDate && formatDate(releaseDate) },
     { term: '카탈로그 번호', value: pressing.catalogNo },
     { term: '바코드', value: pressing.barcode },
-    { term: '에디션', value: EDITION_TYPE_LABELS[pressing.editionType] },
+    { term: '에디션', value: pressing.editionType && EDITION_TYPE_LABELS[pressing.editionType] },
     { term: '컬러반', value: colorVariant },
     { term: '사양', value: pressingInfo },
   ];
@@ -60,6 +60,10 @@ export function PressingSpecTable({
           </a>
           .
         </p>
+      )}
+
+      {pressing.stale && (
+        <p className="mt-2 text-xs text-content-subtle">최신 정보를 확인하는 중입니다.</p>
       )}
     </div>
   );

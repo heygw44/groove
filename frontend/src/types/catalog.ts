@@ -2,14 +2,18 @@ import type { ProductSummary } from '@/types/product';
 
 export type EditionType = 'STANDARD' | 'ORIGINAL' | 'REISSUE' | 'REMASTER' | 'LIMITED' | 'PROMO';
 
-/** 상품 상세의 프레싱 스펙. 값이 없는 필드는 non_null 정책상 키 자체가 빠진다. */
+/**
+ * 상품 상세의 프레싱 스펙. 값이 없는 필드는 non_null 정책상 키 자체가 빠진다.
+ * stale 이면 신선도 만료로 Discogs 유래 필드(editionType 포함)가 전부 빠진다.
+ */
 export interface PressingSummary {
   country?: string;
   pressingYear?: number;
   catalogNo?: string;
   barcode?: string;
-  editionType: EditionType;
+  editionType?: EditionType;
   discogsReleaseId?: number;
+  stale: boolean;
 }
 
 export interface ProductAlbumSummary {
