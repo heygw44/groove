@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -76,6 +77,12 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		productRepository.deleteAllByIdInBatch(createdProductIds);
 	}
 
+	// DB 왕복 후 isEqualTo 로 비교하는 값이라 초 미만을 잘라 둔다. Linux 러너의 Clock 은 나노초까지
+	// 주는데 datetime(6) 은 마이크로초까지만 담아, 그대로 두면 CI 에서만 어긋난다.
+	private LocalDateTime staleInstant() {
+		return LocalDateTime.now(clock).minusYears(STALE_YEARS).truncatedTo(ChronoUnit.SECONDS);
+	}
+
 	private Product persistStaleProduct(String title, long discogsReleaseId, LocalDateTime syncedAt) {
 		Artist artist = artistRepository.save(ArtistFixture.create("DRS " + title));
 		Album album = albumRepository.save(AlbumFixture.create(artist, "DRS Album " + title));
@@ -95,7 +102,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("예산 상한을 넘겨 호출하지 않는다")
 		void doesNotExceedBudgetPerRun() {
 			// given: view_count·discogs_synced_at 이 전부 같아 id 오름차순(입력 순)으로 정렬된다
-			LocalDateTime veryStale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
+			LocalDateTime veryStale = staleInstant();
 			List<Product> products = new ArrayList<>();
 			for (int i = 0; i < 5; i++) {
 				long releaseId = 91_000_001L + i;
@@ -122,7 +129,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("건별 실패가 나머지 처리를 막지 않는다")
 		void continuesProcessingAfterIndividualFailure() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
+			LocalDateTime stale = staleInstant();
 			long failingReleaseId = 92_000_001L;
 			long okReleaseId = 92_000_002L;
 			Product failingProduct = persistStaleProduct("Failing", failingReleaseId, stale);
@@ -146,7 +153,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("404 상품은 참조를 끊고 후보에서 영구히 빠진다")
 		void removesNotFoundProductFromCandidatesPermanently() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
+			LocalDateTime stale = staleInstant();
 			long releaseId = 93_000_001L;
 			Product product = persistStaleProduct("NotFound", releaseId, stale);
 			fake.markNotFound(releaseId);
@@ -170,7 +177,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("변경 건수가 있으면 ProductCatalogChangedEvent 를 발행한다")
 		void publishesEventWhenFieldsChanged() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
+			LocalDateTime stale = staleInstant();
 			long releaseId = 94_000_001L;
 			persistStaleProduct("Changed", releaseId, stale);
 			fake.addRelease(DiscogsFixture.releaseResponse(releaseId, 21247L, "Miles Davis", "Columbia",
@@ -188,7 +195,7 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		@DisplayName("변경 건수가 없으면 ProductCatalogChangedEvent 를 발행하지 않는다")
 		void doesNotPublishEventWhenNothingChanged() {
 			// given
-			LocalDateTime stale = LocalDateTime.now(clock).minusYears(STALE_YEARS);
+			LocalDateTime stale = staleInstant();
 			long releaseId = 95_000_001L;
 			persistStaleProduct("Unchanged", releaseId, stale);
 			fake.addRelease(DiscogsFixture.releaseResponse(releaseId, 21247L, "Miles Davis", "Columbia", "CS 8163",
