@@ -210,13 +210,17 @@ class AdminStatsControllerTest {
 			LimitedDropStatsResponse response = new LimitedDropStatsResponse(1L, "그루브 앨범", LimitedDropStatus.OPEN,
 					10, 3, 30.0, LocalDateTime.of(2026, 9, 1, 10, 0), LocalDateTime.of(2026, 9, 2, 10, 0), null,
 					null, null);
-			given(adminStatsService.getLimitedDropStats()).willReturn(List.of(response));
+			given(adminStatsService.getLimitedDropStats(any()))
+					.willReturn(PageResponse.of(List.of(response), 0, 20, 1));
 
 			// when & then
 			mockMvc.perform(get(BASE_URL + "/limited-drops").header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.success", is(true)))
-					.andExpect(jsonPath("$.data[0].sellRate", is(30.0)));
+					.andExpect(jsonPath("$.data.content[0].sellRate", is(30.0)))
+					.andExpect(jsonPath("$.data.page", is(0)))
+					.andExpect(jsonPath("$.data.size", is(20)))
+					.andExpect(jsonPath("$.data.totalElements", is(1)));
 		}
 
 		@Test
@@ -226,7 +230,7 @@ class AdminStatsControllerTest {
 			mockMvc.perform(get(BASE_URL + "/limited-drops").header(HttpHeaders.AUTHORIZATION, userToken()))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(adminStatsService, never()).getLimitedDropStats();
+			verify(adminStatsService, never()).getLimitedDropStats(any());
 		}
 
 		@Test
@@ -236,7 +240,7 @@ class AdminStatsControllerTest {
 			mockMvc.perform(get(BASE_URL + "/limited-drops"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(adminStatsService, never()).getLimitedDropStats();
+			verify(adminStatsService, never()).getLimitedDropStats(any());
 		}
 	}
 

@@ -3,12 +3,15 @@ package com.groove.limited.service;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.connection.StringRedisConnection;
 import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
@@ -118,6 +121,36 @@ public class LimitedDropRedisService {
 			return parseAttempts(hashOps.entries(attemptsKey(dropId)));
 		} catch (DataAccessException e) {
 			log.warn("한정반 시도 집계 Redis 조회 실패 dropId={}", dropId, e);
+			return Map.of();
+		}
+	}
+
+	/**
+	 * 관리자 목록 조회용. 드롭마다 HGETALL 을 따로 부르는 대신 파이프라인 한 번으로 묶는다.
+	 * Redis 장애 시 예외를 삼키고 전부 빈 맵으로 폴백한다(단건 {@link #getAttempts(Long)}과 같은 의미).
+	 */
+	public Map<Long, Map<LimitedAttemptResult, Long>> getAttempts(Collection<Long> dropIds) {
+		if (dropIds.isEmpty()) {
+			return Map.of();
+		}
+		List<Long> orderedIds = List.copyOf(dropIds);
+		try {
+			List<Object> pipelinedResults = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+				StringRedisConnection stringConnection = (StringRedisConnection) connection;
+				for (Long dropId : orderedIds) {
+					stringConnection.hGetAll(attemptsKey(dropId));
+				}
+				return null;
+			});
+			Map<Long, Map<LimitedAttemptResult, Long>> attemptsByDrop = new LinkedHashMap<>();
+			for (int i = 0; i < orderedIds.size(); i++) {
+				@SuppressWarnings("unchecked")
+				Map<String, String> entries = (Map<String, String>) pipelinedResults.get(i);
+				attemptsByDrop.put(orderedIds.get(i), parseAttempts(entries == null ? Map.of() : entries));
+			}
+			return attemptsByDrop;
+		} catch (DataAccessException e) {
+			log.warn("한정반 시도 집계 Redis 일괄 조회 실패 dropIds={}", orderedIds, e);
 			return Map.of();
 		}
 	}

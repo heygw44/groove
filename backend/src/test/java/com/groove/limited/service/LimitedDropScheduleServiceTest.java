@@ -178,7 +178,7 @@ class LimitedDropScheduleServiceTest {
 			// given
 			LimitedDrop drop = scheduledDrop();
 			drop.open();
-			drop.recordSale(drop.getTotalQuantity());
+			drop.recordSale(drop.getTotalQuantity(), now);
 			LimitedDropFixture.withCloseAt(drop, now.minusMinutes(1));
 			given(limitedDropRepository.findByIdForUpdate(DROP_ID)).willReturn(Optional.of(drop));
 

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import com.groove.limited.entity.LimitedAttemptResult;
 import com.groove.support.IntegrationTestSupport;
 
 class LimitedDropRedisServiceTest extends IntegrationTestSupport {
@@ -150,6 +151,60 @@ class LimitedDropRedisServiceTest extends IntegrationTestSupport {
 			} finally {
 				limitedDropRedisService.clear(missingDropId);
 			}
+		}
+	}
+
+	@Nested
+	@DisplayName("getAttempts(Collection)")
+	class GetAttemptsBatch {
+
+		@Test
+		@DisplayName("파이프라인으로 여러 드롭의 시도 집계를 한 번에 읽는다")
+		void returnsAttemptsForEachDropInOneRoundTrip() {
+			// given
+			dropId = newDropId();
+			Long otherDropId = newDropId();
+			limitedDropRedisService.recordAttempt(dropId, LimitedAttemptResult.SOLD_OUT);
+			limitedDropRedisService.recordAttempt(dropId, LimitedAttemptResult.SOLD_OUT);
+			limitedDropRedisService.recordAttempt(otherDropId, LimitedAttemptResult.NOT_OPEN);
+
+			try {
+				// when
+				Map<Long, Map<LimitedAttemptResult, Long>> result =
+						limitedDropRedisService.getAttempts(List.of(dropId, otherDropId));
+
+				// then
+				assertThat(result.get(dropId)).containsEntry(LimitedAttemptResult.SOLD_OUT, 2L);
+				assertThat(result.get(otherDropId)).containsEntry(LimitedAttemptResult.NOT_OPEN, 1L);
+			} finally {
+				limitedDropRedisService.clear(otherDropId);
+			}
+		}
+
+		@Test
+		@DisplayName("시도 집계가 없는 드롭은 빈 맵으로 채운다")
+		void fillsEmptyMapForDropWithoutAttempts() {
+			// given
+			dropId = newDropId();
+
+			// when
+			Map<Long, Map<LimitedAttemptResult, Long>> result =
+					limitedDropRedisService.getAttempts(List.of(dropId));
+
+			// then
+			assertThat(result).containsKey(dropId);
+			assertThat(result.get(dropId)).isEmpty();
+		}
+
+		@Test
+		@DisplayName("드롭 id 목록이 비어 있으면 빈 맵을 반환한다")
+		void returnsEmptyMapWhenNoDropIds() {
+			// when
+			Map<Long, Map<LimitedAttemptResult, Long>> result =
+					limitedDropRedisService.getAttempts(List.of());
+
+			// then
+			assertThat(result).isEmpty();
 		}
 	}
 

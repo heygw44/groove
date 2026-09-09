@@ -1,6 +1,7 @@
 import type { AdminAuditLogListParams } from '@/types/adminAuditLog';
 import type { AdminMemberListParams } from '@/types/adminMember';
 import type {
+  LimitedDropStatsListParams,
   PopularProductParams,
   ReconcileLogListParams,
   StatsPeriodParams,
@@ -113,7 +114,8 @@ export const adminStatsKeys = {
   dailySales: (params: StatsPeriodParams) => ['adminStats', 'dailySales', params] as const,
   popularProducts: (params: PopularProductParams) =>
     ['adminStats', 'popularProducts', params] as const,
-  limitedDrops: ['adminStats', 'limitedDrops'] as const,
+  limitedDrops: (params: LimitedDropStatsListParams) =>
+    ['adminStats', 'limitedDrops', params] as const,
   reconcileLogs: (params: ReconcileLogListParams) =>
     ['adminStats', 'reconcileLogs', params] as const,
 };
