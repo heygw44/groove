@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ProductSummary } from '@/types/product';
-import { buildPressingMetaLine } from '@/utils/pressing';
+import { buildOtherPressingLabel, buildPressingMetaLine } from '@/utils/pressing';
 
 const product = (overrides: Partial<ProductSummary> = {}): ProductSummary => ({
   id: 1,
@@ -10,6 +10,8 @@ const product = (overrides: Partial<ProductSummary> = {}): ProductSummary => ({
   price: 30000,
   status: 'ON_SALE',
   editionType: 'STANDARD',
+  albumId: 1,
+  otherPressingCount: 0,
   ...overrides,
 });
 
@@ -45,5 +47,23 @@ describe('buildPressingMetaLine()', () => {
 
     // then
     expect(line).toBe('일본 · 리마스터반');
+  });
+});
+
+describe('buildOtherPressingLabel()', () => {
+  it('개수를 그대로 문구에 넣는다', () => {
+    // given & when
+    const label = buildOtherPressingLabel(3);
+
+    // then
+    expect(label).toBe('다른 에디션 3종');
+  });
+
+  it('1개여도 단수 표현을 따로 두지 않는다', () => {
+    // given & when
+    const label = buildOtherPressingLabel(1);
+
+    // then
+    expect(label).toBe('다른 에디션 1종');
   });
 });

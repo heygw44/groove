@@ -8,12 +8,24 @@ import { AlbumPressingsSection } from '@/components/product/AlbumPressingsSectio
 import { albumKeys } from '@/hooks/queries/queryKeys';
 import { useAuthStore } from '@/store/authStore';
 import type { AlbumDetail } from '@/types/catalog';
+import type { ProductSummary } from '@/types/product';
 
 const baseAlbum: Omit<AlbumDetail, 'pressings'> = {
   id: 10,
   title: 'Kind of Blue',
   artist: { id: 1, name: 'Miles Davis' },
 };
+
+// 앨범 상세의 프레싱 목록은 항상 otherPressingCount 0 으로 내려온다(대표 축약이 없는 전체 목록이라서).
+const pressing = (overrides: Partial<ProductSummary> & Pick<ProductSummary, 'id' | 'title'>): ProductSummary => ({
+  artistName: 'Miles Davis',
+  price: 30000,
+  status: 'ON_SALE',
+  editionType: 'ORIGINAL',
+  albumId: baseAlbum.id,
+  otherPressingCount: 0,
+  ...overrides,
+});
 
 const renderSection = (album: AlbumDetail, currentProductId: number, hasOtherPressings = true) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -42,22 +54,8 @@ describe('AlbumPressingsSection', () => {
     const album: AlbumDetail = {
       ...baseAlbum,
       pressings: [
-        {
-          id: 1,
-          title: '현재 프레싱',
-          artistName: 'Miles Davis',
-          price: 30000,
-          status: 'ON_SALE',
-          editionType: 'ORIGINAL',
-        },
-        {
-          id: 2,
-          title: '재발매 프레싱',
-          artistName: 'Miles Davis',
-          price: 25000,
-          status: 'ON_SALE',
-          editionType: 'REISSUE',
-        },
+        pressing({ id: 1, title: '현재 프레싱' }),
+        pressing({ id: 2, title: '재발매 프레싱', price: 25000, editionType: 'REISSUE' }),
       ],
     };
 
@@ -73,16 +71,7 @@ describe('AlbumPressingsSection', () => {
     // given
     const album: AlbumDetail = {
       ...baseAlbum,
-      pressings: [
-        {
-          id: 1,
-          title: '현재 프레싱',
-          artistName: 'Miles Davis',
-          price: 30000,
-          status: 'ON_SALE',
-          editionType: 'ORIGINAL',
-        },
-      ],
+      pressings: [pressing({ id: 1, title: '현재 프레싱' })],
     };
 
     // when
@@ -99,22 +88,8 @@ describe('AlbumPressingsSection', () => {
     const album: AlbumDetail = {
       ...baseAlbum,
       pressings: [
-        {
-          id: 1,
-          title: '현재 프레싱',
-          artistName: 'Miles Davis',
-          price: 30000,
-          status: 'ON_SALE',
-          editionType: 'ORIGINAL',
-        },
-        {
-          id: 2,
-          title: '재발매 프레싱',
-          artistName: 'Miles Davis',
-          price: 25000,
-          status: 'ON_SALE',
-          editionType: 'REISSUE',
-        },
+        pressing({ id: 1, title: '현재 프레싱' }),
+        pressing({ id: 2, title: '재발매 프레싱', price: 25000, editionType: 'REISSUE' }),
       ],
     };
 
@@ -132,24 +107,15 @@ describe('AlbumPressingsSection', () => {
     const album: AlbumDetail = {
       ...baseAlbum,
       pressings: [
-        {
-          id: 1,
-          title: '현재 프레싱',
-          artistName: 'Miles Davis',
-          price: 30000,
-          status: 'ON_SALE',
-          editionType: 'ORIGINAL',
-        },
-        {
+        pressing({ id: 1, title: '현재 프레싱' }),
+        pressing({
           id: 2,
           title: '일본반',
-          artistName: 'Miles Davis',
           price: 40000,
-          status: 'ON_SALE',
           editionType: 'REISSUE',
           country: 'Japan',
           pressingYear: 1990,
-        },
+        }),
       ],
     };
 
