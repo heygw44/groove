@@ -104,6 +104,11 @@ groove:
       ttl: 6h
       # 킬 스위치. false 면 전부 fresh 취급 — Discogs 장애 시 스펙 표가 통째로 사라지는 것을 막는다.
       enabled: true
+    resync:
+      interval: 5m
+      max-calls-per-run: 150  # 5분 x 150 = 30 req/min = Discogs 60 req/min 버킷의 50%(나머지는 관리자 조회용 유보)
+      sweep-cron: "0 15 2 * * *"
+      view-window: 7d
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

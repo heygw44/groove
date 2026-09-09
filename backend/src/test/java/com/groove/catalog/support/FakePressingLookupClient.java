@@ -29,7 +29,12 @@ public class FakePressingLookupClient implements PressingLookupClient {
 	}
 
 	public void addRelease(DiscogsReleaseResponse release) {
-		releases.put(release.id(), release);
+		addRelease(release.id(), release);
+	}
+
+	/** 병합(리다이렉트) 시나리오용. release.id() 가 requestedId 와 달라도 requestedId 로 조회되게 등록한다. */
+	public void addRelease(long requestedId, DiscogsReleaseResponse release) {
+		releases.put(requestedId, release);
 	}
 
 	public void markNotFound(long id) {

@@ -100,6 +100,14 @@ public final class DiscogsFixture {
 	public static DiscogsReleaseResponse releaseResponse(String artistName, String labelName, String catalogNo,
 			List<String> formatDescriptions, String barcode, List<String> genres, List<String> styles,
 			Integer year) {
+		return releaseResponse(249504L, 21247L, artistName, labelName, catalogNo, formatDescriptions, barcode,
+				genres, styles, year);
+	}
+
+	/** id/masterId 를 직접 지정한다. 재검증의 병합(리다이렉트)·마스터 변경 시나리오에 쓴다. */
+	public static DiscogsReleaseResponse releaseResponse(long id, Long masterId, String artistName, String labelName,
+			String catalogNo, List<String> formatDescriptions, String barcode, List<String> genres,
+			List<String> styles, Integer year) {
 		List<DiscogsReleaseResponse.Artist> artists = artistName == null ? List.of()
 				: List.of(new DiscogsReleaseResponse.Artist(artistName));
 		List<DiscogsReleaseResponse.Label> labels = labelName == null ? List.of()
@@ -111,7 +119,7 @@ public final class DiscogsFixture {
 		List<DiscogsReleaseResponse.Image> images = List.of(
 				new DiscogsReleaseResponse.Image("primary", "https://i.discogs.com/large.jpeg",
 						"https://i.discogs.com/150.jpeg"));
-		return new DiscogsReleaseResponse(249504L, "Kind Of Blue", artists, labels, "Germany", year, genres, styles,
-				formats, identifiers, images, 21247L, "Discogs 원본 노트");
+		return new DiscogsReleaseResponse(id, "Kind Of Blue", artists, labels, "Germany", year, genres, styles,
+				formats, identifiers, images, masterId, "Discogs 원본 노트");
 	}
 }

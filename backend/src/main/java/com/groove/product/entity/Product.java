@@ -276,6 +276,17 @@ public class Product extends BaseTimeEntity {
 		this.discogsSyncedAt = syncedAt;
 	}
 
+	/** Discogs 릴리즈가 삭제됐을 때(404) 호출한다. 상품 자체는 자체 데이터 상품으로 남고 후보 조회에서 영구히 빠진다. */
+	public void clearDiscogsRelease() {
+		this.discogsReleaseId = null;
+		this.discogsSyncedAt = null;
+	}
+
+	/** Discogs 릴리즈 병합(리다이렉트)으로 참조 id 가 바뀌었을 때만 호출한다. */
+	public void changeDiscogsReleaseId(Long discogsReleaseId) {
+		this.discogsReleaseId = discogsReleaseId;
+	}
+
 	public void addGenre(Genre genre) {
 		boolean alreadyLinked = this.productGenres.stream()
 				.map(ProductGenre::getGenre)
