@@ -414,7 +414,7 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			Album album = AlbumFixture.create(artist, "PF Imported");
 			em.persist(album);
 			Product product = Product.createImported(album, "PF Imported", artist, null, "US", 1975,
-					"CS 8163", "888880123456", null, new BigDecimal("30000.00"), null);
+					"CS 8163", "888880123456", null, new BigDecimal("30000.00"), null, null);
 			em.persist(product);
 			em.flush();
 			em.clear();
