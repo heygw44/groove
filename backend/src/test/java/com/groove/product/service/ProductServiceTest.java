@@ -26,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.groove.catalog.service.CatalogFreshness;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.GenreFixture;
 import com.groove.fixture.MemberFixture;
@@ -88,13 +89,16 @@ class ProductServiceTest {
 	@Mock
 	private ApplicationEventPublisher eventPublisher;
 
+	@Mock
+	private CatalogFreshness catalogFreshness;
+
 	private ProductService productService;
 
 	@BeforeEach
 	void setUp() {
 		productService = new ProductService(productSearchMapper, productRepository, productImageRepository,
 				stockRepository, wishlistRepository, limitedDropService, albumWatchRepository, eventPublisher,
-				FIXED_CLOCK);
+				catalogFreshness, FIXED_CLOCK);
 	}
 
 	@Nested
@@ -435,6 +439,71 @@ class ProductServiceTest {
 			assertThat(response.wishlisted()).isNull();
 			assertThat(response.alertEnabled()).isNull();
 			verify(wishlistRepository, never()).findByMemberIdAndProductId(any(), any());
+		}
+
+		@Test
+		@DisplayName("CatalogFreshness 가 stale 로 판정하면 Discogs 유래 필드가 모두 null 로 내려온다")
+		void masksDiscogsFieldsWhenStale() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+			given(catalogFreshness.isStale(product)).willReturn(true);
+
+			// when
+			ProductDetailResponse response = productService.getDetail(10L, null);
+
+			// then
+			assertThat(response.pressing().stale()).isTrue();
+			assertThat(response.pressing().country()).isNull();
+			assertThat(response.pressing().pressingYear()).isNull();
+			assertThat(response.pressing().catalogNo()).isNull();
+			assertThat(response.pressing().barcode()).isNull();
+			assertThat(response.pressing().editionType()).isNull();
+			assertThat(response.pressing().discogsReleaseId()).isNull();
+		}
+
+		@Test
+		@DisplayName("CatalogFreshness 가 fresh 로 판정하면 프레싱 스펙을 그대로 내려준다")
+		void keepsPressingFieldsWhenFresh() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+			given(catalogFreshness.isStale(product)).willReturn(false);
+
+			// when
+			ProductDetailResponse response = productService.getDetail(10L, null);
+
+			// then
+			assertThat(response.pressing().stale()).isFalse();
+			assertThat(response.pressing().country()).isEqualTo(product.getCountry());
+			assertThat(response.pressing().catalogNo()).isEqualTo(product.getCatalogNo());
+		}
+
+		@Test
+		@DisplayName("stale 이어도 라벨·발매일·컬러 등 자체 데이터는 그대로 노출된다")
+		void keepsOwnDataWhenStale() {
+			// given
+			Artist artist = ArtistFixture.withId(artist(), 1L);
+			Product product = ProductFixture.withId(ProductFixture.create(artist), 10L);
+			given(productRepository.findDetailById(10L)).willReturn(Optional.of(product));
+			given(productImageRepository.findAllByProductIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+			given(stockRepository.findByProductId(10L)).willReturn(Optional.empty());
+			given(catalogFreshness.isStale(product)).willReturn(true);
+
+			// when
+			ProductDetailResponse response = productService.getDetail(10L, null);
+
+			// then
+			assertThat(response.releaseDate()).isEqualTo(product.getReleaseDate());
+			assertThat(response.pressingInfo()).isEqualTo(product.getPressingInfo());
+			assertThat(response.colorVariant()).isEqualTo(product.getColorVariant());
+			assertThat(response.price()).isEqualTo(product.getPrice());
 		}
 
 		@Test
