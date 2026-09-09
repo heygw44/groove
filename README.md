@@ -12,13 +12,14 @@ Java 17 / Spring Boot 3.5 + React 18로 만든 LP 이커머스다. 한정반(Lim
 
 | | |
 |---|---|
-| ![홈](.github/assets/home.jpg) 홈 | ![상품 상세](.github/assets/product-detail.jpg) 상품 상세 |
+| ![홈](.github/assets/home.jpg) 홈 · 한정반 배너 · 개인화 추천 | ![상품 상세](.github/assets/product-detail.jpg) 상품 상세 |
 | ![한정반](.github/assets/limited-drop.jpg) 한정반 드롭 | ![장바구니](.github/assets/cart.jpg) 장바구니 |
 | ![관리자 상품 관리](.github/assets/admin-products.jpg) 관리자 · 상품 관리 | |
 
 ## 주요 기능
 
-- **상품 탐색** — 장르·아티스트·가격대 필터, 바코드/카탈로그 번호/키워드 검색, 취향·행동 신호를 조합한 규칙 기반 추천
+- **상품 탐색** — 장르·아티스트·가격대 필터, 바코드/카탈로그 번호/키워드 검색
+- **추천** — 취향 프로필(장르·아티스트·연대)과 최근 본 상품·구매·위시리스트 같은 행동 신호를 가중치 합산해 홈에 "OO님을 위한 추천"으로 보여준다. 학습 모델 없이도 무작위 대비 8.9배, 인기순 대비 5.6배 recall@10을 낸다
 - **한정반(Limited Drop)** — 선착순 구매. Redis Lua로 1차 필터링하고 DB 트랜잭션으로 재확인하는 이중 방어로 초과 판매 0건을 유지한다
 - **주문·결제** — 장바구니, Toss Payments 결제 승인/취소, 쿠폰
 - **회원** — JWT 무상태 인증(Access는 메모리, Refresh는 HttpOnly 쿠키), 위시리스트, 앨범 재입고 구독과 알림
