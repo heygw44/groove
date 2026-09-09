@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -161,6 +165,52 @@ class ProductTest {
 			assertThat(product.getEditionType()).isEqualTo(EditionType.REMASTER);
 			assertThat(product.getPrice()).isEqualByComparingTo("52000.00");
 			assertThat(product.getDescription()).isEqualTo("변경된 설명");
+		}
+	}
+
+	@Nested
+	@DisplayName("applyDiscogsSync()")
+	class ApplyDiscogsSync {
+
+		@Test
+		@DisplayName("프레싱 다섯 필드와 동기화 시각을 갱신한다")
+		void updatesPressingFieldsAndSyncedAt() {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+			Clock clock = Clock.fixed(Instant.parse("2026-09-09T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+			LocalDateTime syncedAt = LocalDateTime.now(clock);
+
+			// when
+			product.applyDiscogsSync("JP", 2025, "imp-1234", "4988005123456", EditionType.REMASTER, syncedAt);
+
+			// then
+			assertThat(product.getCountry()).isEqualTo("JP");
+			assertThat(product.getPressingYear()).isEqualTo(2025);
+			assertThat(product.getCatalogNo()).isEqualTo("imp-1234");
+			assertThat(product.getCatalogNoNormalized()).isEqualTo("IMP1234");
+			assertThat(product.getBarcode()).isEqualTo("4988005123456");
+			assertThat(product.getEditionType()).isEqualTo(EditionType.REMASTER);
+			assertThat(product.getDiscogsSyncedAt()).isEqualTo(syncedAt);
+		}
+
+		@Test
+		@DisplayName("price·description·title 은 그대로 보존한다")
+		void preservesAdminManagedFields() {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+			BigDecimal originalPrice = product.getPrice();
+			String originalDescription = product.getDescription();
+			String originalTitle = product.getTitle();
+			Clock clock = Clock.fixed(Instant.parse("2026-09-09T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+
+			// when
+			product.applyDiscogsSync("JP", 2025, "imp-1234", "4988005123456", EditionType.REMASTER,
+					LocalDateTime.now(clock));
+
+			// then
+			assertThat(product.getPrice()).isEqualByComparingTo(originalPrice);
+			assertThat(product.getDescription()).isEqualTo(originalDescription);
+			assertThat(product.getTitle()).isEqualTo(originalTitle);
 		}
 	}
 

@@ -8,16 +8,20 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -63,11 +67,19 @@ class CatalogImportRegistrarTest {
 	@Mock
 	private StockService stockService;
 
-	@InjectMocks
 	private CatalogImportRegistrar registrar;
+
+	private Clock clock;
 
 	@Captor
 	private ArgumentCaptor<Product> productCaptor;
+
+	@BeforeEach
+	void setUp() {
+		clock = Clock.fixed(Instant.parse("2026-09-09T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+		registrar = new CatalogImportRegistrar(artistRepository, labelRepository, albumRepository, genreRepository,
+				productRepository, stockService, clock);
+	}
 
 	private CatalogImportItem item(Long discogsMasterId) {
 		return new CatalogImportItem(123L, discogsMasterId, "Kind of Blue", "Miles Davis", "Columbia", "US", 1959,
@@ -94,7 +106,7 @@ class CatalogImportRegistrarTest {
 			given(genreRepository.findByName("Unknown")).willReturn(Optional.empty());
 			Product saved = ProductFixture.withId(Product.createImported(album, item.title(), artist, label,
 					item.country(), item.pressingYear(), item.catalogNo(), item.barcode(), item.editionType(),
-					item.price(), item.discogsReleaseId()), 10L);
+					item.price(), item.discogsReleaseId(), LocalDateTime.now(clock)), 10L);
 			given(productRepository.save(any(Product.class))).willReturn(saved);
 
 			// when
@@ -183,6 +195,7 @@ class CatalogImportRegistrarTest {
 			Product captured = productCaptor.getValue();
 			assertThat(captured.getStatus()).isEqualTo(ProductStatus.HIDDEN);
 			assertThat(captured.getDiscogsReleaseId()).isEqualTo(123L);
+			assertThat(captured.getDiscogsSyncedAt()).isEqualTo(LocalDateTime.now(clock));
 			verify(stockService).create(any(Product.class), eq(0));
 		}
 

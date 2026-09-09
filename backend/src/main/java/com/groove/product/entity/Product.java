@@ -6,6 +6,7 @@ import static lombok.AccessLevel.PROTECTED;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -108,6 +109,9 @@ public class Product extends BaseTimeEntity {
 	@Column(name = "discogs_release_id")
 	private Long discogsReleaseId;
 
+	@Column(name = "discogs_synced_at")
+	private LocalDateTime discogsSyncedAt;
+
 	@Column(nullable = false, precision = 10, scale = 2)
 	private BigDecimal price;
 
@@ -144,7 +148,7 @@ public class Product extends BaseTimeEntity {
 	private Product(String title, Album album, Artist artist, Label label, LocalDate releaseDate,
 			String pressingInfo, String colorVariant, String country, Integer pressingYear, String catalogNo,
 			String barcode, EditionType editionType, BigDecimal price, ProductStatus status, String description,
-			Long discogsReleaseId) {
+			Long discogsReleaseId, LocalDateTime discogsSyncedAt) {
 		this.title = title;
 		this.album = album;
 		this.artist = artist;
@@ -162,6 +166,7 @@ public class Product extends BaseTimeEntity {
 		this.status = status;
 		this.description = description;
 		this.discogsReleaseId = discogsReleaseId;
+		this.discogsSyncedAt = discogsSyncedAt;
 		this.reviewCount = 0;
 		this.soldQuantity = 0;
 	}
@@ -191,7 +196,7 @@ public class Product extends BaseTimeEntity {
 	// Discogs 적재 상품은 가격·재고 검수 전이라 HIDDEN 으로 만든다.
 	public static Product createImported(Album album, String title, Artist artist, Label label, String country,
 			Integer pressingYear, String catalogNo, String barcode, EditionType editionType, BigDecimal price,
-			Long discogsReleaseId) {
+			Long discogsReleaseId, LocalDateTime discogsSyncedAt) {
 		return Product.builder()
 				.title(title)
 				.album(album)
@@ -205,6 +210,7 @@ public class Product extends BaseTimeEntity {
 				.price(price)
 				.status(ProductStatus.HIDDEN)
 				.discogsReleaseId(discogsReleaseId)
+				.discogsSyncedAt(discogsSyncedAt)
 				.build();
 	}
 
@@ -253,6 +259,21 @@ public class Product extends BaseTimeEntity {
 		this.editionType = editionType;
 		this.price = price;
 		this.description = description;
+	}
+
+	/**
+	 * Discogs 재검증으로 갱신 가능한 다섯 필드와 동기화 시각만 대입한다. price·description·title 등
+	 * 관리자가 직접 관리하는 필드는 시그니처에 아예 없어 호출자가 실수로 되쓸 수 없다.
+	 */
+	public void applyDiscogsSync(String country, Integer pressingYear, String catalogNo, String barcode,
+			EditionType editionType, LocalDateTime syncedAt) {
+		this.country = country;
+		this.pressingYear = pressingYear;
+		this.catalogNo = catalogNo;
+		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
+		this.barcode = barcode;
+		this.editionType = editionType;
+		this.discogsSyncedAt = syncedAt;
 	}
 
 	public void addGenre(Genre genre) {
