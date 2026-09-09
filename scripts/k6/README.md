@@ -54,6 +54,12 @@ docker compose --profile full up -d backend
 | `OPEN_DELAY_SEC` | `8` | 회원 준비가 끝난 뒤 오픈 시각까지 두는 여유(초) |
 | `MEMBER_PASSWORD` | `load1234!` | 테스트용으로 생성하는 회원 비밀번호 |
 | `RESULT_DIR` | `scripts/k6/results` | 결과 JSON 저장 위치 |
+| `MEMBER_EMAIL_PREFIX` | `lt-` | 생성하는 회원 이메일 접두사(`prod-run.sh` 는 `k6lt-`) |
+| `PRODUCT_TITLE_PREFIX` | `LIMITED-LOADTEST-` | 생성하는 상품/앨범 타이틀 접두사 |
+| `RUN_LABEL` | (빈 문자열) | 결과 JSON 파일명에 붙는 라벨(`limited-<RUN_LABEL>-<timestamp>.json`). `prod-run.sh` 는 단계별로 `vu-050` 처럼 채운다 |
+| `SETUP_BATCH_SIZE` | `20` | 회원 준비 단계의 BCrypt 동시성. 요청 동시성(`options.batch`, 항상 20 이상)과 분리되어 있다 |
+| `P95_MS` | `1000` | `http_req_duration{name:purchase}` 임계값(ms) |
+| `CHECK_RATE` | `0.99` | `checks` 임계값(통과율) |
 
 ## 판정 기준
 
@@ -81,6 +87,137 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 - 컨테이너 백엔드는 `JAVA_TOOL_OPTIONS`(Dockerfile)로 `-Xmx384m` + SerialGC 제약을 받는다. VUS 를 크게 올리면 GC 압박으로 응답 지연이 커질 수 있다.
 - `VUS=1000` 기준 setup 에서 로그인만 1000건이라 준비 단계가 수십 초 걸릴 수 있다. `setupTimeout: '10m'` 로 여유를 뒀다.
 - 실행마다 새 상품/한정반을 만들고 지우지 않는다. 반복 실행하면 관리자 상품/한정반 목록에 `LIMITED-LOADTEST-*` 항목이 계속 쌓이므로, 필요하면 수동으로 정리한다.
+
+## 운영 도메인 측정
+
+**경고: 이 측정은 운영 DB 를 직접 건드린다.** 측정용 회원·상품·주문이 실제 운영 데이터에 섞여 들어가고, 끝나면 반드시 정리해야 한다. 아래 스크립트로 돌린다.
+
+- `prod-run.sh` — VU 를 단계적으로 올리며(기본 50 → 200 → 500 → 1000) 운영 도메인에 대고 `limited-purchase.js` 를 반복 실행한다.
+- `monitor-remote.sh` — 부하가 도는 동안 EC2 자원(컨테이너 CPU/메모리, free, cpu steal, TCP 연결 수)을 CSV 로 수집한다.
+- `verify-oversell.sh` — 각 단계가 끝나면 즉시 초과판매 여부를 판정한다.
+- `cleanup-prod-loadtest.sh` — 측정이 남긴 데이터를 접두사 기준으로 지운다(기본 dry-run).
+
+### 왜 다시 재나
+
+기존 수치(`limited-*.md`)는 로컬(Apple M4/16GB)에서 컨테이너 백엔드를 직접 때린 값이다. "코드가 초과판매를 막는가"는 증명하지만 "이 서비스가 얼마나 버티는가"는 증명하지 못한다. 실제 서비스는 t3.micro(2 vCPU / 1GB) 한 대에 MySQL·Redis·JVM 이 같이 떠 있고, 앞에 Nginx·TLS·인터넷 구간이 붙는다.
+
+### 측정 전에 알아야 할 제약
+
+아래는 실측치다.
+
+| 항목 | 값 |
+|---|---|
+| EC2 스펙 | t3.micro, 2 vCPU / 총 911MB |
+| 측정 전 available 메모리 | 약 120MB |
+| swap | 2048MB 중 약 440MB 이미 사용 중 |
+| 컨테이너 RSS | backend 약 355MB(`-Xmx384m` + SerialGC), mysql 약 74MB, redis 약 2MB |
+| `/api/v1/health` 왕복(로컬 → 운영) | conn 약 55ms, TLS 약 78ms, TTFB 약 100ms |
+| Nginx | `worker_connections 768` × worker 2 |
+| `net.ipv4.tcp_max_syn_backlog` | 128 |
+| Redis | `maxmemory 64mb` / `allkeys-lru`, 측정 전 사용량 1.3MB |
+| rate limit | 애플리케이션·Nginx 어디에도 없음 |
+
+특히 챙길 점:
+
+- 네트워크 왕복만으로 80ms대 고정 바닥이 깔린다. 로컬 측정에는 없던 항목이므로 로컬 p95 와 운영 p95 를 그냥 나란히 놓으면 안 되고, `http_req_waiting` 을 같이 봐야 한다.
+- Nginx 프록시 요청 1건이 클라이언트+업스트림 2슬롯을 쓰므로 **동시 요청 약 768 이 Nginx 한계**다. 1000 VU 는 JVM 이 아니라 여기서 먼저 막힐 수 있다.
+- Redis 축출 여지는 낮지만(1.3MB/64MB) `evicted_keys` 는 `post-check.txt` 에서 확인한다.
+
+### 가장 중요한 제약: 판정 유효 시간 10분
+
+한정반 구매는 PENDING 주문이고, `OrderExpirationScheduler` 가 60초마다 돌며 10분 지난 주문을 취소한다. 그때 `limited_purchase` 행이 **삭제되고** 재고가 복구된다. 초과판매 판정을 늦게 하면 증거가 스스로 사라진다는 뜻이다. `prod-run.sh` 가 k6 종료 직후, 쿨다운에 들어가기 전에 `verify-oversell.sh` 를 부르는 이유가 이것이다.
+
+### 사전 준비
+
+- SSH 접속이 가능해야 한다(`~/.ssh/groove-key.pem`, 보안그룹 22번이 현재 IP 로 열려 있어야 함). 네트워크가 바뀌었으면 AWS 콘솔에서 다시 열어야 한다.
+- 운영 관리자 계정 자격증명을 `scripts/k6/.env.prod`(gitignore 대상, `chmod 600`)에 `ADMIN_EMAIL=` / `ADMIN_PASSWORD=` 로 둔다. `prod-run.sh` 가 `ADMIN_EMAIL`/`ADMIN_PASSWORD` 가 비어 있을 때 이 파일을 읽는다.
+- **배포와 겹치지 않는 시간대에 한다.** CD 는 main push 마다 컨테이너를 재기동한다.
+- 관리자로 API 로그인하면 refresh 토큰이 교체되어 브라우저에 열려 있던 관리자 세션이 로그아웃된다. 측정 중에는 관리자 화면을 쓰지 않는 게 좋다.
+
+### 실행
+
+스모크부터 돈다. 생성 → 구매 → 판정 → 정리 한 바퀴가 도는지 확인하고 본측정에 들어간다.
+
+```bash
+scripts/k6/prod-run.sh --smoke
+```
+
+`--smoke` 는 `--vus "10" --stock 3` 과 같다. 확인됐으면 본측정.
+
+```bash
+scripts/k6/prod-run.sh
+```
+
+기본 단계는 `--vus "50 200 500 1000"`, 단계별 재고는 `--stock 100`, 단계 사이 쿨다운은 `--cooldown 60`. 필요하면 옵션으로 바꾼다(`--vus`, `--stock`, `--base-url`, `--out`, `--cooldown`, `--no-monitor`, 자세한 건 `--help`).
+
+결과는 `--out`(기본 `scripts/k6/results/prod-<YYYYMMDD-HHmmss>`) 밑에 남는다.
+
+- `run.log` — 단계별 진행 로그.
+- `summary.tsv` — 단계별 한 줄 요약(exit_code, status, p50/p95/p99, `http_req_waiting` p95, 총 요청 수, 실패율, rps, 성공/품절/서버에러 건수).
+- `baseline-before.txt` / `baseline-after.txt` — 측정 전후 로컬 curl RTT.
+- `drop-ids.txt` — 단계마다 생성된 dropId 누적(정리 시 사용).
+- `vu-NNN/` (단계별 디렉토리):
+  - `k6-stdout.log` — k6 실행 전체 출력.
+  - `exit-code.txt` — k6 종료 코드.
+  - `limited-vu-NNN-<timestamp>.json` — k6 JSON 요약(`limited-purchase.js` 의 `handleSummary`).
+  - `resources.csv` — `monitor-remote.sh` 가 수집한 EC2 자원 시계열.
+  - `pre-check.txt` / `post-check.txt` — `monitor-remote.sh` snapshot/stop 결과(컨테이너 상태, Nginx 경고, Redis 통계, dmesg, 백엔드 에러 로그).
+  - `verify.txt` — `verify-oversell.sh` 판정 결과.
+
+### 판정
+
+기존 [판정 기준](#판정-기준) 절의 3종(성공 201 수 == 재고, `limited_purchase` 행 수 == 재고, `stock.quantity` == 0)에 Redis `limited:buyers` 카운트를 더한 4종을 `verify-oversell.sh` 가 자동으로 낸다. exit code:
+
+| exit code | 의미 |
+|---|---|
+| 0 | 4종 모두 PASS |
+| 1 | 하나 이상 FAIL |
+| 2 | 대상 드롭 없음 또는 원격 조회 실패 |
+| 3 | 최초 구매로부터 10분 초과 — 만료 스케줄러가 이미 데이터를 지웠을 수 있어 판정 자체가 무효일 수 있음 |
+
+**임계값 실패(p95)는 사고가 아니라 결과다.** k6 exit 99 는 threshold 위반이고 `summary.tsv` 에 `THRESHOLD_FAIL` 로 남는다. 운영에서 p95 1초가 깨지면 그 사실을 그대로 기록한다. 반면 초과판매 판정은 어떤 단계에서도 타협하지 않는다.
+
+### 정리 (필수)
+
+dry-run 으로 먼저 확인하고, 문제없으면 `--apply`.
+
+```bash
+scripts/k6/cleanup-prod-loadtest.sh --drop-ids "<drop-ids.txt 내용>"
+scripts/k6/cleanup-prod-loadtest.sh --drop-ids "<drop-ids.txt 내용>" --apply
+```
+
+`prod-run.sh` 가 종료 시 `drop-ids.txt` 를 바탕으로 위 두 명령을 그대로 출력해준다.
+
+안전장치:
+
+- `MEMBER_EMAIL_PREFIX`/`PRODUCT_TITLE_PREFIX` 는 4자 미만이거나 와일드카드(`%`, `_`)만으로 이루어지면 거부한다(전체 테이블 스캔 방지).
+- 대상 회원 수가 `MAX_MEMBERS`(기본 2000)를 넘으면 거부한다.
+- 삭제 대상에 `ADMIN` role 이 하나라도 섞여 있으면 거부한다.
+- 전체 삭제가 트랜잭션 하나로 묶여 있다(부분 삭제로 끝나지 않는다).
+- 삭제 후 같은 접두사로 재조회해 0건인지 사후 검증한다.
+
+지우는 순서는 자식 → 부모(한정반 통계/구매 → 한정반 → 재고 이력 → 주문 관련 → 재고 → 상품 부속 → 회원 부속 → 상품/앨범 → 회원), 마지막에 Redis 의 `limited:stock:*`/`limited:buyers:*`/`limited:attempts:*`/`refresh:*` 키를 수집한 id 기준으로만 `DEL` 한다(`KEYS` 스캔 없음).
+
+`sales_daily`/`sales_daily_product` 는 손대지 않는다. 집계 소스가 `payment.approved_at` 인데, 한정반 부하테스트 주문은 PENDING 상태라 애초에 payment 행이 생기지 않아 집계에 잡히지 않는다.
+
+### 서비스가 죽었을 때
+
+`prod-run.sh` 는 헬스체크가 실패하면 자동으로 재기동하지 않고 그 자리에서 멈춘다 — 죽은 지점이 결과이기 때문이다. 복구는 수동으로 한다.
+
+```bash
+ssh -i ~/.ssh/groove-key.pem ubuntu@52.78.95.139 'cd /opt/groove && docker compose -f docker-compose.prod.yml up -d'
+```
+
+원인은 `post-check.txt` 로 가른다.
+
+- 컨테이너 `OOMKilled=true` 또는 `RestartCount` 증가 — 메모리 부족으로 죽었다는 뜻.
+- Nginx `worker_connections are not enough` 경고 건수 — Nginx 슬롯 고갈.
+- access.log 5xx 증가분 — 애플리케이션 레벨 실패.
+- `resources.csv` 의 `cpu_steal_pct`(CPU 스틸) / `swap_used_mb`(스왑 사용량) 추이 — t3.micro 크레딧 고갈이나 메모리 압박 여부.
+
+### 이번 범위 밖
+
+운영에서 Redis ON/OFF 비교는 하지 않는다. compose 수정 + 재기동 2회 + 원복 누락 리스크에 비해 얻는 게 없다. 로컬에서 ON≈OFF 를 이미 확인했고 `results/limited-20260904.md` 에 있다.
 
 ## 집계/배치 간섭 시나리오 (admin-dashboard.js, batch-interference.js)
 

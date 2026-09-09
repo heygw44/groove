@@ -78,7 +78,7 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 
 이 엔드포인트의 p95 목표는 1초다. 상품 목록 API의 300ms(NFR-03)와는 별개 기준으로, 동시 경합이 훨씬 크고 쓰기 트랜잭션이 포함되기 때문이다.
 
-측정 조건
+측정 조건 (로컬)
 
 | 항목 | 값 |
 |---|---|
@@ -88,7 +88,7 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 | 부하 | 1000 VU × 1회, 오픈 직후 일제 요청. 드롭 재고 100, 1인 1매 |
 | 워밍업 | 같은 규모 1회 후 2회 측정 |
 
-결과 (Redis 선점 ON, 2회 중 느린 쪽)
+결과 (로컬, Redis 선점 ON, 2회 중 느린 쪽)
 
 | 지표 | 값 |
 |---|---|
@@ -111,7 +111,32 @@ Redis 선점 ON vs DB 락만 (`LIMITED_REDIS_ENABLED=false`)
 | p99 | 880 ~ 1,000ms | 759 ~ 885ms |
 | 초과 판매 | 0건 | 0건 |
 
-Redis를 꺼도 초과 판매가 없는 것은 DB 제약이 최종 방어라는 설계 그대로다. 이 규모에서는 응답 시간도 두 모드가 같은 수준인데, 실패 요청이 행 락에 줄을 서더라도 락 점유가 짧아서다. Redis 단계의 효과는 DB에 들어가는 트랜잭션 수(900건 차단)이고, 꼬리 지연은 성공 100건이 드롭 행 락에서 직렬화되는 시간(건당 5~8ms)이 만든다. 워밍업 없는 첫 실행은 p95 1.2~1.9초로, JIT 영향이다. 실행별 수치와 HikariCP 50 진단 결과는 [`scripts/k6/results/limited-20260904.md`](scripts/k6/results/limited-20260904.md)에 있다. EC2 t3.micro 측정은 배포 뒤 추가한다.
+Redis를 꺼도 초과 판매가 없는 것은 DB 제약이 최종 방어라는 설계 그대로다. 이 규모에서는 응답 시간도 두 모드가 같은 수준인데, 실패 요청이 행 락에 줄을 서더라도 락 점유가 짧아서다. Redis 단계의 효과는 DB에 들어가는 트랜잭션 수(900건 차단)이고, 꼬리 지연은 성공 100건이 드롭 행 락에서 직렬화되는 시간(건당 5~8ms)이 만든다. 워밍업 없는 첫 실행은 p95 1.2~1.9초로, JIT 영향이다. 실행별 수치와 HikariCP 50 진단 결과는 [`scripts/k6/results/limited-20260904.md`](scripts/k6/results/limited-20260904.md)에 있다. 위 표는 그 시점 수치이고, 이후 한정반 락에서 상품 조인을 걷어낸 뒤 같은 시나리오를 다시 잰 값은 [`limited-20260908.md`](scripts/k6/results/limited-20260908.md)에 있다(측정 머신 상태가 달라 절대값이 더 크다).
+
+### 운영 환경 측정 (EC2 t3.micro)
+
+위 수치는 앱·DB·Redis·k6가 한 머신에 있는 로컬 값이라, 코드가 초과 판매를 막는지는 증명해도 서비스가 얼마나 버티는지는 증명하지 못한다. 같은 시나리오를 운영 도메인(`https://groove-lp.duckdns.org`)에 대고 VU를 올려가며 다시 쟀다.
+
+| 항목 | 값 |
+|---|---|
+| 서버 | EC2 t3.micro (2 vCPU / 911MB), MySQL·Redis·JVM 한 대에 공존 |
+| 경로 | 로컬 → 인터넷 → Nginx(TLS 종료) → 백엔드. `/api/v1/health` TTFB 53ms(conn 17 + TLS 36)가 네트워크 바닥 |
+| 부하 | 오픈 직후 일제 요청, 1인 1매. 재고는 VU의 절반을 상한으로 둔다 |
+
+| VU | 재고 | p50 | p95 | p99 | 서버 대기 p95 | RPS | 성공 201 | 실패 | 초과 판매 |
+|---|---|---|---|---|---|---|---|---|---|
+| 50 | 25 | 500ms | 753ms | 794ms | 577ms | 16.2 | 25 | 0 | 0건 |
+| 200 | 100 | 1,106ms | 2,486ms | 2,694ms | 1,985ms | 31.3 | 100 | 0 | 0건 |
+| 500 | 100 | 10,604ms | 11,577ms | 11,862ms | 11,175ms | 35.0 | 100 | 0 | 0건 |
+| 1000 | 100 | 3,368ms | 4,479ms | 4,730ms | 4,054ms | 29.6 | 100 | 217 (21.7%) | 0건 |
+
+500 VU의 p95가 1000 VU보다 큰 것은 1000 VU에서 217건이 탈락해 살아남은 요청만 집계된 생존 편향이다. "1000이 더 빠르다"로 읽으면 안 된다.
+
+**한계 지점은 1000 VU이고, 먼저 무너진 것은 JVM이 아니라 Nginx다.** `768 worker_connections are not enough while connecting to upstream` 경고가 199건 찍혔고 구매 요청 경로를 그대로 지목한다. `worker_processes`가 2, `worker_connections`가 768인데 프록시 요청 한 건이 클라이언트와 업스트림 슬롯을 하나씩 쓰기 때문이다. 실패 217건은 Nginx가 낸 500 응답 78건과 access.log에 남지도 못한 연결 리셋 139건으로 정확히 나뉜다. 반대로 커널 TCP 큐(`ListenOverflows`, `ListenDrops`, `TCPBacklogDrop`)는 전부 0, 컨테이너는 `OOMKilled=false`에 재시작 0회, Redis `evicted_keys`도 0이었다.
+
+p95 1초 목표는 200 VU부터 깨진다. 다만 **네 단계 전부 초과 판매는 0건이다.** 1000 VU에서 21.7%가 실패하는 와중에도 `limited_purchase` 100행 = `stock.quantity` 0 = `sold_count` 100 = Redis `limited:buyers` 100이 정확히 맞았다. Redis 선점과 DB 제약의 이중 방어는 게이트웨이가 무너지는 부하에서도 유지된다.
+
+단계별 원자료, 자원 시계열, 그리고 폐기한 1차 측정(로컬 트래픽이 VPN 터널을 타고 있어 500 VU에서 요청이 서버에 도달조차 못 했다)의 전말은 [`scripts/k6/results/limited-prod-20260909.md`](scripts/k6/results/limited-prod-20260909.md)에 있다.
 
 ## 성능
 
