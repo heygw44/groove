@@ -13,6 +13,7 @@ BASE_URL="https://groove-lp.duckdns.org"
 OUT_DIR=""
 COOLDOWN=60
 NO_MONITOR=0
+ALLOW_TUNNEL=0
 MEMBER_EMAIL_PREFIX="${MEMBER_EMAIL_PREFIX:-k6lt-}"
 PRODUCT_TITLE_PREFIX="${PRODUCT_TITLE_PREFIX:-LIMITED-LOADTEST-}"
 # t3.micro 는 setup 의 BCrypt 동시성이 곧 부하다. 회원 준비 청크를 로컬 기본(20)보다 낮춘다.
@@ -28,6 +29,7 @@ usage() {
   --cooldown 60               단계 사이 대기 초 (기본 60)
   --smoke                     --vus "10" --stock 3 과 동등한 스모크 모드
   --no-monitor                원격 모니터링 생략
+  --allow-tunnel              대상 경로가 VPN 터널이어도 강행(기본은 거부)
 
 환경변수(필수): ADMIN_EMAIL, ADMIN_PASSWORD (운영 관리자 자격증명이라 기본값을 두지 않는다)
 환경변수(선택): MEMBER_EMAIL_PREFIX(기본 k6lt-), PRODUCT_TITLE_PREFIX(기본 LIMITED-LOADTEST-)
@@ -65,6 +67,10 @@ while [ $# -gt 0 ]; do
 			NO_MONITOR=1
 			shift
 			;;
+		--allow-tunnel)
+			ALLOW_TUNNEL=1
+			shift
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -88,6 +94,28 @@ if [ -z "${ADMIN_EMAIL:-}" ] || [ -z "${ADMIN_PASSWORD:-}" ]; then
 	echo "ADMIN_EMAIL, ADMIN_PASSWORD 환경변수가 필요하다 (운영 관리자 자격증명)." >&2
 	usage
 	exit 2
+fi
+
+# 대상 호스트로 가는 경로가 VPN/터널이면 거부한다. 실제로 500 VU 에서 터널이 먼저 무너져
+# 구매 요청이 서버에 도달하지도 못했고(서버 TCP 큐는 멀쩡했다) SSH 세션까지 같이 끊겼다.
+# 그 수치는 서비스 한계가 아니라 측정 장비 한계라 쓸 수 없다.
+check_route() {
+	command -v route > /dev/null 2>&1 || return 0
+	local host iface
+	host=$(printf '%s' "$BASE_URL" | sed -E 's#^[a-z]+://##; s#/.*##; s#:.*##')
+	iface=$(route -n get "$host" 2>/dev/null | awk '/interface:/ {print $2}')
+	case "$iface" in
+	utun*|ppp*|ipsec*|tun*)
+		echo "거부: ${host} 로 가는 경로가 터널 인터페이스(${iface})다." >&2
+		echo "      VPN 을 끄고 다시 실행해라. 터널이 클라이언트 병목이 되어 측정이 무의미해진다." >&2
+		echo "      그래도 강행하려면 --allow-tunnel 을 붙여라(결과에 그 사실을 반드시 남길 것)." >&2
+		exit 2
+		;;
+	esac
+}
+
+if [ "$ALLOW_TUNNEL" -eq 0 ]; then
+	check_route
 fi
 
 if [ -z "$OUT_DIR" ]; then
@@ -152,6 +180,7 @@ health_check_with_retry() {
 # summary.tsv 한 단계 요약을 채운다. 파싱 실패는 죽지 않고 빈 값으로 남긴다(방어적 파싱).
 append_summary_row() {
 	local vu="$1" status="$2" exit_code="$3" json_file="$4"
+	local row_stock="${stage_stock:-$STOCK}"
 	local p50="" p95="" p99="" waiting_p95="" req_total="" fail_rate="" rps=""
 	local success_201="" sold_out_409="" server_error=""
 
@@ -228,7 +257,7 @@ PYOUT
 	fi
 
 	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-		"$vu" "$STOCK" "$exit_code" "$status" "$p50" "$p95" "$p99" "$waiting_p95" \
+		"$vu" "$row_stock" "$exit_code" "$status" "$p50" "$p95" "$p99" "$waiting_p95" \
 		"$req_total" "$fail_rate" "$rps" "$success_201" "$sold_out_409" "$server_error" >> "$SUMMARY_TSV"
 }
 
@@ -257,6 +286,28 @@ print_final_summary() {
 	fi
 }
 
+# 대상까지의 경로가 VPN/터널 인터페이스를 타면 수백 VU 에서 터널이 먼저 무너져 서버가 아니라
+# 측정 장비를 재게 된다. 실제로 500 VU 에서 요청이 서버에 도달조차 못 한 적이 있다.
+check_tunnel_route() {
+	local host ip iface
+	host=$(echo "$BASE_URL" | sed -E 's#^https?://##; s#/.*##; s#:.*##')
+	ip=$(dig +short "$host" 2>/dev/null | tail -n1)
+	[ -z "$ip" ] && return 0
+	iface=$(route -n get "$ip" 2>/dev/null | awk '/interface:/ {print $2}')
+	case "$iface" in
+	utun*|ipsec*|ppp*|tun*)
+		log "경고: ${host} 로 가는 경로가 터널 인터페이스(${iface})를 탄다."
+		log "      수백 VU 에서 서버가 아니라 터널이 먼저 무너져 측정이 무의미해진다. VPN 을 끄고 다시 실행해라."
+		if [ "$ALLOW_TUNNEL" -eq 0 ]; then
+			log "      그래도 진행하려면 --allow-tunnel 을 붙여라."
+			exit 2
+		fi
+		;;
+	esac
+}
+
+check_tunnel_route
+
 log "=== prod-run 시작: base=${BASE_URL} stages=[${VU_STAGES}] stock=${STOCK} out=${OUT_DIR} ==="
 SERVICE_DOWN=0
 
@@ -267,7 +318,17 @@ for vu in $VU_STAGES; do
 	stage_dir="${OUT_DIR}/${stage_label}"
 	mkdir -p "$stage_dir"
 
-	log "--- 단계 시작: VU=${vu} STOCK=${STOCK} ---"
+	# 재고가 VU 보다 많으면 전원이 성공해도 재고가 남아 "성공 수 == 재고" 판정이 구조적으로 불가능하다.
+	# 경합을 최소 2:1 로 유지하기 위해 단계 재고를 VU 의 절반으로 상한한다.
+	stage_stock="$STOCK"
+	max_stock=$((vu / 2))
+	[ "$max_stock" -lt 1 ] && max_stock=1
+	if [ "$stage_stock" -gt "$max_stock" ]; then
+		stage_stock="$max_stock"
+		log "재고를 ${STOCK} → ${stage_stock} 로 낮춤 (VU=${vu} 대비 경합 2:1 유지)"
+	fi
+
+	log "--- 단계 시작: VU=${vu} STOCK=${stage_stock} ---"
 
 	if ! health_check_with_retry; then
 		log "사전 헬스체크 실패, 여기서 멈춤 (VU=${vu})"
@@ -289,7 +350,7 @@ for vu in $VU_STAGES; do
 
 	log "k6 실행 시작 (VU=${vu})"
 	set +e
-	BASE_URL="$BASE_URL" VUS="$vu" STOCK="$STOCK" RUN_LABEL="$stage_label" \
+	BASE_URL="$BASE_URL" VUS="$vu" STOCK="$stage_stock" RUN_LABEL="$stage_label" \
 		MEMBER_EMAIL_PREFIX="$MEMBER_EMAIL_PREFIX" PRODUCT_TITLE_PREFIX="$PRODUCT_TITLE_PREFIX" \
 		ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
 		SETUP_BATCH_SIZE="$SETUP_BATCH_SIZE" RESULT_DIR="$stage_dir" \
@@ -335,6 +396,21 @@ for vu in $VU_STAGES; do
 
 	if [ "$NO_MONITOR" -eq 0 ] && [ -x "$MONITOR_SCRIPT" ]; then
 		"$MONITOR_SCRIPT" stop "$stage_dir" >> "$RUN_LOG" 2>&1 || log "monitor-remote.sh stop 실패"
+	fi
+
+	# 모니터가 k6 종료보다 일찍 끊겼으면 정작 러시 구간의 자원 데이터가 없다.
+	csv="${stage_dir}/resources.csv"
+	if [ -f "$csv" ]; then
+		last_ms=$(grep -v '^#' "$csv" | tail -n1 | cut -d, -f1)
+		case "$last_ms" in
+		''|*[!0-9]*) log "경고: resources.csv 마지막 타임스탬프를 읽지 못했다" ;;
+		*)
+			gap=$(( $(date +%s) - last_ms / 1000 ))
+			if [ "$gap" -gt 20 ]; then
+				log "경고: 모니터가 k6 종료 ${gap}초 전에 끊겼다. 러시 구간 자원 데이터가 없을 수 있다(monitor.err.log 확인)"
+			fi
+			;;
+		esac
 	fi
 
 	if ! health_check_with_retry; then
