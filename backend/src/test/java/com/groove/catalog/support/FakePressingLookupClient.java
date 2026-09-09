@@ -29,7 +29,12 @@ public class FakePressingLookupClient implements PressingLookupClient {
 	}
 
 	public void addRelease(DiscogsReleaseResponse release) {
-		releases.put(release.id(), release);
+		addRelease(release.id(), release);
+	}
+
+	/** 병합(리다이렉트) 시나리오용. release.id() 가 requestedId 와 달라도 requestedId 로 조회되게 등록한다. */
+	public void addRelease(long requestedId, DiscogsReleaseResponse release) {
+		releases.put(requestedId, release);
 	}
 
 	public void markNotFound(long id) {
@@ -55,6 +60,11 @@ public class FakePressingLookupClient implements PressingLookupClient {
 
 	public int releaseCalls(long releaseId) {
 		return releaseCalls.getOrDefault(releaseId, 0);
+	}
+
+	/** 어떤 릴리즈가 뽑혔는지와 무관하게 회당 호출 예산을 지켰는지 재는 용도. */
+	public int totalReleaseCalls() {
+		return releaseCalls.values().stream().mapToInt(Integer::intValue).sum();
 	}
 
 	@Override

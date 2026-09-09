@@ -52,6 +52,9 @@ export interface ProductSummary {
   country?: string;
   pressingYear?: number;
   editionType: EditionType;
+  albumId: number;
+  /** 같은 앨범의 다른 프레싱 수. 목록 축약으로 대표 프레싱만 보일 때 카드에 노출한다. */
+  otherPressingCount: number;
 }
 
 export interface ProductDetail {

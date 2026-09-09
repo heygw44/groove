@@ -36,6 +36,9 @@ backend/bin/
 scripts/k6/results/*
 !scripts/k6/results/*.md
 
+# 운영 측정용 자격증명 (로컬 전용)
+scripts/k6/.env.prod
+
 # Claude
 .claude/
 

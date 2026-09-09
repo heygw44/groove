@@ -11,6 +11,8 @@ const item = (id: number, wishlisted = false): RecommendItem => ({
     price: 30000,
     status: 'ON_SALE',
     editionType: 'STANDARD',
+    albumId: id,
+    otherPressingCount: 0,
     wishlisted,
   },
   reasons: ['SAME_GENRE'],

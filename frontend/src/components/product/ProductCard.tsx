@@ -7,6 +7,7 @@ import { WishButton } from '@/components/product/WishButton';
 import { PRODUCT_STATUS_META } from '@/constants/product';
 import type { ProductSummary } from '@/types/product';
 import { formatPrice } from '@/utils/formatPrice';
+import { buildOtherPressingLabel, buildPressingMetaLine } from '@/utils/pressing';
 
 interface ProductCardProps {
   product: ProductSummary;
@@ -72,6 +73,12 @@ export function ProductCard({ product, children }: ProductCardProps) {
         {product.title}
       </Link>
       <p className="mt-0.5 text-xs text-content-muted">{product.artistName}</p>
+      <p className="mt-0.5 text-xs text-content-muted">{buildPressingMetaLine(product)}</p>
+      {product.otherPressingCount > 0 && (
+        <p className="mt-0.5 text-xs text-content-muted">
+          {buildOtherPressingLabel(product.otherPressingCount)}
+        </p>
+      )}
       <p className="mt-1 text-sm font-bold">{formatPrice(product.price)}</p>
       <div className="mt-auto">{children}</div>
     </div>

@@ -19,7 +19,9 @@
 			</choose> AS wishlisted,
 			p.country AS country,
 			p.pressing_year AS pressing_year,
-			p.edition_type AS edition_type
+			p.edition_type AS edition_type,
+			p.album_id AS album_id,
+			0 AS other_pressing_count
 		FROM product p
 		JOIN artist a ON a.id = p.artist_id
 		LEFT JOIN label l ON l.id = p.label_id

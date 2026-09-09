@@ -1,5 +1,8 @@
 package com.groove.catalog.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +34,7 @@ public class CatalogImportRegistrar {
 	private final GenreRepository genreRepository;
 	private final ProductRepository productRepository;
 	private final StockService stockService;
+	private final Clock clock;
 
 	@Transactional
 	public CatalogImportResult register(CatalogImportItem item) {
@@ -38,9 +42,10 @@ public class CatalogImportRegistrar {
 		Label label = resolveLabel(item.labelName(), item.country());
 		Album album = resolveAlbum(item, artist);
 
+		// 방금 API 에서 받아온 데이터이므로 적재 시각이 곧 동기화 시각이다.
 		Product product = Product.createImported(album, item.title(), artist, label, item.country(),
 				item.pressingYear(), item.catalogNo(), item.barcode(), item.editionType(), item.price(),
-				item.discogsReleaseId());
+				item.discogsReleaseId(), LocalDateTime.now(clock));
 		if (item.genreNames() != null) {
 			item.genreNames().forEach(genreName -> genreRepository.findByName(genreName)
 					.ifPresent(product::addGenre));

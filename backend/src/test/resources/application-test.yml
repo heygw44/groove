@@ -46,6 +46,15 @@ file:
 groove:
   recommend:
     feature-cache-ttl: 0s
+  catalog:
+    freshness:
+      ttl: 6h
+    resync:
+      interval: 5m
+      # 스케줄러는 테스트에서 자동 실행되지 않고 메서드를 직접 호출하므로, 예산 상한 검증이 결정적이도록 작게 둔다.
+      max-calls-per-run: 3
+      sweep-cron: "0 15 2 * * *"
+      view-window: 7d
 
 logging:
   level:

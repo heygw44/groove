@@ -21,6 +21,8 @@
 			<arg column="country" javaType="java.lang.String"/>
 			<arg column="pressing_year" javaType="java.lang.Integer"/>
 			<arg column="edition_type" javaType="com.groove.product.entity.EditionType"/>
+			<arg column="album_id" javaType="java.lang.Long"/>
+			<arg column="other_pressing_count" javaType="_int"/>
 		</constructor>
 	</resultMap>
 
@@ -47,7 +49,53 @@
 		p.review_count AS review_count,
 		p.country AS country,
 		p.pressing_year AS pressing_year,
-		p.edition_type AS edition_type
+		p.edition_type AS edition_type,
+		p.album_id AS album_id
+	</sql>
+
+	<!-- searchProducts 파생 테이블 전용: 썸네일/wishlisted 는 축약 전 전체 후보에 평가되는 것을 피하려고 바깥 SELECT 로 뺀다. -->
+	<sql id="searchInnerColumns">
+		p.id, p.title, a.name AS artist_name, l.name AS label_name, p.price,
+		p.color_variant, p.pressing_info, p.status,
+		p.avg_rating AS average_rating,
+		p.review_count AS review_count,
+		p.country AS country,
+		p.pressing_year AS pressing_year,
+		p.edition_type AS edition_type,
+		p.album_id AS album_id,
+		p.created_at AS created_at,
+		p.sold_quantity AS sold_quantity
+	</sql>
+
+	<!-- 대표 프레싱 선정·파생 테이블 내부 정렬용. 판매 가능 여부를 선두에 둬 품절 최저가가 대표가 되지 않게 한다. -->
+	<sql id="innerSortKey">
+		<choose>
+			<when test="sort.name() == 'PRICE_ASC'">p.price ASC, p.id DESC</when>
+			<when test="sort.name() == 'PRICE_DESC'">p.price DESC, p.id DESC</when>
+			<when test="sort.name() == 'RATING'">p.avg_rating DESC, p.review_count DESC, p.created_at DESC, p.id DESC</when>
+			<when test="sort.name() == 'POPULAR'">p.sold_quantity DESC, p.review_count DESC, p.created_at DESC, p.id DESC</when>
+			<otherwise>p.created_at DESC, p.id DESC</otherwise>
+		</choose>
+	</sql>
+
+	<!-- 축약 후 최종 목록 정렬. 품절 여부는 넣지 않는다 - 넣으면 "품절이 목록 끝으로 밀리는" 별개의 정책 변경이 된다. -->
+	<sql id="outerSortKey">
+		<choose>
+			<when test="sort.name() == 'PRICE_ASC'">t.price ASC, t.id DESC</when>
+			<when test="sort.name() == 'PRICE_DESC'">t.price DESC, t.id DESC</when>
+			<when test="sort.name() == 'RATING'">t.average_rating DESC, t.review_count DESC, t.created_at DESC, t.id DESC</when>
+			<when test="sort.name() == 'POPULAR'">t.sold_quantity DESC, t.review_count DESC, t.created_at DESC, t.id DESC</when>
+			<otherwise>t.created_at DESC, t.id DESC</otherwise>
+		</choose>
+	</sql>
+
+	<!-- albumId 필터가 걸리면 "이 앨범의 프레싱을 전부 보여달라"는 요청이라 축약을 끈다.
+		 파티션 키를 p.id 로 바꾸면 행마다 자기 자신만의 파티션이 되어 rn 은 항상 1, 다른 프레싱 수는 0 이 된다. -->
+	<sql id="dedupPartitionKey">
+		<choose>
+			<when test="albumId != null">p.id</when>
+			<otherwise>p.album_id</otherwise>
+		</choose>
 	</sql>
 
 	<sql id="searchWhere">
@@ -107,38 +155,46 @@
 	<select id="searchProducts" parameterType="com.groove.product.dto.ProductSearchCondition"
 			resultMap="productSummaryMap">
 		SELECT
-			<include refid="summaryColumns"/>,
+			t.id, t.title, t.artist_name, t.label_name, t.price,
+			t.color_variant, t.pressing_info, t.status,
+			(SELECT MIN(i.image_url) FROM product_image i WHERE i.product_id = t.id AND i.sort_order = 0) AS thumbnail_url,
+			t.average_rating,
+			t.review_count,
 			<!-- 비로그인(memberId null)은 NULL 이라 응답에서 키가 생략된다. -->
 			<choose>
 				<when test="memberId != null">
-					EXISTS (SELECT 1 FROM wishlist w WHERE w.product_id = p.id AND w.member_id = #{memberId})
+					EXISTS (SELECT 1 FROM wishlist w WHERE w.product_id = t.id AND w.member_id = #{memberId})
 				</when>
 				<otherwise>NULL</otherwise>
-			</choose> AS wishlisted
-		<include refid="searchFrom"/>
-		<include refid="searchWhere"/>
-		<choose>
-			<when test="sort.name() == 'PRICE_ASC'">
-				ORDER BY p.price ASC, p.id DESC
-			</when>
-			<when test="sort.name() == 'PRICE_DESC'">
-				ORDER BY p.price DESC, p.id DESC
-			</when>
-			<when test="sort.name() == 'RATING'">
-				ORDER BY p.avg_rating DESC, p.review_count DESC, p.created_at DESC, p.id DESC
-			</when>
-			<when test="sort.name() == 'POPULAR'">
-				ORDER BY p.sold_quantity DESC, p.review_count DESC, p.created_at DESC, p.id DESC
-			</when>
-			<otherwise>
-				ORDER BY p.created_at DESC, p.id DESC
-			</otherwise>
-		</choose>
+			</choose> AS wishlisted,
+			t.country, t.pressing_year, t.edition_type, t.album_id,
+			t.album_match_count - 1 AS other_pressing_count
+		FROM (
+			SELECT
+				<include refid="searchInnerColumns"/>,
+				ROW_NUMBER() OVER (
+					PARTITION BY <include refid="dedupPartitionKey"/>
+					ORDER BY (p.status = 'SOLD_OUT'), <include refid="innerSortKey"/>
+				) AS rn,
+				COUNT(*) OVER (PARTITION BY <include refid="dedupPartitionKey"/>) AS album_match_count
+			<include refid="searchFrom"/>
+			<include refid="searchWhere"/>
+		) t
+		WHERE t.rn = 1
+		ORDER BY <include refid="outerSortKey"/>
 		LIMIT #{size} OFFSET #{offset}
 	</select>
 
 	<select id="countProducts" parameterType="com.groove.product.dto.ProductSearchCondition" resultType="long">
-		SELECT COUNT(*)
+		<choose>
+			<!-- albumId 필터는 축약을 끄므로 앨범 1건이 아니라 필터를 통과한 프레싱 전체를 센다. -->
+			<when test="albumId != null">
+				SELECT COUNT(*)
+			</when>
+			<otherwise>
+				SELECT COUNT(DISTINCT p.album_id)
+			</otherwise>
+		</choose>
 		<include refid="searchFrom"/>
 		<include refid="searchWhere"/>
 	</select>
@@ -146,7 +202,8 @@
 	<select id="findAlbumPressings" resultMap="productSummaryMap">
 		SELECT
 			<include refid="summaryColumns"/>,
-			NULL AS wishlisted
+			NULL AS wishlisted,
+			0 AS other_pressing_count
 		<include refid="searchFrom"/>
 		WHERE p.album_id = #{albumId}
 		AND p.status &lt;&gt; 'HIDDEN'
@@ -154,19 +211,31 @@
 	</select>
 
 	<select id="suggestProducts" resultMap="suggestionItemMap">
-		SELECT p.id, p.title, a.name AS artistName,
+		SELECT t.id, t.title, t.artistName,
 			(SELECT MIN(pi.image_url) FROM product_image pi
-				WHERE pi.product_id = p.id AND pi.sort_order = 0) AS thumbnailUrl
-		FROM product p
-		JOIN artist a ON a.id = p.artist_id
-		WHERE p.status &lt;&gt; 'HIDDEN'
-		AND (p.title LIKE CONCAT('%', #{keyword}, '%')
-			OR a.name LIKE CONCAT('%', #{keyword}, '%'))
+				WHERE pi.product_id = t.id AND pi.sort_order = 0) AS thumbnailUrl
+		FROM (
+			SELECT p.id, p.title, a.name AS artistName, p.review_count AS review_count,
+				ROW_NUMBER() OVER (
+					PARTITION BY p.album_id
+					ORDER BY (p.status = 'SOLD_OUT'),
+						CASE WHEN p.title LIKE CONCAT(#{keyword}, '%') THEN 0
+							WHEN a.name LIKE CONCAT(#{keyword}, '%') THEN 1
+							ELSE 2 END,
+						p.review_count DESC, p.id DESC
+				) AS rn
+			FROM product p
+			JOIN artist a ON a.id = p.artist_id
+			WHERE p.status &lt;&gt; 'HIDDEN'
+			AND (p.title LIKE CONCAT('%', #{keyword}, '%')
+				OR a.name LIKE CONCAT('%', #{keyword}, '%'))
+		) t
+		WHERE t.rn = 1
 		ORDER BY
-			CASE WHEN p.title LIKE CONCAT(#{keyword}, '%') THEN 0
-				WHEN a.name LIKE CONCAT(#{keyword}, '%') THEN 1
+			CASE WHEN t.title LIKE CONCAT(#{keyword}, '%') THEN 0
+				WHEN t.artistName LIKE CONCAT(#{keyword}, '%') THEN 1
 				ELSE 2 END,
-			p.review_count DESC, p.id DESC
+			t.review_count DESC, t.id DESC
 		LIMIT #{limit}
 	</select>
 

@@ -77,13 +77,14 @@ class ProductControllerTest {
 	private ProductSummaryResponse sampleSummary() {
 		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
 				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
-				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, null, "US", 1959, EditionType.STANDARD);
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, null, "US", 1959, EditionType.STANDARD, 1L, 0);
 	}
 
 	private ProductSummaryResponse sampleSummary(Boolean wishlisted) {
 		return new ProductSummaryResponse(1L, "Kind of Blue", "Miles Davis", "Columbia", new BigDecimal("45000.00"),
 				"Standard Black", "180g Heavyweight Vinyl", ProductStatus.ON_SALE,
-				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, wishlisted, "US", 1959, EditionType.STANDARD);
+				"https://cdn.groove.com/kind-of-blue.jpg", null, 0, wishlisted, "US", 1959, EditionType.STANDARD, 1L,
+				0);
 	}
 
 	@Nested
@@ -290,7 +291,7 @@ class ProductControllerTest {
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
 					null, "180g", "Standard Black",
 					new ProductDetailResponse.PressingSummary("US", 1959, "CS 8163", "888880123456",
-							EditionType.STANDARD, null),
+							EditionType.STANDARD, null, false),
 					new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
 					10, null, 0L, null, null, null);
@@ -326,7 +327,7 @@ class ProductControllerTest {
 					List.of(new ProductDetailResponse.GenreSummary(3L, "Jazz")),
 					null, "180g", "Standard Black",
 					new ProductDetailResponse.PressingSummary("US", 1959, "CS 8163", "888880123456",
-							EditionType.STANDARD, null),
+							EditionType.STANDARD, null, false),
 					new BigDecimal("45000.00"), ProductStatus.ON_SALE, "설명",
 					List.of(new ProductDetailResponse.ImageSummary("https://cdn.groove.com/0.jpg", 0)),
 					10, null, 0L, true, true, null);

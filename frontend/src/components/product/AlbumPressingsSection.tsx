@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 
 import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
 import { useAlbum } from '@/hooks/queries/useAlbum';
-import { buildPressingMetaLine } from '@/utils/pressing';
 
 interface AlbumPressingsSectionProps {
   albumId: number;
@@ -76,9 +75,7 @@ export function AlbumPressingsSection({
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
           {pressings.map((product) => (
-            <ProductCard key={product.id} product={product}>
-              <p className="mt-1 text-xs text-content-muted">{buildPressingMetaLine(product)}</p>
-            </ProductCard>
+            <ProductCard key={product.id} product={product} />
           ))}
         </div>
       )}

@@ -8,7 +8,6 @@ import { Spinner } from '@/components/common/Spinner';
 import { AlbumWatchButton } from '@/components/notification/AlbumWatchButton';
 import { ProductCard } from '@/components/product/ProductCard';
 import { useAlbum } from '@/hooks/queries/useAlbum';
-import { buildPressingMetaLine } from '@/utils/pressing';
 
 const ID_PATTERN = /^\d+$/;
 
@@ -90,9 +89,7 @@ export default function AlbumDetailPage() {
         <h2 className="text-lg font-bold">에디션</h2>
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
           {album.pressings.map((product) => (
-            <ProductCard key={product.id} product={product}>
-              <p className="mt-1 text-xs text-content-muted">{buildPressingMetaLine(product)}</p>
-            </ProductCard>
+            <ProductCard key={product.id} product={product} />
           ))}
         </div>
       </section>

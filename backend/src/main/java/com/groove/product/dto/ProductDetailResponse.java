@@ -37,15 +37,16 @@ public record ProductDetailResponse(
 
 	public static ProductDetailResponse from(Product product, List<ProductImage> images, int stockQuantity,
 		Boolean wishlisted, Boolean alertEnabled, LimitedDropSummary limitedDrop, int pressingCount,
-		Boolean watched) {
+		Boolean watched, boolean stale) {
 		LabelSummary label = product.getLabel() == null
 				? null
 				: new LabelSummary(product.getLabel().getId(), product.getLabel().getName());
 		AlbumSummary album = new AlbumSummary(product.getAlbum().getId(), product.getAlbum().getTitle(),
 				product.getAlbum().getOriginalReleaseYear(), pressingCount, watched);
-		PressingSummary pressing = new PressingSummary(product.getCountry(), product.getPressingYear(),
-				product.getCatalogNo(), product.getBarcode(), product.getEditionType(),
-				product.getDiscogsReleaseId());
+		PressingSummary pressing = stale
+				? new PressingSummary(null, null, null, null, null, null, true)
+				: new PressingSummary(product.getCountry(), product.getPressingYear(), product.getCatalogNo(),
+						product.getBarcode(), product.getEditionType(), product.getDiscogsReleaseId(), false);
 		List<GenreSummary> genres = product.getProductGenres().stream()
 				.map(ProductGenre::getGenre)
 				.map(genre -> new GenreSummary(genre.getId(), genre.getName()))
@@ -82,7 +83,7 @@ public record ProductDetailResponse(
 	}
 
 	public record PressingSummary(String country, Integer pressingYear, String catalogNo, String barcode,
-			EditionType editionType, Long discogsReleaseId) {
+			EditionType editionType, Long discogsReleaseId, boolean stale) {
 	}
 
 	public record ArtistSummary(Long id, String name) {

@@ -70,7 +70,7 @@ class AlbumServiceTest {
 			Album album = AlbumFixture.withId(AlbumFixture.create(artist, "Kind Of Blue"), 5L);
 			ProductSummaryResponse pressing = new ProductSummaryResponse(10L, "Kind of Blue", "Miles Davis",
 					"Columbia", new BigDecimal("42000"), "Standard Black", "180g", ProductStatus.ON_SALE, null, null,
-					0, null, "US", 1959, EditionType.ORIGINAL);
+					0, null, "US", 1959, EditionType.ORIGINAL, 5L, 0);
 			given(albumRepository.findWithArtistById(5L)).willReturn(Optional.of(album));
 			given(productSearchMapper.findAlbumPressings(5L)).willReturn(List.of(pressing));
 

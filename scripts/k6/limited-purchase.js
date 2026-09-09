@@ -3,7 +3,10 @@
 // 실행: k6 run scripts/k6/limited-purchase.js
 // 환경변수: BASE_URL(기본 http://localhost:8080), VUS(기본 1000), STOCK(기본 100),
 //           ADMIN_EMAIL/ADMIN_PASSWORD(기본 admin@groove.com/admin1234!),
-//           OPEN_DELAY_SEC(기본 8), MEMBER_PASSWORD(기본 load1234!), RESULT_DIR(기본 scripts/k6/results)
+//           OPEN_DELAY_SEC(기본 8), MEMBER_PASSWORD(기본 load1234!), RESULT_DIR(기본 scripts/k6/results),
+//           MEMBER_EMAIL_PREFIX(기본 lt-), PRODUCT_TITLE_PREFIX(기본 LIMITED-LOADTEST-),
+//           RUN_LABEL(기본 빈 문자열), SETUP_BATCH_SIZE(기본 20),
+//           P95_MS(기본 1000), CHECK_RATE(기본 0.99)
 // local 프로파일 시드(관리자 계정)가 필요하다. 상품/한정반/회원은 setup() 이 직접 만든다.
 // 결과: 실행이 끝나면 RESULT_DIR 밑에 실행 시각 기준 JSON 요약 파일을 남긴다.
 
@@ -20,8 +23,18 @@ const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || 'admin1234!';
 const OPEN_DELAY_SEC = Number(__ENV.OPEN_DELAY_SEC || 8);
 const MEMBER_PASSWORD = __ENV.MEMBER_PASSWORD || 'load1234!';
 const RESULT_DIR = __ENV.RESULT_DIR || 'scripts/k6/results';
+const MEMBER_EMAIL_PREFIX = __ENV.MEMBER_EMAIL_PREFIX || 'lt-';
+const PRODUCT_TITLE_PREFIX = __ENV.PRODUCT_TITLE_PREFIX || 'LIMITED-LOADTEST-';
+const RUN_LABEL = __ENV.RUN_LABEL || '';
+const SETUP_BATCH_SIZE = Number(__ENV.SETUP_BATCH_SIZE || 20);
+const P95_MS = Number(__ENV.P95_MS || 1000);
+const CHECK_RATE = Number(__ENV.CHECK_RATE || 0.99);
 
-const BATCH_SIZE = 20;
+// 닉네임 검증(2~20자)에 걸리지 않도록 접두사에서 영숫자만 남긴다.
+const MEMBER_NICKNAME_PREFIX = MEMBER_EMAIL_PREFIX.replace(/[^a-zA-Z0-9]/g, '');
+
+// 운영은 t3.micro 라 회원 준비 단계의 BCrypt 동시성(SETUP_BATCH_SIZE)을 요청 동시성(options.batch)과 분리한다.
+const BATCH_SIZE = Math.max(20, SETUP_BATCH_SIZE);
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 // setup 은 signup 중복(409), 로그인/생성은 2xx 를 기대한다. 구매는 409(품절/중복)도 정상 응답이라
@@ -32,6 +45,7 @@ const purchaseSuccess = new Counter('purchase_success');
 const purchaseSoldOut = new Counter('purchase_sold_out');
 const purchaseAlready = new Counter('purchase_already');
 const purchaseUnexpected = new Counter('purchase_unexpected');
+const purchaseServerError = new Counter('purchase_server_error');
 
 export const options = {
   setupTimeout: '10m',
@@ -47,8 +61,8 @@ export const options = {
     },
   },
   thresholds: {
-    'http_req_duration{name:purchase}': ['p(95)<1000'],
-    checks: ['rate>0.99'],
+    'http_req_duration{name:purchase}': [`p(95)<${P95_MS}`],
+    checks: [`rate>${CHECK_RATE}`],
     purchase_success: [`count>=${STOCK}`, `count<=${STOCK}`],
     purchase_unexpected: ['count<1'],
   },
@@ -116,12 +130,12 @@ function firstArtistId() {
 
 function createProduct(adminToken, artistId) {
   const res = http.post(`${BASE_URL}/api/v1/admin/products`, JSON.stringify({
-    title: `LIMITED-LOADTEST-${Date.now()}`,
+    title: `${PRODUCT_TITLE_PREFIX}${Date.now()}`,
     artistId,
     price: 45000,
     initialStock: STOCK,
     // 상품은 앨범에 속해야 한다. 부하 테스트용 상품은 매번 새 앨범으로 만든다.
-    newAlbum: { title: `LIMITED-LOADTEST-ALBUM-${Date.now()}` },
+    newAlbum: { title: `${PRODUCT_TITLE_PREFIX}ALBUM-${Date.now()}` },
   }), { headers: authHeader(adminToken), tags: { name: 'setup_product_create' } });
 
   if (res.status !== 201) {
@@ -186,15 +200,15 @@ function rescheduleAndForceOpen(adminToken, dropId) {
 
 function signupMember(index) {
   return ['POST', `${BASE_URL}/api/v1/auth/signup`, JSON.stringify({
-    email: `lt-${index}@groove.com`,
+    email: `${MEMBER_EMAIL_PREFIX}${index}@groove.com`,
     password: MEMBER_PASSWORD,
-    nickname: `lt${index}`,
+    nickname: `${MEMBER_NICKNAME_PREFIX}${index}`,
   }), { headers: JSON_HEADERS, tags: { name: 'setup_signup' } }];
 }
 
 function loginMember(index) {
   return ['POST', `${BASE_URL}/api/v1/auth/login`, JSON.stringify({
-    email: `lt-${index}@groove.com`,
+    email: `${MEMBER_EMAIL_PREFIX}${index}@groove.com`,
     password: MEMBER_PASSWORD,
   }), { headers: JSON_HEADERS, tags: { name: 'setup_login' } }];
 }
@@ -222,7 +236,7 @@ function createMembers() {
   }
 
   const users = [];
-  chunk(indexes, BATCH_SIZE).forEach((batch) => {
+  chunk(indexes, SETUP_BATCH_SIZE).forEach((batch) => {
     http.batch(batch.map(signupMember));
 
     const loginResponses = http.batch(batch.map(loginMember));
@@ -284,6 +298,7 @@ export function setup() {
     sleep(waitMs / 1000);
   }
 
+  console.log(`setup done: dropId=${dropId} productId=${productId}`);
   return { dropId, productId, stock: STOCK, users, adminToken };
 }
 
@@ -316,6 +331,12 @@ export default function (data) {
     return;
   }
 
+  // status 0 은 연결 실패/타임아웃. 5xx 와 함께 서버/인프라 문제로 따로 센다.
+  if (res.status === 0 || res.status >= 500) {
+    purchaseServerError.add(1);
+    return;
+  }
+
   purchaseUnexpected.add(1);
 }
 
@@ -325,7 +346,7 @@ export function teardown(data) {
   const content = listRes.json('data.content') || [];
   const drop = content.find((item) => item.id === data.dropId);
   const soldCount = drop ? drop.soldCount : undefined;
-  console.log(`teardown: dropId=${data.dropId} soldCount=${soldCount}`);
+  console.log(`teardown: dropId=${data.dropId} productId=${data.productId} soldCount=${soldCount}`);
 
   const detail = getDropDetail(data.dropId);
   console.log(`teardown: remainingQuantity=${detail.remainingQuantity}`);
@@ -344,6 +365,9 @@ function timestamp() {
 export function handleSummary(data) {
   const output = {};
   output['stdout'] = textSummary(data, { indent: ' ', enableColors: true });
-  output[`${RESULT_DIR}/limited-${timestamp()}.json`] = JSON.stringify(data, null, 2);
+  const fileName = RUN_LABEL
+    ? `limited-${RUN_LABEL}-${timestamp()}.json`
+    : `limited-${timestamp()}.json`;
+  output[`${RESULT_DIR}/${fileName}`] = JSON.stringify(data, null, 2);
   return output;
 }
