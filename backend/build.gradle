@@ -80,11 +80,11 @@ dependencies {
 }
 
 tasks.named('test') {
-    // precision/throughput/ablation 태그는 품질·성능 측정용이라 일반 빌드/CI 에서는 뺀다.
-    // ./gradlew precisionAt10 / discogsResyncThroughput / recommendAblation 으로 따로 돈다.
-    // ablation 을 빼먹으면 local+seed 컨텍스트가 하나 더 떠 캐시가 넘쳐 스위트 전체가 깨진다.
+    // precision/throughput/ablation/sweep 태그는 품질·성능 측정용이라 일반 빌드/CI 에서는 뺀다.
+    // ./gradlew precisionAt10 / discogsResyncThroughput / recommendAblation / recommendWeightSweep 으로 따로 돈다.
+    // 하나라도 빼먹으면 local+seed 컨텍스트가 하나 더 떠 캐시가 넘쳐 스위트 전체가 깨진다.
     useJUnitPlatform {
-        excludeTags 'precision', 'throughput', 'ablation'
+        excludeTags 'precision', 'throughput', 'ablation', 'sweep'
     }
     finalizedBy jacocoTestReport
 }
@@ -114,6 +114,22 @@ tasks.register('recommendAblation', Test) {
     testLogging {
         showStandardStreams = true
     }
+    outputs.upToDateWhen { false }
+}
+
+tasks.register('recommendWeightSweep', Test) {
+    group = 'verification'
+    description = '추천 가중치를 좌표상승으로 탐색하고 4중 과적합 방어(회원 CV·합성 코호트·널 테스트·보수적 채택)를 거쳐 리포트한다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'sweep'
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+    // 좌표상승이 (회원 × 후보) 벡터를 코호트마다 통째로 들고 있어 기본 힙으로는 부족하다.
+    maxHeapSize = '3g'
     outputs.upToDateWhen { false }
 }
 

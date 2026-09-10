@@ -361,10 +361,18 @@ public final class EvalMetrics {
 	 * randomSeeds 로 측정된 것이어야 한다.
 	 */
 	public static MeasurementStats pairedDelta(FoldedRun base, FoldedRun other) {
+		return MeasurementStats.of(pairedDeltaValues(base, other));
+	}
+
+	/**
+	 * {@link #pairedDelta} 와 같은 짝짓기 규칙으로 Δ 원본 값 목록을 낸다. 스윕처럼 여러 kind·코호트의 Δ 를
+	 * 하나로 풀링해 판정해야 할 때 {@link MeasurementStats} 로 뭉치기 전 원본이 필요해 따로 노출한다.
+	 */
+	public static List<Double> pairedDeltaValues(FoldedRun base, FoldedRun other) {
 		Map<List<Long>, Double> baseRecallBySeedFold = base.measurements().stream()
 				.collect(Collectors.toMap(measurement -> List.of(measurement.randomSeed(),
 						(long)measurement.foldIndex()), measurement -> measurement.summary().recallMicro()));
-		List<Double> deltas = other.measurements().stream()
+		return other.measurements().stream()
 				.map(measurement -> {
 					List<Long> key = List.of(measurement.randomSeed(), (long)measurement.foldIndex());
 					Double baseRecall = baseRecallBySeedFold.get(key);
@@ -375,6 +383,5 @@ public final class EvalMetrics {
 					return measurement.summary().recallMicro() - baseRecall;
 				})
 				.toList();
-		return MeasurementStats.of(deltas);
 	}
 }
