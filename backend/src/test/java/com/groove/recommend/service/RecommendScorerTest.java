@@ -16,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.groove.product.entity.ProductStatus;
 import com.groove.recommend.dto.RecommendReason;
 import com.groove.recommend.entity.Decade;
 import com.groove.recommend.service.RecommendScorer.ScoreResult;
@@ -31,7 +32,7 @@ class RecommendScorerTest {
 	}
 
 	private ProductFeature feature(Long id, Long artistId, Long labelId, Set<Long> genreIds, Decade decade) {
-		return new ProductFeature(id, id, artistId, labelId, genreIds, decade, 4.0, NOW, false);
+		return new ProductFeature(id, id, artistId, labelId, genreIds, decade, 4.0, NOW, 10, 0L, ProductStatus.ON_SALE);
 	}
 
 	@Nested

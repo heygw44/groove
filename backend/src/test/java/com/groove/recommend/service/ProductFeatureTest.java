@@ -27,7 +27,7 @@ class ProductFeatureTest {
 		@DisplayName("장르 CSV 를 id 집합으로, 발매 연도를 연대로 바꾼다")
 		void parsesGenreCsvAndDecade() {
 			// given
-			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, 20L, 1975, 4.5, CREATED_AT,
+			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, 20L, 1975, 4.5, 12, 34L, CREATED_AT,
 					ProductStatus.ON_SALE, "3,1,5");
 
 			// when
@@ -42,7 +42,24 @@ class ProductFeatureTest {
 			assertThat(feature.decade()).isEqualTo(Decade.D1970);
 			assertThat(feature.averageRating()).isEqualTo(4.5);
 			assertThat(feature.createdAt()).isEqualTo(CREATED_AT);
+			assertThat(feature.reviewCount()).isEqualTo(12);
+			assertThat(feature.soldQuantity()).isEqualTo(34L);
 			assertThat(feature.hidden()).isFalse();
+		}
+
+		@Test
+		@DisplayName("reviewCount·soldQuantity 가 null 이면 0으로 채운다")
+		void fillsNullReviewCountAndSoldQuantityWithZero() {
+			// given
+			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, 20L, 1975, null, null, null, CREATED_AT,
+					ProductStatus.ON_SALE, "3,1,5");
+
+			// when
+			ProductFeature feature = ProductFeature.from(row);
+
+			// then
+			assertThat(feature.reviewCount()).isZero();
+			assertThat(feature.soldQuantity()).isZero();
 		}
 
 		@ParameterizedTest
@@ -51,7 +68,7 @@ class ProductFeatureTest {
 		@DisplayName("장르 CSV 가 비어 있으면 빈 집합으로 만든다")
 		void returnsEmptyGenreIdsWhenCsvBlank(String genreIds) {
 			// given
-			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, null, null, null, CREATED_AT,
+			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, null, null, null, null, null, CREATED_AT,
 					ProductStatus.HIDDEN, genreIds);
 
 			// when

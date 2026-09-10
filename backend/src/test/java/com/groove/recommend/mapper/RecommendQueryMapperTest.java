@@ -356,6 +356,28 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
+		@DisplayName("review_count·sold_quantity 를 그대로 담는다")
+		void includesReviewCountAndSoldQuantity() {
+			// given
+			Album album = AlbumFixture.create(artist, "PF Review Sold");
+			em.persist(album);
+			Product product = Product.create(album, "PF Review Sold", artist, null, LocalDate.of(2023, 1, 1),
+					"180g", "Black", null, null, null, null, null, new BigDecimal("30000.00"), "설명");
+			ReflectionTestUtils.setField(product, "reviewCount", 7);
+			ReflectionTestUtils.setField(product, "soldQuantity", 42L);
+			em.persist(product);
+			em.flush();
+			em.clear();
+
+			// when
+			ProductFeatureRow row = findMyRow(product.getId());
+
+			// then
+			assertThat(row.reviewCount()).isEqualTo(7);
+			assertThat(row.soldQuantity()).isEqualTo(42L);
+		}
+
+		@Test
 		@DisplayName("장르가 없으면 genreIds 가 null 이다")
 		void genreIdsIsNullWhenProductHasNoGenre() {
 			// given
