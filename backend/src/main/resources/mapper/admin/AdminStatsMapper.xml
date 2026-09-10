@@ -120,6 +120,7 @@
 	<resultMap id="statsSummaryMap" type="com.groove.admin.dto.AdminStatsSummaryResponse">
 		<constructor>
 			<arg column="today_sales_amount" javaType="java.math.BigDecimal"/>
+			<arg column="today_cancel_amount" javaType="java.math.BigDecimal"/>
 			<arg column="today_order_count" javaType="_long"/>
 			<arg column="today_new_member_count" javaType="_long"/>
 			<arg column="pending_order_count" javaType="_long"/>
@@ -129,6 +130,7 @@
 	<select id="findSummary" resultMap="statsSummaryMap">
 		SELECT
 			COALESCE(t.sales_amount, 0) AS today_sales_amount,
+			COALESCE(c.cancel_amount, 0) AS today_cancel_amount,
 			COALESCE(t.order_count, 0) AS today_order_count,
 			(SELECT COUNT(*) FROM member m
 				WHERE m.created_at &gt;= #{todayStart} AND m.created_at &lt; #{tomorrowStart}) AS today_new_member_count,
@@ -139,7 +141,14 @@
 			FROM payment p
 			WHERE p.status IN ('DONE', 'CANCELED')
 			AND p.approved_at &gt;= #{todayStart} AND p.approved_at &lt; #{tomorrowStart}
-		) t
+		) t,
+		<!-- 승인일과 취소일이 다를 수 있어 취소는 취소일 기준으로 따로 센다. -->
+		(
+			SELECT SUM(p.amount) AS cancel_amount
+			FROM payment p
+			WHERE p.status = 'CANCELED'
+			AND p.canceled_at &gt;= #{todayStart} AND p.canceled_at &lt; #{tomorrowStart}
+		) c
 	</select>
 
 </mapper>
