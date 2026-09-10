@@ -2,6 +2,7 @@ package com.groove.global.init;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.atLeast;
@@ -13,6 +14,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -53,6 +55,8 @@ import com.groove.recommend.repository.MemberTasteDecadeRepository;
 import com.groove.recommend.repository.MemberTasteGenreRepository;
 import com.groove.recommend.repository.MemberTasteProfileRepository;
 import com.groove.recommend.repository.ProductViewLogRepository;
+import com.groove.review.entity.Review;
+import com.groove.review.repository.ReviewRepository;
 import com.groove.wishlist.entity.Wishlist;
 import com.groove.wishlist.repository.WishlistRepository;
 
@@ -96,6 +100,9 @@ class LocalSignalSeederTest {
 
 	@Mock
 	ProductViewLogRepository productViewLogRepository;
+
+	@Mock
+	ReviewRepository reviewRepository;
 
 	@Nested
 	@DisplayName("seed()")
@@ -247,6 +254,42 @@ class LocalSignalSeederTest {
 			assertThat(captor.getValue()).hasSize(LocalSignalSeeder.VIEW_LOG_COUNT);
 			assertThat(captor.getValue()).allSatisfy(log -> assertThat(log.getMember()).isSameAs(demo));
 		}
+
+		@Test
+		@DisplayName("리뷰 수는 상품마다 갈리고 0건인 상품도, 여럿 몰린 상품도 있다")
+		void seedsReviewsWithLongTailDistribution() {
+			// given
+			stubCatalog();
+			int productCount = catalog().size();
+
+			// when
+			newSeeder().seed(List.of());
+
+			// then
+			Map<Long, Long> countsByProduct = capturedReviews().stream()
+					.collect(Collectors.groupingBy(review -> review.getProduct().getId(), Collectors.counting()));
+			assertThat(countsByProduct.keySet())
+					.as("리뷰가 하나도 없는 상품이 있어야 한다")
+					.hasSizeLessThan(productCount);
+			assertThat(countsByProduct.values())
+					.as("리뷰어 2명 상한을 넘어 몰린 상품이 있어야 한다")
+					.anyMatch(count -> count > 2);
+			verify(productRepository, times(productCount)).refreshReviewStats(anyLong());
+		}
+
+		@Test
+		@DisplayName("고정 시드를 쓰므로 두 번 실행해도 상품별 리뷰 개수가 같다")
+		void producesSameReviewCountsOnEveryRun() {
+			// given
+			stubCatalog();
+
+			// when
+			List<Long> first = runAndCaptureReviewCountsPerProduct();
+			List<Long> second = runAndCaptureReviewCountsPerProduct();
+
+			// then
+			assertThat(first).isEqualTo(second);
+		}
 	}
 
 	private List<List<Wishlist>> capturedWishlists() {
@@ -268,6 +311,24 @@ class LocalSignalSeederTest {
 				.toList();
 		Mockito.reset(wishlistRepository);
 		return ids;
+	}
+
+	private List<Review> capturedReviews() {
+		ArgumentCaptor<List<Review>> captor = ArgumentCaptor.forClass(List.class);
+		verify(reviewRepository, times(1)).saveAll(captor.capture());
+		return captor.getValue();
+	}
+
+	private List<Long> runAndCaptureReviewCountsPerProduct() {
+		newSeeder().seed(List.of());
+		List<Long> counts = capturedReviews().stream()
+				.collect(Collectors.groupingBy(review -> review.getProduct().getId(), Collectors.counting()))
+				.values()
+				.stream()
+				.sorted()
+				.toList();
+		Mockito.reset(reviewRepository);
+		return counts;
 	}
 
 	private Set<Long> genreIdsOf(Product product) {
@@ -311,6 +372,7 @@ class LocalSignalSeederTest {
 	private LocalSignalSeeder newSeeder() {
 		return new LocalSignalSeeder(memberRepository, passwordEncoder, productRepository, wishlistRepository,
 				orderRepository, paymentRepository, memberTasteProfileRepository, memberTasteGenreRepository,
-				memberTasteArtistRepository, memberTasteDecadeRepository, productViewLogRepository);
+				memberTasteArtistRepository, memberTasteDecadeRepository, productViewLogRepository,
+				reviewRepository);
 	}
 }
