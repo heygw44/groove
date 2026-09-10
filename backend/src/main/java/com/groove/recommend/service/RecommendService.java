@@ -1,11 +1,8 @@
 package com.groove.recommend.service;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -48,16 +45,9 @@ public class RecommendService {
 	static final int RELATED_DEFAULT_SIZE = 8;
 	static final int RELATED_MAX_SIZE = 20;
 
-	private static final Comparator<RankedCandidate> RANKING_COMPARATOR = Comparator
-			.comparingDouble((RankedCandidate candidate) -> candidate.score().totalScore())
-			.reversed()
-			.thenComparing(candidate -> candidate.feature().averageRating(),
-					Comparator.nullsLast(Comparator.<Double>reverseOrder()))
-			.thenComparing(candidate -> candidate.feature().createdAt(), Comparator.reverseOrder())
-			.thenComparing(candidate -> candidate.feature().id(), Comparator.reverseOrder());
-
 	private final RecommendQueryMapper recommendQueryMapper;
 	private final RecommendScorer recommendScorer;
+	private final RecommendRanker recommendRanker;
 	private final ProductFeatureCache productFeatureCache;
 	private final BoughtTogetherRedisService boughtTogetherRedisService;
 	private final RecentViewService recentViewService;
@@ -76,14 +66,9 @@ public class RecommendService {
 		Set<Long> purchasedIds = new HashSet<>(
 				orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(memberId, OrderStatus.PAID_OR_LATER));
 		List<Long> recentIds = recentViewService.findRecentProductIds(memberId);
-
-		Set<Long> ownedIds = new HashSet<>(wishlistIds);
-		ownedIds.addAll(purchasedIds);
-		Set<Long> recentOnlySeedIds = recentIds.stream()
-				.filter(id -> !ownedIds.contains(id))
-				.collect(Collectors.toCollection(LinkedHashSet::new));
-		Set<Long> seedIds = new LinkedHashSet<>(ownedIds);
-		seedIds.addAll(recentIds);
+		HomeSeeds homeSeeds = HomeSeeds.of(wishlistIds, purchasedIds, recentIds);
+		Set<Long> seedIds = homeSeeds.seedIds();
+		Set<Long> recentOnlySeedIds = homeSeeds.recentOnlySeedIds();
 
 		if (taste.isEmpty() && seedIds.isEmpty()) {
 			List<Long> popularIds = recommendQueryMapper.findPopularProductIds(resolvedSize);
@@ -98,8 +83,8 @@ public class RecommendService {
 		Map<Long, Double> coPurchaseScores = aggregateCoPurchaseScores(seedIds);
 
 		// 최근 본 상품도 후보에서 뺀다. 안 그러면 자기 자신과 전 차원이 일치해 최상위로 올라온다.
-		List<RankedCandidate> ranked = rank(features, taste, seeds, recentOnlySeedIds, coPurchaseScores, seedIds,
-				resolvedSize);
+		List<RecommendRanker.RankedCandidate> ranked = recommendRanker.rank(features, taste, seeds,
+				recentOnlySeedIds, coPurchaseScores, seedIds, resolvedSize);
 
 		return HomeRecommendResponse.of(toItems(ranked, memberId));
 	}
@@ -135,8 +120,8 @@ public class RecommendService {
 			coPurchaseScores = boughtTogetherRedisService.findScores(productId);
 		}
 
-		List<RankedCandidate> ranked = rank(features, taste, seeds, Set.of(), coPurchaseScores, excludeIds,
-				resolvedSize);
+		List<RecommendRanker.RankedCandidate> ranked = recommendRanker.rank(features, taste, seeds, Set.of(),
+				coPurchaseScores, excludeIds, resolvedSize);
 
 		return toItems(ranked, memberId);
 	}
@@ -207,40 +192,14 @@ public class RecommendService {
 		return totalScores;
 	}
 
-	private List<RankedCandidate> rank(Map<Long, ProductFeature> features, TasteSignal taste,
-			Collection<ProductFeature> seeds, Set<Long> recentOnlySeedIds, Map<Long, Double> coPurchaseScores,
-			Set<Long> excludeIds, int size) {
-		List<RankedCandidate> sorted = features.values().stream()
-				.filter(feature -> !feature.hidden())
-				.filter(feature -> !excludeIds.contains(feature.id()))
-				.map(feature -> new RankedCandidate(feature, recommendScorer.score(feature, taste, seeds,
-						recentOnlySeedIds, coPurchaseScores.getOrDefault(feature.id(), 0.0))))
-				.filter(candidate -> candidate.score().totalScore() > 0)
-				.sorted(RANKING_COMPARATOR)
-				.toList();
-
-		// 같은 앨범의 다른 프레싱은 나란히 상위를 차지하므로 앨범당 점수 1위만 남긴다. size 로 자르기 전에 걸러야 목록이 짧아지지 않는다.
-		Set<Long> seenAlbumIds = new HashSet<>();
-		List<RankedCandidate> picked = new ArrayList<>(size);
-		for (RankedCandidate candidate : sorted) {
-			if (!seenAlbumIds.add(candidate.feature().albumId())) {
-				continue;
-			}
-			picked.add(candidate);
-			if (picked.size() == size) {
-				break;
-			}
-		}
-		return picked;
-	}
-
-	private List<RecommendItemResponse> toItems(List<RankedCandidate> ranked, Long memberId) {
+	private List<RecommendItemResponse> toItems(List<RecommendRanker.RankedCandidate> ranked, Long memberId) {
 		if (ranked.isEmpty()) {
 			return List.of();
 		}
 		List<Long> ids = ranked.stream().map(candidate -> candidate.feature().id()).toList();
 		Map<Long, RecommendScorer.ScoreResult> scoreById = ranked.stream()
-				.collect(Collectors.toMap(candidate -> candidate.feature().id(), RankedCandidate::score));
+				.collect(Collectors.toMap(candidate -> candidate.feature().id(),
+						RecommendRanker.RankedCandidate::score));
 		Map<Long, ProductSummaryResponse> summaryById = recommendQueryMapper.findSummariesByIds(ids, memberId)
 				.stream()
 				.collect(Collectors.toMap(ProductSummaryResponse::id, Function.identity(), (a, b) -> a,
@@ -278,8 +237,5 @@ public class RecommendService {
 			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
 		}
 		return size;
-	}
-
-	private record RankedCandidate(ProductFeature feature, RecommendScorer.ScoreResult score) {
 	}
 }

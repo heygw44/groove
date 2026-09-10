@@ -97,7 +97,9 @@ class RecommendServiceTest {
 		// TTL 0 인 캐시라 기존 검증(호출마다 findProductFeatures() 재조회) 이 그대로 유지된다.
 		ProductFeatureCache productFeatureCache = new ProductFeatureCache(recommendQueryMapper,
 				new RecommendProperties(Duration.ZERO, RecommendWeights.DEFAULT), Clock.systemDefaultZone());
-		recommendService = new RecommendService(recommendQueryMapper, new RecommendScorer(RecommendWeights.DEFAULT),
+		RecommendScorer recommendScorer = new RecommendScorer(RecommendWeights.DEFAULT);
+		RecommendRanker recommendRanker = new RecommendRanker(recommendScorer, RecommendWeights.DEFAULT);
+		recommendService = new RecommendService(recommendQueryMapper, recommendScorer, recommendRanker,
 				productFeatureCache, boughtTogetherRedisService, recentViewService, wishlistRepository,
 				orderItemRepository, memberTasteProfileRepository, memberTasteGenreRepository,
 				memberTasteArtistRepository, memberTasteDecadeRepository);
@@ -736,10 +738,11 @@ class RecommendServiceTest {
 		private RecommendService recommendServiceWithFeatureCacheTtl(Duration ttl) {
 			ProductFeatureCache featureCache = new ProductFeatureCache(recommendQueryMapper,
 					new RecommendProperties(ttl, RecommendWeights.DEFAULT), Clock.systemDefaultZone());
-			return new RecommendService(recommendQueryMapper, new RecommendScorer(RecommendWeights.DEFAULT),
-					featureCache, boughtTogetherRedisService, recentViewService, wishlistRepository,
-					orderItemRepository, memberTasteProfileRepository, memberTasteGenreRepository,
-					memberTasteArtistRepository, memberTasteDecadeRepository);
+			RecommendScorer scorer = new RecommendScorer(RecommendWeights.DEFAULT);
+			RecommendRanker ranker = new RecommendRanker(scorer, RecommendWeights.DEFAULT);
+			return new RecommendService(recommendQueryMapper, scorer, ranker, featureCache, boughtTogetherRedisService,
+					recentViewService, wishlistRepository, orderItemRepository, memberTasteProfileRepository,
+					memberTasteGenreRepository, memberTasteArtistRepository, memberTasteDecadeRepository);
 		}
 	}
 }
