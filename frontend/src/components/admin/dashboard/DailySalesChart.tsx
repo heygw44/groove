@@ -56,7 +56,7 @@ export function DailySalesChart({ data }: DailySalesChartProps) {
         />
         <Legend />
         <Bar dataKey="salesAmount" name="매출" fill="var(--color-accent)" />
-        <Bar dataKey="cancelAmount" name="취소" fill="var(--color-danger-soft)" />
+        <Bar dataKey="cancelAmount" name="취소" fill="var(--color-danger)" />
         <Line
           yAxisId="right"
           type="monotone"
