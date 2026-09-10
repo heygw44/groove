@@ -25,7 +25,8 @@ import com.groove.recommend.service.TasteSignal;
  * (회원 × 후보) 벡터를 (kind, seed, fold) 당 한 번만 만들고, 가중치 구성을 바꿔가며 재평가할 때는
  * {@link RecommendScorer#score(ScoreVector, RecommendWeights)} 내적만 반복한다 — {@code RecommendRanker}
  * 를 직접 부르면 호출마다 vectorize 를 다시 하므로 이 클래스는 그 후처리(채점·정렬·앨범 dedup·컷)만
- * 별도로 재현한다({@link #rank}). 로직은 {@code RecommendRanker.rank()} 와 반드시 같아야 한다.
+ * 별도로 재현한다({@link #rank}). 로직은 {@code RecommendRanker.rank()} 와 반드시 같아야 한다 — 단, 아티스트/레이블
+ * 캡은 가중치와 무관한 별개 정책이라 여기서는 재현하지 않는다.
  */
 public final class WeightSweep {
 
