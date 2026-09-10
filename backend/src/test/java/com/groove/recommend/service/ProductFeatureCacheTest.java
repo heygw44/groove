@@ -43,11 +43,13 @@ class ProductFeatureCacheTest {
 
 	private ProductFeatureCache cache(Duration ttl) {
 		clock = new MutableClock(Instant.parse("2026-09-08T00:00:00Z"), ZoneOffset.UTC);
-		return new ProductFeatureCache(recommendQueryMapper, new RecommendProperties(ttl), clock);
+		return new ProductFeatureCache(recommendQueryMapper, new RecommendProperties(ttl, RecommendWeights.DEFAULT),
+				clock);
 	}
 
 	private ProductFeatureRow row(Long id) {
-		return new ProductFeatureRow(id, id, id, null, 2020, null, CREATED_AT, ProductStatus.ON_SALE, null);
+		return new ProductFeatureRow(id, id, id, null, 2020, null, null, null, CREATED_AT, ProductStatus.ON_SALE,
+				null);
 	}
 
 	@Nested

@@ -3,6 +3,7 @@ package com.groove.recommend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -96,11 +97,13 @@ class RecommendServiceTest {
 	void setUp() {
 		// TTL 0 인 캐시라 기존 검증(호출마다 findProductFeatures() 재조회) 이 그대로 유지된다.
 		ProductFeatureCache productFeatureCache = new ProductFeatureCache(recommendQueryMapper,
-				new RecommendProperties(Duration.ZERO), Clock.systemDefaultZone());
-		recommendService = new RecommendService(recommendQueryMapper, new RecommendScorer(), productFeatureCache,
-				boughtTogetherRedisService, recentViewService, wishlistRepository, orderItemRepository,
-				memberTasteProfileRepository, memberTasteGenreRepository, memberTasteArtistRepository,
-				memberTasteDecadeRepository);
+				new RecommendProperties(Duration.ZERO, RecommendWeights.DEFAULT), Clock.systemDefaultZone());
+		RecommendScorer recommendScorer = new RecommendScorer(RecommendWeights.DEFAULT);
+		RecommendRanker recommendRanker = new RecommendRanker(recommendScorer, RecommendWeights.DEFAULT);
+		recommendService = new RecommendService(recommendQueryMapper, recommendScorer, recommendRanker,
+				productFeatureCache, boughtTogetherRedisService, recentViewService, wishlistRepository,
+				orderItemRepository, memberTasteProfileRepository, memberTasteGenreRepository,
+				memberTasteArtistRepository, memberTasteDecadeRepository);
 	}
 
 	private void givenNoSeeds() {
@@ -142,7 +145,10 @@ class RecommendServiceTest {
 
 	private static ProductFeatureRow rowInAlbum(Long id, Long albumId, Long artistId, ProductStatus status,
 			Double averageRating, LocalDateTime createdAt) {
-		return new ProductFeatureRow(id, albumId, artistId, null, null, averageRating, createdAt, status, null);
+		// 평점이 있는 상품은 리뷰도 있다고 가정해 bayes tie-break 가 기존 averageRating 순서를 그대로 따르게 한다.
+		int reviewCount = averageRating == null ? 0 : 10;
+		return new ProductFeatureRow(id, albumId, artistId, null, null, averageRating, reviewCount, 0L, createdAt,
+				status, null);
 	}
 
 	private static ProductSummaryResponse summary(Long id) {
@@ -155,13 +161,15 @@ class RecommendServiceTest {
 	class RecommendHome {
 
 		@Test
-		@DisplayName("취향 프로필도 시드도 없으면 profileRequired 와 함께 인기 상품을 폴백으로 반환한다")
+		@DisplayName("취향 프로필도 시드도 없으면 profileRequired 와 함께 popularity 상위 상품을 폴백으로 반환한다")
 		void returnsPopularFallbackWhenNoTasteAndNoSeeds() {
-			// given
+			// given — 스냅샷에서 popularity 로 정렬하므로 findPopularProductIds() 가 아니라
+			// findProductFeatures() 를 부른다. 평점 5.0(900)이 3.0(800)보다 popularity 가 높다.
 			givenNoSeeds();
 			givenNoTasteProfile(MEMBER_ID);
-			given(recommendQueryMapper.findPopularProductIds(RecommendService.HOME_DEFAULT_SIZE))
-					.willReturn(List.of(900L, 800L));
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					row(900L, 1L, ProductStatus.ON_SALE, 5.0, NOW),
+					row(800L, 2L, ProductStatus.ON_SALE, 3.0, NOW)));
 			given(recommendQueryMapper.findSummariesByIds(List.of(900L, 800L), MEMBER_ID))
 					.willReturn(List.of(summary(900L), summary(800L)));
 
@@ -173,7 +181,7 @@ class RecommendServiceTest {
 			assertThat(response.items()).extracting(item -> item.product().id()).containsExactly(900L, 800L);
 			assertThat(response.items()).flatExtracting(RecommendItemResponse::reasons)
 					.containsOnly(RecommendReason.POPULAR);
-			verify(recommendQueryMapper, never()).findProductFeatures();
+			verify(recommendQueryMapper, never()).findPopularProductIds(anyInt());
 		}
 
 		@Test
@@ -294,15 +302,18 @@ class RecommendServiceTest {
 		}
 
 		@Test
-		@DisplayName("총점이 같으면 평점 내림차순, 그다음 생성일 내림차순으로 정렬한다")
+		@DisplayName("총점이 같으면 베이지안 평점 내림차순, 그다음 생성일 내림차순으로 정렬한다")
 		void sortsByRatingThenCreatedAtWhenTotalScoreTied() {
-			// given
+			// given — bayes(700) < bayes(800) = bayes(900) 이 되도록 리뷰 수·평점을 계산해서 맞춘다.
+			// C(전체 평균) = (2.0+4.5+4.5)/3 ≈ 3.667. bayes(700)=(1·2.0+5·3.667)/6≈3.39,
+			// bayes(800)=bayes(900)=(8·4.5+5·3.667)/13≈4.18 — 800·900 은 bayes 로 동점이라 createdAt 이 가른다.
 			givenNoSeeds();
 			givenTasteProfile(MEMBER_ID, Set.of(1L), Set.of(), Set.of());
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
-					row(700L, 1L, ProductStatus.ON_SALE, null, NOW),
-					row(800L, 1L, ProductStatus.ON_SALE, 4.5, NOW.minusDays(1)),
-					row(900L, 1L, ProductStatus.ON_SALE, 4.5, NOW)));
+					new ProductFeatureRow(700L, 700L, 1L, null, null, 2.0, 1, 0L, NOW, ProductStatus.ON_SALE, null),
+					new ProductFeatureRow(800L, 800L, 1L, null, null, 4.5, 8, 0L, NOW.minusDays(1),
+							ProductStatus.ON_SALE, null),
+					new ProductFeatureRow(900L, 900L, 1L, null, null, 4.5, 8, 0L, NOW, ProductStatus.ON_SALE, null)));
 			ArgumentCaptor<List<Long>> idsCaptor = ArgumentCaptor.captor();
 			given(recommendQueryMapper.findSummariesByIds(idsCaptor.capture(), eq(MEMBER_ID)))
 					.willReturn(List.of(summary(900L), summary(800L), summary(700L)));
@@ -609,8 +620,8 @@ class RecommendServiceTest {
 
 		private static ProductFeatureRow rowWithGenreAndDecade(Long id, Long artistId, String genreIds,
 				Integer releaseYear) {
-			return new ProductFeatureRow(id, id, artistId, null, releaseYear, null, NOW, ProductStatus.ON_SALE,
-					genreIds);
+			return new ProductFeatureRow(id, id, artistId, null, releaseYear, null, null, null, NOW,
+					ProductStatus.ON_SALE, genreIds);
 		}
 
 		@Test
@@ -735,11 +746,12 @@ class RecommendServiceTest {
 
 		private RecommendService recommendServiceWithFeatureCacheTtl(Duration ttl) {
 			ProductFeatureCache featureCache = new ProductFeatureCache(recommendQueryMapper,
-					new RecommendProperties(ttl), Clock.systemDefaultZone());
-			return new RecommendService(recommendQueryMapper, new RecommendScorer(), featureCache,
-					boughtTogetherRedisService, recentViewService, wishlistRepository, orderItemRepository,
-					memberTasteProfileRepository, memberTasteGenreRepository, memberTasteArtistRepository,
-					memberTasteDecadeRepository);
+					new RecommendProperties(ttl, RecommendWeights.DEFAULT), Clock.systemDefaultZone());
+			RecommendScorer scorer = new RecommendScorer(RecommendWeights.DEFAULT);
+			RecommendRanker ranker = new RecommendRanker(scorer, RecommendWeights.DEFAULT);
+			return new RecommendService(recommendQueryMapper, scorer, ranker, featureCache, boughtTogetherRedisService,
+					recentViewService, wishlistRepository, orderItemRepository, memberTasteProfileRepository,
+					memberTasteGenreRepository, memberTasteArtistRepository, memberTasteDecadeRepository);
 		}
 	}
 }

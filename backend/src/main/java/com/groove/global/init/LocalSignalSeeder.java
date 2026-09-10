@@ -38,6 +38,8 @@ import com.groove.recommend.repository.MemberTasteDecadeRepository;
 import com.groove.recommend.repository.MemberTasteGenreRepository;
 import com.groove.recommend.repository.MemberTasteProfileRepository;
 import com.groove.recommend.repository.ProductViewLogRepository;
+import com.groove.review.entity.Review;
+import com.groove.review.repository.ReviewRepository;
 import com.groove.wishlist.entity.Wishlist;
 import com.groove.wishlist.repository.WishlistRepository;
 
@@ -48,6 +50,10 @@ import lombok.extern.slf4j.Slf4j;
  * 추천이 실제로 동작하는 모습을 보려면 취향·위시·구매 신호가 있어야 한다. 회원마다 장르 하나를 축으로 한
  * 취향 클러스터를 배정하고, 위시/구매의 {@value #CLUSTER_PICK_PERCENT}% 는 클러스터 안에서, 나머지는
  * 전체 상품에서 뽑는다. 노이즈를 섞지 않으면 추천 품질 측정이 시드 생성 규칙을 되맞히는 자기충족이 된다.
+ *
+ * <p>리뷰도 여기서 디거 30명을 재사용해 시딩한다. 리뷰어가 데모 회원 2명뿐이면 상품당 리뷰 수가 0~2로
+ * 묶여 베이지안 스무딩({@code PopularityIndex#bayes}) 이 평균 평점의 단조 변환에 그친다 — 디거 풀을
+ * 써야 롱테일 분산과 0건 상품이 실제로 생긴다.
  */
 @Slf4j
 @Component
@@ -76,6 +82,33 @@ public class LocalSignalSeeder {
 	private static final int MAX_TASTE_ARTISTS = 2;
 	private static final int MAX_TASTE_DECADES = 2;
 
+	// 리뷰 수 분포: 5%는 히트작(10~20건), 15%는 인기작(3~8건), 30%는 롱테일(1~2건), 나머지 50%는 0건.
+	// 상품당 리뷰 수가 균일하면 베이지안 스무딩이 평균 평점의 단조 변환이라 tie-break 이 무의미해진다.
+	private static final int REVIEW_HIT_PERCENT = 5;
+	private static final int REVIEW_POPULAR_PERCENT = 15;
+	private static final int REVIEW_LONGTAIL_PERCENT = 30;
+	private static final int REVIEW_HIT_MIN = 10;
+	private static final int REVIEW_HIT_MAX = 20;
+	private static final int REVIEW_POPULAR_MIN = 3;
+	private static final int REVIEW_POPULAR_MAX = 8;
+	private static final int REVIEW_LONGTAIL_MIN = 1;
+	private static final int REVIEW_LONGTAIL_MAX = 2;
+	private static final double RATING_CENTER_MIN = 1.0;
+	private static final double RATING_CENTER_RANGE = 4.0;
+	private static final double RATING_NOISE_RANGE = 2.0;
+	private static final int MIN_RATING = 1;
+	private static final int MAX_RATING = 5;
+
+	private static final List<String> REVIEW_TITLES = List.of(
+			"자주 듣게 되는 앨범", "믹싱이 훌륭합니다", "소장 가치 있음", "기대 이상이었어요", "재구매 의사 있습니다");
+
+	private static final List<String> REVIEW_CONTENTS = List.of(
+			"판 상태도 좋고 배송도 빨랐습니다.",
+			"음질이 생각보다 훨씬 좋네요.",
+			"자켓 디자인이 마음에 듭니다.",
+			"플레이어에 걸어두고 매일 듣고 있어요.",
+			"선물용으로 구매했는데 반응이 좋았습니다.");
+
 	// 고정 시드. 시드를 다시 만들어도 같은 신호가 나와야 precision 측정값을 실행 간 비교할 수 있다.
 	private static final long RANDOM_SEED = 20260906L;
 
@@ -90,6 +123,7 @@ public class LocalSignalSeeder {
 	private final MemberTasteArtistRepository memberTasteArtistRepository;
 	private final MemberTasteDecadeRepository memberTasteDecadeRepository;
 	private final ProductViewLogRepository productViewLogRepository;
+	private final ReviewRepository reviewRepository;
 
 	public void seed(List<Member> demoMembers) {
 		// 첫 쓰기가 유니크 email 을 가진 회원이라 회원 존재 여부로 막는다. 취향 테이블 개수로 막으면
@@ -109,10 +143,12 @@ public class LocalSignalSeeder {
 		Random random = new Random(RANDOM_SEED);
 		LocalDateTime now = LocalDateTime.now();
 		List<Genre> genres = distinctGenres(products);
+		List<Member> diggers = new ArrayList<>();
 		int orderSequence = 0;
 
 		for (int index = 0; index < MEMBER_COUNT; index++) {
 			Member member = createMember(index);
+			diggers.add(member);
 			Genre clusterGenre = genres.get(index % genres.size());
 			List<Product> clusterProducts = productsOf(products, clusterGenre);
 
@@ -122,6 +158,7 @@ public class LocalSignalSeeder {
 		}
 
 		seedViewLogs(demoMembers, products, now);
+		seedReviews(diggers, products, random);
 
 		// 로컬은 Flyway 가 꺼져 있어 V12 백필이 안 돈다. 여기서 만든 주문이 없으면 인기순 정렬이 전부 0 이 된다.
 		productRepository.refreshSoldQuantities(products.stream().map(Product::getId).toList());
@@ -217,6 +254,54 @@ public class LocalSignalSeeder {
 			}
 		}
 		productViewLogRepository.saveAll(logs);
+	}
+
+	/**
+	 * 상품별 리뷰 수를 롱테일로 흩뿌린다. 리뷰어는 디거 풀에서 상품마다 다시 뽑아 상품 간 리뷰어 중복이
+	 * 실제 구매 이력과 무관하게 섞이게 한다 — 서비스 계층의 "구매자만" 규칙은 이 시더가 원래도 우회한다.
+	 */
+	private void seedReviews(List<Member> reviewerPool, List<Product> products, Random random) {
+		List<Review> reviews = new ArrayList<>();
+		for (Product product : products) {
+			int reviewCount = Math.min(nextReviewCount(random), reviewerPool.size());
+			if (reviewCount == 0) {
+				continue;
+			}
+
+			double ratingCenter = RATING_CENTER_MIN + random.nextDouble() * RATING_CENTER_RANGE;
+			List<Member> reviewers = pick(reviewerPool, reviewCount, random);
+			for (Member reviewer : reviewers) {
+				int phraseIndex = random.nextInt(REVIEW_TITLES.size());
+				reviews.add(Review.create(product, reviewer, ratingAround(ratingCenter, random),
+						REVIEW_TITLES.get(phraseIndex), REVIEW_CONTENTS.get(phraseIndex)));
+			}
+		}
+		reviewRepository.saveAll(reviews);
+		products.forEach(product -> productRepository.refreshReviewStats(product.getId()));
+
+		log.info("더미 리뷰를 시딩했다: {}건", reviews.size());
+	}
+
+	/** 50%는 0건, 30%는 1~2건(롱테일), 15%는 3~8건(인기작), 5%는 10~20건(히트작)으로 나눈다. */
+	private int nextReviewCount(Random random) {
+		int roll = random.nextInt(100);
+		if (roll < REVIEW_HIT_PERCENT) {
+			return REVIEW_HIT_MIN + random.nextInt(REVIEW_HIT_MAX - REVIEW_HIT_MIN + 1);
+		}
+		if (roll < REVIEW_HIT_PERCENT + REVIEW_POPULAR_PERCENT) {
+			return REVIEW_POPULAR_MIN + random.nextInt(REVIEW_POPULAR_MAX - REVIEW_POPULAR_MIN + 1);
+		}
+		if (roll < REVIEW_HIT_PERCENT + REVIEW_POPULAR_PERCENT + REVIEW_LONGTAIL_PERCENT) {
+			return REVIEW_LONGTAIL_MIN + random.nextInt(REVIEW_LONGTAIL_MAX - REVIEW_LONGTAIL_MIN + 1);
+		}
+		return 0;
+	}
+
+	/** 상품마다 다른 평점 중심(center)에 노이즈를 더해 상품별 평균 평점 자체에도 편차를 만든다. */
+	private int ratingAround(double center, Random random) {
+		double noise = (random.nextDouble() - 0.5) * RATING_NOISE_RANGE;
+		int rating = (int) Math.round(center + noise);
+		return Math.max(MIN_RATING, Math.min(MAX_RATING, rating));
 	}
 
 	/** 클러스터에서 {@value #CLUSTER_PICK_PERCENT}% 를, 나머지는 전체에서 뽑는다. */

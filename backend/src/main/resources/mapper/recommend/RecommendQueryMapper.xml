@@ -66,6 +66,8 @@
 			<arg column="label_id" javaType="java.lang.Long"/>
 			<arg column="release_year" javaType="java.lang.Integer"/>
 			<arg column="average_rating" javaType="java.lang.Double"/>
+			<arg column="review_count" javaType="java.lang.Integer"/>
+			<arg column="sold_quantity" javaType="java.lang.Long"/>
 			<arg column="created_at" javaType="java.time.LocalDateTime"/>
 			<arg column="status" javaType="com.groove.product.entity.ProductStatus"/>
 			<arg column="genre_ids" javaType="java.lang.String"/>
@@ -77,7 +79,7 @@
 	<select id="findProductFeatures" resultMap="productFeatureRowMap">
 		SELECT p.id AS product_id, p.album_id, p.artist_id, p.label_id,
 		       COALESCE(YEAR(p.release_date), p.pressing_year) AS release_year,
-		       p.avg_rating AS average_rating, p.created_at, p.status,
+		       p.avg_rating AS average_rating, p.review_count, p.sold_quantity, p.created_at, p.status,
 		       GROUP_CONCAT(pg.genre_id) AS genre_ids
 		FROM product p
 		LEFT JOIN product_genre pg ON pg.product_id = p.id

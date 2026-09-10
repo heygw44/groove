@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -12,25 +13,16 @@ import org.springframework.stereotype.Component;
 
 import com.groove.recommend.dto.RecommendReason;
 
-/** 규칙 기반 추천 점수 계산기. 상태를 갖지 않는다. */
+import lombok.RequiredArgsConstructor;
+
+/** 규칙 기반 추천 점수 계산기. 상태를 갖지 않는다(가중치는 주입받는다). */
 @Component
+@RequiredArgsConstructor
 public class RecommendScorer {
 
-	public static final int TASTE_MATCH_THRESHOLD = 3;
 	public static final int MAX_REASONS = 2;
-	static final int CO_PURCHASE_MULTIPLIER = 2;
 
-	private static final Map<RecommendReason, Integer> WEIGHTS = new EnumMap<>(RecommendReason.class);
-
-	static {
-		WEIGHTS.put(RecommendReason.TASTE_ARTIST, 5);
-		WEIGHTS.put(RecommendReason.SAME_ARTIST, 4);
-		WEIGHTS.put(RecommendReason.TASTE_GENRE, 3);
-		WEIGHTS.put(RecommendReason.SAME_GENRE, 2);
-		WEIGHTS.put(RecommendReason.SAME_LABEL, 2);
-		WEIGHTS.put(RecommendReason.TASTE_DECADE, 1);
-		WEIGHTS.put(RecommendReason.SAME_DECADE, 1);
-	}
+	private final RecommendWeights weights;
 
 	/** 취향 프로필만으로 점수를 매길 때 쓴다(시드·공동구매 없음). */
 	public ScoreResult scoreTaste(ProductFeature candidate, TasteSignal taste) {
@@ -40,55 +32,90 @@ public class RecommendScorer {
 	/** 콘텐츠 점수(취향+시드 유사도) + 공동구매 점수를 합산한다. */
 	public ScoreResult score(ProductFeature candidate, TasteSignal taste, Collection<ProductFeature> seeds,
 			Set<Long> recentOnlySeedIds, double coPurchaseCount) {
-		Map<RecommendReason, Double> contributions = new EnumMap<>(RecommendReason.class);
+		ScoreVector vector = vectorize(candidate, taste, seeds, recentOnlySeedIds, coPurchaseCount);
+		return score(vector, weights);
+	}
 
-		addTasteContribution(contributions, RecommendReason.TASTE_ARTIST,
+	/**
+	 * 후보 하나의 매칭 벡터를 만든다. 가중치와 완전히 무관하다 — (회원 x 후보) 벡터를 한 번 만들어 두면
+	 * 가중치 조합을 바꿔가며 재평가할 때 이 계산을 다시 할 필요가 없다.
+	 */
+	public ScoreVector vectorize(ProductFeature candidate, TasteSignal taste, Collection<ProductFeature> seeds,
+			Set<Long> recentOnlySeedIds, double coPurchaseScore) {
+		EnumMap<RecommendReason, Double> matchStrength = new EnumMap<>(RecommendReason.class);
+		Set<RecommendReason> recentOnlyReasons = EnumSet.noneOf(RecommendReason.class);
+
+		addTasteMatch(matchStrength, RecommendReason.TASTE_ARTIST,
 				candidate.artistId() != null && taste.artistIds().contains(candidate.artistId()));
-		addTasteContribution(contributions, RecommendReason.TASTE_GENRE,
+		addTasteMatch(matchStrength, RecommendReason.TASTE_GENRE,
 				!Collections.disjoint(candidate.genreIds(), taste.genreIds()));
-		addTasteContribution(contributions, RecommendReason.TASTE_DECADE,
+		addTasteMatch(matchStrength, RecommendReason.TASTE_DECADE,
 				candidate.decade() != null && taste.decades().contains(candidate.decade()));
 
-		addSameDimensionContribution(contributions, RecommendReason.SAME_ARTIST,
+		addSameDimensionMatch(matchStrength, recentOnlyReasons, RecommendReason.SAME_ARTIST,
 				matchingSeedsByArtist(candidate, seeds), recentOnlySeedIds);
-		addSameDimensionContribution(contributions, RecommendReason.SAME_GENRE,
+		addSameDimensionMatch(matchStrength, recentOnlyReasons, RecommendReason.SAME_GENRE,
 				matchingSeedsByGenre(candidate, seeds), recentOnlySeedIds);
-		addSameDimensionContribution(contributions, RecommendReason.SAME_LABEL,
+		addSameDimensionMatch(matchStrength, recentOnlyReasons, RecommendReason.SAME_LABEL,
 				matchingSeedsByLabel(candidate, seeds), recentOnlySeedIds);
-		addSameDimensionContribution(contributions, RecommendReason.SAME_DECADE,
+		addSameDimensionMatch(matchStrength, recentOnlyReasons, RecommendReason.SAME_DECADE,
 				matchingSeedsByDecade(candidate, seeds), recentOnlySeedIds);
 
-		int contentScore = contributions.values().stream().mapToInt(Double::intValue).sum();
+		return new ScoreVector(matchStrength, recentOnlyReasons, coPurchaseScore);
+	}
 
-		if (coPurchaseCount > 0) {
-			contributions.merge(RecommendReason.BOUGHT_TOGETHER, coPurchaseCount * CO_PURCHASE_MULTIPLIER,
-					Double::sum);
+	/** 매칭 벡터에 가중치를 적용해 점수를 매긴다. */
+	public ScoreResult score(ScoreVector vector, RecommendWeights scoreWeights) {
+		Map<RecommendReason, Double> contributions = new EnumMap<>(RecommendReason.class);
+		double contentScore = 0;
+
+		for (Map.Entry<RecommendReason, Double> entry : vector.matchStrength().entrySet()) {
+			RecommendReason reason = entry.getKey();
+			double contribution = scoreWeights.weightOf(reason) * entry.getValue();
+			contentScore += contribution;
+
+			RecommendReason effectiveReason = vector.recentOnlyReasons().contains(reason)
+					? RecommendReason.RECENTLY_VIEWED_SIMILAR
+					: reason;
+			contributions.merge(effectiveReason, contribution, Double::sum);
 		}
-		double totalScore = contentScore + coPurchaseCount * CO_PURCHASE_MULTIPLIER;
+
+		double coPurchaseContribution = vector.coPurchaseScore() * scoreWeights.coPurchase();
+		if (vector.coPurchaseScore() > 0) {
+			contributions.merge(RecommendReason.BOUGHT_TOGETHER, coPurchaseContribution, Double::sum);
+		}
+		double totalScore = contentScore + coPurchaseContribution;
 
 		return new ScoreResult(contentScore, totalScore, contributions);
 	}
 
-	public boolean matchesTaste(ScoreResult tasteResult) {
-		return tasteResult.contentScore() >= TASTE_MATCH_THRESHOLD;
+	/** 주입된 기본 가중치로 매칭 벡터에 점수를 매긴다. */
+	public ScoreResult score(ScoreVector vector) {
+		return score(vector, weights);
 	}
 
-	private void addTasteContribution(Map<RecommendReason, Double> contributions, RecommendReason reason,
-			boolean matched) {
+	public boolean matchesTaste(ScoreResult tasteResult) {
+		return tasteResult.contentScore() >= weights.tasteMatchThreshold() - 1e-9;
+	}
+
+	private void addTasteMatch(Map<RecommendReason, Double> matchStrength, RecommendReason reason, boolean matched) {
 		if (matched) {
-			contributions.put(reason, (double) WEIGHTS.get(reason));
+			matchStrength.put(reason, 1.0);
 		}
 	}
 
-	/** 매칭 시드가 전부 recentOnlySeedIds 소속이면 RECENTLY_VIEWED_SIMILAR 로 치환해 가중치를 누적한다. */
-	private void addSameDimensionContribution(Map<RecommendReason, Double> contributions, RecommendReason reason,
-			List<ProductFeature> matchingSeeds, Set<Long> recentOnlySeedIds) {
+	/** 매칭 시드가 전부 recentOnlySeedIds 소속이면 recentOnlyReasons 에 표시한다. 점수가 아니라 라벨링에만 쓰인다. */
+	private void addSameDimensionMatch(Map<RecommendReason, Double> matchStrength,
+			Set<RecommendReason> recentOnlyReasons, RecommendReason reason, List<ProductFeature> matchingSeeds,
+			Set<Long> recentOnlySeedIds) {
 		if (matchingSeeds.isEmpty()) {
 			return;
 		}
+		matchStrength.put(reason, 1.0);
 		boolean allRecentOnly = matchingSeeds.stream().allMatch(seed -> recentOnlySeedIds.contains(seed.id()));
-		RecommendReason effectiveReason = allRecentOnly ? RecommendReason.RECENTLY_VIEWED_SIMILAR : reason;
-		contributions.merge(effectiveReason, (double) WEIGHTS.get(reason), Double::sum);
+		if (allRecentOnly) {
+			recentOnlyReasons.add(reason);
+		}
 	}
 
 	private List<ProductFeature> matchingSeedsByArtist(ProductFeature candidate, Collection<ProductFeature> seeds) {
@@ -125,7 +152,7 @@ public class RecommendScorer {
 	}
 
 	/** 콘텐츠 점수·최종 점수·이유별 기여도. */
-	public record ScoreResult(int contentScore, double totalScore, Map<RecommendReason, Double> contributions) {
+	public record ScoreResult(double contentScore, double totalScore, Map<RecommendReason, Double> contributions) {
 
 		public List<RecommendReason> topReasons() {
 			return contributions.entrySet().stream()

@@ -16,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.groove.product.entity.ProductStatus;
 import com.groove.recommend.dto.RecommendReason;
 import com.groove.recommend.entity.Decade;
 import com.groove.recommend.service.RecommendScorer.ScoreResult;
@@ -24,14 +25,14 @@ class RecommendScorerTest {
 
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 6, 10, 0);
 
-	private final RecommendScorer recommendScorer = new RecommendScorer();
+	private final RecommendScorer recommendScorer = new RecommendScorer(RecommendWeights.DEFAULT);
 
 	private ProductFeature candidate() {
 		return feature(100L, 1L, 10L, Set.of(1L, 2L), Decade.D1990);
 	}
 
 	private ProductFeature feature(Long id, Long artistId, Long labelId, Set<Long> genreIds, Decade decade) {
-		return new ProductFeature(id, id, artistId, labelId, genreIds, decade, 4.0, NOW, false);
+		return new ProductFeature(id, id, artistId, labelId, genreIds, decade, 4.0, NOW, 10, 0L, ProductStatus.ON_SALE);
 	}
 
 	@Nested
