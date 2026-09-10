@@ -3,7 +3,9 @@ package com.groove.recommend;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +29,6 @@ import com.groove.recommend.repository.MemberTasteDecadeRepository;
 import com.groove.recommend.repository.MemberTasteGenreRepository;
 import com.groove.recommend.repository.MemberTasteProfileRepository;
 import com.groove.recommend.service.BoughtTogetherAggregator;
-import com.groove.recommend.service.BoughtTogetherRedisService;
 import com.groove.recommend.service.ProductFeature;
 import com.groove.recommend.service.ProductFeatureCache;
 import com.groove.recommend.service.RecentViewService;
@@ -35,6 +36,9 @@ import com.groove.recommend.service.RecommendRanker;
 import com.groove.recommend.service.RecommendScorer;
 import com.groove.recommend.service.RecommendWeights;
 import com.groove.recommend.service.TasteSignal;
+import com.groove.recommend.support.CoPurchaseBasket;
+import com.groove.recommend.support.CoPurchaseBasketLoader;
+import com.groove.recommend.support.CoPurchaseIndex;
 import com.groove.recommend.support.EvalMetrics;
 import com.groove.recommend.support.EvalReport;
 import com.groove.recommend.support.EvalRunner;
@@ -43,6 +47,7 @@ import com.groove.recommend.support.EvalSignals;
 import com.groove.recommend.support.HoldoutKind;
 import com.groove.recommend.support.HoldoutSpec;
 import com.groove.recommend.support.HoldoutSplitter;
+import com.groove.recommend.support.InMemoryCoPurchaseIndex;
 import com.groove.support.IntegrationTestSupport;
 import com.groove.wishlist.repository.WishlistRepository;
 
@@ -80,13 +85,13 @@ class RecommendAblationTest extends IntegrationTestSupport {
 	EntityManager entityManager;
 
 	@Autowired
+	Clock clock;
+
+	@Autowired
 	RecommendRanker recommendRanker;
 
 	@Autowired
 	RecommendScorer recommendScorer;
-
-	@Autowired
-	BoughtTogetherRedisService boughtTogetherRedisService;
 
 	@Autowired
 	ProductFeatureCache productFeatureCache;
@@ -117,9 +122,9 @@ class RecommendAblationTest extends IntegrationTestSupport {
 			// given
 			boughtTogetherAggregator.refresh();
 			Map<Long, ProductFeature> features = productFeatureCache.get();
-			EvalRunner runner = new EvalRunner(recommendRanker, boughtTogetherRedisService, features);
 			List<EvalSignals> seedMembers = newSignalLoader().loadSeedMembers();
 			assertThat(seedMembers).isNotEmpty();
+			List<CoPurchaseBasket> baskets = CoPurchaseBasketLoader.load(entityManager, clock);
 
 			List<Long> byPopularity = productIdsByPopularity();
 			long candidateCount = features.values().stream().filter(feature -> !feature.hidden()).count();
@@ -131,12 +136,17 @@ class RecommendAblationTest extends IntegrationTestSupport {
 
 			// 홀드아웃 분할은 구성마다 다시 하지 않는다 — 짝지은 비교가 성립하려면 9개 구성이 같은 분할을
 			// 공유해야 한다. HoldoutSplitter 는 (kind, foldCount, seed, memberId) 로만 결정되므로
-			// 가중치와 무관하게 한 번만 계산해 재사용한다.
+			// 가중치와 무관하게 한 번만 계산해 재사용한다. 공동구매 인덱스도 마찬가지로 (kind, seed, fold) 당
+			// 한 번만 재집계해 9개 구성이 공유한다 — 구성별로 다시 만들면 캐싱 범위가 좁아져 다시 누수가 된다.
 			HoldoutSplitter splitter = new HoldoutSplitter();
 			Map<Long, Map<Long, List<Set<Long>>>> wishFoldsBySeed = foldsBySeed(splitter, HoldoutKind.WISH,
 					WISH_FOLD_COUNT, seedMembers);
 			Map<Long, Map<Long, List<Set<Long>>>> purchaseFoldsBySeed = foldsBySeed(splitter, HoldoutKind.PURCHASE,
 					PURCHASE_FOLD_COUNT, seedMembers);
+			Map<Long, List<CoPurchaseIndex>> wishIndexBySeed = coPurchaseIndexBySeed(baskets, wishFoldsBySeed,
+					WISH_FOLD_COUNT);
+			Map<Long, List<CoPurchaseIndex>> purchaseIndexBySeed = coPurchaseIndexBySeed(baskets, purchaseFoldsBySeed,
+					PURCHASE_FOLD_COUNT);
 
 			List<AblationConfig> configs = ablationConfigs();
 
@@ -144,10 +154,11 @@ class RecommendAblationTest extends IntegrationTestSupport {
 			List<EvalMetrics.FoldedRun> wishRuns = new ArrayList<>();
 			List<EvalMetrics.FoldedRun> purchaseRuns = new ArrayList<>();
 			for (AblationConfig config : configs) {
-				wishRuns.add(measureFolded(HoldoutKind.WISH, WISH_FOLD_COUNT, wishFoldsBySeed, seedMembers,
-						byPopularity, runner, candidateCount, albumCandidateCount, config.weights()));
+				wishRuns.add(measureFolded(HoldoutKind.WISH, WISH_FOLD_COUNT, wishFoldsBySeed, wishIndexBySeed,
+						seedMembers, byPopularity, features, candidateCount, albumCandidateCount, config.weights()));
 				purchaseRuns.add(measureFolded(HoldoutKind.PURCHASE, PURCHASE_FOLD_COUNT, purchaseFoldsBySeed,
-						seedMembers, byPopularity, runner, candidateCount, albumCandidateCount, config.weights()));
+						purchaseIndexBySeed, seedMembers, byPopularity, features, candidateCount, albumCandidateCount,
+						config.weights()));
 			}
 
 			List<String> labels = configs.stream().map(AblationConfig::label).toList();
@@ -195,18 +206,43 @@ class RecommendAblationTest extends IntegrationTestSupport {
 	}
 
 	/**
+	 * 시드마다 (kind, foldCount) 에 맞는 공동구매 인덱스를 폴드별로 미리 재집계해둔다. {@code foldsBySeed} 로
+	 * 이미 계산된 분할에서 회원별 홀드아웃만 뽑아 {@link InMemoryCoPurchaseIndex} 를 만든다 — 9개 ablation
+	 * 구성이 이 인덱스를 공유해야 (kind, seed, fold) 당 재집계 1회가 유지된다.
+	 */
+	private Map<Long, List<CoPurchaseIndex>> coPurchaseIndexBySeed(List<CoPurchaseBasket> baskets,
+			Map<Long, Map<Long, List<Set<Long>>>> foldsBySeed, int foldCount) {
+		Map<Long, List<CoPurchaseIndex>> indexBySeed = new HashMap<>();
+		for (Map.Entry<Long, Map<Long, List<Set<Long>>>> entry : foldsBySeed.entrySet()) {
+			Map<Long, List<Set<Long>>> foldsByMemberId = entry.getValue();
+			List<CoPurchaseIndex> indexes = new ArrayList<>();
+			for (int foldIndex = 0; foldIndex < foldCount; foldIndex++) {
+				Map<Long, Set<Long>> holdoutByMemberId = new HashMap<>();
+				for (Map.Entry<Long, List<Set<Long>>> memberEntry : foldsByMemberId.entrySet()) {
+					holdoutByMemberId.put(memberEntry.getKey(), memberEntry.getValue().get(foldIndex));
+				}
+				indexes.add(new InMemoryCoPurchaseIndex(baskets, holdoutByMemberId));
+			}
+			indexBySeed.put(entry.getKey(), indexes);
+		}
+		return indexBySeed;
+	}
+
+	/**
 	 * kind 를 폴드 수만큼 등분해 시드마다 전체 폴드를 한 바퀴 돈다. 측정 수는 {@code foldCount * 시드 수}다.
-	 * {@code weights} 만 구성마다 바뀌고, 홀드아웃 분할은 {@code foldsBySeed} 에 미리 계산된 것을 그대로 쓴다.
+	 * {@code weights} 만 구성마다 바뀌고, 홀드아웃 분할과 공동구매 인덱스는 미리 계산된 것을 그대로 쓴다.
 	 */
 	private EvalMetrics.FoldedRun measureFolded(HoldoutKind kind, int foldCount,
-			Map<Long, Map<Long, List<Set<Long>>>> foldsBySeed, List<EvalSignals> seedMembers,
-			List<Long> byPopularity, EvalRunner runner, long candidateCount, long albumCandidateCount,
-			RecommendWeights weights) {
+			Map<Long, Map<Long, List<Set<Long>>>> foldsBySeed, Map<Long, List<CoPurchaseIndex>> indexBySeed,
+			List<EvalSignals> seedMembers, List<Long> byPopularity, Map<Long, ProductFeature> features,
+			long candidateCount, long albumCandidateCount, RecommendWeights weights) {
 		List<EvalMetrics.Measurement> measurements = new ArrayList<>();
 
 		for (Long seed : RANDOM_SEEDS) {
 			Map<Long, List<Set<Long>>> foldsByMemberId = foldsBySeed.get(seed);
+			List<CoPurchaseIndex> indexesByFold = indexBySeed.get(seed);
 			for (int foldIndex = 0; foldIndex < foldCount; foldIndex++) {
+				EvalRunner runner = new EvalRunner(recommendRanker, indexesByFold.get(foldIndex), features);
 				List<EvalMetrics.MemberEvalResult> results = new ArrayList<>();
 				for (EvalSignals signals : seedMembers) {
 					Set<Long> holdout = foldsByMemberId.get(signals.memberId()).get(foldIndex);

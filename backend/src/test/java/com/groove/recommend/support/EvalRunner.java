@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import com.groove.recommend.service.BoughtTogetherRedisService;
 import com.groove.recommend.service.HomeSeeds;
 import com.groove.recommend.service.ProductFeature;
 import com.groove.recommend.service.RecommendRanker;
@@ -15,19 +14,19 @@ import com.groove.recommend.service.RecommendWeights;
 /**
  * {@code RecommendService.recommendHome()} 의 랭킹 경로를 그대로 재현하는 인메모리 러너. 스프링 빈이
  * 아니라 평범한 클래스다 — 상품 특성 스냅샷을 생성자에서 한 번 받아 두고, 그 뒤로는 DB/Redis 상품 조회를
- * 다시 하지 않는다. 공동구매 점수만은 시드 집합이 폴드마다 달라지므로 {@link #recommend} 를 부를 때마다
- * 다시 합산한다 — 캐싱하면 홀드아웃 상품의 공동구매 신호가 새어 들어간다.
+ * 다시 하지 않는다. 공동구매 점수는 {@link CoPurchaseIndex} 로 갈아 끼운다 — 운영 경로 검증에는
+ * {@link RedisCoPurchaseIndex}, 홀드아웃 누수 없는 측정에는 {@link InMemoryCoPurchaseIndex} 를 쓴다.
  */
 public class EvalRunner {
 
 	private final RecommendRanker recommendRanker;
-	private final BoughtTogetherRedisService boughtTogetherRedisService;
+	private final CoPurchaseIndex coPurchaseIndex;
 	private final Map<Long, ProductFeature> features;
 
-	public EvalRunner(RecommendRanker recommendRanker, BoughtTogetherRedisService boughtTogetherRedisService,
+	public EvalRunner(RecommendRanker recommendRanker, CoPurchaseIndex coPurchaseIndex,
 			Map<Long, ProductFeature> features) {
 		this.recommendRanker = recommendRanker;
-		this.boughtTogetherRedisService = boughtTogetherRedisService;
+		this.coPurchaseIndex = coPurchaseIndex;
 		this.features = features;
 	}
 
@@ -73,7 +72,7 @@ public class EvalRunner {
 			return Map.of();
 		}
 		Map<Long, Double> totalScores = new LinkedHashMap<>();
-		for (Map<Long, Double> scoresByCandidate : boughtTogetherRedisService.findScores(seedIds).values()) {
+		for (Map<Long, Double> scoresByCandidate : coPurchaseIndex.findScores(seedIds).values()) {
 			scoresByCandidate.forEach((candidateId, score) -> totalScores.merge(candidateId, score, Double::sum));
 		}
 		return totalScores;

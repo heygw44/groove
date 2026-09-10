@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -41,6 +43,9 @@ import com.groove.recommend.service.RecommendRanker;
 import com.groove.recommend.service.RecommendScorer;
 import com.groove.recommend.service.RecommendService;
 import com.groove.recommend.service.TasteSignal;
+import com.groove.recommend.support.CoPurchaseBasket;
+import com.groove.recommend.support.CoPurchaseBasketLoader;
+import com.groove.recommend.support.CoPurchaseIndex;
 import com.groove.recommend.support.EvalMetrics;
 import com.groove.recommend.support.EvalReport;
 import com.groove.recommend.support.EvalRunner;
@@ -49,6 +54,8 @@ import com.groove.recommend.support.EvalSignals;
 import com.groove.recommend.support.HoldoutKind;
 import com.groove.recommend.support.HoldoutSpec;
 import com.groove.recommend.support.HoldoutSplitter;
+import com.groove.recommend.support.InMemoryCoPurchaseIndex;
+import com.groove.recommend.support.RedisCoPurchaseIndex;
 import com.groove.support.IntegrationTestSupport;
 import com.groove.wishlist.repository.WishlistRepository;
 
@@ -96,6 +103,9 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 	EntityManager entityManager;
 
 	@Autowired
+	Clock clock;
+
+	@Autowired
 	RecommendRanker recommendRanker;
 
 	@Autowired
@@ -136,9 +146,9 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 			// given
 			boughtTogetherAggregator.refresh();
 			Map<Long, ProductFeature> features = productFeatureCache.get();
-			EvalRunner runner = new EvalRunner(recommendRanker, boughtTogetherRedisService, features);
 			List<EvalSignals> seedMembers = newSignalLoader().loadSeedMembers();
 			assertThat(seedMembers).isNotEmpty();
+			List<CoPurchaseBasket> baskets = CoPurchaseBasketLoader.load(entityManager, clock);
 
 			List<Long> byPopularity = productIdsByPopularity();
 			long candidateCount = features.values().stream().filter(feature -> !feature.hidden()).count();
@@ -149,8 +159,8 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 					.count();
 
 			// when: 기존 단일 폴드(HOLDOUT_EVERY=5) 재현. 비교 불가능한 단일 측정값이라 참고선으로만 남긴다.
-			EvalMetrics.Summary legacySummary = measureLegacy(seedMembers, byPopularity, runner, candidateCount,
-					albumCandidateCount);
+			EvalMetrics.Summary legacySummary = measureLegacy(seedMembers, byPopularity, features, baskets,
+					candidateCount, albumCandidateCount);
 
 			List<EvalMetrics.GenreDf> genreDf = EvalMetrics.genreDocumentFrequency(features, genreNames());
 			long soldQuantityPositiveCount = countProductsWithSales();
@@ -161,9 +171,9 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 			// when: 위시/구매 홀드아웃을 폴드 × 시드로 반복 측정해 표준편차를 낸다
 			EvalMetrics.FoldedRun wishRun = measureFolded(HoldoutKind.WISH, WISH_FOLD_COUNT, seedMembers,
-					byPopularity, runner, candidateCount, albumCandidateCount);
+					byPopularity, features, baskets, candidateCount, albumCandidateCount);
 			EvalMetrics.FoldedRun purchaseRun = measureFolded(HoldoutKind.PURCHASE, PURCHASE_FOLD_COUNT,
-					seedMembers, byPopularity, runner, candidateCount, albumCandidateCount);
+					seedMembers, byPopularity, features, baskets, candidateCount, albumCandidateCount);
 
 			// then
 			String foldReport = EvalReport.renderFolded(legacySummary, wishRun, purchaseRun);
@@ -196,7 +206,8 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 			// given
 			boughtTogetherAggregator.refresh();
 			Map<Long, ProductFeature> features = productFeatureCache.get();
-			EvalRunner runner = new EvalRunner(recommendRanker, boughtTogetherRedisService, features);
+			EvalRunner runner = new EvalRunner(recommendRanker, new RedisCoPurchaseIndex(boughtTogetherRedisService),
+					features);
 			List<EvalSignals> seedMembers = newSignalLoader().loadSeedMembers();
 			assertThat(seedMembers).isNotEmpty();
 
@@ -216,6 +227,29 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 						.as("memberId=%d", signals.memberId())
 						.containsExactlyElementsOf(productionIds);
 			}
+		}
+
+		@Test
+		@Transactional
+		@DisplayName("홀드아웃이 없으면 인메모리 공동구매 집계가 Redis 집계와 같다")
+		void inMemoryCoPurchaseIndexMatchesRedisWhenHoldoutIsEmpty() {
+			// given
+			boughtTogetherAggregator.refresh();
+			List<CoPurchaseBasket> baskets = CoPurchaseBasketLoader.load(entityManager, clock);
+			Set<Long> allBasketProductIds = baskets.stream()
+					.flatMap(basket -> basket.productIds().stream())
+					.collect(Collectors.toCollection(LinkedHashSet::new));
+			assertThat(allBasketProductIds).isNotEmpty();
+
+			CoPurchaseIndex inMemoryIndex = new InMemoryCoPurchaseIndex(baskets, Map.of());
+			CoPurchaseIndex redisIndex = new RedisCoPurchaseIndex(boughtTogetherRedisService);
+
+			// when
+			Map<Long, Map<Long, Double>> inMemoryScores = inMemoryIndex.findScores(allBasketProductIds);
+			Map<Long, Map<Long, Double>> redisScores = redisIndex.findScores(allBasketProductIds);
+
+			// then
+			assertThat(inMemoryScores).isEqualTo(redisScores);
 		}
 	}
 
@@ -265,20 +299,30 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 	/** 기존 단일 폴드(HOLDOUT_EVERY=5) 기준 측정. 재구성 전후 비교용 참고선으로만 쓴다. */
 	private EvalMetrics.Summary measureLegacy(List<EvalSignals> seedMembers, List<Long> byPopularity,
-			EvalRunner runner, long candidateCount, long albumCandidateCount) {
+			Map<Long, ProductFeature> features, List<CoPurchaseBasket> baskets, long candidateCount,
+			long albumCandidateCount) {
+		Map<Long, Set<Long>> holdoutByMemberId = new HashMap<>();
+		for (EvalSignals signals : seedMembers) {
+			holdoutByMemberId.put(signals.memberId(), holdoutOf(signals.wishedIds()));
+		}
+		EvalRunner runner = new EvalRunner(recommendRanker, new InMemoryCoPurchaseIndex(baskets, holdoutByMemberId),
+				features);
+
 		List<EvalMetrics.MemberEvalResult> results = new ArrayList<>();
 		for (EvalSignals signals : seedMembers) {
-			results.add(measure(signals, holdoutOf(signals.wishedIds()), byPopularity, runner));
+			results.add(measure(signals, holdoutByMemberId.get(signals.memberId()), byPopularity, runner));
 		}
 		return EvalMetrics.summarize(results, candidateCount, albumCandidateCount);
 	}
 
 	/**
 	 * kind 를 폴드 수 만큼 등분해 시드마다 전체 폴드를 한 바퀴 돈다. 측정 수는 {@code foldCount * 시드 수}다.
-	 * 폴드마다 회원의 상품 특성 스냅샷은 재사용하고 홀드아웃 부분집합만 바뀐다.
+	 * 폴드마다 회원의 상품 특성 스냅샷은 재사용하고 홀드아웃 부분집합만 바뀐다. 공동구매 인덱스도 (kind, seed,
+	 * fold) 마다 새로 재집계한다 — 그 폴드의 홀드아웃이 빠진 채로 다시 세야 신호 누수가 없다.
 	 */
 	private EvalMetrics.FoldedRun measureFolded(HoldoutKind kind, int foldCount, List<EvalSignals> seedMembers,
-			List<Long> byPopularity, EvalRunner runner, long candidateCount, long albumCandidateCount) {
+			List<Long> byPopularity, Map<Long, ProductFeature> features, List<CoPurchaseBasket> baskets,
+			long candidateCount, long albumCandidateCount) {
 		HoldoutSplitter splitter = new HoldoutSplitter();
 		List<EvalMetrics.Measurement> measurements = new ArrayList<>();
 
@@ -288,6 +332,14 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 					.collect(Collectors.toMap(EvalSignals::memberId, signals -> splitter.foldsOf(signals, spec)));
 
 			for (int foldIndex = 0; foldIndex < foldCount; foldIndex++) {
+				Map<Long, Set<Long>> holdoutByMemberId = new HashMap<>();
+				for (EvalSignals signals : seedMembers) {
+					holdoutByMemberId.put(signals.memberId(),
+							foldsByMemberId.get(signals.memberId()).get(foldIndex));
+				}
+				EvalRunner runner = new EvalRunner(recommendRanker,
+						new InMemoryCoPurchaseIndex(baskets, holdoutByMemberId), features);
+
 				List<EvalMetrics.MemberEvalResult> results = new ArrayList<>();
 				for (EvalSignals signals : seedMembers) {
 					Set<Long> holdout = foldsByMemberId.get(signals.memberId()).get(foldIndex);
