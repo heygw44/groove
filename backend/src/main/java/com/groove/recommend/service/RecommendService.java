@@ -88,7 +88,7 @@ public class RecommendService {
 
 		// 최근 본 상품도 후보에서 뺀다. 안 그러면 자기 자신과 전 차원이 일치해 최상위로 올라온다.
 		List<RecommendRanker.RankedCandidate> ranked = recommendRanker.rank(features, taste, seeds,
-				recentOnlySeedIds, coPurchaseScores, seedIds, resolvedSize);
+				recentOnlySeedIds, coPurchaseScores, seedIds, resolvedSize, RecommendRanker.CapPolicy.HOME);
 
 		return HomeRecommendResponse.of(toItems(ranked, memberId));
 	}
@@ -124,8 +124,9 @@ public class RecommendService {
 			coPurchaseScores = boughtTogetherRedisService.findScores(productId);
 		}
 
+		// 같은 아티스트의 다른 앨범은 관련 상품에서 정당한 추천이라 캡을 걸지 않는다.
 		List<RecommendRanker.RankedCandidate> ranked = recommendRanker.rank(features, taste, seeds, Set.of(),
-				coPurchaseScores, excludeIds, resolvedSize);
+				coPurchaseScores, excludeIds, resolvedSize, RecommendRanker.CapPolicy.UNCAPPED);
 
 		return toItems(ranked, memberId);
 	}

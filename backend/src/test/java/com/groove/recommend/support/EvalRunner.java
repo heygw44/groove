@@ -44,6 +44,15 @@ public class EvalRunner {
 	 * {@link Result#fallback()} 으로 알린다 — 호출부가 폴백 회원 수를 리포트에 남기는 안전장치다.
 	 */
 	public Result recommend(EvalSignals signals, int size, RecommendWeights weights) {
+		return recommend(signals, size, weights, RecommendRanker.CapPolicy.HOME);
+	}
+
+	/**
+	 * 가중치·캡 정책을 모두 지정해 추천한다. {@code capPolicy} 를 명시적으로 바꿔가며 캡 도입 전/후를
+	 * 짝짓는 측정이 이 오버로드를 쓴다.
+	 */
+	public Result recommend(EvalSignals signals, int size, RecommendWeights weights,
+			RecommendRanker.CapPolicy capPolicy) {
 		HomeSeeds homeSeeds = HomeSeeds.of(signals.wishedIds(), signals.purchasedIds(), signals.recentIds());
 		Set<Long> seedIds = homeSeeds.seedIds();
 
@@ -59,9 +68,9 @@ public class EvalRunner {
 
 		List<RecommendRanker.RankedCandidate> ranked = weights == null
 				? recommendRanker.rank(features, signals.taste(), seeds, homeSeeds.recentOnlySeedIds(),
-						coPurchaseScores, seedIds, size)
+						coPurchaseScores, seedIds, size, capPolicy)
 				: recommendRanker.rank(features, signals.taste(), seeds, homeSeeds.recentOnlySeedIds(),
-						coPurchaseScores, seedIds, size, weights);
+						coPurchaseScores, seedIds, size, weights, capPolicy);
 
 		return Result.of(ranked);
 	}
