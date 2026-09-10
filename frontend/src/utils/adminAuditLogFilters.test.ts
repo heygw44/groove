@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { AUDIT_ACTION_LABELS, AUDIT_TARGET_TYPE_LABELS } from '@/constants/adminAudit';
 import {
   parseAdminAuditLogFilters,
   serializeAdminAuditLogFilters,
@@ -39,6 +40,14 @@ describe('parseAdminAuditLogFilters()', () => {
     expect(parseAdminAuditLogFilters(searchParams).action).toBe('MEMBER_STATUS_CHANGE');
   });
 
+  it.each(Object.keys(AUDIT_ACTION_LABELS))('라벨 사전의 action(%s)은 그대로 쓴다', (action) => {
+    // given
+    const searchParams = new URLSearchParams({ action });
+
+    // when & then
+    expect(parseAdminAuditLogFilters(searchParams).action).toBe(action);
+  });
+
   it('알 수 없는 action 값은 무시한다', () => {
     // given
     const searchParams = new URLSearchParams('action=UNKNOWN');
@@ -54,6 +63,17 @@ describe('parseAdminAuditLogFilters()', () => {
     // when & then
     expect(parseAdminAuditLogFilters(searchParams).targetType).toBe('MEMBER');
   });
+
+  it.each(Object.keys(AUDIT_TARGET_TYPE_LABELS))(
+    '라벨 사전의 targetType(%s)은 그대로 쓴다',
+    (targetType) => {
+      // given
+      const searchParams = new URLSearchParams({ targetType });
+
+      // when & then
+      expect(parseAdminAuditLogFilters(searchParams).targetType).toBe(targetType);
+    },
+  );
 
   it('알 수 없는 targetType 값은 무시한다', () => {
     // given
@@ -158,6 +178,20 @@ describe('serializeAdminAuditLogFilters()', () => {
   it('직렬화한 값을 다시 파싱하면 원래 필터로 돌아온다', () => {
     // given
     const value = filters({ action: 'PAYMENT_CANCEL', adminId: 5, page: 4 });
+
+    // when
+    const result = parseAdminAuditLogFilters(serializeAdminAuditLogFilters(value));
+
+    // then
+    expect(result).toEqual(value);
+  });
+
+  it('집계 실행 action과 targetType을 직렬화-파싱해 보존한다', () => {
+    // given
+    const value = filters({
+      action: 'SALES_AGGREGATION_RUN',
+      targetType: 'SALES_AGGREGATION',
+    });
 
     // when
     const result = parseAdminAuditLogFilters(serializeAdminAuditLogFilters(value));
