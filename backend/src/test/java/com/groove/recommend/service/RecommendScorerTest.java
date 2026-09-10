@@ -24,7 +24,7 @@ class RecommendScorerTest {
 
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 6, 10, 0);
 
-	private final RecommendScorer recommendScorer = new RecommendScorer();
+	private final RecommendScorer recommendScorer = new RecommendScorer(RecommendWeights.DEFAULT);
 
 	private ProductFeature candidate() {
 		return feature(100L, 1L, 10L, Set.of(1L, 2L), Decade.D1990);

@@ -43,7 +43,8 @@ class ProductFeatureCacheTest {
 
 	private ProductFeatureCache cache(Duration ttl) {
 		clock = new MutableClock(Instant.parse("2026-09-08T00:00:00Z"), ZoneOffset.UTC);
-		return new ProductFeatureCache(recommendQueryMapper, new RecommendProperties(ttl), clock);
+		return new ProductFeatureCache(recommendQueryMapper, new RecommendProperties(ttl, RecommendWeights.DEFAULT),
+				clock);
 	}
 
 	private ProductFeatureRow row(Long id) {
