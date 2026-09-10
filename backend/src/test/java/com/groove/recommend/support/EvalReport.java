@@ -111,6 +111,70 @@ public final class EvalReport {
 				""".formatted(soldQuantityPositiveCount, summary.fallbackCount());
 	}
 
+	/**
+	 * 폴드×시드 안정성 리포트. 기존 단일 폴드(HOLDOUT_EVERY=5) 수치를 참고선으로 남기고, kind 별로 mean±σ ·
+	 * min/max · raw 측정값을 찍는다.
+	 */
+	public static String renderFolded(EvalMetrics.Summary legacySummary, EvalMetrics.FoldedRun wishRun,
+			EvalMetrics.FoldedRun purchaseRun) {
+		StringBuilder report = new StringBuilder();
+		report.append("""
+				# 추천 품질 측정 — 폴드 × 시드 안정성
+
+				기존 단일 폴드(id 오름차순 5개마다 1개, HOLDOUT_EVERY=5) 기준 recall@10 micro = %.3f.
+				이 값은 단일 측정이라 노이즈와 개선을 구분할 수 없다. 아래는 같은 회원·같은 랭커를 폴드 ×
+				시드로 반복 측정해 표준편차를 낸 결과다.
+				""".formatted(legacySummary.recallMicro()));
+		report.append('\n');
+		report.append(renderFoldedRunSection("위시 홀드아웃", wishRun));
+		report.append('\n');
+		report.append(renderFoldedRunSection("구매 홀드아웃", purchaseRun));
+		return report.toString();
+	}
+
+	private static String renderFoldedRunSection(String title, EvalMetrics.FoldedRun run) {
+		EvalMetrics.MeasurementStats recall = run.recallStats();
+		EvalMetrics.MeasurementStats popularity = run.popularityRecallStats();
+		EvalMetrics.MeasurementStats margin = run.marginOverPopularityStats();
+		String seeds = run.randomSeeds().stream().map(String::valueOf).reduce((left, right) -> left + ", " + right)
+				.orElse("");
+
+		StringBuilder section = new StringBuilder();
+		section.append("""
+				## %s (kind=%s, foldCount=%d, 시드=%s)
+
+				| 항목 | 값 |
+				|---|---|
+				| 측정 수 | %d |
+				| recall@10 micro mean ± σ | %.3f ± %.3f |
+				| min / max | %.3f / %.3f |
+				| mean - 2σ (회귀 게이트 하한) | %.3f |
+				| 무작위 기준선 | %.3f |
+				| 인기순 대조군 mean ± σ | %.3f ± %.3f |
+				| recall - 인기순 margin mean ± σ | %.3f ± %.3f |
+				| 폴백 발생 횟수(측정 합) | %d |
+
+				"""
+				.formatted(title, run.kind(), run.foldCount(), seeds, recall.count(), recall.mean(),
+						recall.stdDev(), recall.min(), recall.max(), recall.lowerBound(), run.randomBaseline(),
+						popularity.mean(), popularity.stdDev(), margin.mean(), margin.stdDev(),
+						run.totalFallbackOccurrences()));
+		section.append(renderRawMeasurements(run));
+		return section.toString();
+	}
+
+	private static String renderRawMeasurements(EvalMetrics.FoldedRun run) {
+		StringBuilder table = new StringBuilder();
+		table.append("| 시드 | fold | recall@10 | 인기순 recall@10 | 폴백 회원 |\n|---|---|---|---|---|\n");
+		for (EvalMetrics.Measurement measurement : run.measurements()) {
+			EvalMetrics.Summary summary = measurement.summary();
+			table.append("| %d | %d | %.3f | %.3f | %d |\n".formatted(measurement.randomSeed(),
+					measurement.foldIndex(), summary.recallMicro(), summary.popularityRecall(),
+					summary.fallbackCount()));
+		}
+		return table.toString();
+	}
+
 	public static void write(Path path, String content) throws IOException {
 		Files.createDirectories(path.getParent());
 		Files.writeString(path, content);

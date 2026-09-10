@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.ToDoubleFunction;
 import java.util.stream.Collectors;
 
 import com.groove.recommend.entity.Decade;
@@ -23,7 +24,10 @@ public final class EvalMetrics {
 	}
 
 	public static Summary summarize(List<MemberEvalResult> results, long candidateCount, long albumCandidateCount) {
-		List<MemberEvalResult> evaluable = results.stream().filter(r -> !r.holdoutIds().isEmpty()).toList();
+		// 폴백 회원은 개인화 경로를 안 탔으므로 recall 계산에서 뺀다. fallbackCount 로 별도 집계한다.
+		List<MemberEvalResult> evaluable = results.stream()
+				.filter(r -> !r.holdoutIds().isEmpty() && !r.fallback())
+				.toList();
 		List<MemberEvalResult> withRecommendations = results.stream()
 				.filter(r -> !r.recommended().isEmpty())
 				.toList();
@@ -257,6 +261,67 @@ public final class EvalMetrics {
 
 		public double vsPopularity() {
 			return popularityRecall == 0 ? 0 : recallMicro / popularityRecall;
+		}
+	}
+
+	/** 값 목록 하나의 평균·표준편차(표본, n-1)·최소·최대. 폴드×시드 측정치를 요약할 때 쓴다. */
+	public record MeasurementStats(double mean, double stdDev, double min, double max, int count) {
+
+		public static MeasurementStats of(List<Double> values) {
+			int count = values.size();
+			double mean = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+			double variance = count < 2 ? 0
+					: values.stream().mapToDouble(value -> Math.pow(value - mean, 2)).sum() / (count - 1);
+			double min = values.stream().mapToDouble(Double::doubleValue).min().orElse(0);
+			double max = values.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+			return new MeasurementStats(mean, Math.sqrt(variance), min, max, count);
+		}
+
+		/** 회귀 게이트용 하한. 폴드가 늘면 단일 값이 흔들리므로 평균에서 2σ 를 뺀 값으로 보수화한다. */
+		public double lowerBound() {
+			return mean - 2 * stdDev;
+		}
+	}
+
+	/** 폴드×시드 조합 하나의 측정값. raw 리포트에서 어떤 조합이 어떤 값을 냈는지 추적하는 데 쓴다. */
+	public record Measurement(long randomSeed, int foldIndex, Summary summary) {
+	}
+
+	/**
+	 * 한 {@link HoldoutKind} 에 대한 폴드×시드 측정 묶음. {@code measurements} 순서는 시드 → fold index
+	 * 순이다.
+	 */
+	public record FoldedRun(HoldoutKind kind, int foldCount, List<Long> randomSeeds,
+			List<Measurement> measurements) {
+
+		public MeasurementStats recallStats() {
+			return statsOf(Summary::recallMicro);
+		}
+
+		public MeasurementStats popularityRecallStats() {
+			return statsOf(Summary::popularityRecall);
+		}
+
+		/**
+		 * recallMicro - popularityRecall 을 같은 폴드·시드 쌍끼리 짝지은 값. 두 지표가 같은 홀드아웃을 공유해
+		 * 생기는 공통 노이즈를 지운다.
+		 */
+		public MeasurementStats marginOverPopularityStats() {
+			return statsOf(summary -> summary.recallMicro() - summary.popularityRecall());
+		}
+
+		private MeasurementStats statsOf(ToDoubleFunction<Summary> extractor) {
+			return MeasurementStats.of(measurements.stream()
+					.map(measurement -> extractor.applyAsDouble(measurement.summary()))
+					.toList());
+		}
+
+		public double randomBaseline() {
+			return measurements.isEmpty() ? 0 : measurements.get(0).summary().randomBaseline();
+		}
+
+		public int totalFallbackOccurrences() {
+			return measurements.stream().mapToInt(measurement -> measurement.summary().fallbackCount()).sum();
 		}
 	}
 }
