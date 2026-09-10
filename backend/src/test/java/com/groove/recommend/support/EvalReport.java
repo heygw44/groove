@@ -11,6 +11,10 @@ public final class EvalReport {
 	/** {@code RecommendAblationTest} 가 쓰는 리포트 경로. */
 	public static final Path ABLATION_REPORT_PATH = Path.of("build", "reports", "recommend-eval", "ablation.md");
 
+	/** 공동구매 쌍 분포(n_ab 히스토그램) 리포트 경로. */
+	public static final Path CO_PURCHASE_DISTRIBUTION_REPORT_PATH = Path.of("build", "reports", "recommend-eval",
+			"co-purchase-distribution.md");
+
 	private EvalReport() {
 	}
 
@@ -226,6 +230,39 @@ public final class EvalReport {
 					run.coverageStats().mean(), run.totalShortRecommendationOccurrences()));
 		}
 		return table.toString();
+	}
+
+	/**
+	 * 공동구매 쌍 분포. 쌍은 비순서쌍(상품 A, B) 기준으로 세고, 같은 주문은 한 쌍에 최대 1씩만 더한다 —
+	 * {@link InMemoryCoPurchaseIndex} 가 재집계하는 방식과 같다.
+	 */
+	public static String renderCoPurchaseDistribution(int orderCount, double avgItemsPerOrder, int productCount,
+			long pairCountAt1, long pairCountAt2, long pairCountAtLeast3, long productAppearanceMin,
+			long productAppearanceMax, double productAppearanceMedian) {
+		long totalPairs = pairCountAt1 + pairCountAt2 + pairCountAtLeast3;
+		double ratioAtLeast2 = totalPairs == 0 ? 0 : (double)(pairCountAt2 + pairCountAtLeast3) / totalPairs;
+		return """
+				# 공동구매 쌍 분포
+
+				비순서쌍(상품 A, B) 기준. n_ab 는 두 상품이 함께 담긴 주문 수(같은 주문은 한 쌍에 최대 1씩만
+				센다). n_a 는 상품 하나가 등장한 주문 수.
+
+				| 항목 | 값 |
+				|---|---|
+				| 전체 주문 수 | %d건 |
+				| 주문당 평균 상품 수 | %.2f개 |
+				| 등장한 상품 수 (n_a > 0) | %d개 |
+				| 전체 쌍 개수 | %d쌍 |
+				| n_ab = 1 인 쌍 | %d쌍 |
+				| n_ab = 2 인 쌍 | %d쌍 |
+				| n_ab ≥ 3 인 쌍 | %d쌍 |
+				| n_ab ≥ 2 비율 | %.3f |
+				| n_a 최소 | %d |
+				| n_a 최대 | %d |
+				| n_a 중앙값 | %.1f |
+				""".formatted(orderCount, avgItemsPerOrder, productCount, totalPairs, pairCountAt1, pairCountAt2,
+				pairCountAtLeast3, ratioAtLeast2, productAppearanceMin, productAppearanceMax,
+				productAppearanceMedian);
 	}
 
 	public static void write(Path path, String content) throws IOException {

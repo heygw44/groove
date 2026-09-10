@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -178,9 +179,81 @@ class RecommendAblationTest extends IntegrationTestSupport {
 		}
 	}
 
-	/** 기준 + 7개 콘텐츠 차원 각각 0 + 공동구매 0. 순서가 리포트의 행 순서다. */
+	@Nested
+	@DisplayName("공동구매 쌍 분포")
+	class CoPurchasePairDistribution {
+
+		@Test
+		@Transactional
+		@DisplayName("주문 바스켓에서 n_ab 히스토그램과 n_a 분포를 낸다")
+		void measuresPairDistribution() throws IOException {
+			// given
+			List<CoPurchaseBasket> baskets = CoPurchaseBasketLoader.load(entityManager, clock);
+			assertThat(baskets).isNotEmpty();
+
+			// when
+			Map<ProductPair, Long> countByPair = new HashMap<>();
+			Map<Long, Long> countByProduct = new HashMap<>();
+			long totalItems = 0;
+			for (CoPurchaseBasket basket : baskets) {
+				List<Long> productIds = basket.productIds().stream().sorted().toList();
+				totalItems += productIds.size();
+				for (Long productId : productIds) {
+					countByProduct.merge(productId, 1L, Long::sum);
+				}
+				for (int left = 0; left < productIds.size(); left++) {
+					for (int right = left + 1; right < productIds.size(); right++) {
+						countByPair.merge(new ProductPair(productIds.get(left), productIds.get(right)), 1L,
+								Long::sum);
+					}
+				}
+			}
+
+			long pairCountAt1 = countByPair.values().stream().filter(count -> count == 1).count();
+			long pairCountAt2 = countByPair.values().stream().filter(count -> count == 2).count();
+			long pairCountAtLeast3 = countByPair.values().stream().filter(count -> count >= 3).count();
+			List<Long> productAppearances = new ArrayList<>(countByProduct.values());
+			Collections.sort(productAppearances);
+
+			String report = EvalReport.renderCoPurchaseDistribution(baskets.size(),
+					(double)totalItems / baskets.size(), countByProduct.size(), pairCountAt1, pairCountAt2,
+					pairCountAtLeast3, productAppearances.get(0), productAppearances.get(productAppearances.size() - 1),
+					median(productAppearances));
+			System.out.println(report);
+			EvalReport.write(EvalReport.CO_PURCHASE_DISTRIBUTION_REPORT_PATH, report);
+
+			// then
+			assertThat(countByPair).isNotEmpty();
+		}
+
+		/** 정렬된 값 목록의 중앙값. 개수가 짝수면 가운데 두 값의 평균이다. */
+		private double median(List<Long> sortedValues) {
+			int size = sortedValues.size();
+			if (size % 2 == 1) {
+				return sortedValues.get(size / 2);
+			}
+			return (sortedValues.get(size / 2 - 1) + sortedValues.get(size / 2)) / 2.0;
+		}
+	}
+
+	/** 비순서쌍(상품 A, B) 키. {@code left} 는 항상 {@code right} 보다 작은 상품 id다. */
+	private record ProductPair(Long left, Long right) {
+	}
+
+	/**
+	 * 기준 + 7개 콘텐츠 차원 각각 0 + 공동구매 0 + 두 신호군 단독. 순서가 리포트의 행 순서다. 마지막 두 행은
+	 * SAME_* 만 남긴 구성(TASTE_* 셋을 0으로)과 TASTE_* 만 남긴 구성(SAME_* 넷을 0으로)이다 — 시드 신호와
+	 * 취향 신호가 겹치는지 판단하는 근거다.
+	 */
 	private List<AblationConfig> ablationConfigs() {
 		RecommendWeights base = RecommendWeights.DEFAULT;
+		RecommendWeights sameOnly = base.withZeroed(RecommendReason.TASTE_ARTIST)
+				.withZeroed(RecommendReason.TASTE_GENRE)
+				.withZeroed(RecommendReason.TASTE_DECADE);
+		RecommendWeights tasteOnly = base.withZeroed(RecommendReason.SAME_ARTIST)
+				.withZeroed(RecommendReason.SAME_GENRE)
+				.withZeroed(RecommendReason.SAME_LABEL)
+				.withZeroed(RecommendReason.SAME_DECADE);
 		return List.of(
 				new AblationConfig("(없음, 기준)", base),
 				new AblationConfig("TASTE_ARTIST", base.withZeroed(RecommendReason.TASTE_ARTIST)),
@@ -190,7 +263,9 @@ class RecommendAblationTest extends IntegrationTestSupport {
 				new AblationConfig("SAME_LABEL", base.withZeroed(RecommendReason.SAME_LABEL)),
 				new AblationConfig("TASTE_DECADE", base.withZeroed(RecommendReason.TASTE_DECADE)),
 				new AblationConfig("SAME_DECADE", base.withZeroed(RecommendReason.SAME_DECADE)),
-				new AblationConfig("BOUGHT_TOGETHER", base.withZeroed(RecommendReason.BOUGHT_TOGETHER)));
+				new AblationConfig("BOUGHT_TOGETHER", base.withZeroed(RecommendReason.BOUGHT_TOGETHER)),
+				new AblationConfig("SAME_전용(TASTE_* 0)", sameOnly),
+				new AblationConfig("TASTE_전용(SAME_* 0)", tasteOnly));
 	}
 
 	/** 시드마다 회원별 폴드 분할을 한 번만 계산해 구성 9개가 전부 공유하게 한다. */
