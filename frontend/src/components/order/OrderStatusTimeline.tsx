@@ -23,15 +23,9 @@ export function OrderStatusTimeline({ status }: OrderStatusTimelineProps) {
       {ORDER_STATUS_STEPS.map((step, index) => {
         const isDone = index <= currentIndex;
         const isCurrent = index === currentIndex;
-        const isFirst = index === 0;
-        const isLast = index === ORDER_STATUS_STEPS.length - 1;
         return (
           <li key={step} className="flex flex-1 items-center last:flex-none">
-            <div
-              className={`flex flex-col items-center gap-1.5 ${
-                isFirst ? 'items-start' : isLast ? 'items-end' : ''
-              }`}
-            >
+            <div className="flex flex-col items-center gap-1.5">
               <span
                 aria-current={isCurrent ? 'step' : undefined}
                 className={`h-2.5 w-2.5 rounded-full ${isDone ? 'bg-accent' : 'bg-line-strong'}`}
