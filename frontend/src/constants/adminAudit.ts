@@ -19,6 +19,7 @@ export const AUDIT_ACTION_LABELS: Record<AdminAuditAction, string> = {
   STOCK_ADJUST: '재고 조정',
   PRODUCT_IMPORT: '상품 가져오기',
   CATALOG_IMPORT_JOB_START: '카탈로그 수집 실행',
+  SALES_AGGREGATION_RUN: '매출 집계 실행',
 };
 
 export const AUDIT_TARGET_TYPE_LABELS: Record<AdminAuditTargetType, string> = {
@@ -29,6 +30,7 @@ export const AUDIT_TARGET_TYPE_LABELS: Record<AdminAuditTargetType, string> = {
   MEMBER: '회원',
   PAYMENT: '결제',
   CATALOG_IMPORT_JOB: '카탈로그 수집',
+  SALES_AGGREGATION: '매출 집계',
 };
 
 export const MEMBER_STATUS_LABELS: Record<MemberStatus, string> = {

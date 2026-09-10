@@ -1,3 +1,4 @@
+import { AUDIT_ACTION_LABELS, AUDIT_TARGET_TYPE_LABELS } from '@/constants/adminAudit';
 import type {
   AdminAuditAction,
   AdminAuditLogListParams,
@@ -17,32 +18,9 @@ const DEFAULT_PAGE = 0;
 const ADMIN_AUDIT_LOG_PAGE_SIZE = 20;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-const AUDIT_ACTIONS = new Set<string>([
-  'PRODUCT_CREATE',
-  'PRODUCT_UPDATE',
-  'PRODUCT_HIDE',
-  'PRODUCT_RESTORE',
-  'ORDER_STATUS_CHANGE',
-  'COUPON_CREATE',
-  'COUPON_UPDATE',
-  'COUPON_DISABLE',
-  'LIMITED_DROP_CREATE',
-  'LIMITED_DROP_UPDATE',
-  'LIMITED_DROP_OPEN',
-  'LIMITED_DROP_CLOSE',
-  'MEMBER_STATUS_CHANGE',
-  'PAYMENT_CANCEL',
-  'STOCK_ADJUST',
-]);
+const AUDIT_ACTIONS = new Set<string>(Object.keys(AUDIT_ACTION_LABELS));
 
-const AUDIT_TARGET_TYPES = new Set<string>([
-  'PRODUCT',
-  'ORDER',
-  'COUPON',
-  'LIMITED_DROP',
-  'MEMBER',
-  'PAYMENT',
-]);
+const AUDIT_TARGET_TYPES = new Set<string>(Object.keys(AUDIT_TARGET_TYPE_LABELS));
 
 const isAuditAction = (value: string): value is AdminAuditAction => AUDIT_ACTIONS.has(value);
 const isAuditTargetType = (value: string): value is AdminAuditTargetType =>
