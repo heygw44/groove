@@ -252,13 +252,15 @@ class AdminStatsControllerTest {
 		@DisplayName("관리자면 200 과 요약 카드를 반환한다")
 		void returnsSummaryForAdmin() throws Exception {
 			// given
-			AdminStatsSummaryResponse response = new AdminStatsSummaryResponse(new BigDecimal("100000"), 2, 1, 3);
+			AdminStatsSummaryResponse response = new AdminStatsSummaryResponse(new BigDecimal("100000"),
+					new BigDecimal("20000"), 2, 1, 3);
 			given(adminStatsService.getSummary()).willReturn(response);
 
 			// when & then
 			mockMvc.perform(get(BASE_URL + "/summary").header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.success", is(true)))
+					.andExpect(jsonPath("$.data.todayCancelAmount", is(20000)))
 					.andExpect(jsonPath("$.data.pendingOrderCount", is(3)));
 		}
 
