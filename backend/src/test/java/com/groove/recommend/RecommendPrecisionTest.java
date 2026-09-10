@@ -3,10 +3,8 @@ package com.groove.recommend;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -14,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,15 +22,30 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderItemRepository;
-import com.groove.product.dto.ProductSummaryResponse;
+import com.groove.product.entity.Genre;
 import com.groove.product.entity.ProductStatus;
+import com.groove.product.repository.GenreRepository;
 import com.groove.recommend.dto.RecommendItemResponse;
+import com.groove.recommend.repository.MemberTasteArtistRepository;
+import com.groove.recommend.repository.MemberTasteDecadeRepository;
+import com.groove.recommend.repository.MemberTasteGenreRepository;
+import com.groove.recommend.repository.MemberTasteProfileRepository;
 import com.groove.recommend.service.BoughtTogetherAggregator;
+import com.groove.recommend.service.BoughtTogetherRedisService;
+import com.groove.recommend.service.ProductFeature;
+import com.groove.recommend.service.ProductFeatureCache;
+import com.groove.recommend.service.RecentViewService;
+import com.groove.recommend.service.RecommendRanker;
+import com.groove.recommend.service.RecommendScorer;
 import com.groove.recommend.service.RecommendService;
+import com.groove.recommend.service.TasteSignal;
+import com.groove.recommend.support.EvalMetrics;
+import com.groove.recommend.support.EvalReport;
+import com.groove.recommend.support.EvalRunner;
+import com.groove.recommend.support.EvalSignalLoader;
+import com.groove.recommend.support.EvalSignals;
 import com.groove.support.IntegrationTestSupport;
 import com.groove.wishlist.repository.WishlistRepository;
 
@@ -39,8 +53,10 @@ import jakarta.persistence.EntityManager;
 
 /**
  * 규칙 기반 추천의 품질 측정. 시드 회원 위시리스트의 20% 를 홀드아웃으로 떼고, 남은 신호만으로 계산한 추천
- * 상위 10개에 홀드아웃이 몇 개나 들어오는지 센다. 일반 빌드에서는 제외되고 {@code ./gradlew precisionAt10}
- * 으로만 돈다. 합성 시드 기준이라 실사용 지표가 아니라 규칙이 무작위보다 낫다는 것을 보이는 용도다.
+ * 상위 10개에 홀드아웃이 몇 개나 들어오는지 센다. 신호는 DB 에서 한 번만 읽어 메모리에 올리고, 홀드아웃은
+ * 행을 지우는 대신 시드 목록에서 뺀 채로 {@link RecommendRanker} 를 직접 불러 계산한다({@link EvalRunner}).
+ * 일반 빌드에서는 제외되고 {@code ./gradlew precisionAt10} 으로만 돈다. 합성 시드 기준이라 실사용
+ * 지표가 아니라 규칙이 무작위보다 낫다는 것을 보이는 용도다.
  */
 @Tag("precision")
 @ActiveProfiles({"local", "seed", "test"})
@@ -48,8 +64,8 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 	private static final int TOP_K = 10;
 	private static final int HOLDOUT_EVERY = 5;
-	private static final String SEED_MEMBER_PREFIX = "digger";
-	private static final Path REPORT_PATH = Path.of("build", "reports", "precision-at-10.md");
+	private static final Path LEGACY_REPORT_PATH = Path.of("build", "reports", "precision-at-10.md");
+	private static final Path REPORT_PATH = Path.of("build", "reports", "recommend-eval", "home-recall.md");
 
 	@Autowired
 	RecommendService recommendService;
@@ -69,6 +85,36 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 	@Autowired
 	EntityManager entityManager;
 
+	@Autowired
+	RecommendRanker recommendRanker;
+
+	@Autowired
+	RecommendScorer recommendScorer;
+
+	@Autowired
+	BoughtTogetherRedisService boughtTogetherRedisService;
+
+	@Autowired
+	ProductFeatureCache productFeatureCache;
+
+	@Autowired
+	RecentViewService recentViewService;
+
+	@Autowired
+	MemberTasteProfileRepository memberTasteProfileRepository;
+
+	@Autowired
+	MemberTasteGenreRepository memberTasteGenreRepository;
+
+	@Autowired
+	MemberTasteArtistRepository memberTasteArtistRepository;
+
+	@Autowired
+	MemberTasteDecadeRepository memberTasteDecadeRepository;
+
+	@Autowired
+	GenreRepository genreRepository;
+
 	@Nested
 	@DisplayName("recommendHome()")
 	class RecommendHome {
@@ -79,25 +125,67 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 		void recallAtTenBeatsRandomBaseline() throws IOException {
 			// given
 			boughtTogetherAggregator.refresh();
-			List<Member> members = seedMembers();
-			assertThat(members).isNotEmpty();
+			Map<Long, ProductFeature> features = productFeatureCache.get();
+			EvalRunner runner = new EvalRunner(recommendRanker, boughtTogetherRedisService, features);
+			List<EvalSignals> seedMembers = newSignalLoader().loadSeedMembers();
+			assertThat(seedMembers).isNotEmpty();
 
 			List<Long> byPopularity = productIdsByPopularity();
-			List<MemberResult> results = new ArrayList<>();
+			List<EvalMetrics.MemberEvalResult> results = new ArrayList<>();
 
 			// when
-			for (Member member : members) {
-				results.add(measure(member, byPopularity));
+			for (EvalSignals signals : seedMembers) {
+				results.add(measure(signals, byPopularity, runner));
 			}
 
 			// then
-			Metrics metrics = Metrics.of(results, byPopularity.size());
-			String report = metrics.toMarkdown();
-			System.out.println(report);
-			writeReport(report);
+			long candidateCount = features.values().stream().filter(feature -> !feature.hidden()).count();
+			long albumCandidateCount = features.values().stream()
+					.filter(feature -> !feature.hidden())
+					.map(ProductFeature::albumId)
+					.distinct()
+					.count();
+			EvalMetrics.Summary summary = EvalMetrics.summarize(results, candidateCount, albumCandidateCount);
 
-			assertThat(metrics.recallAtK()).isGreaterThan(metrics.randomBaseline() * 3);
-			assertThat(metrics.recallAtK()).isGreaterThan(metrics.popularityRecallAtK());
+			List<EvalMetrics.GenreDf> genreDf = EvalMetrics.genreDocumentFrequency(features, genreNames());
+			long soldQuantityPositiveCount = countProductsWithSales();
+
+			String fullReport = EvalReport.renderFull(summary, genreDf, soldQuantityPositiveCount);
+			System.out.println(fullReport);
+			EvalReport.write(LEGACY_REPORT_PATH, EvalReport.renderLegacy(summary));
+			EvalReport.write(REPORT_PATH, fullReport);
+
+			assertThat(summary.recallMicro()).isGreaterThan(summary.randomBaseline() * 3);
+			assertThat(summary.recallMicro()).isGreaterThan(summary.popularityRecall());
+		}
+
+		@Test
+		@Transactional
+		@DisplayName("홀드아웃 없이 계산한 하네스 추천 결과는 recommendHome() 결과와 상품 순서까지 같다")
+		void harnessMatchesRecommendHome() {
+			// given
+			boughtTogetherAggregator.refresh();
+			Map<Long, ProductFeature> features = productFeatureCache.get();
+			EvalRunner runner = new EvalRunner(recommendRanker, boughtTogetherRedisService, features);
+			List<EvalSignals> seedMembers = newSignalLoader().loadSeedMembers();
+			assertThat(seedMembers).isNotEmpty();
+
+			for (EvalSignals signals : seedMembers) {
+				// when
+				EvalRunner.Result result = runner.recommend(signals, TOP_K);
+				List<Long> productionIds = recommendService.recommendHome(signals.memberId(), TOP_K).items()
+						.stream()
+						.map(item -> item.product().id())
+						.toList();
+
+				// then
+				assertThat(result.fallback())
+						.as("memberId=%d 는 인기순 폴백을 타면 안 된다", signals.memberId())
+						.isFalse();
+				assertThat(result.productIds())
+						.as("memberId=%d", signals.memberId())
+						.containsExactlyElementsOf(productionIds);
+			}
 		}
 	}
 
@@ -145,37 +233,40 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 		}
 	}
 
-	private MemberResult measure(Member member, List<Long> byPopularity) {
-		List<Long> wishedIds = wishlistRepository.findProductIdsByMemberId(member.getId()).stream()
-				.sorted()
-				.toList();
-		Set<Long> holdout = holdoutOf(wishedIds);
+	private EvalMetrics.MemberEvalResult measure(EvalSignals signals, List<Long> byPopularity, EvalRunner runner) {
+		Set<Long> holdout = holdoutOf(signals.wishedIds());
 		if (holdout.isEmpty()) {
-			return new MemberResult(0, 0, 0);
+			return EvalMetrics.MemberEvalResult.empty(signals.memberId());
 		}
 
-		holdout.forEach(productId -> wishlistRepository.findByMemberIdAndProductId(member.getId(), productId)
-				.ifPresent(wishlistRepository::delete));
-		entityManager.flush();
-
-		List<Long> recommended = recommendService.recommendHome(member.getId(), TOP_K).items().stream()
-				.map(RecommendItemResponse::product)
-				.map(ProductSummaryResponse::id)
+		EvalSignals foldSignals = signals.without(holdout);
+		EvalRunner.Result result = runner.recommend(foldSignals, TOP_K);
+		List<EvalMetrics.RecommendedItem> recommended = result.ranked().stream()
+				.map(candidate -> toRecommendedItem(candidate.feature(), signals.taste()))
 				.toList();
 
-		int hits = (int)recommended.stream().filter(holdout::contains).count();
-		int popularityHits = (int)popularityTopK(member, byPopularity).stream().filter(holdout::contains).count();
-		return new MemberResult(holdout.size(), hits, popularityHits);
+		List<Long> popularityPicks = popularityTopK(foldSignals, byPopularity);
+		int popularityHitCount = (int)popularityPicks.stream().filter(holdout::contains).count();
+
+		return new EvalMetrics.MemberEvalResult(signals.memberId(), holdout, recommended, result.fallback(),
+				popularityHitCount);
+	}
+
+	private EvalMetrics.RecommendedItem toRecommendedItem(ProductFeature feature, TasteSignal taste) {
+		RecommendScorer.ScoreResult tasteScore = recommendScorer.scoreTaste(feature, taste);
+		boolean tasteMatch = recommendScorer.matchesTaste(tasteScore);
+		return new EvalMetrics.RecommendedItem(feature.id(), feature.albumId(), feature.artistId(),
+				feature.labelId(), feature.genreIds(), feature.decade(), tasteMatch);
 	}
 
 	/**
 	 * 대조군. 개인화 없이 평점 높은 순으로 10개를 고른다. 규칙 추천이 균등 무작위보다 낫다는 것만으로는
-	 * 부족하고, "그냥 인기순으로 뿌리기"보다 나아야 개인화가 값을 한다고 말할 수 있다.
+	 * 부족하고, "그냥 인기순으로 뿌리기"보다 나아야 개인화가 값을 한다고 말할 수 있다. 제외 대상은 홀드아웃을
+	 * 뺀 폴드 신호 기준이다 — 홀드아웃 상품도 이 대조군이 맞힐 수 있어야 recall 대조가 공정하다.
 	 */
-	private List<Long> popularityTopK(Member member, List<Long> byPopularity) {
-		Set<Long> excluded = new HashSet<>(wishlistRepository.findProductIdsByMemberId(member.getId()));
-		excluded.addAll(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(member.getId(),
-				OrderStatus.PAID_OR_LATER));
+	private List<Long> popularityTopK(EvalSignals foldSignals, List<Long> byPopularity) {
+		Set<Long> excluded = new HashSet<>(foldSignals.wishedIds());
+		excluded.addAll(foldSignals.purchasedIds());
 		return byPopularity.stream()
 				.filter(id -> !excluded.contains(id))
 				.limit(TOP_K)
@@ -191,6 +282,16 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 				.getResultList();
 	}
 
+	private long countProductsWithSales() {
+		return entityManager.createQuery("select count(p) from Product p where p.soldQuantity > 0", Long.class)
+				.getSingleResult();
+	}
+
+	private Map<Long, String> genreNames() {
+		return genreRepository.findAllByOrderByNameAsc().stream()
+				.collect(Collectors.toMap(Genre::getId, Genre::getName));
+	}
+
 	/** id 오름차순으로 {@value #HOLDOUT_EVERY} 개마다 1개. 난수가 아니라 실행마다 같은 홀드아웃이 나온다. */
 	private Set<Long> holdoutOf(List<Long> wishedIds) {
 		Set<Long> holdout = new LinkedHashSet<>();
@@ -200,78 +301,9 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 		return holdout;
 	}
 
-	private List<Member> seedMembers() {
-		return memberRepository.findAll().stream()
-				.filter(member -> member.getEmail().startsWith(SEED_MEMBER_PREFIX))
-				.sorted(Comparator.comparing(Member::getEmail))
-				.toList();
-	}
-
-	private void writeReport(String report) throws IOException {
-		Files.createDirectories(REPORT_PATH.getParent());
-		Files.writeString(REPORT_PATH, report);
-	}
-
-	private record MemberResult(int holdoutCount, int hitCount, int popularityHitCount) {
-	}
-
-	private record Metrics(int memberCount, int holdoutTotal, int hitTotal, int hitMemberCount,
-			int popularityHitTotal, long candidateCount) {
-
-		static Metrics of(List<MemberResult> results, long candidateCount) {
-			int holdoutTotal = results.stream().mapToInt(MemberResult::holdoutCount).sum();
-			int hitTotal = results.stream().mapToInt(MemberResult::hitCount).sum();
-			int hitMemberCount = (int)results.stream().filter(result -> result.hitCount() > 0).count();
-			int popularityHitTotal = results.stream().mapToInt(MemberResult::popularityHitCount).sum();
-			return new Metrics(results.size(), holdoutTotal, hitTotal, hitMemberCount, popularityHitTotal,
-					candidateCount);
-		}
-
-		double recallAtK() {
-			return holdoutTotal == 0 ? 0 : (double)hitTotal / holdoutTotal;
-		}
-
-		double precisionAtK() {
-			return memberCount == 0 ? 0 : (double)hitTotal / ((long)memberCount * TOP_K);
-		}
-
-		double hitRateAtK() {
-			return memberCount == 0 ? 0 : (double)hitMemberCount / memberCount;
-		}
-
-		double randomBaseline() {
-			return candidateCount == 0 ? 0 : (double)TOP_K / candidateCount;
-		}
-
-		double popularityRecallAtK() {
-			return holdoutTotal == 0 ? 0 : (double)popularityHitTotal / holdoutTotal;
-		}
-
-		String toMarkdown() {
-			return """
-					# 추천 품질 측정 (precision@10)
-
-					| 항목 | 값 |
-					|---|---|
-					| 측정 회원 | %d명 |
-					| 후보 상품 | %d건 |
-					| 홀드아웃 | %d건 |
-					| 규칙 추천 적중 | %d건 |
-					| 인기순 적중 | %d건 |
-
-					| 지표 | 값 |
-					|---|---|
-					| recall@10 | %.3f |
-					| precision@10 | %.3f |
-					| hit-rate@10 | %.3f |
-					| 인기순 대조군 recall@10 | %.3f |
-					| 무작위 기준선 recall@10 | %.3f |
-					| 무작위 대비 | %.1f배 |
-					| 인기순 대비 | %.1f배 |
-					""".formatted(memberCount, candidateCount, holdoutTotal, hitTotal, popularityHitTotal,
-					recallAtK(), precisionAtK(), hitRateAtK(), popularityRecallAtK(), randomBaseline(),
-					randomBaseline() == 0 ? 0 : recallAtK() / randomBaseline(),
-					popularityRecallAtK() == 0 ? 0 : recallAtK() / popularityRecallAtK());
-		}
+	private EvalSignalLoader newSignalLoader() {
+		return new EvalSignalLoader(memberRepository, wishlistRepository, orderItemRepository, recentViewService,
+				memberTasteProfileRepository, memberTasteGenreRepository, memberTasteArtistRepository,
+				memberTasteDecadeRepository);
 	}
 }
