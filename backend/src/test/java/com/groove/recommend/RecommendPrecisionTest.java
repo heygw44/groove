@@ -46,17 +46,22 @@ import com.groove.recommend.support.EvalReport;
 import com.groove.recommend.support.EvalRunner;
 import com.groove.recommend.support.EvalSignalLoader;
 import com.groove.recommend.support.EvalSignals;
+import com.groove.recommend.support.HoldoutKind;
+import com.groove.recommend.support.HoldoutSpec;
+import com.groove.recommend.support.HoldoutSplitter;
 import com.groove.support.IntegrationTestSupport;
 import com.groove.wishlist.repository.WishlistRepository;
 
 import jakarta.persistence.EntityManager;
 
 /**
- * 규칙 기반 추천의 품질 측정. 시드 회원 위시리스트의 20% 를 홀드아웃으로 떼고, 남은 신호만으로 계산한 추천
- * 상위 10개에 홀드아웃이 몇 개나 들어오는지 센다. 신호는 DB 에서 한 번만 읽어 메모리에 올리고, 홀드아웃은
- * 행을 지우는 대신 시드 목록에서 뺀 채로 {@link RecommendRanker} 를 직접 불러 계산한다({@link EvalRunner}).
- * 일반 빌드에서는 제외되고 {@code ./gradlew precisionAt10} 으로만 돈다. 합성 시드 기준이라 실사용
- * 지표가 아니라 규칙이 무작위보다 낫다는 것을 보이는 용도다.
+ * 규칙 기반 추천의 품질 측정. 시드 회원의 위시·구매 신호에서 {@link HoldoutSplitter} 로 폴드를 떼고, 남은
+ * 신호만으로 계산한 추천 상위 10개에 홀드아웃이 몇 개나 들어오는지 센다. 폴드 하나가 아니라 폴드 × 시드 조합
+ * 여러 번을 돌려 평균과 표준편차를 낸다 — 단일 측정값은 개선인지 노이즈인지 구분할 수 없기 때문이다. 신호는
+ * DB 에서 한 번만 읽어 메모리에 올리고, 홀드아웃은 행을 지우는 대신 시드 목록에서 뺀 채로
+ * {@link RecommendRanker} 를 직접 불러 계산한다({@link EvalRunner}). 일반 빌드에서는 제외되고
+ * {@code ./gradlew precisionAt10} 으로만 돈다. 합성 시드 기준이라 실사용 지표가 아니라 규칙이 무작위보다
+ * 낫다는 것을 보이는 용도다.
  */
 @Tag("precision")
 @ActiveProfiles({"local", "seed", "test"})
@@ -64,8 +69,13 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 	private static final int TOP_K = 10;
 	private static final int HOLDOUT_EVERY = 5;
+	private static final int WISH_FOLD_COUNT = 5;
+	private static final int PURCHASE_FOLD_COUNT = 3;
+	// 회원당 주문 상품이 2~12개로 적어 위시보다 폴드를 적게 잡는다.
+	private static final List<Long> RANDOM_SEEDS = List.of(1L, 2L, 3L, 4L, 5L);
 	private static final Path LEGACY_REPORT_PATH = Path.of("build", "reports", "precision-at-10.md");
 	private static final Path REPORT_PATH = Path.of("build", "reports", "recommend-eval", "home-recall.md");
+	private static final Path FOLD_REPORT_PATH = Path.of("build", "reports", "recommend-eval", "fold-stability.md");
 
 	@Autowired
 	RecommendService recommendService;
@@ -121,8 +131,8 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 		@Test
 		@Transactional
-		@DisplayName("위시리스트 20% 를 홀드아웃으로 떼면 추천 상위 10개가 무작위 기준선보다 홀드아웃을 잘 맞힌다")
-		void recallAtTenBeatsRandomBaseline() throws IOException {
+		@DisplayName("위시·구매 홀드아웃을 폴드 × 시드로 반복 측정하면 평균에서 2σ 를 빼도 기준선보다 높다")
+		void recallAtTenIsStableAcrossFoldsAndSeeds() throws IOException {
 			// given
 			boughtTogetherAggregator.refresh();
 			Map<Long, ProductFeature> features = productFeatureCache.get();
@@ -131,32 +141,52 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 			assertThat(seedMembers).isNotEmpty();
 
 			List<Long> byPopularity = productIdsByPopularity();
-			List<EvalMetrics.MemberEvalResult> results = new ArrayList<>();
-
-			// when
-			for (EvalSignals signals : seedMembers) {
-				results.add(measure(signals, byPopularity, runner));
-			}
-
-			// then
 			long candidateCount = features.values().stream().filter(feature -> !feature.hidden()).count();
 			long albumCandidateCount = features.values().stream()
 					.filter(feature -> !feature.hidden())
 					.map(ProductFeature::albumId)
 					.distinct()
 					.count();
-			EvalMetrics.Summary summary = EvalMetrics.summarize(results, candidateCount, albumCandidateCount);
+
+			// when: 기존 단일 폴드(HOLDOUT_EVERY=5) 재현. 비교 불가능한 단일 측정값이라 참고선으로만 남긴다.
+			EvalMetrics.Summary legacySummary = measureLegacy(seedMembers, byPopularity, runner, candidateCount,
+					albumCandidateCount);
 
 			List<EvalMetrics.GenreDf> genreDf = EvalMetrics.genreDocumentFrequency(features, genreNames());
 			long soldQuantityPositiveCount = countProductsWithSales();
-
-			String fullReport = EvalReport.renderFull(summary, genreDf, soldQuantityPositiveCount);
+			String fullReport = EvalReport.renderFull(legacySummary, genreDf, soldQuantityPositiveCount);
 			System.out.println(fullReport);
-			EvalReport.write(LEGACY_REPORT_PATH, EvalReport.renderLegacy(summary));
+			EvalReport.write(LEGACY_REPORT_PATH, EvalReport.renderLegacy(legacySummary));
 			EvalReport.write(REPORT_PATH, fullReport);
 
-			assertThat(summary.recallMicro()).isGreaterThan(summary.randomBaseline() * 3);
-			assertThat(summary.recallMicro()).isGreaterThan(summary.popularityRecall());
+			// when: 위시/구매 홀드아웃을 폴드 × 시드로 반복 측정해 표준편차를 낸다
+			EvalMetrics.FoldedRun wishRun = measureFolded(HoldoutKind.WISH, WISH_FOLD_COUNT, seedMembers,
+					byPopularity, runner, candidateCount, albumCandidateCount);
+			EvalMetrics.FoldedRun purchaseRun = measureFolded(HoldoutKind.PURCHASE, PURCHASE_FOLD_COUNT,
+					seedMembers, byPopularity, runner, candidateCount, albumCandidateCount);
+
+			// then
+			String foldReport = EvalReport.renderFolded(legacySummary, wishRun, purchaseRun);
+			System.out.println(foldReport);
+			EvalReport.write(FOLD_REPORT_PATH, foldReport);
+
+			EvalMetrics.MeasurementStats wishRecall = wishRun.recallStats();
+			EvalMetrics.MeasurementStats wishMargin = wishRun.marginOverPopularityStats();
+			assertThat(wishRecall.lowerBound())
+					.as("위시 홀드아웃 recall@10 mean-2σ 가 무작위 기준선의 3배를 넘어야 한다")
+					.isGreaterThan(wishRun.randomBaseline() * 3);
+			assertThat(wishMargin.lowerBound())
+					.as("규칙 추천이 인기순 대조군을 이기는 폭의 mean-2σ 가 0을 넘어야 한다")
+					.isGreaterThan(0);
+
+			EvalMetrics.MeasurementStats purchaseRecall = purchaseRun.recallStats();
+			EvalMetrics.MeasurementStats purchaseMargin = purchaseRun.marginOverPopularityStats();
+			assertThat(purchaseRecall.lowerBound())
+					.as("구매 홀드아웃 recall@10 mean-2σ 가 무작위 기준선의 3배를 넘어야 한다")
+					.isGreaterThan(purchaseRun.randomBaseline() * 3);
+			assertThat(purchaseMargin.lowerBound())
+					.as("구매 홀드아웃에서도 규칙 추천이 인기순 대조군을 이기는 폭의 mean-2σ 가 0을 넘어야 한다")
+					.isGreaterThan(0);
 		}
 
 		@Test
@@ -233,8 +263,46 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 		}
 	}
 
-	private EvalMetrics.MemberEvalResult measure(EvalSignals signals, List<Long> byPopularity, EvalRunner runner) {
-		Set<Long> holdout = holdoutOf(signals.wishedIds());
+	/** 기존 단일 폴드(HOLDOUT_EVERY=5) 기준 측정. 재구성 전후 비교용 참고선으로만 쓴다. */
+	private EvalMetrics.Summary measureLegacy(List<EvalSignals> seedMembers, List<Long> byPopularity,
+			EvalRunner runner, long candidateCount, long albumCandidateCount) {
+		List<EvalMetrics.MemberEvalResult> results = new ArrayList<>();
+		for (EvalSignals signals : seedMembers) {
+			results.add(measure(signals, holdoutOf(signals.wishedIds()), byPopularity, runner));
+		}
+		return EvalMetrics.summarize(results, candidateCount, albumCandidateCount);
+	}
+
+	/**
+	 * kind 를 폴드 수 만큼 등분해 시드마다 전체 폴드를 한 바퀴 돈다. 측정 수는 {@code foldCount * 시드 수}다.
+	 * 폴드마다 회원의 상품 특성 스냅샷은 재사용하고 홀드아웃 부분집합만 바뀐다.
+	 */
+	private EvalMetrics.FoldedRun measureFolded(HoldoutKind kind, int foldCount, List<EvalSignals> seedMembers,
+			List<Long> byPopularity, EvalRunner runner, long candidateCount, long albumCandidateCount) {
+		HoldoutSplitter splitter = new HoldoutSplitter();
+		List<EvalMetrics.Measurement> measurements = new ArrayList<>();
+
+		for (Long seed : RANDOM_SEEDS) {
+			HoldoutSpec spec = new HoldoutSpec(kind, foldCount, seed);
+			Map<Long, List<Set<Long>>> foldsByMemberId = seedMembers.stream()
+					.collect(Collectors.toMap(EvalSignals::memberId, signals -> splitter.foldsOf(signals, spec)));
+
+			for (int foldIndex = 0; foldIndex < foldCount; foldIndex++) {
+				List<EvalMetrics.MemberEvalResult> results = new ArrayList<>();
+				for (EvalSignals signals : seedMembers) {
+					Set<Long> holdout = foldsByMemberId.get(signals.memberId()).get(foldIndex);
+					results.add(measure(signals, holdout, byPopularity, runner));
+				}
+				EvalMetrics.Summary summary = EvalMetrics.summarize(results, candidateCount, albumCandidateCount);
+				measurements.add(new EvalMetrics.Measurement(seed, foldIndex, summary));
+			}
+		}
+
+		return new EvalMetrics.FoldedRun(kind, foldCount, RANDOM_SEEDS, measurements);
+	}
+
+	private EvalMetrics.MemberEvalResult measure(EvalSignals signals, Set<Long> holdout, List<Long> byPopularity,
+			EvalRunner runner) {
 		if (holdout.isEmpty()) {
 			return EvalMetrics.MemberEvalResult.empty(signals.memberId());
 		}
