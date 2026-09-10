@@ -2,6 +2,7 @@ import type { LimitedDropStatus } from '@/types/limitedDrop';
 
 export interface AdminStatsSummary {
   todaySalesAmount: number;
+  todayCancelAmount: number;
   todayOrderCount: number;
   todayNewMemberCount: number;
   pendingOrderCount: number;

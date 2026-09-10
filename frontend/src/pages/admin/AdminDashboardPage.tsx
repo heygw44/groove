@@ -20,7 +20,7 @@ import {
   useAdminPopularProducts,
   useAdminStatsSummary,
 } from '@/hooks/queries/useAdminStats';
-import type { PopularProductSort } from '@/types/adminStats';
+import type { AdminStatsSummary, PopularProductSort } from '@/types/adminStats';
 import {
   parseStatsPeriod,
   resolvePresetPeriod,
@@ -30,6 +30,16 @@ import { formatPrice } from '@/utils/formatPrice';
 import { getServerNow } from '@/utils/serverTime';
 
 const POPULAR_PRODUCT_LIMIT = 10;
+
+function buildTodaySalesCard(summary: AdminStatsSummary) {
+  return {
+    value: formatPrice(summary.todaySalesAmount - summary.todayCancelAmount),
+    hint:
+      summary.todayCancelAmount > 0
+        ? `승인 ${formatPrice(summary.todaySalesAmount)} · 취소 ${formatPrice(-summary.todayCancelAmount)}`
+        : undefined,
+  };
+}
 
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
@@ -85,7 +95,7 @@ export default function AdminDashboardPage() {
 
         {!summaryQuery.isPending && !summaryQuery.isError && summaryQuery.data && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="오늘 매출" value={formatPrice(summaryQuery.data.todaySalesAmount)} />
+            <StatCard label="오늘 매출" {...buildTodaySalesCard(summaryQuery.data)} />
             <StatCard label="오늘 주문" value={`${summaryQuery.data.todayOrderCount}건`} />
             <StatCard label="오늘 신규 회원" value={`${summaryQuery.data.todayNewMemberCount}명`} />
             <StatCard
