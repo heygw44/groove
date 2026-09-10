@@ -48,7 +48,8 @@ class ProductFeatureCacheTest {
 	}
 
 	private ProductFeatureRow row(Long id) {
-		return new ProductFeatureRow(id, id, id, null, 2020, null, CREATED_AT, ProductStatus.ON_SALE, null);
+		return new ProductFeatureRow(id, id, id, null, 2020, null, null, null, CREATED_AT, ProductStatus.ON_SALE,
+				null);
 	}
 
 	@Nested

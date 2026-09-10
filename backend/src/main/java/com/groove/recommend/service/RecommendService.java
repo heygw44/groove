@@ -71,7 +71,11 @@ public class RecommendService {
 		Set<Long> recentOnlySeedIds = homeSeeds.recentOnlySeedIds();
 
 		if (taste.isEmpty() && seedIds.isEmpty()) {
-			List<Long> popularIds = recommendQueryMapper.findPopularProductIds(resolvedSize);
+			// findPopularProductIds() 대신 이미 로드된 스냅샷에서 popularity 로 정렬한다.
+			// SQL 과 Java 양쪽에 같은 공식을 두면 갈라지기 쉽고, 캐시가 조회보다 싸다.
+			Map<Long, ProductFeature> popularFeatures = loadFeatures();
+			PopularityIndex popularityIndex = PopularityIndex.from(popularFeatures.values());
+			List<Long> popularIds = popularityIndex.topOnSaleProductIds(popularFeatures.values(), resolvedSize);
 			return HomeRecommendResponse.requiresProfileWithPopularFallback(toPopularItems(popularIds, memberId));
 		}
 

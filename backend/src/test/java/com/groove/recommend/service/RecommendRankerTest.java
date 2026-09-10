@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import com.groove.product.entity.ProductStatus;
 import com.groove.recommend.dto.RecommendReason;
 import com.groove.recommend.entity.Decade;
 import com.groove.recommend.service.RecommendRanker.RankedCandidate;
@@ -20,16 +21,21 @@ class RecommendRankerTest {
 
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 6, 10, 0);
 
+	// bayes tie-break 이 averageRating 순서를 그대로 따르도록 리뷰 수를 후보끼리 동일하게 맞춘다.
+	private static final int REVIEW_COUNT = 10;
+
 	private final RecommendScorer recommendScorer = new RecommendScorer(RecommendWeights.DEFAULT);
 	private final RecommendRanker recommendRanker = new RecommendRanker(recommendScorer, RecommendWeights.DEFAULT);
 
 	// labelId·decade 는 null, genreIds 는 빈 집합으로 둬 SAME_ARTIST 외 다른 차원이 우연히 매칭되지 않게 한다.
 	private ProductFeature feature(Long id, Long albumId, Long artistId, Double averageRating) {
-		return new ProductFeature(id, albumId, artistId, null, Set.of(), null, averageRating, NOW, false);
+		return new ProductFeature(id, albumId, artistId, null, Set.of(), null, averageRating, NOW, REVIEW_COUNT, 0L,
+				ProductStatus.ON_SALE);
 	}
 
 	private ProductFeature seed(Long id, Long artistId) {
-		return new ProductFeature(id, id, artistId, null, Set.of(), null, 4.0, NOW, false);
+		return new ProductFeature(id, id, artistId, null, Set.of(), null, 4.0, NOW, REVIEW_COUNT, 0L,
+				ProductStatus.ON_SALE);
 	}
 
 	private Map<Long, ProductFeature> featuresOf(ProductFeature... features) {
@@ -90,7 +96,7 @@ class RecommendRankerTest {
 		@Test
 		@DisplayName("같은 앨범의 후보는 점수가 가장 높은 것만 남긴다")
 		void dedupsCandidatesByAlbumKeepingHighestScore() {
-			// given — albumId 1 아래 두 프레싱. artistId 로 SAME_ARTIST(4점) 만 맞춘 쪽이 averageRating tie-break 로도 이긴다
+			// given — albumId 1 아래 두 프레싱. artistId 로 SAME_ARTIST(4점) 만 맞춘 쪽이 bayes tie-break 로도 이긴다
 			ProductFeature higherRated = feature(1L, 1L, 5L, 5.0);
 			ProductFeature lowerRated = feature(2L, 1L, 5L, 3.0);
 			Map<Long, ProductFeature> features = featuresOf(higherRated, lowerRated);
@@ -126,7 +132,8 @@ class RecommendRankerTest {
 		@DisplayName("hidden 상품은 후보에서 뺀다")
 		void excludesHiddenFeatures() {
 			// given
-			ProductFeature hidden = new ProductFeature(1L, 1L, 5L, 1L, Set.of(), Decade.D1990, 4.0, NOW, true);
+			ProductFeature hidden = new ProductFeature(1L, 1L, 5L, 1L, Set.of(), Decade.D1990, 4.0, NOW, REVIEW_COUNT,
+					0L, ProductStatus.HIDDEN);
 			Map<Long, ProductFeature> features = featuresOf(hidden);
 			List<ProductFeature> seeds = List.of(seed(10L, 5L));
 
