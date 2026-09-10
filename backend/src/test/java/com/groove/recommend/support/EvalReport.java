@@ -8,6 +8,9 @@ import java.util.List;
 /** 측정 결과를 마크다운 표로 렌더한다. 파일 저장은 {@link #write} 가 담당한다. */
 public final class EvalReport {
 
+	/** {@code RecommendAblationTest} 가 쓰는 리포트 경로. */
+	public static final Path ABLATION_REPORT_PATH = Path.of("build", "reports", "recommend-eval", "ablation.md");
+
 	private EvalReport() {
 	}
 
@@ -171,6 +174,56 @@ public final class EvalReport {
 			table.append("| %d | %d | %.3f | %.3f | %d |\n".formatted(measurement.randomSeed(),
 					measurement.foldIndex(), summary.recallMicro(), summary.popularityRecall(),
 					summary.fallbackCount()));
+		}
+		return table.toString();
+	}
+
+	/**
+	 * 추천 차원별 기여도(ablation) 리포트. {@code labels.get(0)} 이 기준 구성이고, 나머지는 그 차원을
+	 * 0으로 만든 구성이다. Δ÷σ 는 {@link EvalMetrics#pairedDelta} 로 낸 값이라 절대 recall 의 σ 보다
+	 * 훨씬 작다 — |Δ|÷σ 가 2 미만이면 그 차원은 품질에 유의미하게 기여하지 않는다고 읽는다.
+	 */
+	public static String renderAblation(List<String> labels, List<EvalMetrics.FoldedRun> wishRuns,
+			List<EvalMetrics.FoldedRun> purchaseRuns) {
+		StringBuilder report = new StringBuilder();
+		report.append("""
+				# 추천 차원별 기여도 (ablation)
+
+				기준(`RecommendWeights.DEFAULT`) 대비 차원 하나를 0으로 만든 구성을 같은 (randomSeed, fold)
+				끼리 짝지어 recall Δ 의 분포를 낸다. 판정은 절대 recall 의 σ 가 아니라 이 Δ 의 σ 로 한다 —
+				`|Δ|÷σ` 가 2 미만이면 그 차원은 품질에 유의미하게 기여하지 않는다는 뜻이다. `추천 10개 미만
+				회원 수` 가 늘어난 구성은 recall 하락이 그 차원의 기여가 아니라 `totalScore > 0` 필터에
+				걸린 후보 부족 때문일 수 있으니 같이 봐야 한다.
+				""");
+		report.append('\n');
+		report.append(renderAblationSection("위시 홀드아웃", labels, wishRuns));
+		report.append('\n');
+		report.append(renderAblationSection("구매 홀드아웃", labels, purchaseRuns));
+		return report.toString();
+	}
+
+	private static String renderAblationSection(String title, List<String> labels,
+			List<EvalMetrics.FoldedRun> runs) {
+		EvalMetrics.FoldedRun base = runs.get(0);
+		StringBuilder table = new StringBuilder();
+		table.append("## ").append(title).append("\n\n");
+		table.append("| 제거한 차원 | recall@10 mean ± σ | Δ vs 기준 | Δ÷σ | nDCG@10 | coverage@10 "
+				+ "| 추천 10개 미만 회원 수 |\n");
+		table.append("|---|---|---|---|---|---|---|\n");
+		for (int i = 0; i < runs.size(); i++) {
+			EvalMetrics.FoldedRun run = runs.get(i);
+			EvalMetrics.MeasurementStats recall = run.recallStats();
+			boolean isBaseline = i == 0;
+			String deltaColumn = "—";
+			String ratioColumn = "—";
+			if (!isBaseline) {
+				EvalMetrics.MeasurementStats delta = EvalMetrics.pairedDelta(base, run);
+				deltaColumn = "%.4f".formatted(delta.mean());
+				ratioColumn = "%.2f".formatted(delta.absMeanOverStdDev());
+			}
+			table.append("| %s | %.3f ± %.3f | %s | %s | %.3f | %.3f | %d |\n".formatted(labels.get(i),
+					recall.mean(), recall.stdDev(), deltaColumn, ratioColumn, run.ndcgStats().mean(),
+					run.coverageStats().mean(), run.totalShortRecommendationOccurrences()));
 		}
 		return table.toString();
 	}

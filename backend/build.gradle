@@ -80,10 +80,11 @@ dependencies {
 }
 
 tasks.named('test') {
-    // precision/throughput 태그는 품질·성능 측정용이라 일반 빌드/CI 에서는 뺀다.
-    // ./gradlew precisionAt10 / discogsResyncThroughput 으로 따로 돈다.
+    // precision/throughput/ablation 태그는 품질·성능 측정용이라 일반 빌드/CI 에서는 뺀다.
+    // ./gradlew precisionAt10 / discogsResyncThroughput / recommendAblation 으로 따로 돈다.
+    // ablation 을 빼먹으면 local+seed 컨텍스트가 하나 더 떠 캐시가 넘쳐 스위트 전체가 깨진다.
     useJUnitPlatform {
-        excludeTags 'precision', 'throughput'
+        excludeTags 'precision', 'throughput', 'ablation'
     }
     finalizedBy jacocoTestReport
 }
@@ -95,6 +96,20 @@ tasks.register('precisionAt10', Test) {
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform {
         includeTags 'precision'
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+    outputs.upToDateWhen { false }
+}
+
+tasks.register('recommendAblation', Test) {
+    group = 'verification'
+    description = '추천 점수 7개 콘텐츠 차원 + 공동구매를 하나씩 0으로 만들어 recall@10 기여도를 잰다'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'ablation'
     }
     testLogging {
         showStandardStreams = true

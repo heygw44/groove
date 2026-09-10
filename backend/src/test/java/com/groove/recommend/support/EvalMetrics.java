@@ -38,6 +38,12 @@ public final class EvalMetrics {
 		int hitMemberCount = (int)evaluable.stream().filter(r -> r.hitCount() > 0).count();
 		int popularityHitTotal = evaluable.stream().mapToInt(MemberEvalResult::popularityHitCount).sum();
 		int fallbackCount = (int)results.stream().filter(MemberEvalResult::fallback).count();
+		// 차원을 0으로 만들면 totalScore > 0 필터에 더 걸려 추천이 10개 미만인 회원이 생길 수 있다.
+		// ablation 이 recall 하락을 후보 부족과 혼동하지 않도록 별도로 센다.
+		int shortRecommendationCount = (int)results.stream()
+				.filter(r -> !r.fallback())
+				.filter(r -> r.recommended().size() < TOP_K)
+				.count();
 
 		double recallMacro = evaluable.isEmpty() ? 0
 				: evaluable.stream().mapToDouble(r -> (double)r.hitCount() / r.holdoutIds().size()).average()
@@ -79,9 +85,9 @@ public final class EvalMetrics {
 		double popularityRecall = holdoutTotal == 0 ? 0 : (double)popularityHitTotal / holdoutTotal;
 
 		return new Summary(memberCount, evaluable.size(), candidateCount, albumCandidateCount, holdoutTotal, hitTotal,
-				hitMemberCount, popularityHitTotal, fallbackCount, recallMicro, recallMacro, precision, hitRate,
-				popularityRecall, randomBaseline, ndcg, map, productCoverage, albumCoverage, gini, diversity,
-				tasteMatchRate);
+				hitMemberCount, popularityHitTotal, fallbackCount, shortRecommendationCount, recallMicro,
+				recallMacro, precision, hitRate, popularityRecall, randomBaseline, ndcg, map, productCoverage,
+				albumCoverage, gini, diversity, tasteMatchRate);
 	}
 
 	/** 상품별 추천 등장 횟수 분포의 Gini 계수. n(카탈로그 전체) 중 추천에 한 번도 안 뽑힌 상품은 0건으로 채운다. */
@@ -251,9 +257,10 @@ public final class EvalMetrics {
 	/** 측정 회원 전체를 집계한 결과 묶음. */
 	public record Summary(int memberCount, int evaluableMemberCount, long candidateCount, long albumCandidateCount,
 			int holdoutTotal, int hitTotal, int hitMemberCount, int popularityHitTotal, int fallbackCount,
-			double recallMicro, double recallMacro, double precisionAtK, double hitRateAtK, double popularityRecall,
-			double randomBaseline, double ndcg, double map, double productCoverage, double albumCoverage,
-			double gini, Diversity diversity, double tasteMatchRate) {
+			int shortRecommendationCount, double recallMicro, double recallMacro, double precisionAtK,
+			double hitRateAtK, double popularityRecall, double randomBaseline, double ndcg, double map,
+			double productCoverage, double albumCoverage, double gini, Diversity diversity,
+			double tasteMatchRate) {
 
 		public double vsRandom() {
 			return randomBaseline == 0 ? 0 : recallMicro / randomBaseline;
@@ -281,6 +288,14 @@ public final class EvalMetrics {
 		public double lowerBound() {
 			return mean - 2 * stdDev;
 		}
+
+		/** ablation 판정용 비율. |mean|÷σ 가 2 미만이면 그 차원은 유의미하게 기여하지 않는다고 읽는다. */
+		public double absMeanOverStdDev() {
+			if (stdDev == 0) {
+				return mean == 0 ? 0 : Double.POSITIVE_INFINITY;
+			}
+			return Math.abs(mean) / stdDev;
+		}
 	}
 
 	/** 폴드×시드 조합 하나의 측정값. raw 리포트에서 어떤 조합이 어떤 값을 냈는지 추적하는 데 쓴다. */
@@ -300,6 +315,14 @@ public final class EvalMetrics {
 
 		public MeasurementStats popularityRecallStats() {
 			return statsOf(Summary::popularityRecall);
+		}
+
+		public MeasurementStats ndcgStats() {
+			return statsOf(Summary::ndcg);
+		}
+
+		public MeasurementStats coverageStats() {
+			return statsOf(Summary::productCoverage);
 		}
 
 		/**
@@ -323,5 +346,35 @@ public final class EvalMetrics {
 		public int totalFallbackOccurrences() {
 			return measurements.stream().mapToInt(measurement -> measurement.summary().fallbackCount()).sum();
 		}
+
+		public int totalShortRecommendationOccurrences() {
+			return measurements.stream()
+					.mapToInt(measurement -> measurement.summary().shortRecommendationCount())
+					.sum();
+		}
+	}
+
+	/**
+	 * 두 {@link FoldedRun} 을 같은 (randomSeed, foldIndex) 끼리 짝지어 recall 차이 Δ 의 분포를 낸다.
+	 * ablation·스윕 판정은 절대 recall 의 σ 가 아니라 이 Δ 의 σ 로 해야 한다 — before/after 가 같은
+	 * 홀드아웃을 공유해 폴드 난이도 편차가 상쇄된다. {@code other} 는 {@code base} 와 같은 kind·foldCount·
+	 * randomSeeds 로 측정된 것이어야 한다.
+	 */
+	public static MeasurementStats pairedDelta(FoldedRun base, FoldedRun other) {
+		Map<List<Long>, Double> baseRecallBySeedFold = base.measurements().stream()
+				.collect(Collectors.toMap(measurement -> List.of(measurement.randomSeed(),
+						(long)measurement.foldIndex()), measurement -> measurement.summary().recallMicro()));
+		List<Double> deltas = other.measurements().stream()
+				.map(measurement -> {
+					List<Long> key = List.of(measurement.randomSeed(), (long)measurement.foldIndex());
+					Double baseRecall = baseRecallBySeedFold.get(key);
+					if (baseRecall == null) {
+						throw new IllegalStateException("짝지을 기준 측정이 없다: seed=" + measurement.randomSeed()
+								+ ", fold=" + measurement.foldIndex());
+					}
+					return measurement.summary().recallMicro() - baseRecall;
+				})
+				.toList();
+		return MeasurementStats.of(deltas);
 	}
 }
