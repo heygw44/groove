@@ -10,8 +10,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.config.PaymentReconcileProperties;
@@ -43,13 +45,15 @@ public class PaymentReconcileService {
 	private final PaymentRepository paymentRepository;
 	private final OrderRepository orderRepository;
 	private final PaymentConfirmWriter writer;
+	private final PaymentCancelWriter cancelWriter;
 	private final PaymentReconcileLogRepository logRepository;
 	private final PaymentReconcileProperties properties;
 	private final Clock clock;
 
 	public List<PaymentReconcileCandidate> findCandidates(LocalDateTime now) {
 		LocalDateTime before = now.minus(properties.grace());
-		return paymentRepository.findReconcileCandidates(PaymentStatus.UNRESOLVED, before, properties.maxAttempts(),
+		return paymentRepository.findReconcileCandidates(PaymentStatus.RECONCILE_TARGETS, before,
+				properties.maxAttempts(),
 				Limit.of(properties.batchSize()));
 	}
 
@@ -60,14 +64,14 @@ public class PaymentReconcileService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Payment payment = paymentRepository.findById(candidate.paymentId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-		if (!payment.getStatus().isUnresolved()) {
+		if (!payment.getStatus().isReconcileTarget()) {
 			return PaymentReconcileOutcome.alreadyResolved();
 		}
 
 		PaymentStatus beforeStatus = payment.getStatus();
 		String tossStatus = lookup.status().name();
-		PaymentReconcileDecision decision = PaymentReconcileRule.decide(order.getStatus(), payment.getAmount(),
-				lookup);
+		PaymentReconcileDecision decision = PaymentReconcileRule.decide(payment.getStatus(), order.getStatus(),
+				payment.getAmount(), lookup);
 		return switch (decision) {
 			case APPROVE -> {
 				writer.approve(candidate.orderId(), candidate.paymentId(), lookup.paymentKey(),
@@ -100,7 +104,41 @@ public class PaymentReconcileService {
 			}
 			// 토스 cancel 은 트랜잭션 밖에서 호출해야 하므로 여기서는 상태를 바꾸지 않는다.
 			case COMPENSATE -> PaymentReconcileOutcome.needsCompensation(lookup.paymentKey(), lookup.approvedAt());
+			case COMPLETE_CANCEL -> {
+				LocalDateTime canceledAt = lookup.canceledAt() != null ? lookup.canceledAt() : LocalDateTime.now(clock);
+				cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt);
+				writeLog(payment, beforeStatus, lookup.status().name(), PaymentReconcileAction.CANCELED, null);
+				yield PaymentReconcileOutcome.applied();
+			}
+			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey());
 		};
+	}
+
+	@Transactional
+	public void recordCancelRetry(PaymentReconcileCandidate candidate, PaymentCancelResult result,
+			BusinessException failure) {
+		orderRepository.findByIdForUpdate(candidate.orderId())
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		Payment payment = paymentRepository.findById(candidate.paymentId())
+				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		if (payment.getStatus() != PaymentStatus.CANCEL_REQUESTED) {
+			return;
+		}
+		PaymentStatus beforeStatus = payment.getStatus();
+		if (result != null) {
+			LocalDateTime canceledAt = result.canceledAt() != null ? result.canceledAt() : LocalDateTime.now(clock);
+			cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt);
+			writeLog(payment, beforeStatus, "CANCELED", PaymentReconcileAction.CANCELED, null);
+			return;
+		}
+		if (failure != null && failure.getErrorCode() != ErrorCode.PAYMENT_RESULT_UNKNOWN) {
+			cancelWriter.revertCancelRequest(candidate.orderId(), candidate.paymentId());
+			log.error("토스 취소 재시도 거절: paymentId={}, orderId={}", candidate.paymentId(), candidate.orderId(), failure);
+			writeLog(payment, beforeStatus, "DONE", PaymentReconcileAction.MANUAL_REVIEW, "토스가 취소를 거절");
+			return;
+		}
+		recordMiss(payment, beforeStatus, "DONE", PaymentReconcileAction.SKIPPED,
+				failure == null ? null : failure.getMessage());
 	}
 
 	/** compensator 의 토스 cancel 결과를 반영한다. 성공이면 CANCELED, 실패면 miss 처리 후 SKIPPED 로 남긴다. */
@@ -122,7 +160,7 @@ public class PaymentReconcileService {
 	@Transactional
 	public void recordFailure(PaymentReconcileCandidate candidate, String detail) {
 		Payment payment = paymentRepository.findById(candidate.paymentId()).orElse(null);
-		if (payment == null || !payment.getStatus().isUnresolved()) {
+		if (payment == null || !payment.getStatus().isReconcileTarget()) {
 			return;
 		}
 		recordMiss(payment, payment.getStatus(), LOOKUP_ERROR_TOSS_STATUS, PaymentReconcileAction.SKIPPED, detail);
@@ -137,6 +175,12 @@ public class PaymentReconcileService {
 		payment.recordReconcileMiss();
 		if (payment.getReconcileAttempts() < properties.maxAttempts()) {
 			writeLog(payment, beforeStatus, tossStatus, defaultAction, detail);
+			return;
+		}
+		if (payment.getStatus() == PaymentStatus.CANCEL_REQUESTED) {
+			log.error("취소 대사 상한 도달, 수동 확인 필요: paymentId={}", payment.getId());
+			writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW,
+					"취소 대사 상한 도달, 수동 확인 필요");
 			return;
 		}
 		boolean observedDoneOrPartial = DONE_TOSS_STATUS.equals(tossStatus)

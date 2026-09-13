@@ -33,6 +33,8 @@ import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Address;
@@ -58,6 +60,7 @@ import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentReconcileLogRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.payment.scheduler.PaymentReconcileScheduler;
+import com.groove.payment.service.PaymentCancelWriter;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -111,6 +114,9 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private PaymentReconcileScheduler paymentReconcileScheduler;
+
+	@Autowired
+	private PaymentCancelWriter paymentCancelWriter;
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
@@ -276,6 +282,99 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 			assertThat(reloadedPayment.getStatus()).isEqualTo(PaymentStatus.DONE);
 			assertThat(reloadedPayment.getPaymentKey()).isEqualTo("toss-key-concurrent");
 		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 와 토스 CANCELED 면 주문·재고·결제를 함께 복구한다")
+		void completesCancelRequestedWhenTossCanceled() {
+			// given
+			CancelSeededOrder seeded = seedCancelRequestedOrder(5);
+			LocalDateTime canceledAt = now().minusMinutes(1).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.CANCELED, seeded.paymentKey(), "카드", seeded.finalAmount(),
+							now().minusMinutes(5), canceledAt));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			assertThat(paymentRepository.findById(seeded.paymentId()).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCELED);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.CANCELED);
+			assertThat(stockRepository.findByProductId(seeded.product().getId()).orElseThrow().getQuantity())
+					.isEqualTo(5);
+			assertThat(lastLogAction(seeded.paymentId())).isEqualTo(PaymentReconcileAction.CANCELED);
+		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 와 토스 DONE 이면 취소를 한 번 재시도하고 CANCELED 로 수렴한다")
+		void retriesCancelRequestedWhenTossDone() {
+			// given
+			CancelSeededOrder seeded = seedCancelRequestedOrder(5);
+			LocalDateTime canceledAt = now().minusMinutes(1).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, seeded.paymentKey(), "카드", seeded.finalAmount(),
+							now().minusMinutes(5), null));
+			given(paymentClient.cancel(seeded.paymentKey(), "주문 취소 재시도"))
+					.willReturn(new PaymentCancelResult(seeded.paymentKey(), "CANCELED", canceledAt));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			verify(paymentClient, times(1)).cancel(seeded.paymentKey(), "주문 취소 재시도");
+			assertThat(paymentRepository.findById(seeded.paymentId()).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCELED);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.CANCELED);
+		}
+
+		@Test
+		@DisplayName("취소 재시도가 거절되면 결제·주문을 DONE·PAID 로 되돌리고 MANUAL_REVIEW 한다")
+		void revertsCancelRequestedWhenRetryRejected() {
+			// given
+			CancelSeededOrder seeded = seedCancelRequestedOrder(5);
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, seeded.paymentKey(), "카드", seeded.finalAmount(),
+						now().minusMinutes(5), null));
+			given(paymentClient.cancel(seeded.paymentKey(), "주문 취소 재시도"))
+					.willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			assertThat(paymentRepository.findById(seeded.paymentId()).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.DONE);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.PAID);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getCancelReason()).isNull();
+			PaymentReconcileLog log = lastLog(seeded.paymentId());
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			assertThat(log.getDetail()).isEqualTo("토스가 취소를 거절");
+		}
+
+		@Test
+		@DisplayName("취소 재시도 결과 불명이 상한에 도달하면 상태를 유지하고 FAILED 로 확정하지 않는다")
+		void keepsCancelRequestedAtRetryLimitWhenRetryUnknown() {
+			// given
+			CancelSeededOrder seeded = seedCancelRequestedOrder(5);
+			jdbcTemplate.update("update payment set reconcile_attempts = 9 where id = ?", seeded.paymentId());
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, seeded.paymentKey(), "카드", seeded.finalAmount(),
+						now().minusMinutes(5), null));
+			given(paymentClient.cancel(seeded.paymentKey(), "주문 취소 재시도"))
+					.willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			Payment payment = paymentRepository.findById(seeded.paymentId()).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
+			assertThat(payment.getReconcileAttempts()).isEqualTo(10);
+			assertThat(lastLogAction(seeded.paymentId())).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+		}
 	}
 
 	@Nested
@@ -371,6 +470,22 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 		return paymentRepository.findById(saved.getId()).orElseThrow();
 	}
 
+	private CancelSeededOrder seedCancelRequestedOrder(int stockQuantity) {
+		SeededOrder seeded = seedPendingOrder(stockQuantity, 1);
+		Order order = orderRepository.findById(seeded.orderId()).orElseThrow();
+		order.markPaid();
+		orderRepository.saveAndFlush(order);
+		String paymentKey = "cancel-recon-" + UUID.randomUUID();
+		Payment payment = Payment.ready(order);
+		payment.approve(paymentKey, "카드", now().minusMinutes(5));
+		Payment saved = paymentRepository.saveAndFlush(payment);
+		paymentCancelWriter.requestCancel(seeded.orderId(), seeded.memberId(), "고객 변심");
+		jdbcTemplate.update("update payment set updated_at = ? where id = ?",
+				Timestamp.valueOf(oldUpdatedAt()), saved.getId());
+		return new CancelSeededOrder(seeded.memberId(), seeded.product(), seeded.orderId(), seeded.orderNumber(),
+				seeded.finalAmount(), saved.getId(), paymentKey);
+	}
+
 	private SeededOrder seedPendingOrder(int stockQuantity, int purchaseQuantity) {
 		Member member = memberRepository.save(MemberFixture.create("recon-" + UUID.randomUUID() + "@groove.com"));
 		Address address = addressRepository.save(AddressFixture.create(member));
@@ -387,5 +502,9 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 
 	private record SeededOrder(Long memberId, Product product, Long orderId, String orderNumber,
 			BigDecimal finalAmount) {
+	}
+
+	private record CancelSeededOrder(Long memberId, Product product, Long orderId, String orderNumber,
+			BigDecimal finalAmount, Long paymentId, String paymentKey) {
 	}
 }

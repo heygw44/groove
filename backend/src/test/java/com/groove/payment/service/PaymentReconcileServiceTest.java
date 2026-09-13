@@ -28,10 +28,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.config.PaymentReconcileProperties;
@@ -61,6 +64,9 @@ class PaymentReconcileServiceTest {
 	private PaymentConfirmWriter writer;
 
 	@Mock
+	private PaymentCancelWriter cancelWriter;
+
+	@Mock
 	private PaymentReconcileLogRepository logRepository;
 
 	private PaymentReconcileService service;
@@ -75,8 +81,8 @@ class PaymentReconcileServiceTest {
 		now = LocalDateTime.now(clock);
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 				Duration.ofMinutes(2), 50, 10);
-		service = new PaymentReconcileService(paymentRepository, orderRepository, writer, logRepository, properties,
-				clock);
+		service = new PaymentReconcileService(paymentRepository, orderRepository, writer, cancelWriter, logRepository,
+				properties, clock);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 	}
 
@@ -211,6 +217,46 @@ class PaymentReconcileServiceTest {
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
 		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 와 토스 CANCELED 면 T2 복구를 실행하고 CANCELED 로 기록한다")
+		void completesCancelWhenTossCanceled() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = cancelRequestedPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(cancelWriter.completeCancel(eq(ORDER_ID), eq(PAYMENT_ID), eq(now)))
+					.willReturn(Optional.empty());
+
+			// when
+			PaymentReconcileOutcome outcome = service.apply(candidate(), lookupOf(PaymentStatus.CANCEL_REQUESTED,
+					PaymentLookupStatus.CANCELED, AMOUNT));
+
+			// then
+			assertThat(outcome.needsCancelRetry()).isFalse();
+			verify(cancelWriter).completeCancel(ORDER_ID, PAYMENT_ID, now);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.CANCELED);
+		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 와 토스 DONE 이면 취소 재시도를 반환한다")
+		void returnsCancelRetryWhenTossDone() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = cancelRequestedPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when
+			PaymentReconcileOutcome outcome = service.apply(candidate(), lookupOf(PaymentStatus.CANCEL_REQUESTED,
+					PaymentLookupStatus.DONE, AMOUNT));
+
+			// then
+			assertThat(outcome.needsCancelRetry()).isTrue();
+			assertThat(outcome.paymentKey()).isEqualTo(PAYMENT_KEY);
+			verify(logRepository, never()).save(any());
+		}
 	}
 
 	@Nested
@@ -340,6 +386,82 @@ class PaymentReconcileServiceTest {
 		}
 
 		@Test
+		@DisplayName("CANCEL_REQUESTED 가 결과 불명이면 상태를 유지하고 SKIPPED 로 남긴다")
+		void recordsMissWhenCancelRequestedResultUnknown() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = cancelRequestedPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when
+			service.recordCancelRetry(candidate(), null, new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN));
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.SKIPPED);
+		}
+
+		@Test
+		@DisplayName("취소 재시도가 성공하면 T2 완료와 CANCELED 로그를 남긴다")
+		void completesCancelRetryWhenTossCancelSucceeds() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = cancelRequestedPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(cancelWriter.completeCancel(eq(ORDER_ID), eq(PAYMENT_ID), eq(now)))
+					.willReturn(Optional.empty());
+			PaymentCancelResult result = new PaymentCancelResult(PAYMENT_KEY, "CANCELED", now);
+
+			// when
+			service.recordCancelRetry(candidate(), result, null);
+
+			// then
+			verify(cancelWriter).completeCancel(ORDER_ID, PAYMENT_ID, now);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.CANCELED);
+		}
+
+		@Test
+		@DisplayName("취소 재시도가 거절되면 DONE 복귀와 MANUAL_REVIEW 로그를 남긴다")
+		void revertsCancelRetryWhenTossRejects() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = cancelRequestedPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
+
+			// when
+			service.recordCancelRetry(candidate(), null, failure);
+
+			// then
+			verify(cancelWriter).revertCancelRequest(ORDER_ID, PAYMENT_ID);
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			assertThat(log.getDetail()).isEqualTo("토스가 취소를 거절");
+		}
+
+		@Test
+		@DisplayName("취소 재시도 결과 불명이 상한에 도달하면 상태를 유지하고 MANUAL_REVIEW 한다")
+		void keepsCancelRequestedAtRetryLimitWhenResultUnknown() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = cancelRequestedPayment(order);
+			ReflectionTestUtils.setField(payment, "reconcileAttempts", 9);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when
+			service.recordCancelRetry(candidate(), null, new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN));
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
+			assertThat(payment.getReconcileAttempts()).isEqualTo(10);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+		}
+
+		@Test
 		@DisplayName("결제가 이미 해소됐으면 아무것도 하지 않는다")
 		void doesNothingWhenPaymentAlreadyResolved() {
 			// given
@@ -382,6 +504,11 @@ class PaymentReconcileServiceTest {
 		return new PaymentLookupResult(status, PAYMENT_KEY, "카드", amount, now.minusMinutes(5), now);
 	}
 
+	private PaymentLookupResult lookupOf(PaymentStatus paymentStatus, PaymentLookupStatus lookupStatus,
+			BigDecimal amount) {
+		return new PaymentLookupResult(lookupStatus, PAYMENT_KEY, "카드", amount, now.minusMinutes(5), now);
+	}
+
 	private Order orderWithStatus(OrderStatus status) {
 		Order order = OrderFixture.withId(OrderFixture.create(member), ORDER_ID);
 		ReflectionTestUtils.setField(order, "status", status);
@@ -397,6 +524,12 @@ class PaymentReconcileServiceTest {
 	private Payment donePayment(Order order) {
 		Payment payment = readyPayment(order);
 		payment.approve(PAYMENT_KEY, "카드", now.minusMinutes(10));
+		return payment;
+	}
+
+	private Payment cancelRequestedPayment(Order order) {
+		Payment payment = donePayment(order);
+		payment.requestCancel();
 		return payment;
 	}
 

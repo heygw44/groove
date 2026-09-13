@@ -7,7 +7,10 @@ import java.util.List;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.service.CompensationResult;
@@ -59,6 +62,9 @@ public class PaymentReconcileScheduler {
 						compensated++;
 					}
 				}
+				if (outcome.needsCancelRetry()) {
+					retryCancel(candidate, outcome.paymentKey());
+				}
 			} catch (RuntimeException e) {
 				failed++;
 				log.warn("대사 처리 실패 paymentId={}, orderId={}", candidate.paymentId(), candidate.orderId(), e);
@@ -66,6 +72,22 @@ public class PaymentReconcileScheduler {
 			}
 		}
 		log.info("결제 대사 완료 candidates={} compensated={} failed={}", candidates.size(), compensated, failed);
+	}
+
+	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey) {
+		PaymentCancelResult result;
+		try {
+			result = paymentClient.cancel(paymentKey, "주문 취소 재시도");
+		} catch (BusinessException ex) {
+			reconcileService.recordCancelRetry(candidate, null, ex);
+			return;
+		} catch (RuntimeException ex) {
+			log.warn("취소 재시도 결과 불명 paymentId={}, orderId={}", candidate.paymentId(), candidate.orderId(), ex);
+			reconcileService.recordCancelRetry(candidate, null,
+					new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, ex.getMessage()));
+			return;
+		}
+		reconcileService.recordCancelRetry(candidate, result, null);
 	}
 
 	private void recordFailureSafely(PaymentReconcileCandidate candidate, RuntimeException cause) {

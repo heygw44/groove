@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -34,6 +35,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -90,11 +92,14 @@ import com.groove.order.scheduler.OrderExpirationScheduler;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
+import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.dto.PaymentCancelRequest;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
+import com.groove.payment.scheduler.PaymentReconcileScheduler;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.AlbumRepository;
@@ -173,6 +178,12 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	PlatformTransactionManager transactionManager;
+
+	@Autowired
+	PaymentReconcileScheduler paymentReconcileScheduler;
+
+	@Autowired
+	JdbcTemplate jdbcTemplate;
 
 	@MockitoBean
 	PaymentClient paymentClient;
@@ -473,6 +484,102 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					.doesNotContain(StockChangeType.CANCEL);
 			MemberCoupon memberCoupon = memberCouponRepository.findById(orderInfo.memberCouponId()).orElseThrow();
 			assertThat(memberCoupon.isUsed()).isTrue();
+		}
+
+		@Test
+		@DisplayName("토스 취소 결과를 알 수 없으면 주문은 PAID 이고 결제는 CANCEL_REQUESTED 로 남는다")
+		void keepsCancelRequestedWhenTossResultIsUnknown() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
+					.given(paymentClient).cancel(eq(paymentKey), any());
+
+			// when
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCEL_REQUESTED")));
+
+			// then
+			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCEL_REQUESTED);
+			Order order = orderRepository.findById(orderInfo.orderId()).orElseThrow();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(order.getCancelReason()).isEqualTo("고객 변심");
+
+			// when: 대사가 조회할 수 있도록 후보 grace 를 지난 결제로 만든다
+			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+			jdbcTemplate.update("update payment set updated_at = ? where id = ?",
+					Timestamp.valueOf(LocalDateTime.now(clock).minusDays(30)), paymentId);
+			given(paymentClient.lookup(eq(orderInfo.orderNumber()))).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.CANCELED, paymentKey, "카드", orderInfo.finalAmount(),
+					LocalDateTime.now(clock).minusMinutes(5), canceledAt));
+			paymentReconcileScheduler.reconcile();
+
+			// then: 주문·결제·재고가 CANCELED 상태로 수렴한다
+			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCELED);
+			assertThat(orderRepository.findById(orderInfo.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.CANCELED);
+			assertThat(stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity()).isEqualTo(5);
+		}
+
+		@Test
+		@DisplayName("토스 취소 후 T2가 실패하면 CANCEL_REQUESTED 를 유지하고 이후 T2 재실행으로 수렴한다")
+		void convergesWhenCompletionFailsAfterTossCancel() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.cancel(eq(paymentKey), any())).willAnswer(invocation -> {
+				jdbcTemplate.update("update orders set status = 'DELIVERED' where id = ?", orderInfo.orderId());
+				return new PaymentCancelResult(paymentKey, "CANCELED", canceledAt);
+			});
+
+			// when: T2 의 주문 상태 검증을 결정적으로 실패시킨다
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCEL_REQUESTED")));
+
+			// then: T1 은 유지되고 토스 취소는 한 번만 호출된다
+			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCEL_REQUESTED);
+			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"));
+
+			// when: 대사가 조회한 CANCELED 결과를 반영할 수 있도록 주문 상태를 원래대로 되돌린다
+			jdbcTemplate.update("update orders set status = 'PAID' where id = ?", orderInfo.orderId());
+			jdbcTemplate.update("update payment set updated_at = ? where id = ?",
+					Timestamp.valueOf(LocalDateTime.now(clock).minusDays(30)), paymentId);
+			given(paymentClient.lookup(eq(orderInfo.orderNumber()))).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.CANCELED, paymentKey, "카드", orderInfo.finalAmount(),
+					LocalDateTime.now(clock).minusMinutes(5), canceledAt));
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCELED);
+			assertThat(orderRepository.findById(orderInfo.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.CANCELED);
+			assertThat(stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity()).isEqualTo(5);
+			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"));
 		}
 
 		@Test
