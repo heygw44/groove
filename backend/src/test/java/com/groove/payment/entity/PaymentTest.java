@@ -306,10 +306,11 @@ class PaymentTest {
 	class Retry {
 
 		@Test
-		@DisplayName("FAILED 면 READY 로 바뀌고 실패 사유가 초기화된다")
+		@DisplayName("FAILED 면 READY 로 바뀌고 실패 사유와 대사 시도 횟수가 초기화된다")
 		void resetsToReadyWhenFailed() {
 			// given
 			Payment payment = PaymentFixture.failed(order(), "TOSS REJECT_CARD_COMPANY");
+			payment.recordReconcileMiss();
 
 			// when
 			payment.retry();
@@ -317,6 +318,7 @@ class PaymentTest {
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
 			assertThat(payment.getFailReason()).isNull();
+			assertThat(payment.getReconcileAttempts()).isZero();
 		}
 
 		@ParameterizedTest
@@ -412,6 +414,25 @@ class PaymentTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("recordReconcileMiss()")
+	class RecordReconcileMiss {
+
+		@Test
+		@DisplayName("호출할 때마다 대사 시도 횟수가 1씩 늘어난다")
+		void incrementsReconcileAttempts() {
+			// given
+			Payment payment = Payment.ready(order());
+
+			// when
+			payment.recordReconcileMiss();
+			payment.recordReconcileMiss();
+
+			// then
+			assertThat(payment.getReconcileAttempts()).isEqualTo(2);
 		}
 	}
 }

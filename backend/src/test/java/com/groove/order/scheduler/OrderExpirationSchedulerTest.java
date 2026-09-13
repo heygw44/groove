@@ -62,7 +62,7 @@ class OrderExpirationSchedulerTest {
 		@DisplayName("만료 대상이 없으면 서비스를 호출하지 않는다")
 		void doesNotCallServiceWhenNoCandidates() {
 			// given
-			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any()))
+			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of());
 
 			// when
@@ -76,7 +76,7 @@ class OrderExpirationSchedulerTest {
 		@DisplayName("한 건이 실패해도 나머지 후보는 계속 처리한다")
 		void continuesProcessingWhenOneOrderFails() {
 			// given
-			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any()))
+			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L, 2L, 3L));
 			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
 			given(orderExpirationService.expire(2L, now)).willThrow(new RuntimeException("boom"));
@@ -96,7 +96,7 @@ class OrderExpirationSchedulerTest {
 		void releasesLimitedDropReservationWhenPresent() {
 			// given
 			LimitedRelease release = new LimitedRelease(10L, 20L);
-			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any()))
+			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L));
 			given(orderExpirationService.expire(1L, now)).willReturn(Optional.of(release));
 
@@ -111,7 +111,7 @@ class OrderExpirationSchedulerTest {
 		@DisplayName("한정반 선점 정보가 없으면 Redis 를 건드리지 않는다")
 		void skipsRedisReleaseWhenEmpty() {
 			// given
-			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any()))
+			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L));
 			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
 

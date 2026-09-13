@@ -95,6 +95,12 @@ limited:
   redis-enabled: ${LIMITED_REDIS_ENABLED:true}
 
 groove:
+  payment:
+    reconcile:
+      interval: 60s
+      grace: 2m
+      batch-size: 50
+      max-attempts: 10
   recommend:
     # 추천 상품 특성 캐시 TTL. 0 이하면 캐시를 끄고 매 요청마다 다시 읽는다.
     feature-cache-ttl: 60s

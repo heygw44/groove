@@ -44,7 +44,8 @@ import lombok.NoArgsConstructor;
 		},
 		indexes = {
 			@Index(name = "idx_payment_approved_at", columnList = "approved_at"),
-			@Index(name = "idx_payment_canceled_at", columnList = "canceled_at")
+			@Index(name = "idx_payment_canceled_at", columnList = "canceled_at"),
+			@Index(name = "idx_payment_status_updated", columnList = "status, updated_at")
 		})
 public class Payment extends BaseTimeEntity {
 
@@ -90,6 +91,10 @@ public class Payment extends BaseTimeEntity {
 	@Column(nullable = false)
 	@ColumnDefault("0")
 	private Long version;
+
+	@Column(name = "reconcile_attempts", nullable = false)
+	@ColumnDefault("0")
+	private int reconcileAttempts;
 
 	private Payment(Order order) {
 		this.order = order;
@@ -142,6 +147,7 @@ public class Payment extends BaseTimeEntity {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 		this.failReason = null;
+		this.reconcileAttempts = 0;
 		this.status = PaymentStatus.READY;
 	}
 
@@ -166,6 +172,10 @@ public class Payment extends BaseTimeEntity {
 		this.canceledAt = canceledTime;
 		this.failReason = truncate(reason);
 		this.status = PaymentStatus.CANCELED;
+	}
+
+	public void recordReconcileMiss() {
+		this.reconcileAttempts++;
 	}
 
 	/** approve/fail/markUnknown 공통 전이 검증. READY·FAILED·UNKNOWN 에서만 다음 상태로 넘어갈 수 있다. */

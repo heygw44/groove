@@ -12,7 +12,7 @@ import org.springframework.web.client.RestClient;
  * 커스터마이저가 그대로 먹힌다. Basic 인증 헤더는 요청마다 {@code TossPaymentClient} 가 붙인다.
  */
 @Configuration
-@EnableConfigurationProperties(TossProperties.class)
+@EnableConfigurationProperties({TossProperties.class, PaymentReconcileProperties.class})
 public class PaymentClientConfig {
 
 	@Bean

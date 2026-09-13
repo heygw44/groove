@@ -126,7 +126,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1 D1 D2)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1 D1 D2 Y1 Y2)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -164,6 +164,8 @@ case_desc() {
 	L1) echo "관리자 한정반 드롭 통계 첫 페이지, open_at DESC (before: 상관 서브쿼리 2회+페이징 없음 / after: sold_out_at 컬럼+LIMIT 20, AdminStatsMapper.xml findLimitedDropStats)" ;;
 	D1) echo "Discogs 재검증 우선순위 후보, viewPriority=true (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml findCandidates)" ;;
 	D2) echo "Discogs 재검증 야간 스윕 후보, viewPriority=false (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml findCandidates)" ;;
+	Y1) echo "결제 대사 후보 (before: reconcile_attempts 컬럼 없음, status 무인덱스 / after: idx_payment_status_updated + reconcile_attempts, PaymentRepository.findReconcileCandidates)" ;;
+	Y2) echo "만료 후보, 결제 미확정 주문 제외 (before: 제외 없음 / after: LEFT JOIN payment ... IS NULL 추가, OrderRepository 만료 후보)" ;;
 	*) echo "?" ;;
 	esac
 }
@@ -916,6 +918,32 @@ recreate_resync_index_if_missing() {
 	fi
 }
 
+# 기본 시드는 payment.status 가 DONE/CANCELED/FAILED 뿐이라(READY/UNKNOWN 이 한 건도 없음) Y1 이 항상
+# 빈 결과라 실행계획의 접근 방식은 드러나도 실제로 몇 건을 걸러내는지는 안 보인다. Y1 측정 직전에만
+# payment 끝 50건을 UNKNOWN 으로 바꿔두고 측정이 끝나면 원래 값으로 되돌린다. run_case 는 매번 별도
+# mysql_perf 접속(세션)을 새로 열어 TEMPORARY TABLE 이 살아남지 못하므로 원본값은 일반 테이블에 백업한다.
+mark_payment_reconcile_candidates() {
+	echo "  - payment 끝 50건 UNKNOWN 임시 표시 (Y1 측정용)"
+	mysql_perf "
+		DROP TABLE IF EXISTS y1_payment_backup;
+		CREATE TABLE y1_payment_backup AS
+		SELECT id, status, updated_at FROM payment ORDER BY id DESC LIMIT 50;
+		UPDATE payment p
+		JOIN y1_payment_backup b ON b.id = p.id
+		SET p.status = 'UNKNOWN', p.updated_at = DATE_SUB(NOW(6), INTERVAL 30 MINUTE);
+	"
+}
+
+unmark_payment_reconcile_candidates() {
+	echo "  - payment 끝 50건 원상 복구 (Y1 측정 후)"
+	mysql_perf "
+		UPDATE payment p
+		JOIN y1_payment_backup b ON b.id = p.id
+		SET p.status = b.status, p.updated_at = b.updated_at;
+		DROP TABLE y1_payment_backup;
+	"
+}
+
 analyze_tables() {
 	echo "[통계] ANALYZE TABLE 실행"
 	mysql_perf "ANALYZE TABLE member, artist, label, genre, album, product, product_genre, product_image,
@@ -1641,6 +1669,52 @@ get_case_sql() {
 			LIMIT 150
 		SQL
 		;;
+	Y1)
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- PaymentRepository.findReconcileCandidates, V21 이전(reconcile_attempts 컬럼 없음)
+				SELECT p.id, p.order_id, p.toss_order_id
+				FROM payment p
+				WHERE p.status IN ('READY', 'UNKNOWN')
+				AND p.updated_at < NOW(6) - INTERVAL 2 MINUTE
+				ORDER BY p.updated_at, p.id
+				LIMIT 50
+			SQL
+		else
+			cat <<-SQL
+				-- PaymentRepository.findReconcileCandidates, V21 이후(idx_payment_status_updated + reconcile_attempts)
+				SELECT p.id, p.order_id, p.toss_order_id
+				FROM payment p
+				WHERE p.status IN ('READY', 'UNKNOWN')
+				AND p.updated_at < NOW(6) - INTERVAL 2 MINUTE
+				AND p.reconcile_attempts < 10
+				ORDER BY p.updated_at, p.id
+				LIMIT 50
+			SQL
+		fi
+		;;
+	Y2)
+		if [ "${phase}" = before ]; then
+			cat <<-SQL
+				-- OrderRepository 만료 후보, V21 이전(결제 미확정 주문 제외 없음)
+				SELECT o.id FROM orders o
+				WHERE o.status = 'PENDING' AND o.expires_at <= NOW(6)
+				ORDER BY o.expires_at, o.id
+				LIMIT 100
+			SQL
+		else
+			cat <<-SQL
+				-- OrderRepository 만료 후보, V21 이후(결제 미확정(READY/UNKNOWN) 주문 제외 추가)
+				-- NOT EXISTS 는 semijoin materialization 으로 payment 풀스캔이 붙어 기각
+				SELECT o.id FROM orders o
+				LEFT JOIN payment p ON p.order_id = o.id AND p.status IN ('READY', 'UNKNOWN')
+				WHERE o.status = 'PENDING' AND o.expires_at <= NOW(6)
+				AND p.id IS NULL
+				ORDER BY o.expires_at, o.id
+				LIMIT 100
+			SQL
+		fi
+		;;
 	*)
 		echo "알 수 없는 케이스: ${id}" >&2
 		exit 1
@@ -1732,7 +1806,13 @@ main() {
 		echo "  - before 단계"
 		local id
 		for id in "${CASE_IDS[@]}"; do
+			if [ "${id}" = "Y1" ]; then
+				mark_payment_reconcile_candidates
+			fi
 			run_case before "${id}"
+			if [ "${id}" = "Y1" ]; then
+				unmark_payment_reconcile_candidates
+			fi
 		done
 	fi
 	if [ "${RUN_AFTER}" = true ]; then
@@ -1749,7 +1829,13 @@ main() {
 		echo "  - after 단계"
 		local id2
 		for id2 in "${CASE_IDS[@]}"; do
+			if [ "${id2}" = "Y1" ]; then
+				mark_payment_reconcile_candidates
+			fi
 			run_case after "${id2}"
+			if [ "${id2}" = "Y1" ]; then
+				unmark_payment_reconcile_candidates
+			fi
 		done
 	fi
 
