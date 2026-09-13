@@ -136,6 +136,38 @@ public class Payment extends BaseTimeEntity {
 		this.status = PaymentStatus.CANCELED;
 	}
 
+	/** FAILED 로 남아 대사 대상에서 빠진 결제를 재시도용 READY 로 되돌린다. updated_at 이 갱신돼 grace 도 새로 시작한다. */
+	public void retry() {
+		if (this.status != PaymentStatus.FAILED) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		this.failReason = null;
+		this.status = PaymentStatus.READY;
+	}
+
+	/**
+	 * 토스가 승인한 결제를 뒤늦게 취소로 수렴시킨다(승인 후 주문 무효, 대사 결과 토스에서 이미 취소됨 등).
+	 * approvedAt 을 채우는 이유: 매출 집계는 DONE/CANCELED 의 approved_at 을 매출로, CANCELED 의
+	 * canceled_at 을 취소로 센다. approvedAt 을 비우면 취소 금액만 늘어 순매출이 실제보다 줄어든다.
+	 */
+	public void compensate(String key, LocalDateTime approvedTime, LocalDateTime canceledTime, String reason) {
+		if (this.status == PaymentStatus.CANCELED) {
+			return;
+		}
+		if (this.status == PaymentStatus.DONE || this.status == PaymentStatus.CANCEL_REQUESTED) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		if (this.paymentKey == null) {
+			this.paymentKey = key;
+		}
+		if (this.approvedAt == null) {
+			this.approvedAt = approvedTime != null ? approvedTime : canceledTime;
+		}
+		this.canceledAt = canceledTime;
+		this.failReason = truncate(reason);
+		this.status = PaymentStatus.CANCELED;
+	}
+
 	/** approve/fail/markUnknown 공통 전이 검증. READY·FAILED·UNKNOWN 에서만 다음 상태로 넘어갈 수 있다. */
 	private void validateApprovable() {
 		if (this.status == PaymentStatus.DONE) {

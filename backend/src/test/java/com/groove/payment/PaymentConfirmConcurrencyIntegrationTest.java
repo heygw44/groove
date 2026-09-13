@@ -5,6 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.atMost;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,11 +58,13 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
+import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentConfirmService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -70,9 +74,10 @@ import com.groove.product.repository.ProductRepository;
 import com.groove.support.IntegrationTestSupport;
 
 /**
- * 같은 결제 키로 동시에 승인 요청이 들어와도 결제 1건, 주문 PAID 1건만 남는지 검증한다.
- * MockMvc 를 스레드마다 새로 태우는 대신 {@link PaymentConfirmService} 를 직접 호출해
- * 트랜잭션 경계 밖(토스 호출)과 안(락)의 경합만 결정적으로 재현한다.
+ * 동시에 승인 요청이 들어와도 결제 1건, 주문 PAID 1건만 남는지 검증한다. 같은 키면 멱등 재생이라
+ * 보상 취소하지 않고, 다른 키면 나중에 확정된 쪽을 보상 취소한다. MockMvc 를 스레드마다 새로 태우는
+ * 대신 {@link PaymentConfirmService} 를 직접 호출해 트랜잭션 경계 밖(토스 호출)과 안(락)의 경합만
+ * 결정적으로 재현한다.
  */
 @AutoConfigureMockMvc
 class PaymentConfirmConcurrencyIntegrationTest extends IntegrationTestSupport {
@@ -198,6 +203,103 @@ class PaymentConfirmConcurrencyIntegrationTest extends IntegrationTestSupport {
 			// prepare() 락 → 토스 호출 → approve() 락 구조라, 두 스레드가 각자 prepare 를 통과하면 토스는
 			// 두 번 불릴 수 있다. DB 정합성은 결제/주문 행이 하나뿐이라는 위 단언들이 보장하므로 허용한다.
 			verify(paymentClient, atMost(2)).confirm(eq(paymentKey), eq(orderInfo.orderNumber()), any());
+			// 같은 키의 두 번째 승인은 멱등키 재생이라 토스 쪽 실제 청구는 1건뿐이다. 이걸 취소하면 정상 결제를
+			// 환불해 버리므로 같은 키 동시 승인은 보상하지 않는다.
+			verify(paymentClient, never()).cancel(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("다른 결제 키로 동시에 승인 요청하면")
+	class ConcurrentConfirmWithDifferentKeys {
+
+		@Test
+		@DisplayName("먼저 커밋된 키만 DONE 이고 나머지 키는 보상 취소로 cancel 이 1회 호출된다")
+		void keepsFirstCommittedKeyDoneAndCancelsTheOtherOnce() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String firstKey = "tviva-" + UUID.randomUUID();
+			String secondKey = "tviva-" + UUID.randomUUID();
+			CountDownLatch bothApprovedByTossLatch = new CountDownLatch(THREAD_COUNT);
+			stubConfirmSuccessAwaitingBothThreads(firstKey, secondKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount(), bothApprovedByTossLatch);
+			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.cancel(eq(firstKey), any()))
+					.willReturn(new PaymentCancelResult(firstKey, "CANCELED", canceledAt));
+			given(paymentClient.cancel(eq(secondKey), any()))
+					.willReturn(new PaymentCancelResult(secondKey, "CANCELED", canceledAt));
+
+			CountDownLatch readyLatch = new CountDownLatch(THREAD_COUNT);
+			CountDownLatch startLatch = new CountDownLatch(1);
+			List<AtomicReference<Throwable>> results = new ArrayList<>();
+
+			// when
+			for (String key : List.of(firstKey, secondKey)) {
+				AtomicReference<Throwable> result = new AtomicReference<>();
+				results.add(result);
+				PaymentConfirmRequest request = new PaymentConfirmRequest(key, orderInfo.orderNumber(),
+						orderInfo.finalAmount().longValueExact());
+				executorService.submit(() -> {
+					try {
+						readyLatch.countDown();
+						startLatch.await();
+						paymentConfirmService.confirm(member.getId(), request);
+					} catch (Throwable throwable) {
+						result.set(throwable);
+					}
+				});
+			}
+			readyLatch.await();
+			startLatch.countDown();
+			executorService.shutdown();
+			boolean finished = executorService.awaitTermination(30, TimeUnit.SECONDS);
+
+			// then: 두 키 모두 토스 승인 자체는 성공하지만(실제로는 서로 다른 두 번 청구), 같은 결제 행을
+			// 두고 경합하므로 먼저 커밋한 키만 DONE 으로 남고 나중 키는 approve() 가 예외로 거절돼
+			// PaymentCompensator 가 토스에 보상 취소를 1회 호출한다. 어느 쪽이 먼저 커밋할지는 스케줄링에
+			// 달려 있어 고정할 수 없으므로 결과를 보고 DONE 으로 남은 키를 역산한다.
+			assertThat(finished).isTrue();
+			Payment payment = paymentRepository.findByOrderId(orderInfo.orderId()).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			String doneKey = payment.getPaymentKey();
+			assertThat(doneKey).isIn(firstKey, secondKey);
+			String otherKey = doneKey.equals(firstKey) ? secondKey : firstKey;
+
+			List<Throwable> failures = results.stream()
+					.map(AtomicReference::get)
+					.filter(throwable -> throwable != null)
+					.toList();
+			assertThat(failures).hasSize(1);
+			assertThat(failures.get(0))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isIn(ErrorCode.PAYMENT_ALREADY_DONE, ErrorCode.ORDER_ALREADY_PAID);
+			verify(paymentClient, times(1)).cancel(eq(otherKey), eq(PaymentCompensator.DUPLICATE_APPROVAL_REASON));
+			verify(paymentClient, never()).cancel(eq(doneKey), any());
+			Order order = orderRepository.findById(orderInfo.orderId()).orElseThrow();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+		}
+
+		private void stubConfirmSuccessAwaitingBothThreads(String firstKey, String secondKey, String orderNumber,
+				BigDecimal amount, CountDownLatch bothApprovedByTossLatch) {
+			LocalDateTime approvedAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.confirm(eq(firstKey), eq(orderNumber), any(BigDecimal.class)))
+					.willAnswer(invocation -> awaitBothThenReturn(bothApprovedByTossLatch,
+							new PaymentConfirmResult(firstKey, orderNumber, "카드", amount, approvedAt)));
+			given(paymentClient.confirm(eq(secondKey), eq(orderNumber), any(BigDecimal.class)))
+					.willAnswer(invocation -> awaitBothThenReturn(bothApprovedByTossLatch,
+							new PaymentConfirmResult(secondKey, orderNumber, "카드", amount, approvedAt)));
+		}
+
+		private PaymentConfirmResult awaitBothThenReturn(CountDownLatch latch, PaymentConfirmResult result)
+				throws InterruptedException {
+			latch.countDown();
+			latch.await(30, TimeUnit.SECONDS);
+			return result;
 		}
 	}
 

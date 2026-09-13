@@ -265,6 +265,22 @@ class PaymentConfirmWriterTest {
 			assertThat(preparation.alreadyApproved()).isEmpty();
 			verify(paymentRepository, never()).save(any());
 		}
+
+		@Test
+		@DisplayName("실패했던 결제가 있으면 재시도용 READY 로 되돌린다")
+		void retriesFailedPayment() {
+			// given
+			Payment failed = PaymentFixture.failed(order, "TOSS REJECT_CARD_COMPANY");
+			given(orderRepository.findByOrderNumberForUpdate(order.getOrderNumber())).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(failed));
+
+			// when
+			writer.prepare(MEMBER_ID, requestOf(PaymentFixture.PAYMENT_KEY, PRICE.longValueExact()));
+
+			// then
+			assertThat(failed.getStatus()).isEqualTo(PaymentStatus.READY);
+			assertThat(failed.getFailReason()).isNull();
+		}
 	}
 
 	@Nested
@@ -282,7 +298,7 @@ class PaymentConfirmWriterTest {
 					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
 
 			// when
-			PaymentConfirmResponse response = writer.approve(10L, PaymentFixture.PAYMENT_KEY, result);
+			PaymentConfirmResponse response = writer.approve(ORDER_ID, 10L, PaymentFixture.PAYMENT_KEY, result);
 
 			// then
 			assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
@@ -301,7 +317,7 @@ class PaymentConfirmWriterTest {
 					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
 
 			// when
-			writer.approve(14L, PaymentFixture.PAYMENT_KEY, result);
+			writer.approve(ORDER_ID, 14L, PaymentFixture.PAYMENT_KEY, result);
 
 			// then
 			verify(productSalesStatsUpdater).refreshFor(order);
@@ -318,7 +334,7 @@ class PaymentConfirmWriterTest {
 					PaymentFixture.METHOD, PRICE, null);
 
 			// when
-			PaymentConfirmResponse response = writer.approve(11L, PaymentFixture.PAYMENT_KEY, result);
+			PaymentConfirmResponse response = writer.approve(ORDER_ID, 11L, PaymentFixture.PAYMENT_KEY, result);
 
 			// then
 			assertThat(response.approvedAt()).isEqualTo(now);
@@ -335,7 +351,7 @@ class PaymentConfirmWriterTest {
 					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
 
 			// when
-			PaymentConfirmResponse response = writer.approve(12L, PaymentFixture.PAYMENT_KEY, result);
+			PaymentConfirmResponse response = writer.approve(ORDER_ID, 12L, PaymentFixture.PAYMENT_KEY, result);
 
 			// then
 			assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
@@ -353,10 +369,48 @@ class PaymentConfirmWriterTest {
 					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
 
 			// when & then
-			assertThatThrownBy(() -> writer.approve(13L, PaymentFixture.PAYMENT_KEY, result))
+			assertThatThrownBy(() -> writer.approve(ORDER_ID, 13L, PaymentFixture.PAYMENT_KEY, result))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_KEY_MISMATCH);
+		}
+
+		@Test
+		@DisplayName("이미 같은 키로 DONE 이면 아무것도 바꾸지 않고 그대로 반환한다")
+		void returnsUnchangedWhenAlreadyDoneWithSameKey() {
+			// given
+			Payment done = paymentWithId(PaymentFixture.approved(order, PaymentFixture.PAYMENT_KEY), 15L);
+			given(paymentRepository.findById(15L)).willReturn(Optional.of(done));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, order.getOrderNumber(),
+					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
+
+			// when
+			PaymentConfirmResponse response = writer.approve(ORDER_ID, 15L, PaymentFixture.PAYMENT_KEY, result);
+
+			// then
+			assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
+			verify(paymentRepository, never()).flush();
+			verify(productSalesStatsUpdater, never()).refreshFor(any());
+		}
+
+		@Test
+		@DisplayName("결제가 다른 주문 소유면 PAYMENT_NOT_FOUND 예외를 던진다")
+		void throwsWhenPaymentBelongsToAnotherOrder() {
+			// given
+			Order anotherOrder = OrderFixture.withId(
+					OrderFixture.createWithItem(member, ProductFixture.create(ArtistFixture.withId(2L)), 1), 999L);
+			Payment payment = paymentWithId(Payment.ready(anotherOrder), 16L);
+			given(paymentRepository.findById(16L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, order.getOrderNumber(),
+					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
+
+			// when & then
+			assertThatThrownBy(() -> writer.approve(ORDER_ID, 16L, PaymentFixture.PAYMENT_KEY, result))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
 		}
 	}
 
@@ -391,6 +445,21 @@ class PaymentConfirmWriterTest {
 
 			// then
 			assertThat(done.getStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("이미 UNKNOWN 인 결제는 그대로 둔다")
+		void ignoresAlreadyUnknownPayment() {
+			// given
+			Payment unknown = paymentWithId(PaymentFixture.unknown(order, "TOSS 응답 지연"), 22L);
+			given(paymentRepository.findById(22L)).willReturn(Optional.of(unknown));
+
+			// when
+			writer.fail(22L, "다른 카드로 재시도 거절");
+
+			// then
+			assertThat(unknown.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+			assertThat(unknown.getFailReason()).isEqualTo("TOSS 응답 지연");
 		}
 	}
 
@@ -435,6 +504,44 @@ class PaymentConfirmWriterTest {
 
 			// when & then
 			assertThatThrownBy(() -> writer.markUnknown(32L, "TOSS 응답 지연"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("markCompensated()")
+	class MarkCompensated {
+
+		@Test
+		@DisplayName("READY 결제를 보상 취소로 CANCELED 로 기록한다")
+		void compensatesReadyPayment() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 40L);
+			given(paymentRepository.findById(40L)).willReturn(Optional.of(payment));
+			LocalDateTime canceledAt = now.plusSeconds(1);
+
+			// when
+			writer.markCompensated(40L, PaymentFixture.PAYMENT_KEY, PaymentFixture.APPROVED_AT, canceledAt,
+					"승인 후 주문 무효로 자동 취소");
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(payment.getPaymentKey()).isEqualTo(PaymentFixture.PAYMENT_KEY);
+			assertThat(payment.getApprovedAt()).isEqualTo(PaymentFixture.APPROVED_AT);
+			assertThat(payment.getCanceledAt()).isEqualTo(canceledAt);
+		}
+
+		@Test
+		@DisplayName("결제가 없으면 PAYMENT_NOT_FOUND 예외를 던진다")
+		void throwsWhenPaymentNotFound() {
+			// given
+			given(paymentRepository.findById(41L)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> writer.markCompensated(41L, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, now, "사유"))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);

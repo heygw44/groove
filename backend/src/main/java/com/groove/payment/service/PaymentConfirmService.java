@@ -26,6 +26,7 @@ public class PaymentConfirmService {
 
 	private final PaymentConfirmWriter writer;
 	private final PaymentClient paymentClient;
+	private final PaymentCompensator compensator;
 
 	public PaymentConfirmResponse confirm(Long memberId, PaymentConfirmRequest request) {
 		ConfirmPreparation preparation = writer.prepare(memberId, request);
@@ -49,11 +50,12 @@ public class PaymentConfirmService {
 	private PaymentConfirmResponse applyApproval(ConfirmPreparation preparation, PaymentConfirmRequest request,
 			PaymentConfirmResult result) {
 		Long paymentId = preparation.paymentId();
+		Long orderId = preparation.orderId();
+		String paymentKey = request.paymentKey();
 		try {
-			return writer.approve(paymentId, request.paymentKey(), result);
+			return writer.approve(orderId, paymentId, paymentKey, result);
 		} catch (BusinessException ex) {
-			safeFail(paymentId, ex.getMessage());
-			throw ex;
+			throw recoverFromInvalidatedApproval(paymentId, paymentKey, result, ex);
 		} catch (RuntimeException ex) {
 			throw recoverFromApprovalFailure(paymentId, ex);
 		}
@@ -65,6 +67,36 @@ public class PaymentConfirmService {
 		} else {
 			safeFail(paymentId, ex.getMessage());
 		}
+	}
+
+	/**
+	 * 토스는 이미 승인을 마쳤으므로 approve() 가 주문 상태 때문에 거절돼도 FAILED 로 기록하지 않는다.
+	 * 원인별로 자동 보상 여부와 사용자에게 돌려줄 예외가 다르다.
+	 */
+	private BusinessException recoverFromInvalidatedApproval(Long paymentId, String paymentKey,
+			PaymentConfirmResult result, BusinessException ex) {
+		ErrorCode errorCode = ex.getErrorCode();
+		if (errorCode == ErrorCode.ORDER_INVALID_STATUS) {
+			CompensationResult compensation = compensator.cancelApproved(paymentId, paymentKey, result.approvedAt(),
+					PaymentCompensator.ORDER_INVALIDATED_REASON);
+			return compensation.canceled()
+					? new BusinessException(ErrorCode.ORDER_EXPIRED)
+					: new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, compensation.failureDetail());
+		}
+		if (isDuplicateApproval(errorCode)) {
+			compensator.cancelApproved(null, paymentKey, result.approvedAt(),
+					PaymentCompensator.DUPLICATE_APPROVAL_REASON);
+			return ex;
+		}
+		log.error("승인 후 자동 보상 대상이 아닌 예외: paymentId={}, errorCode={}", paymentId, errorCode, ex);
+		safeMarkUnknown(paymentId, ex.getMessage());
+		return ex;
+	}
+
+	private boolean isDuplicateApproval(ErrorCode errorCode) {
+		return errorCode == ErrorCode.PAYMENT_ALREADY_DONE
+				|| errorCode == ErrorCode.ORDER_ALREADY_PAID
+				|| errorCode == ErrorCode.PAYMENT_INVALID_STATUS;
 	}
 
 	/**
