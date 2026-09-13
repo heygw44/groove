@@ -15,6 +15,7 @@ import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
 import { PendingExpiryBanner } from '@/components/order/PendingExpiryBanner';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
+import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
 import { PaymentWidgetSection } from '@/components/payment/PaymentWidgetSection';
 import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
@@ -25,6 +26,11 @@ import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatServerDateTime } from '@/utils/formatDate';
 import { isCancelableStatus } from '@/utils/orderStatus';
 import { buildOrderName } from '@/utils/paymentRedirect';
+import {
+  CANCEL_REQUESTED_MESSAGES,
+  getOrderCancelSuccessMessage,
+  isCancellationPending,
+} from '@/utils/paymentStatus';
 import { toServerMs } from '@/utils/serverTime';
 
 const NOT_FOUND_CODES = new Set(['ORDER_NOT_FOUND']);
@@ -105,8 +111,8 @@ export default function OrderDetailPage() {
     cancelOrderMutation.mutate(
       { orderId: order.id, reason },
       {
-        onSuccess: () => {
-          showToast('success', '주문을 취소했습니다.');
+        onSuccess: (response) => {
+          showToast('success', getOrderCancelSuccessMessage(response.payment?.status));
           setIsCancelDialogOpen(false);
         },
         onError: (error) => {
@@ -115,6 +121,8 @@ export default function OrderDetailPage() {
       },
     );
   };
+
+  const cancellationPending = isCancellationPending(order.payment?.status);
 
   return (
     <div>
@@ -188,6 +196,12 @@ export default function OrderDetailPage() {
         <section className="mt-8">
           <h2 className="mb-3 text-base font-bold">결제 정보</h2>
           <div className="space-y-1.5 rounded-lg border border-line bg-surface px-5 py-4 text-sm">
+            {cancellationPending && (
+              <p className="flex items-center gap-2">
+                <span className="text-content-muted">결제 상태</span>
+                <PaymentStatusBadge status={order.payment.status} />
+              </p>
+            )}
             <p>
               <span className="text-content-muted">결제 수단</span>{' '}
               <span className="font-medium">{order.payment.method}</span>
@@ -209,10 +223,17 @@ export default function OrderDetailPage() {
       )}
 
       {isCancelableStatus(order.status) && (
-        <div className="mt-6 flex justify-end">
-          <Button variant="danger" onClick={() => setIsCancelDialogOpen(true)}>
+        <div className="mt-6 flex flex-col items-end gap-2">
+          <Button
+            variant="danger"
+            onClick={() => setIsCancelDialogOpen(true)}
+            disabled={cancellationPending}
+          >
             주문 취소
           </Button>
+          {cancellationPending && (
+            <p className="text-sm text-content-muted">{CANCEL_REQUESTED_MESSAGES.memberReason}</p>
+          )}
         </div>
       )}
 
