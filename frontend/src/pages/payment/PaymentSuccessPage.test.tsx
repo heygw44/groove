@@ -81,4 +81,16 @@ describe('PaymentSuccessPage', () => {
     expect(await screen.findByText('결제 승인에 실패했습니다')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '주문으로 돌아가기' })).toBeInTheDocument();
   });
+
+  it('ORDER_EXPIRED 면 승인 후 자동 취소됐다는 안내를 보여준다', async () => {
+    // given
+    mockConfirmPaymentError('ORDER_EXPIRED', '결제 기한이 지난 주문입니다.');
+
+    // when
+    renderPage(search);
+
+    // then
+    expect(await screen.findByText('결제 승인에 실패했습니다')).toBeInTheDocument();
+    expect(screen.getByText('주문 시간이 지나 결제가 자동 취소됐습니다.')).toBeInTheDocument();
+  });
 });

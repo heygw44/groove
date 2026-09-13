@@ -15,6 +15,7 @@ import {
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
+import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
 import { useChangeAdminOrderStatus } from '@/hooks/mutations/useAdminOrderMutations';
 import { adminOrderKeys } from '@/hooks/queries/queryKeys';
 import { useAdminOrder } from '@/hooks/queries/useAdminOrder';
@@ -22,6 +23,7 @@ import type { OrderStatus } from '@/types/order';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatServerDateTime } from '@/utils/formatDate';
 import { ADMIN_ORDER_TRANSITIONS, ORDER_STATUS_LABEL } from '@/utils/orderStatus';
+import { isReconcilePending } from '@/utils/paymentStatus';
 
 interface AdminOrderDetailDrawerProps {
   orderId?: number;
@@ -107,6 +109,9 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
           <div>
             <div className="flex items-center gap-2">
               <OrderStatusBadge status={detail.status} />
+              {detail.paymentStatus && isReconcilePending(detail.paymentStatus) && (
+                <PaymentStatusBadge status={detail.paymentStatus} />
+              )}
               <span className="text-xs text-content-muted">
                 {formatServerDateTime(detail.createdAt)}
               </span>

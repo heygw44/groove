@@ -3,10 +3,17 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOrderName,
   buildPaymentRedirectUrls,
+  getPaymentConfirmErrorMessage,
   getTossFailMessage,
   parsePaymentFailParams,
   parsePaymentSuccessParams,
 } from '@/utils/paymentRedirect';
+
+const buildAxiosError = (code: string, message: string) =>
+  Object.assign(new Error(message), {
+    isAxiosError: true,
+    response: { data: { error: { code, message } } },
+  });
 
 describe('parsePaymentSuccessParams()', () => {
   it('paymentKey/orderId/amount 가 모두 있으면 파싱한다', () => {
@@ -165,5 +172,29 @@ describe('getTossFailMessage()', () => {
   it('매핑도 fallback 도 없으면 기본 문구를 반환한다', () => {
     // given & when & then
     expect(getTossFailMessage(undefined)).toBe('결제에 실패했습니다.');
+  });
+});
+
+describe('getPaymentConfirmErrorMessage()', () => {
+  it('ORDER_EXPIRED 면 승인 후 자동 취소 문구를 반환한다', () => {
+    // given
+    const error = buildAxiosError('ORDER_EXPIRED', '결제 기한이 지난 주문입니다.');
+
+    // when
+    const message = getPaymentConfirmErrorMessage(error);
+
+    // then
+    expect(message).toBe('주문 시간이 지나 결제가 자동 취소됐습니다.');
+  });
+
+  it('그 밖의 코드면 전역 에러 메시지를 그대로 반환한다', () => {
+    // given
+    const error = buildAxiosError('PAYMENT_CONFIRM_FAILED', '결제 승인에 실패했습니다.');
+
+    // when
+    const message = getPaymentConfirmErrorMessage(error);
+
+    // then
+    expect(message).toBe('결제 승인에 실패했습니다.');
   });
 });
