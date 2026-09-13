@@ -84,6 +84,7 @@ public enum ErrorCode {
 	ORDER_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "주문 금액이 일치하지 않습니다."),
 	ORDER_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 주문 상태입니다."),
 	ORDER_INVALID_STATUS_TRANSITION(HttpStatus.BAD_REQUEST, "허용되지 않는 주문 상태 전이입니다."),
+	ORDER_CANCEL_IN_PROGRESS(HttpStatus.CONFLICT, "취소가 진행 중인 주문입니다."),
 	ORDER_EXPIRED(HttpStatus.CONFLICT, "결제 기한이 지난 주문입니다."),
 
 	// ===== PAYMENT =====

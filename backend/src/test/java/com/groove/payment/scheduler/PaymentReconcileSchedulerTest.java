@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.dto.PaymentReconcileCandidate;
@@ -120,6 +121,73 @@ class PaymentReconcileSchedulerTest {
 			verify(compensator).cancelApproved(1L, "tviva-key", approvedAt,
 					PaymentCompensator.ORDER_INVALIDATED_REASON);
 			verify(reconcileService).recordCompensation(candidate, compensationResult);
+		}
+
+		@Test
+		@DisplayName("취소 재시도가 필요한 결과면 토스 취소 후 결과를 기록한다")
+		void retriesCancelWhenOutcomeNeedsCancelRetry() {
+			// given
+			stubLockToRunTask();
+			PaymentReconcileCandidate candidate = new PaymentReconcileCandidate(1L, 10L, "toss-1");
+			given(reconcileService.findCandidates(now)).willReturn(List.of(candidate));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.DONE, "tviva-key", "카드",
+					BigDecimal.ZERO, now.minusMinutes(5), null);
+			given(paymentClient.lookup("toss-1")).willReturn(lookup);
+			given(reconcileService.apply(candidate, lookup))
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
+			PaymentCancelResult cancelResult = new PaymentCancelResult("tviva-key", "CANCELED", now);
+			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willReturn(cancelResult);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(paymentClient).cancel("tviva-key", "주문 취소 재시도");
+			verify(reconcileService).recordCancelRetry(candidate, cancelResult, null);
+		}
+
+		@Test
+		@DisplayName("취소 재시도가 거절되면 거절 결과를 기록한다")
+		void recordsCancelRetryRejection() {
+			// given
+			stubLockToRunTask();
+			PaymentReconcileCandidate candidate = new PaymentReconcileCandidate(1L, 10L, "toss-1");
+			given(reconcileService.findCandidates(now)).willReturn(List.of(candidate));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.DONE, "tviva-key", "카드",
+					BigDecimal.ZERO, now.minusMinutes(5), null);
+			given(paymentClient.lookup("toss-1")).willReturn(lookup);
+			given(reconcileService.apply(candidate, lookup))
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
+			BusinessException rejection = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
+			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willThrow(rejection);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(reconcileService).recordCancelRetry(candidate, null, rejection);
+		}
+
+		@Test
+		@DisplayName("취소 재시도 결과가 불명이면 결과 불명으로 기록한다")
+		void recordsUnknownCancelRetryResult() {
+			// given
+			stubLockToRunTask();
+			PaymentReconcileCandidate candidate = new PaymentReconcileCandidate(1L, 10L, "toss-1");
+			given(reconcileService.findCandidates(now)).willReturn(List.of(candidate));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.DONE, "tviva-key", "카드",
+					BigDecimal.ZERO, now.minusMinutes(5), null);
+			given(paymentClient.lookup("toss-1")).willReturn(lookup);
+			given(reconcileService.apply(candidate, lookup))
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
+			RuntimeException timeout = new RuntimeException("Read timed out");
+			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willThrow(timeout);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(reconcileService).recordCancelRetry(eq(candidate), eq(null), any(BusinessException.class));
 		}
 
 		@Test

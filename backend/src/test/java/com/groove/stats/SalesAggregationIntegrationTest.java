@@ -127,7 +127,8 @@ class SalesAggregationIntegrationTest extends IntegrationTestSupport {
 			assertThat(beforeCancelDaily.getOrderCount()).isEqualTo(1);
 
 			// when — 주문을 취소하고 같은 날짜를 재집계한다
-			order.cancel("테스트 취소");
+			order.requestCancel("테스트 취소", false);
+			order.completeCancel(saleDateTime().plusHours(1));
 			orderRepository.saveAndFlush(order);
 			salesAggregationService.aggregateDate(SALE_DATE);
 
@@ -151,7 +152,8 @@ class SalesAggregationIntegrationTest extends IntegrationTestSupport {
 			assertThat(salesDailyProductRepository.findById(productId).orElseThrow().getSoldQuantity()).isEqualTo(5);
 
 			// when — 3개짜리 주문만 취소하고 재집계한다
-			order2.cancel("테스트 취소");
+			order2.requestCancel("테스트 취소", false);
+			order2.completeCancel(saleDateTime().plusHours(1));
 			orderRepository.saveAndFlush(order2);
 			salesAggregationService.aggregateDate(SALE_DATE);
 

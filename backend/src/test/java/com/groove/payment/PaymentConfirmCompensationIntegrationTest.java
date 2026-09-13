@@ -47,7 +47,7 @@ import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
-import com.groove.order.service.OrderService;
+import com.groove.order.service.OrderCancelService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
@@ -66,7 +66,7 @@ import com.groove.support.IntegrationTestSupport;
 
 /**
  * 토스 승인 호출이 끝나기 전에 주문이 취소되면(사용자/관리자 취소) 승인 반영이 거절되는데, 이때 즉시 보상
- * 취소가 도는지 검증한다. {@code paymentClient.confirm} 스텁의 응답 콜백 안에서 {@link OrderService#cancel}
+ * 취소가 도는지 검증한다. {@code paymentClient.confirm} 스텁의 응답 콜백 안에서 {@link OrderCancelService#cancel}
  * 을 직접 호출해 "토스 승인 호출 도중 주문이 먼저 취소됨"을 스레드 분기 없이 결정적으로 재현한다.
  */
 @AutoConfigureMockMvc
@@ -106,7 +106,7 @@ class PaymentConfirmCompensationIntegrationTest extends IntegrationTestSupport {
 	private PaymentConfirmService paymentConfirmService;
 
 	@Autowired
-	private OrderService orderService;
+	private OrderCancelService orderCancelService;
 
 	@Autowired
 	private Clock clock;
@@ -132,7 +132,7 @@ class PaymentConfirmCompensationIntegrationTest extends IntegrationTestSupport {
 			LocalDateTime canceledAt = approvedAt.plusSeconds(1);
 			given(paymentClient.confirm(eq(paymentKey), eq(orderInfo.orderNumber()), any(BigDecimal.class)))
 					.willAnswer(invocation -> {
-						orderService.cancel(member.getId(), orderInfo.orderId(), new OrderCancelRequest(null));
+						orderCancelService.cancel(member.getId(), orderInfo.orderId(), new OrderCancelRequest(null));
 						return new PaymentConfirmResult(paymentKey, orderInfo.orderNumber(), "카드",
 								orderInfo.finalAmount(), approvedAt);
 					});
@@ -171,7 +171,7 @@ class PaymentConfirmCompensationIntegrationTest extends IntegrationTestSupport {
 			LocalDateTime approvedAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.confirm(eq(paymentKey), eq(orderInfo.orderNumber()), any(BigDecimal.class)))
 					.willAnswer(invocation -> {
-						orderService.cancel(member.getId(), orderInfo.orderId(), new OrderCancelRequest(null));
+						orderCancelService.cancel(member.getId(), orderInfo.orderId(), new OrderCancelRequest(null));
 						return new PaymentConfirmResult(paymentKey, orderInfo.orderNumber(), "카드",
 								orderInfo.finalAmount(), approvedAt);
 					});

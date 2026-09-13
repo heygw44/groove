@@ -86,4 +86,20 @@ describe('AdminOrderDetailDrawer', () => {
     expect(screen.queryByText('승인대기')).not.toBeInTheDocument();
     expect(screen.queryByText('결제완료')).not.toBeInTheDocument();
   });
+
+  it('paymentStatus 가 CANCEL_REQUESTED 면 상태 전이를 비활성화하고 이유를 보여준다', async () => {
+    // given
+    const detail = buildDetail({ paymentStatus: 'CANCEL_REQUESTED' });
+
+    // when
+    renderDrawer(detail);
+
+    // then
+    expect(await screen.findByText('취소 처리 중')).toBeInTheDocument();
+    expect(screen.getByLabelText('변경할 상태')).toBeDisabled();
+    expect(screen.getByRole('button', { name: '변경' })).toBeDisabled();
+    expect(
+      screen.getByText('취소 결과를 확인하고 있어 주문 상태를 변경할 수 없습니다.'),
+    ).toBeInTheDocument();
+  });
 });

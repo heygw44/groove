@@ -20,6 +20,7 @@ import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
+import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 public class OrderController {
 
 	private final OrderService orderService;
+	private final OrderCancelService orderCancelService;
 
 	@Operation(summary = "주문 생성")
 	@PostMapping
@@ -60,6 +62,6 @@ public class OrderController {
 	@PostMapping("/{id}/cancel")
 	public ApiResponse<OrderDetailResponse> cancel(@AuthMember LoginMember loginMember, @PathVariable Long id,
 			@RequestBody(required = false) @Valid OrderCancelRequest request) {
-		return ApiResponse.ok(orderService.cancel(loginMember.id(), id, request));
+		return ApiResponse.ok(orderCancelService.cancel(loginMember.id(), id, request));
 	}
 }

@@ -5,18 +5,22 @@ import java.math.BigDecimal;
 import com.groove.order.entity.OrderStatus;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.entity.PaymentStatus;
 
 /**
- * 토스 조회 결과와 DB 상태를 견줘 대사 처리를 결정하는 순수 함수. 호출 시점의 DB 결제는 항상 READY/UNKNOWN
- * 이다(아니면 호출 전에 걸러진다).
+ * 토스 조회 결과와 DB 상태를 견줘 대사 처리를 결정하는 순수 함수.
  */
 public final class PaymentReconcileRule {
 
 	private PaymentReconcileRule() {
 	}
 
-	public static PaymentReconcileDecision decide(OrderStatus orderStatus, BigDecimal paymentAmount,
+	public static PaymentReconcileDecision decide(PaymentStatus paymentStatus, OrderStatus orderStatus,
+			BigDecimal paymentAmount,
 			PaymentLookupResult lookup) {
+		if (paymentStatus == PaymentStatus.CANCEL_REQUESTED) {
+			return decideCancelRequested(orderStatus, lookup.status());
+		}
 		PaymentLookupStatus status = lookup.status();
 		if (status == PaymentLookupStatus.DONE) {
 			return decideForDone(orderStatus, paymentAmount, lookup);
@@ -31,6 +35,20 @@ public final class PaymentReconcileRule {
 			return PaymentReconcileDecision.SYNC_CANCELED;
 		}
 		// PARTIAL_CANCELED
+		return PaymentReconcileDecision.MANUAL_REVIEW;
+	}
+
+	private static PaymentReconcileDecision decideCancelRequested(OrderStatus orderStatus,
+			PaymentLookupStatus lookupStatus) {
+		if (orderStatus != OrderStatus.PAID && orderStatus != OrderStatus.PREPARING) {
+			return PaymentReconcileDecision.MANUAL_REVIEW;
+		}
+		if (lookupStatus == PaymentLookupStatus.CANCELED) {
+			return PaymentReconcileDecision.COMPLETE_CANCEL;
+		}
+		if (lookupStatus == PaymentLookupStatus.DONE) {
+			return PaymentReconcileDecision.RETRY_CANCEL;
+		}
 		return PaymentReconcileDecision.MANUAL_REVIEW;
 	}
 

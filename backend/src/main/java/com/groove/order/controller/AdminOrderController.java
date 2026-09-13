@@ -17,6 +17,7 @@ import com.groove.order.dto.AdminOrderSearchRequest;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.service.AdminOrderService;
+import com.groove.order.service.AdminOrderStatusService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class AdminOrderController {
 
 	private final AdminOrderService adminOrderService;
+	private final AdminOrderStatusService adminOrderStatusService;
 
 	@Operation(summary = "관리자 주문 목록 조회")
 	@GetMapping
@@ -48,6 +50,6 @@ public class AdminOrderController {
 	@PatchMapping("/{id}/status")
 	public ApiResponse<AdminOrderDetailResponse> changeStatus(@AuthMember LoginMember admin, @PathVariable Long id,
 			@Valid @RequestBody AdminOrderStatusChangeRequest request) {
-		return ApiResponse.ok(adminOrderService.changeStatus(admin.id(), id, request));
+		return ApiResponse.ok(adminOrderStatusService.changeStatus(admin.id(), id, request));
 	}
 }

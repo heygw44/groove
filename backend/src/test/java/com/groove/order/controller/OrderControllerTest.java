@@ -45,6 +45,7 @@ import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.OrderStatus;
+import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderService;
 
 @WebMvcTest(OrderController.class)
@@ -66,6 +67,9 @@ class OrderControllerTest {
 
 	@MockitoBean
 	OrderService orderService;
+
+	@MockitoBean
+	OrderCancelService orderCancelService;
 
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
@@ -296,7 +300,7 @@ class OrderControllerTest {
 		@DisplayName("바디 없이 요청해도 200 과 취소된 주문을 반환한다")
 		void cancelsWithoutBody() throws Exception {
 			// given
-			given(orderService.cancel(eq(1L), eq(1L), eq(null)))
+			given(orderCancelService.cancel(eq(1L), eq(1L), eq(null)))
 					.willReturn(sampleDetailResponse(OrderStatus.CANCELED));
 
 			// when & then

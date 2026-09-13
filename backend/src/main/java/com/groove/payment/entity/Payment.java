@@ -133,12 +133,26 @@ public class Payment extends BaseTimeEntity {
 		this.status = PaymentStatus.UNKNOWN;
 	}
 
-	public void cancel(LocalDateTime canceledTime) {
+	public void requestCancel() {
 		if (this.status != PaymentStatus.DONE) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		this.status = PaymentStatus.CANCEL_REQUESTED;
+	}
+
+	public void completeCancel(LocalDateTime canceledTime) {
+		if (this.status != PaymentStatus.CANCEL_REQUESTED) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 		this.canceledAt = canceledTime;
 		this.status = PaymentStatus.CANCELED;
+	}
+
+	public void revertCancelRequest() {
+		if (this.status != PaymentStatus.CANCEL_REQUESTED) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		this.status = PaymentStatus.DONE;
 	}
 
 	/** FAILED 로 남아 대사 대상에서 빠진 결제를 재시도용 READY 로 되돌린다. updated_at 이 갱신돼 grace 도 새로 시작한다. */

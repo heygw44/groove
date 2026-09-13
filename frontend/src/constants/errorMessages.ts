@@ -30,6 +30,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   CART_EMPTY: '장바구니가 비어 있습니다.',
   ORDER_NOT_FOUND: '삭제되었거나 존재하지 않는 주문입니다.',
   ORDER_CANNOT_CANCEL: '취소할 수 없는 상태의 주문입니다.',
+  ORDER_CANCEL_IN_PROGRESS: '취소가 진행 중인 주문입니다.',
   ORDER_INVALID_STATUS_TRANSITION: '지금 상태에서는 처리할 수 없습니다.',
   ORDER_EXPIRED: '결제 기한이 지난 주문입니다.',
   ORDER_AMOUNT_MISMATCH: '주문 금액이 일치하지 않습니다.',

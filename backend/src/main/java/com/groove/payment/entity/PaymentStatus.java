@@ -11,8 +11,13 @@ public enum PaymentStatus {
 
 	/** 토스 결과가 DB 에 아직 확정되지 않은 상태. 대사 대상이고, 이 결제가 걸린 주문은 만료시키지 않는다. */
 	public static final List<PaymentStatus> UNRESOLVED = List.of(READY, UNKNOWN);
+	public static final List<PaymentStatus> RECONCILE_TARGETS = List.of(READY, UNKNOWN, CANCEL_REQUESTED);
 
 	public boolean isUnresolved() {
 		return UNRESOLVED.contains(this);
+	}
+
+	public boolean isReconcileTarget() {
+		return RECONCILE_TARGETS.contains(this);
 	}
 }

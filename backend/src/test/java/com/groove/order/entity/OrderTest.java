@@ -250,13 +250,11 @@ class OrderTest {
 	@DisplayName("cancel()")
 	class Cancel {
 
-		@ParameterizedTest
-		@EnumSource(value = OrderStatus.class, names = {"PENDING", "PAID"})
-		@DisplayName("PENDING·PAID 면 CANCELED 로 바뀌고 취소 시각·사유가 기록된다")
-		void cancelsAndRecordsReasonForCancelableStatuses(OrderStatus status) {
+		@Test
+		@DisplayName("PENDING 이면 CANCELED 로 바뀌고 취소 시각·사유가 기록된다")
+		void cancelsAndRecordsReasonWhenPending() {
 			// given
 			Order order = OrderFixture.create(member);
-			ReflectionTestUtils.setField(order, "status", status);
 
 			// when
 			order.cancel("고객 변심");
@@ -269,7 +267,7 @@ class OrderTest {
 
 		@ParameterizedTest
 		@EnumSource(value = OrderStatus.class,
-				names = {"PREPARING", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"})
+				names = {"PAID", "PREPARING", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"})
 		@DisplayName("취소 불가 상태면 ORDER_CANNOT_CANCEL 예외를 던진다")
 		void throwsCannotCancelForNonCancelableStatuses(OrderStatus status) {
 			// given
@@ -281,6 +279,124 @@ class OrderTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+		}
+	}
+
+	@Nested
+	@DisplayName("requestCancel()")
+	class RequestCancel {
+
+		@Test
+		@DisplayName("회원 취소면 PAID 상태에서 사유만 기록한다")
+		void recordsReasonWithoutChangingStatusForMember() {
+			// given
+			Order order = OrderFixture.markPaid(OrderFixture.create(member));
+
+			// when
+			order.requestCancel("고객 변심", false);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(order.getCancelReason()).isEqualTo("고객 변심");
+			assertThat(order.getCanceledAt()).isNull();
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
+		@DisplayName("관리자 취소면 취소 가능한 상태에서 관리자 사유만 기록한다")
+		void recordsAdminReasonWithoutChangingStatus(OrderStatus status) {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", status);
+
+			// when
+			order.requestCancel(null, true);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(status);
+			assertThat(order.getCancelReason()).isEqualTo("관리자 취소");
+		}
+
+		@Test
+		@DisplayName("회원 취소가 PAID 상태가 아니면 ORDER_CANNOT_CANCEL 예외를 던진다")
+		void throwsWhenMemberOrderIsNotPaid() {
+			// given
+			Order order = OrderFixture.create(member);
+
+			// when & then
+			assertThatThrownBy(() -> order.requestCancel("고객 변심", false))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+		}
+
+		@Test
+		@DisplayName("관리자 취소가 허용되지 않은 상태면 ORDER_INVALID_STATUS_TRANSITION 예외를 던진다")
+		void throwsWhenAdminTransitionIsNotAllowed() {
+			// given
+			Order order = OrderFixture.markDelivered(OrderFixture.create(member));
+
+			// when & then
+			assertThatThrownBy(() -> order.requestCancel(null, true))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
+		}
+	}
+
+	@Nested
+	@DisplayName("completeCancel()")
+	class CompleteCancel {
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
+		@DisplayName("PAID 또는 PREPARING 이면 CANCELED 로 바뀌고 취소 시각을 기록한다")
+		void completesCancelForPaidOrderStatuses(OrderStatus status) {
+			// given
+			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", status);
+			order.requestCancel("고객 변심", status == OrderStatus.PREPARING);
+			LocalDateTime canceledAt = LocalDateTime.of(2026, 9, 13, 10, 30);
+
+			// when
+			order.completeCancel(canceledAt);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isEqualTo(canceledAt);
+			assertThat(order.getCancelReason()).isNotNull();
+		}
+
+		@Test
+		@DisplayName("PAID 또는 PREPARING 이 아니면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsForInvalidStatus() {
+			// given
+			Order order = OrderFixture.create(member);
+
+			// when & then
+			assertThatThrownBy(() -> order.completeCancel(LocalDateTime.of(2026, 9, 13, 10, 30)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("withdrawCancelRequest()")
+	class WithdrawCancelRequest {
+
+		@Test
+		@DisplayName("취소 요청을 철회하면 취소 사유를 지운다")
+		void clearsCancelReason() {
+			// given
+			Order order = OrderFixture.markPaid(OrderFixture.create(member));
+			order.requestCancel("고객 변심", false);
+
+			// when
+			order.withdrawCancelRequest();
+
+			// then
+			assertThat(order.getCancelReason()).isNull();
 		}
 	}
 

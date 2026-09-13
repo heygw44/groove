@@ -269,21 +269,20 @@ class PaymentTest {
 	}
 
 	@Nested
-	@DisplayName("cancel()")
-	class Cancel {
+	@DisplayName("requestCancel()")
+	class RequestCancel {
 
 		@Test
-		@DisplayName("DONE 이면 CANCELED 로 바뀌고 취소 시각이 기록된다")
-		void changesStatusToCanceledWhenDone() {
+		@DisplayName("DONE 이면 CANCEL_REQUESTED 로 바뀐다")
+		void changesStatusToCancelRequestedWhenDone() {
 			// given
 			Payment payment = PaymentFixture.approved(order());
 
 			// when
-			payment.cancel(CANCELED_AT);
+			payment.requestCancel();
 
 			// then
-			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
-			assertThat(payment.getCanceledAt()).isEqualTo(CANCELED_AT);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
 		}
 
 		@ParameterizedTest
@@ -294,7 +293,73 @@ class PaymentTest {
 			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
 
 			// when & then
-			assertThatThrownBy(() -> payment.cancel(CANCELED_AT))
+			assertThatThrownBy(payment::requestCancel)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("completeCancel()")
+	class CompleteCancel {
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 면 CANCELED 로 바뀌고 취소 시각이 기록된다")
+		void changesStatusToCanceledWhenRequested() {
+			// given
+			Payment payment = PaymentFixture.approved(order());
+			payment.requestCancel();
+
+			// when
+			payment.completeCancel(CANCELED_AT);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(payment.getCanceledAt()).isEqualTo(CANCELED_AT);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "DONE", "CANCELED", "FAILED", "UNKNOWN"})
+		@DisplayName("CANCEL_REQUESTED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatusWhenNotRequested(PaymentStatus status) {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
+
+			// when & then
+			assertThatThrownBy(() -> payment.completeCancel(CANCELED_AT))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("revertCancelRequest()")
+	class RevertCancelRequest {
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 면 DONE 으로 되돌린다")
+		void changesStatusBackToDone() {
+			// given
+			Payment payment = PaymentFixture.approved(order());
+			payment.requestCancel();
+
+			// when
+			payment.revertCancelRequest();
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatusWhenNotRequested() {
+			// given
+			Payment payment = PaymentFixture.approved(order());
+
+			// when & then
+			assertThatThrownBy(payment::revertCancelRequest)
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);

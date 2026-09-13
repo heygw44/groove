@@ -53,14 +53,10 @@ import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.repository.LimitedPurchaseRepository;
-import com.groove.limited.service.LimitedPurchaseWriter;
-import com.groove.limited.service.LimitedRelease;
-import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
@@ -75,7 +71,6 @@ import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
-import com.groove.product.service.ProductSalesStatsUpdater;
 
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -102,12 +97,6 @@ class OrderServiceTest {
 	LimitedPurchaseRepository limitedPurchaseRepository;
 
 	@Mock
-	LimitedPurchaseWriter limitedPurchaseWriter;
-
-	@Mock
-	LimitedReleaseSynchronizer limitedReleaseSynchronizer;
-
-	@Mock
 	CartItemRepository cartItemRepository;
 
 	@Mock
@@ -124,12 +113,6 @@ class OrderServiceTest {
 
 	@Mock
 	PaymentRepository paymentRepository;
-
-	@Mock
-	PaymentCancelHook paymentCancelHook;
-
-	@Mock
-	ProductSalesStatsUpdater productSalesStatsUpdater;
 
 	OrderService orderService;
 
@@ -152,9 +135,8 @@ class OrderServiceTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
-				limitedPurchaseRepository, limitedPurchaseWriter, limitedReleaseSynchronizer, cartItemRepository,
-				memberCouponRepository, orderStockService, orderRepository, orderNumberGenerator, orderQueryMapper,
-				paymentRepository, paymentCancelHook, productSalesStatsUpdater, clock);
+				limitedPurchaseRepository, cartItemRepository, memberCouponRepository, orderStockService,
+				orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -610,176 +592,4 @@ class OrderServiceTest {
 		}
 	}
 
-	@Nested
-	@DisplayName("cancel()")
-	class Cancel {
-
-		@Test
-		@DisplayName("PENDING 주문을 취소하면 재고를 복구하고 결제 취소 훅은 호출하지 않는다")
-		void restoresStockAndSkipsHookWhenPending() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 2), 500L);
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(500L, MEMBER_ID)).willReturn(Optional.of(order));
-
-			// when
-			OrderDetailResponse response = orderService.cancel(MEMBER_ID, 500L, null);
-
-			// then
-			assertThat(response.status()).isEqualTo(OrderStatus.CANCELED);
-			verify(orderStockService).restore(order);
-			verify(paymentCancelHook, never()).onPaidOrderCanceled(any());
-		}
-
-		@Test
-		@DisplayName("PAID 주문을 취소하면 결제 취소 훅을 호출한다")
-		void callsHookWhenPaid() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 501L);
-			order.markPaid();
-			given(orderRepository.findByIdForUpdate(501L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(501L, MEMBER_ID)).willReturn(Optional.of(order));
-
-			// when
-			orderService.cancel(MEMBER_ID, 501L, new OrderCancelRequest("단순 변심"));
-
-			// then
-			verify(orderStockService).restore(order);
-			verify(paymentCancelHook).onPaidOrderCanceled(order);
-		}
-
-		@Test
-		@DisplayName("PAID 주문을 취소하면 판매 수량을 재계산한다")
-		void refreshesSoldQuantityWhenPaidOrderCanceled() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 507L);
-			order.markPaid();
-			given(orderRepository.findByIdForUpdate(507L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(507L, MEMBER_ID)).willReturn(Optional.of(order));
-
-			// when
-			orderService.cancel(MEMBER_ID, 507L, null);
-
-			// then
-			verify(productSalesStatsUpdater).refreshFor(order);
-		}
-
-		@Test
-		@DisplayName("PENDING 주문을 취소하면 판매 수량을 재계산하지 않는다")
-		void skipsSoldQuantityRefreshWhenPendingOrderCanceled() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 508L);
-			given(orderRepository.findByIdForUpdate(508L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(508L, MEMBER_ID)).willReturn(Optional.of(order));
-
-			// when
-			orderService.cancel(MEMBER_ID, 508L, null);
-
-			// then
-			verify(productSalesStatsUpdater, never()).refreshFor(any());
-		}
-
-		@Test
-		@DisplayName("SHIPPED 주문을 취소하면 ORDER_CANNOT_CANCEL 예외를 던지고 재고를 건드리지 않는다")
-		void throwsWhenShipped() {
-			// given
-			Order order = OrderFixture.withId(
-					OrderFixture.markShipped(OrderFixture.createWithItem(member, product, 1)), 502L);
-			given(orderRepository.findByIdForUpdate(502L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(502L, MEMBER_ID)).willReturn(Optional.of(order));
-
-			// when & then
-			assertThatThrownBy(() -> orderService.cancel(MEMBER_ID, 502L, null))
-					.isInstanceOf(BusinessException.class)
-					.extracting("errorCode")
-					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
-			verify(orderStockService, never()).restore(any());
-			verify(limitedPurchaseWriter, never()).revertByOrder(any(), any());
-		}
-
-		@Test
-		@DisplayName("타인 주문이거나 존재하지 않으면 ORDER_NOT_FOUND 예외를 던진다")
-		void throwsWhenOrderNotFound() {
-			// given
-			given(orderRepository.findByIdForUpdate(999L)).willReturn(Optional.empty());
-
-			// when & then
-			assertThatThrownBy(() -> orderService.cancel(MEMBER_ID, 999L, null))
-					.isInstanceOf(BusinessException.class)
-					.extracting("errorCode")
-					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
-		}
-
-		@Test
-		@DisplayName("쿠폰을 적용한 주문을 취소하면 쿠폰이 미사용 상태로 복구된다")
-		void restoresCouponOnCancel() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 503L);
-			MemberCoupon memberCoupon = MemberCouponFixture.create(member,
-					CouponFixture.fixed("CANCEL5000", new BigDecimal("5000")));
-			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
-			memberCoupon.use(order.getId());
-			given(orderRepository.findByIdForUpdate(503L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(503L, MEMBER_ID)).willReturn(Optional.of(order));
-
-			// when
-			orderService.cancel(MEMBER_ID, 503L, null);
-
-			// then
-			assertThat(memberCoupon.isUsed()).isFalse();
-		}
-
-		@Test
-		@DisplayName("만료된 쿠폰을 적용한 주문도 취소하면 쿠폰이 복구된다")
-		void restoresExpiredCouponOnCancel() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 504L);
-			Coupon coupon = CouponFixture.fixed("CANCELEXPIRED", new BigDecimal("5000"));
-			MemberCoupon memberCoupon = MemberCouponFixture.create(member, coupon);
-			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
-			memberCoupon.use(order.getId());
-			CouponFixture.expired(coupon);
-			given(orderRepository.findByIdForUpdate(504L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(504L, MEMBER_ID)).willReturn(Optional.of(order));
-
-			// when
-			orderService.cancel(MEMBER_ID, 504L, null);
-
-			// then
-			assertThat(memberCoupon.isUsed()).isFalse();
-		}
-
-		@Test
-		@DisplayName("한정반 주문을 취소하면 구매 이력을 되돌리고 커밋 후 Redis 선점을 해제한다")
-		void revertsLimitedPurchaseAndReleasesAfterCommit() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 505L);
-			given(orderRepository.findByIdForUpdate(505L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(505L, MEMBER_ID)).willReturn(Optional.of(order));
-			LimitedRelease release = new LimitedRelease(5L, MEMBER_ID);
-			given(limitedPurchaseWriter.revertByOrder(505L, now)).willReturn(Optional.of(release));
-
-			// when
-			orderService.cancel(MEMBER_ID, 505L, null);
-
-			// then
-			verify(limitedReleaseSynchronizer).releaseAfterCommit(release);
-		}
-
-		@Test
-		@DisplayName("한정반 주문이 아니면 Redis 선점 해제를 호출하지 않는다")
-		void skipsLimitedReleaseForNormalOrder() {
-			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 506L);
-			given(orderRepository.findByIdForUpdate(506L)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsByIdAndMemberId(506L, MEMBER_ID)).willReturn(Optional.of(order));
-			given(limitedPurchaseWriter.revertByOrder(506L, now)).willReturn(Optional.empty());
-
-			// when
-			orderService.cancel(MEMBER_ID, 506L, null);
-
-			// then
-			verify(limitedReleaseSynchronizer, never()).releaseAfterCommit(any());
-		}
-	}
 }

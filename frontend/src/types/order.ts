@@ -65,7 +65,7 @@ export interface OrderDetail {
   cancelReason?: string;
   /** 한정반 구매 주문에만 존재. 만료 취소로 LimitedPurchase 가 지워지면 재조회 시 사라질 수 있다. */
   limitedDropId?: number;
-  /** 승인 이력이 있는 결제(DONE/CANCELED)만 존재. */
+  /** 승인 이력이 있는 결제(DONE/CANCEL_REQUESTED/CANCELED)만 존재. */
   payment?: OrderPayment;
 }
 

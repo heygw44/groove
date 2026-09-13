@@ -22,12 +22,12 @@ describe('PaymentStatusBadge', () => {
     expect(screen.getByText('대사 대기')).toBeInTheDocument();
   });
 
-  it('status 가 CANCEL_REQUESTED 면 취소 확인 중과 대사 대기를 함께 표시한다', () => {
+  it('status 가 CANCEL_REQUESTED 면 취소 처리 중과 대사 대기를 함께 표시한다', () => {
     // given & when
     render(<PaymentStatusBadge status="CANCEL_REQUESTED" />);
 
     // then
-    expect(screen.getByText('취소 확인 중')).toBeInTheDocument();
+    expect(screen.getByText('취소 처리 중')).toBeInTheDocument();
     expect(screen.getByText('대사 대기')).toBeInTheDocument();
   });
 });
