@@ -136,9 +136,9 @@ class RecommendAblationTest extends IntegrationTestSupport {
 			List<CoPurchaseBasket> baskets = CoPurchaseBasketLoader.load(entityManager, clock);
 
 			List<Long> byPopularity = productIdsByPopularity();
-			long candidateCount = features.values().stream().filter(feature -> !feature.hidden()).count();
+			long candidateCount = features.values().stream().filter(ProductFeature::recommendable).count();
 			long albumCandidateCount = features.values().stream()
-					.filter(feature -> !feature.hidden())
+					.filter(ProductFeature::recommendable)
 					.map(ProductFeature::albumId)
 					.distinct()
 					.count();
@@ -271,9 +271,9 @@ class RecommendAblationTest extends IntegrationTestSupport {
 			List<CoPurchaseBasket> baskets = CoPurchaseBasketLoader.load(entityManager, clock);
 
 			List<Long> byPopularity = productIdsByPopularity();
-			long candidateCount = features.values().stream().filter(feature -> !feature.hidden()).count();
+			long candidateCount = features.values().stream().filter(ProductFeature::recommendable).count();
 			long albumCandidateCount = features.values().stream()
-					.filter(feature -> !feature.hidden())
+					.filter(ProductFeature::recommendable)
 					.map(ProductFeature::albumId)
 					.distinct()
 					.count();
@@ -789,9 +789,9 @@ class RecommendAblationTest extends IntegrationTestSupport {
 	/** 평점 내림차순 → 최신순 → id 내림차순. RecommendService 의 동점 처리와 같은 순서다. */
 	private List<Long> productIdsByPopularity() {
 		return entityManager.createQuery(
-						"select p.id from Product p where p.status <> :hidden "
+						"select p.id from Product p where p.status = :onSale "
 								+ "order by p.averageRating desc, p.createdAt desc, p.id desc", Long.class)
-				.setParameter("hidden", ProductStatus.HIDDEN)
+				.setParameter("onSale", ProductStatus.ON_SALE)
 				.getResultList();
 	}
 

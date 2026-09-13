@@ -117,11 +117,11 @@ public final class EvalMetrics {
 		return numerator / (itemCount * sum);
 	}
 
-	/** 후보 풀(비HIDDEN 상품)의 장르별 상품 수 분포. 분포가 얼마나 평평한지로 후속 IDF 도입 여부를 판단한다. */
+	/** 후보 풀(ON_SALE 상품)의 장르별 상품 수 분포. 분포가 얼마나 평평한지로 후속 IDF 도입 여부를 판단한다. */
 	public static List<GenreDf> genreDocumentFrequency(Map<Long, ProductFeature> features,
 			Map<Long, String> genreNames) {
 		Map<Long, Long> countByGenreId = features.values().stream()
-				.filter(feature -> !feature.hidden())
+				.filter(ProductFeature::recommendable)
 				.flatMap(feature -> feature.genreIds().stream())
 				.collect(Collectors.groupingBy(genreId -> genreId, Collectors.counting()));
 		return countByGenreId.entrySet().stream()

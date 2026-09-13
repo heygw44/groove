@@ -152,9 +152,9 @@ class RecommendWeightSweepTest extends IntegrationTestSupport {
 			Map<Long, ProductFeature> features = productFeatureCache.get();
 			PopularityIndex popularityIndex = PopularityIndex.from(features.values());
 			List<Long> byPopularityIds = byPopularityIds(features);
-			long candidateCount = features.values().stream().filter(feature -> !feature.hidden()).count();
+			long candidateCount = features.values().stream().filter(ProductFeature::recommendable).count();
 			long albumCandidateCount = features.values().stream()
-					.filter(feature -> !feature.hidden())
+					.filter(ProductFeature::recommendable)
 					.map(ProductFeature::albumId)
 					.distinct()
 					.count();
@@ -296,7 +296,7 @@ class RecommendWeightSweepTest extends IntegrationTestSupport {
 	/** 평점 desc(null 뒤로) → 최신순 → id desc. {@code RecommendPrecisionTest} 의 인기순 대조군과 같은 규칙이다. */
 	private List<Long> byPopularityIds(Map<Long, ProductFeature> features) {
 		return features.values().stream()
-				.filter(feature -> !feature.hidden())
+				.filter(ProductFeature::recommendable)
 				.sorted(Comparator
 						.comparing(ProductFeature::averageRating, Comparator.nullsLast(Comparator.reverseOrder()))
 						.thenComparing(ProductFeature::createdAt, Comparator.reverseOrder())

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -79,6 +80,26 @@ class ProductFeatureTest {
 			assertThat(feature.labelId()).isNull();
 			assertThat(feature.decade()).isNull();
 			assertThat(feature.hidden()).isTrue();
+		}
+	}
+
+	@Nested
+	@DisplayName("recommendable()")
+	class Recommendable {
+
+		@ParameterizedTest
+		@EnumSource(ProductStatus.class)
+		@DisplayName("ON_SALE 이면 true, 아니면 false 를 반환한다")
+		void returnsTrueOnlyForOnSaleStatus(ProductStatus status) {
+			// given
+			ProductFeatureRow row = new ProductFeatureRow(1L, 2L, 10L, 20L, 1975, 4.5, 12, 34L, CREATED_AT,
+					status, "3,1,5");
+
+			// when
+			ProductFeature feature = ProductFeature.from(row);
+
+			// then
+			assertThat(feature.recommendable()).isEqualTo(status == ProductStatus.ON_SALE);
 		}
 	}
 }

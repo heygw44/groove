@@ -11,6 +11,8 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import com.groove.product.entity.ProductStatus;
 import com.groove.recommend.dto.RecommendReason;
@@ -133,13 +135,14 @@ class RecommendRankerTest {
 			assertThat(ranked).extracting(candidate -> candidate.feature().id()).containsExactly(1L, 3L);
 		}
 
-		@Test
-		@DisplayName("hidden 상품은 후보에서 뺀다")
-		void excludesHiddenFeatures() {
+		@ParameterizedTest
+		@EnumSource(value = ProductStatus.class, names = {"HIDDEN", "SOLD_OUT"})
+		@DisplayName("ON_SALE 이 아닌 상품은 후보에서 뺀다")
+		void excludesNonRecommendableFeatures(ProductStatus status) {
 			// given
-			ProductFeature hidden = new ProductFeature(1L, 1L, 5L, 1L, Set.of(), Decade.D1990, 4.0, NOW, REVIEW_COUNT,
-					0L, ProductStatus.HIDDEN);
-			Map<Long, ProductFeature> features = featuresOf(hidden);
+			ProductFeature nonRecommendable = new ProductFeature(1L, 1L, 5L, 1L, Set.of(), Decade.D1990, 4.0, NOW,
+					REVIEW_COUNT, 0L, status);
+			Map<Long, ProductFeature> features = featuresOf(nonRecommendable);
 			List<ProductFeature> seeds = List.of(seed(10L, 5L));
 
 			// when
