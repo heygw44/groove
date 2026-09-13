@@ -38,6 +38,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   PAYMENT_CANCEL_FAILED: '결제 취소에 실패했습니다.',
   PAYMENT_ALREADY_DONE: '이미 승인된 결제입니다.',
   PAYMENT_KEY_MISMATCH: '결제 정보가 일치하지 않습니다.',
+  PAYMENT_RESULT_UNKNOWN: '결제 결과를 확인하고 있습니다. 잠시 후 주문 내역에서 확인해 주세요.',
   WISHLIST_ALREADY_EXISTS: '이미 찜한 상품입니다.',
   WISHLIST_NOT_FOUND: '찜하지 않은 상품입니다.',
   ALBUM_WATCH_ALREADY_EXISTS: '이미 알림을 받고 있는 앨범입니다.',

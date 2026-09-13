@@ -24,7 +24,10 @@ import com.groove.product.service.ProductSalesStatsUpdater;
 
 import lombok.RequiredArgsConstructor;
 
-/** 결제 승인의 DB 반영. 토스 호출은 {@link PaymentConfirmService} 가 트랜잭션 밖에서 맡고, 이 클래스는 쓰기만 한다. */
+/**
+ * 결제 승인의 DB 반영. 토스 호출은 {@link PaymentConfirmService} 가 트랜잭션 밖에서 맡고, 이 클래스는 쓰기만 한다.
+ * fail/markUnknown 의 버전 충돌(ObjectOptimisticLockingFailureException)은 커밋 시점에 나므로 호출자가 처리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class PaymentConfirmWriter {
@@ -105,5 +108,15 @@ public class PaymentConfirmWriter {
 			return;
 		}
 		payment.fail(reason);
+	}
+
+	@Transactional
+	public void markUnknown(Long paymentId, String reason) {
+		Payment payment = paymentRepository.findById(paymentId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		if (payment.getStatus() == PaymentStatus.DONE) {
+			return;
+		}
+		payment.markUnknown(reason);
 	}
 }

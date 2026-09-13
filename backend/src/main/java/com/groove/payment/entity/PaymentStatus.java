@@ -1,6 +1,9 @@
 package com.groove.payment.entity;
 
-/** 결제 상태. 승인 전 READY 로 만들어지고 토스 승인/취소 결과에 따라 전이한다. */
+/**
+ * 결제 상태. 승인 전 READY 로 만들어지고 토스 승인/취소 결과에 따라 전이한다.
+ * UNKNOWN 은 토스 승인 호출의 처리 결과를 모르는 상태(대사로 수렴), CANCEL_REQUESTED 는 취소를 요청하고 토스 결과를 기다리는 상태다.
+ */
 public enum PaymentStatus {
-	READY, DONE, CANCELED, FAILED
+	READY, DONE, CANCELED, FAILED, UNKNOWN, CANCEL_REQUESTED
 }

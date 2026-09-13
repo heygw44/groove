@@ -45,6 +45,12 @@ public final class PaymentFixture {
 		return payment;
 	}
 
+	public static Payment unknown(Order order, String reason) {
+		Payment payment = Payment.ready(order);
+		payment.markUnknown(reason);
+		return payment;
+	}
+
 	public static Payment canceled(Order order) {
 		Payment payment = approved(order);
 		payment.cancel(CANCELED_AT);

@@ -118,6 +118,33 @@ class PaymentTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
+
+		@Test
+		@DisplayName("UNKNOWN 이면 재승인되고 DONE 으로 바뀐다")
+		void approvesAgainAndChangesStatusToDoneWhenUnknown() {
+			// given
+			Payment payment = PaymentFixture.unknown(order(), "TOSS 응답 지연");
+
+			// when
+			payment.approve(PAYMENT_KEY, METHOD, APPROVED_AT);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(payment.getFailReason()).isNull();
+		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatusWhenCancelRequested() {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), PaymentStatus.CANCEL_REQUESTED);
+
+			// when & then
+			assertThatThrownBy(() -> payment.approve(PAYMENT_KEY, METHOD, APPROVED_AT))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
 	}
 
 	@Nested
@@ -173,6 +200,67 @@ class PaymentTest {
 
 			// when & then
 			assertThatThrownBy(() -> payment.fail("REJECT_CARD_COMPANY"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("markUnknown()")
+	class MarkUnknown {
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "FAILED"})
+		@DisplayName("READY 또는 FAILED 면 UNKNOWN 으로 바뀌고 사유가 기록된다")
+		void changesStatusToUnknown(PaymentStatus status) {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
+
+			// when
+			payment.markUnknown("TOSS 응답 지연");
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+			assertThat(payment.getFailReason()).isEqualTo("TOSS 응답 지연");
+		}
+
+		@Test
+		@DisplayName("사유가 컬럼 길이를 넘으면 300자로 잘라 저장한다")
+		void truncatesReasonExceedingColumnLength() {
+			// given
+			Payment payment = Payment.ready(order());
+			String reason = "가".repeat(301);
+
+			// when
+			payment.markUnknown(reason);
+
+			// then
+			assertThat(payment.getFailReason()).hasSize(300);
+		}
+
+		@Test
+		@DisplayName("이미 DONE 이면 PAYMENT_ALREADY_DONE 예외를 던진다")
+		void throwsAlreadyDoneWhenDone() {
+			// given
+			Payment payment = PaymentFixture.approved(order());
+
+			// when & then
+			assertThatThrownBy(() -> payment.markUnknown("TOSS 응답 지연"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_ALREADY_DONE);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"CANCELED", "CANCEL_REQUESTED"})
+		@DisplayName("CANCELED 또는 CANCEL_REQUESTED 면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatus(PaymentStatus status) {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
+
+			// when & then
+			assertThatThrownBy(() -> payment.markUnknown("TOSS 응답 지연"))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);

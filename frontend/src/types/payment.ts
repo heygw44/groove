@@ -1,4 +1,5 @@
-export type PaymentStatus = 'READY' | 'DONE' | 'CANCELED' | 'FAILED';
+export type PaymentStatus =
+  'READY' | 'DONE' | 'CANCELED' | 'FAILED' | 'UNKNOWN' | 'CANCEL_REQUESTED';
 
 export interface PaymentConfirmRequest {
   paymentKey: string;

@@ -7,8 +7,10 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.Base64;
+import java.util.Set;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -21,6 +23,8 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
+import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.client.dto.TossCancelRequest;
 import com.groove.payment.client.dto.TossConfirmRequest;
 import com.groove.payment.client.dto.TossErrorResponse;
@@ -39,7 +43,20 @@ public class TossPaymentClient implements PaymentClient {
 
 	private static final String CONFIRM_PATH = "/v1/payments/confirm";
 	private static final String CANCEL_PATH = "/v1/payments/{paymentKey}/cancel";
+	private static final String LOOKUP_PATH = "/v1/payments/orders/{orderId}";
 	private static final String UNKNOWN_ERROR_CODE = "UNKNOWN";
+
+	/**
+	 * 토스는 멱등키+API 키+URL+메서드로 요청을 판별하고 본문은 보지 않아 첫 응답을 15일간 그대로 재생한다.
+	 * 승인 키를 orderId 로 잡으면 카드 거절 뒤 다른 카드(새 paymentKey)로 재결제할 때 첫 거절이 재생되므로
+	 * 결제 시도 단위인 paymentKey 로 잡는다.
+	 */
+	private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+	private static final String CONFIRM_IDEMPOTENCY_PREFIX = "confirm-";
+	private static final String CANCEL_IDEMPOTENCY_PREFIX = "cancel-";
+
+	/** 조회 대상 결제가 없다는 토스 에러 코드. */
+	private static final Set<String> NOT_FOUND_ERROR_CODES = Set.of("NOT_FOUND_PAYMENT", "NOT_FOUND");
 
 	private final RestClient restClient;
 	private final ObjectMapper objectMapper;
@@ -57,7 +74,13 @@ public class TossPaymentClient implements PaymentClient {
 	@Override
 	public PaymentConfirmResult confirm(String paymentKey, String orderId, BigDecimal amount) {
 		TossConfirmRequest request = new TossConfirmRequest(paymentKey, orderId, toWon(amount));
-		TossPaymentResponse response = send(ErrorCode.PAYMENT_CONFIRM_FAILED, paymentKey, CONFIRM_PATH, request);
+		String idempotencyKey = CONFIRM_IDEMPOTENCY_PREFIX + paymentKey;
+		TossPaymentResponse response;
+		try {
+			response = send(ErrorCode.PAYMENT_CONFIRM_FAILED, paymentKey, idempotencyKey, CONFIRM_PATH, request);
+		} catch (TossAlreadyProcessedException ex) {
+			return absorbAlreadyProcessed(paymentKey, orderId, amount, ex);
+		}
 		return new PaymentConfirmResult(response.paymentKey(), response.orderId(), response.method(),
 				response.totalAmount(), toServerTime(response.approvedAt()));
 	}
@@ -65,35 +88,123 @@ public class TossPaymentClient implements PaymentClient {
 	@Override
 	public PaymentCancelResult cancel(String paymentKey, String reason) {
 		TossCancelRequest request = new TossCancelRequest(reason);
-		TossPaymentResponse response = send(ErrorCode.PAYMENT_CANCEL_FAILED, paymentKey, CANCEL_PATH, request,
-				paymentKey);
+		String idempotencyKey = CANCEL_IDEMPOTENCY_PREFIX + paymentKey;
+		TossPaymentResponse response;
+		try {
+			response = send(ErrorCode.PAYMENT_CANCEL_FAILED, paymentKey, idempotencyKey, CANCEL_PATH, request,
+					paymentKey);
+		} catch (TossAlreadyProcessedException ex) {
+			// 이미 취소된 결제는 토스가 ALREADY_CANCELED_PAYMENT 로 답해 이 코드로 오지 않는다.
+			// 취소 요청에서 나오면 예상 밖의 응답이라 거절로 본다.
+			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, ex.getMessage());
+		}
 		TossPaymentResponse.Cancel lastCancel = response.lastCancel();
 		LocalDateTime canceledAt = lastCancel == null ? null : toServerTime(lastCancel.canceledAt());
 		return new PaymentCancelResult(response.paymentKey(), response.status(), canceledAt);
 	}
 
-	private TossPaymentResponse send(ErrorCode errorCode, String paymentKey, String uri, Object body,
-			Object... uriVariables) {
+	@Override
+	public PaymentLookupResult lookup(String tossOrderId) {
+		try {
+			TossPaymentResponse response = restClient.get()
+					.uri(LOOKUP_PATH, tossOrderId)
+					.header(HttpHeaders.AUTHORIZATION, authorization)
+					.retrieve()
+					.body(TossPaymentResponse.class);
+			if (response == null) {
+				log.warn("토스 결제 조회 2xx 빈 응답: orderId={}", tossOrderId);
+				throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 조회 응답 본문이 비어 있습니다.");
+			}
+			return toLookupResult(response);
+		} catch (RestClientResponseException ex) {
+			TossErrorResponse error = parseError(ex.getResponseBodyAsString());
+			boolean notFound = ex.getStatusCode().isSameCodeAs(HttpStatus.NOT_FOUND)
+					&& NOT_FOUND_ERROR_CODES.contains(error.code());
+			if (notFound) {
+				return PaymentLookupResult.notFound();
+			}
+			log.warn("토스 결제 조회 오류 응답: orderId={}, status={}, tossCode={}, tossMessage={}",
+					tossOrderId, ex.getStatusCode(), displayCode(error.code()), error.message());
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN,
+					"TOSS " + displayCode(error.code()) + ": " + error.message());
+		} catch (RestClientException ex) {
+			log.warn("토스 결제 조회 통신 실패: orderId={}", tossOrderId, ex);
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 통신 실패: " + ex.getMessage());
+		}
+	}
+
+	private TossPaymentResponse send(ErrorCode errorCode, String paymentKey, String idempotencyKey, String uri,
+			Object body, Object... uriVariables) {
 		try {
 			TossPaymentResponse response = restClient.post()
 					.uri(uri, uriVariables)
 					.header(HttpHeaders.AUTHORIZATION, authorization)
+					.header(IDEMPOTENCY_KEY_HEADER, idempotencyKey)
 					.contentType(MediaType.APPLICATION_JSON)
 					.body(body)
 					.retrieve()
 					.body(TossPaymentResponse.class);
 			if (response == null) {
-				throw new BusinessException(errorCode, "TOSS 응답 본문이 비어 있습니다.");
+				log.warn("토스 결제 API 2xx 빈 응답: paymentKey={}", paymentKey);
+				throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 응답 본문이 비어 있습니다.");
 			}
 			return response;
 		} catch (RestClientResponseException ex) {
 			TossErrorResponse error = parseError(ex.getResponseBodyAsString());
-			log.warn("토스 결제 API 오류 응답: errorCode={}, paymentKey={}, tossCode={}, tossMessage={}",
-					errorCode.name(), paymentKey, error.code(), error.message());
-			throw new BusinessException(errorCode, "TOSS " + error.code() + ": " + error.message());
+			TossFailureType failureType = TossFailureType.classify(ex.getStatusCode(), error.code());
+			String detail = "TOSS " + displayCode(error.code()) + ": " + error.message();
+			if (failureType == TossFailureType.ALREADY_PROCESSED) {
+				log.warn("토스 결제 API 이미 처리된 승인 요청: paymentKey={}, tossCode={}", paymentKey, error.code());
+				throw new TossAlreadyProcessedException(detail);
+			}
+			if (failureType == TossFailureType.RESULT_UNKNOWN) {
+				log.warn("토스 결제 API 결과 불명 응답: paymentKey={}, status={}, tossCode={}, tossMessage={}",
+						paymentKey, ex.getStatusCode(), displayCode(error.code()), error.message());
+				throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, detail);
+			}
+			log.warn("토스 결제 API 거절 응답: errorCode={}, paymentKey={}, tossCode={}, tossMessage={}",
+					errorCode.name(), paymentKey, displayCode(error.code()), error.message());
+			throw new BusinessException(errorCode, detail);
 		} catch (RestClientException ex) {
-			log.warn("토스 결제 API 통신 실패: errorCode={}, paymentKey={}", errorCode.name(), paymentKey, ex);
-			throw new BusinessException(errorCode, "TOSS 통신 실패: " + ex.getMessage());
+			// 타임아웃·연결 실패는 응답이 없어 토스가 처리했는지 알 수 없다. 거절로 확정하지 않는다.
+			log.warn("토스 결제 API 통신 실패: paymentKey={}", paymentKey, ex);
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 통신 실패: " + ex.getMessage());
+		}
+	}
+
+	/** 같은 결제 재전송(이전 응답 유실)이면 토스가 이미 처리했다고 답하므로 조회로 실제 상태를 확인해 성공으로 잇는다. */
+	private PaymentConfirmResult absorbAlreadyProcessed(String paymentKey, String orderId, BigDecimal amount,
+			TossAlreadyProcessedException cause) {
+		PaymentLookupResult lookup = lookup(orderId);
+		boolean matches = lookup.status() == PaymentLookupStatus.DONE
+				&& paymentKey.equals(lookup.paymentKey())
+				&& lookup.totalAmount() != null
+				&& amount.compareTo(lookup.totalAmount()) == 0;
+		if (!matches) {
+			log.error("토스 이미 처리된 승인 요청을 조회로 확정하지 못함: paymentKey={}, orderId={}, lookupStatus={}, "
+					+ "lookupPaymentKey={}", paymentKey, orderId, lookup.status(), lookup.paymentKey());
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, cause.getMessage());
+		}
+		return new PaymentConfirmResult(lookup.paymentKey(), orderId, lookup.method(), lookup.totalAmount(),
+				lookup.approvedAt());
+	}
+
+	private PaymentLookupResult toLookupResult(TossPaymentResponse response) {
+		PaymentLookupStatus status = parseLookupStatus(response.status());
+		TossPaymentResponse.Cancel lastCancel = response.lastCancel();
+		LocalDateTime canceledAt = lastCancel == null ? null : toServerTime(lastCancel.canceledAt());
+		return new PaymentLookupResult(status, response.paymentKey(), response.method(), response.totalAmount(),
+				toServerTime(response.approvedAt()), canceledAt);
+	}
+
+	private PaymentLookupStatus parseLookupStatus(String status) {
+		if (status == null) {
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 조회 상태 값이 없습니다.");
+		}
+		try {
+			return PaymentLookupStatus.valueOf(status);
+		} catch (IllegalArgumentException ex) {
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 알 수 없는 조회 상태: " + status);
 		}
 	}
 
@@ -115,15 +226,26 @@ public class TossPaymentClient implements PaymentClient {
 		return time.atZoneSameInstant(clock.getZone()).toLocalDateTime();
 	}
 
+	private String displayCode(String code) {
+		return code == null ? UNKNOWN_ERROR_CODE : code;
+	}
+
 	private TossErrorResponse parseError(String body) {
 		if (body == null || body.isBlank()) {
-			return new TossErrorResponse(UNKNOWN_ERROR_CODE, "");
+			return new TossErrorResponse(null, "");
 		}
 		try {
-			TossErrorResponse error = objectMapper.readValue(body, TossErrorResponse.class);
-			return error.code() == null ? new TossErrorResponse(UNKNOWN_ERROR_CODE, body) : error;
+			return objectMapper.readValue(body, TossErrorResponse.class);
 		} catch (JsonProcessingException ex) {
-			return new TossErrorResponse(UNKNOWN_ERROR_CODE, body);
+			return new TossErrorResponse(null, body);
+		}
+	}
+
+	/** send() 내부에서만 오가는 신호. confirm 은 조회로 흡수하고, cancel 은 거절과 동일하게 처리한다. */
+	private static final class TossAlreadyProcessedException extends RuntimeException {
+
+		private TossAlreadyProcessedException(String message) {
+			super(message);
 		}
 	}
 }
