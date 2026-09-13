@@ -35,7 +35,8 @@ public final class PaymentFixture {
 	public static Payment canceledAt(Order order, String paymentKey, LocalDateTime approvedAt,
 			LocalDateTime canceledAt) {
 		Payment payment = approvedAt(order, paymentKey, approvedAt);
-		payment.cancel(canceledAt);
+		payment.requestCancel();
+		payment.completeCancel(canceledAt);
 		return payment;
 	}
 
@@ -53,7 +54,8 @@ public final class PaymentFixture {
 
 	public static Payment canceled(Order order) {
 		Payment payment = approved(order);
-		payment.cancel(CANCELED_AT);
+		payment.requestCancel();
+		payment.completeCancel(CANCELED_AT);
 		return payment;
 	}
 

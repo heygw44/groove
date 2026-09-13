@@ -43,6 +43,7 @@ import com.groove.order.dto.OrderItemResponse;
 import com.groove.order.dto.ShippingAddressResponse;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.service.AdminOrderService;
+import com.groove.order.service.AdminOrderStatusService;
 
 @WebMvcTest(AdminOrderController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -63,6 +64,9 @@ class AdminOrderControllerTest {
 
 	@MockitoBean
 	AdminOrderService adminOrderService;
+
+	@MockitoBean
+	AdminOrderStatusService adminOrderStatusService;
 
 	private String adminToken() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.ADMIN);
@@ -193,7 +197,7 @@ class AdminOrderControllerTest {
 		@DisplayName("관리자면 200 과 변경된 주문을 반환한다")
 		void changesStatusForAdmin() throws Exception {
 			// given
-			given(adminOrderService.changeStatus(any(), any(), any()))
+			given(adminOrderStatusService.changeStatus(any(), any(), any()))
 					.willReturn(sampleDetailResponse(OrderStatus.PREPARING));
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
 
@@ -216,7 +220,7 @@ class AdminOrderControllerTest {
 							.content("{}"))
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
-			verify(adminOrderService, never()).changeStatus(any(), any(), any());
+			verify(adminOrderStatusService, never()).changeStatus(any(), any(), any());
 		}
 
 		@Test
@@ -224,7 +228,7 @@ class AdminOrderControllerTest {
 		void returnsBadRequestWhenTransitionNotAllowed() throws Exception {
 			// given
 			willThrow(new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION))
-					.given(adminOrderService).changeStatus(any(), any(), any());
+					.given(adminOrderStatusService).changeStatus(any(), any(), any());
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.SHIPPED);
 
 			// when & then
@@ -241,7 +245,7 @@ class AdminOrderControllerTest {
 		void returnsNotFound() throws Exception {
 			// given
 			willThrow(new BusinessException(ErrorCode.ORDER_NOT_FOUND))
-					.given(adminOrderService).changeStatus(any(), any(), any());
+					.given(adminOrderStatusService).changeStatus(any(), any(), any());
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.PREPARING);
 
 			// when & then
@@ -266,7 +270,7 @@ class AdminOrderControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(adminOrderService, never()).changeStatus(any(), any(), any());
+			verify(adminOrderStatusService, never()).changeStatus(any(), any(), any());
 		}
 
 		@Test
@@ -281,7 +285,7 @@ class AdminOrderControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(adminOrderService, never()).changeStatus(any(), any(), any());
+			verify(adminOrderStatusService, never()).changeStatus(any(), any(), any());
 		}
 	}
 }

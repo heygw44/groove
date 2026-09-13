@@ -1,6 +1,7 @@
 package com.groove.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -21,6 +22,9 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -34,6 +38,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -164,6 +170,9 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	AdminAuditLogRepository adminAuditLogRepository;
+
+	@Autowired
+	PlatformTransactionManager transactionManager;
 
 	@MockitoBean
 	PaymentClient paymentClient;
@@ -300,6 +309,59 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 	class Cancel {
 
 		@Test
+		@DisplayName("토스 취소 응답을 기다리는 동안에도 같은 상품 재고 갱신이 곧바로 끝난다")
+		void doesNotHoldStockLockWhileWaitingForTossCancel() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			CountDownLatch tossCallStarted = new CountDownLatch(1);
+			CountDownLatch releaseTossCall = new CountDownLatch(1);
+			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.cancel(eq(paymentKey), any())).willAnswer(invocation -> {
+				tossCallStarted.countDown();
+				releaseTossCall.await(10, TimeUnit.SECONDS);
+				return new PaymentCancelResult(paymentKey, "CANCELED", canceledAt);
+			});
+
+			CompletableFuture<Void> cancelRequest = CompletableFuture.runAsync(() -> {
+				try {
+					mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+						.andExpect(status().isOk());
+				} catch (Exception e) {
+					throw new IllegalStateException(e);
+				}
+			});
+			assertThat(tossCallStarted.await(10, TimeUnit.SECONDS)).isTrue();
+
+			try {
+				// when
+				TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+				CompletableFuture<Void> stockUpdate = CompletableFuture.runAsync(() ->
+						transactionTemplate.executeWithoutResult(status -> {
+							Stock stock = stockRepository.findAllWithProductByProductIdInForUpdate(
+									List.of(product.getId())).get(0);
+							stock.increase(1);
+							stockRepository.flush();
+						}));
+
+				// then
+				assertThatCode(() -> stockUpdate.get(2, TimeUnit.SECONDS)).doesNotThrowAnyException();
+			} finally {
+				releaseTossCall.countDown();
+				cancelRequest.get(10, TimeUnit.SECONDS);
+			}
+		}
+
+		@Test
 		@DisplayName("쿠폰이 적용된 결제 완료 주문을 취소하면 결제/주문/재고/쿠폰이 모두 복구된다")
 		void cancelsPaidOrderWithCouponAndRestoresEverything() throws Exception {
 			// given
@@ -403,6 +465,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
 			Order order = orderRepository.findById(orderInfo.orderId()).orElseThrow();
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(order.getCancelReason()).isNull();
 			Stock stock = stockRepository.findByProductId(product.getId()).orElseThrow();
 			assertThat(stock.getQuantity()).isEqualTo(4);
 			assertThat(stockHistoryRepository.findAllByStockIdOrderByCreatedAtAsc(stock.getId()))
@@ -410,6 +473,39 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					.doesNotContain(StockChangeType.CANCEL);
 			MemberCoupon memberCoupon = memberCouponRepository.findById(orderInfo.memberCouponId()).orElseThrow();
 			assertThat(memberCoupon.isUsed()).isTrue();
+		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 주문을 다시 취소하면 토스를 재호출하지 않고 같은 상태를 반환한다")
+		void returnsIdempotentlyForDuplicateCancelRequest() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
+					.given(paymentClient).cancel(eq(paymentKey), any());
+			PaymentCancelRequest request = new PaymentCancelRequest("고객 변심");
+
+			// when
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isOk());
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCEL_REQUESTED")));
+
+			// then
+			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"));
 		}
 
 		@Test
@@ -573,6 +669,84 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(logs.get(1).getTargetType()).isEqualTo(AdminAuditTargetType.PAYMENT);
 			assertThat(logs.get(1).getTargetId()).isEqualTo(paymentId);
 		}
+
+		@Test
+		@DisplayName("토스 취소 결과를 알 수 없으면 CANCEL_REQUESTED 감사 로그 두 건을 남긴다")
+		void recordsInProgressAuditLogsWhenTossResultIsUnknown() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
+					.given(paymentClient).cancel(eq(paymentKey), any());
+			Member admin = memberRepository.save(
+					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/orders/{id}/status", orderInfo.orderId())
+						.header(HttpHeaders.AUTHORIZATION, adminToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(
+								new AdminOrderStatusChangeRequest(OrderStatus.CANCELED))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.paymentStatus", is("CANCEL_REQUESTED")));
+
+			// then
+			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
+			assertThat(logs).extracting(AdminAuditLog::getDetail)
+					.containsExactly("PAID->CANCEL_REQUESTED", "DONE->CANCEL_REQUESTED");
+			assertThat(logs.get(1).getTargetId()).isEqualTo(paymentId);
+		}
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 중이면 PAID 와 PREPARING 주문의 다음 배송 상태 전이를 거절한다")
+		void rejectsShippingTransitionsWhileCancelRequested() throws Exception {
+			// given: PAID 주문
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product firstProduct = seedProduct(5);
+			OrderInfo paidOrder = createOrder(accessToken, firstProduct.getId(), 1, address.getId());
+			String firstPaymentKey = uniquePaymentKey();
+			long firstPaymentId = confirmAndGetPaymentId(accessToken, firstPaymentKey, paidOrder.orderNumber(),
+					paidOrder.finalAmount());
+			Member admin = memberRepository.save(
+					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
+					.given(paymentClient).cancel(eq(firstPaymentKey), any());
+			requestPaymentCancel(accessToken, firstPaymentId);
+
+			// when & then: PAID -> PREPARING
+			changeAdminOrderStatus(adminToken, paidOrder.orderId(), OrderStatus.PREPARING)
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("ORDER_CANCEL_IN_PROGRESS")));
+
+			// given: PREPARING 주문
+			reset(paymentClient);
+			Product secondProduct = seedProduct(5);
+			OrderInfo preparingOrder = createOrder(accessToken, secondProduct.getId(), 1, address.getId());
+			String secondPaymentKey = uniquePaymentKey();
+			confirmAndGetPaymentId(accessToken, secondPaymentKey, preparingOrder.orderNumber(),
+					preparingOrder.finalAmount());
+			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.PREPARING)
+					.andExpect(status().isOk());
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
+					.given(paymentClient).cancel(eq(secondPaymentKey), any());
+			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.CANCELED)
+					.andExpect(status().isOk());
+
+			// when & then: PREPARING -> SHIPPED
+			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.SHIPPED)
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("ORDER_CANCEL_IN_PROGRESS")));
+		}
 	}
 
 	private record OrderInfo(Long orderId, String orderNumber, BigDecimal finalAmount) {
@@ -648,6 +822,22 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(
 						confirmRequest(paymentKey, orderInfo.orderNumber(), amount))));
+	}
+
+	private void requestPaymentCancel(String accessToken, long paymentId) throws Exception {
+		mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+					.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+				.andExpect(status().isOk());
+	}
+
+	private ResultActions changeAdminOrderStatus(String adminToken, Long orderId, OrderStatus status)
+			throws Exception {
+		return mockMvc.perform(patch("/api/v1/admin/orders/{id}/status", orderId)
+				.header(HttpHeaders.AUTHORIZATION, adminToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(new AdminOrderStatusChangeRequest(status))));
 	}
 
 	private PaymentConfirmRequest confirmRequest(String paymentKey, String orderNumber, long amount) {

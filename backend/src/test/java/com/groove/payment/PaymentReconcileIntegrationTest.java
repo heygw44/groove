@@ -45,6 +45,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
+import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
@@ -103,6 +104,9 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 	private OrderService orderService;
 
 	@Autowired
+	private OrderCancelService orderCancelService;
+
+	@Autowired
 	private OrderExpirationScheduler orderExpirationScheduler;
 
 	@Autowired
@@ -150,7 +154,7 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 		void compensatesWhenOrderCanceledWhileTossDone() throws Exception {
 			// given
 			SeededOrder seeded = seedPendingOrder(5, 1);
-			orderService.cancel(seeded.memberId(), seeded.orderId(), new OrderCancelRequest(null));
+			orderCancelService.cancel(seeded.memberId(), seeded.orderId(), new OrderCancelRequest(null));
 			Payment payment = seedPayment(seeded.orderId(), PaymentStatus.READY, oldUpdatedAt());
 			LocalDateTime approvedAt = now().minusMinutes(3).truncatedTo(ChronoUnit.SECONDS);
 			LocalDateTime canceledAt = now().minusMinutes(1).truncatedTo(ChronoUnit.SECONDS);
