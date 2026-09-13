@@ -34,7 +34,15 @@ services:
     image: redis:7-alpine
     container_name: groove-redis
     restart: unless-stopped
-    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    # maxmemory 64mb 는 운영 측정 전 임시값이다.
+    # noeviction: 사라지면 안 되는 키(한정반 재고·구매자, refresh 세션)가 캐시와 한 인스턴스라 축출을 끈다.
+    #   캐시 키는 전부 TTL 이 있고, 메모리가 차면 쓰기가 OOM 으로 실패한다(캐시 쓰기는 앱이 삼킨다).
+    # appendonly everysec: 재시작·재생성에도 키를 남긴다. 최대 1초 유실.
+    # save "": RDB 스냅샷을 끈다(1GB 인스턴스에서 fork 메모리 부담). AOF rewrite 도 fork 하지만 데이터가 수 MB 라 부담이 작다.
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction",
+      "--appendonly", "yes", "--appendfsync", "everysec", "--save", ""]
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -90,3 +98,4 @@ services:
 
 volumes:
   mysql-data:
+  redis-data:

@@ -26,6 +26,11 @@ services:
     container_name: groove-redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    # 운영과 같은 정책(noeviction + AOF everysec, RDB 끔).
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction",
+      "--appendonly", "yes", "--appendfsync", "everysec", "--save", ""]
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -74,4 +79,5 @@ services:
 
 volumes:
   mysql-data:
+  redis-data:
   uploads-data:

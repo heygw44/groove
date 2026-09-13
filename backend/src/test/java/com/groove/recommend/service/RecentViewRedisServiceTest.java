@@ -117,4 +117,20 @@ class RecentViewRedisServiceTest {
 			assertThat(result).isEmpty();
 		}
 	}
+
+	@Nested
+	@DisplayName("remove()")
+	class Remove {
+
+		@Test
+		@DisplayName("Redis 장애가 나도 예외를 던지지 않는다")
+		void doesNotThrowWhenRedisFails() {
+			// given
+			recentViewRedisService = new RecentViewRedisService(redisTemplate, recentViewPushScript);
+			given(redisTemplate.opsForList()).willThrow(new QueryTimeoutException("timeout"));
+
+			// when & then
+			assertThatCode(() -> recentViewRedisService.remove(1L, List.of(10L))).doesNotThrowAnyException();
+		}
+	}
 }

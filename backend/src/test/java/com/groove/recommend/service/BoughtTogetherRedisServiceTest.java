@@ -3,10 +3,12 @@ package com.groove.recommend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -90,8 +93,8 @@ class BoughtTogetherRedisServiceTest {
 		}
 
 		@Test
-		@DisplayName("임시 키에 zAdd 후 rename, expire 로 스왑한다")
-		void addsToTempKeyThenRenamesAndExpires() {
+		@DisplayName("임시 키에 zAdd 후 expire, rename 순으로 스왑한다")
+		void addsToTempKeyThenExpiresAndRenames() {
 			// given
 			boughtTogetherRedisService = new BoughtTogetherRedisService(redisTemplate);
 			stubExecutePipelinedToRunCallback();
@@ -104,8 +107,27 @@ class BoughtTogetherRedisServiceTest {
 			// then
 			verify(stringRedisConnection).zAdd(eq(tmpKey), eq(3.0), eq("2"));
 			verify(stringRedisConnection).zAdd(eq(tmpKey), eq(5.0), eq("4"));
+			verify(stringRedisConnection).expire(eq(tmpKey), eq(BoughtTogetherRedisService.TTL.toSeconds()));
 			verify(stringRedisConnection).rename(eq(tmpKey), eq(key));
-			verify(stringRedisConnection).expire(eq(key), eq(BoughtTogetherRedisService.TTL.toSeconds()));
+			verify(stringRedisConnection, never()).expire(eq(key), anyLong());
+		}
+
+		@Test
+		@DisplayName("rename 전에 임시 키의 TTL 을 먼저 건다")
+		void expiresTempKeyBeforeRename() {
+			// given
+			boughtTogetherRedisService = new BoughtTogetherRedisService(redisTemplate);
+			stubExecutePipelinedToRunCallback();
+			String key = BoughtTogetherRedisService.boughtTogetherKey(1L);
+			String tmpKey = key + ":tmp";
+
+			// when
+			boughtTogetherRedisService.replaceAll(Map.of(1L, Map.of(2L, 3L)));
+
+			// then
+			InOrder inOrder = inOrder(stringRedisConnection);
+			inOrder.verify(stringRedisConnection).expire(eq(tmpKey), eq(BoughtTogetherRedisService.TTL.toSeconds()));
+			inOrder.verify(stringRedisConnection).rename(eq(tmpKey), eq(key));
 		}
 
 		private void stubExecutePipelinedToRunCallback() {
