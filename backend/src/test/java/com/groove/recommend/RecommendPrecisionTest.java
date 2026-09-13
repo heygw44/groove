@@ -78,6 +78,7 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 	private static final int HOLDOUT_EVERY = 5;
 	private static final int WISH_FOLD_COUNT = 5;
 	private static final int PURCHASE_FOLD_COUNT = 3;
+	private static final int RANDOM_BASELINE_MULTIPLIER = 3;
 	// 회원당 주문 상품이 2~12개로 적어 위시보다 폴드를 적게 잡는다.
 	private static final List<Long> RANDOM_SEEDS = List.of(1L, 2L, 3L, 4L, 5L);
 	private static final Path LEGACY_REPORT_PATH = Path.of("build", "reports", "precision-at-10.md");
@@ -141,7 +142,8 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 		@Test
 		@Transactional
-		@DisplayName("위시·구매 홀드아웃을 폴드 × 시드로 반복 측정하면 평균에서 2σ 를 빼도 기준선보다 높다")
+		@DisplayName("위시·구매 홀드아웃을 폴드 × 시드로 반복 측정하면 평균에서 2·SE 를 빼도 "
+				+ "기준선보다 높다")
 		void recallAtTenIsStableAcrossFoldsAndSeeds() throws IOException {
 			// given
 			boughtTogetherAggregator.refresh();
@@ -182,18 +184,18 @@ class RecommendPrecisionTest extends IntegrationTestSupport {
 
 			EvalMetrics.MeasurementStats wishRecall = wishRun.recallStats();
 			EvalMetrics.MeasurementStats wishMargin = wishRun.marginOverPopularityStats();
-			assertThat(wishRecall.lowerBound())
-					.as("위시 홀드아웃 recall@10 mean-2σ 가 무작위 기준선의 3배를 넘어야 한다")
-					.isGreaterThan(wishRun.randomBaseline() * 3);
+			assertThat(wishRecall.meanLowerBound())
+					.as("위시 홀드아웃 recall@10 mean-2·SE 가 무작위 기준선의 3배를 넘어야 한다")
+					.isGreaterThan(wishRun.randomBaseline() * RANDOM_BASELINE_MULTIPLIER);
 			assertThat(wishMargin.lowerBound())
 					.as("규칙 추천이 인기순 대조군을 이기는 폭의 mean-2σ 가 0을 넘어야 한다")
 					.isGreaterThan(0);
 
 			EvalMetrics.MeasurementStats purchaseRecall = purchaseRun.recallStats();
 			EvalMetrics.MeasurementStats purchaseMargin = purchaseRun.marginOverPopularityStats();
-			assertThat(purchaseRecall.lowerBound())
-					.as("구매 홀드아웃 recall@10 mean-2σ 가 무작위 기준선의 3배를 넘어야 한다")
-					.isGreaterThan(purchaseRun.randomBaseline() * 3);
+			assertThat(purchaseRecall.meanLowerBound())
+					.as("구매 홀드아웃 recall@10 mean-2·SE 가 무작위 기준선의 3배를 넘어야 한다")
+					.isGreaterThan(purchaseRun.randomBaseline() * RANDOM_BASELINE_MULTIPLIER);
 			assertThat(purchaseMargin.lowerBound())
 					.as("구매 홀드아웃에서도 규칙 추천이 인기순 대조군을 이기는 폭의 mean-2σ 가 0을 넘어야 한다")
 					.isGreaterThan(0);

@@ -155,7 +155,8 @@ public final class EvalReport {
 				| 측정 수 | %d |
 				| recall@10 micro mean ± σ | %.3f ± %.3f |
 				| min / max | %.3f / %.3f |
-				| mean - 2σ (회귀 게이트 하한) | %.3f |
+				| mean - 2σ (폴드 예측 하한) | %.3f |
+				| mean - 2·SE (절대 게이트 하한) | %.3f |
 				| 무작위 기준선 | %.3f |
 				| 인기순 대조군 mean ± σ | %.3f ± %.3f |
 				| recall - 인기순 margin mean ± σ | %.3f ± %.3f |
@@ -163,8 +164,8 @@ public final class EvalReport {
 
 				"""
 				.formatted(title, run.kind(), run.foldCount(), seeds, recall.count(), recall.mean(),
-						recall.stdDev(), recall.min(), recall.max(), recall.lowerBound(), run.randomBaseline(),
-						popularity.mean(), popularity.stdDev(), margin.mean(), margin.stdDev(),
+						recall.stdDev(), recall.min(), recall.max(), recall.lowerBound(), recall.meanLowerBound(),
+						run.randomBaseline(), popularity.mean(), popularity.stdDev(), margin.mean(), margin.stdDev(),
 						run.totalFallbackOccurrences()));
 		section.append(renderRawMeasurements(run));
 		return section.toString();
