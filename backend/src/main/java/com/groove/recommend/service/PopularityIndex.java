@@ -4,8 +4,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 
-import com.groove.product.entity.ProductStatus;
-
 /**
  * 베이지안 평점 스무딩과 판매량을 합친 인기 점수. {@link ProductFeatureCache} 스냅샷에서 계산해 동점 처리와
  * 콜드스타트 폴백이 같은 공식을 공유하게 한다 — SQL 과 Java 두 곳에 같은 계산이 있으면 갈라지기 쉽다.
@@ -64,7 +62,7 @@ public final class PopularityIndex {
 				.thenComparing(ProductFeature::createdAt, Comparator.reverseOrder())
 				.thenComparing(ProductFeature::id, Comparator.reverseOrder());
 		return features.stream()
-				.filter(feature -> feature.status() == ProductStatus.ON_SALE)
+				.filter(ProductFeature::recommendable)
 				.sorted(comparator)
 				.limit(limit)
 				.map(ProductFeature::id)

@@ -55,7 +55,7 @@ public final class SyntheticCohortGenerator {
 
 	public CohortData generate(Map<Long, ProductFeature> features, CohortSpec spec) {
 		List<ProductFeature> products = features.values().stream()
-				.filter(feature -> !feature.hidden())
+				.filter(ProductFeature::recommendable)
 				.sorted(Comparator.comparing(ProductFeature::id))
 				.toList();
 		if (products.isEmpty()) {

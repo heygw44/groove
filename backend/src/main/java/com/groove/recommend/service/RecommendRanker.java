@@ -44,7 +44,7 @@ public class RecommendRanker {
 				.thenComparing(candidate -> candidate.feature().id(), Comparator.reverseOrder());
 
 		List<RankedCandidate> sorted = features.values().stream()
-				.filter(feature -> !feature.hidden())
+				.filter(ProductFeature::recommendable)
 				.filter(feature -> !excludeIds.contains(feature.id()))
 				.map(feature -> {
 					ScoreVector vector = recommendScorer.vectorize(feature, taste, seeds, recentOnlySeedIds,

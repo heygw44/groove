@@ -24,6 +24,11 @@ public record ProductFeature(Long id, Long albumId, Long artistId, Long labelId,
 		return status == ProductStatus.HIDDEN;
 	}
 
+	/** 추천 후보 적격은 ON_SALE 이며 품절도 HIDDEN 처럼 status 에서 파생한다. */
+	public boolean recommendable() {
+		return status == ProductStatus.ON_SALE;
+	}
+
 	private static int nullToZero(Integer value) {
 		return value == null ? 0 : value;
 	}
