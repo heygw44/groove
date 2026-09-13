@@ -50,11 +50,19 @@ services:
     image: ghcr.io/${GHCR_OWNER}/groove-backend:${BACKEND_IMAGE_TAG}
     container_name: groove-backend
     restart: unless-stopped
+    # Docker 기본 10초면 graceful 종료(웹 30s + 스케줄러 대기 10s + 비동기 실행기 5s+5s)가 SIGKILL 로 잘린다.
+    stop_grace_period: 60s
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
       MYSQL_DATABASE: ${MYSQL_DATABASE}

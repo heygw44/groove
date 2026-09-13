@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
@@ -35,10 +36,14 @@ public class PaymentReconcileScheduler {
 	private final PaymentReconcileLock reconcileLock;
 	private final PaymentClient paymentClient;
 	private final PaymentCompensator compensator;
+	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
 
 	@Scheduled(fixedDelayString = "${groove.payment.reconcile.interval}", initialDelay = 45_000)
 	public void reconcile() {
+		if (shutdownSignal.isShuttingDown()) {
+			return;
+		}
 		boolean acquired = reconcileLock.runExclusively(this::runReconcile);
 		if (!acquired) {
 			log.info("결제 대사 락 획득 실패로 건너뛴다");
@@ -48,9 +53,14 @@ public class PaymentReconcileScheduler {
 	private void runReconcile() {
 		LocalDateTime now = LocalDateTime.now(clock);
 		List<PaymentReconcileCandidate> candidates = reconcileService.findCandidates(now);
+		int processed = 0;
 		int compensated = 0;
 		int failed = 0;
 		for (PaymentReconcileCandidate candidate : candidates) {
+			if (shutdownSignal.isShuttingDown()) {
+				log.info("셧다운 신호로 결제 대사 중단 processed={} remaining={}", processed, candidates.size() - processed);
+				break;
+			}
 			try {
 				PaymentLookupResult lookup = paymentClient.lookup(candidate.tossOrderId());
 				PaymentReconcileOutcome outcome = reconcileService.apply(candidate, lookup);
@@ -70,8 +80,10 @@ public class PaymentReconcileScheduler {
 				log.warn("대사 처리 실패 paymentId={}, orderId={}", candidate.paymentId(), candidate.orderId(), e);
 				recordFailureSafely(candidate, e);
 			}
+			processed++;
 		}
-		log.info("결제 대사 완료 candidates={} compensated={} failed={}", candidates.size(), compensated, failed);
+		log.info("결제 대사 완료 candidates={} processed={} compensated={} failed={}", candidates.size(), processed,
+				compensated, failed);
 	}
 
 	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey) {

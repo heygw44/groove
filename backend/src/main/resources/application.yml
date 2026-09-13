@@ -23,11 +23,19 @@ spring:
       # Redis 장애 시 DB 폴백이 지연되지 않도록 기본 타임아웃보다 짧게 잡는다.
       timeout: 1s
       connect-timeout: 500ms
+  lifecycle:
+    # Boot 3.4+ 기본값(30s)과 같다. 토스 connect 3s + read 10s 에 여유를 둔 값이라 compose
+    # stop_grace_period 산정 근거로 삼기 위해 그대로 명시해 둔다.
+    timeout-per-shutdown-phase: 30s
   task:
     scheduling:
       thread-name-prefix: groove-scheduler-
       pool:
         size: 4
+      shutdown:
+        await-termination: true
+        # 스케줄러 루프는 신호를 보고 진행 중인 건만 마저 끝내고 멈추므로 짧게 둔다.
+        await-termination-period: 10s
   servlet:
     multipart:
       max-file-size: 5MB
@@ -44,6 +52,10 @@ spring:
       initialize-schema: never
 
 server:
+  # Boot 3.4+ 기본값(graceful)과 같지만, compose stop_grace_period 산정 근거라 명시해 둔다.
+  # compose stop_grace_period 는 이 값(spring.lifecycle.timeout-per-shutdown-phase=30s)
+  # + 스케줄러 대기(10s) + 비동기 실행기 대기(5s+5s) 보다 커야 SIGKILL 로 안 잘린다.
+  shutdown: graceful
   tomcat:
     max-swallow-size: 10MB
 

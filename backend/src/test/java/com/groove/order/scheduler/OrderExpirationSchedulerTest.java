@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.limited.service.LimitedDropRedisService;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.OrderStatus;
@@ -42,6 +43,9 @@ class OrderExpirationSchedulerTest {
 	@Mock
 	private LimitedDropRedisService limitedDropRedisService;
 
+	@Mock
+	private ShutdownSignal shutdownSignal;
+
 	private OrderExpirationScheduler scheduler;
 
 	private LocalDateTime now;
@@ -51,7 +55,7 @@ class OrderExpirationSchedulerTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
 		scheduler = new OrderExpirationScheduler(orderRepository, orderExpirationService, limitedDropRedisService,
-				clock);
+				shutdownSignal, clock);
 	}
 
 	@Nested
@@ -120,6 +124,36 @@ class OrderExpirationSchedulerTest {
 
 			// then
 			verify(limitedDropRedisService, never()).release(any(), any());
+		}
+
+		@Test
+		@DisplayName("시작 시 셧다운 중이면 조회조차 하지 않는다")
+		void doesNotQueryWhenShuttingDownAtStart() {
+			// given
+			given(shutdownSignal.isShuttingDown()).willReturn(true);
+
+			// when
+			scheduler.expireOrders();
+
+			// then
+			verify(orderRepository, never()).findIdsByStatusAndExpiresAtBefore(any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("첫 건 처리 후 셧다운 신호가 오면 두 번째 건을 처리하지 않는다")
+		void stopsProcessingWhenShutdownSignaledMidLoop() {
+			// given
+			given(shutdownSignal.isShuttingDown()).willReturn(false, false, true);
+			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
+					.willReturn(List.of(1L, 2L));
+			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
+
+			// when
+			scheduler.expireOrders();
+
+			// then
+			verify(orderExpirationService).expire(1L, now);
+			verify(orderExpirationService, never()).expire(eq(2L), any());
 		}
 	}
 }

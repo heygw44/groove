@@ -140,7 +140,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "scripts/backup.sh"
+          source: "scripts/backup.sh,scripts/deploy-backend.sh"
           target: "/opt/groove/scripts"
           strip_components: 1
           overwrite: true
@@ -155,19 +155,21 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: GHCR_PAT,GHCR_USER
+          # pull + 컨테이너 헬스체크(최대 240s) + 실패 시 롤백 재헬스체크(최대 240s) 를 감안한 여유.
+          command_timeout: 15m
           script: |
             set -e
             # scp 는 실행 비트를 보존하지 않는다.
             chmod +x /opt/groove/scripts/*.sh
             echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd /opt/groove
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
+            ./scripts/deploy-backend.sh
             docker image prune -f
 
+      # 준비 상태(DB·Redis)는 서버에서 컨테이너 헬스체크로 이미 확인했다. 여기서는 Nginx 를 거친 외부 경로만 본다.
       - name: Health check
         run: |
-          for i in $(seq 1 20); do
+          for i in $(seq 1 12); do
             if curl -fsS "$HEALTH_URL"; then
               echo "헬스체크 성공 (${i}회차)"
               exit 0

@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
@@ -49,6 +50,9 @@ class PaymentReconcileSchedulerTest {
 	@Mock
 	private PaymentCompensator compensator;
 
+	@Mock
+	private ShutdownSignal shutdownSignal;
+
 	private PaymentReconcileScheduler scheduler;
 
 	private Clock clock;
@@ -58,7 +62,8 @@ class PaymentReconcileSchedulerTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
-		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator, clock);
+		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator,
+				shutdownSignal, clock);
 	}
 
 	@Nested
@@ -210,6 +215,41 @@ class PaymentReconcileSchedulerTest {
 			// then
 			verify(reconcileService).recordFailure(eq(first), any());
 			verify(reconcileService).apply(second, lookup);
+		}
+
+		@Test
+		@DisplayName("시작 시 셧다운 중이면 락도 잡지 않는다")
+		void doesNotAcquireLockWhenShuttingDownAtStart() {
+			// given
+			given(shutdownSignal.isShuttingDown()).willReturn(true);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(reconcileLock, never()).runExclusively(any());
+		}
+
+		@Test
+		@DisplayName("첫 건 처리 후 셧다운 신호가 오면 두 번째 건을 처리하지 않는다")
+		void stopsProcessingWhenShutdownSignaledMidLoop() {
+			// given
+			given(shutdownSignal.isShuttingDown()).willReturn(false, false, true);
+			stubLockToRunTask();
+			PaymentReconcileCandidate first = new PaymentReconcileCandidate(1L, 10L, "toss-1");
+			PaymentReconcileCandidate second = new PaymentReconcileCandidate(2L, 20L, "toss-2");
+			given(reconcileService.findCandidates(now)).willReturn(List.of(first, second));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.READY, null, null, null, null,
+					null);
+			given(paymentClient.lookup("toss-1")).willReturn(lookup);
+			given(reconcileService.apply(first, lookup)).willReturn(PaymentReconcileOutcome.applied());
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(paymentClient).lookup("toss-1");
+			verify(paymentClient, never()).lookup("toss-2");
 		}
 	}
 
