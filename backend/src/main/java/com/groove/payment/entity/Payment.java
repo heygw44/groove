@@ -28,6 +28,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -85,6 +86,11 @@ public class Payment extends BaseTimeEntity {
 	@Column(name = "fail_reason", length = MAX_FAIL_REASON_LENGTH)
 	private String failReason;
 
+	@Version
+	@Column(nullable = false)
+	@ColumnDefault("0")
+	private Long version;
+
 	private Payment(Order order) {
 		this.order = order;
 		this.tossOrderId = order.getOrderNumber();
@@ -96,7 +102,10 @@ public class Payment extends BaseTimeEntity {
 		return new Payment(order);
 	}
 
-	/** FAILED 에서도 승인을 허용한다. 승인에 실패한 주문은 PENDING 으로 남아 다시 결제할 수 있어야 한다. */
+	/**
+	 * FAILED 에서도 승인을 허용한다. 승인에 실패한 주문은 PENDING 으로 남아 다시 결제할 수 있어야 한다.
+	 * UNKNOWN 에서도 승인을 허용한다. 재시도나 대사 과정에서 실제로는 승인된 결제였음이 뒤늦게 확인될 수 있다.
+	 */
 	public void approve(String key, String payMethod, LocalDateTime approvedTime) {
 		validateApprovable();
 		this.paymentKey = key;
@@ -112,6 +121,13 @@ public class Payment extends BaseTimeEntity {
 		this.status = PaymentStatus.FAILED;
 	}
 
+	/** 토스 승인 호출이 timeout/5xx 로 결과를 알 수 없을 때 호출한다. 이후 대사나 재조회로 DONE/FAILED 로 수렴시킨다. */
+	public void markUnknown(String reason) {
+		validateApprovable();
+		this.failReason = truncate(reason);
+		this.status = PaymentStatus.UNKNOWN;
+	}
+
 	public void cancel(LocalDateTime canceledTime) {
 		if (this.status != PaymentStatus.DONE) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
@@ -120,11 +136,12 @@ public class Payment extends BaseTimeEntity {
 		this.status = PaymentStatus.CANCELED;
 	}
 
+	/** approve/fail/markUnknown 공통 전이 검증. READY·FAILED·UNKNOWN 에서만 다음 상태로 넘어갈 수 있다. */
 	private void validateApprovable() {
 		if (this.status == PaymentStatus.DONE) {
 			throw new BusinessException(ErrorCode.PAYMENT_ALREADY_DONE);
 		}
-		if (this.status == PaymentStatus.CANCELED) {
+		if (this.status == PaymentStatus.CANCELED || this.status == PaymentStatus.CANCEL_REQUESTED) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 	}

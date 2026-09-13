@@ -393,4 +393,51 @@ class PaymentConfirmWriterTest {
 			assertThat(done.getStatus()).isEqualTo(PaymentStatus.DONE);
 		}
 	}
+
+	@Nested
+	@DisplayName("markUnknown()")
+	class MarkUnknown {
+
+		@Test
+		@DisplayName("READY 결제는 UNKNOWN 으로 바뀐다")
+		void marksReadyPaymentAsUnknown() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 30L);
+			given(paymentRepository.findById(30L)).willReturn(Optional.of(payment));
+
+			// when
+			writer.markUnknown(30L, "TOSS 응답 지연");
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+			assertThat(payment.getFailReason()).isEqualTo("TOSS 응답 지연");
+		}
+
+		@Test
+		@DisplayName("이미 DONE 인 결제는 그대로 둔다")
+		void ignoresAlreadyDonePayment() {
+			// given
+			Payment done = paymentWithId(PaymentFixture.approved(order), 31L);
+			given(paymentRepository.findById(31L)).willReturn(Optional.of(done));
+
+			// when
+			writer.markUnknown(31L, "동시 요청에서 이미 승인됨");
+
+			// then
+			assertThat(done.getStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("결제가 없으면 PAYMENT_NOT_FOUND 예외를 던진다")
+		void throwsWhenPaymentNotFound() {
+			// given
+			given(paymentRepository.findById(32L)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> writer.markUnknown(32L, "TOSS 응답 지연"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+		}
+	}
 }
