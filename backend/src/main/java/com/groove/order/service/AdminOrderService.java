@@ -24,6 +24,9 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.service.ProductSalesStatsUpdater;
 
 import lombok.RequiredArgsConstructor;
@@ -42,6 +45,7 @@ public class AdminOrderService {
 	private final LimitedPurchaseWriter limitedPurchaseWriter;
 	private final LimitedReleaseSynchronizer limitedReleaseSynchronizer;
 	private final ProductSalesStatsUpdater productSalesStatsUpdater;
+	private final PaymentRepository paymentRepository;
 	private final Clock clock;
 
 	public PageResponse<AdminOrderSummaryResponse> getList(AdminOrderSearchRequest request) {
@@ -57,7 +61,7 @@ public class AdminOrderService {
 	public AdminOrderDetailResponse getDetail(Long orderId) {
 		Order order = orderRepository.findWithItemsAndMemberById(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		return AdminOrderDetailResponse.from(order);
+		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId));
 	}
 
 	@Transactional
@@ -88,7 +92,11 @@ public class AdminOrderService {
 			adminAuditLogService.record(adminId, AdminAuditAction.PAYMENT_CANCEL, AdminAuditTargetType.PAYMENT,
 					canceledPaymentId, "DONE->CANCELED");
 		}
-		return AdminOrderDetailResponse.from(order);
+		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId));
+	}
+
+	private PaymentStatus resolvePaymentStatus(Long orderId) {
+		return paymentRepository.findByOrderId(orderId).map(Payment::getStatus).orElse(null);
 	}
 
 	private void restoreCoupon(Order order) {

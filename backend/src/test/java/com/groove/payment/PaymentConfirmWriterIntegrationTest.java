@@ -120,7 +120,7 @@ class PaymentConfirmWriterIntegrationTest extends IntegrationTestSupport {
 				assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
 					writer.fail(paymentId, "timeout");
 					Future<?> approveFuture = executorService.submit(
-							() -> writer.approve(paymentId, paymentKey, result));
+							() -> writer.approve(order.getId(), paymentId, paymentKey, result));
 					try {
 						approveFuture.get(30, TimeUnit.SECONDS);
 					} catch (Exception ex) {
@@ -150,7 +150,7 @@ class PaymentConfirmWriterIntegrationTest extends IntegrationTestSupport {
 			LocalDateTime approvedAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 			PaymentConfirmResult result = new PaymentConfirmResult(paymentKey, order.getOrderNumber(), "카드",
 					order.getFinalAmount(), approvedAt);
-			writer.approve(paymentId, paymentKey, result);
+			writer.approve(order.getId(), paymentId, paymentKey, result);
 
 			// when
 			writer.fail(paymentId, "뒤늦게 도착한 실패 신호");

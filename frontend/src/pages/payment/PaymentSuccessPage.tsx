@@ -7,8 +7,8 @@ import { PageContainer } from '@/components/common/PageContainer';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { useConfirmPayment } from '@/hooks/mutations/usePaymentMutations';
-import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { parsePaymentSuccessParams } from '@/utils/paymentRedirect';
+import { getErrorCode } from '@/utils/apiError';
+import { getPaymentConfirmErrorMessage, parsePaymentSuccessParams } from '@/utils/paymentRedirect';
 
 /** 백엔드가 토스 승인 결과를 못 받았을 때(timeout·5xx) 내려주는 코드. 실패가 아니라 대사 대기 상태다. */
 const PAYMENT_RESULT_UNKNOWN_CODE = 'PAYMENT_RESULT_UNKNOWN';
@@ -51,7 +51,7 @@ function ConfirmStatusContent({ status, confirmError, onNavigateBack }: ConfirmS
       <EmptyState
         title="결제 결과를 확인하고 있습니다"
         titleAs="h1"
-        description={getErrorMessage(confirmError)}
+        description={getPaymentConfirmErrorMessage(confirmError)}
         action={
           <Button variant="secondary" onClick={onNavigateBack}>
             주문 상세 보기
@@ -65,7 +65,7 @@ function ConfirmStatusContent({ status, confirmError, onNavigateBack }: ConfirmS
     <EmptyState
       title="결제 승인에 실패했습니다"
       titleAs="h1"
-      description={getErrorMessage(confirmError)}
+      description={getPaymentConfirmErrorMessage(confirmError)}
       action={
         <Button variant="secondary" onClick={onNavigateBack}>
           주문으로 돌아가기

@@ -79,7 +79,7 @@ class AdminOrderControllerTest {
 				"서울시 강남구 테헤란로 1", "101동 1001호");
 		return new AdminOrderDetailResponse(1L, "20260903-TESTAB12", 1L, "buyer@groove.com", status,
 				new BigDecimal("90000"), BigDecimal.ZERO, new BigDecimal("90000"), null, List.of(item),
-				shippingAddress, null, null, null, null);
+				shippingAddress, null, null, null, null, null);
 	}
 
 	@Nested

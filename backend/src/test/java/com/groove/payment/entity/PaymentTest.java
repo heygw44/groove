@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
@@ -297,6 +298,141 @@ class PaymentTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("retry()")
+	class Retry {
+
+		@Test
+		@DisplayName("FAILED 면 READY 로 바뀌고 실패 사유와 대사 시도 횟수가 초기화된다")
+		void resetsToReadyWhenFailed() {
+			// given
+			Payment payment = PaymentFixture.failed(order(), "TOSS REJECT_CARD_COMPANY");
+			payment.recordReconcileMiss();
+
+			// when
+			payment.retry();
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
+			assertThat(payment.getFailReason()).isNull();
+			assertThat(payment.getReconcileAttempts()).isZero();
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "DONE", "CANCELED", "UNKNOWN", "CANCEL_REQUESTED"})
+		@DisplayName("FAILED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatusWhenNotFailed(PaymentStatus status) {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
+
+			// when & then
+			assertThatThrownBy(payment::retry)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("compensate()")
+	class Compensate {
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "UNKNOWN", "FAILED"})
+		@DisplayName("READY, UNKNOWN, FAILED 면 CANCELED 로 바뀌고 승인·취소 시각과 사유가 채워진다")
+		void changesStatusToCanceledAndFillsApprovedAndCanceledAt(PaymentStatus status) {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
+
+			// when
+			payment.compensate(PAYMENT_KEY, APPROVED_AT, CANCELED_AT, "승인 후 주문 무효로 자동 취소");
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(payment.getPaymentKey()).isEqualTo(PAYMENT_KEY);
+			assertThat(payment.getApprovedAt()).isEqualTo(APPROVED_AT);
+			assertThat(payment.getCanceledAt()).isEqualTo(CANCELED_AT);
+			assertThat(payment.getFailReason()).isEqualTo("승인 후 주문 무효로 자동 취소");
+		}
+
+		@Test
+		@DisplayName("이미 결제 키와 승인 시각이 있으면 덮어쓰지 않는다")
+		void doesNotOverwriteExistingPaymentKeyAndApprovedAt() {
+			// given: 이전 대사 라운드에서 결제 키와 승인 시각까지는 채웠지만 CANCELED 로 확정되지 못한 상태를 흉내낸다.
+			Payment payment = PaymentFixture.unknown(order(), "TOSS 응답 지연");
+			ReflectionTestUtils.setField(payment, "paymentKey", PAYMENT_KEY);
+			ReflectionTestUtils.setField(payment, "approvedAt", APPROVED_AT);
+
+			// when
+			payment.compensate("other-key", APPROVED_AT.plusMinutes(1), CANCELED_AT, "사유");
+
+			// then
+			assertThat(payment.getPaymentKey()).isEqualTo(PAYMENT_KEY);
+			assertThat(payment.getApprovedAt()).isEqualTo(APPROVED_AT);
+		}
+
+		@Test
+		@DisplayName("승인 시각이 없으면 취소 시각으로 채운다")
+		void fillsApprovedAtWithCanceledTimeWhenApprovedTimeIsNull() {
+			// given
+			Payment payment = Payment.ready(order());
+
+			// when
+			payment.compensate(PAYMENT_KEY, null, CANCELED_AT, "사유");
+
+			// then
+			assertThat(payment.getApprovedAt()).isEqualTo(CANCELED_AT);
+		}
+
+		@Test
+		@DisplayName("이미 CANCELED 면 아무것도 바꾸지 않는다(멱등)")
+		void doesNothingWhenAlreadyCanceled() {
+			// given
+			Payment payment = PaymentFixture.canceled(order());
+
+			// when
+			payment.compensate("other-key", APPROVED_AT.plusMinutes(1), CANCELED_AT.plusMinutes(1), "다른 사유");
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(payment.getPaymentKey()).isEqualTo(PAYMENT_KEY);
+			assertThat(payment.getCanceledAt()).isEqualTo(CANCELED_AT);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"DONE", "CANCEL_REQUESTED"})
+		@DisplayName("DONE 또는 CANCEL_REQUESTED 면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatus(PaymentStatus status) {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
+
+			// when & then
+			assertThatThrownBy(() -> payment.compensate(PAYMENT_KEY, APPROVED_AT, CANCELED_AT, "사유"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("recordReconcileMiss()")
+	class RecordReconcileMiss {
+
+		@Test
+		@DisplayName("호출할 때마다 대사 시도 횟수가 1씩 늘어난다")
+		void incrementsReconcileAttempts() {
+			// given
+			Payment payment = Payment.ready(order());
+
+			// when
+			payment.recordReconcileMiss();
+			payment.recordReconcileMiss();
+
+			// then
+			assertThat(payment.getReconcileAttempts()).isEqualTo(2);
 		}
 	}
 }

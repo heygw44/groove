@@ -10,6 +10,8 @@ import com.groove.limited.service.LimitedPurchaseWriter;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ public class OrderExpirationService {
 	private final OrderRepository orderRepository;
 	private final OrderStockService orderStockService;
 	private final LimitedPurchaseWriter limitedPurchaseWriter;
+	private final PaymentRepository paymentRepository;
 
 	@Transactional
 	public Optional<LimitedRelease> expire(Long orderId, LocalDateTime now) {
@@ -30,6 +33,12 @@ public class OrderExpirationService {
 		Optional<Order> found = orderRepository.findByIdForUpdate(orderId);
 		if (found.isEmpty() || !found.get().isExpired(now)) {
 			log.debug("만료 대상에서 제외 orderId={}", orderId);
+			return Optional.empty();
+		}
+		// prepare() 가 같은 주문 락 안에서 결제 행을 만들므로, 락 뒤 재확인이 대사 대기 중인 결제와의 경합을 닫는다.
+		Optional<Payment> payment = paymentRepository.findByOrderId(orderId);
+		if (payment.isPresent() && payment.get().getStatus().isUnresolved()) {
+			log.debug("결제 대사 대기 중이라 만료를 건너뜀 orderId={}", orderId);
 			return Optional.empty();
 		}
 		Order order = found.get();

@@ -1,4 +1,4 @@
-import type { OrderPayment } from '@/types/payment';
+import type { OrderPayment, PaymentStatus } from '@/types/payment';
 
 export type OrderStatus =
   'PENDING' | 'PAID' | 'PREPARING' | 'SHIPPED' | 'DELIVERED' | 'CANCELED' | 'REFUNDED';
@@ -105,6 +105,8 @@ export interface AdminOrderDetail {
   expiresAt: string;
   canceledAt?: string;
   cancelReason?: string;
+  /** 결제 행이 없으면 응답에서 빠진다. */
+  paymentStatus?: PaymentStatus;
 }
 
 export interface AdminOrderListParams {

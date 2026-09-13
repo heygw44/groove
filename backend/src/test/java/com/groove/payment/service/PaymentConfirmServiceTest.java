@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.CannotAcquireLockException;
@@ -49,6 +52,9 @@ class PaymentConfirmServiceTest {
 	@Mock
 	PaymentClient paymentClient;
 
+	@Mock
+	PaymentCompensator compensator;
+
 	PaymentConfirmService service;
 
 	PaymentConfirmRequest request;
@@ -57,7 +63,7 @@ class PaymentConfirmServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new PaymentConfirmService(writer, paymentClient);
+		service = new PaymentConfirmService(writer, paymentClient, compensator);
 		request = new PaymentConfirmRequest(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT.longValueExact());
 		preparation = new ConfirmPreparation(PAYMENT_ID, ORDER_ID, ORDER_NUMBER, AMOUNT, Optional.empty());
 	}
@@ -98,7 +104,7 @@ class PaymentConfirmServiceTest {
 			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
 			PaymentConfirmResponse approvedResponse = new PaymentConfirmResponse(PAYMENT_ID, ORDER_ID, ORDER_NUMBER,
 					PaymentStatus.DONE, PaymentFixture.METHOD, AMOUNT, PaymentFixture.APPROVED_AT);
-			given(writer.approve(eq(PAYMENT_ID), eq(PaymentFixture.PAYMENT_KEY), eq(result)))
+			given(writer.approve(eq(ORDER_ID), eq(PAYMENT_ID), eq(PaymentFixture.PAYMENT_KEY), eq(result)))
 					.willReturn(approvedResponse);
 
 			// when
@@ -108,6 +114,7 @@ class PaymentConfirmServiceTest {
 			assertThat(response).isEqualTo(approvedResponse);
 			verify(writer, never()).fail(any(), any());
 			verify(writer, never()).markUnknown(any(), any());
+			verify(compensator, never()).cancelApproved(any(), any(), any(), any());
 		}
 
 		@Test
@@ -124,7 +131,7 @@ class PaymentConfirmServiceTest {
 					.isSameAs(confirmFailed);
 			verify(writer).fail(PAYMENT_ID, confirmFailed.getMessage());
 			verify(writer, never()).markUnknown(any(), any());
-			verify(writer, never()).approve(any(), any(), any());
+			verify(writer, never()).approve(any(), any(), any(), any());
 		}
 
 		@Test
@@ -141,25 +148,7 @@ class PaymentConfirmServiceTest {
 					.isSameAs(resultUnknown);
 			verify(writer).markUnknown(PAYMENT_ID, resultUnknown.getMessage());
 			verify(writer, never()).fail(any(), any());
-			verify(writer, never()).approve(any(), any(), any());
-		}
-
-		@Test
-		@DisplayName("승인 반영이 비즈니스 예외로 실패하면 결제를 실패로 기록하고 같은 예외를 다시 던진다")
-		void marksFailureAndRethrowsWhenApproveThrowsBusinessException() {
-			// given
-			given(writer.prepare(MEMBER_ID, request)).willReturn(preparation);
-			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER,
-					PaymentFixture.METHOD, AMOUNT, LocalDateTime.now());
-			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
-			BusinessException alreadyPaid = new BusinessException(ErrorCode.ORDER_ALREADY_PAID);
-			willThrow(alreadyPaid).given(writer).approve(PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
-
-			// when & then
-			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
-					.isSameAs(alreadyPaid);
-			verify(writer).fail(PAYMENT_ID, alreadyPaid.getMessage());
-			verify(writer, never()).markUnknown(any(), any());
+			verify(writer, never()).approve(any(), any(), any(), any());
 		}
 
 		@Test
@@ -171,7 +160,7 @@ class PaymentConfirmServiceTest {
 					PaymentFixture.METHOD, AMOUNT, LocalDateTime.now());
 			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
 			willThrow(new CannotAcquireLockException("lock timeout"))
-					.given(writer).approve(PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
+					.given(writer).approve(ORDER_ID, PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
 
 			// when & then
 			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
@@ -191,7 +180,7 @@ class PaymentConfirmServiceTest {
 					PaymentFixture.METHOD, AMOUNT, LocalDateTime.now());
 			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
 			willThrow(new CannotAcquireLockException("lock timeout"))
-					.given(writer).approve(PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
+					.given(writer).approve(ORDER_ID, PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
 			willThrow(new CannotAcquireLockException("db down"))
 					.given(writer).markUnknown(eq(PAYMENT_ID), anyString());
 
@@ -230,6 +219,95 @@ class PaymentConfirmServiceTest {
 			// when & then
 			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
 					.isSameAs(resultUnknown);
+		}
+	}
+
+	@Nested
+	@DisplayName("confirm() 승인 후 approve() 가 거절되면")
+	class ApproveRejectedAfterTossApproval {
+
+		private PaymentConfirmResult stubTossApproval() {
+			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER,
+					PaymentFixture.METHOD, AMOUNT, PaymentFixture.APPROVED_AT);
+			given(writer.prepare(MEMBER_ID, request)).willReturn(preparation);
+			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
+			return result;
+		}
+
+		@Test
+		@DisplayName("주문이 취소·만료돼 ORDER_INVALID_STATUS 면 보상 취소하고 성공 시 ORDER_EXPIRED 를 던진다")
+		void compensatesAndThrowsOrderExpiredWhenOrderInvalidatedAndCompensationSucceeds() {
+			// given
+			PaymentConfirmResult result = stubTossApproval();
+			BusinessException orderInvalidStatus = new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+			willThrow(orderInvalidStatus).given(writer)
+					.approve(ORDER_ID, PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
+			given(compensator.cancelApproved(PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result.approvedAt(),
+					PaymentCompensator.ORDER_INVALIDATED_REASON))
+					.willReturn(CompensationResult.canceled(PaymentFixture.CANCELED_AT));
+
+			// when & then
+			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_EXPIRED);
+			verify(writer, never()).fail(any(), any());
+		}
+
+		@Test
+		@DisplayName("주문 무효 보상 취소마저 실패하면 PAYMENT_RESULT_UNKNOWN 을 던진다")
+		void throwsPaymentResultUnknownWhenOrderInvalidatedCompensationFails() {
+			// given
+			PaymentConfirmResult result = stubTossApproval();
+			BusinessException orderInvalidStatus = new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+			willThrow(orderInvalidStatus).given(writer)
+					.approve(ORDER_ID, PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
+			given(compensator.cancelApproved(PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result.approvedAt(),
+					PaymentCompensator.ORDER_INVALIDATED_REASON))
+					.willReturn(CompensationResult.notCanceled("TOSS ALREADY_CANCELED_PAYMENT"));
+
+			// when & then
+			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
+			verify(writer, never()).fail(any(), any());
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = ErrorCode.class,
+				names = {"PAYMENT_ALREADY_DONE", "ORDER_ALREADY_PAID", "PAYMENT_INVALID_STATUS"})
+		@DisplayName("같은 주문이 다른 키로 먼저 승인됐으면 DB 행은 건드리지 않고 토스만 보상 취소한 뒤 원래 예외를 던진다")
+		void compensatesWithoutTouchingPaymentRowAndRethrowsOriginalException(ErrorCode errorCode) {
+			// given
+			PaymentConfirmResult result = stubTossApproval();
+			BusinessException duplicateApproval = new BusinessException(errorCode);
+			willThrow(duplicateApproval).given(writer)
+					.approve(ORDER_ID, PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
+
+			// when & then
+			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
+					.isSameAs(duplicateApproval);
+			verify(compensator).cancelApproved(isNull(), eq(PaymentFixture.PAYMENT_KEY), eq(result.approvedAt()),
+					eq(PaymentCompensator.DUPLICATE_APPROVAL_REASON));
+			verify(writer, never()).fail(any(), any());
+			verify(writer, never()).markUnknown(any(), any());
+		}
+
+		@Test
+		@DisplayName("자동 보상 대상이 아닌 예외면 결제를 UNKNOWN 으로 남기고 원래 예외를 던진다")
+		void marksUnknownWithoutCompensatingAndRethrowsOriginalExceptionForNonCompensableCodes() {
+			// given
+			PaymentConfirmResult result = stubTossApproval();
+			BusinessException keyMismatch = new BusinessException(ErrorCode.PAYMENT_KEY_MISMATCH);
+			willThrow(keyMismatch).given(writer).approve(ORDER_ID, PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result);
+
+			// when & then
+			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
+					.isSameAs(keyMismatch);
+			verify(writer).markUnknown(PAYMENT_ID, keyMismatch.getMessage());
+			verify(writer, never()).fail(any(), any());
+			verify(compensator, never()).cancelApproved(any(), any(), any(), any());
 		}
 	}
 }

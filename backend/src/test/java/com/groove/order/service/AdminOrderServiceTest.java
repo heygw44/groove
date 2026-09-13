@@ -37,6 +37,7 @@ import com.groove.fixture.CouponFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -53,6 +54,8 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.service.ProductSalesStatsUpdater;
@@ -88,6 +91,9 @@ class AdminOrderServiceTest {
 	@Mock
 	ProductSalesStatsUpdater productSalesStatsUpdater;
 
+	@Mock
+	PaymentRepository paymentRepository;
+
 	AdminOrderService adminOrderService;
 
 	Member member;
@@ -100,7 +106,7 @@ class AdminOrderServiceTest {
 		now = LocalDateTime.now(clock);
 		adminOrderService = new AdminOrderService(orderRepository, orderQueryMapper, orderStockService,
 				paymentCancelHook, adminAuditLogService, limitedPurchaseWriter, limitedReleaseSynchronizer,
-				productSalesStatsUpdater, clock);
+				productSalesStatsUpdater, paymentRepository, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
@@ -178,6 +184,22 @@ class AdminOrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("결제 행이 있으면 결제 상태를 포함한다")
+		void includesPaymentStatusWhenPaymentExists() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), ORDER_ID);
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID))
+					.willReturn(Optional.of(PaymentFixture.unknown(order, "확인 중")));
+
+			// when
+			AdminOrderDetailResponse response = adminOrderService.getDetail(ORDER_ID);
+
+			// then
+			assertThat(response.paymentStatus()).isEqualTo(PaymentStatus.UNKNOWN);
 		}
 	}
 

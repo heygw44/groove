@@ -14,6 +14,7 @@ import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderExpirationService;
+import com.groove.payment.entity.PaymentStatus;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +36,7 @@ public class OrderExpirationScheduler {
 	public void expireOrders() {
 		LocalDateTime now = LocalDateTime.now(clock);
 		List<Long> orderIds = orderRepository.findIdsByStatusAndExpiresAtBefore(OrderStatus.PENDING, now,
-				Limit.of(BATCH_SIZE));
+				PaymentStatus.UNRESOLVED, Limit.of(BATCH_SIZE));
 		if (orderIds.isEmpty()) {
 			return;
 		}
