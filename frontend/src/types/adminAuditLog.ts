@@ -15,10 +15,18 @@ export type AdminAuditAction =
   | 'PAYMENT_CANCEL'
   | 'STOCK_ADJUST'
   | 'PRODUCT_IMPORT'
-  | 'CATALOG_IMPORT_JOB_START';
+  | 'CATALOG_IMPORT_JOB_START'
+  | 'SALES_AGGREGATION_RUN';
 
 export type AdminAuditTargetType =
-  'PRODUCT' | 'ORDER' | 'COUPON' | 'LIMITED_DROP' | 'MEMBER' | 'PAYMENT' | 'CATALOG_IMPORT_JOB';
+  | 'PRODUCT'
+  | 'ORDER'
+  | 'COUPON'
+  | 'LIMITED_DROP'
+  | 'MEMBER'
+  | 'PAYMENT'
+  | 'CATALOG_IMPORT_JOB'
+  | 'SALES_AGGREGATION';
 
 export interface AdminAuditLog {
   id: number;
@@ -26,7 +34,7 @@ export interface AdminAuditLog {
   adminNickname: string;
   action: AdminAuditAction;
   targetType: AdminAuditTargetType;
-  targetId: number;
+  targetId?: number;
   detail?: string;
   ipAddress?: string;
   createdAt: string;

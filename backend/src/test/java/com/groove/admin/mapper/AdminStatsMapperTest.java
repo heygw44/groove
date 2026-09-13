@@ -561,6 +561,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result.todaySalesAmount()).isEqualByComparingTo(new BigDecimal("50000"));
+			assertThat(result.todayCancelAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(result.todayOrderCount()).isEqualTo(2);
 			assertThat(result.todayNewMemberCount()).isZero();
 			assertThat(result.pendingOrderCount()).isGreaterThanOrEqualTo(1);
@@ -579,12 +580,13 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(result).isNotNull();
 			assertThat(result.todaySalesAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+			assertThat(result.todayCancelAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(result.todayOrderCount()).isZero();
 		}
 
 		@Test
-		@DisplayName("취소된 결제도 승인일 기준으로 오늘 매출에 포함한다")
-		void countsCanceledPaymentAmountInTodaySales() {
+		@DisplayName("당일 승인 후 취소된 결제면 승인 매출과 취소액에 모두 포함한다")
+		void includesSameDayCanceledPaymentInSalesAndCancelAmount() {
 			// given
 			LocalDateTime todayStart = LocalDateTime.of(2032, 2, 1, 0, 0);
 			LocalDateTime tomorrowStart = LocalDateTime.of(2032, 2, 2, 0, 0);
@@ -607,7 +609,38 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result.todaySalesAmount()).isEqualByComparingTo(new BigDecimal("15000"));
+			assertThat(result.todayCancelAmount()).isEqualByComparingTo(new BigDecimal("15000"));
 			assertThat(result.todayOrderCount()).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("전날 승인된 결제가 다음 날 취소되면 취소일의 취소액에만 포함한다")
+		void includesPreviousDayApprovalOnlyInCancelAmountOnCanceledDate() {
+			// given
+			LocalDateTime todayStart = LocalDateTime.of(2032, 4, 10, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2032, 4, 11, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Next Day Canceled Product",
+					new BigDecimal("17000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+
+			Order order = OrderFixture.create(member, "20320409-ASMSUM006");
+			order.addItem(product, 1);
+			OrderFixture.markPaid(order);
+			em.persist(order);
+			em.persist(PaymentFixture.canceledAt(order, "asm-summary-key-6",
+					LocalDateTime.of(2032, 4, 9, 22, 0), LocalDateTime.of(2032, 4, 10, 8, 0)));
+
+			em.flush();
+			em.clear();
+
+			// when
+			AdminStatsSummaryResponse result = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			// then
+			assertThat(result.todaySalesAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+			assertThat(result.todayCancelAmount()).isEqualByComparingTo(new BigDecimal("17000"));
+			assertThat(result.todayOrderCount()).isZero();
 		}
 	}
 }

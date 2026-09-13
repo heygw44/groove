@@ -1439,6 +1439,7 @@ get_case_sql() {
 				-- AdminStatsMapper.xml findSummary, 오늘 (after: 파생 테이블 병합)
 				SELECT
 					COALESCE(t.sales_amount, 0) AS today_sales_amount,
+					COALESCE(c.cancel_amount, 0) AS today_cancel_amount,
 					COALESCE(t.order_count, 0) AS today_order_count,
 					(SELECT COUNT(*) FROM member m
 						WHERE m.created_at >= CURDATE() AND m.created_at < CURDATE() + INTERVAL 1 DAY)
@@ -1449,7 +1450,14 @@ get_case_sql() {
 					FROM payment p
 					WHERE p.status IN ('DONE', 'CANCELED')
 					AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY
-				) t
+				) t,
+				-- 승인일과 취소일이 다를 수 있어 취소는 취소일 기준으로 따로 센다.
+				(
+					SELECT SUM(p.amount) AS cancel_amount
+					FROM payment p
+					WHERE p.status = 'CANCELED'
+					AND p.canceled_at >= CURDATE() AND p.canceled_at < CURDATE() + INTERVAL 1 DAY
+				) c
 			SQL
 		fi
 		;;

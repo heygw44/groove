@@ -117,11 +117,11 @@ public final class EvalMetrics {
 		return numerator / (itemCount * sum);
 	}
 
-	/** 후보 풀(비HIDDEN 상품)의 장르별 상품 수 분포. 분포가 얼마나 평평한지로 후속 IDF 도입 여부를 판단한다. */
+	/** 후보 풀(ON_SALE 상품)의 장르별 상품 수 분포. 분포가 얼마나 평평한지로 후속 IDF 도입 여부를 판단한다. */
 	public static List<GenreDf> genreDocumentFrequency(Map<Long, ProductFeature> features,
 			Map<Long, String> genreNames) {
 		Map<Long, Long> countByGenreId = features.values().stream()
-				.filter(feature -> !feature.hidden())
+				.filter(ProductFeature::recommendable)
 				.flatMap(feature -> feature.genreIds().stream())
 				.collect(Collectors.groupingBy(genreId -> genreId, Collectors.counting()));
 		return countByGenreId.entrySet().stream()
@@ -284,9 +284,20 @@ public final class EvalMetrics {
 			return new MeasurementStats(mean, Math.sqrt(variance), min, max, count);
 		}
 
-		/** 회귀 게이트용 하한. 폴드가 늘면 단일 값이 흔들리므로 평균에서 2σ 를 뺀 값으로 보수화한다. */
+		/**
+		 * paired Δ 판정용 폴드 단위 하한. 폴드 하나의 예측 하한이라 절대 게이트에는 쓰지 않는다.
+		 */
 		public double lowerBound() {
 			return mean - 2 * stdDev;
+		}
+
+		public double standardError() {
+			return count < 2 ? 0 : stdDev / Math.sqrt(count);
+		}
+
+		/** 평균이 기준선을 넘는지 판정하는 하한. */
+		public double meanLowerBound() {
+			return mean - 2 * standardError();
 		}
 
 		/** ablation 판정용 비율. |mean|÷σ 가 2 미만이면 그 차원은 유의미하게 기여하지 않는다고 읽는다. */

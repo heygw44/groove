@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 /** 관리자 대시보드 요약 카드. */
 public record AdminStatsSummaryResponse(
 		BigDecimal todaySalesAmount,
+		BigDecimal todayCancelAmount,
 		long todayOrderCount,
 		long todayNewMemberCount,
 		long pendingOrderCount

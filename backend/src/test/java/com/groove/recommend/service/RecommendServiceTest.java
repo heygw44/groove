@@ -229,8 +229,8 @@ class RecommendServiceTest {
 		}
 
 		@Test
-		@DisplayName("HIDDEN 상품과 이미 구매·위시한 상품은 후보에서 제외된다")
-		void excludesHiddenAndOwnedProducts() {
+		@DisplayName("HIDDEN·SOLD_OUT 상품과 이미 구매·위시한 상품은 후보에서 제외된다")
+		void excludesNonRecommendableAndOwnedProducts() {
 			// given
 			givenTasteProfile(MEMBER_ID, Set.of(1L), Set.of(), Set.of());
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of(10L));
@@ -241,7 +241,8 @@ class RecommendServiceTest {
 					row(10L, 1L, ProductStatus.ON_SALE, null, NOW),
 					row(20L, 1L, ProductStatus.ON_SALE, null, NOW),
 					row(30L, 1L, ProductStatus.HIDDEN, null, NOW),
-					row(40L, 1L, ProductStatus.ON_SALE, null, NOW)));
+					row(40L, 1L, ProductStatus.ON_SALE, null, NOW),
+					row(50L, 1L, ProductStatus.SOLD_OUT, null, NOW)));
 			given(boughtTogetherRedisService.findScores(Set.of(10L, 20L))).willReturn(Map.of());
 			given(recommendQueryMapper.findSummariesByIds(List.of(40L), MEMBER_ID))
 					.willReturn(List.of(summary(40L)));
@@ -478,6 +479,24 @@ class RecommendServiceTest {
 			verify(orderItemRepository, never()).findProductIdsByMemberIdAndOrderStatusIn(any(), any());
 			verify(boughtTogetherRedisService, never()).findScores(any(Long.class));
 			verify(memberTasteProfileRepository, never()).findByMemberId(any());
+		}
+
+		@Test
+		@DisplayName("관련 상품 후보에서 SOLD_OUT 상품은 제외된다")
+		void excludesSoldOutCandidatesFromRelated() {
+			// given
+			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
+					row(PRODUCT_ID, 1L, ProductStatus.ON_SALE, null, NOW),
+					row(60L, 1L, ProductStatus.SOLD_OUT, null, NOW),
+					row(70L, 1L, ProductStatus.ON_SALE, null, NOW)));
+			given(recommendQueryMapper.findSummariesByIds(List.of(70L), null))
+					.willReturn(List.of(summary(70L)));
+
+			// when
+			List<RecommendItemResponse> items = recommendService.recommendRelated(PRODUCT_ID, null, null);
+
+			// then
+			assertThat(items).extracting(item -> item.product().id()).containsExactly(70L);
 		}
 
 		@Test

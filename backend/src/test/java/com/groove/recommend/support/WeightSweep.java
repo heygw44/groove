@@ -91,7 +91,7 @@ public final class WeightSweep {
 		Map<Long, Double> coPurchaseScores = aggregateCoPurchaseScores(coPurchaseIndex, seedIds);
 
 		List<CandidateVector> candidates = features.values().stream()
-				.filter(feature -> !feature.hidden())
+				.filter(ProductFeature::recommendable)
 				.filter(feature -> !seedIds.contains(feature.id()))
 				.map(feature -> {
 					ScoreVector vector = scorer.vectorize(feature, foldSignals.taste(), seeds,

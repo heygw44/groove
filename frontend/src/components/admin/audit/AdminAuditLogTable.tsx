@@ -12,7 +12,13 @@ interface AdminAuditLogTableProps {
 }
 
 function AuditTargetCell({ log }: { log: AdminAuditLog }) {
-  const label = `${AUDIT_TARGET_TYPE_LABELS[log.targetType]} #${log.targetId}`;
+  const targetLabel = AUDIT_TARGET_TYPE_LABELS[log.targetType];
+
+  if (log.targetId == null) {
+    return <span>{targetLabel}</span>;
+  }
+
+  const label = `${targetLabel} #${log.targetId}`;
 
   if (log.targetType === 'PRODUCT') {
     return (
