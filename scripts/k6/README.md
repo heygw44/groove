@@ -6,6 +6,8 @@
 - `limited-purchase.js` — 한정반 선착순 구매 API(`POST /api/v1/limited-drops/{id}/purchase`) 부하 테스트. 초과 판매 0건(NFR-02)과 p95 1초 검증.
 - `admin-dashboard.js` — 관리자 통계 4종(`daily-sales`/`popular-products`/`limited-drops`/`summary`)을 대시보드 진입처럼 동시 호출. #316 사전 집계(`sales_daily`/`sales_daily_product`) 도입 전후 p95 비교용.
 - `batch-interference.js` — #316 핵심 증명. 사전 집계 배치(`POST /api/v1/admin/stats/aggregations`)가 도는 동안 일반 API(`GET /api/v1/products`) 응답 시간이 평상시와 같은지를 잰다. 지연을 배치로 "옮긴" 게 아니라 "없앴다"는 걸 보이는 유일한 방법.
+- `toss-mock.mjs` — 토스페이먼츠 목 서버(k6 스크립트가 아니라 Node 스크립트). 배포 드레인 측정에서 실제 결제사 없이 승인 지연을 재현하는 용도.
+- `deploy-drain.js` — 배포(백엔드 컨테이너 재생성) 동안 진행 중(in-flight) 요청이 끝까지 처리되는지, 재기동 공백에 거부·끊김이 몇 건인지 센다.
 
 ## 사전 준비
 
@@ -364,3 +366,64 @@ docker exec -i -e MYSQL_PWD=root1234 groove-mysql mysql -uroot -e 'DROP DATABASE
 
 측정 중에는 같은 MySQL 에 다른 무거운 작업(다른 부하 테스트, 대량 배치)을 같이 돌리지 않는다 — 측정이
 오염된다.
+
+## 배포 드레인 측정 (toss-mock.mjs, deploy-drain.js)
+
+배포(백엔드 컨테이너 재생성) 동안 진행 중(in-flight) 요청이 끝까지 처리되는지, 그리고 재기동 공백에서
+거부·끊김이 몇 건 나는지를 잰다. 인스턴스가 하나뿐이라 재기동 공백의 새 요청은 어차피 거부되므로,
+컨테이너 헬스체크·graceful shutdown·`scripts/deploy-backend.sh` 롤백이 "다운타임을 없앤다"는 뜻은 아니다.
+
+### 사전 준비
+
+1. 토스 목 서버를 띄운다. 실제 결제사 대신 승인 지연만 흉내낸다.
+
+   ```bash
+   PORT=18080 CONFIRM_DELAY_MS=200 node scripts/k6/toss-mock.mjs
+   ```
+
+2. 백엔드를 목 서버를 보도록 compose full 프로파일로 기동한다.
+
+   ```bash
+   TOSS_BASE_URL=http://host.docker.internal:18080 docker compose --profile full up -d --build
+   ```
+
+3. k6 를 시작한다.
+
+   ```bash
+   k6 run scripts/k6/deploy-drain.js
+   ```
+
+4. 도중에 배포를 흉내낸다.
+
+   ```bash
+   docker compose --profile full up -d --force-recreate backend
+   ```
+
+### 환경변수
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `BASE_URL` | `http://localhost:8080` | 대상 서버 |
+| `DURATION` | `120s` | 두 시나리오 실행 시간 |
+| `RATE` | `20` | `product_list` 시나리오 초당 요청 수 |
+| `CONFIRM_ORDERS` | `30` | `payment_confirm` 시나리오에서 미리 만들어 둘 PENDING 주문 수(= VU 수) |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@groove.com` / `admin1234!` | local 시드 관리자 계정 |
+| `MEMBER_PASSWORD` | `load1234!` | 생성하는 회원 비밀번호 |
+| `MEMBER_EMAIL_PREFIX` | `drain-` | 생성하는 회원 이메일 접두사 |
+| `PRODUCT_TITLE_PREFIX` | `DEPLOY-DRAIN-` | 생성하는 상품/앨범 타이틀 접두사 |
+| `RESULT_DIR` | `scripts/k6/results` | 결과 JSON 저장 위치 |
+| `RUN_LABEL` | (빈 문자열) | 결과 JSON 파일명에 붙는 라벨 |
+
+`toss-mock.mjs` 는 `PORT`(기본 18080), `CONFIRM_DELAY_MS`(기본 0, 승인 응답 전 지연), `LOOKUP_DELAY_MS`
+(기본 0, 조회 응답 전 지연 — 대사 스케줄러가 셧다운 신호로 다음 건에 안 넘어가는지 볼 때 크게 잡는다),
+`LOOKUP_UNKNOWN_AS_DONE`(기본 0, `1`이면 메모리에 없는 orderId 조회도 404 대신 DONE 으로 답한다 — 목
+서버 재기동으로 승인 이력을 잃은 상태에서 DB 의 UNKNOWN 결제를 조회하는 시나리오 재현용)를 받는다.
+
+### 판정
+
+`product_list_*`/`payment_confirm_*` Counter(성공/서버 오류/연결 거부/연결 끊김/그 외)를 `handleSummary`
+결과에서 확인한다. **로컬에서는 docker 포트 포워딩 때문에 백엔드가 없는 순간의 새 연결이 "거부(refused)"
+대신 "끊김(reset)"으로 보일 수 있다** — 판정할 때 두 Counter 를 합쳐서 본다. 재기동 공백 동안의
+거부+끊김 건수가 곧 다운타임 중 놓친 새 요청 수이고, 서버 오류만 잠깐 늘었다면 헬스체크가 트래픽을 옮기기
+전 그레이스 기간 문제일 수 있다. `payment_confirm_success` 가 `CONFIRM_ORDERS` 와 같다면(요청이 재기동
+전후로만 배분되고 도중에 끊긴 게 없다면) in-flight 요청이 끝까지 처리됐다는 뜻이다.
