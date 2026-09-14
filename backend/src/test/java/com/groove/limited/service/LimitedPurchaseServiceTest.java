@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -51,6 +52,9 @@ class LimitedPurchaseServiceTest {
 	@Mock
 	private LimitedPurchaseWriter limitedPurchaseWriter;
 
+	@Mock
+	private LimitedDropSyncService limitedDropSyncService;
+
 	private Clock clock;
 
 	private LimitedPurchaseService limitedPurchaseService;
@@ -59,7 +63,7 @@ class LimitedPurchaseServiceTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		limitedPurchaseService = new LimitedPurchaseService(limitedDropRepository, limitedDropRedisService,
-				limitedPurchaseWriter, new LimitedProperties(true), clock);
+				limitedPurchaseWriter, limitedDropSyncService, new LimitedProperties(true), clock);
 	}
 
 	@Nested
@@ -133,6 +137,47 @@ class LimitedPurchaseServiceTest {
 		}
 
 		@Test
+		@DisplayName("Redis 재고 키가 유실됐고 재적재에 성공하면 재시도해 정상 처리한다")
+		void retriesReserveWhenRebuildSucceedsAfterNotInitialized() {
+			// given
+			LimitedDrop drop = openDrop(10L);
+			given(limitedDropRepository.findById(10L)).willReturn(Optional.of(drop));
+			given(limitedDropRedisService.reserve(10L, 10L))
+					.willReturn(LimitedDropRedisService.ReserveResult.NOT_INITIALIZED,
+							LimitedDropRedisService.ReserveResult.OK);
+			given(limitedDropSyncService.rebuildOnce(10L)).willReturn(true);
+			LimitedPurchaseResponse response = new LimitedPurchaseResponse(1L, "20260904-ABCDE123",
+					new BigDecimal("10000"), LocalDateTime.now(clock));
+			given(limitedPurchaseWriter.write(10L, 10L, 20L)).willReturn(response);
+
+			// when
+			LimitedPurchaseResponse result = limitedPurchaseService.purchase(10L, 10L, 20L);
+
+			// then
+			assertThat(result).isEqualTo(response);
+			verify(limitedDropRedisService, times(2)).reserve(10L, 10L);
+		}
+
+		@Test
+		@DisplayName("Redis 재고 키가 유실됐고 재적재 락을 못 잡으면 LIMITED_NOT_OPEN 예외를 던진다")
+		void throwsNotOpenWhenRebuildFailsAfterNotInitialized() {
+			// given
+			LimitedDrop drop = openDrop(11L);
+			given(limitedDropRepository.findById(11L)).willReturn(Optional.of(drop));
+			given(limitedDropRedisService.reserve(11L, 10L))
+					.willReturn(LimitedDropRedisService.ReserveResult.NOT_INITIALIZED);
+			given(limitedDropSyncService.rebuildOnce(11L)).willReturn(false);
+
+			// when & then
+			assertThatThrownBy(() -> limitedPurchaseService.purchase(11L, 10L, 20L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.LIMITED_NOT_OPEN);
+			verify(limitedDropRedisService, times(1)).reserve(11L, 10L);
+			verify(limitedPurchaseWriter, never()).write(any(), any(), any());
+		}
+
+		@Test
 		@DisplayName("Writer 에서 예외가 나면 Redis 선점을 되돌리고 예외를 그대로 던진다")
 		void releasesReservationWhenWriterFails() {
 			// given
@@ -197,7 +242,7 @@ class LimitedPurchaseServiceTest {
 			// given
 			LimitedProperties redisDisabled = new LimitedProperties(false);
 			LimitedPurchaseService service = new LimitedPurchaseService(limitedDropRepository,
-					limitedDropRedisService, limitedPurchaseWriter, redisDisabled, clock);
+					limitedDropRedisService, limitedPurchaseWriter, limitedDropSyncService, redisDisabled, clock);
 			LimitedDrop drop = openDrop(7L);
 			given(limitedDropRepository.findById(7L)).willReturn(Optional.of(drop));
 			LimitedPurchaseResponse response = new LimitedPurchaseResponse(1L, "20260904-ABCDE123",
@@ -218,7 +263,7 @@ class LimitedPurchaseServiceTest {
 			// given
 			LimitedProperties redisDisabled = new LimitedProperties(false);
 			LimitedPurchaseService service = new LimitedPurchaseService(limitedDropRepository,
-					limitedDropRedisService, limitedPurchaseWriter, redisDisabled, clock);
+					limitedDropRedisService, limitedPurchaseWriter, limitedDropSyncService, redisDisabled, clock);
 			LimitedDrop drop = openDrop(8L);
 			given(limitedDropRepository.findById(8L)).willReturn(Optional.of(drop));
 			given(limitedPurchaseWriter.write(8L, 10L, 20L))

@@ -1,5 +1,6 @@
 package com.groove.limited.scheduler;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.QueryTimeoutException;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
@@ -26,7 +28,9 @@ import com.groove.fixture.ProductFixture;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.service.LimitedDropRedisService;
 import com.groove.limited.service.LimitedDropScheduleService;
+import com.groove.limited.service.LimitedDropSyncService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 
@@ -41,6 +45,12 @@ class LimitedDropSchedulerTest {
 	@Mock
 	private LimitedDropScheduleService scheduleService;
 
+	@Mock
+	private LimitedDropRedisService limitedDropRedisService;
+
+	@Mock
+	private LimitedDropSyncService limitedDropSyncService;
+
 	private LimitedDropScheduler scheduler;
 
 	private LocalDateTime now;
@@ -50,9 +60,11 @@ class LimitedDropSchedulerTest {
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
-		scheduler = new LimitedDropScheduler(limitedDropRepository, scheduleService, clock);
+		scheduler = new LimitedDropScheduler(limitedDropRepository, scheduleService, limitedDropRedisService,
+				limitedDropSyncService, clock);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
+		given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of());
 	}
 
 	private LimitedDrop dropWithId(Long id) {
@@ -118,6 +130,62 @@ class LimitedDropSchedulerTest {
 			// then
 			verify(scheduleService, never()).open(any(), any());
 			verify(scheduleService, never()).close(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("run() - 재고 키 유실 복구")
+	class RestoreMissingKeys {
+
+		@BeforeEach
+		void stubNoOpenOrClose() {
+			given(limitedDropRepository.findAllByStatusAndOpenAtLessThanEqual(eq(LimitedDropStatus.SCHEDULED),
+					any())).willReturn(List.of());
+			given(limitedDropRepository.findAllByStatusInAndCloseAtLessThanEqual(any(), any())).willReturn(List.of());
+		}
+
+		@Test
+		@DisplayName("Redis 재고 키가 없는 드롭만 골라 대사 서비스로 재적재한다")
+		void syncsOnlyDropsWithMissingStockKey() {
+			// given
+			given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of(1L, 2L));
+			given(limitedDropRedisService.findMissingStock(List.of(1L, 2L))).willReturn(List.of(2L));
+
+			// when
+			scheduler.run();
+
+			// then
+			verify(limitedDropSyncService).sync(2L);
+			verify(limitedDropSyncService, never()).sync(1L);
+		}
+
+		@Test
+		@DisplayName("Redis 조회가 실패하면 대사 서비스를 호출하지 않고 건너뛴다")
+		void skipsWhenRedisLookupFails() {
+			// given
+			given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of(1L));
+			given(limitedDropRedisService.findMissingStock(List.of(1L)))
+					.willThrow(new QueryTimeoutException("timeout"));
+
+			// when & then
+			assertThatCode(() -> scheduler.run()).doesNotThrowAnyException();
+			verify(limitedDropSyncService, never()).sync(any());
+		}
+
+		@Test
+		@DisplayName("한 드롭의 재적재가 실패해도 나머지 드롭은 계속 처리한다")
+		void continuesWhenOneSyncFails() {
+			// given
+			given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of(1L, 2L));
+			given(limitedDropRedisService.findMissingStock(List.of(1L, 2L))).willReturn(List.of(1L, 2L));
+			given(limitedDropSyncService.sync(1L)).willThrow(new RuntimeException("boom"));
+
+			// when
+			scheduler.run();
+
+			// then
+			verify(limitedDropSyncService).sync(1L);
+			verify(limitedDropSyncService).sync(2L);
 		}
 	}
 }
