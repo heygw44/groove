@@ -67,6 +67,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   LIMITED_ALREADY_PURCHASED: '이미 구매한 한정반입니다.',
   LIMITED_LIMIT_EXCEEDED: '1인 구매 한도를 초과했습니다.',
   LIMITED_INVALID_STATUS: '지금 상태에서는 처리할 수 없습니다.',
+  LIMITED_BUSY: '지금 요청이 몰려 있습니다. 잠시 후 다시 시도해 주세요.',
   PRODUCT_LIMITED_ONLY: '한정반 상품은 한정반 페이지에서만 구매할 수 있습니다.',
   ADMIN_CANNOT_MODIFY_SELF: '자기 자신의 상태는 변경할 수 없습니다.',
   ADMIN_CANNOT_MODIFY_ADMIN: '다른 관리자의 상태는 변경할 수 없습니다.',

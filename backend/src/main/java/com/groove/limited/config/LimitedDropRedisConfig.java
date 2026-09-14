@@ -10,7 +10,9 @@ import org.springframework.data.redis.core.script.RedisScript;
 
 /** 한정반 선착순 구매의 재고/구매자 원자적 처리와 대사를 위한 Lua 스크립트 빈. */
 @Configuration
-@EnableConfigurationProperties({LimitedProperties.class, LimitedReconcileProperties.class})
+@EnableConfigurationProperties({
+	LimitedProperties.class, LimitedReconcileProperties.class, LimitedCircuitProperties.class
+})
 public class LimitedDropRedisConfig {
 
 	@Bean
