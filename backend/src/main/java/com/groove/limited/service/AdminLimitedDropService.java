@@ -46,6 +46,7 @@ public class AdminLimitedDropService {
 	private final ProductRepository productRepository;
 	private final StockService stockService;
 	private final LimitedDropRedisService limitedDropRedisService;
+	private final LimitedDropSyncService limitedDropSyncService;
 	private final LimitedDropStatFlusher limitedDropStatFlusher;
 	private final AdminAuditLogService adminAuditLogService;
 
@@ -103,9 +104,9 @@ public class AdminLimitedDropService {
 		LimitedDrop drop = limitedDropRepository.findWithProductById(dropId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.LIMITED_DROP_NOT_FOUND));
 
-		// 이미 OPEN 이면 SET NX 만 다시 쳐서 키가 유실됐을 때 DB 기준 남은 수량으로 복구하고, 감사 로그는 남기지 않는다.
+		// 이미 OPEN 이면 Redis 를 DB 기준으로 재동기화한다(재고뿐 아니라 구매자 집합까지 복원), 감사 로그는 남기지 않는다.
 		if (drop.getStatus() == LimitedDropStatus.OPEN) {
-			limitedDropRedisService.initStock(drop.getId(), drop.remainingQuantity());
+			limitedDropSyncService.sync(drop.getId());
 			return AdminLimitedDropResponse.from(drop);
 		}
 

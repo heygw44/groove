@@ -29,6 +29,7 @@ public class LimitedPurchaseService {
 	private final LimitedDropRepository limitedDropRepository;
 	private final LimitedDropRedisService limitedDropRedisService;
 	private final LimitedPurchaseWriter limitedPurchaseWriter;
+	private final LimitedDropSyncService limitedDropSyncService;
 	private final LimitedProperties limitedProperties;
 	private final Clock clock;
 
@@ -49,6 +50,10 @@ public class LimitedPurchaseService {
 
 	private LimitedPurchaseResponse reserveAndWrite(Long dropId, Long memberId, Long addressId) {
 		ReserveResult reserveResult = limitedDropRedisService.reserve(dropId, memberId);
+		// 키 유실이면 DB 기준으로 한 번 재적재한 뒤 다시 시도한다. 락을 못 잡은 요청은 재적재 창 안에서 NOT_OPEN 으로 응답한다.
+		if (reserveResult == ReserveResult.NOT_INITIALIZED && limitedDropSyncService.rebuildOnce(dropId)) {
+			reserveResult = limitedDropRedisService.reserve(dropId, memberId);
+		}
 		validateReserveResult(reserveResult);
 
 		try {
