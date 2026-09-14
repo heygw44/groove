@@ -48,6 +48,7 @@ public class LimitedPurchaseWriter {
 	private final OrderRepository orderRepository;
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final Clock clock;
+	private final LimitedPendingSynchronizer limitedPendingSynchronizer;
 
 	@Transactional
 	public LimitedPurchaseResponse write(Long dropId, Long memberId, Long addressId) {
@@ -84,6 +85,8 @@ public class LimitedPurchaseWriter {
 
 		purchase.attachOrder(order);
 		drop.recordSale(PURCHASE_QUANTITY, now);
+
+		limitedPendingSynchronizer.clearAfterCommit(dropId, memberId);
 
 		return new LimitedPurchaseResponse(order.getId(), order.getOrderNumber(), order.getFinalAmount(),
 				order.getExpiresAt());

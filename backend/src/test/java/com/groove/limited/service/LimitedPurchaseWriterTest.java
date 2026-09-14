@@ -78,6 +78,9 @@ class LimitedPurchaseWriterTest {
 	@Mock
 	private OrderNumberGenerator orderNumberGenerator;
 
+	@Mock
+	private LimitedPendingSynchronizer limitedPendingSynchronizer;
+
 	private Clock clock;
 
 	private LimitedPurchaseWriter limitedPurchaseWriter;
@@ -87,7 +90,7 @@ class LimitedPurchaseWriterTest {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		limitedPurchaseWriter = new LimitedPurchaseWriter(limitedDropRepository, limitedPurchaseRepository,
 				memberRepository, addressRepository, stockRepository, stockHistoryRepository, orderRepository,
-				orderNumberGenerator, clock);
+				orderNumberGenerator, clock, limitedPendingSynchronizer);
 	}
 
 	@Nested
@@ -210,6 +213,7 @@ class LimitedPurchaseWriterTest {
 			assertThat(drop.getSoldCount()).isEqualTo(1);
 			verify(orderRepository).save(any());
 			verify(stockHistoryRepository).save(any());
+			verify(limitedPendingSynchronizer).clearAfterCommit(4L, 10L);
 		}
 	}
 

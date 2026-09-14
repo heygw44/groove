@@ -50,6 +50,10 @@ groove:
       grace: 2m
       batch-size: 50
       max-attempts: 10
+  limited:
+    reconcile:
+      interval: 30s
+      grace: 30s
   recommend:
     feature-cache-ttl: 0s
   catalog:

@@ -113,6 +113,11 @@ groove:
       grace: 2m
       batch-size: 50
       max-attempts: 10
+  limited:
+    reconcile:
+      interval: 30s
+      # reserve→write 커밋 최악 소요(드롭 행 락 대기 포함)보다 넉넉히 잡는다.
+      grace: 30s
   recommend:
     # 추천 상품 특성 캐시 TTL. 0 이하면 캐시를 끄고 매 요청마다 다시 읽는다.
     feature-cache-ttl: 60s

@@ -3,6 +3,7 @@ package com.groove.limited.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +26,9 @@ class LimitedDropRedisServiceTest extends IntegrationTestSupport {
 
 	@Autowired
 	StringRedisTemplate redisTemplate;
+
+	@Autowired
+	Clock clock;
 
 	private Long dropId;
 
@@ -306,6 +310,182 @@ class LimitedDropRedisServiceTest extends IntegrationTestSupport {
 
 			// then
 			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("10");
+		}
+	}
+
+	@Nested
+	@DisplayName("reserve()/release() - pending")
+	class PendingTracking {
+
+		@Test
+		@DisplayName("선점에 성공하면 pending 에 회원을 기록한다")
+		void addsMemberToPendingOnReserve() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+
+			// when
+			limitedDropRedisService.reserve(dropId, 1L);
+
+			// then
+			assertThat(redisTemplate.opsForZSet().score(LimitedDropRedisService.pendingKey(dropId), "1")).isNotNull();
+		}
+
+		@Test
+		@DisplayName("선점을 해제하면 pending 에서도 회원을 지운다")
+		void removesMemberFromPendingOnRelease() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			limitedDropRedisService.reserve(dropId, 1L);
+
+			// when
+			limitedDropRedisService.release(dropId, 1L);
+
+			// then
+			assertThat(redisTemplate.opsForZSet().score(LimitedDropRedisService.pendingKey(dropId), "1")).isNull();
+		}
+	}
+
+	@Nested
+	@DisplayName("confirm()")
+	class Confirm {
+
+		@Test
+		@DisplayName("write() 커밋 후 호출하면 pending 에서 회원을 지운다")
+		void removesMemberFromPending() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			limitedDropRedisService.reserve(dropId, 1L);
+
+			// when
+			limitedDropRedisService.confirm(dropId, 1L);
+
+			// then
+			assertThat(redisTemplate.opsForZSet().score(LimitedDropRedisService.pendingKey(dropId), "1")).isNull();
+		}
+	}
+
+	@Nested
+	@DisplayName("sync()")
+	class Sync {
+
+		@Test
+		@DisplayName("DB 구매자로 정리된 pending 항목은 cleared 로 세고 DB 기준으로 재고를 맞춘다")
+		void clearsConfirmedPendingAndAlignsStockWithDb() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			limitedDropRedisService.reserve(dropId, 1L);
+			// stale 한 재고를 흉내 낸다(write() 커밋 이후 confirm 이 아직 안 된 상태와 무관하게 DB 값과 어긋난 경우).
+			redisTemplate.opsForValue().set(LimitedDropRedisService.stockKey(dropId), "3");
+
+			// when
+			LimitedSyncResult result = limitedDropRedisService.sync(dropId, 7, List.of(1L, 2L),
+					clock.millis() + 60_000);
+
+			// then
+			assertThat(result.stockBefore()).isEqualTo(3);
+			assertThat(result.stockAfter()).isEqualTo(7);
+			assertThat(result.buyersChanged()).isTrue();
+			assertThat(result.cleared()).isEqualTo(1);
+			assertThat(result.leaked()).isZero();
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("7");
+			assertThat(redisTemplate.opsForSet().members(LimitedDropRedisService.buyersKey(dropId)))
+					.containsExactlyInAnyOrder("1", "2");
+			assertThat(redisTemplate.opsForZSet().score(LimitedDropRedisService.pendingKey(dropId), "1")).isNull();
+		}
+
+		@Test
+		@DisplayName("cutoff 이전의 pending 항목은 leaked 로 세고 지운다")
+		void clearsStalePendingAsLeaked() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			long staleScore = clock.millis() - 100_000;
+			redisTemplate.opsForZSet().add(LimitedDropRedisService.pendingKey(dropId), "99", staleScore);
+
+			// when
+			LimitedSyncResult result = limitedDropRedisService.sync(dropId, 10, List.of(), clock.millis() - 50_000);
+
+			// then
+			assertThat(result.leaked()).isEqualTo(1);
+			assertThat(result.cleared()).isZero();
+			assertThat(result.changed()).isTrue();
+			assertThat(redisTemplate.opsForZSet().score(LimitedDropRedisService.pendingKey(dropId), "99")).isNull();
+		}
+
+		@Test
+		@DisplayName("신선한 pending 항목은 진행 중 선점으로 인정해 재고에서만 빼고 손대지 않는다")
+		void treatsFreshPendingAsInFlight() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+			limitedDropRedisService.reserve(dropId, 5L);
+
+			// when: DB 는 아직 write() 커밋 전이라 5L 을 모른다
+			LimitedSyncResult result = limitedDropRedisService.sync(dropId, 10, List.of(), clock.millis() - 60_000);
+
+			// then
+			assertThat(result.changed()).isFalse();
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("9");
+			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(dropId), "5")).isTrue();
+			assertThat(redisTemplate.opsForZSet().score(LimitedDropRedisService.pendingKey(dropId), "5")).isNotNull();
+		}
+	}
+
+	@Nested
+	@DisplayName("tryLockRebuild()/unlockRebuild()")
+	class RebuildLock {
+
+		@Test
+		@DisplayName("최초 획득은 성공하고 해제 전 재시도는 실패한다")
+		void allowsOnlyOneConcurrentRebuild() {
+			// given
+			dropId = newDropId();
+
+			// when & then
+			assertThat(limitedDropRedisService.tryLockRebuild(dropId)).isTrue();
+			assertThat(limitedDropRedisService.tryLockRebuild(dropId)).isFalse();
+		}
+
+		@Test
+		@DisplayName("해제 후에는 다시 잠글 수 있다")
+		void allowsLockAgainAfterUnlock() {
+			// given
+			dropId = newDropId();
+			limitedDropRedisService.tryLockRebuild(dropId);
+
+			// when
+			limitedDropRedisService.unlockRebuild(dropId);
+
+			// then
+			assertThat(limitedDropRedisService.tryLockRebuild(dropId)).isTrue();
+		}
+	}
+
+	@Nested
+	@DisplayName("findMissingStock()")
+	class FindMissingStock {
+
+		@Test
+		@DisplayName("재고 키가 없는 드롭만 골라 반환한다")
+		void returnsOnlyDropsWithoutStockKey() {
+			// given
+			dropId = newDropId();
+			Long missingDropId = newDropId();
+			limitedDropRedisService.initStock(dropId, 10);
+
+			try {
+				// when
+				List<Long> missing = limitedDropRedisService.findMissingStock(List.of(dropId, missingDropId));
+
+				// then
+				assertThat(missing).containsExactly(missingDropId);
+			} finally {
+				limitedDropRedisService.clear(missingDropId);
+			}
 		}
 	}
 

@@ -62,4 +62,7 @@ public interface LimitedDropRepository extends JpaRepository<LimitedDrop, Long> 
 
 	List<LimitedDrop> findAllByStatusInAndCloseAtLessThanEqual(Collection<LimitedDropStatus> statuses,
 			LocalDateTime closeAt);
+
+	@Query("select d.id from LimitedDrop d where d.status in :statuses")
+	List<Long> findIdsByStatusIn(@Param("statuses") Collection<LimitedDropStatus> statuses);
 }
