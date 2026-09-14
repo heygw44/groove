@@ -54,6 +54,9 @@ groove:
     reconcile:
       interval: 30s
       grace: 30s
+    circuit:
+      open-duration: 1s
+      fallback-permits: 2
   recommend:
     feature-cache-ttl: 0s
   catalog:

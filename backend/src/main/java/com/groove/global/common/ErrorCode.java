@@ -71,6 +71,7 @@ public enum ErrorCode {
 	LIMITED_ALREADY_PURCHASED(HttpStatus.CONFLICT, "이미 구매한 한정반입니다."),
 	LIMITED_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "회원당 구매 가능 수량을 초과했습니다."),
 	LIMITED_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 한정반 상태입니다."),
+	LIMITED_BUSY(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
 
 	// ===== CART =====
 	CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."),
