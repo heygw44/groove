@@ -4,12 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +34,10 @@ import com.groove.auth.dto.LoginRequest;
 import com.groove.auth.dto.SignupRequest;
 import com.groove.auth.dto.SignupResponse;
 import com.groove.auth.jwt.JwtProvider;
+import com.groove.auth.jwt.RefreshTokenClaims;
+import com.groove.auth.repository.RefreshRotation;
 import com.groove.auth.repository.RefreshTokenRepository;
+import com.groove.auth.repository.RotationResult;
 import com.groove.fixture.MemberFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -43,6 +51,7 @@ import com.groove.member.repository.MemberRepository;
 class AuthServiceTest {
 
 	private static final Long MEMBER_ID = 1L;
+	private static final String SESSION_ID = "session-1";
 
 	@Mock
 	MemberRepository memberRepository;
@@ -57,14 +66,17 @@ class AuthServiceTest {
 	JwtProvider jwtProvider;
 
 	JwtProperties jwtProperties = new JwtProperties(
-			"test-secret-key-for-jwt-signing-must-be-long-enough-000000", Duration.ofMinutes(30), Duration.ofDays(14));
+			"test-secret-key-for-jwt-signing-must-be-long-enough-000000", Duration.ofMinutes(30), Duration.ofDays(14),
+			Duration.ofSeconds(10));
+
+	Clock clock = Clock.fixed(Instant.parse("2026-09-15T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
 	AuthService authService;
 
 	@BeforeEach
 	void setUp() {
 		authService = new AuthService(memberRepository, passwordEncoder, refreshTokenRepository, jwtProvider,
-				jwtProperties);
+				jwtProperties, clock);
 	}
 
 	@Nested
@@ -145,7 +157,7 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS);
-			verify(refreshTokenRepository, never()).save(anyLong(), any());
+			verify(refreshTokenRepository, never()).save(anyLong(), anyString(), anyString());
 		}
 
 		@Test
@@ -178,11 +190,11 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
-			verify(refreshTokenRepository, never()).save(anyLong(), any());
+			verify(refreshTokenRepository, never()).save(anyLong(), anyString(), anyString());
 		}
 
 		@Test
-		@DisplayName("인증에 성공하면 토큰을 발급하고 refresh token 을 저장한다")
+		@DisplayName("인증에 성공하면 새 세션 id 로 토큰을 발급하고 저장한다")
 		void issuesTokensAndSavesRefresh() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
@@ -190,13 +202,13 @@ class AuthServiceTest {
 			given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
 			given(passwordEncoder.matches(request.password(), member.getPassword())).willReturn(true);
 			given(jwtProvider.createAccessToken(MEMBER_ID, member.getRole())).willReturn("access");
-			given(jwtProvider.createRefreshToken(MEMBER_ID)).willReturn("refresh");
+			given(jwtProvider.createRefreshToken(eq(MEMBER_ID), anyString())).willReturn("refresh");
 
 			// when
 			AuthTokens tokens = authService.login(request);
 
 			// then
-			verify(refreshTokenRepository).save(1L, "refresh");
+			verify(refreshTokenRepository).save(eq(MEMBER_ID), anyString(), eq("refresh"));
 			assertThat(tokens.accessToken()).isEqualTo("access");
 			assertThat(tokens.expiresIn()).isEqualTo(1800L);
 		}
@@ -218,11 +230,13 @@ class AuthServiceTest {
 		}
 
 		@Test
-		@DisplayName("Redis 에 저장된 토큰이 없으면 AUTH_REFRESH_TOKEN_NOT_FOUND 예외를 던진다")
-		void throwsNotFoundWhenRedisHasNoToken() {
+		@DisplayName("세션이 없으면 AUTH_REFRESH_TOKEN_NOT_FOUND 예외를 던진다")
+		void throwsNotFoundWhenSessionMissing() {
 			// given
-			given(jwtProvider.parseRefreshToken("refresh")).willReturn(MEMBER_ID);
-			given(refreshTokenRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.empty());
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
+			given(refreshTokenRepository.rotate(MEMBER_ID, SESSION_ID, "refresh", "new-refresh", clock.millis()))
+					.willReturn(new RefreshRotation(RotationResult.NOT_FOUND, null));
 
 			// when & then
 			assertThatThrownBy(() -> authService.reissue("refresh"))
@@ -232,18 +246,21 @@ class AuthServiceTest {
 		}
 
 		@Test
-		@DisplayName("저장된 토큰과 다르면 세션을 삭제하고 AUTH_REFRESH_TOKEN_MISMATCH 예외를 던진다")
-		void deletesSessionAndThrowsMismatchWhenTokenDiffers() {
+		@DisplayName("재사용으로 판정되면 AUTH_REFRESH_TOKEN_MISMATCH 예외를 던진다")
+		void throwsMismatchWhenReused() {
 			// given
-			given(jwtProvider.parseRefreshToken("old-refresh")).willReturn(MEMBER_ID);
-			given(refreshTokenRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of("new-refresh"));
+			given(jwtProvider.parseRefreshToken("old-refresh"))
+					.willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
+			given(refreshTokenRepository.rotate(MEMBER_ID, SESSION_ID, "old-refresh", "new-refresh", clock.millis()))
+					.willReturn(new RefreshRotation(RotationResult.REUSED, null));
 
 			// when & then
 			assertThatThrownBy(() -> authService.reissue("old-refresh"))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_REFRESH_TOKEN_MISMATCH);
-			verify(refreshTokenRepository).deleteByMemberId(MEMBER_ID);
+			verify(memberRepository, never()).findById(any());
 		}
 
 		@Test
@@ -251,8 +268,10 @@ class AuthServiceTest {
 		void throwsWhenMemberWithdrawn() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.createWithdrawn(), MEMBER_ID);
-			given(jwtProvider.parseRefreshToken("refresh")).willReturn(MEMBER_ID);
-			given(refreshTokenRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of("refresh"));
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
+			given(refreshTokenRepository.rotate(MEMBER_ID, SESSION_ID, "refresh", "new-refresh", clock.millis()))
+					.willReturn(new RefreshRotation(RotationResult.ROTATED, "new-refresh"));
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 
 			// when & then
@@ -267,8 +286,10 @@ class AuthServiceTest {
 		void throwsWhenMemberSuspended() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
-			given(jwtProvider.parseRefreshToken("refresh")).willReturn(MEMBER_ID);
-			given(refreshTokenRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of("refresh"));
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
+			given(refreshTokenRepository.rotate(MEMBER_ID, SESSION_ID, "refresh", "new-refresh", clock.millis()))
+					.willReturn(new RefreshRotation(RotationResult.ROTATED, "new-refresh"));
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 
 			// when & then
@@ -279,22 +300,44 @@ class AuthServiceTest {
 		}
 
 		@Test
-		@DisplayName("검증에 성공하면 새 refresh token 으로 회전한다")
-		void rotatesRefreshToken() {
+		@DisplayName("Lua 가 ROTATED 를 반환하면 새 refresh token 을 응답한다")
+		void returnsRotatedRefreshToken() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
-			given(jwtProvider.parseRefreshToken("old-refresh")).willReturn(MEMBER_ID);
-			given(refreshTokenRepository.findByMemberId(MEMBER_ID)).willReturn(Optional.of("old-refresh"));
+			given(jwtProvider.parseRefreshToken("old-refresh"))
+					.willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
+			given(refreshTokenRepository.rotate(MEMBER_ID, SESSION_ID, "old-refresh", "new-refresh", clock.millis()))
+					.willReturn(new RefreshRotation(RotationResult.ROTATED, "new-refresh"));
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(jwtProvider.createAccessToken(MEMBER_ID, member.getRole())).willReturn("new-access");
-			given(jwtProvider.createRefreshToken(MEMBER_ID)).willReturn("new-refresh");
 
 			// when
 			AuthTokens tokens = authService.reissue("old-refresh");
 
 			// then
-			verify(refreshTokenRepository).save(MEMBER_ID, "new-refresh");
 			assertThat(tokens.refreshToken()).isEqualTo("new-refresh");
+			assertThat(tokens.accessToken()).isEqualTo("new-access");
+		}
+
+		@Test
+		@DisplayName("Lua 가 GRACE 를 반환하면 새로 발급하지 않고 현재 토큰을 그대로 응답한다")
+		void returnsCurrentRefreshTokenOnGrace() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(jwtProvider.parseRefreshToken("prev-refresh"))
+					.willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("attempted-new");
+			given(refreshTokenRepository.rotate(MEMBER_ID, SESSION_ID, "prev-refresh", "attempted-new", clock.millis()))
+					.willReturn(new RefreshRotation(RotationResult.GRACE, "current-refresh"));
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(jwtProvider.createAccessToken(MEMBER_ID, member.getRole())).willReturn("new-access");
+
+			// when
+			AuthTokens tokens = authService.reissue("prev-refresh");
+
+			// then
+			assertThat(tokens.refreshToken()).isEqualTo("current-refresh");
 		}
 	}
 
@@ -302,14 +345,53 @@ class AuthServiceTest {
 	@DisplayName("logout()")
 	class Logout {
 
-		@Test
-		@DisplayName("refresh token 을 삭제한다")
-		void deletesRefreshToken() {
+		@ParameterizedTest
+		@NullAndEmptySource
+		@DisplayName("refresh token 이 비어있으면 아무 것도 하지 않는다")
+		void doesNothingWhenTokenBlank(String refreshToken) {
 			// when
-			authService.logout(MEMBER_ID);
+			authService.logout(MEMBER_ID, refreshToken);
 
 			// then
-			verify(refreshTokenRepository).deleteByMemberId(MEMBER_ID);
+			verify(refreshTokenRepository, never()).delete(any(), any());
+		}
+
+		@Test
+		@DisplayName("파싱한 memberId 가 요청자와 같으면 해당 세션을 삭제한다")
+		void deletesSessionWhenSubjectMatches() {
+			// given
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+
+			// when
+			authService.logout(MEMBER_ID, "refresh");
+
+			// then
+			verify(refreshTokenRepository).delete(MEMBER_ID, SESSION_ID);
+		}
+
+		@Test
+		@DisplayName("파싱한 memberId 가 요청자와 다르면 삭제하지 않는다")
+		void doesNotDeleteWhenSubjectMismatches() {
+			// given
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(999L, SESSION_ID));
+
+			// when
+			authService.logout(MEMBER_ID, "refresh");
+
+			// then
+			verify(refreshTokenRepository, never()).delete(any(), any());
+		}
+
+		@Test
+		@DisplayName("토큰 파싱이 실패해도 예외를 삼키고 조용히 넘어간다")
+		void swallowsExceptionWhenTokenInvalid() {
+			// given
+			given(jwtProvider.parseRefreshToken("expired"))
+					.willThrow(new BusinessException(ErrorCode.AUTH_EXPIRED_TOKEN));
+
+			// when & then
+			authService.logout(MEMBER_ID, "expired");
+			verify(refreshTokenRepository, never()).delete(any(), any());
 		}
 	}
 }

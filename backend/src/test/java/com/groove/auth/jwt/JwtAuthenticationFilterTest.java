@@ -59,7 +59,8 @@ class JwtAuthenticationFilterTest {
 		void returnsExpiredTokenWhenTokenExpired() throws Exception {
 			// given
 			JwtProvider expiredProvider = new JwtProvider(
-					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14)));
+					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14),
+							Duration.ofSeconds(10)));
 			String token = expiredProvider.createAccessToken(1L, MemberRole.USER);
 
 			// when & then
@@ -73,7 +74,8 @@ class JwtAuthenticationFilterTest {
 		void returnsInvalidTokenWhenTokenForged() throws Exception {
 			// given
 			JwtProvider otherProvider = new JwtProvider(
-					new JwtProperties(OTHER_SIGNING_KEY, Duration.ofMinutes(30), Duration.ofDays(14)));
+					new JwtProperties(OTHER_SIGNING_KEY, Duration.ofMinutes(30), Duration.ofDays(14),
+							Duration.ofSeconds(10)));
 			String token = otherProvider.createAccessToken(1L, MemberRole.USER);
 
 			// when & then

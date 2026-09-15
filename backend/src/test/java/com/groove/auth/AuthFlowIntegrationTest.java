@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -46,7 +47,13 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 	RefreshTokenRepository refreshTokenRepository;
 
 	@Autowired
+	JwtProvider jwtProvider;
+
+	@Autowired
 	JwtProperties jwtProperties;
+
+	@Autowired
+	StringRedisTemplate redisTemplate;
 
 	@Nested
 	@DisplayName("로그인 → 재발급 → 로그아웃 흐름")
@@ -65,10 +72,11 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			// when
 			MvcResult loginResult = login(email, password);
 			Cookie firstRefreshCookie = loginResult.getResponse().getCookie("refreshToken");
+			String sessionId = sessionIdOf(firstRefreshCookie);
 
 			// then
 			assertThat(firstRefreshCookie).isNotNull();
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).contains(firstRefreshCookie.getValue());
+			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId)).contains(firstRefreshCookie.getValue());
 
 			// 토큰 없이 로그아웃하면 401
 			mockMvc.perform(post("/api/v1/auth/logout"))
@@ -82,25 +90,29 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			Cookie secondRefreshCookie = reissueResult.getResponse().getCookie("refreshToken");
 			assertThat(secondRefreshCookie).isNotNull();
 			assertThat(secondRefreshCookie.getValue()).isNotEqualTo(firstRefreshCookie.getValue());
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).contains(secondRefreshCookie.getValue());
+			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId))
+					.contains(secondRefreshCookie.getValue());
 
-			// 이미 회전된(옛) 쿠키로 재발급을 시도하면 탈취로 간주해 세션을 폐기한다
+			// grace 를 지난 옛(첫) 쿠키로 재발급을 시도하면 탈취로 간주해 세션을 폐기한다
+			expirePrevGrace(memberId, sessionId);
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(firstRefreshCookie))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_REFRESH_TOKEN_MISMATCH")));
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).isEmpty();
+			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId)).isEmpty();
 
 			// 다시 로그인한 뒤 로그아웃하면 refresh token 이 삭제되고 쿠키가 만료된다
 			MvcResult secondLoginResult = login(email, password);
 			Cookie latestRefreshCookie = secondLoginResult.getResponse().getCookie("refreshToken");
+			String latestSessionId = sessionIdOf(latestRefreshCookie);
 			String latestAccessToken = objectMapper.readTree(secondLoginResult.getResponse().getContentAsString())
 					.path("data").path("accessToken").asText();
 
 			mockMvc.perform(post("/api/v1/auth/logout")
-							.header(HttpHeaders.AUTHORIZATION, "Bearer " + latestAccessToken))
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + latestAccessToken)
+							.cookie(latestRefreshCookie))
 					.andExpect(status().isOk())
 					.andExpect(cookie().maxAge("refreshToken", 0));
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).isEmpty();
+			assertThat(refreshTokenRepository.findCurrent(memberId, latestSessionId)).isEmpty();
 
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(latestRefreshCookie))
 					.andExpect(status().isUnauthorized())
@@ -137,6 +149,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			Long memberId = objectMapper.readTree(signupResult.getResponse().getContentAsString())
 					.path("data").path("id").asLong();
 			MvcResult loginResult = login(email, password);
+			String sessionId = sessionIdOf(loginResult.getResponse().getCookie("refreshToken"));
 			String accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
 					.path("data").path("accessToken").asText();
 
@@ -150,7 +163,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			mockMvc.perform(delete("/api/v1/members/me")
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
 					.andExpect(status().isOk());
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).isEmpty();
+			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId)).isEmpty();
 
 			mockMvc.perform(get("/api/v1/members/me")
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
@@ -184,6 +197,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			String firstAccessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
 					.path("data").path("accessToken").asText();
 			Cookie firstRefreshCookie = loginResult.getResponse().getCookie("refreshToken");
+			String sessionId = sessionIdOf(firstRefreshCookie);
 
 			// then
 			mockMvc.perform(get("/api/v1/members/me")
@@ -200,7 +214,8 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			// access token 은 jti 없이 초 단위 iat/exp 로만 서명되어, 로그인과 재발급이 같은 초에 일어나면 값이 같을 수 있다.
 			assertThat(secondRefreshCookie).isNotNull();
 			assertThat(secondRefreshCookie.getValue()).isNotEqualTo(firstRefreshCookie.getValue());
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).contains(secondRefreshCookie.getValue());
+			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId))
+					.contains(secondRefreshCookie.getValue());
 
 			mockMvc.perform(get("/api/v1/members/me")
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + secondAccessToken))
@@ -208,10 +223,11 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(jsonPath("$.data.email", is(email)));
 
 			mockMvc.perform(post("/api/v1/auth/logout")
-							.header(HttpHeaders.AUTHORIZATION, "Bearer " + secondAccessToken))
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + secondAccessToken)
+							.cookie(secondRefreshCookie))
 					.andExpect(status().isOk())
 					.andExpect(cookie().maxAge("refreshToken", 0));
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).isEmpty();
+			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId)).isEmpty();
 
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(secondRefreshCookie))
 					.andExpect(status().isUnauthorized())
@@ -234,7 +250,8 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 					.path("data").path("id").asLong();
 			login(email, password);
 			JwtProvider expiredProvider = new JwtProvider(
-					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofMillis(-1000)));
+					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofMillis(-1000),
+							jwtProperties.refreshTokenGrace()));
 			String expiredAccessToken = expiredProvider.createAccessToken(memberId, MemberRole.USER);
 
 			// when & then
@@ -253,16 +270,19 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			MvcResult signupResult = signup(email, password);
 			Long memberId = objectMapper.readTree(signupResult.getResponse().getContentAsString())
 					.path("data").path("id").asLong();
-			login(email, password);
+			MvcResult loginResult = login(email, password);
+			String sessionId = sessionIdOf(loginResult.getResponse().getCookie("refreshToken"));
 			JwtProvider expiredProvider = new JwtProvider(
-					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofMillis(-1000)));
-			String expiredRefreshToken = expiredProvider.createRefreshToken(memberId);
+					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofMillis(-1000),
+							jwtProperties.refreshTokenGrace()));
+			// 파싱이 만료로 실패하는 경로라 세션 자체는 실존하지 않는 임의 sessionId 로도 충분하다.
+			String expiredRefreshToken = expiredProvider.createRefreshToken(memberId, UUID.randomUUID().toString());
 
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", expiredRefreshToken)))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_EXPIRED_TOKEN")));
-			assertThat(refreshTokenRepository.findByMemberId(memberId)).isPresent();
+			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId)).isPresent();
 		}
 	}
 
@@ -282,5 +302,14 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 						.content(objectMapper.writeValueAsString(request)))
 				.andExpect(status().isOk())
 				.andReturn();
+	}
+
+	private String sessionIdOf(Cookie refreshCookie) {
+		return jwtProvider.parseRefreshToken(refreshCookie.getValue()).sessionId();
+	}
+
+	/** grace 안에 있는 prev 를 즉시 지난 것으로 만들어 재사용 판정을 sleep 없이 재현한다. */
+	private void expirePrevGrace(Long memberId, String sessionId) {
+		redisTemplate.opsForHash().put("refresh:" + memberId + ":" + sessionId, "prev_exp", "0");
 	}
 }

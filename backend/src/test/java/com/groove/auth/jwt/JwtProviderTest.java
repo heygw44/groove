@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -20,9 +21,10 @@ class JwtProviderTest {
 
 	private static final String SIGNING_KEY = "test-secret-key-for-jwt-signing-must-be-long-enough-000000";
 	private static final Long MEMBER_ID = 1L;
+	private static final String SESSION_ID = "session-1";
 
 	private final JwtProvider jwtProvider = new JwtProvider(
-			new JwtProperties(SIGNING_KEY, Duration.ofMinutes(30), Duration.ofDays(14)));
+			new JwtProperties(SIGNING_KEY, Duration.ofMinutes(30), Duration.ofDays(14), Duration.ofSeconds(10)));
 
 	@Nested
 	@DisplayName("createAccessToken()")
@@ -52,8 +54,8 @@ class JwtProviderTest {
 		@DisplayName("연속으로 호출해도 서로 다른 토큰을 발급한다")
 		void issuesDifferentTokensOnConsecutiveCalls() {
 			// when
-			String first = jwtProvider.createRefreshToken(MEMBER_ID);
-			String second = jwtProvider.createRefreshToken(MEMBER_ID);
+			String first = jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID);
+			String second = jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID);
 
 			// then
 			assertThat(first).isNotEqualTo(second);
@@ -69,7 +71,8 @@ class JwtProviderTest {
 		void throwsExpiredTokenWhenExpired() {
 			// given
 			JwtProvider expiredProvider = new JwtProvider(
-					new JwtProperties(SIGNING_KEY, Duration.ofMillis(-1000), Duration.ofDays(14)));
+					new JwtProperties(SIGNING_KEY, Duration.ofMillis(-1000), Duration.ofDays(14),
+							Duration.ofSeconds(10)));
 			String token = expiredProvider.createAccessToken(MEMBER_ID, MemberRole.USER);
 
 			// when & then
@@ -85,7 +88,7 @@ class JwtProviderTest {
 			// given
 			JwtProvider otherProvider = new JwtProvider(
 					new JwtProperties("other-secret-key-for-jwt-signing-must-be-long-enough-0000",
-							Duration.ofMinutes(30), Duration.ofDays(14)));
+							Duration.ofMinutes(30), Duration.ofDays(14), Duration.ofSeconds(10)));
 			String token = otherProvider.createAccessToken(MEMBER_ID, MemberRole.USER);
 
 			// when & then
@@ -119,7 +122,7 @@ class JwtProviderTest {
 		@DisplayName("refresh 토큰을 넣으면 AUTH_INVALID_TOKEN 예외를 던진다")
 		void throwsInvalidTokenWhenGivenRefreshToken() {
 			// given
-			String refreshToken = jwtProvider.createRefreshToken(MEMBER_ID);
+			String refreshToken = jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID);
 
 			// when & then
 			assertThatThrownBy(() -> jwtProvider.parseAccessToken(refreshToken))
@@ -134,16 +137,17 @@ class JwtProviderTest {
 	class ParseRefreshToken {
 
 		@Test
-		@DisplayName("정상 토큰이면 memberId를 반환한다")
-		void returnsMemberIdWhenValid() {
+		@DisplayName("정상 토큰이면 memberId와 sessionId를 반환한다")
+		void returnsMemberIdAndSessionIdWhenValid() {
 			// given
-			String token = jwtProvider.createRefreshToken(MEMBER_ID);
+			String token = jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID);
 
 			// when
-			Long memberId = jwtProvider.parseRefreshToken(token);
+			RefreshTokenClaims claims = jwtProvider.parseRefreshToken(token);
 
 			// then
-			assertThat(memberId).isEqualTo(MEMBER_ID);
+			assertThat(claims.memberId()).isEqualTo(MEMBER_ID);
+			assertThat(claims.sessionId()).isEqualTo(SESSION_ID);
 		}
 
 		@Test
@@ -154,6 +158,20 @@ class JwtProviderTest {
 
 			// when & then
 			assertThatThrownBy(() -> jwtProvider.parseRefreshToken(accessToken))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_INVALID_TOKEN);
+		}
+
+		@ParameterizedTest
+		@NullAndEmptySource
+		@DisplayName("sid 클레임이 없거나 비어있으면 AUTH_INVALID_TOKEN 예외를 던진다")
+		void throwsInvalidTokenWhenSessionIdMissing(String sessionId) {
+			// given
+			String token = jwtProvider.createRefreshToken(MEMBER_ID, sessionId);
+
+			// when & then
+			assertThatThrownBy(() -> jwtProvider.parseRefreshToken(token))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_INVALID_TOKEN);
