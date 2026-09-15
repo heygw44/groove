@@ -9,8 +9,12 @@ import type {
   OrderSummary,
 } from '@/types/order';
 
-export const createOrder = (payload: OrderCreateRequest) =>
-  unwrap(client.post<ApiResponse<OrderCreateResponse>>('/orders', payload));
+export const createOrder = (payload: OrderCreateRequest, idempotencyKey: string) =>
+  unwrap(
+    client.post<ApiResponse<OrderCreateResponse>>('/orders', payload, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }),
+  );
 
 export const getOrders = (params: OrderListParams) =>
   unwrap(client.get<ApiResponse<PageResponse<OrderSummary>>>('/orders', { params }));

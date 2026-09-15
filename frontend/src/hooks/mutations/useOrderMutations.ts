@@ -4,11 +4,17 @@ import { cancelOrder, createOrder } from '@/api/order';
 import { cartKeys, couponKeys, orderKeys } from '@/hooks/queries/queryKeys';
 import type { OrderCreateRequest } from '@/types/order';
 
+interface CreateOrderVariables {
+  payload: OrderCreateRequest;
+  idempotencyKey: string;
+}
+
 export const useCreateOrder = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: OrderCreateRequest) => createOrder(payload),
+    mutationFn: ({ payload, idempotencyKey }: CreateOrderVariables) =>
+      createOrder(payload, idempotencyKey),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: cartKeys.all });
       queryClient.invalidateQueries({ queryKey: orderKeys.all });

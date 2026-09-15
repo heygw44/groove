@@ -14,7 +14,7 @@ import { OrderItemSummaryList } from '@/components/order/OrderItemSummaryList';
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 import { ShippingAddressSection } from '@/components/order/ShippingAddressSection';
 import { useCreateOrder } from '@/hooks/mutations/useOrderMutations';
-import { addressKeys, couponKeys } from '@/hooks/queries/queryKeys';
+import { addressKeys, couponKeys, orderKeys } from '@/hooks/queries/queryKeys';
 import { useAddresses } from '@/hooks/queries/useAddresses';
 import { useCart } from '@/hooks/queries/useCart';
 import { useProduct } from '@/hooks/queries/useProduct';
@@ -23,6 +23,7 @@ import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { parseOrderDraft, toOrderCreateRequest } from '@/utils/orderDraft';
 
 const STOCK_ERROR_CODES = new Set(['STOCK_INSUFFICIENT', 'STOCK_CONFLICT']);
+const IDEMPOTENCY_KEY_REUSED = 'IDEMPOTENCY_KEY_REUSED';
 const COUPON_ERROR_CODES = new Set([
   'COUPON_NOT_FOUND',
   'COUPON_EXPIRED',
@@ -52,6 +53,7 @@ export default function OrderFormPage() {
 
   const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
   const [selectedCoupon, setSelectedCoupon] = useState<AvailableCoupon | null>(null);
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const submittedRef = useRef(false);
 
   const cartItems = cartQuery.data?.items ?? [];
@@ -153,7 +155,10 @@ export default function OrderFormPage() {
     }
 
     createOrderMutation.mutate(
-      toOrderCreateRequest(draft, effectiveSelectedId, selectedCoupon?.memberCouponId ?? null),
+      {
+        payload: toOrderCreateRequest(draft, effectiveSelectedId, selectedCoupon?.memberCouponId ?? null),
+        idempotencyKey,
+      },
       {
         onSuccess: (data) => {
           submittedRef.current = true;
@@ -161,6 +166,13 @@ export default function OrderFormPage() {
         },
         onError: (error) => {
           const code = getErrorCode(error);
+          if (code === IDEMPOTENCY_KEY_REUSED) {
+            submittedRef.current = true;
+            queryClient.invalidateQueries({ queryKey: orderKeys.all });
+            showToast('error', getErrorMessage(error));
+            navigate('/orders', { replace: true });
+            return;
+          }
           if (code && STOCK_ERROR_CODES.has(code)) {
             submittedRef.current = true;
             showToast('error', getErrorMessage(error));
