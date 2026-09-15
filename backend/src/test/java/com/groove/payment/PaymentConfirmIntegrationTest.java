@@ -109,10 +109,13 @@ class PaymentConfirmIntegrationTest extends IntegrationTestSupport {
 	@Autowired
 	private MockServerRestClientCustomizer mockServerRestClientCustomizer;
 
-	// discogsRestClient 도 같은 RestClient.Builder 자동구성을 타서 목으로 바꿔치기하지 않으면
-	// MockServerRestClientCustomizer 가 RestClient 를 2개에 바인딩해 getServer() 가 실패한다.
+	// discogsRestClient·alertRestClient 도 같은 RestClient.Builder 자동구성을 타서 목으로 바꿔치기하지 않으면
+	// MockServerRestClientCustomizer 가 RestClient 를 여러 개에 바인딩해 getServer() 가 실패한다.
 	@MockitoBean(name = "discogsRestClient")
 	private RestClient discogsRestClient;
+
+	@MockitoBean(name = "alertRestClient")
+	private RestClient alertRestClient;
 
 	private MockRestServiceServer server;
 

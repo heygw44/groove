@@ -8,6 +8,8 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.limited.service.LimitedRelease;
@@ -49,6 +51,7 @@ public class PaymentReconcileService {
 	private final PaymentReconcileLogRepository logRepository;
 	private final PaymentReconcileProperties properties;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	public List<PaymentReconcileCandidate> findCandidates(LocalDateTime now) {
 		LocalDateTime before = now.minus(properties.grace());
@@ -99,6 +102,10 @@ public class PaymentReconcileService {
 			case MANUAL_REVIEW -> {
 				log.error("대사 결과 수동 확인 필요: paymentId={}, orderId={}, tossStatus={}", candidate.paymentId(),
 						candidate.orderId(), tossStatus);
+				alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+						"대사 결과 수동 확인 필요: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId()
+								+ ", tossStatus=" + tossStatus,
+						"paymentId=" + candidate.paymentId()));
 				recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, null);
 				yield PaymentReconcileOutcome.applied();
 			}
@@ -134,6 +141,9 @@ public class PaymentReconcileService {
 		if (failure != null && failure.getErrorCode() != ErrorCode.PAYMENT_RESULT_UNKNOWN) {
 			cancelWriter.revertCancelRequest(candidate.orderId(), candidate.paymentId());
 			log.error("토스 취소 재시도 거절: paymentId={}, orderId={}", candidate.paymentId(), candidate.orderId(), failure);
+			alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+					"토스 취소 재시도 거절: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId(),
+					"paymentId=" + candidate.paymentId()));
 			writeLog(payment, beforeStatus, "DONE", PaymentReconcileAction.MANUAL_REVIEW, "토스가 취소를 거절");
 			return;
 		}
@@ -179,6 +189,8 @@ public class PaymentReconcileService {
 		}
 		if (payment.getStatus() == PaymentStatus.CANCEL_REQUESTED) {
 			log.error("취소 대사 상한 도달, 수동 확인 필요: paymentId={}", payment.getId());
+			alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+					"취소 대사 상한 도달, 수동 확인 필요: paymentId=" + payment.getId(), "paymentId=" + payment.getId()));
 			writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW,
 					"취소 대사 상한 도달, 수동 확인 필요");
 			return;
@@ -189,6 +201,8 @@ public class PaymentReconcileService {
 				|| logRepository.existsByPaymentIdAndTossStatus(payment.getId(), PARTIAL_CANCELED_TOSS_STATUS);
 		if (observedDoneOrPartial) {
 			log.error("대사 상한 도달, 수동 확인 필요: paymentId={}", payment.getId());
+			alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+					"대사 상한 도달, 수동 확인 필요: paymentId=" + payment.getId(), "paymentId=" + payment.getId()));
 			writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, "대사 상한 도달, 수동 확인 필요");
 			return;
 		}

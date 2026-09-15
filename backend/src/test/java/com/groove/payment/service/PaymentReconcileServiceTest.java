@@ -28,6 +28,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
+import com.groove.global.alert.AlertSeverity;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
@@ -69,6 +72,9 @@ class PaymentReconcileServiceTest {
 	@Mock
 	private PaymentReconcileLogRepository logRepository;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private PaymentReconcileService service;
 
 	private Clock clock;
@@ -82,7 +88,7 @@ class PaymentReconcileServiceTest {
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 				Duration.ofMinutes(2), 50, 10);
 		service = new PaymentReconcileService(paymentRepository, orderRepository, writer, cancelWriter, logRepository,
-				properties, clock);
+				properties, clock, alertNotifier);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 	}
 
@@ -216,6 +222,10 @@ class PaymentReconcileServiceTest {
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+			verify(alertNotifier).notify(alertCaptor.capture());
+			assertThat(alertCaptor.getValue().severity()).isEqualTo(AlertSeverity.CRITICAL);
+			assertThat(alertCaptor.getValue().key()).isEqualTo("payment.reconcile-manual-review");
 		}
 
 		@Test

@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.groove.fixture.MemberFixture;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.member.entity.Member;
 import com.groove.member.entity.MemberRole;
 import com.groove.member.repository.MemberRepository;
@@ -38,11 +39,14 @@ class StatsAlertDispatcherTest {
 	@Mock
 	private NotificationRepository notificationRepository;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private StatsAlertDispatcher statsAlertDispatcher;
 
 	@BeforeEach
 	void setUp() {
-		statsAlertDispatcher = new StatsAlertDispatcher(memberRepository, notificationRepository);
+		statsAlertDispatcher = new StatsAlertDispatcher(memberRepository, notificationRepository, alertNotifier);
 	}
 
 	@Nested

@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
+import com.groove.global.alert.AlertNotifier;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -37,7 +39,7 @@ class AggregationLockTest {
 		connection = mock(Connection.class);
 		connectionProvider = mock(AggregationLock.LockConnectionProvider.class);
 		given(connectionProvider.open()).willReturn(connection);
-		aggregationLock = new AggregationLock(connectionProvider);
+		aggregationLock = new AggregationLock(connectionProvider, mock(AlertNotifier.class));
 
 		logAppender = new ListAppender<>();
 		logAppender.start();

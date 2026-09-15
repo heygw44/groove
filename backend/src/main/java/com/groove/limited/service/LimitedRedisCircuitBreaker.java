@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.stereotype.Component;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.limited.config.LimitedCircuitProperties;
 
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ public class LimitedRedisCircuitBreaker {
 
 	private final LimitedCircuitProperties circuitProperties;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	private final AtomicReference<State> state = new AtomicReference<>(State.CLOSED);
 	private final AtomicInteger failures = new AtomicInteger();
@@ -49,6 +52,11 @@ public class LimitedRedisCircuitBreaker {
 	/** 부가 호출(recordAttempt 등) 판단용. 프로브를 소모하지 않는다. */
 	public boolean isClosed() {
 		return state() == State.CLOSED;
+	}
+
+	/** afterCommit 등 부가 호출을 건너뛸지 판단용. OPEN 이고 openDuration 이 안 지났을 때만 true. */
+	public boolean isOpen() {
+		return state() == State.OPEN;
 	}
 
 	/** CLOSED 는 항상 true, OPEN 은 항상 false, HALF_OPEN 은 첫 한 스레드만 true(프로브)다. */
@@ -84,10 +92,14 @@ public class LimitedRedisCircuitBreaker {
 	}
 
 	private void open() {
+		if (state() == State.OPEN) {
+			return;
+		}
 		state.set(State.OPEN);
 		openedAtMillis.set(clock.millis());
 		probeTaken.set(false);
 		log.error("한정반 Redis 서킷 OPEN, DB 폴백 전환");
+		alertNotifier.notify(Alert.critical("limited.redis-circuit-open", "한정반 Redis 서킷 OPEN, DB 폴백 전환", null));
 	}
 
 	private boolean openDurationElapsed() {

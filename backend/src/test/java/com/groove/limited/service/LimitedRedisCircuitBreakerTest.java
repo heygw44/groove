@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import com.groove.global.alert.LoggingAlertNotifier;
 import com.groove.limited.config.LimitedCircuitProperties;
 
 class LimitedRedisCircuitBreakerTest {
@@ -25,7 +26,7 @@ class LimitedRedisCircuitBreakerTest {
 	void setUp() {
 		clock = new MutableClock(Instant.parse("2026-09-14T00:00:00Z"));
 		LimitedCircuitProperties properties = new LimitedCircuitProperties(3, Duration.ofSeconds(10), 5, true);
-		circuitBreaker = new LimitedRedisCircuitBreaker(properties, clock);
+		circuitBreaker = new LimitedRedisCircuitBreaker(properties, clock, new LoggingAlertNotifier());
 	}
 
 	@Nested
@@ -134,6 +135,83 @@ class LimitedRedisCircuitBreakerTest {
 			assertThat(circuitBreaker.allowRedis()).isFalse();
 			clock.advance(Duration.ofSeconds(1));
 			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.HALF_OPEN);
+		}
+	}
+
+	@Nested
+	@DisplayName("open()")
+	class Open {
+
+		@Test
+		@DisplayName("이미 OPEN 이면 openedAt 을 유지한다")
+		void keepsOpenedAtWhenAlreadyOpen() {
+			// given
+			openCircuit();
+			clock.advance(Duration.ofSeconds(3));
+
+			// when: 이미 OPEN 인 상태에서 실패가 더 들어와도
+			circuitBreaker.onFailure();
+			circuitBreaker.onFailure();
+
+			// then: 여전히 OPEN 이고, openDuration 은 최초로 열린 시각부터 계산된다
+			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.OPEN);
+			clock.advance(Duration.ofSeconds(6));
+			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.OPEN);
+			clock.advance(Duration.ofSeconds(1));
+			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.HALF_OPEN);
+		}
+
+		@Test
+		@DisplayName("HALF_OPEN 프로브가 실패하면 openedAt 을 갱신해 다시 연다")
+		void reopensAfterHalfOpenProbeFails() {
+			// given
+			openCircuit();
+			clock.advance(Duration.ofSeconds(10));
+			assertThat(circuitBreaker.allowRedis()).isTrue();
+
+			// when
+			circuitBreaker.onFailure();
+
+			// then
+			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.OPEN);
+			clock.advance(Duration.ofSeconds(9));
+			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.OPEN);
+			clock.advance(Duration.ofSeconds(1));
+			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.HALF_OPEN);
+		}
+	}
+
+	@Nested
+	@DisplayName("isOpen()")
+	class IsOpen {
+
+		@Test
+		@DisplayName("CLOSED 면 false 다")
+		void falseWhenClosed() {
+			// when & then
+			assertThat(circuitBreaker.isOpen()).isFalse();
+		}
+
+		@Test
+		@DisplayName("OPEN 이면 true 다")
+		void trueWhenOpen() {
+			// given
+			openCircuit();
+
+			// when & then
+			assertThat(circuitBreaker.isOpen()).isTrue();
+		}
+
+		@Test
+		@DisplayName("HALF_OPEN 이면 false 다")
+		void falseWhenHalfOpen() {
+			// given
+			openCircuit();
+			clock.advance(Duration.ofSeconds(10));
+
+			// when & then
+			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.HALF_OPEN);
+			assertThat(circuitBreaker.isOpen()).isFalse();
 		}
 	}
 

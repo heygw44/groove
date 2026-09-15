@@ -2,6 +2,7 @@ package com.groove.limited.service;
 
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,11 +24,14 @@ class LimitedPendingSynchronizerTest {
 	@Mock
 	private LimitedDropRedisService limitedDropRedisService;
 
+	@Mock
+	private LimitedRedisCircuitBreaker circuitBreaker;
+
 	private LimitedPendingSynchronizer limitedPendingSynchronizer;
 
 	@BeforeEach
 	void setUp() {
-		limitedPendingSynchronizer = new LimitedPendingSynchronizer(limitedDropRedisService);
+		limitedPendingSynchronizer = new LimitedPendingSynchronizer(limitedDropRedisService, circuitBreaker);
 	}
 
 	@AfterEach
@@ -84,6 +88,39 @@ class LimitedPendingSynchronizerTest {
 
 			// then
 			verify(limitedDropRedisService, never()).confirm(DROP_ID, MEMBER_ID);
+		}
+
+		@Test
+		@DisplayName("서킷이 OPEN 이면 커밋 후에도 pending 정리를 건너뛰고 fallbackDrops 에 표시한다")
+		void skipsConfirmAndNotesFallbackWhenCircuitOpen() {
+			// given
+			when(circuitBreaker.isOpen()).thenReturn(true);
+			TransactionSynchronizationManager.initSynchronization();
+			limitedPendingSynchronizer.clearAfterCommit(DROP_ID, MEMBER_ID);
+
+			// when
+			TransactionSynchronizationManager.getSynchronizations()
+					.forEach(TransactionSynchronization::afterCommit);
+
+			// then
+			verify(limitedDropRedisService, never()).confirm(DROP_ID, MEMBER_ID);
+			verify(circuitBreaker).noteFallback(DROP_ID);
+		}
+
+		@Test
+		@DisplayName("서킷이 HALF_OPEN(=isOpen false) 이면 커밋 후 pending 을 정리한다")
+		void clearsWhenCircuitHalfOpen() {
+			// given
+			when(circuitBreaker.isOpen()).thenReturn(false);
+			TransactionSynchronizationManager.initSynchronization();
+			limitedPendingSynchronizer.clearAfterCommit(DROP_ID, MEMBER_ID);
+
+			// when
+			TransactionSynchronizationManager.getSynchronizations()
+					.forEach(TransactionSynchronization::afterCommit);
+
+			// then
+			verify(limitedDropRedisService).confirm(DROP_ID, MEMBER_ID);
 		}
 	}
 }
