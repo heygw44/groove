@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import com.groove.global.alert.LoggingAlertNotifier;
 import com.groove.limited.config.LimitedCircuitProperties;
 
 class LimitedRedisCircuitBreakerTest {
@@ -25,7 +26,7 @@ class LimitedRedisCircuitBreakerTest {
 	void setUp() {
 		clock = new MutableClock(Instant.parse("2026-09-14T00:00:00Z"));
 		LimitedCircuitProperties properties = new LimitedCircuitProperties(3, Duration.ofSeconds(10), 5, true);
-		circuitBreaker = new LimitedRedisCircuitBreaker(properties, clock);
+		circuitBreaker = new LimitedRedisCircuitBreaker(properties, clock, new LoggingAlertNotifier());
 	}
 
 	@Nested

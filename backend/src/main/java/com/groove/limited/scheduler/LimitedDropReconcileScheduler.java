@@ -9,6 +9,8 @@ import java.util.Optional;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.service.LimitedDropSyncService;
@@ -28,6 +30,7 @@ public class LimitedDropReconcileScheduler {
 	private final LimitedDropSyncService limitedDropSyncService;
 	private final LimitedReconcileLock reconcileLock;
 	private final ShutdownSignal shutdownSignal;
+	private final AlertNotifier alertNotifier;
 
 	@Scheduled(fixedDelayString = "${groove.limited.reconcile.interval}", initialDelay = 30_000)
 	public void reconcile() {
@@ -63,6 +66,8 @@ public class LimitedDropReconcileScheduler {
 		}
 		if (corrected > 0 || failed > 0) {
 			log.info("한정반 대사 완료 drops={} corrected={} failed={}", dropIds.size(), corrected, failed);
+			alertNotifier.notify(Alert.warn("limited.reconcile-corrected",
+					"한정반 대사 보정 drops=" + dropIds.size() + " corrected=" + corrected + " failed=" + failed, null));
 		} else {
 			log.debug("한정반 대사 완료 drops={} corrected={} failed={}", dropIds.size(), corrected, failed);
 		}

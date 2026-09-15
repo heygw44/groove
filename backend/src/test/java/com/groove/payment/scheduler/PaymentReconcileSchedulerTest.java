@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.lifecycle.ShutdownSignal;
@@ -53,6 +54,9 @@ class PaymentReconcileSchedulerTest {
 	@Mock
 	private ShutdownSignal shutdownSignal;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private PaymentReconcileScheduler scheduler;
 
 	private Clock clock;
@@ -63,7 +67,7 @@ class PaymentReconcileSchedulerTest {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator,
-				shutdownSignal, clock);
+				shutdownSignal, clock, alertNotifier);
 	}
 
 	@Nested

@@ -6,6 +6,8 @@ import java.time.LocalDateTime;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
@@ -28,6 +30,7 @@ public class PaymentCompensator {
 	private final PaymentClient paymentClient;
 	private final PaymentConfirmWriter writer;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	/** paymentId 가 null 이면 DB 결제 행이 없는 키(같은 주문의 두 번째 승인)라 토스 취소만 한다. */
 	public CompensationResult cancelApproved(Long paymentId, String paymentKey, LocalDateTime approvedAt,
@@ -38,6 +41,10 @@ public class PaymentCompensator {
 		} catch (BusinessException ex) {
 			log.error("승인 후 보상 취소 실패: paymentId={}, paymentKey={}, message={}", paymentId, paymentKey,
 					ex.getMessage(), ex);
+			alertNotifier.notify(Alert.critical("payment.compensation-failed",
+					"승인 후 보상 취소 실패: paymentId=" + paymentId + ", paymentKey=" + paymentKey + ", message="
+							+ ex.getMessage(),
+					paymentId != null ? "paymentId=" + paymentId : null));
 			if (paymentId != null) {
 				safeMarkUnknown(paymentId, "보상 취소 실패: " + ex.getMessage());
 			}
@@ -50,6 +57,8 @@ public class PaymentCompensator {
 				writer.markCompensated(paymentId, paymentKey, approvedAt, canceledAt, reason);
 			} catch (RuntimeException ex) {
 				log.error("보상 취소는 성공했으나 결제 반영에 실패함: paymentId={}", paymentId, ex);
+				alertNotifier.notify(Alert.critical("payment.compensation-failed",
+						"보상 취소는 성공했으나 결제 반영에 실패함: paymentId=" + paymentId, "paymentId=" + paymentId));
 			}
 		}
 		return CompensationResult.canceled(canceledAt);
@@ -60,6 +69,8 @@ public class PaymentCompensator {
 			writer.markUnknown(paymentId, reason);
 		} catch (ObjectOptimisticLockingFailureException | BusinessException ex) {
 			log.error("보상 취소 실패 기록 중 예외 발생: paymentId={}", paymentId, ex);
+			alertNotifier.notify(Alert.critical("payment.compensation-failed",
+					"보상 취소 실패 기록 중 예외 발생: paymentId=" + paymentId, "paymentId=" + paymentId));
 		}
 	}
 }

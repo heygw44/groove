@@ -26,6 +26,7 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import com.groove.fixture.PaymentFixture;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
@@ -44,6 +45,9 @@ class PaymentCompensatorTest {
 	@Mock
 	PaymentConfirmWriter writer;
 
+	@Mock
+	AlertNotifier alertNotifier;
+
 	PaymentCompensator compensator;
 
 	Clock clock;
@@ -53,7 +57,7 @@ class PaymentCompensatorTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
-		compensator = new PaymentCompensator(paymentClient, writer, clock);
+		compensator = new PaymentCompensator(paymentClient, writer, clock, alertNotifier);
 	}
 
 	@Nested
