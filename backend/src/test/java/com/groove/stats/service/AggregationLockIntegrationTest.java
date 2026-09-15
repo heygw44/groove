@@ -7,6 +7,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -33,6 +34,9 @@ import com.zaxxer.hikari.HikariDataSource;
  * 검증은 항상 {@link AggregationLock} 바깥의 새 JDBC 커넥션으로 한다.
  */
 class AggregationLockIntegrationTest extends IntegrationTestSupport {
+
+	private static final Duration LOCK_RELEASE_TIMEOUT = Duration.ofSeconds(5);
+	private static final Duration LOCK_RELEASE_POLL_INTERVAL = Duration.ofMillis(50);
 
 	@Autowired
 	private AggregationLock aggregationLock;
@@ -154,10 +158,24 @@ class AggregationLockIntegrationTest extends IntegrationTestSupport {
 				releaseLock(dedicated, name); // 카운터 1 로만 줄어든다
 			} // close() 가 실제 세션 종료라 남은 카운터와 무관하게 락이 풀린다
 
-			assertThat(new JdbcTemplate(dataSource)
-					.queryForObject("SELECT IS_USED_LOCK(?)", Integer.class, name))
+			assertThat(awaitLockHolderCleared(name))
 					.as("전용 커넥션은 close() 가 세션 종료라 카운터가 남아 있어도 락이 풀린다")
 					.isNull();
+		}
+
+		/**
+		 * close() 는 서버에 종료만 알리고 세션 정리를 기다리지 않는다. 락은 서버가 세션을 치운 뒤에 풀리므로
+		 * 곧바로 조회하면 느린 러너에서 아직 잡혀 있는 것으로 보인다.
+		 */
+		private Integer awaitLockHolderCleared(String name) throws InterruptedException {
+			JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+			long deadline = System.nanoTime() + LOCK_RELEASE_TIMEOUT.toNanos();
+			Integer holder = jdbcTemplate.queryForObject("SELECT IS_USED_LOCK(?)", Integer.class, name);
+			while (holder != null && System.nanoTime() < deadline) {
+				Thread.sleep(LOCK_RELEASE_POLL_INTERVAL.toMillis());
+				holder = jdbcTemplate.queryForObject("SELECT IS_USED_LOCK(?)", Integer.class, name);
+			}
+			return holder;
 		}
 
 		private void getLock(Connection connection, String name) throws Exception {
