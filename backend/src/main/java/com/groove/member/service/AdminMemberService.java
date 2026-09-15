@@ -81,7 +81,7 @@ public class AdminMemberService {
 
 		if (next == MemberStatus.SUSPENDED) {
 			member.suspend();
-			refreshTokenRepository.deleteByMemberId(memberId);
+			refreshTokenRepository.deleteAllByMemberId(memberId);
 		} else {
 			member.activate();
 		}

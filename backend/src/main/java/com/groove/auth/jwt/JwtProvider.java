@@ -7,6 +7,7 @@ import java.util.UUID;
 import javax.crypto.SecretKey;
 
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -25,6 +26,7 @@ public class JwtProvider {
 
 	private static final String CLAIM_ROLE = "role";
 	private static final String CLAIM_TYPE = "typ";
+	private static final String CLAIM_SESSION_ID = "sid";
 	private static final String TYPE_ACCESS = "access";
 	private static final String TYPE_REFRESH = "refresh";
 
@@ -49,13 +51,14 @@ public class JwtProvider {
 				.compact();
 	}
 
-	public String createRefreshToken(Long memberId) {
+	public String createRefreshToken(Long memberId, String sessionId) {
 		Date now = new Date();
 		Date expiration = new Date(now.getTime() + jwtProperties.refreshTokenExpiry().toMillis());
 		return Jwts.builder()
 				.id(UUID.randomUUID().toString())
 				.subject(String.valueOf(memberId))
 				.claim(CLAIM_TYPE, TYPE_REFRESH)
+				.claim(CLAIM_SESSION_ID, sessionId)
 				.issuedAt(now)
 				.expiration(expiration)
 				.signWith(secretKey, Jwts.SIG.HS256)
@@ -69,9 +72,14 @@ public class JwtProvider {
 		return new TokenClaims(memberId, role);
 	}
 
-	public Long parseRefreshToken(String token) {
+	public RefreshTokenClaims parseRefreshToken(String token) {
 		Claims claims = parse(token, TYPE_REFRESH);
-		return Long.valueOf(claims.getSubject());
+		Long memberId = Long.valueOf(claims.getSubject());
+		String sessionId = claims.get(CLAIM_SESSION_ID, String.class);
+		if (!StringUtils.hasText(sessionId)) {
+			throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+		}
+		return new RefreshTokenClaims(memberId, sessionId);
 	}
 
 	private Claims parse(String token, String expectedType) {

@@ -28,7 +28,7 @@ public enum ErrorCode {
 	AUTH_EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다."),
 	AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
 	AUTH_REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다. 다시 로그인해주세요."),
-	AUTH_REFRESH_TOKEN_MISMATCH(HttpStatus.UNAUTHORIZED, "다른 기기에서 로그인되어 로그아웃되었습니다. 다시 로그인해주세요."),
+	AUTH_REFRESH_TOKEN_MISMATCH(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_MEMBER_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 회원입니다."),
 
 	// ===== MEMBER =====

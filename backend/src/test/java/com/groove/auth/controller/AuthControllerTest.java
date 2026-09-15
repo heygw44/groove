@@ -265,12 +265,27 @@ class AuthControllerTest {
 			mockMvc.perform(post("/api/v1/auth/logout"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(authService, never()).logout(any());
+			verify(authService, never()).logout(any(), any());
 		}
 
 		@Test
-		@DisplayName("인증된 요청이면 200 과 만료된 refresh 쿠키를 반환한다")
+		@DisplayName("인증된 요청이면 200 과 만료된 refresh 쿠키를 반환하고 쿠키의 refresh token 을 넘긴다")
 		void expiresCookieWhenAuthenticated() throws Exception {
+			// given
+			String accessToken = jwtProvider.createAccessToken(1L, MemberRole.USER);
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/logout")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.cookie(new Cookie("refreshToken", "refresh-cookie-value")))
+					.andExpect(status().isOk())
+					.andExpect(cookie().maxAge("refreshToken", 0));
+			verify(authService).logout(1L, "refresh-cookie-value");
+		}
+
+		@Test
+		@DisplayName("쿠키 없이 인증된 요청이면 200 과 만료된 refresh 쿠키를 반환하고 null 을 넘긴다")
+		void expiresCookieWhenAuthenticatedWithoutRefreshCookie() throws Exception {
 			// given
 			String accessToken = jwtProvider.createAccessToken(1L, MemberRole.USER);
 
@@ -279,7 +294,7 @@ class AuthControllerTest {
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
 					.andExpect(status().isOk())
 					.andExpect(cookie().maxAge("refreshToken", 0));
-			verify(authService).logout(1L);
+			verify(authService).logout(eq(1L), isNull());
 		}
 	}
 }
