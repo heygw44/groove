@@ -84,6 +84,8 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       DISCOGS_TOKEN: ${DISCOGS_TOKEN}
       LIMITED_REDIS_ENABLED: "true"
+      # PROD_ENV_FILE 시크릿이 원본이다. 시크릿 갱신 전 배포가 깨지지 않도록 기본값은 빈 문자열(로그로만 남김)로 둔다.
+      GROOVE_ALERT_DISCORD_WEBHOOK_URL: ${GROOVE_ALERT_DISCORD_WEBHOOK_URL:-}
     volumes:
       - /opt/groove/uploads:/app/uploads
       - /opt/groove/logs:/app/logs
