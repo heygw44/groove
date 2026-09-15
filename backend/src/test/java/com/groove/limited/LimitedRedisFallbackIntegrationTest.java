@@ -200,7 +200,7 @@ class LimitedRedisFallbackIntegrationTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("Redis 가 돌아오고 openDuration 이 지나면 구매 1건으로 서킷이 CLOSED 되고 Redis 가 DB 와 다시 맞는다")
+	@DisplayName("서킷 OPEN 중 pending 정리를 건너뛰어도 Redis 가 돌아오면 구매 1건의 sync() 가 DB 기준으로 정합을 맞춘다")
 	void closesCircuitAndResyncsRedisAfterRedisRecovers() throws InterruptedException {
 		// given
 		prepareOpenDrop(50);
