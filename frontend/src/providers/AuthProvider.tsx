@@ -5,6 +5,7 @@ import { getMe } from '@/api/member';
 import { memberKeys } from '@/hooks/queries/queryKeys';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/store/authStore';
+import { withReissueLock } from '@/utils/reissueLock';
 
 /*
  * Access Token 은 메모리에만 두므로 새로고침하면 사라진다. 부팅 때 리프레시
@@ -17,7 +18,7 @@ const bootstrap = async () => {
   const { setAuth, clearAuth, setBootstrapped } = useAuthStore.getState();
 
   try {
-    const { accessToken } = await reissue();
+    const { accessToken } = await withReissueLock(reissue);
     /*
      * 탈퇴해도 서버가 리프레시 쿠키를 만료시키지 않아 재발급은 성공한다.
      * 내 정보 조회가 403 을 주는 지점에서 비로소 걸러진다.
