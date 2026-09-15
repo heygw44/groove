@@ -8,6 +8,7 @@
 - `batch-interference.js` — #316 핵심 증명. 사전 집계 배치(`POST /api/v1/admin/stats/aggregations`)가 도는 동안 일반 API(`GET /api/v1/products`) 응답 시간이 평상시와 같은지를 잰다. 지연을 배치로 "옮긴" 게 아니라 "없앴다"는 걸 보이는 유일한 방법.
 - `toss-mock.mjs` — 토스페이먼츠 목 서버(k6 스크립트가 아니라 Node 스크립트). 배포 드레인 측정에서 실제 결제사 없이 승인 지연을 재현하는 용도.
 - `deploy-drain.js` — 배포(백엔드 컨테이너 재생성) 동안 진행 중(in-flight) 요청이 끝까지 처리되는지, 재기동 공백에 거부·끊김이 몇 건인지 센다.
+- `chaos/run.sh`, `chaos/limited-chaos.js`, `chaos/analyze-chaos.mjs` — #401. 한정반 러시 도중 Redis/앱 장애를 주입해 대사·재적재·서킷 폴백이 실제로 원상복구를 시키는지 본다. 자세한 내용은 [한정반 카오스 부하 테스트](#한정반-카오스-부하-테스트-chaos) 절.
 
 ## 사전 준비
 
@@ -96,7 +97,7 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 
 - `prod-run.sh` — VU 를 단계적으로 올리며(기본 50 → 200 → 500 → 1000) 운영 도메인에 대고 `limited-purchase.js` 를 반복 실행한다.
 - `monitor-remote.sh` — 부하가 도는 동안 EC2 자원(컨테이너 CPU/메모리, free, cpu steal, TCP 연결 수)을 CSV 로 수집한다.
-- `verify-oversell.sh` — 각 단계가 끝나면 즉시 초과판매 여부를 판정한다.
+- `verify-oversell.sh` — 각 단계가 끝나면 즉시 초과판매 여부를 판정한다. `--local`/`--chaos` 옵션이 붙어 로컬 docker 환경과 카오스 판정(7항목)에도 그대로 쓴다 — 아래 [한정반 카오스 부하 테스트](#한정반-카오스-부하-테스트-chaos) 절 참고.
 - `cleanup-prod-loadtest.sh` — 측정이 남긴 데이터를 접두사 기준으로 지운다(기본 dry-run).
 
 ### 왜 다시 재나
@@ -220,6 +221,213 @@ ssh -i ~/.ssh/groove-key.pem ubuntu@52.78.95.139 'cd /opt/groove && docker compo
 ### 이번 범위 밖
 
 운영에서 Redis ON/OFF 비교는 하지 않는다. compose 수정 + 재기동 2회 + 원복 누락 리스크에 비해 얻는 게 없다. 로컬에서 ON≈OFF 를 이미 확인했고 `results/limited-20260904.md` 에 있다.
+
+## 한정반 카오스 부하 테스트 (chaos/)
+
+### 목적
+
+정상 조건에서 초과판매가 안 나는 건 `limited-purchase.js` 가 이미 증명한다. 여기서 보는 건 다른
+질문이다 — 러시 도중 Redis 나 앱이 죽으면 무슨 일이 일어나고, 대사(`LimitedDropReconcileScheduler`)·
+재고 키 재적재·서킷 폴백이 실제로 원상복구를 시키는가. `limited-purchase.js` 는 재고가 한 번에
+소진되는 순간 테스트가 끝나지만, `chaos/limited-chaos.js` 는 러시를 수십 초에 걸쳐 늘리고(`RATE`
+구간) 복구 뒤에도 잔여 재고를 계속 사려는 테일 트래픽(`TAIL_RATE` 구간)을 붙여서 "장애 중 응답이
+어떻게 보이는가"와 "복구 후 남은 재고가 정상적으로 팔리는가"를 같이 본다.
+
+### 시나리오 3종
+
+| 시나리오 | 주입 방법 | 무엇을 검증하는가 |
+|---|---|---|
+| `redis-restart` | `docker compose restart redis`(`REDIS_DOWN_SEC=0`) 또는 `stop` → `sleep N` → `start`(`REDIS_DOWN_SEC>0`, 정지 시간을 늘림). `redis-cli ping` 이 `PONG` 될 때까지 폴링 | Redis 연결이 끊겼다가 돌아왔을 때 구매 경로가 어떻게 실패하고(503/연결 오류), 재연결 뒤 정상화되는가. `REDIS_DOWN_SEC` 을 충분히 키우면 연속 실패로 서킷이 열려 DB 락 경로로 폴백하는 것도 관찰 대상이 된다 |
+| `redis-key-loss` | `redis-cli DEL limited:stock:{dropId} limited:buyers:{dropId}` | Redis 는 살아 있는데 재고 키만 갑자기 사라졌을 때 `LIMITED_NOT_OPEN` 오탐 없이 DB 기준 재적재가 붙는가 |
+| `app-kill` | `docker kill -s KILL groove-backend` → `docker start` → `/actuator/health` 가 `"UP"` 이 될 때까지 폴링 | 프로세스가 즉사했다가 재기동했을 때 in-flight 요청이 어떻게 끊기고, 재기동 뒤(대사 스케줄러 재시작 30초 지연 포함) 서비스가 정상 응답하는가 |
+
+### 실행
+
+```bash
+scripts/k6/chaos/run.sh <redis-restart|redis-key-loss|app-kill> [--label NAME] [--out DIR]
+```
+
+`--label` 은 결과 디렉토리 이름에 붙는다(`chaos-<scenario>-<label>-<timestamp>/`), `--out` 을 주면
+그 경로를 그대로 쓴다.
+
+`docker compose restart redis` 는 로컬에서 1초도 안 걸려 서킷이 열릴 틈이 없다. 폴백을 보려면 정지 시간을
+늘린다.
+
+```bash
+REDIS_DOWN_SEC=10 scripts/k6/chaos/run.sh redis-restart --label down10
+```
+
+### 수정 전/후 비교하는 법
+
+이미지 한 장을 만들어서 `BACKEND_IMAGE` 로 바꿔치기하는 방식이다(`docker-compose.yml` 의 backend
+서비스가 `image: ${BACKEND_IMAGE:-groove-backend}` 를 갖는다).
+
+```bash
+# 1) 비교 대상 커밋을 별도 워크트리로 체크아웃
+git worktree add ../groove-before <commit-ish>
+
+# 2) 그 커밋의 backend 로 별도 태그 이미지를 빌드
+docker build -t groove-backend:before ../groove-before/backend
+
+# 3) 그 이미지로 backend 컨테이너를 재기동
+BACKEND_IMAGE=groove-backend:before docker compose --profile full up -d --force-recreate backend
+
+# 4) 워밍업 필수 — force-recreate 직후는 콜드 JVM 이라 첫 응답들이 비정상적으로 느리다
+VUS=50 STOCK=10 k6 run scripts/k6/limited-purchase.js
+
+# 5) 카오스 실행
+scripts/k6/chaos/run.sh redis-key-loss --label before
+
+# 현재 코드로 되돌리기(빌드 컨텍스트 재빌드)
+docker compose --profile full up -d --build --force-recreate backend
+VUS=50 STOCK=10 k6 run scripts/k6/limited-purchase.js
+scripts/k6/chaos/run.sh redis-key-loss --label after
+```
+
+### 러너(run.sh)가 하는 일 순서
+
+1. `k6 run --out json=$OUT_DIR/raw.json scripts/k6/chaos/limited-chaos.js` 를 백그라운드로 실행
+   (`RESULT_DIR`/`RUN_LABEL`/`BASE_URL` 을 넘긴다).
+2. `k6-stdout.log` 를 0.2초 간격으로 폴링해 `setup done: dropId=... productId=...` 와
+   `CHAOS_RUSH_START ms=...` 를 파싱한다(최대 10분, `drop-id.txt` 에 저장).
+3. `now_ms >= rushStartMs + INJECT_DELAY_SEC*1000` 이 될 때까지 대기한 뒤 `fault.log` 에
+   `FAULT_START` 를 쓰고 시나리오별 장애를 주입한다.
+4. 시나리오별 복구 확인(Redis PONG / DEL 결과 / 헬스체크 UP)이 끝나면 `fault.log` 에 `FAULT_END`.
+5. k6 종료를 기다린다(exit code → `exit-code.txt`).
+6. `VERIFY_DELAY_SEC`(기본 70초) 대기 — 대사 주기(30초)+grace(30초)가 최소 한 번 돌 시간을 준다.
+7. `scripts/k6/verify-oversell.sh --local --chaos <dropId> <productId> $OUT_DIR/verify.txt` 를 실행.
+8. `node scripts/k6/chaos/analyze-chaos.mjs $OUT_DIR/raw.json $OUT_DIR/fault.log` 로 `analysis.md` 생성.
+9. `docker logs --since <rushStartSec> groove-backend`에서 대사/재적재/서킷/선점 실패 관련 줄만 걸러
+   `backend-limited.log` 로 남긴다.
+
+verify 판정이 실패해도, k6/analyze 단계가 없어도(다른 산출물이 아직 없을 때) 러너는 죽지 않고
+끝까지 진행한다 — 각 단계 실패는 로그와 최종 exit code 에만 반영된다.
+
+### 환경변수
+
+`run.sh` 자체가 읽는 것:
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `BASE_URL` | `http://localhost:8080` | 대상 서버 |
+| `INJECT_DELAY_SEC` | `2` | `CHAOS_RUSH_START` 로부터 장애 주입까지 지연(초) |
+| `REDIS_DOWN_SEC` | `0` | `redis-restart` 전용. `0` 이면 `restart`, 그 이상이면 `stop`→`sleep N`→`start` |
+| `VERIFY_DELAY_SEC` | `70` | k6 종료 후 판정 전 대기(초) |
+| `BACKEND_CONTAINER` | `groove-backend` | |
+| `REDIS_CONTAINER` | `groove-redis` | |
+| `HEALTH_TIMEOUT_SEC` | `120` | `app-kill` 복구 헬스체크 대기 상한(초) |
+
+그 외 `MEMBERS`/`STOCK`/`RATE`/`RUSH_DURATION`/`TAIL_RATE`/`TAIL_DURATION`/`PRE_VUS`/`MAX_VUS`/
+`OPEN_DELAY_SEC`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`/`MEMBER_PASSWORD`/`MEMBER_EMAIL_PREFIX`/
+`PRODUCT_TITLE_PREFIX`/`SETUP_BATCH_SIZE` 는 손대지 않고 그대로 `limited-chaos.js` 에 전달된다.
+`RESULT_DIR`/`RUN_LABEL` 은 `run.sh` 가 `OUT_DIR`/시나리오명으로 직접 채우므로 따로 줄 필요가 없다.
+
+`limited-chaos.js` 가 읽는 값(단독 실행 `k6 run scripts/k6/chaos/limited-chaos.js` 시에도 동일):
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `BASE_URL` | `http://localhost:8080` | 대상 서버 |
+| `MEMBERS` | `1000` | 러시 도중 순환할 회원 수 |
+| `STOCK` | `500` | 상품 재고 / 드롭 `totalQuantity` |
+| `RATE` | `150` | 러시 구간 rps. 드롭 행 락 때문에 커밋은 초당 100건 안팎이라 이보다 높아야 선점→커밋 사이에 요청이 쌓인다 |
+| `RUSH_DURATION` | `20s` | 러시 구간 길이 |
+| `TAIL_RATE` | `5` | 테일 구간 목표 rps(복구 후 잔여 재고를 계속 사려는 트래픽) |
+| `TAIL_DURATION` | `120s` | 테일 구간 길이 |
+| `PRE_VUS` | `100` | `ramping-arrival-rate` `preAllocatedVUs` |
+| `MAX_VUS` | `400` | `ramping-arrival-rate` `maxVUs` |
+| `OPEN_DELAY_SEC` | `8` | 드롭 강제 오픈까지 대기 |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@groove.com` / `admin1234!` | local 시드 관리자 계정 |
+| `MEMBER_PASSWORD` | `load1234!` | 생성하는 회원 비밀번호 |
+| `MEMBER_EMAIL_PREFIX` | `chaos-` | `limited-purchase.js` 의 `lt-` 회원과 안 섞이게 |
+| `PRODUCT_TITLE_PREFIX` | `LIMITED-CHAOS-` | |
+| `RESULT_DIR` | `scripts/k6/results` | `run.sh` 가 `OUT_DIR` 로 덮어씀 |
+| `RUN_LABEL` | (빈 문자열) | `run.sh` 가 시나리오명으로 덮어씀 |
+| `SETUP_BATCH_SIZE` | `20` | 회원 준비 단계의 BCrypt 동시성 |
+
+### 결과 디렉토리
+
+`--out` 을 안 주면 `scripts/k6/results/chaos-<scenario>[-<label>]-<YYYYMMDD-HHmmss>/` 밑에 남는다.
+
+- `run.log` — 러너 진행 로그.
+- `fault.log` — `FAULT_START`/`FAULT_END`/`INFO` 라인(장애 주입 상세, `analyze-chaos.mjs` 입력).
+- `k6-stdout.log` — k6 콘솔 전체 출력(setup/teardown 로그 포함).
+- `raw.json` — k6 `--out json` NDJSON(`analyze-chaos.mjs` 입력).
+- `drop-id.txt` — `<dropId> <productId>`.
+- `exit-code.txt` — k6 종료 코드.
+- `verify.txt` — `verify-oversell.sh --local --chaos` 출력.
+- `analysis.md` — `analyze-chaos.mjs` 출력(마크다운, stdout 에도 그대로 찍힌다).
+- `backend-full.log` — 러시 시작 이후 백엔드 로그 전체(`--force-recreate` 로 컨테이너를 다시 만들면 docker 로그가
+  사라지므로 여기 남긴다).
+- `backend-limited.log` — 그중 대사/재적재/서킷/선점 실패 관련 줄만.
+- `chaos-<scenario>-<timestamp>.json` — `limited-chaos.js` 의 `handleSummary` 가 남기는 k6 요약
+  (`RESULT_DIR` 이 `OUT_DIR` 라 같은 디렉터리에 생긴다).
+
+### 판정
+
+**`verify-oversell.sh --local --chaos` 7항목**(드롭이 `CLOSED` 면 3~6은 "판정 불가"로 FAIL 에서 빠진다):
+
+1. 초과판매 없음 — `purchase_count<=total_quantity` 그리고 `sold_count==purchase_count` 그리고
+   `stock.quantity==total_quantity-purchase_count` 세 가지 모두.
+2. 완판 여부 — `purchase_count==total_quantity` 면 PASS, 아니면 실패가 아니라 **INFO 미달 n건**.
+3. Redis pending(`limited:pending:{dropId}`) 잔여 0 — 남아 있으면 좀비 선점이 있다는 뜻.
+4. Redis `limited:stock` == `total_quantity - sold_count`.
+5. Redis buyers 집합 == DB 구매자 집합(다르면 `comm` 대칭차 건수를 같이 보여준다).
+6. Redis buyers 수 == `limited_purchase` 행 수.
+7. 10분 경과 경고(정보성. 경과 자체가 600초를 넘으면 스크립트 전체가 exit 3).
+
+exit code: `0` 전부 PASS / `1` 하나 이상 FAIL / `2` 대상 드롭 없음·조회 실패 / `3` 10분 초과.
+
+**`analyze-chaos.mjs` 출력 읽는 법**:
+
+- 1장(장애 창) — `fault.log` 의 `FAULT_START`/`FAULT_END` 그대로.
+- 2장(구간별 outcome) — `before`/`fault`/`after`/전체 4행. 오류율 = `(busy+server_error+conn_error+other)/합계`.
+- 3장(지연) — `http_req_duration{name:purchase}` 구간별 p50/p95/p99/max, nearest-rank.
+- 4장(복구 지표) — 4개 다 `FAULT_START` 를 기준(0)으로 삼는다.
+  - **(a)** `FAULT_START` 이후 첫 정상 응답(success/sold_out/already)까지: 장애가 시작된 뒤 사용자가
+    다시 "정상적인" 응답(성공이든 품절이든 이미구매든)을 받기까지 걸린 시간.
+  - **(b)** `FAULT_END`(=복구 확인 시점) 이후 첫 정상 응답까지: 이게 (a)보다 훨씬 작아야 "복구
+    확인이 신뢰할 만하다"는 뜻이다. 크게 벌어지면 헬스체크/PONG 확인이 실제 트래픽 정상화보다
+    일찍 끝났다는 신호.
+  - **(c)** 마지막 오류 응답(busy/server_error/conn_error/not_open) 시각 − `FAULT_START`: 장애의
+    "여파"가 실제로 끝난 시점. `app-kill` 은 헬스체크가 UP 이 된 뒤에도 몇 초간 남은 요청이 실패할
+    수 있어 `FAULT_END` 보다 늦게 나올 수 있다.
+  - **(d)** `after` 구간 마지막 success 시각 − `FAULT_START`: 대사·재적재로 복원된 재고가 실제로
+    팔린 시점. `-` 로 나오면 복원된 재고를 살 테일 트래픽이 이미 끝났다는 뜻이니 `TAIL_DURATION`
+    을 늘려야 한다.
+- 5장(1초 타임라인) — 정각이 아니라 **`FAULT_START` 를 0 기준**으로 자른다(그래서 `-3s` 처럼 음수로
+  시작). 열은 success/409(sold_out+already 합)/not_open/busy/error(5xx+0). 최대 60행.
+
+### 측정 환경 함정
+
+- **웜 JVM**: `--force-recreate` 직후는 콜드 JVM 이라 첫 요청들이 비정상적으로 느리다. 비교 전에는
+  반드시 `VUS=50 STOCK=10 k6 run scripts/k6/limited-purchase.js` 로 워밍업하고 카오스를 돌린다.
+- **재고 > VU 면 판정 불가**: 여기서는 `STOCK`(기본 500) < `MEMBERS`(기본 1000)이고 회원이
+  `iterationInTest % MEMBERS` 로 순환하므로 완판이 가능하다. `MEMBERS` 를 `STOCK` 보다 작게 주면
+  구조적으로 완판이 안 나와 판정 2)가 항상 INFO 미달로만 나온다.
+- **10분 만료 창**: 첫 구매 시각부터 10분 안에 verify 가 끝나야 한다. `OPEN_DELAY_SEC` +
+  `RUSH_DURATION` + 1s + `TAIL_DURATION` + `VERIFY_DELAY_SEC` 합이 600초에 여유 있게 들어와야 한다
+  (기본값 합은 약 230초). 구간 길이를 늘릴 땐 이 합을 먼저 계산해본다.
+- **대사 주기 30초 + grace 30초**: `TAIL_DURATION` 이 90초 미만이면 복원된 재고가 팔리기 전에
+  테일이 끝나 복구 지표 (d)가 `-` 로 남는다.
+- **수정 전 코드와 비교할 때**: pending 키 자체가 없던 버전은 판정 3)(pending 잔여)이 비교 대상이
+  아니라 항상 PASS 로 나온다 — 그 버전에서 실제로 봐야 할 건 4)Redis stock 정합성과 5)Redis buyers
+  집합 정합성이다.
+- **`redis-restart` 는 AOF `everysec`**: 재시작 직전 최대 1초 치 쓰기가 유실될 수 있다. 재시작 직후
+  `REDIS_STOCK`/`REDIS_BUYERS` 가 DB 와 잠깐 어긋나는 건 버그가 아니라 이 설정의 예상된 동작일 수
+  있다.
+- **서킷은 전역이고 HALF_OPEN 은 다음 요청까지 머문다**: 앞 케이스가 서킷을 열어 둔 채 끝나면(Redis 정지 케이스가
+  그렇다) 다음 케이스의 첫 요청이 HALF_OPEN 프로브가 되어 러시 시작 직후에 `서킷 CLOSED 복귀`·`대사 보정` 로그가
+  찍힌다. 케이스 사이에 `VUS=50 STOCK=10 k6 run scripts/k6/limited-purchase.js` 를 한 번 돌려 서킷을 닫고
+  시작한다. JVM 온도도 같이 맞춰진다(app-kill 뒤는 콜드 JVM).
+- **요청률은 커밋 속도보다 높게**: 드롭 행 락 때문에 커밋은 초당 100건 안팎이다. `RATE` 가 그보다 낮으면 app-kill
+  순간에 선점→커밋 사이 요청이 없어 누수가 재현되지 않는다(60rps 에서 0건, 150rps 에서 1~5건).
+- **로컬 docker 포트포워딩**: 앱이 죽어 있는 동안 새 연결이 "거부(refused)"가 아니라 "끊김(reset)"
+  으로 보일 수 있다(`deploy-drain.js` 판정과 같은 함정). `limited-chaos.js` 는 이를 status 0 으로
+  받아 `conn_error` 로 센다 — `server_error` 와 분리해서 보되, 오류율 계산에서는 같이 묶인다.
+
+### 결과 문서
+
+`results/limited-chaos-20260915.md` — 수정 전(bc87085)·후 비교 4케이스, #400 폴백 채택 근거, 측정 중 드러난 함정.
 
 ## 집계/배치 간섭 시나리오 (admin-dashboard.js, batch-interference.js)
 
