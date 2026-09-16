@@ -51,6 +51,11 @@ public class LimitedRedisCircuitBreaker {
 		return state() == State.CLOSED;
 	}
 
+	/** afterCommit 등 부가 호출을 건너뛸지 판단용. OPEN 이고 openDuration 이 안 지났을 때만 true. */
+	public boolean isOpen() {
+		return state() == State.OPEN;
+	}
+
 	/** CLOSED 는 항상 true, OPEN 은 항상 false, HALF_OPEN 은 첫 한 스레드만 true(프로브)다. */
 	public boolean allowRedis() {
 		State current = state();
@@ -84,6 +89,9 @@ public class LimitedRedisCircuitBreaker {
 	}
 
 	private void open() {
+		if (state() == State.OPEN) {
+			return;
+		}
 		state.set(State.OPEN);
 		openedAtMillis.set(clock.millis());
 		probeTaken.set(false);
