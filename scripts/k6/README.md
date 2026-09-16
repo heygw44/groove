@@ -115,15 +115,15 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 | swap | 2048MB 중 약 440MB 이미 사용 중 |
 | 컨테이너 RSS | backend 약 355MB(`-Xmx384m` + SerialGC), mysql 약 74MB, redis 약 2MB |
 | `/api/v1/health` 왕복(로컬 → 운영) | conn 약 55ms, TLS 약 78ms, TTFB 약 100ms |
-| Nginx | `worker_connections 768` × worker 2 |
+| Nginx | `worker_connections 4096` × worker 2, upstream keepalive 64 (#405 이후) |
 | `net.ipv4.tcp_max_syn_backlog` | 128 |
 | Redis | `maxmemory 64mb` / `allkeys-lru`, 측정 전 사용량 1.3MB |
-| rate limit | 애플리케이션·Nginx 어디에도 없음 |
+| rate limit | 없음 — Nginx `limit_req` 는 #405 에서 검토 후 기각 |
 
 특히 챙길 점:
 
 - 네트워크 왕복만으로 80ms대 고정 바닥이 깔린다. 로컬 측정에는 없던 항목이므로 로컬 p95 와 운영 p95 를 그냥 나란히 놓으면 안 되고, `http_req_waiting` 을 같이 봐야 한다.
-- Nginx 프록시 요청 1건이 클라이언트+업스트림 2슬롯을 쓰므로 **동시 요청 약 768 이 Nginx 한계**다. 1000 VU 는 JVM 이 아니라 여기서 먼저 막힐 수 있다.
+- Nginx 프록시 요청 1건이 클라이언트+업스트림 2슬롯을 쓰므로 **동시 요청 약 4096 이 Nginx 한계**다(worker 2 × `worker_connections` 4096 / 2). upstream keepalive 64 로 업스트림 연결을 재사용하지만 슬롯 계산 자체는 그대로다.
 - Redis 축출 여지는 낮지만(1.3MB/64MB) `evicted_keys` 는 `post-check.txt` 에서 확인한다.
 
 ### 가장 중요한 제약: 판정 유효 시간 10분
@@ -194,7 +194,7 @@ scripts/k6/cleanup-prod-loadtest.sh --drop-ids "<drop-ids.txt 내용>" --apply
 안전장치:
 
 - `MEMBER_EMAIL_PREFIX`/`PRODUCT_TITLE_PREFIX` 는 4자 미만이거나 와일드카드(`%`, `_`)만으로 이루어지면 거부한다(전체 테이블 스캔 방지).
-- 대상 회원 수가 `MAX_MEMBERS`(기본 2000)를 넘으면 거부한다.
+- 대상 회원 수가 `MAX_MEMBERS`(기본 4000, 1000+2000 VU 를 한 세션에 돌리면 회원 3000명)를 넘으면 거부한다.
 - 삭제 대상에 `ADMIN` role 이 하나라도 섞여 있으면 거부한다.
 - 전체 삭제가 트랜잭션 하나로 묶여 있다(부분 삭제로 끝나지 않는다).
 - 삭제 후 같은 접두사로 재조회해 0건인지 사후 검증한다.

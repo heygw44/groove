@@ -112,6 +112,7 @@ jobs:
             fi
             sudo mkdir -p /var/www/groove
             sudo chown -R "$(id -un)":www-data /var/www/groove
+            mkdir -p /opt/groove/nginx
 
       - name: Upload frontend build
         uses: appleboy/scp-action@v1
@@ -140,8 +141,19 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "scripts/backup.sh,scripts/deploy-backend.sh"
+          source: "scripts/backup.sh,scripts/deploy-backend.sh,scripts/deploy-nginx.sh"
           target: "/opt/groove/scripts"
+          strip_components: 1
+          overwrite: true
+
+      - name: Upload nginx config
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "nginx/nginx.conf,nginx/groove.conf"
+          target: "/opt/groove/nginx"
           strip_components: 1
           overwrite: true
 
@@ -159,10 +171,12 @@ jobs:
           command_timeout: 15m
           script: |
             set -e
-            # scp 는 실행 비트를 보존하지 않는다.
-            chmod +x /opt/groove/scripts/*.sh
-            echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd /opt/groove
+            # scp 는 실행 비트를 보존하지 않는다.
+            chmod +x scripts/*.sh
+            # nginx 반영이 실패하면(nginx -t 불통과) 여기서 멈춰야 컨테이너를 깨진 프록시 설정 뒤에서 재기동하지 않는다.
+            ./scripts/deploy-nginx.sh
+            echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             ./scripts/deploy-backend.sh
             docker image prune -f
 
