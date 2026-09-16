@@ -22,7 +22,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 기본 보안 설정.
  * - 무상태(STATELESS), CSRF/폼로그인/HTTP Basic 비활성화
- * - 공개 경로: 헬스체크, 회원가입/로그인/재발급, Swagger, Actuator health
+ * - 공개 경로: 헬스체크, 회원가입/로그인/재발급, Swagger, Actuator 전체
  * - 인증 실패 401 / 권한 없음 403 은 공통 ApiResponse JSON 으로 응답
  */
 @Configuration
@@ -41,7 +41,8 @@ public class SecurityConfig {
 		"/api/v1/auth/signup",
 		"/api/v1/auth/login",
 		"/api/v1/auth/reissue",
-		"/actuator/health",
+		// 8080 은 127.0.0.1 바인딩이고 Nginx 도 /api/ 만 프록시해 외부에 노출되지 않는다.
+		"/actuator/**",
 		"/swagger-ui.html",
 		"/swagger-ui/**",
 		"/v3/api-docs/**",

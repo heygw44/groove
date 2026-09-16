@@ -140,13 +140,19 @@ public class LimitedDrop extends BaseTimeEntity {
 
 	/** 스케줄러 지연으로 open_at 은 지났지만 실제 오픈 처리(Redis 카운터 세팅 등)가 안 된 상태를 NOT_OPEN 으로 거른다. */
 	public void validatePurchasable(LocalDateTime now) {
-		if (this.status == LimitedDropStatus.CLOSED || !now.isBefore(this.closeAt)) {
+		checkPurchasable(this.status, this.openAt, this.closeAt, now);
+	}
+
+	/** {@link com.groove.limited.service.LimitedDropMeta} 캐시가 엔티티 없이도 같은 규칙을 쓰도록 뽑아낸 정적 검증. */
+	public static void checkPurchasable(LimitedDropStatus status, LocalDateTime openAt, LocalDateTime closeAt,
+			LocalDateTime now) {
+		if (status == LimitedDropStatus.CLOSED || !now.isBefore(closeAt)) {
 			throw new BusinessException(ErrorCode.LIMITED_CLOSED);
 		}
-		if (this.status == LimitedDropStatus.SCHEDULED || now.isBefore(this.openAt)) {
+		if (status == LimitedDropStatus.SCHEDULED || now.isBefore(openAt)) {
 			throw new BusinessException(ErrorCode.LIMITED_NOT_OPEN);
 		}
-		if (this.status == LimitedDropStatus.SOLD_OUT) {
+		if (status == LimitedDropStatus.SOLD_OUT) {
 			throw new BusinessException(ErrorCode.LIMITED_SOLD_OUT);
 		}
 	}

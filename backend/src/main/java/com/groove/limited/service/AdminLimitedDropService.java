@@ -48,6 +48,7 @@ public class AdminLimitedDropService {
 	private final LimitedDropRedisService limitedDropRedisService;
 	private final LimitedDropSyncService limitedDropSyncService;
 	private final LimitedDropStatFlusher limitedDropStatFlusher;
+	private final LimitedDropMetaCache limitedDropMetaCache;
 	private final AdminAuditLogService adminAuditLogService;
 
 	@Transactional
@@ -87,6 +88,7 @@ public class AdminLimitedDropService {
 		LocalDateTime closeAt = coalesce(request.closeAt(), drop.getCloseAt(), "closeAt", changedFields);
 
 		drop.reschedule(totalQuantity, perMemberLimit, openAt, closeAt);
+		limitedDropMetaCache.evict(dropId);
 
 		if (changedFields.contains("totalQuantity")) {
 			stockService.adjust(drop.getProduct().getId(),
@@ -112,6 +114,7 @@ public class AdminLimitedDropService {
 
 		// 상태 검증 뒤에 Redis 를 치므로 실패 시 트랜잭션이 롤백되고 CLOSED 드롭에 키가 생기지 않는다.
 		drop.open();
+		limitedDropMetaCache.evict(dropId);
 		limitedDropRedisService.initStock(drop.getId(), drop.remainingQuantity());
 
 		adminAuditLogService.record(adminId, AdminAuditAction.LIMITED_DROP_OPEN, AdminAuditTargetType.LIMITED_DROP,

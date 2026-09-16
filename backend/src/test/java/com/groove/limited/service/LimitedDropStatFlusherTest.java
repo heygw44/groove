@@ -40,6 +40,9 @@ class LimitedDropStatFlusherTest {
 	@Mock
 	LimitedDropRedisService limitedDropRedisService;
 
+	@Mock
+	LimitedDropMetaCache limitedDropMetaCache;
+
 	LimitedDropStatFlusher limitedDropStatFlusher;
 
 	LimitedDrop drop;
@@ -47,7 +50,8 @@ class LimitedDropStatFlusherTest {
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-07T01:00:00Z"), ZoneId.of("Asia/Seoul"));
-		limitedDropStatFlusher = new LimitedDropStatFlusher(limitedDropStatRepository, limitedDropRedisService, clock);
+		limitedDropStatFlusher = new LimitedDropStatFlusher(limitedDropStatRepository, limitedDropRedisService,
+				limitedDropMetaCache, clock);
 		Artist artist = ArtistFixture.withId(1L);
 		Product product = ProductFixture.withId(ProductFixture.create(artist), 100L);
 		drop = LimitedDropFixture.withId(LimitedDropFixture.open(product, 100), 1L);
@@ -70,6 +74,7 @@ class LimitedDropStatFlusherTest {
 			verify(limitedDropStatRepository, never()).findByDropId(any());
 			verify(limitedDropStatRepository, never()).save(any());
 			verify(limitedDropRedisService).clear(1L);
+			verify(limitedDropMetaCache).evict(1L);
 		}
 
 		@Test

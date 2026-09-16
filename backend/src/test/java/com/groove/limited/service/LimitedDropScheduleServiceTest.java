@@ -48,6 +48,9 @@ class LimitedDropScheduleServiceTest {
 	@Mock
 	private LimitedDropStatFlusher limitedDropStatFlusher;
 
+	@Mock
+	private LimitedDropMetaCache limitedDropMetaCache;
+
 	private LimitedDropScheduleService scheduleService;
 
 	private LocalDateTime now;
@@ -56,7 +59,7 @@ class LimitedDropScheduleServiceTest {
 	@BeforeEach
 	void setUp() {
 		scheduleService = new LimitedDropScheduleService(limitedDropRepository, limitedDropRedisService,
-				limitedDropStatFlusher);
+				limitedDropStatFlusher, limitedDropMetaCache);
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
 		Artist artist = ArtistFixture.withId(1L);
@@ -88,6 +91,7 @@ class LimitedDropScheduleServiceTest {
 			assertThat(result).isTrue();
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.OPEN);
 			verify(limitedDropRedisService).initStock(DROP_ID, drop.remainingQuantity());
+			verify(limitedDropMetaCache).evict(DROP_ID);
 		}
 
 		@Test
@@ -104,6 +108,7 @@ class LimitedDropScheduleServiceTest {
 			// then
 			assertThat(result).isFalse();
 			verify(limitedDropRedisService, never()).initStock(anyLong(), anyInt());
+			verify(limitedDropMetaCache, never()).evict(any());
 		}
 
 		@Test
@@ -170,6 +175,7 @@ class LimitedDropScheduleServiceTest {
 			assertThat(result).isTrue();
 			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.CLOSED);
 			verify(limitedDropStatFlusher).flushAndClear(drop);
+			verify(limitedDropMetaCache).evict(DROP_ID);
 		}
 
 		@Test
