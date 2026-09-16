@@ -96,7 +96,7 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 **경고: 이 측정은 운영 DB 를 직접 건드린다.** 측정용 회원·상품·주문이 실제 운영 데이터에 섞여 들어가고, 끝나면 반드시 정리해야 한다. 아래 스크립트로 돌린다.
 
 - `prod-run.sh` — VU 를 단계적으로 올리며(기본 50 → 200 → 500 → 1000) 운영 도메인에 대고 `limited-purchase.js` 를 반복 실행한다.
-- `monitor-remote.sh` — 부하가 도는 동안 EC2 자원(컨테이너 CPU/메모리, free, cpu steal, TCP 연결 수)을 CSV 로 수집한다.
+- `monitor-remote.sh` — 부하가 도는 동안 EC2 자원(컨테이너 CPU/메모리, free, cpu steal/iowait, 스왑 인/아웃·메이저 폴트, TCP 연결 수)을 CSV 로 수집한다.
 - `verify-oversell.sh` — 각 단계가 끝나면 즉시 초과판매 여부를 판정한다. `--local`/`--chaos` 옵션이 붙어 로컬 docker 환경과 카오스 판정(7항목)에도 그대로 쓴다 — 아래 [한정반 카오스 부하 테스트](#한정반-카오스-부하-테스트-chaos) 절 참고.
 - `cleanup-prod-loadtest.sh` — 측정이 남긴 데이터를 접두사 기준으로 지운다(기본 dry-run).
 
@@ -113,8 +113,8 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 | EC2 스펙 | t3.micro, 2 vCPU / 총 911MB |
 | 측정 전 available 메모리 | 약 120MB |
 | swap | 2048MB 중 약 440MB 이미 사용 중 |
-| 메모리 | 911MB, 러시 중 swap 700~900MB·available 50~150MB — 러시 초반 스왑아웃(#430) |
-| 컨테이너 RSS | backend 약 355MB(`-Xmx384m` + SerialGC), mysql 약 74MB, redis 약 2MB |
+| 메모리 | 911MB, 러시 중 swap 700~900MB·available 50~150MB — 러시 초반 스왑아웃(#430). #430 에서 JVM 비힙(Metaspace 128m/CodeCache 64m/스택 512k/Direct 64m) + MySQL 버퍼풀 64M/커넥션 60 으로 상한을 낮춤 — 아래 RSS 값은 그 전 실측이라 재측정 전까지 참고치 |
+| 컨테이너 RSS(변경 전, 2026-09-16 실측) | backend 약 355MB(`-Xmx384m` + SerialGC), mysql 약 74MB, redis 약 2MB — 변경 후 값은 재측정 필요(`monitor-remote.sh`의 프로세스 메모리/JVM metrics 블록) |
 | `/api/v1/health` 왕복(로컬 → 운영) | conn 약 55ms, TLS 약 78ms, TTFB 약 100ms |
 | Nginx | `worker_connections 4096` × worker 2, upstream keepalive 64 (#405 이후) |
 | `net.ipv4.tcp_max_syn_backlog` | 호스트·컨테이너 4096 (#426, 기본 128) |
@@ -167,8 +167,8 @@ scripts/k6/prod-run.sh
   - `k6-stdout.log` — k6 실행 전체 출력.
   - `exit-code.txt` — k6 종료 코드.
   - `limited-vu-NNN-<timestamp>.json` — k6 JSON 요약(`limited-purchase.js` 의 `handleSummary`).
-  - `resources.csv` — `monitor-remote.sh` 가 수집한 EC2 자원 시계열.
-  - `pre-check.txt` / `post-check.txt` — `monitor-remote.sh` snapshot/stop 결과(컨테이너 상태, Nginx 경고, Redis 통계, dmesg, 백엔드 에러 로그).
+  - `resources.csv` — `monitor-remote.sh` 가 수집한 EC2 자원 시계열(컨테이너 CPU/메모리, `mem_available_mb`, `swap_used_mb`, `cpu_steal_pct`, `tcp_estab`/`tcp_timewait`, `cpu_iowait_pct`, `pswpin_delta`/`pswpout_delta`/`pgmajfault_delta` — 뒤 4개는 #430 에서 스왑 압박 진단용으로 추가).
+  - `pre-check.txt` / `post-check.txt` — `monitor-remote.sh` snapshot/stop 결과(컨테이너 상태, Nginx 경고, Redis 통계, dmesg, 백엔드 에러 로그, 프로세스 VmRSS/VmSwap, JVM metrics — 뒤 2개는 #430 추가).
   - `verify.txt` — `verify-oversell.sh` 판정 결과.
 
 ### 판정
