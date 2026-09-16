@@ -21,7 +21,8 @@ USER groove
 # 커널을 스왑으로 몰아넣는 걸 실측으로 확인했다 — Metaspace·CodeCache·스택에
 # 상한을 걸어 비힙 총량을 줄인다. Xmx 는 이번 배포로 노출되는 jvm.memory.used 힙
 # 실측을 본 뒤 재조정한다. Xms 를 낮춘 건 SerialGC 가 유휴 시 힙을 되돌려줄 여지를
-# 두기 위해서다.
-ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m -Xss512k -XX:MaxDirectMemorySize=64m -Duser.timezone=Asia/Seoul"
+# 두기 위해서다. 128m 은 운영에서 Metaspace OOM(2026-09-16 22:56)이 났다, 256m 은
+# 실사용 상한이 아니라 무한 성장 방지선이다.
+ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=256m -XX:ReservedCodeCacheSize=128m -Xss512k -XX:MaxDirectMemorySize=64m -Duser.timezone=Asia/Seoul"
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
