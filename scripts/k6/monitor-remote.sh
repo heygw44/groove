@@ -73,6 +73,10 @@ fi
 declare -A PREV_USEC
 PREV_STAT_TOTAL=""
 PREV_STAT_STEAL=""
+PREV_STAT_IOWAIT=""
+PREV_PSWPIN=""
+PREV_PSWPOUT=""
+PREV_PGMAJFAULT=""
 
 while true; do
     start_ms=$(date +%s%3N)
@@ -171,16 +175,42 @@ EOF_STATS
     if [ -n "$PREV_STAT_TOTAL" ]; then
         total_delta=$((stat_total - PREV_STAT_TOTAL))
         steal_delta=$((stat_steal - PREV_STAT_STEAL))
+        iowait_delta=$((stat_iowait - PREV_STAT_IOWAIT))
         if [ "$total_delta" -gt 0 ]; then
             cpu_steal_pct=$(awk -v s="$steal_delta" -v t="$total_delta" 'BEGIN{printf "%.2f", s/t*100}')
+            cpu_iowait_pct=$(awk -v s="$iowait_delta" -v t="$total_delta" 'BEGIN{printf "%.2f", s/t*100}')
         else
             cpu_steal_pct="0.00"
+            cpu_iowait_pct="0.00"
         fi
     else
         cpu_steal_pct="0.00"
+        cpu_iowait_pct="0.00"
     fi
     PREV_STAT_TOTAL="$stat_total"
     PREV_STAT_STEAL="$stat_steal"
+    PREV_STAT_IOWAIT="$stat_iowait"
+
+    # /proc/vmstat 은 부팅 이후 누적값이라 steal 과 같은 방식으로 초당 델타를 낸다.
+    # pswpin/pswpout 은 실제 스왑 I/O 발생 횟수, pgmajfault 는 디스크까지 읽으러 간
+    # 메이저 폴트라 스왑인과 거의 같이 움직인다 — 셋을 나란히 두면 스왑 압박과
+    # 페이지 폴트를 구분해서 볼 수 있다.
+    read -r vmstat_pswpin vmstat_pswpout vmstat_pgmajfault < <(awk '
+        /^pswpin /{a=$2} /^pswpout /{b=$2} /^pgmajfault /{c=$2}
+        END{print a, b, c}
+    ' /proc/vmstat)
+    if [ -n "$PREV_PSWPIN" ]; then
+        pswpin_delta=$((vmstat_pswpin - PREV_PSWPIN))
+        pswpout_delta=$((vmstat_pswpout - PREV_PSWPOUT))
+        pgmajfault_delta=$((vmstat_pgmajfault - PREV_PGMAJFAULT))
+    else
+        pswpin_delta=0
+        pswpout_delta=0
+        pgmajfault_delta=0
+    fi
+    PREV_PSWPIN="$vmstat_pswpin"
+    PREV_PSWPOUT="$vmstat_pswpout"
+    PREV_PGMAJFAULT="$vmstat_pgmajfault"
 
     # /proc/net/sockstat 은 ss -s 보다 훨씬 싸다(커널이 이미 집계해둔 카운터를 그냥 읽는 것).
     sockstat_tcp=$(awk '/^TCP:/{print}' /proc/net/sockstat)
@@ -189,7 +219,7 @@ EOF_STATS
     tcp_timewait=$(echo "$sockstat_tcp" | grep -oP 'tw \K[0-9]+')
     tcp_timewait=${tcp_timewait:-0}
 
-    echo "${ts},${backend_cpu},${backend_mem},${mysql_cpu},${mysql_mem},${redis_cpu},${redis_mem},${mem_available_mb},${swap_used_mb},${cpu_steal_pct},${tcp_estab},${tcp_timewait}"
+    echo "${ts},${backend_cpu},${backend_mem},${mysql_cpu},${mysql_mem},${redis_cpu},${redis_mem},${mem_available_mb},${swap_used_mb},${cpu_steal_pct},${tcp_estab},${tcp_timewait},${cpu_iowait_pct},${pswpin_delta},${pswpout_delta},${pgmajfault_delta}"
 
     PREV_LOOP_TS_MS="$start_ms"
 
@@ -267,6 +297,13 @@ host_syn_retrans=${host_syn_retrans:-0}
 host_reqq_full_cookies=$(echo "$host_netstat" | awk -F= '$1=="TCPReqQFullDoCookies"{print $2}')
 host_reqq_full_cookies=${host_reqq_full_cookies:-0}
 
+host_pswpin=$(awk '/^pswpin /{print $2}' /proc/vmstat)
+host_pswpin=${host_pswpin:-0}
+host_pswpout=$(awk '/^pswpout /{print $2}' /proc/vmstat)
+host_pswpout=${host_pswpout:-0}
+host_pgmajfault=$(awk '/^pgmajfault /{print $2}' /proc/vmstat)
+host_pgmajfault=${host_pgmajfault:-0}
+
 echo "nginx_5xx=${nginx_5xx}"
 echo "nginx_worker_conn_warn=${nginx_worker_conn_warn}"
 echo "nginx_upstream_err=${nginx_upstream_err}"
@@ -281,6 +318,9 @@ echo "backend_reqq_full_cookies=${backend_reqq_full_cookies}"
 echo "backend_syncookies_failed=${backend_syncookies_failed}"
 echo "host_syn_retrans=${host_syn_retrans}"
 echo "host_reqq_full_cookies=${host_reqq_full_cookies}"
+echo "host_pswpin=${host_pswpin}"
+echo "host_pswpout=${host_pswpout}"
+echo "host_pgmajfault=${host_pgmajfault}"
 REMOTE_SCRIPT
 }
 
@@ -328,8 +368,9 @@ do_start() {
     collect_counters > "$pre_file" 2>&1 || echo "사전 수집 실패(네트워크 등) — 델타 없이 진행" >&2
 
     {
-        echo "# ts는 밀리초(ms) epoch"
-        echo "ts,backend_cpu_pct,backend_mem_mb,mysql_cpu_pct,mysql_mem_mb,redis_cpu_pct,redis_mem_mb,mem_available_mb,swap_used_mb,cpu_steal_pct,tcp_estab,tcp_timewait"
+        echo "# ts는 밀리초(ms) epoch. iowait_pct=CPU idle 중 디스크 대기 비율,"
+        echo "# pswpin/pswpout_delta=초당 스왑 인/아웃 페이지 수, pgmajfault_delta=초당 메이저 폴트 수(/proc/vmstat 누적값의 델타)"
+        echo "ts,backend_cpu_pct,backend_mem_mb,mysql_cpu_pct,mysql_mem_mb,redis_cpu_pct,redis_mem_mb,mem_available_mb,swap_used_mb,cpu_steal_pct,tcp_estab,tcp_timewait,iowait_pct,pswpin_delta,pswpout_delta,pgmajfault_delta"
     } > "$csv_file"
 
     remote_loop_script | ssh $SSH_OPTS -i "$SSH_KEY" "$SSH_HOST" bash -s -- "$interval" "$REMOTE_TAG" \
@@ -401,7 +442,9 @@ post_check() {
                 "nginx access.log 라인 수:nginx_access_lines" \
                 "backend ListenOverflows:backend_listen_overflows" "backend ListenDrops:backend_listen_drops" \
                 "backend TCPReqQFullDoCookies:backend_reqq_full_cookies" "backend SyncookiesFailed:backend_syncookies_failed" \
-                "host TCPSynRetrans:host_syn_retrans" "host TCPReqQFullDoCookies:host_reqq_full_cookies"; do
+                "host TCPSynRetrans:host_syn_retrans" "host TCPReqQFullDoCookies:host_reqq_full_cookies" \
+                "host pswpin(스왑인 페이지):host_pswpin" "host pswpout(스왑아웃 페이지):host_pswpout" \
+                "host pgmajfault(메이저 폴트):host_pgmajfault"; do
                 local label="${label_key%%:*}"
                 local key="${label_key##*:}"
                 local before after delta
@@ -425,6 +468,28 @@ echo
 echo "=== 컨테이너 상태 ==="
 for c in groove-backend groove-mysql groove-redis; do
     docker inspect --format '{{.Name}} OOMKilled={{.State.OOMKilled}} Restarts={{.RestartCount}} Status={{.State.Status}} StartedAt={{.State.StartedAt}}' "$c" 2>/dev/null || echo "$c 조회 실패"
+done
+
+echo
+echo "=== 프로세스 메모리(VmRSS/VmSwap KB) ==="
+for c in groove-backend groove-mysql groove-redis; do
+    pid=$(docker inspect -f '{{.State.Pid}}' "$c" 2>/dev/null)
+    if [ -n "$pid" ] && [ -r "/proc/${pid}/status" ]; then
+        rss=$(awk '/^VmRSS:/{print $2}' "/proc/${pid}/status")
+        swap=$(awk '/^VmSwap:/{print $2}' "/proc/${pid}/status")
+        echo "${c}: VmRSS=${rss:-0}KB VmSwap=${swap:-0}KB"
+    else
+        echo "${c}: 조회 실패"
+    fi
+done
+
+echo
+echo "=== JVM metrics ==="
+for metric in "jvm.memory.used?tag=area:heap" "jvm.memory.used?tag=area:nonheap" \
+    "jvm.memory.committed?tag=area:heap" "jvm.threads.live" \
+    "hikaricp.connections.active" "hikaricp.connections.pending" "tomcat.threads.busy"; do
+    value=$(curl -fsS "http://127.0.0.1:8080/actuator/metrics/${metric}" 2>/dev/null | grep -o '"value":[0-9.eE+-]*' | head -1)
+    echo "${metric}: ${value:-조회 실패}"
 done
 
 echo
@@ -510,6 +575,17 @@ do_snapshot() {
         echo
         echo "=== 원격: redis INFO memory ==="
         ssh $SSH_OPTS -i "$SSH_KEY" "$SSH_HOST" 'docker exec groove-redis redis-cli INFO memory' 2>&1
+
+        echo
+        echo "=== 원격: JVM metrics ==="
+        ssh $SSH_OPTS -i "$SSH_KEY" "$SSH_HOST" '
+            for metric in "jvm.memory.used?tag=area:heap" "jvm.memory.used?tag=area:nonheap" \
+                "jvm.memory.committed?tag=area:heap" "jvm.threads.live" \
+                "hikaricp.connections.active" "hikaricp.connections.pending" "tomcat.threads.busy"; do
+                value=$(curl -fsS "http://127.0.0.1:8080/actuator/metrics/${metric}" 2>/dev/null | grep -o "\"value\":[0-9.eE+-]*" | head -1)
+                echo "${metric}: ${value:-조회 실패}"
+            done
+        ' 2>&1
 
         echo
         echo "=== 로컬: /api/v1/health RTT (3회) ==="

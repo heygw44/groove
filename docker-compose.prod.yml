@@ -15,7 +15,13 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      - --innodb-buffer-pool-size=128M
+      # buffer pool 128M 로 잡아놨지만 실측 pages_data 2021 × 16KB ≈ 32MB 만 쓴다.
+      # 나머지는 미사용 페이지로 놀면서 911MB 호스트의 스왑 압박만 키운다 — 실사용치의
+      # 2배 수준인 64M 로 줄인다. 커넥션은 HikariCP 10 + 관리 접속 여유분으로 60 이면 충분하다.
+      - --innodb-buffer-pool-size=64M
+      - --innodb-log-buffer-size=8M
+      - --table-open-cache=400
+      - --max-connections=60
       - --performance-schema=OFF
     volumes:
       - mysql-data:/var/lib/mysql

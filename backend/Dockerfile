@@ -17,6 +17,11 @@ RUN groupadd -g 10001 groove && useradd -u 10001 -g groove -M -s /usr/sbin/nolog
 WORKDIR /app
 COPY --from=build /workspace/build/libs/*.jar app.jar
 USER groove
-ENV JAVA_TOOL_OPTIONS="-Xms256m -Xmx384m -XX:+UseSerialGC -Duser.timezone=Asia/Seoul"
+# 911MB 호스트에서 비힙(Metaspace 무제한·CodeCache 240M 예약·스레드 스택 1M×200)이
+# 커널을 스왑으로 몰아넣는 걸 실측으로 확인했다 — Metaspace·CodeCache·스택에
+# 상한을 걸어 비힙 총량을 줄인다. Xmx 는 이번 배포로 노출되는 jvm.memory.used 힙
+# 실측을 본 뒤 재조정한다. Xms 를 낮춘 건 SerialGC 가 유휴 시 힙을 되돌려줄 여지를
+# 두기 위해서다.
+ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx384m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=64m -Xss512k -XX:MaxDirectMemorySize=64m -Duser.timezone=Asia/Seoul"
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
