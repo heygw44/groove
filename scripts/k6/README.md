@@ -113,6 +113,7 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 | EC2 스펙 | t3.micro, 2 vCPU / 총 911MB |
 | 측정 전 available 메모리 | 약 120MB |
 | swap | 2048MB 중 약 440MB 이미 사용 중 |
+| 메모리 | 911MB, 러시 중 swap 700~900MB·available 50~150MB — 러시 초반 스왑아웃(#430) |
 | 컨테이너 RSS | backend 약 355MB(`-Xmx384m` + SerialGC), mysql 약 74MB, redis 약 2MB |
 | `/api/v1/health` 왕복(로컬 → 운영) | conn 약 55ms, TLS 약 78ms, TTFB 약 100ms |
 | Nginx | `worker_connections 4096` × worker 2, upstream keepalive 64 (#405 이후) |
@@ -127,7 +128,7 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 - Nginx 프록시 요청 1건이 클라이언트+업스트림 2슬롯을 쓰므로 **동시 요청 약 4096 이 Nginx 한계**다(worker 2 × `worker_connections` 4096 / 2). upstream keepalive 64 로 업스트림 연결을 재사용하지만 슬롯 계산 자체는 그대로다.
 - `noeviction` 이라 축출은 0 이 정상이다(`evicted_keys` 는 `post-check.txt` 로 확인). 대신 메모리가 꽉 차면 쓰기가 실패하는 쪽이라, 축출 건수보다 `used_memory`/`maxmemory` 비율을 본다.
 
-측정 기록: [`limited-prod-20260909.md`](results/limited-prod-20260909.md) — 1000 VU 21.7% 실패, Nginx `worker_connections 768` 한계. [`limited-prod-20260916.md`](results/limited-prod-20260916.md) — 위 설정을 4096 + upstream keepalive 로 바꾼 뒤 재측정, 1000 VU 실패 0건·2000 VU 실패 1.55%, 다음 병목은 Tomcat accept-count 100(#426).
+측정 기록: [`limited-prod-20260909.md`](results/limited-prod-20260909.md) — 1000 VU 21.7% 실패, Nginx `worker_connections 768` 한계. [`limited-prod-20260916.md`](results/limited-prod-20260916.md) — 위 설정을 4096 + upstream keepalive 로 바꾼 뒤 재측정, 1000 VU 실패 0건·2000 VU 실패 1.55%, 다음 병목은 Tomcat accept-count 100(#426). [`limited-prod-20260916-backlog.md`](results/limited-prod-20260916-backlog.md) — 접속 큐 3단(Nginx listen·컨테이너 SYN·Tomcat accept-count)을 4096 으로 맞춘 뒤 재측정, 2000 VU 실패 0건·SYN 재전송 계단 소멸, 남은 지연은 1GB 호스트 메모리 압박(스왑)과 DB 행 락 컨보이로 좁혀짐(#430·#431).
 
 ### 가장 중요한 제약: 판정 유효 시간 10분
 
