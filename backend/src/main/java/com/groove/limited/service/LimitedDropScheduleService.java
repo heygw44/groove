@@ -20,6 +20,7 @@ public class LimitedDropScheduleService {
 	private final LimitedDropRepository limitedDropRepository;
 	private final LimitedDropRedisService limitedDropRedisService;
 	private final LimitedDropStatFlusher limitedDropStatFlusher;
+	private final LimitedDropMetaCache limitedDropMetaCache;
 
 	@Transactional
 	public boolean open(Long dropId, LocalDateTime now) {
@@ -31,6 +32,7 @@ public class LimitedDropScheduleService {
 		}
 		LimitedDrop drop = found.get();
 		drop.open();
+		limitedDropMetaCache.evict(dropId);
 		// 상태 전이 뒤에 Redis 를 치므로 실패 시 롤백되고 다음 주기에 다시 시도한다.
 		limitedDropRedisService.initStock(drop.getId(), drop.remainingQuantity());
 		return true;
@@ -44,6 +46,7 @@ public class LimitedDropScheduleService {
 		}
 		LimitedDrop drop = found.get();
 		drop.close();
+		limitedDropMetaCache.evict(dropId);
 		limitedDropStatFlusher.flushAndClear(drop);
 		return true;
 	}

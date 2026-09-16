@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,6 +39,7 @@ import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.dto.LimitedPurchaseResponse;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.repository.LimitedPurchaseRepository;
@@ -48,11 +51,13 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderNumberGenerator;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.ProductRepository;
 
 @ExtendWith(MockitoExtension.class)
 class LimitedPurchaseWriterTest {
 
 	private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+	private static final Long PRODUCT_ID = 100L;
 
 	@Mock
 	private LimitedDropRepository limitedDropRepository;
@@ -65,6 +70,9 @@ class LimitedPurchaseWriterTest {
 
 	@Mock
 	private AddressRepository addressRepository;
+
+	@Mock
+	private ProductRepository productRepository;
 
 	@Mock
 	private StockRepository stockRepository;
@@ -81,6 +89,9 @@ class LimitedPurchaseWriterTest {
 	@Mock
 	private LimitedPendingSynchronizer limitedPendingSynchronizer;
 
+	@Mock
+	private LimitedDropMetaCache limitedDropMetaCache;
+
 	private Clock clock;
 
 	private LimitedPurchaseWriter limitedPurchaseWriter;
@@ -89,8 +100,8 @@ class LimitedPurchaseWriterTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		limitedPurchaseWriter = new LimitedPurchaseWriter(limitedDropRepository, limitedPurchaseRepository,
-				memberRepository, addressRepository, stockRepository, stockHistoryRepository, orderRepository,
-				orderNumberGenerator, clock, limitedPendingSynchronizer);
+				memberRepository, addressRepository, productRepository, stockRepository, stockHistoryRepository,
+				orderRepository, orderNumberGenerator, clock, limitedPendingSynchronizer, limitedDropMetaCache);
 	}
 
 	@Nested
@@ -101,47 +112,91 @@ class LimitedPurchaseWriterTest {
 		@DisplayName("드롭을 찾을 수 없으면 LIMITED_DROP_NOT_FOUND 예외를 던진다")
 		void throwsWhenDropNotFound() {
 			// given
+			Product product = product();
+			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
+			Address address = AddressFixture.withId(AddressFixture.create(member), 20L);
+			given(memberRepository.findById(10L)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(20L, 10L)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(limitedDropRepository.findByIdForUpdate(1L)).willReturn(Optional.empty());
 
 			// when & then
-			assertThatThrownBy(() -> limitedPurchaseWriter.write(1L, 10L, 20L))
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(1L, 10L, 20L, PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_DROP_NOT_FOUND);
 		}
 
 		@Test
+		@DisplayName("상품을 찾을 수 없으면 PRODUCT_NOT_FOUND 예외를 던진다")
+		void throwsWhenProductNotFound() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
+			Address address = AddressFixture.withId(AddressFixture.create(member), 20L);
+			given(memberRepository.findById(10L)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(20L, 10L)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(8L, 10L, 20L, PRODUCT_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+			verify(limitedDropRepository, never()).findByIdForUpdate(any());
+		}
+
+		@Test
 		@DisplayName("탈퇴한 회원이면 MEMBER_WITHDRAWN 예외를 던진다")
 		void throwsWhenMemberWithdrawn() {
 			// given
-			Product product = product();
-			LimitedDrop drop = openDrop(product, 6L);
 			Member withdrawn = MemberFixture.withId(MemberFixture.createWithdrawn(), 10L);
-			given(limitedDropRepository.findByIdForUpdate(6L)).willReturn(Optional.of(drop));
 			given(memberRepository.findById(10L)).willReturn(Optional.of(withdrawn));
 
 			// when & then
-			assertThatThrownBy(() -> limitedPurchaseWriter.write(6L, 10L, 20L))
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(6L, 10L, 20L, PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
+			verify(addressRepository, never()).findByIdAndMemberId(any(), any());
 		}
 
 		@Test
 		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
 		void throwsWhenMemberSuspended() {
 			// given
-			Product product = product();
-			LimitedDrop drop = openDrop(product, 7L);
 			Member suspended = MemberFixture.withId(MemberFixture.createSuspended(), 10L);
-			given(limitedDropRepository.findByIdForUpdate(7L)).willReturn(Optional.of(drop));
 			given(memberRepository.findById(10L)).willReturn(Optional.of(suspended));
 
 			// when & then
-			assertThatThrownBy(() -> limitedPurchaseWriter.write(7L, 10L, 20L))
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(7L, 10L, 20L, PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
+		}
+
+		@Test
+		@DisplayName("회원·주소·상품 조회는 드롭 행 락보다 먼저 이루어진다")
+		void looksUpMemberBeforeLockingDrop() {
+			// given
+			Product product = product();
+			LimitedDrop drop = openDrop(product, 2L);
+			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
+			Address address = AddressFixture.withId(AddressFixture.create(member), 20L);
+			given(memberRepository.findById(10L)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(20L, 10L)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(limitedDropRepository.findByIdForUpdate(2L)).willReturn(Optional.of(drop));
+			given(limitedPurchaseRepository.saveAndFlush(any()))
+					.willThrow(new DataIntegrityViolationException("duplicate"));
+
+			// when
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(2L, 10L, 20L, PRODUCT_ID))
+					.isInstanceOf(BusinessException.class);
+
+			// then
+			InOrder inOrder = inOrder(memberRepository, limitedDropRepository);
+			inOrder.verify(memberRepository).findById(10L);
+			inOrder.verify(limitedDropRepository).findByIdForUpdate(2L);
 		}
 
 		@Test
@@ -152,14 +207,15 @@ class LimitedPurchaseWriterTest {
 			LimitedDrop drop = openDrop(product, 2L);
 			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
 			Address address = AddressFixture.withId(AddressFixture.create(member), 20L);
-			given(limitedDropRepository.findByIdForUpdate(2L)).willReturn(Optional.of(drop));
 			given(memberRepository.findById(10L)).willReturn(Optional.of(member));
 			given(addressRepository.findByIdAndMemberId(20L, 10L)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(limitedDropRepository.findByIdForUpdate(2L)).willReturn(Optional.of(drop));
 			given(limitedPurchaseRepository.saveAndFlush(any()))
 					.willThrow(new DataIntegrityViolationException("duplicate"));
 
 			// when & then
-			assertThatThrownBy(() -> limitedPurchaseWriter.write(2L, 10L, 20L))
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(2L, 10L, 20L, PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_ALREADY_PURCHASED);
@@ -174,14 +230,15 @@ class LimitedPurchaseWriterTest {
 			LimitedDrop drop = openDrop(product, 3L);
 			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
 			Address address = AddressFixture.withId(AddressFixture.create(member), 20L);
-			given(limitedDropRepository.findByIdForUpdate(3L)).willReturn(Optional.of(drop));
 			given(memberRepository.findById(10L)).willReturn(Optional.of(member));
 			given(addressRepository.findByIdAndMemberId(20L, 10L)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(limitedDropRepository.findByIdForUpdate(3L)).willReturn(Optional.of(drop));
 			given(limitedPurchaseRepository.saveAndFlush(any())).willAnswer(invocation -> invocation.getArgument(0));
-			given(stockRepository.decreaseIfAvailable(product.getId(), 1)).willReturn(0);
+			given(stockRepository.decreaseIfAvailable(PRODUCT_ID, 1)).willReturn(0);
 
 			// when & then
-			assertThatThrownBy(() -> limitedPurchaseWriter.write(3L, 10L, 20L))
+			assertThatThrownBy(() -> limitedPurchaseWriter.write(3L, 10L, 20L, PRODUCT_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.LIMITED_SOLD_OUT);
@@ -196,17 +253,18 @@ class LimitedPurchaseWriterTest {
 			LimitedDrop drop = openDrop(product, 4L);
 			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
 			Address address = AddressFixture.withId(AddressFixture.create(member), 20L);
-			given(limitedDropRepository.findByIdForUpdate(4L)).willReturn(Optional.of(drop));
 			given(memberRepository.findById(10L)).willReturn(Optional.of(member));
 			given(addressRepository.findByIdAndMemberId(20L, 10L)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(limitedDropRepository.findByIdForUpdate(4L)).willReturn(Optional.of(drop));
 			given(limitedPurchaseRepository.saveAndFlush(any())).willAnswer(invocation -> invocation.getArgument(0));
-			given(stockRepository.decreaseIfAvailable(product.getId(), 1)).willReturn(1);
-			given(stockRepository.findByProductId(product.getId()))
+			given(stockRepository.decreaseIfAvailable(PRODUCT_ID, 1)).willReturn(1);
+			given(stockRepository.findByProductId(PRODUCT_ID))
 					.willReturn(Optional.of(StockFixture.withId(StockFixture.create(product, 9), 30L)));
 			given(orderNumberGenerator.generate()).willReturn("20260904-ABCDE123");
 
 			// when
-			LimitedPurchaseResponse response = limitedPurchaseWriter.write(4L, 10L, 20L);
+			LimitedPurchaseResponse response = limitedPurchaseWriter.write(4L, 10L, 20L, PRODUCT_ID);
 
 			// then
 			assertThat(response.orderNumber()).isEqualTo("20260904-ABCDE123");
@@ -214,6 +272,34 @@ class LimitedPurchaseWriterTest {
 			verify(orderRepository).save(any());
 			verify(stockHistoryRepository).save(any());
 			verify(limitedPendingSynchronizer).clearAfterCommit(4L, 10L);
+			verify(limitedDropMetaCache, never()).evict(any());
+		}
+
+		@Test
+		@DisplayName("판매로 SOLD_OUT 이 되면 드롭 메타 캐시를 지운다")
+		void evictsMetaCacheWhenSaleTriggersSoldOut() {
+			// given
+			Product product = product();
+			LimitedDrop drop = openDrop(product, 5L);
+			drop.recordSale(drop.getTotalQuantity() - 1, LocalDateTime.now(clock));
+			Member member = MemberFixture.withId(MemberFixture.create(), 10L);
+			Address address = AddressFixture.withId(AddressFixture.create(member), 20L);
+			given(memberRepository.findById(10L)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(20L, 10L)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(limitedDropRepository.findByIdForUpdate(5L)).willReturn(Optional.of(drop));
+			given(limitedPurchaseRepository.saveAndFlush(any())).willAnswer(invocation -> invocation.getArgument(0));
+			given(stockRepository.decreaseIfAvailable(PRODUCT_ID, 1)).willReturn(1);
+			given(stockRepository.findByProductId(PRODUCT_ID))
+					.willReturn(Optional.of(StockFixture.withId(StockFixture.create(product, 0), 30L)));
+			given(orderNumberGenerator.generate()).willReturn("20260904-ABCDE123");
+
+			// when
+			limitedPurchaseWriter.write(5L, 10L, 20L, PRODUCT_ID);
+
+			// then
+			assertThat(drop.getStatus()).isEqualTo(LimitedDropStatus.SOLD_OUT);
+			verify(limitedDropMetaCache).evict(5L);
 		}
 	}
 

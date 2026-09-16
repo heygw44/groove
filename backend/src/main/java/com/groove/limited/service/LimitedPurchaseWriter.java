@@ -17,6 +17,7 @@ import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.limited.dto.LimitedPurchaseResponse;
 import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.entity.LimitedPurchase;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.repository.LimitedPurchaseRepository;
@@ -28,6 +29,8 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderNumberGenerator;
+import com.groove.product.entity.Product;
+import com.groove.product.repository.ProductRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -43,23 +46,33 @@ public class LimitedPurchaseWriter {
 	private final LimitedPurchaseRepository limitedPurchaseRepository;
 	private final MemberRepository memberRepository;
 	private final AddressRepository addressRepository;
+	private final ProductRepository productRepository;
 	private final StockRepository stockRepository;
 	private final StockHistoryRepository stockHistoryRepository;
 	private final OrderRepository orderRepository;
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final Clock clock;
 	private final LimitedPendingSynchronizer limitedPendingSynchronizer;
+	private final LimitedDropMetaCache limitedDropMetaCache;
 
+	/**
+	 * 회원·주소·상품 조회와 주문번호 발급은 {@code findByIdForUpdate} 행 락 앞에서 끝낸다 — 당첨자 100명이 락을
+	 * 쥐고 있는 동안 탈락자들이 이 조회들 때문에 커넥션을 오래 붙드는 일을 없애기 위해서다. 락 안에서는
+	 * 재고 UPDATE 가 stock_history INSERT 보다 먼저 flush 되는 순서를 절대 바꾸면 안 된다(FK 데드락).
+	 */
 	@Transactional
-	public LimitedPurchaseResponse write(Long dropId, Long memberId, Long addressId) {
+	public LimitedPurchaseResponse write(Long dropId, Long memberId, Long addressId, Long productId) {
+		Member member = findActiveMember(memberId);
+		Address address = addressRepository.findByIdAndMemberId(addressId, memberId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_ADDRESS_NOT_FOUND));
+		Product product = productRepository.findById(productId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+		String orderNumber = orderNumberGenerator.generate();
+
 		LimitedDrop drop = limitedDropRepository.findByIdForUpdate(dropId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.LIMITED_DROP_NOT_FOUND));
 		LocalDateTime now = LocalDateTime.now(clock);
 		drop.validatePurchasable(now);
-
-		Member member = findActiveMember(memberId);
-		Address address = addressRepository.findByIdAndMemberId(addressId, memberId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_ADDRESS_NOT_FOUND));
 
 		LimitedPurchase purchase = LimitedPurchase.create(drop, member, null, PURCHASE_QUANTITY);
 		try {
@@ -68,23 +81,25 @@ public class LimitedPurchaseWriter {
 			throw new BusinessException(ErrorCode.LIMITED_ALREADY_PURCHASED);
 		}
 
-		int updatedRows = stockRepository.decreaseIfAvailable(drop.getProduct().getId(), PURCHASE_QUANTITY);
+		int updatedRows = stockRepository.decreaseIfAvailable(product.getId(), PURCHASE_QUANTITY);
 		if (updatedRows == 0) {
 			throw new BusinessException(ErrorCode.LIMITED_SOLD_OUT);
 		}
 
-		String orderNumber = orderNumberGenerator.generate();
 		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), now);
-		order.addItem(drop.getProduct(), PURCHASE_QUANTITY);
+		order.addItem(product, PURCHASE_QUANTITY);
 		orderRepository.save(order);
 
-		Stock stock = stockRepository.findByProductId(drop.getProduct().getId())
+		Stock stock = stockRepository.findByProductId(product.getId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
 		stockHistoryRepository.save(StockHistory.of(stock, StockChangeType.OUT, -PURCHASE_QUANTITY,
 				STOCK_OUT_REASON_PREFIX + orderNumber));
 
 		purchase.attachOrder(order);
 		drop.recordSale(PURCHASE_QUANTITY, now);
+		if (drop.getStatus() == LimitedDropStatus.SOLD_OUT) {
+			limitedDropMetaCache.evict(dropId);
+		}
 
 		limitedPendingSynchronizer.clearAfterCommit(dropId, memberId);
 

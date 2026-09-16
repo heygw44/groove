@@ -22,6 +22,7 @@ public class LimitedDropStatFlusher {
 
 	private final LimitedDropStatRepository limitedDropStatRepository;
 	private final LimitedDropRedisService limitedDropRedisService;
+	private final LimitedDropMetaCache limitedDropMetaCache;
 	private final Clock clock;
 
 	/**
@@ -30,6 +31,7 @@ public class LimitedDropStatFlusher {
 	 */
 	@Transactional
 	public void flushAndClear(LimitedDrop drop) {
+		limitedDropMetaCache.evict(drop.getId());
 		// 여기서 나는 예외는 잡지 않는다. 삼키면 clear() 가 실제 데이터를 지워 복구 경로가 사라진다.
 		Map<LimitedAttemptResult, Long> counts = limitedDropRedisService.getAttemptsForFlush(drop.getId());
 		if (!counts.isEmpty()) {
