@@ -89,6 +89,9 @@ class AdminLimitedDropServiceTest {
 	LimitedDropStatFlusher limitedDropStatFlusher;
 
 	@Mock
+	LimitedDropMetaCache limitedDropMetaCache;
+
+	@Mock
 	AdminAuditLogService adminAuditLogService;
 
 	AdminLimitedDropService adminLimitedDropService;
@@ -99,7 +102,7 @@ class AdminLimitedDropServiceTest {
 	void setUp() {
 		adminLimitedDropService = new AdminLimitedDropService(limitedDropRepository, limitedPurchaseRepository,
 				productRepository, stockService, limitedDropRedisService, limitedDropSyncService,
-				limitedDropStatFlusher, adminAuditLogService);
+				limitedDropStatFlusher, limitedDropMetaCache, adminAuditLogService);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 	}
@@ -220,6 +223,7 @@ class AdminLimitedDropServiceTest {
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
 			assertThat(detailCaptor.getValue()).isEqualTo("closeAt");
 			verify(stockService, never()).adjust(any(), any());
+			verify(limitedDropMetaCache).evict(DROP_ID);
 		}
 
 		@Test
@@ -305,6 +309,7 @@ class AdminLimitedDropServiceTest {
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
 			assertThat(detailCaptor.getValue()).isEqualTo("SCHEDULED->OPEN");
 			assertThat(response.status()).isEqualTo(LimitedDropStatus.OPEN);
+			verify(limitedDropMetaCache).evict(DROP_ID);
 		}
 
 		@Test
