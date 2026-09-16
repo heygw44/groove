@@ -233,6 +233,40 @@ restart_redis=${restart_redis:-0}
 nginx_access_lines=$(sudo wc -l < /var/log/nginx/access.log 2>/dev/null)
 nginx_access_lines=${nginx_access_lines:-0}
 
+# TcpExt 섹션은 /proc/net/netstat 에 헤더 줄 + 값 줄 두 줄로 온다(공백 구분 필드가
+# 나란히 대응). 필드명을 키로 매핑해두면 이름으로 값을 뽑을 수 있다.
+netstat_tcpext() {
+    awk '
+        /^TcpExt:/ {
+            n++
+            if (n == 1) { for (i = 2; i <= NF; i++) h[i] = $i; next }
+            for (i = 2; i <= NF; i++) print h[i] "=" $i
+        }
+    ' "$1" 2>/dev/null
+}
+
+BACKEND_PID=$(docker inspect -f '{{.State.Pid}}' groove-backend 2>/dev/null)
+if [ -n "$BACKEND_PID" ] && command -v nsenter >/dev/null 2>&1; then
+    backend_netstat=$(sudo nsenter -t "$BACKEND_PID" -n cat /proc/net/netstat 2>/dev/null | netstat_tcpext /dev/stdin)
+else
+    backend_netstat=""
+    echo "nsenter 불가 또는 backend PID 조회 실패 — backend_* 리슨 백로그 카운터를 0으로 채운다" >&2
+fi
+backend_listen_overflows=$(echo "$backend_netstat" | awk -F= '$1=="ListenOverflows"{print $2}')
+backend_listen_overflows=${backend_listen_overflows:-0}
+backend_listen_drops=$(echo "$backend_netstat" | awk -F= '$1=="ListenDrops"{print $2}')
+backend_listen_drops=${backend_listen_drops:-0}
+backend_reqq_full_cookies=$(echo "$backend_netstat" | awk -F= '$1=="TCPReqQFullDoCookies"{print $2}')
+backend_reqq_full_cookies=${backend_reqq_full_cookies:-0}
+backend_syncookies_failed=$(echo "$backend_netstat" | awk -F= '$1=="SyncookiesFailed"{print $2}')
+backend_syncookies_failed=${backend_syncookies_failed:-0}
+
+host_netstat=$(netstat_tcpext /proc/net/netstat)
+host_syn_retrans=$(echo "$host_netstat" | awk -F= '$1=="TCPSynRetrans"{print $2}')
+host_syn_retrans=${host_syn_retrans:-0}
+host_reqq_full_cookies=$(echo "$host_netstat" | awk -F= '$1=="TCPReqQFullDoCookies"{print $2}')
+host_reqq_full_cookies=${host_reqq_full_cookies:-0}
+
 echo "nginx_5xx=${nginx_5xx}"
 echo "nginx_worker_conn_warn=${nginx_worker_conn_warn}"
 echo "nginx_upstream_err=${nginx_upstream_err}"
@@ -241,6 +275,12 @@ echo "restart_backend=${restart_backend}"
 echo "restart_mysql=${restart_mysql}"
 echo "restart_redis=${restart_redis}"
 echo "nginx_access_lines=${nginx_access_lines}"
+echo "backend_listen_overflows=${backend_listen_overflows}"
+echo "backend_listen_drops=${backend_listen_drops}"
+echo "backend_reqq_full_cookies=${backend_reqq_full_cookies}"
+echo "backend_syncookies_failed=${backend_syncookies_failed}"
+echo "host_syn_retrans=${host_syn_retrans}"
+echo "host_reqq_full_cookies=${host_reqq_full_cookies}"
 REMOTE_SCRIPT
 }
 
@@ -358,7 +398,10 @@ post_check() {
                 "Nginx 업스트림 오류:nginx_upstream_err" \
                 "Redis evicted_keys:redis_evicted_keys" "backend RestartCount:restart_backend" \
                 "mysql RestartCount:restart_mysql" "redis RestartCount:restart_redis" \
-                "nginx access.log 라인 수:nginx_access_lines"; do
+                "nginx access.log 라인 수:nginx_access_lines" \
+                "backend ListenOverflows:backend_listen_overflows" "backend ListenDrops:backend_listen_drops" \
+                "backend TCPReqQFullDoCookies:backend_reqq_full_cookies" "backend SyncookiesFailed:backend_syncookies_failed" \
+                "host TCPSynRetrans:host_syn_retrans" "host TCPReqQFullDoCookies:host_reqq_full_cookies"; do
                 local label="${label_key%%:*}"
                 local key="${label_key##*:}"
                 local before after delta
@@ -407,6 +450,31 @@ echo
 echo "=== Redis 통계 ==="
 docker exec groove-redis redis-cli INFO stats 2>/dev/null | grep -E 'evicted_keys|keyspace_(hits|misses)' || echo "조회 실패"
 docker exec groove-redis redis-cli INFO memory 2>/dev/null | grep -E 'used_memory_human|maxmemory_human' || echo "조회 실패"
+
+echo
+echo "=== 백엔드 리슨 백로그 카운터(누적, 컨테이너 netns TcpExt) ==="
+BACKEND_PID=$(docker inspect -f '{{.State.Pid}}' groove-backend 2>/dev/null)
+if [ -n "$BACKEND_PID" ] && command -v nsenter >/dev/null 2>&1; then
+    sudo nsenter -t "$BACKEND_PID" -n cat /proc/net/netstat 2>/dev/null | awk '
+        /^TcpExt:/ {
+            n++
+            if (n == 1) { for (i = 2; i <= NF; i++) h[i] = $i; next }
+            for (i = 2; i <= NF; i++) {
+                if (h[i] ~ /^(ListenOverflows|ListenDrops|TCPReqQFullDoCookies|SyncookiesSent|SyncookiesFailed|TCPSynRetrans)$/) print h[i]"="$i
+            }
+        }
+    '
+else
+    echo "nsenter 불가 또는 backend PID 조회 실패"
+fi
+
+echo
+echo "=== 백엔드 리슨 소켓 Send-Q(=현재 accept-count 반영값) ==="
+if [ -n "$BACKEND_PID" ] && command -v nsenter >/dev/null 2>&1; then
+    sudo nsenter -t "$BACKEND_PID" -n ss -ltn '( sport = :8080 )' 2>/dev/null || echo "조회 실패"
+else
+    echo "nsenter 불가 또는 backend PID 조회 실패"
+fi
 
 echo
 echo "=== dmesg OOM 흔적 (마지막 20줄) ==="
