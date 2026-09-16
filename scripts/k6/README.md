@@ -119,12 +119,15 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 | `net.ipv4.tcp_max_syn_backlog` | 128 |
 | Redis | `maxmemory 64mb` / `noeviction` + AOF, 사용량 used 1.57M / peak 1.90M(2026-09-16 실측) |
 | rate limit | 없음 — Nginx `limit_req` 는 #405 에서 검토 후 기각 |
+| Tomcat accept-count | 100 (기본값, `server.tomcat.accept-count` 미설정) — 2026-09-16 재측정에서 다음 병목으로 지목(#426) |
 
 특히 챙길 점:
 
 - 네트워크 왕복만으로 80ms대 고정 바닥이 깔린다. 로컬 측정에는 없던 항목이므로 로컬 p95 와 운영 p95 를 그냥 나란히 놓으면 안 되고, `http_req_waiting` 을 같이 봐야 한다.
 - Nginx 프록시 요청 1건이 클라이언트+업스트림 2슬롯을 쓰므로 **동시 요청 약 4096 이 Nginx 한계**다(worker 2 × `worker_connections` 4096 / 2). upstream keepalive 64 로 업스트림 연결을 재사용하지만 슬롯 계산 자체는 그대로다.
 - `noeviction` 이라 축출은 0 이 정상이다(`evicted_keys` 는 `post-check.txt` 로 확인). 대신 메모리가 꽉 차면 쓰기가 실패하는 쪽이라, 축출 건수보다 `used_memory`/`maxmemory` 비율을 본다.
+
+측정 기록: [`limited-prod-20260909.md`](results/limited-prod-20260909.md) — 1000 VU 21.7% 실패, Nginx `worker_connections 768` 한계. [`limited-prod-20260916.md`](results/limited-prod-20260916.md) — 위 설정을 4096 + upstream keepalive 로 바꾼 뒤 재측정, 1000 VU 실패 0건·2000 VU 실패 1.55%, 다음 병목은 Tomcat accept-count 100(#426).
 
 ### 가장 중요한 제약: 판정 유효 시간 10분
 
