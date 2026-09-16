@@ -23,6 +23,13 @@ sudo sysctl vm.swappiness=10
 grep -q '^vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf
 free -h
 
+echo "== 3-1. SYN 큐 상한 조정 (기본 128 은 1000+ VU 러시에서 syncookie 로 넘어간다) =="
+sudo tee /etc/sysctl.d/99-groove.conf > /dev/null <<'EOF'
+net.ipv4.tcp_max_syn_backlog = 4096
+net.core.somaxconn = 4096
+EOF
+sudo sysctl --system
+
 echo "== 4. Docker + Compose plugin 설치 =="
 sudo -E apt-get install -y ca-certificates curl gnupg
 sudo install -m 0755 -d /etc/apt/keyrings

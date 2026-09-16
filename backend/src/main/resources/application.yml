@@ -58,6 +58,13 @@ server:
   shutdown: graceful
   tomcat:
     max-swallow-size: 10MB
+    # accept-count: 아직 accept 되지 않은 연결이 기다리는 커널 큐 길이(기본 100). 컨테이너
+    # somaxconn(4096)·Nginx 동시 프록시 상한(4096)과 맞춰 러시 초반 SYN 재전송을 없앤다.
+    # max-connections: accept 된 뒤 Tomcat 이 붙들고 있는 연결 수 상한(기본 8192, 여기선 명시만).
+    # threads.max(기본 200)는 그중 동시에 처리하는 요청 수 — 백로그를 늘려도 처리 속도 자체는
+    # 스레드·CPU 가 결정하므로 지연은 남고, 재전송 타이머(1·2·4·8초) 계단만 사라진다.
+    accept-count: 4096
+    max-connections: 8192
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
