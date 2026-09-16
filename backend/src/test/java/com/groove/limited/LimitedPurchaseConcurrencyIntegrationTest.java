@@ -55,8 +55,8 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
-import com.groove.order.service.AdminOrderService;
-import com.groove.order.service.OrderService;
+import com.groove.order.service.AdminOrderStatusService;
+import com.groove.order.service.OrderCancelService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.entity.Payment;
@@ -107,10 +107,10 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 	private OrderExpirationScheduler orderExpirationScheduler;
 
 	@Autowired
-	private OrderService orderService;
+	private OrderCancelService orderCancelService;
 
 	@Autowired
-	private AdminOrderService adminOrderService;
+	private AdminOrderStatusService adminOrderStatusService;
 
 	@Autowired
 	private StringRedisTemplate redisTemplate;
@@ -393,7 +393,7 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 					buyer.addressId());
 
 			// when
-			orderService.cancel(buyer.memberId(), purchaseResponse.orderId(), null);
+			orderCancelService.cancel(buyer.memberId(), purchaseResponse.orderId(), null);
 
 			// then
 			Order reloadedOrder = orderRepository.findById(purchaseResponse.orderId()).orElseThrow();
@@ -430,7 +430,7 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			assertThat(soldOutDrop.getStatus()).isEqualTo(LimitedDropStatus.SOLD_OUT);
 
 			// when
-			orderService.cancel(buyer.memberId(), purchaseResponse.orderId(), null);
+			orderCancelService.cancel(buyer.memberId(), purchaseResponse.orderId(), null);
 
 			// then
 			LimitedDrop reopenedDrop = limitedDropRepository.findById(dropId).orElseThrow();
@@ -463,7 +463,7 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 					+ "@groove.com"));
 
 			// when
-			adminOrderService.changeStatus(admin.getId(), order.getId(),
+			adminOrderStatusService.changeStatus(admin.getId(), order.getId(),
 					new AdminOrderStatusChangeRequest(OrderStatus.CANCELED));
 
 			// then

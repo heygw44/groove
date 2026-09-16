@@ -3,6 +3,7 @@ import axios, { type AxiosResponse, type InternalAxiosRequestConfig } from 'axio
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/store/authStore';
 import type { ApiError, ApiResponse } from '@/types/api';
+import { withReissueLock } from '@/utils/reissueLock';
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -18,13 +19,20 @@ export const client = axios.create({
   paramsSerializer: { indexes: null },
 });
 
+// withReissueLock 이 탭 간 재발급을 직렬화하므로, 한 요청이 안 끝나면 다른 탭도 전부 대기한다.
+const REFRESH_TIMEOUT_MS = 10000;
+
 /**
  * 재발급 전용 인스턴스. 인터셉터를 달지 않는 것이 핵심이다.
  * 같은 인스턴스로 재발급을 보내면 그 응답이 401 일 때 인터셉터가 자기 자신에
  * 다시 들어가고, isRefreshing 이 이미 true 라 큐에만 쌓인 채 아무도 깨우지
  * 않아 요청이 영원히 매달린다.
  */
-export const refreshClient = axios.create({ baseURL, withCredentials: true });
+export const refreshClient = axios.create({
+  baseURL,
+  withCredentials: true,
+  timeout: REFRESH_TIMEOUT_MS,
+});
 
 const PUBLIC_PATHS = ['/auth/signup', '/auth/login', '/auth/reissue'];
 
@@ -153,8 +161,9 @@ client.interceptors.response.use(
 
     isRefreshing = true;
     try {
-      const { data } =
-        await refreshClient.post<ApiResponse<{ accessToken: string }>>('/auth/reissue');
+      const { data } = await withReissueLock(() =>
+        refreshClient.post<ApiResponse<{ accessToken: string }>>('/auth/reissue'),
+      );
       const accessToken = data.data!.accessToken;
       useAuthStore.getState().setAccessToken(accessToken);
       flushPending(accessToken);

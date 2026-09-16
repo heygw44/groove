@@ -32,4 +32,16 @@ public abstract class IntegrationTestSupport {
 		MYSQL.start();
 		REDIS.start();
 	}
+
+	/**
+	 * Redis 장애를 흉내낸다. {@code stop()} 은 재기동 시 포트가 바뀌어 다른 테스트를 깨뜨리므로 컨테이너를
+	 * 일시정지한다. 호출한 테스트는 반드시 {@link #unpauseRedis()} 로 되돌려야 한다.
+	 */
+	protected static void pauseRedis() {
+		REDIS.getDockerClient().pauseContainerCmd(REDIS.getContainerId()).exec();
+	}
+
+	protected static void unpauseRedis() {
+		REDIS.getDockerClient().unpauseContainerCmd(REDIS.getContainerId()).exec();
+	}
 }

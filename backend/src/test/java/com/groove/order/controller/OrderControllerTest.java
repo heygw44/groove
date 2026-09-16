@@ -38,6 +38,7 @@ import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
+import com.groove.global.idempotency.IdempotentResult;
 import com.groove.inventory.entity.Stock;
 import com.groove.member.entity.MemberRole;
 import com.groove.order.dto.OrderCreateRequest;
@@ -45,6 +46,8 @@ import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.OrderStatus;
+import com.groove.order.service.OrderCancelService;
+import com.groove.order.service.OrderCreateService;
 import com.groove.order.service.OrderService;
 
 @WebMvcTest(OrderController.class)
@@ -66,6 +69,12 @@ class OrderControllerTest {
 
 	@MockitoBean
 	OrderService orderService;
+
+	@MockitoBean
+	OrderCreateService orderCreateService;
+
+	@MockitoBean
+	OrderCancelService orderCancelService;
 
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
@@ -93,7 +102,8 @@ class OrderControllerTest {
 		@DisplayName("유효한 요청이면 201 과 생성된 주문을 반환한다")
 		void createsOrder() throws Exception {
 			// given
-			given(orderService.create(eq(1L), any())).willReturn(sampleResponse());
+			given(orderCreateService.create(eq(1L), eq(null), any()))
+					.willReturn(new IdempotentResult<>(sampleResponse(), false));
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 2, 10L, null);
 
 			// when & then
@@ -104,7 +114,85 @@ class OrderControllerTest {
 					.andExpect(status().isCreated())
 					.andExpect(jsonPath("$.data.orderId", is(1)))
 					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")));
-			verify(orderService).create(eq(1L), any());
+			verify(orderCreateService).create(eq(1L), eq(null), any());
+		}
+
+		@Test
+		@DisplayName("Idempotency-Key 로 완료된 응답을 재생하면 200 을 반환한다")
+		void returnsOkWhenReplayed() throws Exception {
+			// given
+			String key = "11111111-1111-1111-1111-111111111111";
+			given(orderCreateService.create(eq(1L), eq(key), any()))
+					.willReturn(new IdempotentResult<>(sampleResponse(), true));
+			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 2, 10L, null);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL)
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.header("Idempotency-Key", key)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.orderId", is(1)));
+			verify(orderCreateService).create(eq(1L), eq(key), any());
+		}
+
+		@Test
+		@DisplayName("Idempotency-Key 로 새로 생성되면 201 을 반환한다")
+		void returnsCreatedWhenNotReplayed() throws Exception {
+			// given
+			String key = "11111111-1111-1111-1111-111111111111";
+			given(orderCreateService.create(eq(1L), eq(key), any()))
+					.willReturn(new IdempotentResult<>(sampleResponse(), false));
+			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 2, 10L, null);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL)
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.header("Idempotency-Key", key)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isCreated())
+					.andExpect(jsonPath("$.data.orderId", is(1)));
+			verify(orderCreateService).create(eq(1L), eq(key), any());
+		}
+
+		@Test
+		@DisplayName("같은 키에 요청 바디가 다르면 422 IDEMPOTENCY_KEY_REUSED 를 반환한다")
+		void returnsUnprocessableWhenKeyReused() throws Exception {
+			// given
+			String key = "11111111-1111-1111-1111-111111111111";
+			willThrow(new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REUSED))
+					.given(orderCreateService).create(eq(1L), eq(key), any());
+			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL)
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.header("Idempotency-Key", key)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isUnprocessableEntity())
+					.andExpect(jsonPath("$.error.code", is("IDEMPOTENCY_KEY_REUSED")));
+		}
+
+		@Test
+		@DisplayName("같은 키를 처리 중이면 409 ORDER_REQUEST_IN_PROGRESS 를 반환한다")
+		void returnsConflictWhenRequestInProgress() throws Exception {
+			// given
+			String key = "11111111-1111-1111-1111-111111111111";
+			willThrow(new BusinessException(ErrorCode.ORDER_REQUEST_IN_PROGRESS))
+					.given(orderCreateService).create(eq(1L), eq(key), any());
+			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL)
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.header("Idempotency-Key", key)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("ORDER_REQUEST_IN_PROGRESS")));
 		}
 
 		@Test
@@ -112,7 +200,7 @@ class OrderControllerTest {
 		void returnsConflictWhenStockLockFails() throws Exception {
 			// given: 재고 락 실패는 OrderStockService 가 도메인 코드로 확정해 던진다.
 			willThrow(new BusinessException(ErrorCode.STOCK_CONFLICT))
-					.given(orderService).create(eq(1L), any());
+					.given(orderCreateService).create(eq(1L), eq(null), any());
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
 
 			// when & then
@@ -129,7 +217,7 @@ class OrderControllerTest {
 		void returnsConflictWhenStockVersionConflicts() throws Exception {
 			// given
 			willThrow(new ObjectOptimisticLockingFailureException(Stock.class.getName(), 1L))
-					.given(orderService).create(eq(1L), any());
+					.given(orderCreateService).create(eq(1L), eq(null), any());
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
 
 			// when & then
@@ -146,7 +234,7 @@ class OrderControllerTest {
 		void returnsCommonConflictWhenCouponLockFails() throws Exception {
 			// given: 쿠폰 락 실패는 서비스가 변환하지 않아 전역 핸들러까지 올라온다.
 			willThrow(new PessimisticLockingFailureException("lock wait timeout"))
-					.given(orderService).create(eq(1L), any());
+					.given(orderCreateService).create(eq(1L), eq(null), any());
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 1, 10L, null);
 
 			// when & then
@@ -171,7 +259,7 @@ class OrderControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
-			verify(orderService, never()).create(any(), any());
+			verify(orderCreateService, never()).create(any(), any(), any());
 		}
 
 		@Test
@@ -187,7 +275,7 @@ class OrderControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
-			verify(orderService, never()).create(any(), any());
+			verify(orderCreateService, never()).create(any(), any(), any());
 		}
 
 		@Test
@@ -196,7 +284,8 @@ class OrderControllerTest {
 			// given
 			OrderCreateResponse response = new OrderCreateResponse(1L, "20260903-TESTAB12",
 					new BigDecimal("90000"), new BigDecimal("5000"), new BigDecimal("85000"), "가을맞이 할인");
-			given(orderService.create(eq(1L), any())).willReturn(response);
+			given(orderCreateService.create(eq(1L), eq(null), any()))
+					.willReturn(new IdempotentResult<>(response, false));
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 2, 10L, 5L);
 
 			// when & then
@@ -207,7 +296,7 @@ class OrderControllerTest {
 					.andExpect(status().isCreated())
 					.andExpect(jsonPath("$.data.discountAmount", is(5000)))
 					.andExpect(jsonPath("$.data.couponName", is("가을맞이 할인")));
-			verify(orderService).create(eq(1L), any());
+			verify(orderCreateService).create(eq(1L), eq(null), any());
 		}
 
 		@Test
@@ -222,7 +311,7 @@ class OrderControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(orderService, never()).create(any(), any());
+			verify(orderCreateService, never()).create(any(), any(), any());
 		}
 	}
 
@@ -296,7 +385,7 @@ class OrderControllerTest {
 		@DisplayName("바디 없이 요청해도 200 과 취소된 주문을 반환한다")
 		void cancelsWithoutBody() throws Exception {
 			// given
-			given(orderService.cancel(eq(1L), eq(1L), eq(null)))
+			given(orderCancelService.cancel(eq(1L), eq(1L), eq(null)))
 					.willReturn(sampleDetailResponse(OrderStatus.CANCELED));
 
 			// when & then

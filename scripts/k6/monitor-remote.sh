@@ -217,6 +217,9 @@ nginx_5xx=${nginx_5xx:-0}
 nginx_worker_conn_warn=$(sudo grep -c 'worker_connections are not enough' /var/log/nginx/error.log 2>/dev/null)
 nginx_worker_conn_warn=${nginx_worker_conn_warn:-0}
 
+nginx_upstream_err=$(sudo grep -cE 'upstream prematurely closed|no live upstreams|connect\(\) failed' /var/log/nginx/error.log 2>/dev/null)
+nginx_upstream_err=${nginx_upstream_err:-0}
+
 redis_evicted_keys=$(docker exec groove-redis redis-cli INFO stats 2>/dev/null | awk -F: '/^evicted_keys/{gsub("\r","",$2); print $2}')
 redis_evicted_keys=${redis_evicted_keys:-0}
 
@@ -232,6 +235,7 @@ nginx_access_lines=${nginx_access_lines:-0}
 
 echo "nginx_5xx=${nginx_5xx}"
 echo "nginx_worker_conn_warn=${nginx_worker_conn_warn}"
+echo "nginx_upstream_err=${nginx_upstream_err}"
 echo "redis_evicted_keys=${redis_evicted_keys}"
 echo "restart_backend=${restart_backend}"
 echo "restart_mysql=${restart_mysql}"
@@ -351,6 +355,7 @@ post_check() {
             local pre_counters
             pre_counters=$(cat "$pre_file")
             for label_key in "Nginx 5xx:nginx_5xx" "worker_connections 부족 경고:nginx_worker_conn_warn" \
+                "Nginx 업스트림 오류:nginx_upstream_err" \
                 "Redis evicted_keys:redis_evicted_keys" "backend RestartCount:restart_backend" \
                 "mysql RestartCount:restart_mysql" "redis RestartCount:restart_redis" \
                 "nginx access.log 라인 수:nginx_access_lines"; do
@@ -383,6 +388,11 @@ echo
 echo "=== Nginx worker_connections 부족 경고 건수(누적) ==="
 warn_count=$(sudo grep -c 'worker_connections are not enough' /var/log/nginx/error.log 2>/dev/null)
 echo "${warn_count:-0}"
+
+echo
+echo "=== Nginx 업스트림 오류 건수(누적) ==="
+upstream_err_count=$(sudo grep -cE 'upstream prematurely closed|no live upstreams|connect\(\) failed' /var/log/nginx/error.log 2>/dev/null)
+echo "${upstream_err_count:-0}"
 
 echo
 echo "=== Nginx error.log 마지막 20줄 ==="

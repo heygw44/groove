@@ -28,7 +28,7 @@ public enum ErrorCode {
 	AUTH_EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다."),
 	AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
 	AUTH_REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다. 다시 로그인해주세요."),
-	AUTH_REFRESH_TOKEN_MISMATCH(HttpStatus.UNAUTHORIZED, "다른 기기에서 로그인되어 로그아웃되었습니다. 다시 로그인해주세요."),
+	AUTH_REFRESH_TOKEN_MISMATCH(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_MEMBER_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 회원입니다."),
 
 	// ===== MEMBER =====
@@ -71,6 +71,7 @@ public enum ErrorCode {
 	LIMITED_ALREADY_PURCHASED(HttpStatus.CONFLICT, "이미 구매한 한정반입니다."),
 	LIMITED_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "회원당 구매 가능 수량을 초과했습니다."),
 	LIMITED_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 한정반 상태입니다."),
+	LIMITED_BUSY(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
 
 	// ===== CART =====
 	CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."),
@@ -84,7 +85,10 @@ public enum ErrorCode {
 	ORDER_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "주문 금액이 일치하지 않습니다."),
 	ORDER_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 주문 상태입니다."),
 	ORDER_INVALID_STATUS_TRANSITION(HttpStatus.BAD_REQUEST, "허용되지 않는 주문 상태 전이입니다."),
+	ORDER_CANCEL_IN_PROGRESS(HttpStatus.CONFLICT, "취소가 진행 중인 주문입니다."),
 	ORDER_EXPIRED(HttpStatus.CONFLICT, "결제 기한이 지난 주문입니다."),
+	ORDER_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "같은 주문 요청을 처리하고 있습니다. 잠시 후 주문 내역을 확인해주세요."),
+	IDEMPOTENCY_KEY_REUSED(HttpStatus.UNPROCESSABLE_ENTITY, "이미 접수된 주문이 있습니다. 주문 내역을 확인해주세요."),
 
 	// ===== PAYMENT =====
 	PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),
@@ -93,6 +97,7 @@ public enum ErrorCode {
 	PAYMENT_CONFIRM_FAILED(HttpStatus.BAD_REQUEST, "결제 승인에 실패했습니다."),
 	PAYMENT_CANCEL_FAILED(HttpStatus.BAD_REQUEST, "결제 취소에 실패했습니다."),
 	PAYMENT_KEY_MISMATCH(HttpStatus.CONFLICT, "결제 키가 주문과 일치하지 않습니다."),
+	PAYMENT_RESULT_UNKNOWN(HttpStatus.SERVICE_UNAVAILABLE, "결제 처리 결과를 확인하고 있습니다."),
 
 	// ===== WISHLIST =====
 	WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 등록된 상품입니다."),

@@ -49,8 +49,8 @@ public class MemberService {
 	public void withdraw(Long memberId) {
 		Member member = findActiveMember(memberId);
 		member.withdraw();
-		// 탈퇴 즉시 재발급을 막기 위해 세션도 폐기한다.
-		refreshTokenRepository.deleteByMemberId(memberId);
+		// 탈퇴 즉시 재발급을 막기 위해 모든 세션을 폐기한다.
+		refreshTokenRepository.deleteAllByMemberId(memberId);
 	}
 
 	private Member findActiveMember(Long memberId) {

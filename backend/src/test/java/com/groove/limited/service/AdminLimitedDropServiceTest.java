@@ -83,6 +83,9 @@ class AdminLimitedDropServiceTest {
 	LimitedDropRedisService limitedDropRedisService;
 
 	@Mock
+	LimitedDropSyncService limitedDropSyncService;
+
+	@Mock
 	LimitedDropStatFlusher limitedDropStatFlusher;
 
 	@Mock
@@ -95,8 +98,8 @@ class AdminLimitedDropServiceTest {
 	@BeforeEach
 	void setUp() {
 		adminLimitedDropService = new AdminLimitedDropService(limitedDropRepository, limitedPurchaseRepository,
-				productRepository, stockService, limitedDropRedisService, limitedDropStatFlusher,
-				adminAuditLogService);
+				productRepository, stockService, limitedDropRedisService, limitedDropSyncService,
+				limitedDropStatFlusher, adminAuditLogService);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), PRODUCT_ID);
 	}
@@ -305,8 +308,8 @@ class AdminLimitedDropServiceTest {
 		}
 
 		@Test
-		@DisplayName("이미 OPEN이면 Redis 재고를 다시 세팅하되 감사 로그는 남기지 않는다")
-		void reinitializesStockWithoutAuditWhenAlreadyOpen() {
+		@DisplayName("이미 OPEN이면 Redis 를 DB 기준으로 재동기화하되 감사 로그는 남기지 않는다")
+		void resyncsRedisWithoutAuditWhenAlreadyOpen() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.open(product, 100), DROP_ID);
 			given(limitedDropRepository.findWithProductById(DROP_ID)).willReturn(Optional.of(drop));
@@ -315,7 +318,8 @@ class AdminLimitedDropServiceTest {
 			AdminLimitedDropResponse response = adminLimitedDropService.open(ADMIN_ID, DROP_ID);
 
 			// then
-			verify(limitedDropRedisService).initStock(DROP_ID, drop.remainingQuantity());
+			verify(limitedDropSyncService).sync(DROP_ID);
+			verify(limitedDropRedisService, never()).initStock(any(), anyInt());
 			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
 			assertThat(response.status()).isEqualTo(LimitedDropStatus.OPEN);
 		}

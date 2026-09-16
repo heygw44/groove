@@ -42,4 +42,9 @@ public record OrderDetailResponse(
 				items, ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(),
 				order.getExpiresAt(), order.getCanceledAt(), order.getCancelReason(), limitedDropId, payment);
 	}
+
+	public OrderDetailResponse withLimitedDropId(Long newLimitedDropId) {
+		return new OrderDetailResponse(id, orderNumber, status, totalAmount, discountAmount, finalAmount, couponName,
+				items, shippingAddress, createdAt, expiresAt, canceledAt, cancelReason, newLimitedDropId, payment);
+	}
 }

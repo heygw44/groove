@@ -18,7 +18,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping("/api/v1/health")
 public class HealthController {
 
-	@Operation(summary = "헬스체크", description = "서버 기동 여부와 서버 시각을 반환한다.")
+	@Operation(summary = "헬스체크",
+			description = "프로세스 생존 여부(liveness)만 확인한다. DB·Redis 를 포함한 준비 상태는 /actuator/health 를 본다.")
 	@SecurityRequirements
 	@GetMapping
 	public ApiResponse<Map<String, Object>> health() {

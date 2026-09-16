@@ -15,6 +15,7 @@ import {
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
+import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
 import { useChangeAdminOrderStatus } from '@/hooks/mutations/useAdminOrderMutations';
 import { adminOrderKeys } from '@/hooks/queries/queryKeys';
 import { useAdminOrder } from '@/hooks/queries/useAdminOrder';
@@ -22,6 +23,11 @@ import type { OrderStatus } from '@/types/order';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatServerDateTime } from '@/utils/formatDate';
 import { ADMIN_ORDER_TRANSITIONS, ORDER_STATUS_LABEL } from '@/utils/orderStatus';
+import {
+  CANCEL_REQUESTED_MESSAGES,
+  isCancellationPending,
+  isReconcilePending,
+} from '@/utils/paymentStatus';
 
 interface AdminOrderDetailDrawerProps {
   orderId?: number;
@@ -48,6 +54,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
   }
 
   const transitions = detail ? ADMIN_ORDER_TRANSITIONS[detail.status] : [];
+  const cancellationPending = isCancellationPending(detail?.paymentStatus);
 
   const handleConfirm = () => {
     if (!orderId || !nextStatus) {
@@ -107,6 +114,9 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
           <div>
             <div className="flex items-center gap-2">
               <OrderStatusBadge status={detail.status} />
+              {detail.paymentStatus && isReconcilePending(detail.paymentStatus) && (
+                <PaymentStatusBadge status={detail.paymentStatus} />
+              )}
               <span className="text-xs text-content-muted">
                 {formatServerDateTime(detail.createdAt)}
               </span>
@@ -142,6 +152,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
                   value={nextStatus}
                   onChange={(event) => setNextStatus(event.target.value as OrderStatus | '')}
                   className="w-36"
+                  disabled={cancellationPending}
                 >
                   <option value="">상태 선택</option>
                   {transitions.map((status) => (
@@ -152,11 +163,16 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
                 </Select>
                 <Button
                   onClick={() => setConfirming(true)}
-                  disabled={!nextStatus || changeStatusMutation.isPending}
+                  disabled={cancellationPending || !nextStatus || changeStatusMutation.isPending}
                 >
                   변경
                 </Button>
               </div>
+            )}
+            {cancellationPending && (
+              <p className="mt-2 text-sm text-content-muted">
+                {CANCEL_REQUESTED_MESSAGES.adminReason}
+              </p>
             )}
           </div>
         </div>

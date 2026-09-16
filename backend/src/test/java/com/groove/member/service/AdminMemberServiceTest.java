@@ -236,7 +236,7 @@ class AdminMemberServiceTest {
 
 			// then
 			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
-			verify(refreshTokenRepository, never()).deleteByMemberId(any());
+			verify(refreshTokenRepository, never()).deleteAllByMemberId(any());
 		}
 
 		@Test
@@ -255,7 +255,7 @@ class AdminMemberServiceTest {
 
 			// then
 			assertThat(response.status()).isEqualTo(MemberStatus.SUSPENDED);
-			verify(refreshTokenRepository).deleteByMemberId(MEMBER_ID);
+			verify(refreshTokenRepository).deleteAllByMemberId(MEMBER_ID);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
 					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED");
 		}
@@ -276,7 +276,7 @@ class AdminMemberServiceTest {
 
 			// then
 			assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
-			verify(refreshTokenRepository, never()).deleteByMemberId(anyLong());
+			verify(refreshTokenRepository, never()).deleteAllByMemberId(anyLong());
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
 					AdminAuditTargetType.MEMBER, MEMBER_ID, "SUSPENDED->ACTIVE");
 		}

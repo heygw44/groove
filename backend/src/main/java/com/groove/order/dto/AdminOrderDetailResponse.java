@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
+import com.groove.payment.entity.PaymentStatus;
 
 public record AdminOrderDetailResponse(
 		Long id,
@@ -22,10 +23,11 @@ public record AdminOrderDetailResponse(
 		LocalDateTime createdAt,
 		LocalDateTime expiresAt,
 		LocalDateTime canceledAt,
-		String cancelReason
+		String cancelReason,
+		PaymentStatus paymentStatus
 ) {
 
-	public static AdminOrderDetailResponse from(Order order) {
+	public static AdminOrderDetailResponse from(Order order, PaymentStatus paymentStatus) {
 		List<OrderItemResponse> items = order.getItems().stream()
 				.map(OrderItemResponse::from)
 				.toList();
@@ -33,6 +35,6 @@ public record AdminOrderDetailResponse(
 				order.getMember().getEmail(), order.getStatus(), order.getTotalAmount(), order.getDiscountAmount(),
 				order.getFinalAmount(), order.getCouponName(), items,
 				ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(), order.getExpiresAt(),
-				order.getCanceledAt(), order.getCancelReason());
+				order.getCanceledAt(), order.getCancelReason(), paymentStatus);
 	}
 }

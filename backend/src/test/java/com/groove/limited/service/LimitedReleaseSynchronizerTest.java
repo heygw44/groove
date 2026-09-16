@@ -2,6 +2,7 @@ package com.groove.limited.service;
 
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,11 +24,14 @@ class LimitedReleaseSynchronizerTest {
 	@Mock
 	private LimitedDropRedisService limitedDropRedisService;
 
+	@Mock
+	private LimitedRedisCircuitBreaker circuitBreaker;
+
 	private LimitedReleaseSynchronizer limitedReleaseSynchronizer;
 
 	@BeforeEach
 	void setUp() {
-		limitedReleaseSynchronizer = new LimitedReleaseSynchronizer(limitedDropRedisService);
+		limitedReleaseSynchronizer = new LimitedReleaseSynchronizer(limitedDropRedisService, circuitBreaker);
 	}
 
 	@AfterEach
@@ -89,6 +93,41 @@ class LimitedReleaseSynchronizerTest {
 
 			// then
 			verify(limitedDropRedisService, never()).release(DROP_ID, MEMBER_ID);
+		}
+
+		@Test
+		@DisplayName("서킷이 OPEN 이면 커밋 후에도 선점 해제를 건너뛰고 fallbackDrops 에 표시한다")
+		void skipsReleaseAndNotesFallbackWhenCircuitOpen() {
+			// given
+			LimitedRelease release = new LimitedRelease(DROP_ID, MEMBER_ID);
+			when(circuitBreaker.isOpen()).thenReturn(true);
+			TransactionSynchronizationManager.initSynchronization();
+			limitedReleaseSynchronizer.releaseAfterCommit(release);
+
+			// when
+			TransactionSynchronizationManager.getSynchronizations()
+					.forEach(TransactionSynchronization::afterCommit);
+
+			// then
+			verify(limitedDropRedisService, never()).release(DROP_ID, MEMBER_ID);
+			verify(circuitBreaker).noteFallback(DROP_ID);
+		}
+
+		@Test
+		@DisplayName("서킷이 HALF_OPEN(=isOpen false) 이면 커밋 후 선점을 해제한다")
+		void releasesWhenCircuitHalfOpen() {
+			// given
+			LimitedRelease release = new LimitedRelease(DROP_ID, MEMBER_ID);
+			when(circuitBreaker.isOpen()).thenReturn(false);
+			TransactionSynchronizationManager.initSynchronization();
+			limitedReleaseSynchronizer.releaseAfterCommit(release);
+
+			// when
+			TransactionSynchronizationManager.getSynchronizations()
+					.forEach(TransactionSynchronization::afterCommit);
+
+			// then
+			verify(limitedDropRedisService).release(DROP_ID, MEMBER_ID);
 		}
 	}
 }

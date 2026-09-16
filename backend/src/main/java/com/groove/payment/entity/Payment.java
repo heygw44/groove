@@ -28,6 +28,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -43,7 +44,8 @@ import lombok.NoArgsConstructor;
 		},
 		indexes = {
 			@Index(name = "idx_payment_approved_at", columnList = "approved_at"),
-			@Index(name = "idx_payment_canceled_at", columnList = "canceled_at")
+			@Index(name = "idx_payment_canceled_at", columnList = "canceled_at"),
+			@Index(name = "idx_payment_status_updated", columnList = "status, updated_at")
 		})
 public class Payment extends BaseTimeEntity {
 
@@ -85,6 +87,15 @@ public class Payment extends BaseTimeEntity {
 	@Column(name = "fail_reason", length = MAX_FAIL_REASON_LENGTH)
 	private String failReason;
 
+	@Version
+	@Column(nullable = false)
+	@ColumnDefault("0")
+	private Long version;
+
+	@Column(name = "reconcile_attempts", nullable = false)
+	@ColumnDefault("0")
+	private int reconcileAttempts;
+
 	private Payment(Order order) {
 		this.order = order;
 		this.tossOrderId = order.getOrderNumber();
@@ -96,7 +107,10 @@ public class Payment extends BaseTimeEntity {
 		return new Payment(order);
 	}
 
-	/** FAILED 에서도 승인을 허용한다. 승인에 실패한 주문은 PENDING 으로 남아 다시 결제할 수 있어야 한다. */
+	/**
+	 * FAILED 에서도 승인을 허용한다. 승인에 실패한 주문은 PENDING 으로 남아 다시 결제할 수 있어야 한다.
+	 * UNKNOWN 에서도 승인을 허용한다. 재시도나 대사 과정에서 실제로는 승인된 결제였음이 뒤늦게 확인될 수 있다.
+	 */
 	public void approve(String key, String payMethod, LocalDateTime approvedTime) {
 		validateApprovable();
 		this.paymentKey = key;
@@ -112,19 +126,78 @@ public class Payment extends BaseTimeEntity {
 		this.status = PaymentStatus.FAILED;
 	}
 
-	public void cancel(LocalDateTime canceledTime) {
+	/** 토스 승인 호출이 timeout/5xx 로 결과를 알 수 없을 때 호출한다. 이후 대사나 재조회로 DONE/FAILED 로 수렴시킨다. */
+	public void markUnknown(String reason) {
+		validateApprovable();
+		this.failReason = truncate(reason);
+		this.status = PaymentStatus.UNKNOWN;
+	}
+
+	public void requestCancel() {
 		if (this.status != PaymentStatus.DONE) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		this.status = PaymentStatus.CANCEL_REQUESTED;
+	}
+
+	public void completeCancel(LocalDateTime canceledTime) {
+		if (this.status != PaymentStatus.CANCEL_REQUESTED) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 		this.canceledAt = canceledTime;
 		this.status = PaymentStatus.CANCELED;
 	}
 
+	public void revertCancelRequest() {
+		if (this.status != PaymentStatus.CANCEL_REQUESTED) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		this.status = PaymentStatus.DONE;
+	}
+
+	/** FAILED 로 남아 대사 대상에서 빠진 결제를 재시도용 READY 로 되돌린다. updated_at 이 갱신돼 grace 도 새로 시작한다. */
+	public void retry() {
+		if (this.status != PaymentStatus.FAILED) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		this.failReason = null;
+		this.reconcileAttempts = 0;
+		this.status = PaymentStatus.READY;
+	}
+
+	/**
+	 * 토스가 승인한 결제를 뒤늦게 취소로 수렴시킨다(승인 후 주문 무효, 대사 결과 토스에서 이미 취소됨 등).
+	 * approvedAt 을 채우는 이유: 매출 집계는 DONE/CANCELED 의 approved_at 을 매출로, CANCELED 의
+	 * canceled_at 을 취소로 센다. approvedAt 을 비우면 취소 금액만 늘어 순매출이 실제보다 줄어든다.
+	 */
+	public void compensate(String key, LocalDateTime approvedTime, LocalDateTime canceledTime, String reason) {
+		if (this.status == PaymentStatus.CANCELED) {
+			return;
+		}
+		if (this.status == PaymentStatus.DONE || this.status == PaymentStatus.CANCEL_REQUESTED) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		if (this.paymentKey == null) {
+			this.paymentKey = key;
+		}
+		if (this.approvedAt == null) {
+			this.approvedAt = approvedTime != null ? approvedTime : canceledTime;
+		}
+		this.canceledAt = canceledTime;
+		this.failReason = truncate(reason);
+		this.status = PaymentStatus.CANCELED;
+	}
+
+	public void recordReconcileMiss() {
+		this.reconcileAttempts++;
+	}
+
+	/** approve/fail/markUnknown 공통 전이 검증. READY·FAILED·UNKNOWN 에서만 다음 상태로 넘어갈 수 있다. */
 	private void validateApprovable() {
 		if (this.status == PaymentStatus.DONE) {
 			throw new BusinessException(ErrorCode.PAYMENT_ALREADY_DONE);
 		}
-		if (this.status == PaymentStatus.CANCELED) {
+		if (this.status == PaymentStatus.CANCELED || this.status == PaymentStatus.CANCEL_REQUESTED) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 	}

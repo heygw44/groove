@@ -24,7 +24,10 @@ import com.groove.product.service.ProductSalesStatsUpdater;
 
 import lombok.RequiredArgsConstructor;
 
-/** 결제 승인의 DB 반영. 토스 호출은 {@link PaymentConfirmService} 가 트랜잭션 밖에서 맡고, 이 클래스는 쓰기만 한다. */
+/**
+ * 결제 승인의 DB 반영. 토스 호출은 {@link PaymentConfirmService} 가 트랜잭션 밖에서 맡고, 이 클래스는 쓰기만 한다.
+ * fail/markUnknown 의 버전 충돌(ObjectOptimisticLockingFailureException)은 커밋 시점에 나므로 호출자가 처리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class PaymentConfirmWriter {
@@ -69,16 +72,30 @@ public class PaymentConfirmWriter {
 		}
 
 		Payment payment = existing.orElseGet(() -> paymentRepository.save(Payment.ready(order)));
+		if (payment.getStatus() == PaymentStatus.FAILED) {
+			payment.retry();
+		}
 		return new ConfirmPreparation(payment.getId(), order.getId(), order.getOrderNumber(), order.getFinalAmount(),
 				Optional.empty());
 	}
 
+	/**
+	 * 주문 락을 결제 조회보다 먼저 잡는다. MySQL RR 의 일관 읽기 스냅샷은 트랜잭션의 첫 비잠금 읽기에서
+	 * 고정되므로, 락(잠금 읽기)을 먼저 거쳐야 뒤이은 결제 조회가 그사이 먼저 커밋된 승인을 놓치지 않는다.
+	 */
 	@Transactional
-	public PaymentConfirmResponse approve(Long paymentId, String paymentKey, PaymentConfirmResult result) {
+	public PaymentConfirmResponse approve(Long orderId, Long paymentId, String paymentKey,
+			PaymentConfirmResult result) {
+		Order order = orderRepository.findByIdForUpdate(orderId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Payment payment = paymentRepository.findById(paymentId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-		Order order = orderRepository.findByIdForUpdate(payment.getOrder().getId())
-				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		if (!payment.getOrder().getId().equals(orderId)) {
+			throw new BusinessException(ErrorCode.PAYMENT_NOT_FOUND);
+		}
+		if (payment.getStatus() == PaymentStatus.DONE && paymentKey.equals(payment.getPaymentKey())) {
+			return PaymentConfirmResponse.from(payment);
+		}
 
 		LocalDateTime approvedAt = result.approvedAt() != null ? result.approvedAt() : LocalDateTime.now(clock);
 		payment.approve(paymentKey, result.method(), approvedAt);
@@ -101,9 +118,27 @@ public class PaymentConfirmWriter {
 	public void fail(Long paymentId, String reason) {
 		Payment payment = paymentRepository.findById(paymentId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-		if (payment.getStatus() == PaymentStatus.DONE) {
+		if (payment.getStatus() == PaymentStatus.DONE || payment.getStatus() == PaymentStatus.UNKNOWN) {
 			return;
 		}
 		payment.fail(reason);
+	}
+
+	@Transactional
+	public void markUnknown(Long paymentId, String reason) {
+		Payment payment = paymentRepository.findById(paymentId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		if (payment.getStatus() == PaymentStatus.DONE) {
+			return;
+		}
+		payment.markUnknown(reason);
+	}
+
+	@Transactional
+	public void markCompensated(Long paymentId, String paymentKey, LocalDateTime approvedAt, LocalDateTime canceledAt,
+			String reason) {
+		Payment payment = paymentRepository.findById(paymentId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		payment.compensate(paymentKey, approvedAt, canceledAt, reason);
 	}
 }

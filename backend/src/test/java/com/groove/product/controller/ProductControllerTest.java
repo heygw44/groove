@@ -195,7 +195,8 @@ class ProductControllerTest {
 		void treatsExpiredTokenAsAnonymous() throws Exception {
 			// given
 			JwtProvider expiredProvider = new JwtProvider(
-					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14)));
+					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14),
+							Duration.ofSeconds(10)));
 			String expiredToken = expiredProvider.createAccessToken(1L, MemberRole.USER);
 			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(sampleSummary()), PageRequest.of(0, 20), 1));

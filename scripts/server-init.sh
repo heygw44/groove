@@ -44,7 +44,7 @@ sudo ufw --force enable
 sudo ufw status verbose
 
 echo "== 6. 운영 디렉터리 생성 =="
-sudo mkdir -p /opt/groove/{uploads,backups,scripts,logs}
+sudo mkdir -p /opt/groove/{uploads,backups,scripts,logs,nginx}
 sudo mkdir -p /var/www/groove
 sudo chown -R "$USER":"$USER" /opt/groove
 sudo chown -R "$USER":www-data /var/www/groove
@@ -52,5 +52,10 @@ sudo chown -R "$USER":www-data /var/www/groove
 echo "== 7. Nginx + certbot 설치 =="
 sudo -E apt-get install -y nginx python3-certbot-nginx
 sudo systemctl enable --now nginx
+
+echo "== 8. Nginx 설정 디렉터리 정리 =="
+sudo mkdir -p /opt/groove/nginx && sudo chown "$USER":"$USER" /opt/groove/nginx
+sudo rm -f /etc/nginx/sites-enabled/default
+echo "Nginx 설정은 배포 워크플로가 scripts/deploy-nginx.sh 로 올린다(첫 설치는 docs/09-deployment.md §4.5)"
 
 echo "== 완료 =="

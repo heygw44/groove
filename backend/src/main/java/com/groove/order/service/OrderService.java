@@ -3,7 +3,6 @@ package com.groove.order.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,14 +17,10 @@ import com.groove.global.common.PageResponse;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.repository.LimitedPurchaseRepository;
-import com.groove.limited.service.LimitedPurchaseWriter;
-import com.groove.limited.service.LimitedRelease;
-import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
@@ -34,7 +29,6 @@ import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
@@ -42,7 +36,6 @@ import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
-import com.groove.product.service.ProductSalesStatsUpdater;
 
 import lombok.RequiredArgsConstructor;
 
@@ -57,8 +50,6 @@ public class OrderService {
 	private final ProductRepository productRepository;
 	private final LimitedDropRepository limitedDropRepository;
 	private final LimitedPurchaseRepository limitedPurchaseRepository;
-	private final LimitedPurchaseWriter limitedPurchaseWriter;
-	private final LimitedReleaseSynchronizer limitedReleaseSynchronizer;
 	private final CartItemRepository cartItemRepository;
 	private final MemberCouponRepository memberCouponRepository;
 	private final OrderStockService orderStockService;
@@ -66,8 +57,6 @@ public class OrderService {
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final OrderQueryMapper orderQueryMapper;
 	private final PaymentRepository paymentRepository;
-	private final PaymentCancelHook paymentCancelHook;
-	private final ProductSalesStatsUpdater productSalesStatsUpdater;
 	private final Clock clock;
 
 	@Transactional
@@ -128,44 +117,14 @@ public class OrderService {
 		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId));
 	}
 
-	@Transactional
-	public OrderDetailResponse cancel(Long memberId, Long orderId, OrderCancelRequest request) {
-		// 만료 스케줄러와 같은 주문을 동시에 취소하면 재고가 두 번 복구되므로 주문 행을 먼저 잠근다.
-		orderRepository.findByIdForUpdate(orderId).orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		Order order = orderRepository.findWithItemsByIdAndMemberId(orderId, memberId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		OrderStatus previousStatus = order.getStatus();
-		String reason = request == null ? null : request.reason();
-		order.cancel(reason);
-		orderStockService.restore(order);
-		restoreCoupon(order);
-		Optional<LimitedRelease> limitedRelease = limitedPurchaseWriter.revertByOrder(order.getId(),
-				LocalDateTime.now(clock));
-		limitedRelease.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
-
-		if (previousStatus == OrderStatus.PAID) {
-			paymentCancelHook.onPaidOrderCanceled(order);
-			// paymentCancelHook 은 같은 트랜잭션에서 토스에 HTTP 호출을 하므로, 판매량 재계산을
-			// 그 앞에 두면 인기 상품 한 행의 X 락을 외부 API 왕복 내내 물게 된다. 반드시 뒤에 둔다.
-			productSalesStatsUpdater.refreshFor(order);
-		}
-		Long limitedDropId = limitedRelease.map(LimitedRelease::dropId).orElse(null);
-		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId));
-	}
-
-	/** 승인 이력이 있는 결제(DONE/CANCELED)만 상세 응답에 포함한다. */
+	/** 승인 이력이 있는 결제(DONE/CANCEL_REQUESTED/CANCELED)만 상세 응답에 포함한다. */
 	private OrderPaymentResponse resolvePayment(Long orderId) {
 		return paymentRepository.findByOrderId(orderId)
 				.filter(payment -> payment.getStatus() == PaymentStatus.DONE
+						|| payment.getStatus() == PaymentStatus.CANCEL_REQUESTED
 						|| payment.getStatus() == PaymentStatus.CANCELED)
 				.map(OrderPaymentResponse::from)
 				.orElse(null);
-	}
-
-	private void restoreCoupon(Order order) {
-		if (order.getMemberCoupon() != null && order.getMemberCoupon().isUsed()) {
-			order.getMemberCoupon().restore();
-		}
 	}
 
 	private List<CartItem> findOwnedCartItems(Long memberId, List<Long> cartItemIds) {

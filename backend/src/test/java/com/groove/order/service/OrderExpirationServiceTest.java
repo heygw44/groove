@@ -27,6 +27,7 @@ import com.groove.fixture.CouponFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.limited.service.LimitedPurchaseWriter;
 import com.groove.limited.service.LimitedRelease;
@@ -34,6 +35,8 @@ import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 
@@ -52,6 +55,9 @@ class OrderExpirationServiceTest {
 	@Mock
 	private LimitedPurchaseWriter limitedPurchaseWriter;
 
+	@Mock
+	private PaymentRepository paymentRepository;
+
 	private OrderExpirationService orderExpirationService;
 
 	private Member member;
@@ -61,7 +67,7 @@ class OrderExpirationServiceTest {
 	@BeforeEach
 	void setUp() {
 		orderExpirationService = new OrderExpirationService(orderRepository, orderStockService,
-				limitedPurchaseWriter);
+				limitedPurchaseWriter, paymentRepository);
 
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
@@ -173,6 +179,24 @@ class OrderExpirationServiceTest {
 
 			// then
 			assertThat(result).isEmpty();
+			verify(orderStockService, never()).restore(any());
+		}
+
+		@Test
+		@DisplayName("결제가 READY/UNKNOWN 이면 대사가 결론을 낼 때까지 만료를 건너뛰고 empty 를 반환한다")
+		void skipsWhenPaymentIsUnresolved() {
+			// given
+			Order order = expiredOrder();
+			Payment payment = PaymentFixture.unknown(order, "확인 중");
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+
+			// when
+			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+
+			// then
+			assertThat(result).isEmpty();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
 			verify(orderStockService, never()).restore(any());
 		}
 	}

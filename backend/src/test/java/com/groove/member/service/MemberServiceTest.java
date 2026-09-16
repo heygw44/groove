@@ -191,7 +191,7 @@ class MemberServiceTest {
 
 			// then
 			assertThat(member.getStatus()).isEqualTo(MemberStatus.WITHDRAWN);
-			verify(refreshTokenRepository).deleteByMemberId(MEMBER_ID);
+			verify(refreshTokenRepository).deleteAllByMemberId(MEMBER_ID);
 		}
 
 		@Test
@@ -206,7 +206,7 @@ class MemberServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
-			verify(refreshTokenRepository, never()).deleteByMemberId(any());
+			verify(refreshTokenRepository, never()).deleteAllByMemberId(any());
 		}
 	}
 }

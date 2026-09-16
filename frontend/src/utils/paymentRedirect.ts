@@ -1,4 +1,5 @@
-import { TOSS_FAIL_MESSAGES } from '@/constants/paymentMessages';
+import { PAYMENT_CONFIRM_ERROR_MESSAGES, TOSS_FAIL_MESSAGES } from '@/constants/paymentMessages';
+import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 
 const DEFAULT_FAIL_MESSAGE = '결제에 실패했습니다.';
 
@@ -76,4 +77,16 @@ export function getTossFailMessage(code?: string, fallback?: string): string {
     return TOSS_FAIL_MESSAGES[code];
   }
   return fallback ?? DEFAULT_FAIL_MESSAGE;
+}
+
+/**
+ * 결제 승인(confirm) 실패 메시지. ORDER_EXPIRED 는 전역 문구("결제 기한이 지난 주문입니다")가
+ * 주문 생성 등 다른 화면 것이라, 승인 후 자동 취소됐다는 이 화면 고유 문맥으로 덮어쓴다.
+ */
+export function getPaymentConfirmErrorMessage(error: unknown): string {
+  const code = getErrorCode(error);
+  if (code && PAYMENT_CONFIRM_ERROR_MESSAGES[code]) {
+    return PAYMENT_CONFIRM_ERROR_MESSAGES[code];
+  }
+  return getErrorMessage(error);
 }

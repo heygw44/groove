@@ -51,8 +51,10 @@ public class BoughtTogetherRedisService {
 					for (Map.Entry<Long, Long> score : scoresByOtherProduct.entrySet()) {
 						stringConnection.zAdd(tmpKey, score.getValue(), score.getKey().toString());
 					}
+					// RENAME 전에 걸어야 ZADD 뒤 RENAME 전에 끊겨도 tmp 키가 TTL 없이 남지 않는다.
+					// RENAME 은 원본의 TTL 을 그대로 가져가므로 RENAME 뒤에 다시 걸 필요는 없다.
+					stringConnection.expire(tmpKey, ttlSeconds);
 					stringConnection.rename(tmpKey, key);
-					stringConnection.expire(key, ttlSeconds);
 				}
 				return null;
 			});

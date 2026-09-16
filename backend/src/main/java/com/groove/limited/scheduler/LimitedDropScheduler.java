@@ -9,12 +9,15 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.function.BiPredicate;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.service.LimitedDropRedisService;
 import com.groove.limited.service.LimitedDropScheduleService;
+import com.groove.limited.service.LimitedDropSyncService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +30,8 @@ public class LimitedDropScheduler {
 
 	private final LimitedDropRepository limitedDropRepository;
 	private final LimitedDropScheduleService scheduleService;
+	private final LimitedDropRedisService limitedDropRedisService;
+	private final LimitedDropSyncService limitedDropSyncService;
 	private final Clock clock;
 
 	@Scheduled(fixedDelay = 10_000, initialDelay = 10_000)
@@ -39,6 +44,30 @@ public class LimitedDropScheduler {
 				now), now, scheduleService::close, "마감");
 		if (opened > 0 || closed > 0) {
 			log.info("한정반 드롭 상태 전이 완료 opened={} closed={}", opened, closed);
+		}
+		restoreMissingKeys();
+	}
+
+	/** 오픈·마감 처리 뒤 OPEN/SOLD_OUT 드롭 중 Redis 재고 키가 없는 것을 DB 기준으로 재적재한다. */
+	private void restoreMissingKeys() {
+		List<Long> ids = limitedDropRepository.findIdsByStatusIn(List.of(OPEN, SOLD_OUT));
+		if (ids.isEmpty()) {
+			return;
+		}
+		List<Long> missing;
+		try {
+			missing = limitedDropRedisService.findMissingStock(ids);
+		} catch (DataAccessException e) {
+			log.warn("한정반 재고 키 점검 실패(Redis)", e);
+			return;
+		}
+		for (Long dropId : missing) {
+			try {
+				limitedDropSyncService.sync(dropId);
+				log.info("한정반 재고 키 유실 복구 dropId={}", dropId);
+			} catch (RuntimeException e) {
+				log.warn("한정반 재고 키 유실 복구 실패 dropId={}", dropId, e);
+			}
 		}
 	}
 

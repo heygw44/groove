@@ -19,6 +19,7 @@ import com.groove.catalog.service.DiscogsResyncLock;
 import com.groove.catalog.service.DiscogsResyncService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.recommend.service.ProductCatalogChangedEvent;
 
 import lombok.RequiredArgsConstructor;
@@ -47,11 +48,15 @@ public class DiscogsResyncScheduler {
 	private final CatalogResyncProperties properties;
 	private final CatalogFreshnessProperties freshnessProperties;
 	private final ApplicationEventPublisher eventPublisher;
+	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
 
 	/** 조회수 우선순위 재검증. 회당 예산(maxCallsPerRun)만큼만 부른다. */
 	@Scheduled(fixedDelayString = "${groove.catalog.resync.interval}", initialDelay = 30_000)
 	public void resyncPriority() {
+		if (shutdownSignal.isShuttingDown()) {
+			return;
+		}
 		boolean acquired = discogsResyncLock.runExclusively(this::runPriority);
 		if (!acquired) {
 			log.info("Discogs 우선순위 재검증 락 획득 실패로 건너뛴다");
@@ -61,6 +66,9 @@ public class DiscogsResyncScheduler {
 	/** 야간 전량 스윕. HIDDEN 포함, MAX_LOOPS 만큼 회당 예산 단위로 반복해 소진한다. */
 	@Scheduled(cron = "${groove.catalog.resync.sweep-cron}", zone = "Asia/Seoul")
 	public void resyncSweep() {
+		if (shutdownSignal.isShuttingDown()) {
+			return;
+		}
 		boolean acquired = discogsResyncLock.runExclusively(this::runSweep);
 		if (!acquired) {
 			log.info("Discogs 야간 스윕 락 획득 실패로 건너뛴다");
@@ -92,6 +100,10 @@ public class DiscogsResyncScheduler {
 		int failed = 0;
 		int changed = 0;
 		for (int i = 0; i < SWEEP_MAX_LOOPS; i++) {
+			if (shutdownSignal.isShuttingDown()) {
+				log.info("셧다운 신호로 야간 스윕 중단 candidates={} success={} failed={}", candidateTotal, success, failed);
+				break;
+			}
 			List<DiscogsResyncCandidate> candidates = discogsResyncMapper.findCandidates(staleBefore, null, false,
 					false, properties.maxCallsPerRun());
 			if (candidates.isEmpty()) {
@@ -122,6 +134,11 @@ public class DiscogsResyncScheduler {
 		int failed = 0;
 		int changed = 0;
 		for (DiscogsResyncCandidate candidate : candidates) {
+			if (shutdownSignal.isShuttingDown()) {
+				log.info("셧다운 신호로 Discogs 재검증 중단 processed={} remaining={}", success + failed,
+						candidates.size() - (success + failed));
+				break;
+			}
 			try {
 				DiscogsReleaseResponse release = pressingLookupClient.getRelease(candidate.discogsReleaseId());
 				DiscogsResyncOutcome outcome = discogsResyncService.apply(candidate.productId(),

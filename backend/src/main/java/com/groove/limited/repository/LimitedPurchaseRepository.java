@@ -20,4 +20,7 @@ public interface LimitedPurchaseRepository extends JpaRepository<LimitedPurchase
 	@Query("select p from LimitedPurchase p join fetch p.member left join fetch p.order where p.drop.id = :dropId "
 			+ "order by p.id")
 	List<LimitedPurchase> findAllWithMemberAndOrderByDropId(@Param("dropId") Long dropId);
+
+	@Query("select p.member.id from LimitedPurchase p where p.drop.id = :dropId")
+	List<Long> findMemberIdsByDropId(@Param("dropId") Long dropId);
 }

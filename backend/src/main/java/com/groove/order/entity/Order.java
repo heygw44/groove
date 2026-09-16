@@ -167,12 +167,38 @@ public class Order extends BaseTimeEntity {
 	}
 
 	public void cancel(String reason) {
-		if (!this.status.isCancelable()) {
+		if (this.status != OrderStatus.PENDING) {
 			throw new BusinessException(ErrorCode.ORDER_CANNOT_CANCEL);
 		}
 		this.status = OrderStatus.CANCELED;
 		this.canceledAt = LocalDateTime.now();
 		this.cancelReason = reason;
+	}
+
+	public void requestCancel(String reason, boolean byAdmin) {
+		if (byAdmin) {
+			if (!this.status.canTransitionTo(OrderStatus.CANCELED)) {
+				throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
+			}
+			this.cancelReason = ADMIN_CANCEL_REASON;
+			return;
+		}
+		if (this.status != OrderStatus.PAID) {
+			throw new BusinessException(ErrorCode.ORDER_CANNOT_CANCEL);
+		}
+		this.cancelReason = reason;
+	}
+
+	public void completeCancel(LocalDateTime now) {
+		if (this.status != OrderStatus.PAID && this.status != OrderStatus.PREPARING) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		this.status = OrderStatus.CANCELED;
+		this.canceledAt = now;
+	}
+
+	public void withdrawCancelRequest() {
+		this.cancelReason = null;
 	}
 
 	/** 관리자 상태 전이(PATCH /admin/orders/{id}/status)용. 허용되지 않는 전이는 예외를 던진다. */

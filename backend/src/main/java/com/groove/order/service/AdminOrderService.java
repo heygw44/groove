@@ -1,7 +1,5 @@
 package com.groove.order.service;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -13,8 +11,6 @@ import com.groove.admin.service.AdminAuditLogService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
-import com.groove.limited.service.LimitedPurchaseWriter;
-import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSearchRequest;
@@ -24,7 +20,9 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
-import com.groove.product.service.ProductSalesStatsUpdater;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,13 +34,8 @@ public class AdminOrderService {
 
 	private final OrderRepository orderRepository;
 	private final OrderQueryMapper orderQueryMapper;
-	private final OrderStockService orderStockService;
-	private final PaymentCancelHook paymentCancelHook;
 	private final AdminAuditLogService adminAuditLogService;
-	private final LimitedPurchaseWriter limitedPurchaseWriter;
-	private final LimitedReleaseSynchronizer limitedReleaseSynchronizer;
-	private final ProductSalesStatsUpdater productSalesStatsUpdater;
-	private final Clock clock;
+	private final PaymentRepository paymentRepository;
 
 	public PageResponse<AdminOrderSummaryResponse> getList(AdminOrderSearchRequest request) {
 		AdminOrderSearchCondition condition = request.toCondition();
@@ -57,43 +50,32 @@ public class AdminOrderService {
 	public AdminOrderDetailResponse getDetail(Long orderId) {
 		Order order = orderRepository.findWithItemsAndMemberById(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		return AdminOrderDetailResponse.from(order);
+		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId));
 	}
 
 	@Transactional
 	public AdminOrderDetailResponse changeStatus(Long adminId, Long orderId, AdminOrderStatusChangeRequest request) {
+		if (request.status() == OrderStatus.CANCELED) {
+			throw new IllegalStateException("CANCELED transition must use AdminOrderStatusService");
+		}
 		// 만료 스케줄러와 같은 주문을 동시에 취소하면 재고가 두 번 복구되므로 주문 행을 먼저 잠근다.
 		orderRepository.findByIdForUpdate(orderId).orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Order order = orderRepository.findWithItemsAndMemberById(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		if (resolvePaymentStatus(orderId) == PaymentStatus.CANCEL_REQUESTED) {
+			throw new BusinessException(ErrorCode.ORDER_CANCEL_IN_PROGRESS);
+		}
 		OrderStatus previous = order.getStatus();
 		OrderStatus next = request.status();
 		order.changeStatus(next);
 
-		Long canceledPaymentId = null;
-		if (next == OrderStatus.CANCELED) {
-			orderStockService.restore(order);
-			restoreCoupon(order);
-			limitedPurchaseWriter.revertByOrder(order.getId(), LocalDateTime.now(clock))
-					.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
-			if (previous == OrderStatus.PAID || previous == OrderStatus.PREPARING) {
-				canceledPaymentId = paymentCancelHook.onPaidOrderCanceled(order);
-				productSalesStatsUpdater.refreshFor(order);
-			}
-		}
-
 		adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
 				orderId, previous.name() + "->" + next.name());
-		if (canceledPaymentId != null) {
-			adminAuditLogService.record(adminId, AdminAuditAction.PAYMENT_CANCEL, AdminAuditTargetType.PAYMENT,
-					canceledPaymentId, "DONE->CANCELED");
-		}
-		return AdminOrderDetailResponse.from(order);
+		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId));
 	}
 
-	private void restoreCoupon(Order order) {
-		if (order.getMemberCoupon() != null && order.getMemberCoupon().isUsed()) {
-			order.getMemberCoupon().restore();
-		}
+	private PaymentStatus resolvePaymentStatus(Long orderId) {
+		return paymentRepository.findByOrderId(orderId).map(Payment::getStatus).orElse(null);
 	}
+
 }

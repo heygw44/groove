@@ -23,11 +23,19 @@ spring:
       # Redis 장애 시 DB 폴백이 지연되지 않도록 기본 타임아웃보다 짧게 잡는다.
       timeout: 1s
       connect-timeout: 500ms
+  lifecycle:
+    # Boot 3.4+ 기본값(30s)과 같다. 토스 connect 3s + read 10s 에 여유를 둔 값이라 compose
+    # stop_grace_period 산정 근거로 삼기 위해 그대로 명시해 둔다.
+    timeout-per-shutdown-phase: 30s
   task:
     scheduling:
       thread-name-prefix: groove-scheduler-
       pool:
         size: 4
+      shutdown:
+        await-termination: true
+        # 스케줄러 루프는 신호를 보고 진행 중인 건만 마저 끝내고 멈추므로 짧게 둔다.
+        await-termination-period: 10s
   servlet:
     multipart:
       max-file-size: 5MB
@@ -44,6 +52,10 @@ spring:
       initialize-schema: never
 
 server:
+  # Boot 3.4+ 기본값(graceful)과 같지만, compose stop_grace_period 산정 근거라 명시해 둔다.
+  # compose stop_grace_period 는 이 값(spring.lifecycle.timeout-per-shutdown-phase=30s)
+  # + 스케줄러 대기(10s) + 비동기 실행기 대기(5s+5s) 보다 커야 SIGKILL 로 안 잘린다.
+  shutdown: graceful
   tomcat:
     max-swallow-size: 10MB
 
@@ -65,6 +77,7 @@ jwt:
   secret: ${JWT_SECRET}            # 환경변수 필수, 최소 256bit (32바이트 이상)
   access-token-expiry: 30m
   refresh-token-expiry: 14d
+  refresh-token-grace: 10s
 
 auth:
   cookie:
@@ -95,6 +108,26 @@ limited:
   redis-enabled: ${LIMITED_REDIS_ENABLED:true}
 
 groove:
+  payment:
+    reconcile:
+      interval: 60s
+      grace: 2m
+      batch-size: 50
+      max-attempts: 10
+  limited:
+    reconcile:
+      interval: 30s
+      # reserve→write 커밋 최악 소요(드롭 행 락 대기 포함)보다 넉넉히 잡는다.
+      grace: 30s
+    circuit:
+      # 일시적 타임아웃 한두 건으로 넘어가지 않게, 연속 실패 5회부터 OPEN 한다.
+      failure-threshold: 5
+      # Redis 재기동 등 일시 장애가 보통 이 안에 끝난다. 너무 짧으면 프로브가 계속 실패를 다시 센다.
+      open-duration: 10s
+      # Hikari 기본 풀 10 의 절반. 폴백 중에도 일반 요청이 커넥션을 못 잡는 상황을 막는다.
+      fallback-permits: 5
+      # 끄면 서킷 OPEN 중 즉시 LIMITED_BUSY 로 거절한다. 채택 여부는 측정 뒤 결정한다.
+      fallback-enabled: true
   recommend:
     # 추천 상품 특성 캐시 TTL. 0 이하면 캐시를 끄고 매 요청마다 다시 읽는다.
     feature-cache-ttl: 60s

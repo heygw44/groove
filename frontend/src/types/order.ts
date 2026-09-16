@@ -1,4 +1,4 @@
-import type { OrderPayment } from '@/types/payment';
+import type { OrderPayment, PaymentStatus } from '@/types/payment';
 
 export type OrderStatus =
   'PENDING' | 'PAID' | 'PREPARING' | 'SHIPPED' | 'DELIVERED' | 'CANCELED' | 'REFUNDED';
@@ -65,7 +65,7 @@ export interface OrderDetail {
   cancelReason?: string;
   /** 한정반 구매 주문에만 존재. 만료 취소로 LimitedPurchase 가 지워지면 재조회 시 사라질 수 있다. */
   limitedDropId?: number;
-  /** 승인 이력이 있는 결제(DONE/CANCELED)만 존재. */
+  /** 승인 이력이 있는 결제(DONE/CANCEL_REQUESTED/CANCELED)만 존재. */
   payment?: OrderPayment;
 }
 
@@ -105,6 +105,8 @@ export interface AdminOrderDetail {
   expiresAt: string;
   canceledAt?: string;
   cancelReason?: string;
+  /** 결제 행이 없으면 응답에서 빠진다. */
+  paymentStatus?: PaymentStatus;
 }
 
 export interface AdminOrderListParams {
