@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GROOVE EC2(t3.micro, Ubuntu 24.04) 최초 초기화 스크립트 (docs/09-deployment.md 4.3절)
+# GROOVE EC2(t3.micro, Ubuntu 24.04) 최초 초기화 스크립트
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
@@ -63,6 +63,6 @@ sudo systemctl enable --now nginx
 echo "== 8. Nginx 설정 디렉터리 정리 =="
 sudo mkdir -p /opt/groove/nginx && sudo chown "$USER":"$USER" /opt/groove/nginx
 sudo rm -f /etc/nginx/sites-enabled/default
-echo "Nginx 설정은 배포 워크플로가 scripts/deploy-nginx.sh 로 올린다(첫 설치는 docs/09-deployment.md §4.5)"
+echo "Nginx 설정은 배포 워크플로가 scripts/deploy-nginx.sh 로 올린다(첫 설치는 nginx/ 디렉터리의 설정을 참고)"
 
 echo "== 완료 =="
