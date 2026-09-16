@@ -116,10 +116,10 @@ docker compose exec redis redis-cli SCARD limited:buyers:<dropId>
 | 컨테이너 RSS | backend 약 355MB(`-Xmx384m` + SerialGC), mysql 약 74MB, redis 약 2MB |
 | `/api/v1/health` 왕복(로컬 → 운영) | conn 약 55ms, TLS 약 78ms, TTFB 약 100ms |
 | Nginx | `worker_connections 4096` × worker 2, upstream keepalive 64 (#405 이후) |
-| `net.ipv4.tcp_max_syn_backlog` | 128 |
+| `net.ipv4.tcp_max_syn_backlog` | 호스트·컨테이너 4096 (#426, 기본 128) |
 | Redis | `maxmemory 64mb` / `noeviction` + AOF, 사용량 used 1.57M / peak 1.90M(2026-09-16 실측) |
 | rate limit | 없음 — Nginx `limit_req` 는 #405 에서 검토 후 기각 |
-| Tomcat accept-count | 100 (기본값, `server.tomcat.accept-count` 미설정) — 2026-09-16 재측정에서 다음 병목으로 지목(#426) |
+| Tomcat accept-count | 4096 (#426, 기본 100 에서 상향) |
 
 특히 챙길 점:
 
@@ -220,6 +220,7 @@ ssh -i ~/.ssh/groove-key.pem ubuntu@52.78.95.139 'cd /opt/groove && docker compo
 - Nginx `worker_connections are not enough` 경고 건수 — Nginx 슬롯 고갈.
 - access.log 5xx 증가분 — 애플리케이션 레벨 실패.
 - `resources.csv` 의 `cpu_steal_pct`(CPU 스틸) / `swap_used_mb`(스왑 사용량) 추이 — t3.micro 크레딧 고갈이나 메모리 압박 여부.
+- `backend_listen_overflows`/`backend_listen_drops`/`backend_reqq_full_cookies`/`backend_syncookies_failed`(컨테이너 netns) · `host_syn_retrans`/`host_reqq_full_cookies`(호스트 netns) — 접속 큐 3단 중 어디서 넘쳤는지(#426, `09-deployment.md` §4.5 "접속 큐 3단").
 
 ### 이번 범위 밖
 

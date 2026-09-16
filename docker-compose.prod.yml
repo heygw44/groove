@@ -87,6 +87,11 @@ services:
     volumes:
       - /opt/groove/uploads:/app/uploads
       - /opt/groove/logs:/app/logs
+    # net.* 는 네트워크 네임스페이스별이라 컨테이너에 sysctl 을 직접 걸 수 있다.
+    # somaxconn 은 이미 4096 이라 안 건드리고, SYN 백로그만 컨테이너 기본값(128)에서 올린다 —
+    # 1000~2000 VU 러시에서 Nginx 가 동시에 여는 업스트림 연결 수를 받아내기 위함.
+    sysctls:
+      - net.ipv4.tcp_max_syn_backlog=4096
     # 호스트 루프백에만 바인딩한다. 외부 노출은 Nginx 프록시로만.
     ports:
       - "127.0.0.1:8080:8080"
