@@ -34,7 +34,7 @@ services:
     image: redis:7-alpine
     container_name: groove-redis
     restart: unless-stopped
-    # maxmemory 64mb 는 운영 측정 전 임시값이다.
+    # maxmemory 64mb: 운영 실측(2026-09-16) peak 1.9MB 의 2배 이상이고, 1GB 호스트에서 JVM(-Xmx384m)·MySQL(buffer pool 128M)과 나눠 쓰는 예산 안이라 확정한다.
     # noeviction: 사라지면 안 되는 키(한정반 재고·구매자, refresh 세션)가 캐시와 한 인스턴스라 축출을 끈다.
     #   캐시 키는 전부 TTL 이 있고, 메모리가 차면 쓰기가 OOM 으로 실패한다(캐시 쓰기는 앱이 삼킨다).
     # appendonly everysec: 재시작·재생성에도 키를 남긴다. 최대 1초 유실.
