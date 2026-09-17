@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GROOVE 운영 MySQL 일일 백업 스크립트 (docs/09-deployment.md 5.1절)
+# GROOVE 운영 MySQL 일일 백업 스크립트
 set -euo pipefail
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

@@ -7,7 +7,7 @@
 // 두 소스를 시각으로 대조해서 각 baseline 요청이 "배치가 실제로 도는 순간"이었는지를 사후에 복원한다.
 //
 // 사용법:
-//   node scripts/k6/analyze-batch-interference.mjs <raw-json-output> <k6-stdout-log>
+//   node infra/k6/analyze-batch-interference.mjs <raw-json-output> <k6-stdout-log>
 //
 // <raw-json-output> : k6 run --out json=<file> 로 남긴 NDJSON
 // <k6-stdout-log>   : k6 콘솔 출력을 리다이렉트한 로그 파일(TEST_START_MS/AGG_BATCH_INTERVAL 파싱용)

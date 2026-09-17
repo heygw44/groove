@@ -1,22 +1,38 @@
-name: "🔧 설정 / 리팩터링 / 문서"
-description: "기능 변경이 없는 작업(빌드, 설정, 의존성, 리팩터링, 문서)을 등록합니다."
-title: "[CHORE] "
+name: "설정 · 리팩터링 · 테스트 · 문서 · 인프라"
+description: "기능 변경이 없는 작업(빌드, 설정, 의존성, 리팩터링, 테스트, 문서, 인프라)을 등록한다."
+title: "[chore] "
 labels: ["chore"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        제목 접두사는 작업 성격에 맞게 `[chore]` `[refactor]` `[test]` `[docs]` `[infra]` 중 하나로 바꾸고 라벨도 맞춘다.
   - type: textarea
     id: description
     attributes:
-      label: "📝 작업 내용"
+      label: "작업 내용"
     validations:
       required: true
   - type: textarea
     id: reason
     attributes:
-      label: "💡 이유"
-      description: "왜 지금 해야 하나요?"
+      label: "이유"
+      description: "왜 지금 해야 하는가"
+    validations:
+      required: true
   - type: textarea
-    id: tasks
+    id: acceptance
     attributes:
-      label: "✅ 체크리스트"
-      value: |
-        - [ ] 
+      label: "완료 조건"
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: "영역"
+      options:
+        - backend
+        - frontend
+        - infra
+    validations:
+      required: true

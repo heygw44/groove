@@ -13,8 +13,8 @@
 # shellcheck disable=SC2086 # SSH_OPTS 는 여러 -o 플래그를 담는 문자열이라 의도적으로 언쿼팅
 set -euo pipefail
 
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/groove-key.pem}"
-SSH_HOST="${SSH_HOST:-ubuntu@52.78.95.139}"
+SSH_KEY="${SSH_KEY:?SSH_KEY(pem 경로)를 지정하세요}"
+SSH_HOST="${SSH_HOST:?SSH_HOST(예: ubuntu@<EC2-IP>)를 지정하세요}"
 SSH_OPTS="${SSH_OPTS:--o ConnectTimeout=8 -o BatchMode=yes}"
 
 REMOTE_TAG="GROOVE_MONITOR_TAG"
@@ -26,7 +26,7 @@ usage() {
   $(basename "$0") stop <출력디렉토리>
   $(basename "$0") snapshot <출력디렉토리> <라벨>
 
-환경변수: SSH_KEY(기본 $HOME/.ssh/groove-key.pem), SSH_HOST(기본 ubuntu@52.78.95.139), SSH_OPTS
+환경변수: SSH_KEY(필수, pem 경로), SSH_HOST(필수, 예: ubuntu@<EC2-IP>), SSH_OPTS
 EOF
 }
 

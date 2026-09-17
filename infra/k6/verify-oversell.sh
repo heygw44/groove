@@ -8,8 +8,8 @@
 # shellcheck disable=SC2086 # SSH_OPTS 는 여러 -o 플래그를 담는 문자열이라 의도적으로 언쿼팅
 set -euo pipefail
 
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/groove-key.pem}"
-SSH_HOST="${SSH_HOST:-ubuntu@52.78.95.139}"
+SSH_KEY="${SSH_KEY:-}"
+SSH_HOST="${SSH_HOST:-}"
 SSH_OPTS="${SSH_OPTS:--o ConnectTimeout=8 -o BatchMode=yes}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-groove-mysql}"
 REDIS_CONTAINER="${REDIS_CONTAINER:-groove-redis}"
@@ -21,7 +21,7 @@ usage() {
   --local  SSH 대신 로컬 docker 컨테이너(MYSQL_CONTAINER/REDIS_CONTAINER)로 조회한다.
   --chaos  카오스 테스트용 판정 항목(7종)을 쓴다. 기본은 표준 4항목.
 
-환경변수: SSH_KEY(기본 $HOME/.ssh/groove-key.pem), SSH_HOST(기본 ubuntu@52.78.95.139), SSH_OPTS
+환경변수: SSH_KEY(필수, pem 경로), SSH_HOST(필수, 예: ubuntu@<EC2-IP>), SSH_OPTS - --local 없을 때 사용
           MYSQL_CONTAINER(기본 groove-mysql), REDIS_CONTAINER(기본 groove-redis) - --local 에서 사용
 EOF
 }
@@ -59,6 +59,11 @@ fi
 DROP_ID="${POSITIONAL[0]}"
 PRODUCT_ID="${POSITIONAL[1]}"
 OUT_FILE="${POSITIONAL[2]:-}"
+
+if [ "$LOCAL_MODE" != "1" ]; then
+    : "${SSH_HOST:?SSH_HOST(예: ubuntu@<EC2-IP>)를 지정하세요}"
+    : "${SSH_KEY:?SSH_KEY(pem 경로)를 지정하세요}"
+fi
 
 MODE_LABEL="remote"
 [ "$LOCAL_MODE" = "1" ] && MODE_LABEL="local"

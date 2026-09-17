@@ -39,8 +39,8 @@ logging:
       max-history: 14
 
 management:
-  # metrics 는 8080 이 호스트 127.0.0.1 에만 바인딩되고(docker-compose.prod.yml) Nginx 도
-  # /api/ 만 프록시해(nginx/groove.conf) 외부에 노출되지 않는다 — 메모리 압박 진단에 필요한
+  # metrics 는 8080 이 호스트 127.0.0.1 에만 바인딩되고(infra/docker-compose.prod.yml) Nginx 도
+  # /api/ 만 프록시해(infra/nginx/groove.conf) 외부에 노출되지 않는다 — 메모리 압박 진단에 필요한
   # jvm.memory.used 등을 보려고 연다. Boot 3.5 는 exposure.include 만으로 개별 엔드포인트가
   # 켜진다(엔드포인트별 enabled 는 기본 true). 보안 설정도 /actuator/** 를 permitAll 로 열어둔다
   # (SecurityConfig).

@@ -3,10 +3,10 @@
 // 컨테이너 헬스체크·graceful shutdown·deploy-backend.sh 롤백이 "다운타임을 없앤다"는 뜻은 아니다.
 //
 // 실행 방법:
-//   1. 목 서버 기동: PORT=18080 node scripts/k6/toss-mock.mjs
+//   1. 목 서버 기동: PORT=18080 node infra/k6/toss-mock.mjs
 //   2. 백엔드를 목 서버를 보도록 compose full 프로파일로 기동:
 //      TOSS_BASE_URL=http://host.docker.internal:18080 docker compose --profile full up -d --build
-//   3. k6 시작: k6 run scripts/k6/deploy-drain.js
+//   3. k6 시작: k6 run infra/k6/deploy-drain.js
 //   4. 도중에 배포를 흉내낸다: docker compose --profile full up -d --force-recreate backend
 //
 // 로컬에서는 docker 포트 포워딩 때문에 백엔드가 없는 순간의 새 연결이 "거부(refused)" 대신
@@ -16,7 +16,7 @@
 //           CONFIRM_ORDERS(기본 30, payment_confirm 로 미리 만들어 둘 주문 수 = 그 시나리오 VU 수),
 //           ADMIN_EMAIL/ADMIN_PASSWORD(기본 admin@groove.com/admin1234!), MEMBER_PASSWORD(기본 load1234!),
 //           MEMBER_EMAIL_PREFIX(기본 drain-), PRODUCT_TITLE_PREFIX(기본 DEPLOY-DRAIN-),
-//           RESULT_DIR(기본 scripts/k6/results), RUN_LABEL(기본 빈 문자열)
+//           RESULT_DIR(기본 infra/k6/results), RUN_LABEL(기본 빈 문자열)
 
 import http from 'k6/http';
 import exec from 'k6/execution';
@@ -33,7 +33,7 @@ const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || 'admin1234!';
 const MEMBER_PASSWORD = __ENV.MEMBER_PASSWORD || 'load1234!';
 const MEMBER_EMAIL_PREFIX = __ENV.MEMBER_EMAIL_PREFIX || 'drain-';
 const PRODUCT_TITLE_PREFIX = __ENV.PRODUCT_TITLE_PREFIX || 'DEPLOY-DRAIN-';
-const RESULT_DIR = __ENV.RESULT_DIR || 'scripts/k6/results';
+const RESULT_DIR = __ENV.RESULT_DIR || 'infra/k6/results';
 const RUN_LABEL = __ENV.RUN_LABEL || '';
 
 const MEMBER_NICKNAME_PREFIX = MEMBER_EMAIL_PREFIX.replace(/[^a-zA-Z0-9]/g, '');
