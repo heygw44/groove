@@ -1,8 +1,8 @@
 // 상품 목록 API(GET /api/v1/products) 부하 테스트. 목표: p95 300ms (NFR-03).
-// 실행: k6 run scripts/k6/product-list.js
+// 실행: k6 run infra/k6/product-list.js
 // 환경변수: BASE_URL(기본 http://localhost:8080)
 // local 프로파일 시드 데이터가 필요하다.
-// 결과 저장: k6 run --summary-export scripts/k6/results/product-list.json scripts/k6/product-list.js
+// 결과 저장: k6 run --summary-export infra/k6/results/product-list.json infra/k6/product-list.js
 
 import http from 'k6/http';
 import { check, fail, sleep } from 'k6';

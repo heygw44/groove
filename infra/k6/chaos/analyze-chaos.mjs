@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// scripts/k6/chaos/run.sh 가 남긴 raw.json(k6 --out json)과 fault.log(FAULT_START/FAULT_END)를
+// infra/k6/chaos/run.sh 가 남긴 raw.json(k6 --out json)과 fault.log(FAULT_START/FAULT_END)를
 // 대조해서 장애 전/중/후 구간별 구매 결과 분포·지연·복구 시점을 마크다운으로 뽑는다.
 // analyze-batch-interference.mjs 와 같은 방식(시나리오 로그로 시간창을 잡고 raw JSON 과 대조)이지만,
 // 여기서는 run.sh 가 fault.log 에 남긴 FAULT_START/FAULT_END 두 줄만 시간창 기준으로 쓴다.
 //
-// 사용법: node scripts/k6/chaos/analyze-chaos.mjs <raw.json> <fault.log>
+// 사용법: node infra/k6/chaos/analyze-chaos.mjs <raw.json> <fault.log>
 
 import { createReadStream, readFileSync, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';

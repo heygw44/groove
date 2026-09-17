@@ -25,7 +25,7 @@ usage() {
   --vus "50 200 500 1000"     단계 목록 (기본값)
   --stock 100                 단계마다 고정할 한정반 재고 (기본 100)
   --base-url <url>            (기본 ${BASE_URL})
-  --out <디렉토리>            기본 scripts/k6/results/prod-<YYYYMMDD-HHmmss>
+  --out <디렉토리>            기본 infra/k6/results/prod-<YYYYMMDD-HHmmss>
   --cooldown 60               단계 사이 대기 초 (기본 60)
   --smoke                     --vus "10" --stock 3 과 동등한 스모크 모드
   --no-monitor                원격 모니터링 생략
@@ -119,7 +119,7 @@ if [ "$ALLOW_TUNNEL" -eq 0 ]; then
 fi
 
 if [ -z "$OUT_DIR" ]; then
-	OUT_DIR="${REPO_ROOT}/scripts/k6/results/prod-$(date +%Y%m%d-%H%M%S)"
+	OUT_DIR="${REPO_ROOT}/infra/k6/results/prod-$(date +%Y%m%d-%H%M%S)"
 fi
 mkdir -p "$OUT_DIR"
 
@@ -282,7 +282,7 @@ print_final_summary() {
 	if [ "${SERVICE_DOWN:-0}" -eq 1 ]; then
 		echo
 		echo "서비스가 죽은 채로 종료됨. 복구 명령:"
-		echo "  ssh -i ~/.ssh/groove-key.pem ubuntu@52.78.95.139 'cd /opt/groove && docker compose -f docker-compose.prod.yml up -d'"
+		echo "  ssh -i \"\$SSH_KEY\" \"\$SSH_HOST\" 'cd /opt/groove && docker compose -f docker-compose.prod.yml up -d'"
 	fi
 }
 

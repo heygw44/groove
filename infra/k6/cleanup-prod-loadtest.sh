@@ -3,8 +3,8 @@
 # 기본은 dry-run. --apply 를 줘야 실제로 지운다. 삭제문은 전부 이메일/타이틀 접두사로 좁힌 id 집합에서만 나온다.
 set -euo pipefail
 
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/groove-key.pem}"
-SSH_HOST="${SSH_HOST:-ubuntu@52.78.95.139}"
+SSH_KEY="${SSH_KEY:?SSH_KEY(pem 경로)를 지정하세요}"
+SSH_HOST="${SSH_HOST:?SSH_HOST(예: ubuntu@<EC2-IP>)를 지정하세요}"
 SSH_OPTS="${SSH_OPTS:--o ConnectTimeout=8 -o BatchMode=yes}"
 
 MEMBER_EMAIL_PREFIX="${MEMBER_EMAIL_PREFIX:-k6lt-}"

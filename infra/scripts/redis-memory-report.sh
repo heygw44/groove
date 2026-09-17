@@ -7,15 +7,15 @@
 # `docker exec -i` 를 쓰지 않는다 — SSH 세션 stdin 은 이 스크립트 본문을 전달하는
 # 채널이라, -i 로 컨테이너까지 그 stdin 을 열어두면 아직 안 읽은 나머지 스크립트를
 # 컨테이너 쪽 프로세스가 먹어버려 이후 명령이 통째로 사라진다
-# (scripts/k6/verify-oversell.sh 의 run_sql 주석 참고). 여러 키의 TTL 을 한 번에
+# (infra/k6/verify-oversell.sh 의 run_sql 주석 참고). 여러 키의 TTL 을 한 번에
 # 읽어야 하는 구간(e)은 stdin 대신 Redis EVAL 인자로 키 목록을 넘겨 같은 문제를
 # 피한다. 키 열거는 항상 `KEYS` 대신 `--scan --pattern` 을 쓴다 — KEYS 는 운영
 # 키스페이스 크기에서 스캔 도중 이벤트 루프를 막을 수 있다.
 # shellcheck disable=SC2086 # SSH_OPTS 는 여러 -o 플래그를 담는 문자열이라 의도적으로 언쿼팅
 set -euo pipefail
 
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/groove-key.pem}"
-SSH_HOST="${SSH_HOST:-ubuntu@52.78.95.139}"
+SSH_KEY="${SSH_KEY:-}"
+SSH_HOST="${SSH_HOST:-}"
 SSH_OPTS="${SSH_OPTS:--o ConnectTimeout=8 -o BatchMode=yes}"
 REDIS_CONTAINER="${REDIS_CONTAINER:-groove-redis}"
 
@@ -27,10 +27,10 @@ usage() {
            REDIS_CONTAINER(기본 groove-redis)가 없으면 docker ps 에서 이름에
            redis 가 들어간 컨테이너를 찾아 대신 쓴다.
 
-환경변수: SSH_KEY(기본 $HOME/.ssh/groove-key.pem), SSH_HOST(기본 ubuntu@52.78.95.139), SSH_OPTS
+환경변수: SSH_KEY(필수, pem 경로), SSH_HOST(필수, 예: ubuntu@<EC2-IP>), SSH_OPTS - --local 없을 때 사용
           REDIS_CONTAINER(기본 groove-redis)
 
-출력: scripts/k6/results/redis-memory-<YYYYMMDD-HHmmss>/raw.txt 에 원자료 저장,
+출력: infra/k6/results/redis-memory-<YYYYMMDD-HHmmss>/raw.txt 에 원자료 저장,
       표준출력에 한글 요약(used/peak/maxmemory, prefix 별 키 수, TTL 없는 prefix, bigkeys 상위).
 EOF
 }
@@ -65,6 +65,9 @@ if [ "$LOCAL_MODE" = "1" ]; then
 		echo "REDIS_CONTAINER=${REDIS_CONTAINER} 없음, docker ps 에서 찾은 ${found} 를 대신 쓴다." >&2
 		REDIS_CONTAINER="$found"
 	fi
+else
+	: "${SSH_HOST:?SSH_HOST(예: ubuntu@<EC2-IP>)를 지정하세요}"
+	: "${SSH_KEY:?SSH_KEY(pem 경로)를 지정하세요}"
 fi
 
 # 원격(또는 로컬) 호스트에서 실행할 측정 스크립트 본문. $1 = REDIS_CONTAINER.
@@ -231,7 +234,7 @@ REMOTE_SCRIPT_EOF
 )
 
 TS=$(date +%Y%m%d-%H%M%S)
-OUT_DIR="scripts/k6/results/redis-memory-${TS}"
+OUT_DIR="infra/k6/results/redis-memory-${TS}"
 mkdir -p "$OUT_DIR"
 RAW_FILE="${OUT_DIR}/raw.txt"
 

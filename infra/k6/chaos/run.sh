@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 한정반 러시 도중에 장애를 주입하고(Redis 재시작/키 유실/앱 강제종료), 대사 뒤 상태를
-# scripts/k6/verify-oversell.sh --local --chaos 로 판정한다. limited-chaos.js 가 setup
+# infra/k6/verify-oversell.sh --local --chaos 로 판정한다. limited-chaos.js 가 setup
 # 직후 찍는 CHAOS_RUSH_START 로그를 기준 시각으로 삼아 장애를 주입하므로, 두 프로세스는
 # 이 로그 형식(계약)을 통해서만 맞물린다.
 set -euo pipefail
@@ -95,7 +95,7 @@ if [ -n "$OUT_DIR_ARG" ]; then
 else
 	SUFFIX="$SCENARIO"
 	[ -n "$LABEL" ] && SUFFIX="${SUFFIX}-${LABEL}"
-	OUT_DIR="scripts/k6/results/chaos-${SUFFIX}-$(date +%Y%m%d-%H%M%S)"
+	OUT_DIR="infra/k6/results/chaos-${SUFFIX}-$(date +%Y%m%d-%H%M%S)"
 fi
 mkdir -p "$OUT_DIR"
 
@@ -133,7 +133,7 @@ log "=== chaos run 시작: scenario=${SCENARIO} label=${LABEL:-없음} out=${OUT
 
 # --- k6 백그라운드 실행 ---
 RESULT_DIR="$OUT_DIR" RUN_LABEL="$SCENARIO" BASE_URL="$BASE_URL" \
-	k6 run --out "json=${OUT_DIR}/raw.json" scripts/k6/chaos/limited-chaos.js > "$K6_STDOUT" 2>&1 &
+	k6 run --out "json=${OUT_DIR}/raw.json" infra/k6/chaos/limited-chaos.js > "$K6_STDOUT" 2>&1 &
 K6_PID=$!
 log "k6 실행 시작 (pid=${K6_PID})"
 
@@ -254,9 +254,9 @@ log "대사 대기 ${VERIFY_DELAY_SEC}초"
 sleep "$VERIFY_DELAY_SEC"
 
 VERIFY_EXIT=0
-if [ -x scripts/k6/verify-oversell.sh ]; then
+if [ -x infra/k6/verify-oversell.sh ]; then
 	set +e
-	scripts/k6/verify-oversell.sh --local --chaos "$DROP_ID" "$PRODUCT_ID" "${OUT_DIR}/verify.txt" | tee -a "$RUN_LOG"
+	infra/k6/verify-oversell.sh --local --chaos "$DROP_ID" "$PRODUCT_ID" "${OUT_DIR}/verify.txt" | tee -a "$RUN_LOG"
 	VERIFY_EXIT=${PIPESTATUS[0]}
 	set -e
 	log "verify-oversell.sh 종료 (exit=${VERIFY_EXIT})"
@@ -266,8 +266,8 @@ else
 fi
 
 # --- 사후 분석 ---
-if [ -f scripts/k6/chaos/analyze-chaos.mjs ]; then
-	node scripts/k6/chaos/analyze-chaos.mjs "${OUT_DIR}/raw.json" "$FAULT_LOG" | tee "${OUT_DIR}/analysis.md"
+if [ -f infra/k6/chaos/analyze-chaos.mjs ]; then
+	node infra/k6/chaos/analyze-chaos.mjs "${OUT_DIR}/raw.json" "$FAULT_LOG" | tee "${OUT_DIR}/analysis.md"
 else
 	log "analyze-chaos.mjs 가 아직 없어 분석을 건너뜀"
 fi
