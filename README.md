@@ -110,9 +110,11 @@ cd frontend && npm run test     # Vitest
 groove/
 ├── backend/                    # Spring Boot (com.groove.{global, member, auth, product, ...})
 ├── frontend/                   # React + Vite
-├── scripts/k6/                 # 부하 테스트 스크립트
-├── nginx/                      # 운영 Nginx 설정
+├── infra/
+│   ├── docker-compose.prod.yml # 운영(EC2) 컴포즈
+│   ├── nginx/                  # 운영 Nginx 설정
+│   ├── scripts/                # 서버 초기화·배포·백업 스크립트
+│   └── k6/                     # 부하 테스트
 ├── docker-compose.yml          # 로컬 인프라
-├── docker-compose.prod.yml     # 운영(EC2) 컴포즈
 └── .github/workflows/          # CI, 배포
 ```

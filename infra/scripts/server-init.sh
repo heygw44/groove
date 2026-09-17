@@ -63,6 +63,6 @@ sudo systemctl enable --now nginx
 echo "== 8. Nginx 설정 디렉터리 정리 =="
 sudo mkdir -p /opt/groove/nginx && sudo chown "$USER":"$USER" /opt/groove/nginx
 sudo rm -f /etc/nginx/sites-enabled/default
-echo "Nginx 설정은 배포 워크플로가 scripts/deploy-nginx.sh 로 올린다(첫 설치는 nginx/ 디렉터리의 설정을 참고)"
+echo "Nginx 설정은 배포 워크플로가 infra/scripts/deploy-nginx.sh 로 올린다(첫 설치는 infra/nginx/ 디렉터리의 설정을 참고)"
 
 echo "== 완료 =="

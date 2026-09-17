@@ -1,7 +1,7 @@
 // 한정반 카오스 부하 테스트(#401). limited-purchase.js 와 달리 러시를 수십 초에 걸쳐 이어가면서
-// scripts/k6/chaos/run.sh 가 그 도중에 장애(Redis 재시작/키 삭제/앱 강제종료)를 주입한다.
+// infra/k6/chaos/run.sh 가 그 도중에 장애(Redis 재시작/키 삭제/앱 강제종료)를 주입한다.
 // 목표는 초과판매가 아니라 "장애 중 응답 분포"와 "장애 복구·대사 이후 남은 재고가 정상 판매되는가"를 보는 것.
-// 단독 실행도 가능하다: k6 run scripts/k6/chaos/limited-chaos.js (장애 주입은 run.sh 가 별도로 한다)
+// 단독 실행도 가능하다: k6 run infra/k6/chaos/limited-chaos.js (장애 주입은 run.sh 가 별도로 한다)
 //
 // 환경변수(기본값):
 //   BASE_URL            http://localhost:8080
@@ -18,7 +18,7 @@
 //   MEMBER_PASSWORD       load1234!
 //   MEMBER_EMAIL_PREFIX   chaos-
 //   PRODUCT_TITLE_PREFIX  LIMITED-CHAOS-
-//   RESULT_DIR            scripts/k6/results
+//   RESULT_DIR            infra/k6/results
 //   RUN_LABEL             (빈 문자열)
 //   SETUP_BATCH_SIZE      20
 
@@ -47,7 +47,7 @@ const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || 'admin1234!';
 const MEMBER_PASSWORD = __ENV.MEMBER_PASSWORD || 'load1234!';
 const MEMBER_EMAIL_PREFIX = __ENV.MEMBER_EMAIL_PREFIX || 'chaos-';
 const PRODUCT_TITLE_PREFIX = __ENV.PRODUCT_TITLE_PREFIX || 'LIMITED-CHAOS-';
-const RESULT_DIR = __ENV.RESULT_DIR || 'scripts/k6/results';
+const RESULT_DIR = __ENV.RESULT_DIR || 'infra/k6/results';
 const RUN_LABEL = __ENV.RUN_LABEL || '';
 const SETUP_BATCH_SIZE = Number(__ENV.SETUP_BATCH_SIZE || 20);
 

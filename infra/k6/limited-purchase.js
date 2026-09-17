@@ -1,9 +1,9 @@
 // 한정반 선착순 구매 API(POST /api/v1/limited-drops/{id}/purchase) 부하 테스트.
 // 목표: 초과 판매 0건(NFR-02), p95 1초 이내(이 엔드포인트 기준. NFR-03 의 300ms 는 상품 목록 API 기준).
-// 실행: k6 run scripts/k6/limited-purchase.js
+// 실행: k6 run infra/k6/limited-purchase.js
 // 환경변수: BASE_URL(기본 http://localhost:8080), VUS(기본 1000), STOCK(기본 100),
 //           ADMIN_EMAIL/ADMIN_PASSWORD(기본 admin@groove.com/admin1234!),
-//           OPEN_DELAY_SEC(기본 8), MEMBER_PASSWORD(기본 load1234!), RESULT_DIR(기본 scripts/k6/results),
+//           OPEN_DELAY_SEC(기본 8), MEMBER_PASSWORD(기본 load1234!), RESULT_DIR(기본 infra/k6/results),
 //           MEMBER_EMAIL_PREFIX(기본 lt-), PRODUCT_TITLE_PREFIX(기본 LIMITED-LOADTEST-),
 //           RUN_LABEL(기본 빈 문자열), SETUP_BATCH_SIZE(기본 20),
 //           P95_MS(기본 1000), CHECK_RATE(기본 0.99)
@@ -26,7 +26,7 @@ const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || 'admin@groove.com';
 const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || 'admin1234!';
 const OPEN_DELAY_SEC = Number(__ENV.OPEN_DELAY_SEC || 8);
 const MEMBER_PASSWORD = __ENV.MEMBER_PASSWORD || 'load1234!';
-const RESULT_DIR = __ENV.RESULT_DIR || 'scripts/k6/results';
+const RESULT_DIR = __ENV.RESULT_DIR || 'infra/k6/results';
 const MEMBER_EMAIL_PREFIX = __ENV.MEMBER_EMAIL_PREFIX || 'lt-';
 const PRODUCT_TITLE_PREFIX = __ENV.PRODUCT_TITLE_PREFIX || 'LIMITED-LOADTEST-';
 const RUN_LABEL = __ENV.RUN_LABEL || '';

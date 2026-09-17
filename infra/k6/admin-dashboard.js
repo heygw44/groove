@@ -1,9 +1,9 @@
 // 관리자 대시보드 진입 부하 테스트. 관리자로 로그인해 통계 4종(일별 매출/인기 상품/한정반 현황/요약)을
 // 대시보드가 뜰 때처럼 동시에 호출한다. #316 의 사전 집계(sales_daily/sales_daily_product) 도입
 // 전후로 같은 시나리오를 돌려 p95 를 비교하는 용도.
-// 실행: k6 run scripts/k6/admin-dashboard.js
+// 실행: k6 run infra/k6/admin-dashboard.js
 // 환경변수: BASE_URL(기본 http://localhost:8080), ADMIN_EMAIL/ADMIN_PASSWORD
-//           (기본 admin@groove.com/admin1234!), RESULT_DIR(기본 scripts/k6/results)
+//           (기본 admin@groove.com/admin1234!), RESULT_DIR(기본 infra/k6/results)
 // 합성 데이터가 있는 스키마(예: groove_load, backend/scripts/perf/seed-load-db.sh 로 생성)에 붙은
 // 백엔드가 필요하다 — 소규모 local 시드 데이터로는 통계 API 가 빈 결과라 측정이 무의미하다.
 
@@ -14,7 +14,7 @@ import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || 'admin@groove.com';
 const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || 'admin1234!';
-const RESULT_DIR = __ENV.RESULT_DIR || 'scripts/k6/results';
+const RESULT_DIR = __ENV.RESULT_DIR || 'infra/k6/results';
 
 const STAT_NAMES = ['daily-sales', 'popular-products', 'limited-drops', 'summary'];
 

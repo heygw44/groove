@@ -25,13 +25,13 @@
 //               POST /api/v1/admin/stats/aggregations {from: D-90, to: D-1} 를 순차 반복
 //
 // 실행 (6분+ 걸리므로 반드시 백그라운드로, raw JSON 출력을 남겨야 사후 분석이 가능하다):
-//   k6 run --out json=scripts/k6/results/batch-interference-raw.json scripts/k6/batch-interference.js
+//   k6 run --out json=infra/k6/results/batch-interference-raw.json infra/k6/batch-interference.js
 // 환경변수: BASE_URL(기본 http://localhost:8080), ADMIN_EMAIL/ADMIN_PASSWORD
-//           (기본 admin@groove.com/admin1234!), RESULT_DIR(기본 scripts/k6/results)
+//           (기본 admin@groove.com/admin1234!), RESULT_DIR(기본 infra/k6/results)
 // 합성 데이터가 있는 스키마(backend/scripts/perf/seed-load-db.sh 로 만든 groove_load 등)에 붙은
 // 백엔드가 필요하다.
 //
-// 판정은 scripts/k6/analyze-batch-interference.mjs 가 낸다: 배치가 실제로 도는 동안(duringBatch)의
+// 판정은 infra/k6/analyze-batch-interference.mjs 가 낸다: 배치가 실제로 도는 동안(duringBatch)의
 // baseline p95 를 평시(pretest) p95 와 비교(+10% 이내), 절대값 NFR-03 의 300ms, http_req_failed 0.
 
 import http from 'k6/http';
@@ -42,7 +42,7 @@ import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || 'admin@groove.com';
 const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || 'admin1234!';
-const RESULT_DIR = __ENV.RESULT_DIR || 'scripts/k6/results';
+const RESULT_DIR = __ENV.RESULT_DIR || 'infra/k6/results';
 
 // 2분 지점부터 배치 구간(posttest) 시작. trigger 시나리오의 startTime 과 맞춘다.
 // TRIGGER_START/TOTAL_DURATION 은 스모크 테스트에서만 짧게 덮어쓴다(예: TRIGGER_START=10s TOTAL_DURATION=30s).

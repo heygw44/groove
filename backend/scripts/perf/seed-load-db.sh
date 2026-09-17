@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# k6 부하 시나리오(scripts/k6/batch-interference.js, admin-dashboard.js)용 합성 데이터 시더.
+# k6 부하 시나리오(infra/k6/batch-interference.js, admin-dashboard.js)용 합성 데이터 시더.
 #
 # index-explain.sh 는 groove_perf 스키마가 하드코딩돼 있고 개발 DB(groove)를 절대 건드리지 않는
 # 안전장치가 걸려 있다. 그 스크립트를 고치지 않고, 시드 SQL(seed/backfill 함수 본문)만 텍스트로

@@ -1,6 +1,6 @@
 // 토스페이먼츠 목 서버. 배포 드레인 측정(deploy-drain.js)과 결제 대사(PaymentReconcileScheduler) 셧다운
 // 동작 실측에서 실제 결제사 지연·재기동을 흉내내기 위해 쓴다.
-// Node 기본 모듈만 쓴다(node:http). 실행: node scripts/k6/toss-mock.mjs
+// Node 기본 모듈만 쓴다(node:http). 실행: node infra/k6/toss-mock.mjs
 // 환경변수:
 //   PORT(기본 18080)
 //   CONFIRM_DELAY_MS(기본 0) — POST confirm 응답 전 지연
