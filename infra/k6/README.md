@@ -93,6 +93,51 @@ infra/k6/chaos/run.sh <redis-restart|redis-key-loss|app-kill> [--label NAME] [--
 REDIS_DOWN_SEC=10 infra/k6/chaos/run.sh redis-restart --label down10
 ```
 
+## 앱 2인스턴스(scale 프로필)
+
+Nginx(`nginx:1.27-alpine`) 뒤에 백엔드 2대(`backend-1`/`backend-2`)를 두는 로컬 스택. 앱을 여러 대로 늘렸을 때 무엇이 깨지는지(세션·재고 동시성·연결 수 등) 확인하는 용도다. 기본 `docker compose --profile full`(백엔드 1대, Nginx 없음)과는 별도 경로이며 서로 영향을 주지 않는다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.scale.yml --profile scale up -d --build
+```
+
+호스트 8080 이 이미 쓰이고 있으면 `NGINX_PORT` 로 옮긴다.
+
+```bash
+NGINX_PORT=18080 docker compose -f docker-compose.yml -f docker-compose.scale.yml --profile scale up -d --build
+```
+
+어느 인스턴스가 응답했는지는 `X-Upstream` 헤더로 확인한다. 두 값이 번갈아 나오면 정상이다.
+
+```bash
+for i in $(seq 6); do curl -sI localhost:8080/api/v1/products | grep -i x-upstream; done
+```
+
+1대+Nginx 기준선으로 비교하려면 `NGINX_CONF=groove-single.conf` 로 재기동한다(upstream 에 `backend-1` 만 남는다). 이때는 `X-Upstream` 이 한 값만 나온다.
+
+```bash
+NGINX_CONF=groove-single.conf docker compose -f docker-compose.yml -f docker-compose.scale.yml --profile scale up -d
+```
+
+k6 시나리오는 그대로 돌리면 된다(응답이 Nginx 를 거치므로 `BASE_URL` 은 그대로 `http://localhost:8080`). `purchase_by_upstream` 카운터가 두 값으로 나뉘는지는 `--out json` 원본의 `tags.upstream` 으로 확인한다.
+
+```bash
+k6 run --out json=infra/k6/results/raw.json infra/k6/limited-purchase.js
+grep -o '"upstream":"[^"]*"' infra/k6/results/raw.json | sort | uniq -c
+```
+
+카오스 시나리오는 장애 주입·헬스 대기·로그 수집 대상 컨테이너를 두 개 다 넘긴다(`app-kill` 은 첫 번째만 죽인다).
+
+```bash
+BACKEND_CONTAINERS="groove-backend-1 groove-backend-2" infra/k6/chaos/run.sh redis-restart --label scale
+```
+
+정리(볼륨은 남긴다):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.scale.yml --profile scale down
+```
+
 ## 환경변수
 
 | 변수 | 기본값 | 설명 |
@@ -116,7 +161,9 @@ REDIS_DOWN_SEC=10 infra/k6/chaos/run.sh redis-restart --label down10
 | `INJECT_DELAY_SEC` | `2` | 카오스: 러시 시작부터 장애 주입까지 지연(초) |
 | `REDIS_DOWN_SEC` | `0` | 카오스: `redis-restart` 전용. `0` 이면 `restart`, 그 이상이면 `stop`→`sleep N`→`start` |
 | `VERIFY_DELAY_SEC` | `70` | 카오스: k6 종료 후 판정 전 대기(초) |
-| `BACKEND_CONTAINER` / `REDIS_CONTAINER` | `groove-backend` / `groove-redis` | 카오스 장애 주입 대상 컨테이너 |
+| `BACKEND_CONTAINERS` / `REDIS_CONTAINER` | `groove-backend` / `groove-redis` | 카오스 장애 주입 대상 컨테이너(`BACKEND_CONTAINERS` 는 공백 구분 목록, `app-kill` 은 첫 번째만 죽인다) |
+| `NGINX_PORT` | `8080` | scale 프로필 Nginx 호스트 포트 |
+| `NGINX_CONF` | `groove.conf` | scale 프로필 Nginx 가 읽는 `infra/nginx/local/` 밑 설정 파일(`groove-single.conf` 로 1대 기준선) |
 | `HEALTH_TIMEOUT_SEC` | `120` | 카오스: `app-kill` 복구 헬스체크 대기 상한(초) |
 | `DURATION` | `120s` | `deploy-drain.js` 두 시나리오 실행 시간 |
 | `CONFIRM_ORDERS` | `30` | `deploy-drain.js`: 미리 만들어 둘 PENDING 주문 수(= VU 수) |

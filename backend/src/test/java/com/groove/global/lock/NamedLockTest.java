@@ -73,6 +73,17 @@ class NamedLockTest {
 		given(resultSet.wasNull()).willReturn(result == null);
 	}
 
+	/** holderConnectionId 가 null 이면 아무도 락을 쥐고 있지 않은 것으로 IS_USED_LOCK 을 스텁한다. */
+	private void stubIsUsedLock(Long holderConnectionId) throws SQLException {
+		PreparedStatement statement = mock(PreparedStatement.class);
+		ResultSet resultSet = mock(ResultSet.class);
+		given(connection.prepareStatement(eq("SELECT IS_USED_LOCK(?)"))).willReturn(statement);
+		given(statement.executeQuery()).willReturn(resultSet);
+		given(resultSet.next()).willReturn(true);
+		given(resultSet.getLong(1)).willReturn(holderConnectionId == null ? 0L : holderConnectionId);
+		given(resultSet.wasNull()).willReturn(holderConnectionId == null);
+	}
+
 	private long errorLogCount() {
 		return logAppender.list.stream().filter(event -> event.getLevel() == Level.ERROR).count();
 	}
@@ -103,6 +114,7 @@ class NamedLockTest {
 		void doesNotRunTaskWhenLockNotAcquired() throws SQLException {
 			// given
 			stubGetLock(0);
+			stubIsUsedLock(42L);
 			Runnable task = mock(Runnable.class);
 
 			// when
@@ -161,10 +173,11 @@ class NamedLockTest {
 		}
 
 		@Test
-		@DisplayName("락 획득 실패가 연속되면 error 로 드러낸다")
-		void logsErrorWhenAcquireFailsRepeatedly() throws SQLException {
+		@DisplayName("같은 보유자가 락을 3회 연속 쥐고 있으면 error 로 드러낸다")
+		void logsErrorWhenSameHolderKeepsLockThreeTimesInARow() throws SQLException {
 			// given
 			stubGetLock(0);
+			stubIsUsedLock(42L);
 			Runnable task = mock(Runnable.class);
 
 			// when
@@ -173,15 +186,75 @@ class NamedLockTest {
 			}
 
 			// then
-			assertThat(errorLogCount()).isPositive();
+			assertThat(errorLogCount()).isEqualTo(1);
 			verify(task, never()).run();
+		}
+
+		@Test
+		@DisplayName("보유자 id 가 바뀌면 연속 카운터가 리셋되어 error 가 나지 않는다")
+		void resetsCounterWhenHolderChanges() throws SQLException {
+			// given
+			stubGetLock(0);
+			Runnable task = mock(Runnable.class);
+
+			// when: 매번 다른 세션이 락을 쥐고 있는 것으로 응답한다
+			stubIsUsedLock(1L);
+			namedLock.runExclusively(LOCK_NAME, task);
+			stubIsUsedLock(2L);
+			namedLock.runExclusively(LOCK_NAME, task);
+			stubIsUsedLock(3L);
+			namedLock.runExclusively(LOCK_NAME, task);
+
+			// then
+			assertThat(errorLogCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("보유자가 없으면(NULL) error 가 나지 않는다")
+		void doesNotAlertWhenNoHolder() throws SQLException {
+			// given
+			stubGetLock(0);
+			stubIsUsedLock(null);
+			Runnable task = mock(Runnable.class);
+
+			// when
+			for (int i = 0; i < 3; i++) {
+				namedLock.runExclusively(LOCK_NAME, task);
+			}
+
+			// then
+			assertThat(errorLogCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("락 획득에 성공하면 연속 실패 카운터가 초기화된다")
+		void resetsCounterOnSuccess() throws SQLException {
+			// given: 같은 보유자로 두 번 연속 실패(아직 임계치 미달)
+			stubGetLock(0);
+			stubIsUsedLock(42L);
+			namedLock.runExclusively(LOCK_NAME, mock(Runnable.class));
+			namedLock.runExclusively(LOCK_NAME, mock(Runnable.class));
+
+			// when: 성공 후 같은 보유자로 다시 두 번 실패해도 (연속 3회에 못 미침) error 가 없어야 한다
+			stubGetLock(1);
+			stubReleaseLock(1);
+			namedLock.runExclusively(LOCK_NAME, mock(Runnable.class));
+			logAppender.list.clear();
+
+			stubGetLock(0);
+			namedLock.runExclusively(LOCK_NAME, mock(Runnable.class));
+			namedLock.runExclusively(LOCK_NAME, mock(Runnable.class));
+
+			// then
+			assertThat(errorLogCount()).isZero();
 		}
 
 		@Test
 		@DisplayName("락 이름이 다르면 연속 실패 카운터가 서로 섞이지 않는다")
 		void tracksConsecutiveFailuresPerLockNameSeparately() throws SQLException {
-			// given: lockA 를 두 번 연속 실패시킨다 (아직 임계치 미달)
+			// given: lockA 를 같은 보유자로 두 번 연속 실패시킨다 (아직 임계치 미달)
 			stubGetLock(0);
+			stubIsUsedLock(42L);
 			namedLock.runExclusively("lock-a", mock(Runnable.class));
 			namedLock.runExclusively("lock-a", mock(Runnable.class));
 			logAppender.list.clear();

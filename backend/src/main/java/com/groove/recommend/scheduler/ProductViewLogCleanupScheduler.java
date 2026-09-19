@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.groove.recommend.service.ProductViewLogCleanupService;
+import com.groove.recommend.service.ViewLogCleanupLock;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,10 +23,18 @@ public class ProductViewLogCleanupScheduler {
 	static final int MAX_LOOPS = 100;
 
 	private final ProductViewLogCleanupService productViewLogCleanupService;
+	private final ViewLogCleanupLock viewLogCleanupLock;
 	private final Clock clock;
 
 	@Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
 	public void cleanUp() {
+		boolean acquired = viewLogCleanupLock.runExclusively(this::runCleanUp);
+		if (!acquired) {
+			log.debug("조회 로그 정리 락 획득 실패로 건너뛴다");
+		}
+	}
+
+	private void runCleanUp() {
 		LocalDateTime threshold = LocalDateTime.now(clock).minusDays(RETENTION_DAYS);
 		try {
 			int total = 0;

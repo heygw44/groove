@@ -14,6 +14,7 @@ import com.groove.limited.service.LimitedDropRedisService;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
+import com.groove.order.service.OrderExpirationLock;
 import com.groove.order.service.OrderExpirationService;
 import com.groove.payment.entity.PaymentStatus;
 
@@ -31,6 +32,7 @@ public class OrderExpirationScheduler {
 	private final OrderRepository orderRepository;
 	private final OrderExpirationService orderExpirationService;
 	private final LimitedDropRedisService limitedDropRedisService;
+	private final OrderExpirationLock orderExpirationLock;
 	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
 
@@ -39,6 +41,13 @@ public class OrderExpirationScheduler {
 		if (shutdownSignal.isShuttingDown()) {
 			return;
 		}
+		boolean acquired = orderExpirationLock.runExclusively(this::runExpireOrders);
+		if (!acquired) {
+			log.debug("주문 만료 락 획득 실패로 건너뛴다");
+		}
+	}
+
+	private void runExpireOrders() {
 		LocalDateTime now = LocalDateTime.now(clock);
 		List<Long> orderIds = orderRepository.findIdsByStatusAndExpiresAtBefore(OrderStatus.PENDING, now,
 				PaymentStatus.UNRESOLVED, Limit.of(BATCH_SIZE));
@@ -62,6 +71,8 @@ public class OrderExpirationScheduler {
 			}
 			processed++;
 		}
-		log.info("만료 주문 취소 완료 candidates={} processed={} failed={}", orderIds.size(), processed, failed);
+		if (processed > 0) {
+			log.info("만료 주문 취소 완료 candidates={} processed={} failed={}", orderIds.size(), processed, failed);
+		}
 	}
 }

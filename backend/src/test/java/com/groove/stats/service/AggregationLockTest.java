@@ -69,6 +69,17 @@ class AggregationLockTest {
 		given(resultSet.wasNull()).willReturn(result == null);
 	}
 
+	/** holderConnectionId 가 null 이면 아무도 락을 쥐고 있지 않은 것으로 IS_USED_LOCK 을 스텁한다. */
+	private void stubIsUsedLock(Long holderConnectionId) throws SQLException {
+		PreparedStatement statement = mock(PreparedStatement.class);
+		ResultSet resultSet = mock(ResultSet.class);
+		given(connection.prepareStatement(eq("SELECT IS_USED_LOCK(?)"))).willReturn(statement);
+		given(statement.executeQuery()).willReturn(resultSet);
+		given(resultSet.next()).willReturn(true);
+		given(resultSet.getLong(1)).willReturn(holderConnectionId == null ? 0L : holderConnectionId);
+		given(resultSet.wasNull()).willReturn(holderConnectionId == null);
+	}
+
 	private long errorLogCount() {
 		return logAppender.list.stream().filter(event -> event.getLevel() == Level.ERROR).count();
 	}
@@ -99,6 +110,7 @@ class AggregationLockTest {
 		void doesNotRunTaskWhenLockNotAcquired() throws SQLException {
 			// given
 			stubGetLock(0);
+			stubIsUsedLock(42L);
 			Runnable task = mock(Runnable.class);
 
 			// when
@@ -172,10 +184,11 @@ class AggregationLockTest {
 		}
 
 		@Test
-		@DisplayName("락 획득 실패가 연속되면 error 로 드러낸다")
-		void logsErrorWhenAcquireFailsRepeatedly() throws SQLException {
+		@DisplayName("같은 보유자가 락을 3회 연속 쥐고 있으면 error 로 드러낸다")
+		void logsErrorWhenSameHolderKeepsLockThreeTimesInARow() throws SQLException {
 			// given
 			stubGetLock(0);
+			stubIsUsedLock(42L);
 			Runnable task = mock(Runnable.class);
 
 			// when
@@ -184,19 +197,20 @@ class AggregationLockTest {
 			}
 
 			// then
-			assertThat(errorLogCount()).isPositive();
+			assertThat(errorLogCount()).isEqualTo(1);
 			verify(task, never()).run();
 		}
 
 		@Test
 		@DisplayName("락 획득에 성공하면 연속 실패 카운트가 초기화된다")
 		void resetsConsecutiveFailureCountOnSuccess() throws SQLException {
-			// given: 두 번 연속 실패
+			// given: 같은 보유자로 두 번 연속 실패
 			stubGetLock(0);
+			stubIsUsedLock(42L);
 			aggregationLock.runExclusively(mock(Runnable.class));
 			aggregationLock.runExclusively(mock(Runnable.class));
 
-			// when: 성공 후 다시 두 번 실패해도 (총 4번째 연속 실패까지는 못 감) 아직 error 는 없어야 한다
+			// when: 성공 후 같은 보유자로 다시 두 번 실패해도 (연속 3회에 못 미침) 아직 error 는 없어야 한다
 			stubGetLock(1);
 			stubReleaseLock(1);
 			aggregationLock.runExclusively(mock(Runnable.class));

@@ -46,6 +46,23 @@ export function authHeader(token) {
   return { Authorization: `Bearer ${token}`, ...JSON_HEADERS };
 }
 
+// scale 프로필(Nginx + 앱 2인스턴스)에서 어느 인스턴스가 응답했는지. 헤더가 없으면(Nginx 없이 직접 호출) 'direct'.
+// k6 의 res.headers 키는 서버가 보낸 대소문자를 그대로 유지하므로 대소문자 무시하고 찾는다.
+export function upstreamTag(res) {
+  const headers = res.headers || {};
+  const key = Object.keys(headers).find((name) => name.toLowerCase() === 'x-upstream');
+  return key ? headers[key] : 'direct';
+}
+
+// purchase_by_upstream 카운터의 총 건수를 요약에 한 줄 보탠다. k6 는 VU 별로 격리된 JS 런타임이라
+// handleSummary(별도 런타임에서 실행)에서 태그별 값을 직접 집계할 수 없다 — 인스턴스별 분포는
+// --out json 원본의 tags.upstream 으로 집계한다(예: chaos/run.sh 가 이미 raw.json 을 남긴다).
+export function upstreamSummaryLine(data) {
+  const metric = data.metrics.purchase_by_upstream;
+  const total = metric ? metric.values.count : 0;
+  return `\n purchase_by_upstream: 총 ${total}건 (인스턴스별 분포는 --out json 원본의 tags.upstream 으로 집계)\n`;
+}
+
 export function timestamp() {
   const now = new Date();
   // 같은 분에 두 번 실행하면 앞 결과가 덮어써지므로 초까지 붙인다.

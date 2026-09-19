@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.groove.recommend.service.ProductViewLogCleanupService;
+import com.groove.recommend.service.ViewLogCleanupLock;
 
 @ExtendWith(MockitoExtension.class)
 class ProductViewLogCleanupSchedulerTest {
@@ -32,6 +34,9 @@ class ProductViewLogCleanupSchedulerTest {
 	@Mock
 	private ProductViewLogCleanupService productViewLogCleanupService;
 
+	@Mock
+	private ViewLogCleanupLock viewLogCleanupLock;
+
 	private ProductViewLogCleanupScheduler scheduler;
 
 	private Clock clock;
@@ -39,7 +44,15 @@ class ProductViewLogCleanupSchedulerTest {
 	@BeforeEach
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
-		scheduler = new ProductViewLogCleanupScheduler(productViewLogCleanupService, clock);
+		scheduler = new ProductViewLogCleanupScheduler(productViewLogCleanupService, viewLogCleanupLock, clock);
+	}
+
+	private void stubLockToRunTask() {
+		given(viewLogCleanupLock.runExclusively(any())).willAnswer(invocation -> {
+			Runnable task = invocation.getArgument(0);
+			task.run();
+			return true;
+		});
 	}
 
 	@Nested
@@ -47,9 +60,23 @@ class ProductViewLogCleanupSchedulerTest {
 	class CleanUp {
 
 		@Test
+		@DisplayName("락 획득에 실패하면 삭제를 호출하지 않는다")
+		void doesNothingWhenLockAcquisitionFails() {
+			// given
+			given(viewLogCleanupLock.runExclusively(any())).willReturn(false);
+
+			// when
+			scheduler.cleanUp();
+
+			// then
+			verify(productViewLogCleanupService, never()).deleteBatch(any(), any(Integer.class));
+		}
+
+		@Test
 		@DisplayName("90일 전 threshold 로 배치 삭제를 호출한다")
 		void deletesWithNinetyDayThreshold() {
 			// given
+			stubLockToRunTask();
 			LocalDateTime expectedThreshold = LocalDateTime.now(clock)
 					.minusDays(ProductViewLogCleanupScheduler.RETENTION_DAYS);
 			given(productViewLogCleanupService.deleteBatch(any(), eq(ProductViewLogCleanupScheduler.BATCH_SIZE)))
@@ -69,6 +96,7 @@ class ProductViewLogCleanupSchedulerTest {
 		@DisplayName("삭제 건수가 배치 크기보다 작으면 루프를 멈춘다")
 		void stopsLoopWhenDeletedCountIsBelowBatchSize() {
 			// given
+			stubLockToRunTask();
 			given(productViewLogCleanupService.deleteBatch(any(), eq(ProductViewLogCleanupScheduler.BATCH_SIZE)))
 					.willReturn(ProductViewLogCleanupScheduler.BATCH_SIZE - 1);
 
@@ -84,6 +112,7 @@ class ProductViewLogCleanupSchedulerTest {
 		@DisplayName("배치가 가득 차면 다음 배치를 이어서 호출한다")
 		void continuesToNextBatchWhenFull() {
 			// given
+			stubLockToRunTask();
 			given(productViewLogCleanupService.deleteBatch(any(), eq(ProductViewLogCleanupScheduler.BATCH_SIZE)))
 					.willReturn(ProductViewLogCleanupScheduler.BATCH_SIZE, ProductViewLogCleanupScheduler.BATCH_SIZE,
 							0);
@@ -100,6 +129,7 @@ class ProductViewLogCleanupSchedulerTest {
 		@DisplayName("서비스가 예외를 던져도 예외를 전파하지 않는다")
 		void doesNotPropagateExceptionFromService() {
 			// given
+			stubLockToRunTask();
 			given(productViewLogCleanupService.deleteBatch(any(), eq(ProductViewLogCleanupScheduler.BATCH_SIZE)))
 					.willThrow(new RuntimeException("boom"));
 

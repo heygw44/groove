@@ -27,6 +27,7 @@ import com.groove.limited.service.LimitedDropRedisService;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
+import com.groove.order.service.OrderExpirationLock;
 import com.groove.order.service.OrderExpirationService;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +45,9 @@ class OrderExpirationSchedulerTest {
 	private LimitedDropRedisService limitedDropRedisService;
 
 	@Mock
+	private OrderExpirationLock orderExpirationLock;
+
+	@Mock
 	private ShutdownSignal shutdownSignal;
 
 	private OrderExpirationScheduler scheduler;
@@ -55,7 +59,7 @@ class OrderExpirationSchedulerTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
 		scheduler = new OrderExpirationScheduler(orderRepository, orderExpirationService, limitedDropRedisService,
-				shutdownSignal, clock);
+				orderExpirationLock, shutdownSignal, clock);
 	}
 
 	@Nested
@@ -63,9 +67,37 @@ class OrderExpirationSchedulerTest {
 	class ExpireOrders {
 
 		@Test
+		@DisplayName("시작 시 셧다운 중이면 락도 잡지 않는다")
+		void doesNotAcquireLockWhenShuttingDownAtStart() {
+			// given
+			given(shutdownSignal.isShuttingDown()).willReturn(true);
+
+			// when
+			scheduler.expireOrders();
+
+			// then
+			verify(orderExpirationLock, never()).runExclusively(any());
+		}
+
+		@Test
+		@DisplayName("락 획득에 실패하면 대상 조회조차 하지 않는다")
+		void doesNothingWhenLockAcquisitionFails() {
+			// given
+			given(shutdownSignal.isShuttingDown()).willReturn(false);
+			given(orderExpirationLock.runExclusively(any())).willReturn(false);
+
+			// when
+			scheduler.expireOrders();
+
+			// then
+			verify(orderRepository, never()).findIdsByStatusAndExpiresAtBefore(any(), any(), any(), any());
+		}
+
+		@Test
 		@DisplayName("만료 대상이 없으면 서비스를 호출하지 않는다")
 		void doesNotCallServiceWhenNoCandidates() {
 			// given
+			stubLockToRunTask();
 			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of());
 
@@ -80,6 +112,7 @@ class OrderExpirationSchedulerTest {
 		@DisplayName("한 건이 실패해도 나머지 후보는 계속 처리한다")
 		void continuesProcessingWhenOneOrderFails() {
 			// given
+			stubLockToRunTask();
 			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L, 2L, 3L));
 			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
@@ -99,6 +132,7 @@ class OrderExpirationSchedulerTest {
 		@DisplayName("한정반 선점 정보가 반환되면 Redis 선점을 해제한다")
 		void releasesLimitedDropReservationWhenPresent() {
 			// given
+			stubLockToRunTask();
 			LimitedRelease release = new LimitedRelease(10L, 20L);
 			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L));
@@ -115,6 +149,7 @@ class OrderExpirationSchedulerTest {
 		@DisplayName("한정반 선점 정보가 없으면 Redis 를 건드리지 않는다")
 		void skipsRedisReleaseWhenEmpty() {
 			// given
+			stubLockToRunTask();
 			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L));
 			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
@@ -127,22 +162,10 @@ class OrderExpirationSchedulerTest {
 		}
 
 		@Test
-		@DisplayName("시작 시 셧다운 중이면 조회조차 하지 않는다")
-		void doesNotQueryWhenShuttingDownAtStart() {
-			// given
-			given(shutdownSignal.isShuttingDown()).willReturn(true);
-
-			// when
-			scheduler.expireOrders();
-
-			// then
-			verify(orderRepository, never()).findIdsByStatusAndExpiresAtBefore(any(), any(), any(), any());
-		}
-
-		@Test
 		@DisplayName("첫 건 처리 후 셧다운 신호가 오면 두 번째 건을 처리하지 않는다")
 		void stopsProcessingWhenShutdownSignaledMidLoop() {
 			// given
+			stubLockToRunTask();
 			given(shutdownSignal.isShuttingDown()).willReturn(false, false, true);
 			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L, 2L));
@@ -155,5 +178,13 @@ class OrderExpirationSchedulerTest {
 			verify(orderExpirationService).expire(1L, now);
 			verify(orderExpirationService, never()).expire(eq(2L), any());
 		}
+	}
+
+	private void stubLockToRunTask() {
+		given(orderExpirationLock.runExclusively(any())).willAnswer(invocation -> {
+			Runnable task = invocation.getArgument(0);
+			task.run();
+			return true;
+		});
 	}
 }
