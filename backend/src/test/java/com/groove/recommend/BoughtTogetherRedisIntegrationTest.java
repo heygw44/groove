@@ -1,6 +1,7 @@
 package com.groove.recommend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import com.groove.recommend.scheduler.BoughtTogetherScheduler;
 import com.groove.recommend.service.BoughtTogetherRedisService;
 import com.groove.support.IntegrationTestSupport;
 
@@ -29,6 +31,9 @@ class BoughtTogetherRedisIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private StringRedisTemplate redisTemplate;
+
+	@Autowired
+	private BoughtTogetherScheduler boughtTogetherScheduler;
 
 	@BeforeEach
 	@AfterEach
@@ -101,6 +106,18 @@ class BoughtTogetherRedisIntegrationTest extends IntegrationTestSupport {
 			assertThat(result.get(PRODUCT_A)).containsEntry(PRODUCT_B, 4.0);
 			assertThat(result.get(PRODUCT_B)).containsEntry(PRODUCT_A, 4.0);
 			assertThat(result.get(PRODUCT_NO_DATA)).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("BoughtTogetherScheduler.refresh() - named lock 통합")
+	class RefreshWithNamedLock {
+
+		@Test
+		@DisplayName("실제 named lock 으로 집계를 실행해도 예외 없이 끝난다")
+		void runsRefreshUnderRealNamedLock() {
+			// when & then
+			assertThatCode(() -> boughtTogetherScheduler.refresh()).doesNotThrowAnyException();
 		}
 	}
 }

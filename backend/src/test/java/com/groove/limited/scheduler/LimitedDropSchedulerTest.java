@@ -29,6 +29,7 @@ import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.service.LimitedDropRedisService;
+import com.groove.limited.service.LimitedDropScheduleLock;
 import com.groove.limited.service.LimitedDropScheduleService;
 import com.groove.limited.service.LimitedDropSyncService;
 import com.groove.product.entity.Artist;
@@ -51,6 +52,9 @@ class LimitedDropSchedulerTest {
 	@Mock
 	private LimitedDropSyncService limitedDropSyncService;
 
+	@Mock
+	private LimitedDropScheduleLock scheduleLock;
+
 	private LimitedDropScheduler scheduler;
 
 	private LocalDateTime now;
@@ -61,14 +65,21 @@ class LimitedDropSchedulerTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
 		scheduler = new LimitedDropScheduler(limitedDropRepository, scheduleService, limitedDropRedisService,
-				limitedDropSyncService, clock);
+				limitedDropSyncService, scheduleLock, clock);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
-		given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of());
 	}
 
 	private LimitedDrop dropWithId(Long id) {
 		return LimitedDropFixture.withId(LimitedDropFixture.scheduled(product), id);
+	}
+
+	private void stubLockToRunTask() {
+		given(scheduleLock.runExclusively(any())).willAnswer(invocation -> {
+			Runnable task = invocation.getArgument(0);
+			task.run();
+			return true;
+		});
 	}
 
 	@Nested
@@ -76,9 +87,24 @@ class LimitedDropSchedulerTest {
 	class Run {
 
 		@Test
+		@DisplayName("락 획득에 실패하면 대상 조회조차 하지 않는다")
+		void doesNothingWhenLockAcquisitionFails() {
+			// given
+			given(scheduleLock.runExclusively(any())).willReturn(false);
+
+			// when
+			scheduler.run();
+
+			// then
+			verify(limitedDropRepository, never()).findAllByStatusAndOpenAtLessThanEqual(any(), any());
+		}
+
+		@Test
 		@DisplayName("오픈 대상 하나가 실패해도 나머지 대상은 계속 처리한다")
 		void continuesWhenOneOpenFails() {
 			// given
+			stubLockToRunTask();
+			given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of());
 			given(limitedDropRepository.findAllByStatusAndOpenAtLessThanEqual(eq(LimitedDropStatus.SCHEDULED),
 					any())).willReturn(List.of(dropWithId(1L), dropWithId(2L), dropWithId(3L)));
 			given(limitedDropRepository.findAllByStatusInAndCloseAtLessThanEqual(any(), any()))
@@ -100,6 +126,8 @@ class LimitedDropSchedulerTest {
 		@DisplayName("오픈 대상과 마감 대상을 한 번의 실행에서 모두 처리한다")
 		void processesBothOpenAndCloseCandidates() {
 			// given
+			stubLockToRunTask();
+			given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of());
 			given(limitedDropRepository.findAllByStatusAndOpenAtLessThanEqual(eq(LimitedDropStatus.SCHEDULED),
 					any())).willReturn(List.of(dropWithId(1L)));
 			given(limitedDropRepository.findAllByStatusInAndCloseAtLessThanEqual(any(), any()))
@@ -119,6 +147,8 @@ class LimitedDropSchedulerTest {
 		@DisplayName("오픈·마감 대상이 없으면 서비스를 호출하지 않는다")
 		void doesNotCallServiceWhenNoCandidates() {
 			// given
+			stubLockToRunTask();
+			given(limitedDropRepository.findIdsByStatusIn(any())).willReturn(List.of());
 			given(limitedDropRepository.findAllByStatusAndOpenAtLessThanEqual(eq(LimitedDropStatus.SCHEDULED),
 					any())).willReturn(List.of());
 			given(limitedDropRepository.findAllByStatusInAndCloseAtLessThanEqual(any(), any()))
@@ -139,6 +169,7 @@ class LimitedDropSchedulerTest {
 
 		@BeforeEach
 		void stubNoOpenOrClose() {
+			stubLockToRunTask();
 			given(limitedDropRepository.findAllByStatusAndOpenAtLessThanEqual(eq(LimitedDropStatus.SCHEDULED),
 					any())).willReturn(List.of());
 			given(limitedDropRepository.findAllByStatusInAndCloseAtLessThanEqual(any(), any())).willReturn(List.of());
