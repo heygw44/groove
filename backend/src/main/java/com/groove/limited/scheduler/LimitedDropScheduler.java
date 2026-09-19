@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import com.groove.limited.entity.LimitedDrop;
 import com.groove.limited.repository.LimitedDropRepository;
 import com.groove.limited.service.LimitedDropRedisService;
+import com.groove.limited.service.LimitedDropScheduleLock;
 import com.groove.limited.service.LimitedDropScheduleService;
 import com.groove.limited.service.LimitedDropSyncService;
 
@@ -32,10 +33,18 @@ public class LimitedDropScheduler {
 	private final LimitedDropScheduleService scheduleService;
 	private final LimitedDropRedisService limitedDropRedisService;
 	private final LimitedDropSyncService limitedDropSyncService;
+	private final LimitedDropScheduleLock scheduleLock;
 	private final Clock clock;
 
 	@Scheduled(fixedDelay = 10_000, initialDelay = 10_000)
 	public void run() {
+		boolean acquired = scheduleLock.runExclusively(this::runSchedule);
+		if (!acquired) {
+			log.debug("한정반 드롭 스케줄 락 획득 실패로 건너뛴다");
+		}
+	}
+
+	private void runSchedule() {
 		LocalDateTime now = LocalDateTime.now(clock);
 		int opened = process(limitedDropRepository.findAllByStatusAndOpenAtLessThanEqual(SCHEDULED, now), now,
 				scheduleService::open, "오픈");
