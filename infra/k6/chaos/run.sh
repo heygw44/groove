@@ -14,7 +14,9 @@ usage() {
 환경변수:
   BASE_URL(기본 http://localhost:8080), INJECT_DELAY_SEC(기본 2)
   REDIS_DOWN_SEC(기본 0 - redis-restart 전용, 0 초과면 stop/sleep/start 로 정지 시간 늘림)
-  VERIFY_DELAY_SEC(기본 70), BACKEND_CONTAINER(기본 groove-backend)
+  VERIFY_DELAY_SEC(기본 70), BACKEND_CONTAINERS(공백 구분, 기본 groove-backend)
+    scale 프로필(앱 2인스턴스)에서는 "groove-backend-1 groove-backend-2" 처럼 준다.
+    사전 running 점검·docker logs 증거 수집은 목록 전부, app-kill 은 목록 첫 컨테이너만 죽인다.
   REDIS_CONTAINER(기본 groove-redis), HEALTH_TIMEOUT_SEC(기본 120)
   그리고 limited-chaos.js 가 읽는 MEMBERS/STOCK/RATE/RUSH_DURATION/TAIL_RATE/TAIL_DURATION 등은
   그대로 k6 에 전달된다.
@@ -61,8 +63,9 @@ BASE_URL="${BASE_URL:-http://localhost:8080}"
 INJECT_DELAY_SEC="${INJECT_DELAY_SEC:-2}"
 REDIS_DOWN_SEC="${REDIS_DOWN_SEC:-0}"
 VERIFY_DELAY_SEC="${VERIFY_DELAY_SEC:-70}"
-BACKEND_CONTAINER="${BACKEND_CONTAINER:-groove-backend}"
+BACKEND_CONTAINERS="${BACKEND_CONTAINERS:-groove-backend}"
 REDIS_CONTAINER="${REDIS_CONTAINER:-groove-redis}"
+read -r -a BACKEND_CONTAINER_LIST <<< "$BACKEND_CONTAINERS"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-120}"
 
 # --- 사전 점검 ---
@@ -86,7 +89,9 @@ check_container_running() {
 		exit 2
 	fi
 }
-check_container_running "$BACKEND_CONTAINER"
+for backend_container in "${BACKEND_CONTAINER_LIST[@]}"; do
+	check_container_running "$backend_container"
+done
 check_container_running "$REDIS_CONTAINER"
 
 # --- 출력 디렉토리 ---
@@ -211,9 +216,10 @@ inject_redis_key_loss() {
 }
 
 inject_app_kill() {
-	fault_log "INFO docker kill -s KILL ${BACKEND_CONTAINER}"
-	docker kill -s KILL "$BACKEND_CONTAINER" >> "$RUN_LOG" 2>&1
-	docker start "$BACKEND_CONTAINER" >> "$RUN_LOG" 2>&1
+	local target="${BACKEND_CONTAINER_LIST[0]}"
+	fault_log "INFO docker kill -s KILL ${target}"
+	docker kill -s KILL "$target" >> "$RUN_LOG" 2>&1
+	docker start "$target" >> "$RUN_LOG" 2>&1
 	local waited_x2=0
 	local max_x2=$((HEALTH_TIMEOUT_SEC * 2))
 	while true; do
@@ -275,9 +281,12 @@ fi
 # --- 백엔드 로그 증거 ---
 # 컨테이너를 다시 만들면(--force-recreate) 로그가 사라지므로 전체 로그를 파일로 남겨 둔다.
 RUSH_START_SEC=$((RUSH_START_MS / 1000))
-docker logs --since "$RUSH_START_SEC" "$BACKEND_CONTAINER" > "${OUT_DIR}/backend-full.log" 2>&1 || true
-grep -E '한정반 (Redis 대사 보정|Redis 재고 키 재적재|Redis 서킷|Redis 선점 실패)' "${OUT_DIR}/backend-full.log" \
-	> "${OUT_DIR}/backend-limited.log" || true
+for backend_container in "${BACKEND_CONTAINER_LIST[@]}"; do
+	docker logs --since "$RUSH_START_SEC" "$backend_container" \
+		> "${OUT_DIR}/backend-full-${backend_container}.log" 2>&1 || true
+	grep -E '한정반 (Redis 대사 보정|Redis 재고 키 재적재|Redis 서킷|Redis 선점 실패)' "${OUT_DIR}/backend-full-${backend_container}.log" \
+		> "${OUT_DIR}/backend-limited-${backend_container}.log" || true
+done
 
 # --- 최종 요약 ---
 FINAL_EXIT=1

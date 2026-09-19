@@ -29,7 +29,7 @@ import exec from 'k6/execution';
 import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 import {
   adminLogin, firstArtistId, createProduct, createDrop, getDropDetail,
-  rescheduleAndForceOpen, createMembers, authHeader, timestamp,
+  rescheduleAndForceOpen, createMembers, authHeader, timestamp, upstreamTag, upstreamSummaryLine,
 } from '../lib/limited-setup.js';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
@@ -69,6 +69,8 @@ const purchaseBusy = new Counter('purchase_busy');
 const purchaseServerError = new Counter('purchase_server_error');
 const purchaseConnError = new Counter('purchase_conn_error');
 const purchaseOther = new Counter('purchase_other');
+// scale 프로필(Nginx + 앱 2인스턴스)에서 장애 주입 중에도 요청이 두 인스턴스로 갈라지는지 보기 위한 태그 카운터.
+const purchaseByUpstream = new Counter('purchase_by_upstream');
 
 export const options = {
   setupTimeout: '10m',
@@ -137,6 +139,7 @@ export default function (data) {
 
   const outcome = classify(res);
   purchaseOutcome.add(1, { outcome });
+  purchaseByUpstream.add(1, { upstream: upstreamTag(res) });
 }
 
 function classify(res) {
@@ -202,7 +205,7 @@ export function teardown(data) {
 
 export function handleSummary(data) {
   const output = {};
-  output['stdout'] = textSummary(data, { indent: ' ', enableColors: true });
+  output['stdout'] = textSummary(data, { indent: ' ', enableColors: true }) + upstreamSummaryLine(data);
   const fileName = RUN_LABEL
     ? `chaos-${RUN_LABEL}-${timestamp()}.json`
     : `chaos-${timestamp()}.json`;
