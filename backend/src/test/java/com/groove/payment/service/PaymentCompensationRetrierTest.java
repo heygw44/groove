@@ -18,6 +18,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
@@ -33,6 +35,9 @@ class PaymentCompensationRetrierTest {
 	@Mock
 	private PaymentCompensationWriter compensationWriter;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private PaymentCompensationRetrier retrier;
 
 	private LocalDateTime now;
@@ -41,7 +46,7 @@ class PaymentCompensationRetrierTest {
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-22T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
-		retrier = new PaymentCompensationRetrier(paymentClient, compensationWriter, clock);
+		retrier = new PaymentCompensationRetrier(paymentClient, compensationWriter, clock, alertNotifier);
 	}
 
 	@Nested
@@ -94,6 +99,7 @@ class PaymentCompensationRetrierTest {
 			// then
 			verify(compensationWriter).reviewManually("tviva-dup", rejection.getMessage());
 			verify(compensationWriter, never()).fail(any(), any());
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 
 		@Test

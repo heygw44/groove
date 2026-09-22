@@ -25,6 +25,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
@@ -72,6 +74,9 @@ class PaymentWebhookServiceTest {
 	@Mock
 	private PaymentCompensator compensator;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private PaymentWebhookService service;
 
 	private Member member;
@@ -82,7 +87,7 @@ class PaymentWebhookServiceTest {
 	void setUp() {
 		ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 		service = new PaymentWebhookService(objectMapper, eventWriter, paymentRepository, compensationRepository,
-				compensationRetrier, paymentClient, reconcileService, compensator);
+				compensationRetrier, paymentClient, reconcileService, compensator, alertNotifier);
 
 		member = MemberFixture.create();
 		order = OrderFixture.withId(OrderFixture.create(member), ORDER_ID);
@@ -245,6 +250,7 @@ class PaymentWebhookServiceTest {
 					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 			verify(eventWriter).markResult(eq(EVENT_ID), eq(PaymentWebhookResult.ERROR), any());
 			verify(reconcileService, never()).recordFailure(any(), any());
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 
 		@Test

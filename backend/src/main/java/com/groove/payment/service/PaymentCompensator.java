@@ -7,6 +7,8 @@ import java.util.Objects;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
@@ -31,6 +33,7 @@ public class PaymentCompensator {
 	private final PaymentConfirmWriter writer;
 	private final PaymentCompensationWriter compensationWriter;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	/**
 	 * paymentId 가 있는 경로 전용이다. paymentId 가 없는 보상은 payment_compensation 행에 채울 orderId·
@@ -58,6 +61,10 @@ public class PaymentCompensator {
 		} catch (BusinessException ex) {
 			log.error("승인 후 보상 취소 실패: paymentId={}, paymentKey={}, message={}", paymentId, paymentKey,
 					ex.getMessage(), ex);
+			alertNotifier.notify(Alert.critical("payment.compensation-failed",
+					"승인 후 보상 취소 실패: paymentId=" + paymentId + ", paymentKey=" + paymentKey + ", message="
+							+ ex.getMessage(),
+					paymentId != null ? "paymentId=" + paymentId : "paymentKey=" + paymentKey));
 			String detail = "보상 취소 실패: " + ex.getMessage();
 			if (paymentId != null) {
 				safeMarkUnknown(paymentId, detail);
@@ -77,6 +84,8 @@ public class PaymentCompensator {
 				writer.markCompensated(paymentId, paymentKey, approvedAt, canceledAt, reason);
 			} catch (RuntimeException ex) {
 				log.error("보상 취소는 성공했으나 결제 반영에 실패함: paymentId={}", paymentId, ex);
+				alertNotifier.notify(Alert.critical("payment.compensation-failed",
+						"보상 취소는 성공했으나 결제 반영에 실패함: paymentId=" + paymentId, "paymentId=" + paymentId));
 			}
 		} else {
 			safeCompensationComplete(paymentKey, canceledAt);
@@ -89,6 +98,8 @@ public class PaymentCompensator {
 			writer.markUnknown(paymentId, reason);
 		} catch (ObjectOptimisticLockingFailureException | BusinessException ex) {
 			log.error("보상 취소 실패 기록 중 예외 발생: paymentId={}", paymentId, ex);
+			alertNotifier.notify(Alert.critical("payment.compensation-failed",
+					"보상 취소 실패 기록 중 예외 발생: paymentId=" + paymentId, "paymentId=" + paymentId));
 		}
 	}
 
@@ -97,6 +108,8 @@ public class PaymentCompensator {
 			compensationWriter.fail(paymentKey, detail);
 		} catch (RuntimeException ex) {
 			log.error("보상 대기 실패 기록 중 예외 발생: paymentKey={}", paymentKey, ex);
+			alertNotifier.notify(Alert.critical("payment.compensation-failed",
+					"보상 대기 실패 기록 중 예외 발생: paymentKey=" + paymentKey, "paymentKey=" + paymentKey));
 		}
 	}
 
@@ -105,6 +118,8 @@ public class PaymentCompensator {
 			compensationWriter.reviewManually(paymentKey, detail);
 		} catch (RuntimeException ex) {
 			log.error("보상 대기 수동 확인 기록 중 예외 발생: paymentKey={}", paymentKey, ex);
+			alertNotifier.notify(Alert.critical("payment.compensation-failed",
+					"보상 대기 수동 확인 기록 중 예외 발생: paymentKey=" + paymentKey, "paymentKey=" + paymentKey));
 		}
 	}
 
@@ -113,6 +128,8 @@ public class PaymentCompensator {
 			compensationWriter.complete(paymentKey, canceledAt);
 		} catch (RuntimeException ex) {
 			log.error("보상 취소는 성공했으나 보상 대기 반영에 실패함: paymentKey={}", paymentKey, ex);
+			alertNotifier.notify(Alert.critical("payment.compensation-failed",
+					"보상 취소는 성공했으나 보상 대기 반영에 실패함: paymentKey=" + paymentKey, "paymentKey=" + paymentKey));
 		}
 	}
 }

@@ -13,6 +13,8 @@ import javax.sql.DataSource;
 
 import org.slf4j.Logger;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.zaxxer.hikari.HikariDataSource;
 
 /**
@@ -39,15 +41,17 @@ public class NamedLock {
 
 	private final LockConnectionProvider connectionProvider;
 	private final Logger log;
+	private final AlertNotifier alertNotifier;
 	private final Map<String, FailureTracker> failureTrackers = new ConcurrentHashMap<>();
 
-	public NamedLock(DataSource dataSource, Logger log) {
-		this(toDedicatedConnectionProvider(dataSource), log);
+	public NamedLock(DataSource dataSource, Logger log, AlertNotifier alertNotifier) {
+		this(toDedicatedConnectionProvider(dataSource), log, alertNotifier);
 	}
 
-	public NamedLock(LockConnectionProvider connectionProvider, Logger log) {
+	public NamedLock(LockConnectionProvider connectionProvider, Logger log, AlertNotifier alertNotifier) {
 		this.connectionProvider = connectionProvider;
 		this.log = log;
+		this.alertNotifier = alertNotifier;
 	}
 
 	private static LockConnectionProvider toDedicatedConnectionProvider(DataSource dataSource) {
@@ -97,8 +101,12 @@ public class NamedLock {
 				resultSet.next();
 				int released = resultSet.getInt(1);
 				if (resultSet.wasNull() || released != 1) {
+					String releasedValue = resultSet.wasNull() ? "NULL" : String.valueOf(released);
 					log.error("named lock 해제가 비정상 반환값을 받았다 lockName={} released={} (전용 커넥션을 닫아 세션 단위로는 정리된다)",
-							lockName, resultSet.wasNull() ? "NULL" : released);
+							lockName, releasedValue);
+					alertNotifier.notify(
+							Alert.warn("lock.release-abnormal", "named lock 해제 반환값 이상 released=" + releasedValue,
+									lockName));
 				}
 			}
 		}
@@ -135,6 +143,8 @@ public class NamedLock {
 			if (shouldAlert) {
 				log.error("같은 세션이 named lock 을 {}회 연속 쥐고 있다 lockName={} holderConnectionId={} - 누수 가능성이 있다",
 						tracker.count, lockName, holderConnectionId);
+				alertNotifier.notify(Alert.critical("lock.acquire-denied",
+						"같은 세션이 named lock 을 " + tracker.count + "회 연속 쥐고 있다, 누수 가능성이 있다", lockName));
 			} else {
 				log.debug("named lock 획득 실패 lockName={} holderConnectionId={} count={}", lockName, holderConnectionId,
 						tracker.count);

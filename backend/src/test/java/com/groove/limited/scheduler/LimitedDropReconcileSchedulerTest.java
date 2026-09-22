@@ -16,6 +16,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.limited.repository.LimitedDropRepository;
@@ -38,12 +40,15 @@ class LimitedDropReconcileSchedulerTest {
 	@Mock
 	private ShutdownSignal shutdownSignal;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private LimitedDropReconcileScheduler scheduler;
 
 	@BeforeEach
 	void setUp() {
 		scheduler = new LimitedDropReconcileScheduler(limitedDropRepository, limitedDropSyncService, reconcileLock,
-				shutdownSignal);
+				shutdownSignal, alertNotifier);
 	}
 
 	@Nested
@@ -94,6 +99,7 @@ class LimitedDropReconcileSchedulerTest {
 			// then
 			verify(limitedDropSyncService).sync(1L);
 			verify(limitedDropSyncService).sync(2L);
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 
 		@Test

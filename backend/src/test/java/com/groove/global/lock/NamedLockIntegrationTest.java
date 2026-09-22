@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.groove.global.alert.LoggingAlertNotifier;
 import com.groove.support.IntegrationTestSupport;
 
 /**
@@ -31,7 +32,8 @@ class NamedLockIntegrationTest extends IntegrationTestSupport {
 	private DataSource dataSource;
 
 	private NamedLock namedLock() {
-		return new NamedLock(dataSource, LoggerFactory.getLogger(NamedLockIntegrationTest.class));
+		return new NamedLock(dataSource, LoggerFactory.getLogger(NamedLockIntegrationTest.class),
+				new LoggingAlertNotifier());
 	}
 
 	private Integer currentLockHolder(String lockName) {

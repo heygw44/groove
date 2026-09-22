@@ -20,7 +20,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.slf4j.LoggerFactory;
+
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
+import com.groove.global.alert.AlertSeverity;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -33,6 +38,7 @@ class NamedLockTest {
 
 	private Connection connection;
 	private NamedLock.LockConnectionProvider connectionProvider;
+	private AlertNotifier alertNotifier;
 	private NamedLock namedLock;
 	private ListAppender<ILoggingEvent> logAppender;
 
@@ -41,11 +47,12 @@ class NamedLockTest {
 		connection = mock(Connection.class);
 		connectionProvider = mock(NamedLock.LockConnectionProvider.class);
 		given(connectionProvider.open()).willReturn(connection);
+		alertNotifier = mock(AlertNotifier.class);
 
 		logAppender = new ListAppender<>();
 		logAppender.start();
 		((Logger) LoggerFactory.getLogger(NamedLockTest.class)).addAppender(logAppender);
-		namedLock = new NamedLock(connectionProvider, LoggerFactory.getLogger(NamedLockTest.class));
+		namedLock = new NamedLock(connectionProvider, LoggerFactory.getLogger(NamedLockTest.class), alertNotifier);
 	}
 
 	@AfterEach
@@ -170,6 +177,10 @@ class NamedLockTest {
 			// then
 			assertThat(acquired).isTrue();
 			assertThat(errorLogCount()).isPositive();
+			ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+			verify(alertNotifier).notify(alertCaptor.capture());
+			assertThat(alertCaptor.getValue().severity()).isEqualTo(AlertSeverity.WARN);
+			assertThat(alertCaptor.getValue().key()).isEqualTo("lock.release-abnormal");
 		}
 
 		@Test
@@ -188,6 +199,10 @@ class NamedLockTest {
 			// then
 			assertThat(errorLogCount()).isEqualTo(1);
 			verify(task, never()).run();
+			ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+			verify(alertNotifier).notify(alertCaptor.capture());
+			assertThat(alertCaptor.getValue().severity()).isEqualTo(AlertSeverity.CRITICAL);
+			assertThat(alertCaptor.getValue().key()).isEqualTo("lock.acquire-denied");
 		}
 
 		@Test
@@ -278,7 +293,8 @@ class NamedLockTest {
 			DataSource dataSource = mock(DataSource.class);
 
 			// when & then
-			assertThatThrownBy(() -> new NamedLock(dataSource, LoggerFactory.getLogger(NamedLockTest.class)))
+			assertThatThrownBy(
+					() -> new NamedLock(dataSource, LoggerFactory.getLogger(NamedLockTest.class), alertNotifier))
 					.isInstanceOf(IllegalStateException.class);
 		}
 	}
