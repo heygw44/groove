@@ -3,11 +3,13 @@ package com.groove.payment.scheduler;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -28,8 +30,12 @@ import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.config.PaymentReconcileProperties;
+import com.groove.payment.dto.PaymentCompensationCandidate;
 import com.groove.payment.dto.PaymentReconcileCandidate;
+import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
+import com.groove.payment.service.PaymentCompensationRetrier;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentReconcileLock;
 import com.groove.payment.service.PaymentReconcileOutcome;
@@ -51,6 +57,12 @@ class PaymentReconcileSchedulerTest {
 	private PaymentCompensator compensator;
 
 	@Mock
+	private PaymentCompensationRepository compensationRepository;
+
+	@Mock
+	private PaymentCompensationRetrier compensationRetrier;
+
+	@Mock
 	private ShutdownSignal shutdownSignal;
 
 	private PaymentReconcileScheduler scheduler;
@@ -62,8 +74,10 @@ class PaymentReconcileSchedulerTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
+		PaymentReconcileProperties reconcileProperties = new PaymentReconcileProperties(Duration.ofSeconds(60),
+				Duration.ofMinutes(2), 50, 10);
 		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator,
-				shutdownSignal, clock);
+				compensationRepository, compensationRetrier, reconcileProperties, shutdownSignal, clock);
 	}
 
 	@Nested
@@ -250,6 +264,47 @@ class PaymentReconcileSchedulerTest {
 			// then
 			verify(paymentClient).lookup("toss-1");
 			verify(paymentClient, never()).lookup("toss-2");
+		}
+	}
+
+	@Nested
+	@DisplayName("reconcile() 의 보상 대기 회수")
+	class ReconcileCompensations {
+
+		@Test
+		@DisplayName("후보마다 회수를 시도한다")
+		void retriesEachCandidate() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCompensationCandidate candidate = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
+			given(compensationRepository.findCandidates(eq(now.minusMinutes(2)), eq(10), any()))
+					.willReturn(List.of(candidate));
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(compensationRetrier).retry(candidate);
+		}
+
+		@Test
+		@DisplayName("한 건 회수 처리가 예외를 던져도 대사 자체는 끝까지 진행된다")
+		void doesNotPropagateWhenRetrierThrows() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCompensationCandidate first = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
+			PaymentCompensationCandidate second = new PaymentCompensationCandidate("tviva-dup-2", "중복 승인 자동 취소");
+			given(compensationRepository.findCandidates(eq(now.minusMinutes(2)), eq(10), any()))
+					.willReturn(List.of(first, second));
+			willThrow(new IllegalStateException("boom")).given(compensationRetrier).retry(first);
+
+			// when
+			scheduler.reconcile();
+
+			// then: 예외를 던지지 않고 나머지 후보도 처리한다.
+			verify(compensationRetrier).retry(second);
 		}
 	}
 

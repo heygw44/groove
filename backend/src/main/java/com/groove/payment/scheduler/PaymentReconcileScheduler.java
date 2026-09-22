@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -13,8 +14,12 @@ import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.config.PaymentReconcileProperties;
+import com.groove.payment.dto.PaymentCompensationCandidate;
 import com.groove.payment.dto.PaymentReconcileCandidate;
+import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
+import com.groove.payment.service.PaymentCompensationRetrier;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentReconcileLock;
 import com.groove.payment.service.PaymentReconcileOutcome;
@@ -36,6 +41,9 @@ public class PaymentReconcileScheduler {
 	private final PaymentReconcileLock reconcileLock;
 	private final PaymentClient paymentClient;
 	private final PaymentCompensator compensator;
+	private final PaymentCompensationRepository compensationRepository;
+	private final PaymentCompensationRetrier compensationRetrier;
+	private final PaymentReconcileProperties reconcileProperties;
 	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
 
@@ -84,6 +92,31 @@ public class PaymentReconcileScheduler {
 		}
 		log.info("결제 대사 완료 candidates={} processed={} compensated={} failed={}", candidates.size(), processed,
 				compensated, failed);
+		reconcileCompensations(now);
+	}
+
+	/** 기존 대사 후보 처리가 끝난 뒤, 같은 named lock 안에서 payment_compensation 대기 큐를 회수한다. */
+	private void reconcileCompensations(LocalDateTime now) {
+		LocalDateTime before = now.minus(reconcileProperties.grace());
+		List<PaymentCompensationCandidate> candidates = compensationRepository.findCandidates(before,
+				reconcileProperties.maxAttempts(), Limit.of(reconcileProperties.batchSize()));
+		int processed = 0;
+		for (PaymentCompensationCandidate candidate : candidates) {
+			if (shutdownSignal.isShuttingDown()) {
+				log.info("셧다운 신호로 결제 보상 대기 회수 중단 processed={} remaining={}", processed,
+						candidates.size() - processed);
+				break;
+			}
+			try {
+				compensationRetrier.retry(candidate);
+			} catch (RuntimeException ex) {
+				log.error("결제 보상 대기 회수 처리 실패 paymentKey={}", candidate.paymentKey(), ex);
+			}
+			processed++;
+		}
+		if (processed > 0) {
+			log.info("결제 보상 대기 회수 완료 candidates={} processed={}", candidates.size(), processed);
+		}
 	}
 
 	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey) {

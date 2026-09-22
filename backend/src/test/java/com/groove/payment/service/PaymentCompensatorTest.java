@@ -1,13 +1,16 @@
 package com.groove.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -20,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.CannotAcquireLockException;
@@ -36,13 +40,19 @@ import com.groove.payment.entity.Payment;
 class PaymentCompensatorTest {
 
 	private static final Long PAYMENT_ID = 10L;
+	private static final Long ORDER_ID = 500L;
+	private static final String TOSS_ORDER_ID = "20260913-K7Q2M9XZ";
 	private static final String REASON = PaymentCompensator.ORDER_INVALIDATED_REASON;
+	private static final String DUPLICATE_REASON = PaymentCompensator.DUPLICATE_APPROVAL_REASON;
 
 	@Mock
 	PaymentClient paymentClient;
 
 	@Mock
 	PaymentConfirmWriter writer;
+
+	@Mock
+	PaymentCompensationWriter compensationWriter;
 
 	PaymentCompensator compensator;
 
@@ -53,7 +63,7 @@ class PaymentCompensatorTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
-		compensator = new PaymentCompensator(paymentClient, writer, clock);
+		compensator = new PaymentCompensator(paymentClient, writer, compensationWriter, clock);
 	}
 
 	@Nested
@@ -97,19 +107,24 @@ class PaymentCompensatorTest {
 		}
 
 		@Test
-		@DisplayName("paymentId 가 없으면 토스 취소만 하고 DB 행은 건드리지 않는다")
-		void doesNotWriteToDatabaseWhenPaymentIdIsNull() {
+		@DisplayName("paymentId 가 없으면 대기 행을 먼저 커밋한 뒤 토스를 취소하고 완료로 기록한다")
+		void enqueuesBeforeCancelingAndCompletesWhenPaymentIdIsNull() {
 			// given
 			LocalDateTime canceledAt = now.truncatedTo(ChronoUnit.SECONDS);
-			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, REASON))
+			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON))
 					.willReturn(new PaymentCancelResult(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
 
 			// when
 			CompensationResult result = compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
-					PaymentFixture.APPROVED_AT, REASON);
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON, ORDER_ID, TOSS_ORDER_ID);
 
 			// then
 			assertThat(result.canceled()).isTrue();
+			InOrder order = inOrder(compensationWriter, paymentClient);
+			order.verify(compensationWriter).enqueue(PaymentFixture.PAYMENT_KEY, ORDER_ID, TOSS_ORDER_ID,
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON);
+			order.verify(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON);
+			verify(compensationWriter).complete(PaymentFixture.PAYMENT_KEY, canceledAt);
 			verify(writer, never()).markCompensated(any(), any(), any(), any(), any());
 		}
 
@@ -167,20 +182,53 @@ class PaymentCompensatorTest {
 		}
 
 		@Test
-		@DisplayName("paymentId 가 없으면 취소가 거절돼도 결과 불명 기록을 시도하지 않는다")
-		void doesNotMarkUnknownWhenPaymentIdIsNullAndCancelRejected() {
+		@DisplayName("paymentId 가 없으면 취소가 명확히 거절돼도 상한을 기다리지 않고 즉시 수동 확인으로 넘긴다")
+		void reviewsManuallyWhenPaymentIdIsNullAndCancelExplicitlyRejected() {
 			// given
 			BusinessException cancelFailed = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED,
 					"TOSS ALREADY_CANCELED_PAYMENT");
-			willThrow(cancelFailed).given(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, REASON);
+			willThrow(cancelFailed).given(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON);
 
 			// when
 			CompensationResult result = compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
-					PaymentFixture.APPROVED_AT, REASON);
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON, ORDER_ID, TOSS_ORDER_ID);
 
 			// then
 			assertThat(result.canceled()).isFalse();
+			verify(compensationWriter).enqueue(PaymentFixture.PAYMENT_KEY, ORDER_ID, TOSS_ORDER_ID,
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON);
+			verify(compensationWriter).reviewManually(PaymentFixture.PAYMENT_KEY,
+					"보상 취소 실패: " + cancelFailed.getMessage());
+			verify(compensationWriter, never()).fail(any(), any());
 			verify(writer, never()).markUnknown(any(), any());
+		}
+
+		@Test
+		@DisplayName("paymentId 가 없으면 취소 결과가 불명일 때만 재시도 횟수를 올린다")
+		void failsWhenPaymentIdIsNullAndCancelResultUnknown() {
+			// given
+			BusinessException resultUnknown = new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN,
+					"TOSS 통신 실패: Read timed out");
+			willThrow(resultUnknown).given(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON);
+
+			// when
+			CompensationResult result = compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON, ORDER_ID, TOSS_ORDER_ID);
+
+			// then
+			assertThat(result.canceled()).isFalse();
+			verify(compensationWriter).fail(PaymentFixture.PAYMENT_KEY, "보상 취소 실패: " + resultUnknown.getMessage());
+			verify(compensationWriter, never()).reviewManually(any(), any());
+		}
+
+		@Test
+		@DisplayName("4-인자 오버로드에 paymentId 가 없으면 NullPointerException 을 던지고 아무것도 건드리지 않는다")
+		void throwsNullPointerExceptionWhenPaymentIdIsNullOnFourArgOverload() {
+			// when & then
+			assertThatThrownBy(() -> compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, REASON))
+					.isInstanceOf(NullPointerException.class);
+			verifyNoInteractions(paymentClient, compensationWriter, writer);
 		}
 
 		@Test
