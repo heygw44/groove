@@ -3,11 +3,13 @@ package com.groove.payment.scheduler;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -28,8 +30,12 @@ import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.config.PaymentReconcileProperties;
+import com.groove.payment.dto.PaymentCompensationCandidate;
 import com.groove.payment.dto.PaymentReconcileCandidate;
+import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
+import com.groove.payment.service.PaymentCompensationWriter;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentReconcileLock;
 import com.groove.payment.service.PaymentReconcileOutcome;
@@ -51,6 +57,12 @@ class PaymentReconcileSchedulerTest {
 	private PaymentCompensator compensator;
 
 	@Mock
+	private PaymentCompensationRepository compensationRepository;
+
+	@Mock
+	private PaymentCompensationWriter compensationWriter;
+
+	@Mock
 	private ShutdownSignal shutdownSignal;
 
 	private PaymentReconcileScheduler scheduler;
@@ -62,8 +74,10 @@ class PaymentReconcileSchedulerTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
+		PaymentReconcileProperties reconcileProperties = new PaymentReconcileProperties(Duration.ofSeconds(60),
+				Duration.ofMinutes(2), 50, 10);
 		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator,
-				shutdownSignal, clock);
+				compensationRepository, compensationWriter, reconcileProperties, shutdownSignal, clock);
 	}
 
 	@Nested
@@ -250,6 +264,107 @@ class PaymentReconcileSchedulerTest {
 			// then
 			verify(paymentClient).lookup("toss-1");
 			verify(paymentClient, never()).lookup("toss-2");
+		}
+	}
+
+	@Nested
+	@DisplayName("reconcile() 의 보상 대기 회수")
+	class ReconcileCompensations {
+
+		@Test
+		@DisplayName("취소가 성공하면 완료로 기록한다")
+		void completesWhenCancelSucceeds() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCompensationCandidate candidate = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
+			given(compensationRepository.findCandidates(eq(now.minusMinutes(2)), eq(10), any()))
+					.willReturn(List.of(candidate));
+			PaymentCancelResult cancelResult = new PaymentCancelResult("tviva-dup", "CANCELED", now);
+			given(paymentClient.cancel("tviva-dup", "중복 승인 자동 취소")).willReturn(cancelResult);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(compensationWriter).complete("tviva-dup", now);
+		}
+
+		@Test
+		@DisplayName("취소 결과가 불명이면 재시도 횟수만 올린다")
+		void failsWhenCancelResultUnknown() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCompensationCandidate candidate = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
+			given(compensationRepository.findCandidates(eq(now.minusMinutes(2)), eq(10), any()))
+					.willReturn(List.of(candidate));
+			BusinessException resultUnknown = new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN,
+					"TOSS 통신 실패: Read timed out");
+			given(paymentClient.cancel("tviva-dup", "중복 승인 자동 취소")).willThrow(resultUnknown);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(compensationWriter).fail("tviva-dup", resultUnknown.getMessage());
+			verify(compensationWriter, never()).reviewManually(any(), any());
+		}
+
+		@Test
+		@DisplayName("취소가 명확히 거절되면 상한을 기다리지 않고 즉시 수동 확인으로 넘긴다")
+		void reviewsManuallyWhenCancelRejected() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCompensationCandidate candidate = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
+			given(compensationRepository.findCandidates(eq(now.minusMinutes(2)), eq(10), any()))
+					.willReturn(List.of(candidate));
+			BusinessException rejection = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS 거절");
+			given(paymentClient.cancel("tviva-dup", "중복 승인 자동 취소")).willThrow(rejection);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(compensationWriter).reviewManually("tviva-dup", rejection.getMessage());
+			verify(compensationWriter, never()).fail(any(), any());
+		}
+
+		@Test
+		@DisplayName("취소 호출이 예상 못한 예외를 던지면 재시도 횟수만 올린다")
+		void failsWhenCancelThrowsUnexpectedException() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCompensationCandidate candidate = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
+			given(compensationRepository.findCandidates(eq(now.minusMinutes(2)), eq(10), any()))
+					.willReturn(List.of(candidate));
+			RuntimeException timeout = new RuntimeException("Read timed out");
+			given(paymentClient.cancel("tviva-dup", "중복 승인 자동 취소")).willThrow(timeout);
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(compensationWriter).fail("tviva-dup", timeout.getMessage());
+		}
+
+		@Test
+		@DisplayName("한 건 회수 처리가 예외를 던져도 대사 자체는 끝까지 진행된다")
+		void doesNotPropagateWhenCompensationWriterThrows() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCompensationCandidate candidate = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
+			given(compensationRepository.findCandidates(eq(now.minusMinutes(2)), eq(10), any()))
+					.willReturn(List.of(candidate));
+			PaymentCancelResult cancelResult = new PaymentCancelResult("tviva-dup", "CANCELED", now);
+			given(paymentClient.cancel("tviva-dup", "중복 승인 자동 취소")).willReturn(cancelResult);
+			willThrow(new IllegalStateException("boom")).given(compensationWriter).complete("tviva-dup", now);
+
+			// when & then: 예외를 던지지 않고 정상적으로 끝난다.
+			scheduler.reconcile();
 		}
 	}
 

@@ -289,7 +289,7 @@ class PaymentConfirmServiceTest {
 			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
 					.isSameAs(duplicateApproval);
 			verify(compensator).cancelApproved(isNull(), eq(PaymentFixture.PAYMENT_KEY), eq(result.approvedAt()),
-					eq(PaymentCompensator.DUPLICATE_APPROVAL_REASON));
+					eq(PaymentCompensator.DUPLICATE_APPROVAL_REASON), eq(ORDER_ID), eq(ORDER_NUMBER));
 			verify(writer, never()).fail(any(), any());
 			verify(writer, never()).markUnknown(any(), any());
 		}

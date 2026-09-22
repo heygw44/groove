@@ -58,6 +58,9 @@ public class TossPaymentClient implements PaymentClient {
 	/** 조회 대상 결제가 없다는 토스 에러 코드. */
 	private static final Set<String> NOT_FOUND_ERROR_CODES = Set.of("NOT_FOUND_PAYMENT", "NOT_FOUND");
 
+	/** 이미 취소된 결제를 다시 취소 요청했다는 토스 에러 코드. 재시도 쪽은 원하는 결과에 이미 도달한 것이라 성공으로 흡수한다. */
+	private static final String ALREADY_CANCELED_PAYMENT_CODE = "ALREADY_CANCELED_PAYMENT";
+
 	private final RestClient restClient;
 	private final ObjectMapper objectMapper;
 	private final Clock clock;
@@ -94,9 +97,11 @@ public class TossPaymentClient implements PaymentClient {
 			response = send(ErrorCode.PAYMENT_CANCEL_FAILED, paymentKey, idempotencyKey, CANCEL_PATH, request,
 					paymentKey);
 		} catch (TossAlreadyProcessedException ex) {
-			// 이미 취소된 결제는 토스가 ALREADY_CANCELED_PAYMENT 로 답해 이 코드로 오지 않는다.
-			// 취소 요청에서 나오면 예상 밖의 응답이라 거절로 본다.
+			// ALREADY_PROCESSED_PAYMENT 는 승인 재전송을 흡수하는 코드라 취소 요청에서 나오면 예상 밖의 응답이다.
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, ex.getMessage());
+		} catch (TossAlreadyCanceledException ex) {
+			// 대사/보상 재시도가 먼저 성공한 취소를 다시 부르면 이미 원하는 결과(취소됨)에 도달한 것이므로 성공으로 흡수한다.
+			return new PaymentCancelResult(paymentKey, "CANCELED", null);
 		}
 		TossPaymentResponse.Cancel lastCancel = response.lastCancel();
 		LocalDateTime canceledAt = lastCancel == null ? null : toServerTime(lastCancel.canceledAt());
@@ -151,6 +156,10 @@ public class TossPaymentClient implements PaymentClient {
 			return response;
 		} catch (RestClientResponseException ex) {
 			TossErrorResponse error = parseError(ex.getResponseBodyAsString());
+			if (errorCode == ErrorCode.PAYMENT_CANCEL_FAILED && ALREADY_CANCELED_PAYMENT_CODE.equals(error.code())) {
+				log.warn("토스 결제 API 이미 취소된 결제 응답, 취소 성공으로 흡수: paymentKey={}", paymentKey);
+				throw new TossAlreadyCanceledException();
+			}
 			TossFailureType failureType = TossFailureType.classify(ex.getStatusCode(), error.code());
 			String detail = "TOSS " + displayCode(error.code()) + ": " + error.message();
 			if (failureType == TossFailureType.ALREADY_PROCESSED) {
@@ -247,5 +256,9 @@ public class TossPaymentClient implements PaymentClient {
 		private TossAlreadyProcessedException(String message) {
 			super(message);
 		}
+	}
+
+	/** send() 내부에서만 오가는 신호. 취소 재시도가 이미 취소된 결제를 만나면 성공으로 흡수한다. */
+	private static final class TossAlreadyCanceledException extends RuntimeException {
 	}
 }

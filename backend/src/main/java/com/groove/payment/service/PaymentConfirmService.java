@@ -55,7 +55,7 @@ public class PaymentConfirmService {
 		try {
 			return writer.approve(orderId, paymentId, paymentKey, result);
 		} catch (BusinessException ex) {
-			throw recoverFromInvalidatedApproval(paymentId, paymentKey, result, ex);
+			throw recoverFromInvalidatedApproval(preparation, paymentKey, result, ex);
 		} catch (RuntimeException ex) {
 			throw recoverFromApprovalFailure(paymentId, ex);
 		}
@@ -73,8 +73,9 @@ public class PaymentConfirmService {
 	 * 토스는 이미 승인을 마쳤으므로 approve() 가 주문 상태 때문에 거절돼도 FAILED 로 기록하지 않는다.
 	 * 원인별로 자동 보상 여부와 사용자에게 돌려줄 예외가 다르다.
 	 */
-	private BusinessException recoverFromInvalidatedApproval(Long paymentId, String paymentKey,
+	private BusinessException recoverFromInvalidatedApproval(ConfirmPreparation preparation, String paymentKey,
 			PaymentConfirmResult result, BusinessException ex) {
+		Long paymentId = preparation.paymentId();
 		ErrorCode errorCode = ex.getErrorCode();
 		if (errorCode == ErrorCode.ORDER_INVALID_STATUS) {
 			CompensationResult compensation = compensator.cancelApproved(paymentId, paymentKey, result.approvedAt(),
@@ -85,7 +86,7 @@ public class PaymentConfirmService {
 		}
 		if (isDuplicateApproval(errorCode)) {
 			compensator.cancelApproved(null, paymentKey, result.approvedAt(),
-					PaymentCompensator.DUPLICATE_APPROVAL_REASON);
+					PaymentCompensator.DUPLICATE_APPROVAL_REASON, preparation.orderId(), preparation.orderNumber());
 			return ex;
 		}
 		log.error("승인 후 자동 보상 대상이 아닌 예외: paymentId={}, errorCode={}", paymentId, errorCode, ex);
