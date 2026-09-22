@@ -20,6 +20,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
 	Optional<Payment> findByPaymentKey(String paymentKey);
 
+	Optional<Payment> findByTossOrderId(String tossOrderId);
+
 	@Query("""
 			select new com.groove.payment.dto.PaymentCancelTarget(p.order.id, p.status)
 			from Payment p
