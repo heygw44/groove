@@ -22,6 +22,7 @@ public class PaymentWebhookController {
 	private final PaymentWebhookService paymentWebhookService;
 
 	/**
+	 * 발신 검증은 운영 Nginx의 Toss IP 허용 목록과 요청 제한이 맡는다.
 	 * 인증도 서명 헤더도 없다. 본문이 JSON 으로 파싱되지 않거나, 대상 이벤트가 아니거나, 우리가 아는
 	 * 결제·보상 대기 행이 없는 요청은 로그만 남기고 행을 저장하지 않은 채 200 을 준다 — 무인증
 	 * 엔드포인트라 아무나 반복 호출해 DB 를 채울 수 있으므로, 우리가 알아볼 수 있는 이벤트만 남긴다.
