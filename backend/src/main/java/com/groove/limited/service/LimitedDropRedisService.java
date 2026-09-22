@@ -19,6 +19,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.limited.entity.LimitedAttemptResult;
 
 import lombok.RequiredArgsConstructor;
@@ -48,6 +50,7 @@ public class LimitedDropRedisService {
 	private final RedisScript<Long> limitedReleaseScript;
 	private final RedisScript<List> limitedSyncScript;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	/** 이미 키가 있으면 덮어쓰지 않는다(SET NX). 세팅됐으면 true. */
 	public boolean initStock(Long dropId, int quantity) {
@@ -112,6 +115,8 @@ public class LimitedDropRedisService {
 					List.of(stockKey(dropId), buyersKey(dropId), pendingKey(dropId)), memberId.toString());
 		} catch (DataAccessException e) {
 			log.error("한정반 Redis 선점 해제 실패, 대사 스케줄러가 DB 기준으로 복구한다 dropId={} memberId={}", dropId, memberId, e);
+			alertNotifier.notify(Alert.warn("limited.release-failed",
+					"한정반 Redis 선점 해제 실패, 대사 스케줄러가 DB 기준으로 복구한다", "dropId=" + dropId + " memberId=" + memberId));
 		}
 	}
 

@@ -24,6 +24,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
@@ -46,6 +48,9 @@ class PaymentCompensationWriterTest {
 	@Mock
 	private OrderRepository orderRepository;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private PaymentCompensationWriter writer;
 
 	private Order order;
@@ -59,7 +64,7 @@ class PaymentCompensationWriterTest {
 		order = OrderFixture.create(member);
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 				Duration.ofMinutes(2), 50, 10);
-		writer = new PaymentCompensationWriter(repository, orderRepository, properties);
+		writer = new PaymentCompensationWriter(repository, orderRepository, properties, alertNotifier);
 	}
 
 	@Nested
@@ -166,6 +171,7 @@ class PaymentCompensationWriterTest {
 			// then
 			assertThat(compensation.getAttempts()).isEqualTo(10);
 			assertThat(compensation.getStatus()).isEqualTo(PaymentCompensationStatus.MANUAL_REVIEW);
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 	}
 

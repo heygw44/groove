@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
@@ -26,6 +28,7 @@ public class PaymentCompensationRetrier {
 	private final PaymentClient paymentClient;
 	private final PaymentCompensationWriter compensationWriter;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	/**
 	 * 토스가 이미 취소된 결제로 응답하면(ALREADY_CANCELED_PAYMENT) PaymentClient 구현체가 이를 취소 성공으로
@@ -42,6 +45,9 @@ public class PaymentCompensationRetrier {
 				return;
 			}
 			log.error("결제 보상 대기 거절, 수동 확인 필요: paymentKey={}", candidate.paymentKey(), ex);
+			String paymentKey = candidate.paymentKey();
+			alertNotifier.notify(Alert.critical("payment.compensation-manual-review",
+					"결제 보상 대기 거절, 수동 확인 필요: paymentKey=" + paymentKey, "paymentKey=" + paymentKey));
 			compensationWriter.reviewManually(candidate.paymentKey(), ex.getMessage());
 			return;
 		} catch (RuntimeException ex) {

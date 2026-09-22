@@ -8,6 +8,7 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.lock.NamedLock;
 
 import lombok.extern.slf4j.Slf4j;
@@ -28,12 +29,12 @@ public class AggregationLock {
 	private final NamedLock namedLock;
 
 	@Autowired
-	public AggregationLock(DataSource dataSource) {
-		this.namedLock = new NamedLock(dataSource, log);
+	public AggregationLock(DataSource dataSource, AlertNotifier alertNotifier) {
+		this.namedLock = new NamedLock(dataSource, log, alertNotifier);
 	}
 
-	AggregationLock(LockConnectionProvider connectionProvider) {
-		this.namedLock = new NamedLock(connectionProvider::open, log);
+	AggregationLock(LockConnectionProvider connectionProvider, AlertNotifier alertNotifier) {
+		this.namedLock = new NamedLock(connectionProvider::open, log, alertNotifier);
 	}
 
 	/** 락 획득에 실패하면 task 를 실행하지 않고 false 를 반환한다. */

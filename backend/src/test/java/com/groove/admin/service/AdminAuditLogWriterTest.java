@@ -23,6 +23,9 @@ import com.groove.admin.entity.AdminAuditLog;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.repository.AdminAuditLogRepository;
 import com.groove.fixture.MemberFixture;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
+import com.groove.global.alert.AlertSeverity;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 
@@ -43,12 +46,16 @@ class AdminAuditLogWriterTest {
 	@Mock
 	TransactionStatus transactionStatus;
 
+	@Mock
+	AlertNotifier alertNotifier;
+
 	AdminAuditLogWriter adminAuditLogWriter;
 
 	@BeforeEach
 	void setUp() {
 		given(transactionManager.getTransaction(any())).willReturn(transactionStatus);
-		adminAuditLogWriter = new AdminAuditLogWriter(adminAuditLogRepository, memberRepository, transactionManager);
+		adminAuditLogWriter = new AdminAuditLogWriter(adminAuditLogRepository, memberRepository, transactionManager,
+				alertNotifier);
 	}
 
 	@Nested
@@ -93,6 +100,10 @@ class AdminAuditLogWriterTest {
 			// when & then
 			assertThatCode(() -> adminAuditLogWriter.handle(event)).doesNotThrowAnyException();
 			verify(transactionManager).rollback(transactionStatus);
+			ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+			verify(alertNotifier).notify(alertCaptor.capture());
+			assertThat(alertCaptor.getValue().severity()).isEqualTo(AlertSeverity.CRITICAL);
+			assertThat(alertCaptor.getValue().key()).isEqualTo("admin.audit-log-lost");
 		}
 	}
 }

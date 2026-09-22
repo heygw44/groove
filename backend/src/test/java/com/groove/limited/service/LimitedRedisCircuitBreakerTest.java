@@ -1,6 +1,9 @@
 package com.groove.limited.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -14,18 +17,22 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.limited.config.LimitedCircuitProperties;
 
 class LimitedRedisCircuitBreakerTest {
 
 	private MutableClock clock;
+	private AlertNotifier alertNotifier;
 	private LimitedRedisCircuitBreaker circuitBreaker;
 
 	@BeforeEach
 	void setUp() {
 		clock = new MutableClock(Instant.parse("2026-09-14T00:00:00Z"));
+		alertNotifier = mock(AlertNotifier.class);
 		LimitedCircuitProperties properties = new LimitedCircuitProperties(3, Duration.ofSeconds(10), 5, true);
-		circuitBreaker = new LimitedRedisCircuitBreaker(properties, clock);
+		circuitBreaker = new LimitedRedisCircuitBreaker(properties, clock, alertNotifier);
 	}
 
 	@Nested
@@ -55,6 +62,7 @@ class LimitedRedisCircuitBreakerTest {
 			// then
 			assertThat(circuitBreaker.state()).isEqualTo(LimitedRedisCircuitBreaker.State.OPEN);
 			assertThat(circuitBreaker.allowRedis()).isFalse();
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 	}
 

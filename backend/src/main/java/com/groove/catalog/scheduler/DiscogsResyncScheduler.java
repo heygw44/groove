@@ -17,6 +17,8 @@ import com.groove.catalog.dto.DiscogsResyncOutcome;
 import com.groove.catalog.mapper.DiscogsResyncMapper;
 import com.groove.catalog.service.DiscogsResyncLock;
 import com.groove.catalog.service.DiscogsResyncService;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.lifecycle.ShutdownSignal;
@@ -50,6 +52,7 @@ public class DiscogsResyncScheduler {
 	private final ApplicationEventPublisher eventPublisher;
 	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	/** 조회수 우선순위 재검증. 회당 예산(maxCallsPerRun)만큼만 부른다. */
 	@Scheduled(fixedDelayString = "${groove.catalog.resync.interval}", initialDelay = 30_000)
@@ -179,8 +182,14 @@ public class DiscogsResyncScheduler {
 		double estimatedSeconds = totalCandidates / ratePerSecond;
 		long ttlSeconds = freshnessProperties.ttl().getSeconds();
 		if (estimatedSeconds > ttlSeconds) {
+			long estimatedMinutes = Math.round(estimatedSeconds / 60.0);
+			long ttlMinutes = ttlSeconds / 60;
 			log.error("재검증 주기가 신선도 TTL 을 초과한다 candidates={} estimatedMinutes={} ttlMinutes={}",
-					totalCandidates, Math.round(estimatedSeconds / 60.0), ttlSeconds / 60);
+					totalCandidates, estimatedMinutes, ttlMinutes);
+			alertNotifier.notify(Alert.warn("catalog.resync-budget-exceeded",
+					"재검증 주기가 신선도 TTL 을 초과한다 candidates=" + totalCandidates + " estimatedMinutes=" + estimatedMinutes
+							+ " ttlMinutes=" + ttlMinutes,
+					null));
 		}
 	}
 

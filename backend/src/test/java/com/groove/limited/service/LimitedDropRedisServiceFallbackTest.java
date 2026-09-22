@@ -29,6 +29,8 @@ import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.limited.entity.LimitedAttemptResult;
 
 /** Redis 장애·값 파싱 실패 시 DB 폴백을 위해 예외를 삼키고 empty 를 돌려주는지 검증한다. */
@@ -47,6 +49,9 @@ class LimitedDropRedisServiceFallbackTest {
 	@Mock
 	private HashOperations<String, String, String> hashOperations;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private Clock clock;
 
 	private LimitedDropRedisService limitedDropRedisService;
@@ -54,7 +59,7 @@ class LimitedDropRedisServiceFallbackTest {
 	@BeforeEach
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-14T00:00:00Z"), ZoneId.of("Asia/Seoul"));
-		limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null, null, clock);
+		limitedDropRedisService = new LimitedDropRedisService(redisTemplate, null, null, null, clock, alertNotifier);
 	}
 
 	@Nested
@@ -174,6 +179,7 @@ class LimitedDropRedisServiceFallbackTest {
 
 			// when & then
 			assertThatCode(() -> limitedDropRedisService.release(1L, 10L)).doesNotThrowAnyException();
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 	}
 

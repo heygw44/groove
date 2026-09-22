@@ -54,7 +54,7 @@ spring:
 server:
   # Boot 3.4+ 기본값(graceful)과 같지만, compose stop_grace_period 산정 근거라 명시해 둔다.
   # compose stop_grace_period 는 이 값(spring.lifecycle.timeout-per-shutdown-phase=30s)
-  # + 스케줄러 대기(10s) + 비동기 실행기 대기(5s+5s) 보다 커야 SIGKILL 로 안 잘린다.
+  # + 스케줄러 대기(10s) + 비동기 실행기 대기(5s+5s) + 경보 실행기 대기(2s) 보다 커야 SIGKILL 로 안 잘린다.
   shutdown: graceful
   tomcat:
     max-swallow-size: 10MB
@@ -141,6 +141,13 @@ groove:
   recommend:
     # 추천 상품 특성 캐시 TTL. 0 이하면 캐시를 끄고 매 요청마다 다시 읽는다.
     feature-cache-ttl: 60s
+  alert:
+    # 비어 있으면 로그만 남기는 LoggingAlertNotifier 가 주입된다(로컬·테스트).
+    slack-webhook-url: ${GROOVE_ALERT_SLACK_WEBHOOK_URL:}
+    # 같은 경보 키는 이 창 안에서 한 번만 보낸다. 폭주해도 채널이 도배되지 않게.
+    suppress-window: 5m
+    queue-capacity: 100
+    timeout: 2s
   catalog:
     freshness:
       # Discogs 약관의 6시간 규칙. 재검증이 밀리면 상세 응답에서 해당 필드를 가린다.
