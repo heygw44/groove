@@ -41,6 +41,8 @@ public class SecurityConfig {
 		"/api/v1/auth/signup",
 		"/api/v1/auth/login",
 		"/api/v1/auth/reissue",
+		// 서명 헤더가 없어 인증도 걸 수 없다. 본문은 신뢰하지 않고 재조회로 검증한다(PaymentWebhookService).
+		"/api/v1/payments/webhook",
 		// 8080 은 127.0.0.1 바인딩이고 Nginx 도 /api/ 만 프록시해 외부에 노출되지 않는다.
 		"/actuator/**",
 		"/swagger-ui.html",

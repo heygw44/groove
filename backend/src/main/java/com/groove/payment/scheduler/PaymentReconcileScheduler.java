@@ -19,7 +19,7 @@ import com.groove.payment.dto.PaymentCompensationCandidate;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
-import com.groove.payment.service.PaymentCompensationWriter;
+import com.groove.payment.service.PaymentCompensationRetrier;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentReconcileLock;
 import com.groove.payment.service.PaymentReconcileOutcome;
@@ -42,7 +42,7 @@ public class PaymentReconcileScheduler {
 	private final PaymentClient paymentClient;
 	private final PaymentCompensator compensator;
 	private final PaymentCompensationRepository compensationRepository;
-	private final PaymentCompensationWriter compensationWriter;
+	private final PaymentCompensationRetrier compensationRetrier;
 	private final PaymentReconcileProperties reconcileProperties;
 	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
@@ -108,7 +108,7 @@ public class PaymentReconcileScheduler {
 				break;
 			}
 			try {
-				retryCompensation(candidate);
+				compensationRetrier.retry(candidate);
 			} catch (RuntimeException ex) {
 				log.error("결제 보상 대기 회수 처리 실패 paymentKey={}", candidate.paymentKey(), ex);
 			}
@@ -117,32 +117,6 @@ public class PaymentReconcileScheduler {
 		if (processed > 0) {
 			log.info("결제 보상 대기 회수 완료 candidates={} processed={}", candidates.size(), processed);
 		}
-	}
-
-	/**
-	 * 토스가 이미 취소된 결제로 응답하면(ALREADY_CANCELED_PAYMENT) PaymentClient 구현체가 이를 취소 성공으로
-	 * 흡수해 그대로 완료 처리된다. 그 밖의 명확한 거절은 재시도해도 결과가 바뀌지 않으므로 상한을 기다리지 않고
-	 * 즉시 수동 확인으로 넘긴다. 결과 불명은 재시도 횟수만 올린다.
-	 */
-	private void retryCompensation(PaymentCompensationCandidate candidate) {
-		PaymentCancelResult result;
-		try {
-			result = paymentClient.cancel(candidate.paymentKey(), candidate.reason());
-		} catch (BusinessException ex) {
-			if (ex.getErrorCode() == ErrorCode.PAYMENT_RESULT_UNKNOWN) {
-				compensationWriter.fail(candidate.paymentKey(), ex.getMessage());
-				return;
-			}
-			log.error("결제 보상 대기 거절, 수동 확인 필요: paymentKey={}", candidate.paymentKey(), ex);
-			compensationWriter.reviewManually(candidate.paymentKey(), ex.getMessage());
-			return;
-		} catch (RuntimeException ex) {
-			log.warn("결제 보상 대기 회수 결과 불명 paymentKey={}", candidate.paymentKey(), ex);
-			compensationWriter.fail(candidate.paymentKey(), ex.getMessage());
-			return;
-		}
-		LocalDateTime canceledAt = result.canceledAt() != null ? result.canceledAt() : LocalDateTime.now(clock);
-		compensationWriter.complete(candidate.paymentKey(), canceledAt);
 	}
 
 	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey) {

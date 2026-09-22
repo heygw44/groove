@@ -60,11 +60,30 @@ public class PaymentReconcileService {
 	/** 주문 FOR UPDATE 를 먼저 잡은 뒤 결제를 조회한다. 그 사이 confirm 이 끝냈다면 로그 없이 넘어간다. */
 	@Transactional
 	public PaymentReconcileOutcome apply(PaymentReconcileCandidate candidate, PaymentLookupResult lookup) {
+		return applyInternal(candidate, lookup, false, null);
+	}
+
+	/**
+	 * 웹훅(PaymentWebhookService) 전용 진입점. FAILED 로 확정된 결제도 대사 대상으로 허용한다 — 재시도
+	 * 상한을 넘겨 FAILED 로 확정한 뒤 토스가 뒤늦게 DONE/CANCELED 로 바뀌는 경우를 잡기 위해서다. 서명 없는
+	 * 웹훅이 트리거하지만 이 메서드 자체는 항상 lookup() 재조회 결과로만 판단하므로 본문 위조와 무관하다.
+	 * 스케줄러가 도는 named lock과는 다른 경로지만, 같은 주문을 겨냥한 confirm/스케줄러 대사와의 경합은
+	 * orderRepository.findByIdForUpdate 의 행 락과 Payment.@Version 이 직렬화해 named lock 이 필요 없다.
+	 */
+	@Transactional
+	public PaymentReconcileOutcome applyFromWebhook(PaymentReconcileCandidate candidate, PaymentLookupResult lookup) {
+		return applyInternal(candidate, lookup, true, "webhook");
+	}
+
+	private PaymentReconcileOutcome applyInternal(PaymentReconcileCandidate candidate, PaymentLookupResult lookup,
+			boolean allowFailed, String detail) {
 		Order order = orderRepository.findByIdForUpdate(candidate.orderId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Payment payment = paymentRepository.findById(candidate.paymentId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-		if (!payment.getStatus().isReconcileTarget()) {
+		boolean eligible = payment.getStatus().isReconcileTarget()
+				|| (allowFailed && payment.getStatus() == PaymentStatus.FAILED);
+		if (!eligible) {
 			return PaymentReconcileOutcome.alreadyResolved();
 		}
 
@@ -77,29 +96,29 @@ public class PaymentReconcileService {
 				writer.approve(candidate.orderId(), candidate.paymentId(), lookup.paymentKey(),
 						new PaymentConfirmResult(lookup.paymentKey(), candidate.tossOrderId(), lookup.method(),
 								lookup.totalAmount(), lookup.approvedAt()));
-				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.APPROVED, null);
+				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.APPROVED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			case FAIL -> {
 				payment.fail("대사: 토스 " + tossStatus);
-				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.FAILED, null);
+				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.FAILED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			case SYNC_CANCELED -> {
 				LocalDateTime canceledAt = lookup.canceledAt() != null ? lookup.canceledAt()
 						: LocalDateTime.now(clock);
 				payment.compensate(lookup.paymentKey(), lookup.approvedAt(), canceledAt, "대사: 토스에서 이미 취소됨");
-				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.CANCELED, null);
+				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.CANCELED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			case SKIP -> {
-				recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.SKIPPED, null);
+				recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.SKIPPED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			case MANUAL_REVIEW -> {
 				log.error("대사 결과 수동 확인 필요: paymentId={}, orderId={}, tossStatus={}", candidate.paymentId(),
 						candidate.orderId(), tossStatus);
-				recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, null);
+				recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			// 토스 cancel 은 트랜잭션 밖에서 호출해야 하므로 여기서는 상태를 바꾸지 않는다.
@@ -107,7 +126,7 @@ public class PaymentReconcileService {
 			case COMPLETE_CANCEL -> {
 				LocalDateTime canceledAt = lookup.canceledAt() != null ? lookup.canceledAt() : LocalDateTime.now(clock);
 				cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt);
-				writeLog(payment, beforeStatus, lookup.status().name(), PaymentReconcileAction.CANCELED, null);
+				writeLog(payment, beforeStatus, lookup.status().name(), PaymentReconcileAction.CANCELED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey());
@@ -144,16 +163,34 @@ public class PaymentReconcileService {
 	/** compensator 의 토스 cancel 결과를 반영한다. 성공이면 CANCELED, 실패면 miss 처리 후 SKIPPED 로 남긴다. */
 	@Transactional
 	public void recordCompensation(PaymentReconcileCandidate candidate, CompensationResult result) {
+		recordCompensation(candidate, result, null);
+	}
+
+	/** {@link #recordCompensation(PaymentReconcileCandidate, CompensationResult)} 에 로그 detail 태그를 얹는다. */
+	@Transactional
+	public void recordCompensation(PaymentReconcileCandidate candidate, CompensationResult result, String detail) {
 		orderRepository.findByIdForUpdate(candidate.orderId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Payment payment = paymentRepository.findById(candidate.paymentId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 		PaymentStatus beforeStatus = payment.getStatus();
 		if (result.canceled()) {
-			writeLog(payment, beforeStatus, DONE_TOSS_STATUS, PaymentReconcileAction.CANCELED, null);
+			writeLog(payment, beforeStatus, DONE_TOSS_STATUS, PaymentReconcileAction.CANCELED, detail);
 			return;
 		}
-		recordMiss(payment, beforeStatus, DONE_TOSS_STATUS, PaymentReconcileAction.SKIPPED, result.failureDetail());
+		recordMiss(payment, beforeStatus, DONE_TOSS_STATUS, PaymentReconcileAction.SKIPPED,
+				combineDetail(detail, result.failureDetail()));
+	}
+
+	/** detail 태그가 실패 사유(failureDetail)를 덮어쓰지 않도록 둘 다 있으면 합친다. */
+	private String combineDetail(String detail, String failureDetail) {
+		if (detail == null) {
+			return failureDetail;
+		}
+		if (failureDetail == null) {
+			return detail;
+		}
+		return detail + ": " + failureDetail;
 	}
 
 	/** 토스 조회·적용 중 예기치 못한 예외. 결제가 아직 unresolved 일 때만 miss 처리한다. */
