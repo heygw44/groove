@@ -5,6 +5,7 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.lock.NamedLock;
 
 import lombok.extern.slf4j.Slf4j;
@@ -19,8 +20,8 @@ public class ViewLogCleanupLock {
 	private final NamedLock namedLock;
 
 	@Autowired
-	public ViewLogCleanupLock(DataSource dataSource) {
-		this.namedLock = new NamedLock(dataSource, log);
+	public ViewLogCleanupLock(DataSource dataSource, AlertNotifier alertNotifier) {
+		this.namedLock = new NamedLock(dataSource, log, alertNotifier);
 	}
 
 	/** 락 획득에 실패하면 task 를 실행하지 않고 false 를 반환한다. */

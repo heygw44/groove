@@ -8,6 +8,8 @@ import org.springframework.data.domain.Limit;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.lifecycle.ShutdownSignal;
@@ -46,6 +48,7 @@ public class PaymentReconcileScheduler {
 	private final PaymentReconcileProperties reconcileProperties;
 	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
+	private final AlertNotifier alertNotifier;
 
 	@Scheduled(fixedDelayString = "${groove.payment.reconcile.interval}", initialDelay = 45_000)
 	public void reconcile() {
@@ -140,6 +143,8 @@ public class PaymentReconcileScheduler {
 			reconcileService.recordFailure(candidate, cause.getMessage());
 		} catch (RuntimeException recordFailureEx) {
 			log.error("대사 실패 기록도 실패함 paymentId={}", candidate.paymentId(), recordFailureEx);
+			alertNotifier.notify(Alert.critical("payment.reconcile-record-failed",
+					"대사 실패 기록도 실패함 paymentId=" + candidate.paymentId(), "paymentId=" + candidate.paymentId()));
 		}
 	}
 }

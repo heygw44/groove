@@ -9,6 +9,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -30,6 +31,8 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import com.groove.fixture.PaymentFixture;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
@@ -54,6 +57,9 @@ class PaymentCompensatorTest {
 	@Mock
 	PaymentCompensationWriter compensationWriter;
 
+	@Mock
+	AlertNotifier alertNotifier;
+
 	PaymentCompensator compensator;
 
 	Clock clock;
@@ -63,7 +69,7 @@ class PaymentCompensatorTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
-		compensator = new PaymentCompensator(paymentClient, writer, compensationWriter, clock);
+		compensator = new PaymentCompensator(paymentClient, writer, compensationWriter, clock, alertNotifier);
 	}
 
 	@Nested
@@ -129,6 +135,25 @@ class PaymentCompensatorTest {
 		}
 
 		@Test
+		@DisplayName("paymentId 가 없으면 취소는 성공했으나 보상 대기 완료 기록이 실패해도 취소됨을 반환하고 경보를 보낸다")
+		void returnsCanceledAndNotifiesAlertWhenCompensationCompleteFailsAndPaymentIdIsNull() {
+			// given
+			LocalDateTime canceledAt = now.truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON))
+					.willReturn(new PaymentCancelResult(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
+			willThrow(new IllegalStateException("보상 대기 행을 찾을 수 없습니다")).given(compensationWriter)
+					.complete(PaymentFixture.PAYMENT_KEY, canceledAt);
+
+			// when
+			CompensationResult result = compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON, ORDER_ID, TOSS_ORDER_ID);
+
+			// then
+			assertThat(result.canceled()).isTrue();
+			verify(alertNotifier).notify(any(Alert.class));
+		}
+
+		@Test
 		@DisplayName("토스 취소는 성공했으나 보상 기록이 실패해도 취소됨을 반환한다")
 		void returnsCanceledEvenWhenMarkCompensatedFails() {
 			// given
@@ -162,6 +187,7 @@ class PaymentCompensatorTest {
 			assertThat(result.canceled()).isFalse();
 			assertThat(result.failureDetail()).isEqualTo(cancelFailed.getMessage());
 			verify(writer).markUnknown(PAYMENT_ID, "보상 취소 실패: " + cancelFailed.getMessage());
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 
 		@Test
@@ -204,6 +230,25 @@ class PaymentCompensatorTest {
 		}
 
 		@Test
+		@DisplayName("paymentId 가 없고 수동 확인 기록마저 실패하면 경보를 보낸다")
+		void notifiesAlertWhenReviewManuallyAlsoFailsAndPaymentIdIsNull() {
+			// given
+			BusinessException cancelFailed = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED,
+					"TOSS ALREADY_CANCELED_PAYMENT");
+			willThrow(cancelFailed).given(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON);
+			willThrow(new IllegalStateException("보상 대기 행을 찾을 수 없습니다")).given(compensationWriter)
+					.reviewManually(eq(PaymentFixture.PAYMENT_KEY), anyString());
+
+			// when
+			CompensationResult result = compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON, ORDER_ID, TOSS_ORDER_ID);
+
+			// then: 승인 후 보상 취소 실패 경보(외부 catch) + 수동 확인 기록 실패 경보(내부 catch), 둘 다 온다
+			assertThat(result.canceled()).isFalse();
+			verify(alertNotifier, times(2)).notify(any(Alert.class));
+		}
+
+		@Test
 		@DisplayName("paymentId 가 없으면 취소 결과가 불명일 때만 재시도 횟수를 올린다")
 		void failsWhenPaymentIdIsNullAndCancelResultUnknown() {
 			// given
@@ -219,6 +264,25 @@ class PaymentCompensatorTest {
 			assertThat(result.canceled()).isFalse();
 			verify(compensationWriter).fail(PaymentFixture.PAYMENT_KEY, "보상 취소 실패: " + resultUnknown.getMessage());
 			verify(compensationWriter, never()).reviewManually(any(), any());
+		}
+
+		@Test
+		@DisplayName("paymentId 가 없고 실패 기록마저 실패하면 경보를 보낸다")
+		void notifiesAlertWhenCompensationFailAlsoFailsAndPaymentIdIsNull() {
+			// given
+			BusinessException resultUnknown = new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN,
+					"TOSS 통신 실패: Read timed out");
+			willThrow(resultUnknown).given(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON);
+			willThrow(new IllegalStateException("보상 대기 행을 찾을 수 없습니다")).given(compensationWriter)
+					.fail(eq(PaymentFixture.PAYMENT_KEY), anyString());
+
+			// when
+			CompensationResult result = compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, DUPLICATE_REASON, ORDER_ID, TOSS_ORDER_ID);
+
+			// then: 승인 후 보상 취소 실패 경보(외부 catch) + 실패 기록 실패 경보(내부 catch), 둘 다 온다
+			assertThat(result.canceled()).isFalse();
+			verify(alertNotifier, times(2)).notify(any(Alert.class));
 		}
 
 		@Test

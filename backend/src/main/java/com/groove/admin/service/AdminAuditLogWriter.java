@@ -9,6 +9,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.groove.admin.entity.AdminAuditLog;
 import com.groove.admin.repository.AdminAuditLogRepository;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 
@@ -21,12 +23,14 @@ public class AdminAuditLogWriter {
 
 	private final AdminAuditLogRepository adminAuditLogRepository;
 	private final MemberRepository memberRepository;
+	private final AlertNotifier alertNotifier;
 	private final TransactionTemplate transactionTemplate;
 
 	public AdminAuditLogWriter(AdminAuditLogRepository adminAuditLogRepository, MemberRepository memberRepository,
-			PlatformTransactionManager transactionManager) {
+			PlatformTransactionManager transactionManager, AlertNotifier alertNotifier) {
 		this.adminAuditLogRepository = adminAuditLogRepository;
 		this.memberRepository = memberRepository;
+		this.alertNotifier = alertNotifier;
 		DefaultTransactionDefinition definition = new DefaultTransactionDefinition();
 		definition.setPropagationBehavior(DefaultTransactionDefinition.PROPAGATION_REQUIRES_NEW);
 		this.transactionTemplate = new TransactionTemplate(transactionManager, definition);
@@ -44,6 +48,8 @@ public class AdminAuditLogWriter {
 		} catch (RuntimeException e) {
 			// afterCommit 에서 던진 예외는 호출자에게 전파되므로 감사 로그 저장 실패는 여기서 삼킨다.
 			log.error("감사 로그 저장 실패: adminId={}, action={}", event.adminId(), event.action(), e);
+			alertNotifier.notify(Alert.critical("admin.audit-log-lost", "감사 로그 저장 실패 action=" + event.action(),
+					"adminId=" + event.adminId()));
 		}
 	}
 }

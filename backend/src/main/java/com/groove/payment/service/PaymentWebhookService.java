@@ -5,6 +5,8 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
@@ -50,6 +52,7 @@ public class PaymentWebhookService {
 	private final PaymentClient paymentClient;
 	private final PaymentReconcileService reconcileService;
 	private final PaymentCompensator compensator;
+	private final AlertNotifier alertNotifier;
 
 	public void handle(String rawBody) {
 		PaymentWebhookRequest request;
@@ -138,6 +141,9 @@ public class PaymentWebhookService {
 			eventWriter.markResult(eventId, PaymentWebhookResult.APPLIED, "webhook");
 		} catch (RuntimeException ex) {
 			log.error("토스 웹훅 대사 적용 실패: paymentId={}, orderId={}", payment.getId(), payment.getOrder().getId(), ex);
+			alertNotifier.notify(Alert.warn("payment.webhook-apply-failed",
+					"토스 웹훅 대사 적용 실패: paymentId=" + payment.getId() + ", orderId=" + payment.getOrder().getId(),
+					"paymentId=" + payment.getId()));
 			eventWriter.markResult(eventId, PaymentWebhookResult.ERROR, "적용 실패: " + ex.getMessage());
 			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, ex.getMessage());
 		}

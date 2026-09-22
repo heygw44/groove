@@ -23,6 +23,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.lifecycle.ShutdownSignal;
@@ -65,6 +67,9 @@ class PaymentReconcileSchedulerTest {
 	@Mock
 	private ShutdownSignal shutdownSignal;
 
+	@Mock
+	private AlertNotifier alertNotifier;
+
 	private PaymentReconcileScheduler scheduler;
 
 	private Clock clock;
@@ -77,7 +82,8 @@ class PaymentReconcileSchedulerTest {
 		PaymentReconcileProperties reconcileProperties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 				Duration.ofMinutes(2), 50, 10);
 		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator,
-				compensationRepository, compensationRetrier, reconcileProperties, shutdownSignal, clock);
+				compensationRepository, compensationRetrier, reconcileProperties, shutdownSignal, clock,
+				alertNotifier);
 	}
 
 	@Nested
@@ -114,6 +120,26 @@ class PaymentReconcileSchedulerTest {
 			// then
 			verify(reconcileService).recordFailure(candidate, resultUnknown.getMessage());
 			verify(reconcileService, never()).apply(any(), any());
+		}
+
+		@Test
+		@DisplayName("대사 실패 기록마저 실패하면 경보를 보낸다")
+		void notifiesAlertWhenRecordFailureAlsoThrows() {
+			// given
+			stubLockToRunTask();
+			PaymentReconcileCandidate candidate = new PaymentReconcileCandidate(1L, 10L, "toss-1");
+			given(reconcileService.findCandidates(now)).willReturn(List.of(candidate));
+			BusinessException resultUnknown = new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN,
+					"TOSS 통신 실패: Read timed out");
+			given(paymentClient.lookup("toss-1")).willThrow(resultUnknown);
+			willThrow(new IllegalStateException("db down")).given(reconcileService)
+					.recordFailure(candidate, resultUnknown.getMessage());
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(alertNotifier).notify(any(Alert.class));
 		}
 
 		@Test

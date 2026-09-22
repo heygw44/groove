@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.config.PaymentReconcileProperties;
@@ -23,6 +25,7 @@ public class PaymentCompensationWriter {
 	private final PaymentCompensationRepository repository;
 	private final OrderRepository orderRepository;
 	private final PaymentReconcileProperties properties;
+	private final AlertNotifier alertNotifier;
 
 	/** 같은 paymentKey 행이 이미 있으면 재사용하고 새로 만들지 않는다(멱등). */
 	@Transactional
@@ -47,6 +50,8 @@ public class PaymentCompensationWriter {
 		compensation.recordFailure(error);
 		if (compensation.getAttempts() >= properties.maxAttempts()) {
 			log.error("결제 보상 대기 상한 도달, 수동 확인 필요: paymentKey={}", paymentKey);
+			alertNotifier.notify(Alert.critical("payment.compensation-manual-review",
+					"결제 보상 대기 상한 도달, 수동 확인 필요: paymentKey=" + paymentKey, "paymentKey=" + paymentKey));
 			compensation.markManualReview();
 		}
 	}
