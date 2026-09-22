@@ -489,6 +489,23 @@ class TossPaymentClientTest {
 		}
 
 		@Test
+		@DisplayName("이미 취소된 결제 응답이면 취소 성공으로 흡수한다")
+		void absorbsAlreadyCanceledPaymentAsSuccess() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/" + PAYMENT_KEY + "/cancel"))
+					.andRespond(withBadRequest().body(tossError("ALREADY_CANCELED_PAYMENT", "이미 취소된 결제입니다."))
+							.contentType(MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentCancelResult result = tossPaymentClient.cancel(PAYMENT_KEY, "고객 변심");
+
+			// then
+			assertThat(result.paymentKey()).isEqualTo(PAYMENT_KEY);
+			assertThat(result.status()).isEqualTo("CANCELED");
+			assertThat(result.canceledAt()).isNull();
+		}
+
+		@Test
 		@DisplayName("5xx 응답이면 토스가 처리했는지 알 수 없어 PAYMENT_RESULT_UNKNOWN 예외를 던진다")
 		void throwsResultUnknownWhenServerError() {
 			// given
