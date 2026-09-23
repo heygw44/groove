@@ -51,6 +51,18 @@ management:
   endpoint:
     health:
       show-details: never
+  otlp:
+    metrics:
+      export:
+        enabled: ${GROOVE_OTLP_METRICS_ENABLED:false}
+        url: ${GROOVE_OTLP_METRICS_URL:}
+        headers:
+          "[Authorization]": ${GROOVE_OTLP_METRICS_AUTHORIZATION:}
+        step: 60s
+  metrics:
+    tags:
+      env: prod
+      instance: ${HOSTNAME:unknown}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS}
