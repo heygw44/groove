@@ -18,10 +18,12 @@ import java.math.BigDecimal;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Base64;
+import java.util.List;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
@@ -46,6 +48,8 @@ import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.PaymentTransaction;
+import com.groove.payment.config.PaymentSettlementProperties;
 import com.groove.payment.config.TossProperties;
 
 class TossPaymentClientTest {
@@ -163,20 +167,26 @@ class TossPaymentClientTest {
 			""";
 
 	private MockRestServiceServer server;
+	private MockRestServiceServer transactionServer;
 	private TossPaymentClient tossPaymentClient;
 
 	@BeforeEach
 	void setUp() {
 		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
 		server = MockRestServiceServer.bindTo(builder).build();
-		tossPaymentClient = new TossPaymentClient(builder.build(), new ObjectMapper(),
+		RestClient.Builder transactionBuilder = RestClient.builder().baseUrl(BASE_URL);
+		transactionServer = MockRestServiceServer.bindTo(transactionBuilder).build();
+		PaymentSettlementProperties settlementProperties = new PaymentSettlementProperties("0 10 5 * * *",
+				Duration.ofMinutes(10), 2, 3);
+		tossPaymentClient = new TossPaymentClient(builder.build(), transactionBuilder.build(), new ObjectMapper(),
 				Clock.fixed(Instant.parse("2026-09-02T01:00:00Z"), ZoneId.of("Asia/Seoul")),
-				new TossProperties("test_ck_dummy", SECRET_KEY, BASE_URL));
+				new TossProperties("test_ck_dummy", SECRET_KEY, BASE_URL), settlementProperties);
 	}
 
 	@AfterEach
 	void tearDown() {
 		server.verify();
+		transactionServer.verify();
 	}
 
 	private static Stream<Arguments> ambiguousTossFailures() {
@@ -615,6 +625,130 @@ class TossPaymentClientTest {
 			// when & then
 			assertThatThrownBy(() -> tossPaymentClient.lookup(ORDER_NUMBER))
 					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
+		}
+	}
+
+	@Nested
+	@DisplayName("listTransactions()")
+	class ListTransactions {
+
+		private static final String TRANSACTIONS_URL = BASE_URL + "/v1/transactions";
+
+		private final LocalDateTime from = LocalDateTime.of(2026, 9, 21, 0, 0, 0);
+		private final LocalDateTime to = LocalDateTime.of(2026, 9, 22, 0, 0, 0);
+
+		private String transaction(String transactionKey, String paymentKey, String orderId, String status,
+				String transactionAt) {
+			return ("{ \"transactionKey\": \"%s\", \"paymentKey\": \"%s\", \"orderId\": \"%s\", \"status\": \"%s\", "
+					+ "\"transactionAt\": \"%s\", \"amount\": 1000 }")
+					.formatted(transactionKey, paymentKey, orderId, status, transactionAt);
+		}
+
+		@Test
+		@DisplayName("Authorization 헤더와 startDate·endDate·limit 쿼리 파라미터를 토스 형식으로 보낸다")
+		void sendsQueryParametersInTossFormat() {
+			// given
+			transactionServer.expect(requestTo(TRANSACTIONS_URL
+							+ "?startDate=2026-09-21T00:00:00&endDate=2026-09-22T00:00:00&limit=2"))
+					.andExpect(method(HttpMethod.GET))
+					.andExpect(header(HttpHeaders.AUTHORIZATION, EXPECTED_AUTHORIZATION))
+					.andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+			// when
+			List<PaymentTransaction> result = tossPaymentClient.listTransactions(from, to);
+
+			// then
+			assertThat(result).isEmpty();
+		}
+
+		@Test
+		@DisplayName("첫 페이지가 limit 만큼 차면 마지막 transactionKey 를 startingAfter 로 다음 페이지를 이어 조회한다")
+		void pagesUsingStartingAfterCursor() {
+			// given
+			String page1 = "[" + transaction("txn-1", "pay-1", "order-1", "DONE", "2026-09-21T10:00:00+09:00") + ","
+					+ transaction("txn-2", "pay-2", "order-2", "DONE", "2026-09-21T11:00:00+09:00") + "]";
+			String page2 = "[" + transaction("txn-3", "pay-3", "order-3", "CANCELED",
+					"2026-09-21T12:00:00+09:00") + "]";
+			transactionServer.expect(requestTo(TRANSACTIONS_URL
+							+ "?startDate=2026-09-21T00:00:00&endDate=2026-09-22T00:00:00&limit=2"))
+					.andRespond(withSuccess(page1, MediaType.APPLICATION_JSON));
+			transactionServer.expect(requestTo(TRANSACTIONS_URL + "?startDate=2026-09-21T00:00:00&endDate="
+							+ "2026-09-22T00:00:00&limit=2&startingAfter=txn-2"))
+					.andRespond(withSuccess(page2, MediaType.APPLICATION_JSON));
+
+			// when
+			List<PaymentTransaction> result = tossPaymentClient.listTransactions(from, to);
+
+			// then
+			assertThat(result).extracting(PaymentTransaction::transactionKey)
+					.containsExactly("txn-1", "txn-2", "txn-3");
+			assertThat(result.get(2).status()).isEqualTo("CANCELED");
+			assertThat(result.get(0).transactionAt()).isEqualTo(LocalDateTime.of(2026, 9, 21, 10, 0, 0));
+		}
+
+		@Test
+		@DisplayName("429 면 Retry-After 만큼 기다렸다가 같은 페이지를 한 번 재시도한다")
+		void retriesOnceAfterTooManyRequests() {
+			// given
+			String successBody = "[" + transaction("txn-1", "pay-1", "order-1", "DONE",
+					"2026-09-21T10:00:00+09:00") + "]";
+			transactionServer.expect(requestTo(TRANSACTIONS_URL
+							+ "?startDate=2026-09-21T00:00:00&endDate=2026-09-22T00:00:00&limit=2"))
+					.andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "0")
+							.body(tossError("RATE_LIMIT_EXCEEDED", "요청이 많습니다."))
+							.contentType(MediaType.APPLICATION_JSON));
+			transactionServer.expect(requestTo(TRANSACTIONS_URL
+							+ "?startDate=2026-09-21T00:00:00&endDate=2026-09-22T00:00:00&limit=2"))
+					.andRespond(withSuccess(successBody, MediaType.APPLICATION_JSON));
+
+			// when
+			List<PaymentTransaction> result = tossPaymentClient.listTransactions(from, to);
+
+			// then
+			assertThat(result).extracting(PaymentTransaction::transactionKey).containsExactly("txn-1");
+		}
+
+		@Test
+		@DisplayName("5xx 응답이면 PAYMENT_RESULT_UNKNOWN 예외를 던진다")
+		void throwsResultUnknownWhenServerError() {
+			// given
+			transactionServer.expect(requestTo(TRANSACTIONS_URL
+							+ "?startDate=2026-09-21T00:00:00&endDate=2026-09-22T00:00:00&limit=2"))
+					.andRespond(withServerError());
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.listTransactions(from, to))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
+		}
+
+		@Test
+		@DisplayName("최대 페이지를 넘기면 PAYMENT_RESULT_UNKNOWN 예외를 던진다")
+		void throwsResultUnknownWhenMaxPagesExceeded() {
+			// given: maxPages=3, 매 페이지가 limit(2) 만큼 차서 끝없이 이어진다.
+			String page1 = "[" + transaction("txn-1", "pay-1", "order-1", "DONE", "2026-09-21T10:00:00+09:00") + ","
+					+ transaction("txn-2", "pay-2", "order-2", "DONE", "2026-09-21T11:00:00+09:00") + "]";
+			String page2 = "[" + transaction("txn-3", "pay-3", "order-3", "DONE", "2026-09-21T12:00:00+09:00") + ","
+					+ transaction("txn-4", "pay-4", "order-4", "DONE", "2026-09-21T13:00:00+09:00") + "]";
+			String page3 = "[" + transaction("txn-5", "pay-5", "order-5", "DONE", "2026-09-21T14:00:00+09:00") + ","
+					+ transaction("txn-6", "pay-6", "order-6", "DONE", "2026-09-21T15:00:00+09:00") + "]";
+			transactionServer.expect(requestTo(TRANSACTIONS_URL
+							+ "?startDate=2026-09-21T00:00:00&endDate=2026-09-22T00:00:00&limit=2"))
+					.andRespond(withSuccess(page1, MediaType.APPLICATION_JSON));
+			transactionServer.expect(requestTo(TRANSACTIONS_URL + "?startDate=2026-09-21T00:00:00&endDate="
+							+ "2026-09-22T00:00:00&limit=2&startingAfter=txn-2"))
+					.andRespond(withSuccess(page2, MediaType.APPLICATION_JSON));
+			transactionServer.expect(requestTo(TRANSACTIONS_URL + "?startDate=2026-09-21T00:00:00&endDate="
+							+ "2026-09-22T00:00:00&limit=2&startingAfter=txn-4"))
+					.andRespond(withSuccess(page3, MediaType.APPLICATION_JSON));
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.listTransactions(from, to))
+					.isInstanceOf(BusinessException.class)
+					.hasMessageContaining("최대 페이지")
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 		}

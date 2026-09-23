@@ -55,6 +55,10 @@ groove:
       grace: 2m
       batch-size: 50
       max-attempts: 10
+    settlement:
+      # 스케줄러가 통합 테스트 도중 돌면 안 되므로 끈다. 동작 자체는 PaymentSettlementSchedulerTest 가
+      # 서비스 메서드를 직접 호출해 검증한다.
+      cron: "-"
   limited:
     reconcile:
       interval: 30s

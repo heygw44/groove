@@ -10,7 +10,6 @@ import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
-import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.dto.PaymentCompensationCandidate;
 import com.groove.payment.dto.PaymentReconcileCandidate;
@@ -42,7 +41,6 @@ import lombok.extern.slf4j.Slf4j;
 public class PaymentWebhookService {
 
 	private static final String TARGET_EVENT_TYPE = "PAYMENT_STATUS_CHANGED";
-	private static final String RETRY_CANCEL_REASON = "주문 취소 재시도";
 
 	private final ObjectMapper objectMapper;
 	private final PaymentWebhookEventWriter eventWriter;
@@ -50,8 +48,7 @@ public class PaymentWebhookService {
 	private final PaymentCompensationRepository compensationRepository;
 	private final PaymentCompensationRetrier compensationRetrier;
 	private final PaymentClient paymentClient;
-	private final PaymentReconcileService reconcileService;
-	private final PaymentCompensator compensator;
+	private final PaymentLateResultApplier lateResultApplier;
 	private final AlertNotifier alertNotifier;
 
 	public void handle(String rawBody) {
@@ -114,10 +111,11 @@ public class PaymentWebhookService {
 	}
 
 	/**
-	 * FAILED 결제도 여기서는 허용한다(applyFromWebhook). 진행 중인 confirm·스케줄러 대사와의 경합은
-	 * PaymentReconcileService.apply 내부의 주문 FOR UPDATE 락과 Payment.@Version 이 막는다 — 셋 다
-	 * 같은 주문 행을 잠그려 하므로 이 서비스는 별도 named lock 을 쓰지 않는다. grace(대사 후보 조회 전용
-	 * 유예)도 적용하지 않는다 — 여기서는 findCandidates 를 거치지 않고 웹훅이 지목한 건 하나만 즉시 재조회한다.
+	 * FAILED 결제도 여기서는 허용한다({@link PaymentReconcileService#applyLate}). 진행 중인 confirm·
+	 * 스케줄러 대사와의 경합은 PaymentReconcileService.apply 내부의 주문 FOR UPDATE 락과 Payment.@Version
+	 * 이 막는다 — 셋 다 같은 주문 행을 잠그려 하므로 이 서비스는 별도 named lock 을 쓰지 않는다. grace(대사
+	 * 후보 조회 전용 유예)도 적용하지 않는다 — 여기서는 findCandidates 를 거치지 않고 웹훅이 지목한 건 하나만
+	 * 즉시 재조회한다.
 	 *
 	 * <p>재조회·적용이 실패해도 recordFailure 로 미스 카운트를 올리지 않는다 — reconcile_attempts 는
 	 * 폴링 대사 몫이고, 여기서 올리면 웹훅이 실패할 때마다 상한에 헛되이 가까워진다. 대신 이벤트를 ERROR 로
@@ -136,8 +134,7 @@ public class PaymentWebhookService {
 			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, ex.getMessage());
 		}
 		try {
-			PaymentReconcileOutcome outcome = reconcileService.applyFromWebhook(candidate, lookup);
-			resolveOutcome(candidate, outcome);
+			lateResultApplier.apply(candidate, lookup, "webhook");
 			eventWriter.markResult(eventId, PaymentWebhookResult.APPLIED, "webhook");
 		} catch (RuntimeException ex) {
 			log.error("토스 웹훅 대사 적용 실패: paymentId={}, orderId={}", payment.getId(), payment.getOrder().getId(), ex);
@@ -147,32 +144,5 @@ public class PaymentWebhookService {
 			eventWriter.markResult(eventId, PaymentWebhookResult.ERROR, "적용 실패: " + ex.getMessage());
 			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, ex.getMessage());
 		}
-	}
-
-	private void resolveOutcome(PaymentReconcileCandidate candidate, PaymentReconcileOutcome outcome) {
-		if (outcome.needsCompensation()) {
-			CompensationResult result = compensator.cancelApproved(candidate.paymentId(), outcome.paymentKey(),
-					outcome.approvedAt(), PaymentCompensator.ORDER_INVALIDATED_REASON);
-			reconcileService.recordCompensation(candidate, result, "webhook");
-		}
-		if (outcome.needsCancelRetry()) {
-			retryCancel(candidate, outcome.paymentKey());
-		}
-	}
-
-	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey) {
-		PaymentCancelResult result;
-		try {
-			result = paymentClient.cancel(paymentKey, RETRY_CANCEL_REASON);
-		} catch (BusinessException ex) {
-			reconcileService.recordCancelRetry(candidate, null, ex);
-			return;
-		} catch (RuntimeException ex) {
-			log.warn("웹훅 취소 재시도 결과 불명 paymentId={}, orderId={}", candidate.paymentId(), candidate.orderId(), ex);
-			reconcileService.recordCancelRetry(candidate, null,
-					new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, ex.getMessage()));
-			return;
-		}
-		reconcileService.recordCancelRetry(candidate, result, null);
 	}
 }

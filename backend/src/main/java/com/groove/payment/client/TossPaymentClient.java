@@ -4,9 +4,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Set;
 
 import org.springframework.http.HttpHeaders;
@@ -25,10 +29,13 @@ import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.PaymentTransaction;
 import com.groove.payment.client.dto.TossCancelRequest;
 import com.groove.payment.client.dto.TossConfirmRequest;
 import com.groove.payment.client.dto.TossErrorResponse;
 import com.groove.payment.client.dto.TossPaymentResponse;
+import com.groove.payment.client.dto.TossTransactionResponse;
+import com.groove.payment.config.PaymentSettlementProperties;
 import com.groove.payment.config.TossProperties;
 
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +51,18 @@ public class TossPaymentClient implements PaymentClient {
 	private static final String CONFIRM_PATH = "/v1/payments/confirm";
 	private static final String CANCEL_PATH = "/v1/payments/{paymentKey}/cancel";
 	private static final String LOOKUP_PATH = "/v1/payments/orders/{orderId}";
+	private static final String TRANSACTIONS_PATH = "/v1/transactions";
 	private static final String UNKNOWN_ERROR_CODE = "UNKNOWN";
+
+	/** 토스 거래 조회 startDate/endDate 형식. 서버 로컬(KST) 시각이라 오프셋을 붙이지 않는다. */
+	private static final DateTimeFormatter TRANSACTION_TIME_FORMATTER = DateTimeFormatter
+			.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+
+	/** 429 응답의 Retry-After 헤더가 없거나 파싱할 수 없을 때 기다리는 기본 초. */
+	private static final long DEFAULT_RETRY_AFTER_SECONDS = 1L;
+
+	/** Retry-After 가 이보다 크면 잘라낸다. 배치 한 페이지 재시도가 과도하게 길어지지 않도록 한다. */
+	private static final long MAX_RETRY_AFTER_SECONDS = 60L;
 
 	/**
 	 * 토스는 멱등키+API 키+URL+메서드로 요청을 판별하고 본문은 보지 않아 첫 응답을 15일간 그대로 재생한다.
@@ -62,16 +80,21 @@ public class TossPaymentClient implements PaymentClient {
 	private static final String ALREADY_CANCELED_PAYMENT_CODE = "ALREADY_CANCELED_PAYMENT";
 
 	private final RestClient restClient;
+	private final RestClient transactionRestClient;
 	private final ObjectMapper objectMapper;
 	private final Clock clock;
 	private final String authorization;
+	private final PaymentSettlementProperties settlementProperties;
 
-	public TossPaymentClient(RestClient tossRestClient, ObjectMapper objectMapper, Clock clock,
-			TossProperties properties) {
+	public TossPaymentClient(RestClient tossRestClient, RestClient tossTransactionRestClient,
+			ObjectMapper objectMapper, Clock clock, TossProperties properties,
+			PaymentSettlementProperties settlementProperties) {
 		this.restClient = tossRestClient;
+		this.transactionRestClient = tossTransactionRestClient;
 		this.objectMapper = objectMapper;
 		this.clock = clock;
 		this.authorization = basicAuthorization(properties.secretKey());
+		this.settlementProperties = settlementProperties;
 	}
 
 	@Override
@@ -136,6 +159,100 @@ public class TossPaymentClient implements PaymentClient {
 			log.warn("토스 결제 조회 통신 실패: orderId={}", tossOrderId, ex);
 			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 통신 실패: " + ex.getMessage());
 		}
+	}
+
+	/** startingAfter 커서로 끝까지 페이지를 넘긴다. 마지막 페이지는 받은 건수가 limit 보다 적은 페이지로 판별한다. */
+	@Override
+	public List<PaymentTransaction> listTransactions(LocalDateTime from, LocalDateTime to) {
+		List<PaymentTransaction> transactions = new ArrayList<>();
+		String startingAfter = null;
+		int limit = settlementProperties.pageSize();
+		int maxPages = settlementProperties.maxPages();
+		for (int pageCount = 0; pageCount < maxPages; pageCount++) {
+			List<TossTransactionResponse> page = fetchTransactionPage(from, to, startingAfter, limit, false);
+			for (TossTransactionResponse item : page) {
+				transactions.add(toPaymentTransaction(item));
+			}
+			if (page.size() < limit) {
+				return transactions;
+			}
+			startingAfter = page.get(page.size() - 1).transactionKey();
+		}
+		log.warn("토스 거래 조회 최대 페이지 초과: maxPages={}", maxPages);
+		throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 거래 조회 최대 페이지(" + maxPages + ") 초과");
+	}
+
+	private List<TossTransactionResponse> fetchTransactionPage(LocalDateTime from, LocalDateTime to,
+			String startingAfter, int limit, boolean retried) {
+		try {
+			return requestTransactionPage(from, to, startingAfter, limit);
+		} catch (RestClientResponseException ex) {
+			if (!retried && ex.getStatusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
+				long retryAfterSeconds = parseRetryAfterSeconds(ex.getResponseHeaders());
+				log.warn("토스 거래 조회 429, {}초 대기 후 재시도", retryAfterSeconds);
+				sleep(retryAfterSeconds);
+				return fetchTransactionPage(from, to, startingAfter, limit, true);
+			}
+			TossErrorResponse error = parseError(ex.getResponseBodyAsString());
+			log.warn("토스 거래 조회 오류 응답: status={}, tossCode={}, tossMessage={}", ex.getStatusCode(),
+					displayCode(error.code()), error.message());
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN,
+					"TOSS " + displayCode(error.code()) + ": " + error.message());
+		} catch (RestClientException ex) {
+			log.warn("토스 거래 조회 통신 실패", ex);
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 통신 실패: " + ex.getMessage());
+		}
+	}
+
+	private List<TossTransactionResponse> requestTransactionPage(LocalDateTime from, LocalDateTime to,
+			String startingAfter, int limit) {
+		TossTransactionResponse[] response = transactionRestClient.get()
+				.uri(uriBuilder -> {
+					uriBuilder.path(TRANSACTIONS_PATH)
+							.queryParam("startDate", TRANSACTION_TIME_FORMATTER.format(from))
+							.queryParam("endDate", TRANSACTION_TIME_FORMATTER.format(to))
+							.queryParam("limit", limit);
+					if (startingAfter != null) {
+						uriBuilder.queryParam("startingAfter", startingAfter);
+					}
+					return uriBuilder.build();
+				})
+				.header(HttpHeaders.AUTHORIZATION, authorization)
+				.retrieve()
+				.body(TossTransactionResponse[].class);
+		if (response == null) {
+			log.warn("토스 거래 조회 2xx 빈 응답");
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 거래 조회 응답 본문이 비어 있습니다.");
+		}
+		return List.of(response);
+	}
+
+	/** Retry-After 가 없거나 파싱할 수 없으면 기본값, 있으면 상한(60초)까지만 기다린다. */
+	private long parseRetryAfterSeconds(HttpHeaders headers) {
+		String value = headers == null ? null : headers.getFirst(HttpHeaders.RETRY_AFTER);
+		if (value == null) {
+			return DEFAULT_RETRY_AFTER_SECONDS;
+		}
+		try {
+			long seconds = Long.parseLong(value.trim());
+			return Math.max(0, Math.min(seconds, MAX_RETRY_AFTER_SECONDS));
+		} catch (NumberFormatException ex) {
+			return DEFAULT_RETRY_AFTER_SECONDS;
+		}
+	}
+
+	private void sleep(long seconds) {
+		try {
+			Thread.sleep(Duration.ofSeconds(seconds).toMillis());
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 거래 조회 대기 중 인터럽트되었습니다.");
+		}
+	}
+
+	private PaymentTransaction toPaymentTransaction(TossTransactionResponse response) {
+		return new PaymentTransaction(response.transactionKey(), response.paymentKey(), response.orderId(),
+				response.status(), toServerTime(response.transactionAt()));
 	}
 
 	private TossPaymentResponse send(ErrorCode errorCode, String paymentKey, String idempotencyKey, String uri,
