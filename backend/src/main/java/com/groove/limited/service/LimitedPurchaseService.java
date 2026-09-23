@@ -78,6 +78,7 @@ public class LimitedPurchaseService {
 	private LimitedPurchaseResponse reserveAndWrite(Long dropId, Long memberId, Long addressId,
 			LimitedDropMeta meta) {
 		ReserveResult reserveResult;
+		long startedAt = System.nanoTime();
 		try {
 			resyncFallbackDrops();
 			reserveResult = limitedDropRedisService.reserve(dropId, memberId);
@@ -86,8 +87,10 @@ public class LimitedPurchaseService {
 			}
 			limitedRedisCircuitBreaker.onSuccess();
 		} catch (DataAccessException e) {
+			// 서킷 onFailure 는 synchronized 라 그 대기가 섞이지 않게 먼저 잰다.
+			long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
 			limitedRedisCircuitBreaker.onFailure();
-			log.warn("한정반 Redis 선점 실패, DB 경로로 폴백 dropId={} memberId={}", dropId, memberId, e);
+			log.warn("한정반 Redis 선점 실패, DB 경로로 폴백 dropId={} memberId={} elapsedMs={}", dropId, memberId, elapsedMs, e);
 			return fallback(dropId, memberId, addressId, meta);
 		}
 		validateReserveResult(reserveResult);
