@@ -9,15 +9,18 @@ cd "$(dirname "$0")/../../.."
 
 usage() {
 	cat <<EOF
-사용법: $(basename "$0") <redis-restart|redis-key-loss|app-kill> [--label NAME] [--out DIR]
+사용법: $(basename "$0") <redis-restart|redis-key-loss|app-kill|redis-pause> [--label NAME] [--out DIR]
 
 환경변수:
   BASE_URL(기본 http://localhost:8080), INJECT_DELAY_SEC(기본 2)
-  REDIS_DOWN_SEC(기본 0 - redis-restart 전용, 0 초과면 stop/sleep/start 로 정지 시간 늘림)
+  REDIS_DOWN_SEC(기본 0 - redis-restart/redis-pause 전용. redis-restart 는 0 초과면
+    stop/sleep/start 로 정지 시간을 늘리고, redis-pause 는 pause 유지 시간이라 0 이면 1초로 간주한다)
   VERIFY_DELAY_SEC(기본 70), BACKEND_CONTAINERS(공백 구분, 기본 groove-backend)
     scale 프로필(앱 2인스턴스)에서는 "groove-backend-1 groove-backend-2" 처럼 준다.
     사전 running 점검·docker logs 증거 수집은 목록 전부, app-kill 은 목록 첫 컨테이너만 죽인다.
   REDIS_CONTAINER(기본 groove-redis), HEALTH_TIMEOUT_SEC(기본 120)
+  THREAD_DUMP_OFFSETS(기본 없음 - 공백 구분 초 단위 오프셋, FAULT_START 기준. 지정하면
+    각 오프셋마다 BACKEND_CONTAINERS 전체에 SIGQUIT 을 보내 스레드 덤프를 stdout 에 남긴다)
   그리고 limited-chaos.js 가 읽는 MEMBERS/STOCK/RATE/RUSH_DURATION/TAIL_RATE/TAIL_DURATION 등은
   그대로 k6 에 전달된다.
 EOF
@@ -51,7 +54,7 @@ while [ $# -gt 0 ]; do
 done
 
 case "$SCENARIO" in
-redis-restart | redis-key-loss | app-kill) ;;
+redis-restart | redis-key-loss | app-kill | redis-pause) ;;
 *)
 	echo "알 수 없는 시나리오: '${SCENARIO}'" >&2
 	usage
@@ -67,6 +70,7 @@ BACKEND_CONTAINERS="${BACKEND_CONTAINERS:-groove-backend}"
 REDIS_CONTAINER="${REDIS_CONTAINER:-groove-redis}"
 read -r -a BACKEND_CONTAINER_LIST <<< "$BACKEND_CONTAINERS"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-120}"
+THREAD_DUMP_OFFSETS="${THREAD_DUMP_OFFSETS:-}"
 
 # --- 사전 점검 ---
 for tool in k6 docker node curl; do
@@ -125,11 +129,21 @@ now_ms() {
 }
 
 K6_PID=""
+THREAD_DUMP_PID=""
+REDIS_PAUSED=""
 # shellcheck disable=SC2329 # trap 으로만 호출되어 shellcheck 가 직접 호출을 못 찾는다
 cleanup() {
 	if [ -n "$K6_PID" ] && kill -0 "$K6_PID" 2> /dev/null; then
 		log "중단됨: 백그라운드 k6(pid=${K6_PID}) 를 종료한다"
 		kill "$K6_PID" 2> /dev/null || true
+	fi
+	if [ -n "$THREAD_DUMP_PID" ] && kill -0 "$THREAD_DUMP_PID" 2> /dev/null; then
+		log "중단됨: 스레드 덤프 서브셸(pid=${THREAD_DUMP_PID}) 을 종료한다"
+		kill "$THREAD_DUMP_PID" 2> /dev/null || true
+	fi
+	if [ -n "$REDIS_PAUSED" ]; then
+		log "중단됨: 일시정지된 redis 컨테이너(${REDIS_CONTAINER}) 를 unpause 한다"
+		docker unpause "$REDIS_CONTAINER" > /dev/null 2>&1 || true
 	fi
 }
 trap cleanup EXIT INT TERM
@@ -193,16 +207,54 @@ FAULT_START_MS=$(now_ms)
 fault_log "FAULT_START scenario=${SCENARIO} ms=${FAULT_START_MS}"
 log "장애 주입 시작: scenario=${SCENARIO} ms=${FAULT_START_MS}"
 
+# --- 스레드 덤프 오프셋 예약 (FAULT_START 기준) ---
+start_thread_dumps() {
+	local offset target_ms container
+	for offset in $THREAD_DUMP_OFFSETS; do
+		target_ms=$((FAULT_START_MS + offset * 1000))
+		while [ "$(now_ms)" -lt "$target_ms" ]; do
+			sleep 0.1
+		done
+		for container in "${BACKEND_CONTAINER_LIST[@]}"; do
+			docker kill --signal=QUIT "$container" >> "$RUN_LOG" 2>&1 || true
+			fault_log "THREAD_DUMP container=${container} offset=${offset} ms=$(now_ms)"
+		done
+	done
+}
+
+if [ -n "$THREAD_DUMP_OFFSETS" ]; then
+	start_thread_dumps &
+	THREAD_DUMP_PID=$!
+	log "스레드 덤프 서브셸 시작 (pid=${THREAD_DUMP_PID}) offsets=${THREAD_DUMP_OFFSETS}"
+fi
+
+# docker compose 로 부르면 실행 위치(워크트리 등)에 따라 compose 프로젝트가 달라져 다른 스택을 건드리거나
+# 아무것도 멈추지 못한다. 컨테이너 이름으로 직접 다룬다.
 inject_redis_restart() {
 	if [ "$REDIS_DOWN_SEC" -eq 0 ]; then
-		fault_log "INFO docker compose restart redis"
-		docker compose restart redis >> "$RUN_LOG" 2>&1
+		fault_log "INFO docker restart ${REDIS_CONTAINER}"
+		docker restart "$REDIS_CONTAINER" >> "$RUN_LOG" 2>&1
 	else
-		fault_log "INFO docker compose stop redis, ${REDIS_DOWN_SEC}초 대기 후 start"
-		docker compose stop redis >> "$RUN_LOG" 2>&1
+		fault_log "INFO docker stop ${REDIS_CONTAINER}, ${REDIS_DOWN_SEC}초 대기 후 start"
+		docker stop "$REDIS_CONTAINER" >> "$RUN_LOG" 2>&1
 		sleep "$REDIS_DOWN_SEC"
-		docker compose start redis >> "$RUN_LOG" 2>&1
+		docker start "$REDIS_CONTAINER" >> "$RUN_LOG" 2>&1
 	fi
+	while ! docker exec "$REDIS_CONTAINER" redis-cli ping 2> /dev/null | grep -q PONG; do
+		sleep 0.2
+	done
+	fault_log "INFO redis PONG 확인"
+}
+
+inject_redis_pause() {
+	local down_sec="$REDIS_DOWN_SEC"
+	[ "$down_sec" -eq 0 ] && down_sec=1
+	fault_log "INFO docker pause redis, ${down_sec}초 후 unpause"
+	docker pause "$REDIS_CONTAINER" >> "$RUN_LOG" 2>&1
+	REDIS_PAUSED=1
+	sleep "$down_sec"
+	docker unpause "$REDIS_CONTAINER" >> "$RUN_LOG" 2>&1
+	REDIS_PAUSED=""
 	while ! docker exec "$REDIS_CONTAINER" redis-cli ping 2> /dev/null | grep -q PONG; do
 		sleep 0.2
 	done
@@ -241,6 +293,7 @@ case "$SCENARIO" in
 redis-restart) inject_redis_restart ;;
 redis-key-loss) inject_redis_key_loss ;;
 app-kill) inject_app_kill ;;
+redis-pause) inject_redis_pause ;;
 esac
 
 FAULT_END_MS=$(now_ms)
@@ -254,6 +307,11 @@ K6_EXIT=$?
 set -e
 echo "$K6_EXIT" > "${OUT_DIR}/exit-code.txt"
 log "k6 종료 (exit=${K6_EXIT})"
+
+if [ -n "$THREAD_DUMP_PID" ]; then
+	wait "$THREAD_DUMP_PID" 2> /dev/null || true
+	log "스레드 덤프 서브셸 종료 확인"
+fi
 
 # --- 대사 주기가 돌 시간을 준 뒤 판정 ---
 log "대사 대기 ${VERIFY_DELAY_SEC}초"

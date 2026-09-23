@@ -86,7 +86,9 @@ public class LimitedRedisCircuitBreaker {
 			open();
 			return;
 		}
-		if (failures.incrementAndGet() >= circuitProperties.failureThreshold()) {
+		int failureCount = failures.incrementAndGet();
+		log.debug("한정반 Redis 서킷 실패 누적 {}/{}", failureCount, circuitProperties.failureThreshold());
+		if (failureCount >= circuitProperties.failureThreshold()) {
 			open();
 		}
 	}
