@@ -176,6 +176,22 @@ management:
     web:
       exposure:
         include: health, info, metrics
+  otlp:
+    metrics:
+      export:
+        # url 기본값이 localhost 라 켜 두면 로컬·테스트에서도 전송 실패 로그가 쌓인다. 운영만 환경변수로 켠다.
+        enabled: false
+  metrics:
+    enable:
+      # 리포지토리 메서드·보안 필터·Redis 명령마다 시리즈가 생겨 무료 한도(1만 series)를 빨리 먹는다.
+      spring.data: false
+      spring.security: false
+      lettuce: false
+    distribution:
+      percentiles:
+        # 히스토그램 버킷은 시리즈가 커서 클라이언트 백분위만 쓴다(인스턴스 1대라 집계 문제 없음).
+        http.server.requests: 0.95, 0.99
+        hikaricp.connections.acquire: 0.95
 
 catalog:
   import:

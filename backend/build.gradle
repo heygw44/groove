@@ -42,6 +42,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-batch'
     implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
+    implementation 'io.micrometer:micrometer-registry-otlp'
 
     // --- MyBatis (Boot 3.2~3.5 / Java 17+) ---
     implementation "org.mybatis.spring.boot:mybatis-spring-boot-starter:${mybatisVersion}"
