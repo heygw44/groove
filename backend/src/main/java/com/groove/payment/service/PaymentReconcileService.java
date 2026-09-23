@@ -67,15 +67,16 @@ public class PaymentReconcileService {
 	}
 
 	/**
-	 * 웹훅(PaymentWebhookService) 전용 진입점. FAILED 로 확정된 결제도 대사 대상으로 허용한다 — 재시도
-	 * 상한을 넘겨 FAILED 로 확정한 뒤 토스가 뒤늦게 DONE/CANCELED 로 바뀌는 경우를 잡기 위해서다. 서명 없는
-	 * 웹훅이 트리거하지만 이 메서드 자체는 항상 lookup() 재조회 결과로만 판단하므로 본문 위조와 무관하다.
-	 * 스케줄러가 도는 named lock과는 다른 경로지만, 같은 주문을 겨냥한 confirm/스케줄러 대사와의 경합은
+	 * 웹훅·정산 대사(PaymentLateResultApplier) 공용 진입점. FAILED 로 확정된 결제도 대사 대상으로 허용한다 —
+	 * 재시도 상한을 넘겨 FAILED 로 확정한 뒤 토스가 뒤늦게 DONE/CANCELED 로 바뀌는 경우를 잡기 위해서다. 웹훅은
+	 * 서명이 없어 본문을 신뢰하지 않지만, 이 메서드 자체는 항상 lookup() 재조회 결과로만 판단하므로 본문 위조와
+	 * 무관하다. 스케줄러가 도는 named lock과는 다른 경로지만, 같은 주문을 겨냥한 confirm/스케줄러 대사와의 경합은
 	 * orderRepository.findByIdForUpdate 의 행 락과 Payment.@Version 이 직렬화해 named lock 이 필요 없다.
 	 */
 	@Transactional
-	public PaymentReconcileOutcome applyFromWebhook(PaymentReconcileCandidate candidate, PaymentLookupResult lookup) {
-		return applyInternal(candidate, lookup, true, "webhook");
+	public PaymentReconcileOutcome applyLate(PaymentReconcileCandidate candidate, PaymentLookupResult lookup,
+			String detail) {
+		return applyInternal(candidate, lookup, true, detail);
 	}
 
 	private PaymentReconcileOutcome applyInternal(PaymentReconcileCandidate candidate, PaymentLookupResult lookup,

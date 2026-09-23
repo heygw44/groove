@@ -124,6 +124,12 @@ groove:
       grace: 2m
       batch-size: 50
       max-attempts: 10
+    settlement:
+      # 04:00 DB 백업(scripts/backup.sh) 뒤에 돈다.
+      cron: "0 10 5 * * *"
+      overlap: 10m
+      page-size: 5000
+      max-pages: 20
   limited:
     reconcile:
       interval: 30s
@@ -148,6 +154,8 @@ groove:
     suppress-window: 5m
     queue-capacity: 100
     timeout: 2s
+    # 억제 창이 지나도록 안 나간 요약을 이 주기로 마저 보낸다.
+    flush-interval: 60s
   catalog:
     freshness:
       # Discogs 약관의 6시간 규칙. 재검증이 밀리면 상세 응답에서 해당 필드를 가린다.
@@ -168,6 +176,22 @@ management:
     web:
       exposure:
         include: health, info, metrics
+  otlp:
+    metrics:
+      export:
+        # url 기본값이 localhost 라 켜 두면 로컬·테스트에서도 전송 실패 로그가 쌓인다. 운영만 환경변수로 켠다.
+        enabled: false
+  metrics:
+    enable:
+      # 리포지토리 메서드·보안 필터·Redis 명령마다 시리즈가 생겨 무료 한도(1만 series)를 빨리 먹는다.
+      spring.data: false
+      spring.security: false
+      lettuce: false
+    distribution:
+      percentiles:
+        # 히스토그램 버킷은 시리즈가 커서 클라이언트 백분위만 쓴다(인스턴스 1대라 집계 문제 없음).
+        http.server.requests: 0.95, 0.99
+        hikaricp.connections.acquire: 0.95
 
 catalog:
   import:

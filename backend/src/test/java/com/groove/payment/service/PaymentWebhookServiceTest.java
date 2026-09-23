@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,7 +31,6 @@ import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.payment.client.PaymentClient;
-import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.dto.PaymentCompensationCandidate;
@@ -69,10 +67,7 @@ class PaymentWebhookServiceTest {
 	private PaymentClient paymentClient;
 
 	@Mock
-	private PaymentReconcileService reconcileService;
-
-	@Mock
-	private PaymentCompensator compensator;
+	private PaymentLateResultApplier lateResultApplier;
 
 	@Mock
 	private AlertNotifier alertNotifier;
@@ -87,7 +82,7 @@ class PaymentWebhookServiceTest {
 	void setUp() {
 		ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 		service = new PaymentWebhookService(objectMapper, eventWriter, paymentRepository, compensationRepository,
-				compensationRetrier, paymentClient, reconcileService, compensator, alertNotifier);
+				compensationRetrier, paymentClient, lateResultApplier, alertNotifier);
 
 		member = MemberFixture.create();
 		order = OrderFixture.withId(OrderFixture.create(member), ORDER_ID);
@@ -212,7 +207,7 @@ class PaymentWebhookServiceTest {
 		}
 
 		@Test
-		@DisplayName("재조회가 실패하면 ERROR 로 남기고 PAYMENT_RESULT_UNKNOWN 을 던지며, attempts 는 올리지 않는다")
+		@DisplayName("재조회가 실패하면 ERROR 로 남기고 PAYMENT_RESULT_UNKNOWN 을 던지며, lateResultApplier 는 부르지 않는다")
 		void throwsResultUnknownWhenLookupFails() {
 			// given
 			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(payment));
@@ -228,11 +223,11 @@ class PaymentWebhookServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 			verify(eventWriter).markResult(eq(EVENT_ID), eq(PaymentWebhookResult.ERROR), any());
-			verify(reconcileService, never()).recordFailure(any(), any());
+			verifyNoInteractions(lateResultApplier);
 		}
 
 		@Test
-		@DisplayName("대사 적용이 예외를 던지면 ERROR 로 남기고 PAYMENT_RESULT_UNKNOWN 을 던지며, attempts 는 올리지 않는다")
+		@DisplayName("대사 적용이 예외를 던지면 ERROR 로 남기고 PAYMENT_RESULT_UNKNOWN 을 던지며 경보를 보낸다")
 		void throwsResultUnknownWhenApplyFails() {
 			// given
 			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(payment));
@@ -240,7 +235,7 @@ class PaymentWebhookServiceTest {
 					.willReturn(Optional.of(eventWithId()));
 			PaymentLookupResult lookup = doneLookup();
 			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(lookup);
-			given(reconcileService.applyFromWebhook(any(), eq(lookup))).willThrow(new RuntimeException("DB 오류"));
+			given(lateResultApplier.apply(any(), eq(lookup), eq("webhook"))).willThrow(new RuntimeException("DB 오류"));
 
 			// when & then
 			assertThatThrownBy(() -> service.handle(body("PAYMENT_STATUS_CHANGED", PAYMENT_KEY, TOSS_ORDER_ID,
@@ -249,100 +244,32 @@ class PaymentWebhookServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 			verify(eventWriter).markResult(eq(EVENT_ID), eq(PaymentWebhookResult.ERROR), any());
-			verify(reconcileService, never()).recordFailure(any(), any());
 			verify(alertNotifier).notify(any(Alert.class));
 		}
 
 		@Test
-		@DisplayName("보상이 필요한 결과면 토스 취소 후 webhook 태그로 보상 결과를 기록한다")
-		void compensatesWhenOutcomeNeedsCompensation() {
+		@DisplayName("알려진 결제 이벤트를 받으면 재조회 결과를 detail=webhook 으로 lateResultApplier 에 위임하고 성공하면 APPLIED 로 남긴다")
+		void delegatesToLateResultApplierAndMarksApplied() {
 			// given
 			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(payment));
 			given(eventWriter.receive(any(), any(), any(), any(), any()))
 					.willReturn(Optional.of(eventWithId()));
 			PaymentLookupResult lookup = doneLookup();
 			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(lookup);
-			PaymentReconcileOutcome outcome = PaymentReconcileOutcome.needsCompensation(PAYMENT_KEY,
-					lookup.approvedAt());
-			given(reconcileService.applyFromWebhook(any(), eq(lookup))).willReturn(outcome);
-			CompensationResult compensationResult = CompensationResult.canceled(lookup.approvedAt());
-			given(compensator.cancelApproved(PAYMENT_ID, PAYMENT_KEY, lookup.approvedAt(),
-					PaymentCompensator.ORDER_INVALIDATED_REASON)).willReturn(compensationResult);
+			given(lateResultApplier.apply(any(), eq(lookup), eq("webhook")))
+					.willReturn(PaymentReconcileOutcome.applied());
 
 			// when
 			service.handle(body("PAYMENT_STATUS_CHANGED", PAYMENT_KEY, TOSS_ORDER_ID, "DONE"));
 
 			// then
-			verify(compensator).cancelApproved(PAYMENT_ID, PAYMENT_KEY, lookup.approvedAt(),
-					PaymentCompensator.ORDER_INVALIDATED_REASON);
-			ArgumentCaptor<PaymentReconcileCandidate> captor = ArgumentCaptor.forClass(PaymentReconcileCandidate.class);
-			verify(reconcileService).recordCompensation(captor.capture(), eq(compensationResult), eq("webhook"));
+			ArgumentCaptor<PaymentReconcileCandidate> captor = ArgumentCaptor
+					.forClass(PaymentReconcileCandidate.class);
+			verify(lateResultApplier).apply(captor.capture(), eq(lookup), eq("webhook"));
 			assertThat(captor.getValue().paymentId()).isEqualTo(PAYMENT_ID);
+			assertThat(captor.getValue().orderId()).isEqualTo(ORDER_ID);
+			assertThat(captor.getValue().tossOrderId()).isEqualTo(TOSS_ORDER_ID);
 			verify(eventWriter).markResult(EVENT_ID, PaymentWebhookResult.APPLIED, "webhook");
-		}
-
-		@Test
-		@DisplayName("취소 재시도가 성공하면 결과를 기록한다")
-		void retriesCancelSuccessfully() {
-			// given
-			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(payment));
-			given(eventWriter.receive(any(), any(), any(), any(), any()))
-					.willReturn(Optional.of(eventWithId()));
-			PaymentLookupResult lookup = doneLookup();
-			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(lookup);
-			given(reconcileService.applyFromWebhook(any(), eq(lookup)))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY));
-			PaymentCancelResult cancelResult = new PaymentCancelResult(PAYMENT_KEY, "CANCELED", lookup.approvedAt());
-			given(paymentClient.cancel(PAYMENT_KEY, "주문 취소 재시도")).willReturn(cancelResult);
-
-			// when
-			service.handle(body("PAYMENT_STATUS_CHANGED", PAYMENT_KEY, TOSS_ORDER_ID, "DONE"));
-
-			// then
-			verify(reconcileService).recordCancelRetry(any(), eq(cancelResult), isNull());
-		}
-
-		@Test
-		@DisplayName("취소 재시도가 명확히 거절되면 그 예외를 그대로 기록한다")
-		void recordsRejectionWhenCancelRetryThrowsBusinessException() {
-			// given
-			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(payment));
-			given(eventWriter.receive(any(), any(), any(), any(), any()))
-					.willReturn(Optional.of(eventWithId()));
-			PaymentLookupResult lookup = doneLookup();
-			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(lookup);
-			given(reconcileService.applyFromWebhook(any(), eq(lookup)))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY));
-			BusinessException rejection = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS 거절");
-			given(paymentClient.cancel(PAYMENT_KEY, "주문 취소 재시도")).willThrow(rejection);
-
-			// when
-			service.handle(body("PAYMENT_STATUS_CHANGED", PAYMENT_KEY, TOSS_ORDER_ID, "DONE"));
-
-			// then
-			verify(reconcileService).recordCancelRetry(any(), isNull(), eq(rejection));
-		}
-
-		@Test
-		@DisplayName("취소 재시도 결과가 불명이면 PAYMENT_RESULT_UNKNOWN 으로 감싸 기록한다")
-		void recordsUnknownResultWhenCancelRetryThrowsUnexpectedException() {
-			// given
-			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(payment));
-			given(eventWriter.receive(any(), any(), any(), any(), any()))
-					.willReturn(Optional.of(eventWithId()));
-			PaymentLookupResult lookup = doneLookup();
-			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(lookup);
-			given(reconcileService.applyFromWebhook(any(), eq(lookup)))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY));
-			given(paymentClient.cancel(PAYMENT_KEY, "주문 취소 재시도")).willThrow(new RuntimeException("Read timed out"));
-
-			// when
-			service.handle(body("PAYMENT_STATUS_CHANGED", PAYMENT_KEY, TOSS_ORDER_ID, "DONE"));
-
-			// then
-			ArgumentCaptor<BusinessException> captor = ArgumentCaptor.forClass(BusinessException.class);
-			verify(reconcileService).recordCancelRetry(any(), isNull(), captor.capture());
-			assertThat(captor.getValue().getErrorCode()).isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 		}
 	}
 
