@@ -124,6 +124,12 @@ groove:
       grace: 2m
       batch-size: 50
       max-attempts: 10
+    settlement:
+      # 04:00 DB 백업(scripts/backup.sh) 뒤에 돈다.
+      cron: "0 10 5 * * *"
+      overlap: 10m
+      page-size: 5000
+      max-pages: 20
   limited:
     reconcile:
       interval: 30s

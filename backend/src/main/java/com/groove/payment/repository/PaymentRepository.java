@@ -22,6 +22,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
 	Optional<Payment> findByTossOrderId(String tossOrderId);
 
+	/** order 는 LAZY 라 candidate 생성 시 getOrder().getId() 는 프록시 id 만 읽어 추가 SQL 을 내지 않는다. */
+	List<Payment> findByApprovedAtGreaterThanEqualAndApprovedAtLessThan(LocalDateTime from, LocalDateTime to);
+
 	@Query("""
 			select new com.groove.payment.dto.PaymentCancelTarget(p.order.id, p.status)
 			from Payment p
