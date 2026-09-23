@@ -45,15 +45,23 @@ public class SlackWebhookAlertNotifier implements AlertNotifier {
 
 	@Override
 	public void notify(Alert alert) {
-		if (!throttle.tryAcquire(alert.key())) {
+		AlertThrottle.ThrottleResult result = throttle.acquire(alert);
+		if (!result.acquired()) {
 			log.debug("경보 억제 창 안이라 건너뛴다 key={}", alert.key());
 			return;
 		}
-		String text = buildText(alert);
+		String text = buildText(alert, result.carried());
 		executor.execute(() -> post(text, alert.key()));
 	}
 
-	private String buildText(Alert alert) {
+	@Override
+	public void flushSuppressed() {
+		for (SuppressedSummary summary : throttle.drainExpired()) {
+			executor.execute(() -> post(buildSummaryText(summary), summary.key()));
+		}
+	}
+
+	private String buildText(Alert alert, SuppressedSummary carried) {
 		StringBuilder text = new StringBuilder();
 		text.append(alert.severity() == AlertSeverity.CRITICAL ? "🔴 [CRITICAL] " : "🟠 [WARN] ")
 				.append(alert.key())
@@ -62,13 +70,34 @@ public class SlackWebhookAlertNotifier implements AlertNotifier {
 		if (alert.targetId() != null) {
 			text.append('\n').append("대상: ").append(alert.targetId());
 		}
+		if (carried != null) {
+			text.append('\n').append(carried.describe());
+		}
 		text.append('\n')
 				.append(serviceLabel)
 				.append(" · ")
 				.append(LocalDateTime.now(clock).format(TIMESTAMP_FORMATTER))
 				.append(" KST");
-		String result = text.toString();
-		return result.length() > CONTENT_LIMIT ? result.substring(0, CONTENT_LIMIT) : result;
+		return truncate(text.toString());
+	}
+
+	private String buildSummaryText(SuppressedSummary summary) {
+		StringBuilder text = new StringBuilder();
+		text.append(summary.severity() == AlertSeverity.CRITICAL ? "🔴 [CRITICAL] " : "🟠 [WARN] ")
+				.append(summary.key())
+				.append(" (억제 요약)")
+				.append('\n')
+				.append(summary.describe())
+				.append('\n')
+				.append(serviceLabel)
+				.append(" · ")
+				.append(LocalDateTime.now(clock).format(TIMESTAMP_FORMATTER))
+				.append(" KST");
+		return truncate(text.toString());
+	}
+
+	private String truncate(String text) {
+		return text.length() > CONTENT_LIMIT ? text.substring(0, CONTENT_LIMIT) : text;
 	}
 
 	private void post(String text, String key) {
