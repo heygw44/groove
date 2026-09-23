@@ -11,6 +11,7 @@ public record AlertProperties(
 	@DefaultValue("") String slackWebhookUrl,
 	@DefaultValue("5m") Duration suppressWindow,
 	@DefaultValue("100") int queueCapacity,
-	@DefaultValue("2s") Duration timeout
+	@DefaultValue("2s") Duration timeout,
+	@DefaultValue("60s") Duration flushInterval
 ) {
 }

@@ -213,5 +213,102 @@ class SlackWebhookAlertNotifierTest {
 			assertThat(receivedAtMillis).hasSize(2);
 			assertThat(receivedAtMillis.get(1) - receivedAtMillis.get(0)).isGreaterThanOrEqualTo(900L);
 		}
+
+		@Test
+		@DisplayName("억제 창이 지나 통과하면 그사이 쌓인 억제 요약 줄이 본문에 들어간다")
+		void includesCarriedSummaryLine() {
+			// given
+			MutableClock localClock = new MutableClock(Instant.parse("2026-09-22T05:03:11Z"));
+			AlertThrottle localThrottle = new AlertThrottle(localClock, Duration.ofMinutes(5));
+			SlackWebhookAlertNotifier notifier = new SlackWebhookAlertNotifier(restClient, WEBHOOK_URL, Runnable::run,
+					localThrottle, localClock, "groove-prod");
+			server.expect(requestTo(WEBHOOK_URL)).andRespond(withSuccess());
+			String expectedText = "🟠 [WARN] limited.release-failed\n"
+					+ "선점 해제 실패\n"
+					+ "대상: paymentId=4\n"
+					+ "직전 5분 같은 경보 2건 억제, 대상: paymentId=2, paymentId=3\n"
+					+ "groove-prod · 2026-09-22 14:08:11 KST";
+			server.expect(requestTo(WEBHOOK_URL)).andExpect(jsonPath("$.text").value(expectedText))
+					.andRespond(withSuccess());
+
+			// when
+			notifier.notify(Alert.warn("limited.release-failed", "선점 해제 실패", "paymentId=1"));
+			notifier.notify(Alert.warn("limited.release-failed", "선점 해제 실패", "paymentId=2"));
+			notifier.notify(Alert.warn("limited.release-failed", "선점 해제 실패", "paymentId=3"));
+			localClock.advance(Duration.ofMinutes(5));
+			notifier.notify(Alert.warn("limited.release-failed", "선점 해제 실패", "paymentId=4"));
+
+			// then
+			server.verify();
+		}
+	}
+
+	@Nested
+	@DisplayName("flushSuppressed()")
+	class FlushSuppressed {
+
+		@Test
+		@DisplayName("억제 창이 지나도록 안 나간 억제 요약을 보낸다")
+		void sendsSuppressedSummary() {
+			// given
+			MutableClock localClock = new MutableClock(Instant.parse("2026-09-22T05:03:11Z"));
+			AlertThrottle localThrottle = new AlertThrottle(localClock, Duration.ofMinutes(5));
+			SlackWebhookAlertNotifier notifier = new SlackWebhookAlertNotifier(restClient, WEBHOOK_URL, Runnable::run,
+					localThrottle, localClock, "groove-prod");
+			String expectedText = "🟠 [WARN] limited.release-failed (억제 요약)\n"
+					+ "직전 5분 같은 경보 1건 억제, 대상: paymentId=2\n"
+					+ "groove-prod · 2026-09-22 14:08:11 KST";
+			server.expect(requestTo(WEBHOOK_URL)).andRespond(withSuccess());
+			server.expect(requestTo(WEBHOOK_URL)).andExpect(jsonPath("$.text").value(expectedText))
+					.andRespond(withSuccess());
+			notifier.notify(Alert.warn("limited.release-failed", "선점 해제 실패", "paymentId=1"));
+			notifier.notify(Alert.warn("limited.release-failed", "선점 해제 실패", "paymentId=2"));
+			localClock.advance(Duration.ofMinutes(5));
+
+			// when
+			notifier.flushSuppressed();
+
+			// then
+			server.verify();
+		}
+
+		@Test
+		@DisplayName("억제된 게 없으면 아무것도 보내지 않는다")
+		void doesNotSendWhenNothingSuppressed() {
+			// given
+			SlackWebhookAlertNotifier notifier = notifier(throttle());
+
+			// when & then
+			assertThatCode(notifier::flushSuppressed).doesNotThrowAnyException();
+			server.verify();
+		}
+	}
+
+	private static final class MutableClock extends Clock {
+
+		private Instant instant;
+
+		private MutableClock(Instant instant) {
+			this.instant = instant;
+		}
+
+		private void advance(Duration duration) {
+			instant = instant.plus(duration);
+		}
+
+		@Override
+		public ZoneId getZone() {
+			return ZoneId.of("Asia/Seoul");
+		}
+
+		@Override
+		public Clock withZone(ZoneId zone) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public Instant instant() {
+			return instant;
+		}
 	}
 }

@@ -23,7 +23,8 @@ class AlertConfigTest {
 		@DisplayName("웹훅 URL 이 비어 있으면 LoggingAlertNotifier 를 만든다")
 		void createsLoggingNotifierWhenUrlBlank() {
 			// given
-			AlertProperties properties = new AlertProperties("", Duration.ofMinutes(5), 100, Duration.ofSeconds(2));
+			AlertProperties properties = new AlertProperties("", Duration.ofMinutes(5), 100, Duration.ofSeconds(2),
+					Duration.ofSeconds(60));
 
 			// when
 			AlertNotifier notifier = alertConfig.alertNotifier(properties, RestClient.create(), Runnable::run,
@@ -38,7 +39,7 @@ class AlertConfigTest {
 		void createsSlackNotifierWhenUrlPresent() {
 			// given
 			AlertProperties properties = new AlertProperties("https://hooks.slack.com/services/test",
-					Duration.ofMinutes(5), 100, Duration.ofSeconds(2));
+					Duration.ofMinutes(5), 100, Duration.ofSeconds(2), Duration.ofSeconds(60));
 
 			// when
 			AlertNotifier notifier = alertConfig.alertNotifier(properties, RestClient.create(), Runnable::run,

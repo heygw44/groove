@@ -148,6 +148,8 @@ groove:
     suppress-window: 5m
     queue-capacity: 100
     timeout: 2s
+    # 억제 창이 지나도록 안 나간 요약을 이 주기로 마저 보낸다.
+    flush-interval: 60s
   catalog:
     freshness:
       # Discogs 약관의 6시간 규칙. 재검증이 밀리면 상세 응답에서 해당 필드를 가린다.
