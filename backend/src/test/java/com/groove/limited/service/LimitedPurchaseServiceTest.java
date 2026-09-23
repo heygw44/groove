@@ -71,7 +71,8 @@ class LimitedPurchaseServiceTest {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		limitedCircuitProperties = new LimitedCircuitProperties(5, Duration.ofSeconds(10), 5, true);
 		// 서킷이 정상(CLOSED)인 대부분의 테스트를 위한 기본값. 서킷·폴백을 다루는 테스트에서만 덮어쓴다.
-		lenient().when(limitedRedisCircuitBreaker.allowRedis()).thenReturn(true);
+		lenient().when(limitedRedisCircuitBreaker.admit())
+				.thenReturn(LimitedRedisCircuitBreaker.Admission.REDIS);
 		lenient().when(limitedRedisCircuitBreaker.isClosed()).thenReturn(true);
 		limitedPurchaseService = new LimitedPurchaseService(limitedDropMetaCache, limitedDropRedisService,
 				limitedPurchaseWriter, limitedDropSyncService, limitedRedisCircuitBreaker, limitedFallbackGate,
@@ -351,7 +352,7 @@ class LimitedPurchaseServiceTest {
 		@DisplayName("서킷이 Redis 를 막고 있으면 reserve 를 호출하지 않고 바로 DB 경로로 처리한다")
 		void skipsReserveWhenCircuitDisallowsRedis() {
 			// given
-			given(limitedRedisCircuitBreaker.allowRedis()).willReturn(false);
+			given(limitedRedisCircuitBreaker.admit()).willReturn(LimitedRedisCircuitBreaker.Admission.DENIED);
 			given(limitedFallbackGate.tryEnter(21L)).willReturn(true);
 			LimitedDropMeta meta = openMeta(21L);
 			given(limitedDropMetaCache.get(21L)).willReturn(Optional.of(meta));
@@ -372,7 +373,7 @@ class LimitedPurchaseServiceTest {
 		@DisplayName("폴백 게이트가 거절하면 LIMITED_BUSY 예외를 던진다")
 		void throwsBusyWhenFallbackGateRejects() {
 			// given
-			given(limitedRedisCircuitBreaker.allowRedis()).willReturn(false);
+			given(limitedRedisCircuitBreaker.admit()).willReturn(LimitedRedisCircuitBreaker.Admission.DENIED);
 			given(limitedFallbackGate.tryEnter(22L)).willReturn(false);
 			LimitedDropMeta meta = openMeta(22L);
 			given(limitedDropMetaCache.get(22L)).willReturn(Optional.of(meta));
@@ -395,7 +396,7 @@ class LimitedPurchaseServiceTest {
 			LimitedPurchaseService service = new LimitedPurchaseService(limitedDropMetaCache, limitedDropRedisService,
 					limitedPurchaseWriter, limitedDropSyncService, limitedRedisCircuitBreaker, limitedFallbackGate,
 					new LimitedProperties(true, Duration.ofSeconds(3)), fallbackDisabled, clock);
-			given(limitedRedisCircuitBreaker.allowRedis()).willReturn(false);
+			given(limitedRedisCircuitBreaker.admit()).willReturn(LimitedRedisCircuitBreaker.Admission.DENIED);
 			LimitedDropMeta meta = openMeta(23L);
 			given(limitedDropMetaCache.get(23L)).willReturn(Optional.of(meta));
 
@@ -411,7 +412,7 @@ class LimitedPurchaseServiceTest {
 		@DisplayName("서킷이 CLOSED 가 아니면 폴백 경로에서 예외가 나도 시도 집계를 기록하지 않는다")
 		void skipsRecordAttemptWhenCircuitNotClosed() {
 			// given
-			given(limitedRedisCircuitBreaker.allowRedis()).willReturn(false);
+			given(limitedRedisCircuitBreaker.admit()).willReturn(LimitedRedisCircuitBreaker.Admission.DENIED);
 			given(limitedRedisCircuitBreaker.isClosed()).willReturn(false);
 			given(limitedFallbackGate.tryEnter(24L)).willReturn(true);
 			LimitedDropMeta meta = openMeta(24L);
@@ -431,6 +432,7 @@ class LimitedPurchaseServiceTest {
 		@DisplayName("HALF_OPEN 프로브가 reserve 에 성공하면 폴백 중 쌓인 드롭을 재적재하고 목록을 비운다")
 		void resyncsFallbackDropsOnSuccessfulProbe() {
 			// given
+			given(limitedRedisCircuitBreaker.admit()).willReturn(LimitedRedisCircuitBreaker.Admission.PROBE);
 			LimitedDropMeta meta = openMeta(25L);
 			given(limitedDropMetaCache.get(25L)).willReturn(Optional.of(meta));
 			given(limitedRedisCircuitBreaker.fallbackDrops()).willReturn(Set.of(25L, 30L));
@@ -448,6 +450,52 @@ class LimitedPurchaseServiceTest {
 			verify(limitedDropSyncService).sync(30L);
 			verify(limitedRedisCircuitBreaker).clearFallbackDrops(Set.of(25L, 30L));
 			verify(limitedRedisCircuitBreaker).onSuccess();
+		}
+
+		@Test
+		@DisplayName("CLOSED 상태에서 폴백 드롭이 남아 있어도 재적재하지 않는다")
+		void doesNotResyncFallbackDropsWhenClosed() {
+			// given
+			LimitedDropMeta meta = openMeta(26L);
+			given(limitedDropMetaCache.get(26L)).willReturn(Optional.of(meta));
+			given(limitedDropRedisService.reserve(26L, 10L)).willReturn(LimitedDropRedisService.ReserveResult.OK);
+			LimitedPurchaseResponse response = new LimitedPurchaseResponse(1L, "20260904-ABCDE123",
+					new BigDecimal("10000"), LocalDateTime.now(clock));
+			given(limitedPurchaseWriter.write(26L, 10L, 20L, PRODUCT_ID)).willReturn(response);
+
+			// when
+			LimitedPurchaseResponse result = limitedPurchaseService.purchase(26L, 10L, 20L);
+
+			// then
+			assertThat(result).isEqualTo(response);
+			verify(limitedRedisCircuitBreaker, never()).fallbackDrops();
+			verify(limitedDropSyncService, never()).sync(any());
+			verify(limitedRedisCircuitBreaker, never()).clearFallbackDrops(any());
+		}
+
+		@Test
+		@DisplayName("HALF_OPEN 프로브의 재적재가 Redis 장애로 실패하면 서킷 실패를 기록하고 DB 경로로 폴백한다")
+		void fallsBackToDbWhenProbeResyncFails() {
+			// given
+			given(limitedRedisCircuitBreaker.admit()).willReturn(LimitedRedisCircuitBreaker.Admission.PROBE);
+			LimitedDropMeta meta = openMeta(27L);
+			given(limitedDropMetaCache.get(27L)).willReturn(Optional.of(meta));
+			given(limitedRedisCircuitBreaker.fallbackDrops()).willReturn(Set.of(27L));
+			given(limitedDropSyncService.sync(27L))
+					.willThrow(new RedisConnectionFailureException("connection refused"));
+			given(limitedFallbackGate.tryEnter(27L)).willReturn(true);
+			LimitedPurchaseResponse response = new LimitedPurchaseResponse(1L, "20260904-ABCDE123",
+					new BigDecimal("10000"), LocalDateTime.now(clock));
+			given(limitedPurchaseWriter.write(27L, 10L, 20L, PRODUCT_ID)).willReturn(response);
+
+			// when
+			LimitedPurchaseResponse result = limitedPurchaseService.purchase(27L, 10L, 20L);
+
+			// then
+			assertThat(result).isEqualTo(response);
+			verify(limitedRedisCircuitBreaker).onFailure();
+			verify(limitedRedisCircuitBreaker).noteFallback(27L);
+			verify(limitedDropRedisService, never()).reserve(any(), any());
 		}
 	}
 
