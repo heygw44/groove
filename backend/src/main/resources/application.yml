@@ -125,7 +125,7 @@ groove:
       batch-size: 50
       max-attempts: 10
     settlement:
-      # 04:00 DB 백업(scripts/backup.sh) 뒤에 돈다.
+      # 04:00 DB 백업(infra/scripts/backup.sh) 뒤에 돈다.
       cron: "0 10 5 * * *"
       overlap: 10m
       page-size: 5000
