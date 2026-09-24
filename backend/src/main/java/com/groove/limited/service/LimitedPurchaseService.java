@@ -60,10 +60,12 @@ public class LimitedPurchaseService {
 			if (!limitedProperties.redisEnabled()) {
 				return limitedPurchaseWriter.write(dropId, memberId, addressId, meta.productId());
 			}
-			if (!limitedRedisCircuitBreaker.allowRedis()) {
+			LimitedRedisCircuitBreaker.Admission admission = limitedRedisCircuitBreaker.admit();
+			if (admission == LimitedRedisCircuitBreaker.Admission.DENIED) {
 				return fallback(dropId, memberId, addressId, meta);
 			}
-			return reserveAndWrite(dropId, memberId, addressId, meta);
+			return reserveAndWrite(dropId, memberId, addressId, meta,
+					admission == LimitedRedisCircuitBreaker.Admission.PROBE);
 		} catch (BusinessException e) {
 			recordAttempt(meta, e.getErrorCode());
 			throw e;
@@ -76,18 +78,23 @@ public class LimitedPurchaseService {
 	}
 
 	private LimitedPurchaseResponse reserveAndWrite(Long dropId, Long memberId, Long addressId,
-			LimitedDropMeta meta) {
+			LimitedDropMeta meta, boolean probe) {
 		ReserveResult reserveResult;
+		long startedAt = System.nanoTime();
 		try {
-			resyncFallbackDrops();
+			if (probe) {
+				resyncFallbackDrops();
+			}
 			reserveResult = limitedDropRedisService.reserve(dropId, memberId);
 			if (reserveResult == ReserveResult.NOT_INITIALIZED && limitedDropSyncService.rebuildOnce(dropId)) {
 				reserveResult = limitedDropRedisService.reserve(dropId, memberId);
 			}
 			limitedRedisCircuitBreaker.onSuccess();
 		} catch (DataAccessException e) {
+			// 서킷 onFailure 는 synchronized 라 그 대기가 섞이지 않게 먼저 잰다.
+			long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
 			limitedRedisCircuitBreaker.onFailure();
-			log.warn("한정반 Redis 선점 실패, DB 경로로 폴백 dropId={} memberId={}", dropId, memberId, e);
+			log.warn("한정반 Redis 선점 실패, DB 경로로 폴백 dropId={} memberId={} elapsedMs={}", dropId, memberId, elapsedMs, e);
 			return fallback(dropId, memberId, addressId, meta);
 		}
 		validateReserveResult(reserveResult);
@@ -100,7 +107,11 @@ public class LimitedPurchaseService {
 		}
 	}
 
-	/** 서킷이 HALF_OPEN 프로브로 CLOSED 복귀를 시도하는 시점에, 폴백 중 밀린 드롭들을 DB 기준으로 재적재한다. */
+	/**
+	 * 폴백 중 밀린 드롭들을 DB 기준으로 재적재한다. HALF_OPEN 프로브 요청에서만 부른다 — admit() 이
+	 * 인스턴스에서 한 스레드만 PROBE 로 통과시켜 저절로 한 번만 돈다. CLOSED 상태로 남은 폴백 드롭은 30초 주기 대사 스케줄러가 맞춘다.
+	 * 매 요청마다 돌면 sync() 가 행 락을 쥔 채 Redis 타임아웃을 기다려 뒤이은 요청들이 그 락 뒤에 줄을 선다.
+	 */
 	private void resyncFallbackDrops() {
 		Set<Long> drops = limitedRedisCircuitBreaker.fallbackDrops();
 		if (drops.isEmpty()) {
