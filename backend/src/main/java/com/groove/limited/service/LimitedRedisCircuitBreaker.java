@@ -31,6 +31,11 @@ public class LimitedRedisCircuitBreaker {
 		CLOSED, OPEN, HALF_OPEN
 	}
 
+	/** CLOSED 의 REDIS, HALF_OPEN 프로브로 뽑힌 PROBE, 그 외 거절인 DENIED. */
+	public enum Admission {
+		REDIS, PROBE, DENIED
+	}
+
 	private final LimitedCircuitProperties circuitProperties;
 	private final Clock clock;
 	private final AlertNotifier alertNotifier;
@@ -59,16 +64,24 @@ public class LimitedRedisCircuitBreaker {
 		return state() == State.OPEN;
 	}
 
-	/** CLOSED 는 항상 true, OPEN 은 항상 false, HALF_OPEN 은 첫 한 스레드만 true(프로브)다. */
-	public boolean allowRedis() {
+	/**
+	 * 상태 판정과 HALF_OPEN 프로브 획득을 state() 한 번으로 같이 한다. 판정과 획득을 분리해 따로 부르면
+	 * 그 사이에 OPEN 대기 시간이 끝나 버려 프로브가 아닌 스레드가 실제 프로브를 얻는 경합이 생긴다.
+	 */
+	public Admission admit() {
 		State current = state();
 		if (current == State.CLOSED) {
-			return true;
+			return Admission.REDIS;
 		}
 		if (current == State.OPEN) {
-			return false;
+			return Admission.DENIED;
 		}
-		return probeTaken.compareAndSet(false, true);
+		return probeTaken.compareAndSet(false, true) ? Admission.PROBE : Admission.DENIED;
+	}
+
+	/** CLOSED 는 항상 true, OPEN 은 항상 false, HALF_OPEN 은 첫 한 스레드만 true(프로브)다. */
+	public boolean allowRedis() {
+		return admit() != Admission.DENIED;
 	}
 
 	public synchronized void onSuccess() {

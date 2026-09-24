@@ -223,6 +223,43 @@ class LimitedRedisCircuitBreakerTest {
 	}
 
 	@Nested
+	@DisplayName("admit()")
+	class Admit {
+
+		@Test
+		@DisplayName("CLOSED 면 REDIS 를 돌려준다")
+		void returnsRedisWhenClosed() {
+			// when & then
+			assertThat(circuitBreaker.admit()).isEqualTo(LimitedRedisCircuitBreaker.Admission.REDIS);
+		}
+
+		@Test
+		@DisplayName("OPEN 이고 openDuration 이 안 지났으면 DENIED 를 돌려준다")
+		void returnsDeniedWhileOpenDurationNotElapsed() {
+			// given
+			openCircuit();
+			clock.advance(Duration.ofSeconds(9));
+
+			// when & then
+			assertThat(circuitBreaker.admit()).isEqualTo(LimitedRedisCircuitBreaker.Admission.DENIED);
+		}
+
+		@Test
+		@DisplayName("OPEN 상태에서 openDuration 경과 시점으로 시계를 옮긴 직후 호출하면 첫 호출만 PROBE 고 다음부터는 DENIED 다")
+		void returnsProbeOnlyOnFirstCallRightAfterClockCrossesOpenDuration() {
+			// given: 상태 판정(HALF_OPEN 여부)과 프로브 획득이 admit() 한 호출 안에서 함께 일어나야
+			// 그 사이 경합으로 재동기화 없는 스레드가 프로브를 가로채는 일이 없다.
+			openCircuit();
+			clock.advance(Duration.ofSeconds(10));
+
+			// when & then
+			assertThat(circuitBreaker.admit()).isEqualTo(LimitedRedisCircuitBreaker.Admission.PROBE);
+			assertThat(circuitBreaker.admit()).isEqualTo(LimitedRedisCircuitBreaker.Admission.DENIED);
+			assertThat(circuitBreaker.admit()).isEqualTo(LimitedRedisCircuitBreaker.Admission.DENIED);
+		}
+	}
+
+	@Nested
 	@DisplayName("fallbackDrops()")
 	class FallbackDrops {
 
