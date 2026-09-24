@@ -25,7 +25,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.HashOperations;
-import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
@@ -191,8 +190,9 @@ class LimitedDropRedisServiceFallbackTest {
 		@DisplayName("Redis 장애면 예외를 삼키지 않고 그대로 던진다")
 		void propagatesRedisException() {
 			// given
+			given(redisTemplate.opsForValue()).willReturn(valueOperations);
 			willThrow(new RedisConnectionFailureException("connection refused"))
-					.given(redisTemplate).executePipelined(any(RedisCallback.class));
+					.given(valueOperations).multiGet(List.of("limited:stock:1"));
 
 			// when & then
 			assertThatThrownBy(() -> limitedDropRedisService.findMissingStock(List.of(1L)))
@@ -265,6 +265,36 @@ class LimitedDropRedisServiceFallbackTest {
 
 			// when
 			Map<LimitedAttemptResult, Long> result = limitedDropRedisService.getAttempts(1L);
+
+			// then
+			assertThat(result).isEmpty();
+		}
+	}
+
+	@Nested
+	@DisplayName("getAttempts(Collection)")
+	class GetAttemptsBatch {
+
+		@Test
+		@DisplayName("Redis 연결 실패면 예외를 삼키고 빈 맵을 반환한다")
+		void returnsEmptyMapWhenRedisConnectionFails() {
+			// given
+			given(redisTemplate.<String, String>opsForHash()).willReturn(hashOperations);
+			willThrow(new RedisConnectionFailureException("connection refused"))
+					.given(hashOperations).entries("limited:attempts:1");
+
+			// when
+			Map<Long, Map<LimitedAttemptResult, Long>> result = limitedDropRedisService.getAttempts(List.of(1L));
+
+			// then
+			assertThat(result).isEmpty();
+		}
+
+		@Test
+		@DisplayName("드롭 id 목록이 비어 있으면 Redis 를 호출하지 않고 빈 맵을 반환한다")
+		void returnsEmptyMapWithoutCallingRedisWhenNoDropIds() {
+			// when
+			Map<Long, Map<LimitedAttemptResult, Long>> result = limitedDropRedisService.getAttempts(List.of());
 
 			// then
 			assertThat(result).isEmpty();

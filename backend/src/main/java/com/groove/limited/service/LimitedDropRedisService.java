@@ -12,9 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.connection.StringRedisConnection;
 import org.springframework.data.redis.core.HashOperations;
-import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
@@ -165,17 +163,12 @@ public class LimitedDropRedisService {
 			return List.of();
 		}
 		List<Long> orderedIds = List.copyOf(dropIds);
-		List<Object> pipelinedResults = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-			StringRedisConnection stringConnection = (StringRedisConnection) connection;
-			for (Long dropId : orderedIds) {
-				stringConnection.exists(stockKey(dropId));
-			}
-			return null;
-		});
+		List<String> keys = orderedIds.stream().map(LimitedDropRedisService::stockKey).toList();
+		List<String> values = redisTemplate.opsForValue().multiGet(keys);
 		List<Long> missing = new ArrayList<>();
 		for (int i = 0; i < orderedIds.size(); i++) {
-			Boolean exists = (Boolean) pipelinedResults.get(i);
-			if (!Boolean.TRUE.equals(exists)) {
+			String value = values == null ? null : values.get(i);
+			if (value == null) {
 				missing.add(orderedIds.get(i));
 			}
 		}
@@ -204,7 +197,7 @@ public class LimitedDropRedisService {
 	}
 
 	/**
-	 * 관리자 목록 조회용. 드롭마다 HGETALL 을 따로 부르는 대신 파이프라인 한 번으로 묶는다.
+	 * 관리자 목록 조회용. 드롭마다 HGETALL 을 순차 호출한다(관리자 전용이라 대상이 적어 파이프라인을 쓰지 않는다).
 	 * Redis 장애 시 예외를 삼키고 전부 빈 맵으로 폴백한다(단건 {@link #getAttempts(Long)}과 같은 의미).
 	 */
 	public Map<Long, Map<LimitedAttemptResult, Long>> getAttempts(Collection<Long> dropIds) {
@@ -213,18 +206,10 @@ public class LimitedDropRedisService {
 		}
 		List<Long> orderedIds = List.copyOf(dropIds);
 		try {
-			List<Object> pipelinedResults = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-				StringRedisConnection stringConnection = (StringRedisConnection) connection;
-				for (Long dropId : orderedIds) {
-					stringConnection.hGetAll(attemptsKey(dropId));
-				}
-				return null;
-			});
+			HashOperations<String, String, String> hashOps = redisTemplate.opsForHash();
 			Map<Long, Map<LimitedAttemptResult, Long>> attemptsByDrop = new LinkedHashMap<>();
-			for (int i = 0; i < orderedIds.size(); i++) {
-				@SuppressWarnings("unchecked")
-				Map<String, String> entries = (Map<String, String>) pipelinedResults.get(i);
-				attemptsByDrop.put(orderedIds.get(i), parseAttempts(entries == null ? Map.of() : entries));
+			for (Long dropId : orderedIds) {
+				attemptsByDrop.put(dropId, parseAttempts(hashOps.entries(attemptsKey(dropId))));
 			}
 			return attemptsByDrop;
 		} catch (DataAccessException e) {
