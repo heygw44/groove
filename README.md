@@ -1,6 +1,6 @@
 # GROOVE — LP(바이닐) 전문 이커머스
 
-Java 17 / Spring Boot 3.5 + React 18로 만든 LP 이커머스다. 한정반(Limited Drop) 선착순 판매는 Redis Lua 선점과 DB 제약으로 이중 방어하고, 상품 조회는 JPA, 관리자 통계 같은 복잡한 읽기는 MyBatis로 나눠 처리한다. JWT 무상태 인증, Toss Payments 결제, 규칙 기반 추천까지 갖춰 AWS에 올려 실제로 운영 중이다.
+Java 17 / Spring Boot 3.5 + React 18로 만든 LP 이커머스다. 한정반(Limited Drop) 선착순 판매는 Redis Lua 선점과 DB 제약으로 이중 방어하고, 단순 조회와 쓰기는 JPA, 상품 목록 검색이나 관리자 통계처럼 조건이 많은 읽기는 MyBatis로 나눠 처리한다. JWT 무상태 인증, Toss Payments 결제, 규칙 기반 추천까지 갖춰 AWS에 올려 실제로 운영 중이다.
 
 ## 서비스 주소
 
@@ -31,10 +31,10 @@ Discogs에서 적재한 실제 카탈로그가 올라가 있다 — 앨범 210�
 - **카탈로그(Discogs)** — 프레싱 스펙(국가·연도·카탈로그 번호·바코드)을 Discogs에서 적재하고 5분 주기로 재검증한다. 약관상 원본보다 6시간 이상 오래된 정보는 표시할 수 없어, TTL이 지난 상품은 서버가 해당 필드를 비우고 화면에 "최신 정보를 확인하는 중입니다"를 띄운다
 - **추천** — 취향 프로필(장르·아티스트·연대)과 최근 본 상품·구매·위시리스트 같은 행동 신호를 가중치 합산해 홈에 "OO님을 위한 추천"으로 보여준다. 학습 모델 없이도 위시 홀드아웃 5-fold × 5시드(25회) 측정에서 recall@10 0.347 ± 0.058으로, 무작위 기준선(0.038) 대비 9.1배, 인기순 대조군(0.047) 대비 7.4배다
 - **한정반(Limited Drop)** — 선착순 구매. Redis Lua로 1차 필터링하고 DB 트랜잭션으로 재확인하는 이중 방어로 초과 판매 0건을 유지한다
-- **주문·결제** — 장바구니, Toss Payments 결제 승인/취소, 쿠폰
+- **주문·결제** — 장바구니, Toss Payments 결제 승인/취소, 쿠폰. 웹훅은 발신 IP 허용 목록으로 받고, 일일 배치로 거래를 대조한다
 - **회원** — JWT 무상태 인증(Access는 메모리, Refresh는 HttpOnly 쿠키), 위시리스트, 앨범 재입고 구독과 알림
 - **관리자** — 상품·주문·회원·쿠폰·한정반 관리, 매출/인기 상품 통계 대시보드, 감사 로그
-- **운영** — GitHub Actions로 빌드부터 배포까지 자동화하고, k6로 실제 부하를 걸어 동시성과 성능을 검증한다
+- **운영** — GitHub Actions로 빌드부터 배포까지 자동화하고, k6로 실제 부하를 걸어 동시성과 성능을 검증한다. 정합성 이상은 Slack으로 경보하고, 앱 지표는 OTLP로 Grafana Cloud에 상시 푸시한다
 
 ## 기술 스택
 
@@ -71,20 +71,27 @@ flowchart LR
 
     Toss["Toss Payments"]
     Discogs["Discogs API"]
+    Slack["Slack"]
+    Grafana["Grafana Cloud"]
 
     User -->|HTTPS| Nginx
     Backend -->|결제 승인·취소| Toss
+    Toss -.->|"웹훅(IP 허용 목록)"| Nginx
     Backend -. 카탈로그 적재·재검증 .-> Discogs
+    Backend -.->|경보| Slack
+    Backend -.->|지표 OTLP| Grafana
     Build -->|이미지 push| GHCR
     Build -->|dist scp| Static
     GHCR -. pull .-> Backend
 ```
 
-MySQL·Redis·백엔드가 EC2 한 대에 같이 떠 있고, 백엔드 컨테이너는 루프백에만 바인딩해 외부에서는 Nginx를 거쳐야만 닿는다. 한 대에 몰려 있는 만큼 주기 작업끼리 서로를 굶기지 않게, Discogs 재검증과 매출 집계는 MySQL named lock을 각각 다른 이름(`groove:discogs-resync`, `groove:sales-agg`)으로 잡는다. 배포는 `main` 푸시 → CI 게이트 → 백엔드 이미지를 GHCR로 push, 프론트는 빌드 산출물을 EC2로 직접 scp하는 두 경로로 나뉜다. 배포 중에는 보안그룹 22번을 GitHub Actions 러너 IP에만 열었다가 끝나면 회수하고, 헬스체크(`/api/v1/health`)가 통과해야 배포가 끝난다.
+MySQL·Redis·백엔드가 EC2 한 대에 같이 떠 있고, 백엔드 컨테이너는 루프백에만 바인딩해 외부에서는 Nginx를 거쳐야만 닿는다. 한 대에 몰려 있는 만큼 주기 작업끼리 서로를 굶기지 않게, 스케줄러로 도는 주기 작업(9개)은 작업마다 다른 이름의 MySQL named lock으로 한 번에 하나씩만 실행한다. 배포는 `main` 푸시 → CI 게이트 → 백엔드 이미지를 GHCR로 push, 프론트는 빌드 산출물을 EC2로 직접 scp하는 두 경로로 나뉜다. 배포 중에는 보안그룹 22번을 GitHub Actions 러너 IP에만 열었다가 끝나면 회수하고, 헬스체크(`/api/v1/health`)가 통과해야 배포가 끝난다.
 
 ## 로컬 실행
 
 ```bash
+# 0. (선택) Toss·Discogs 키를 쓸 때만: cp .env.example .env
+
 # 1. 인프라 (MySQL → localhost:3306, Redis → localhost:6379)
 docker compose up -d
 
@@ -114,7 +121,7 @@ groove/
 │   ├── docker-compose.prod.yml # 운영(EC2) 컴포즈
 │   ├── nginx/                  # 운영 Nginx 설정
 │   ├── scripts/                # 서버 초기화·배포·백업 스크립트
-│   └── k6/                     # 부하 테스트
+│   └── k6/                     # 부하·카오스 테스트
 ├── docker-compose.yml          # 로컬 인프라
 └── .github/workflows/          # CI, 배포
 ```
