@@ -163,7 +163,7 @@ class LimitedDropRedisServiceTest extends IntegrationTestSupport {
 	class GetAttemptsBatch {
 
 		@Test
-		@DisplayName("파이프라인으로 여러 드롭의 시도 집계를 한 번에 읽는다")
+		@DisplayName("드롭마다 순차 조회한 시도 집계를 id 로 묶어 반환한다")
 		void returnsAttemptsForEachDropInOneRoundTrip() {
 			// given
 			dropId = newDropId();
