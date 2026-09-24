@@ -13,6 +13,7 @@ import org.springframework.data.redis.connection.StringRedisConnection.StringTup
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
@@ -28,10 +29,12 @@ public class BoughtTogetherRedisService {
 	public static final Duration TTL = Duration.ofHours(2);
 
 	private final StringRedisTemplate redisTemplate;
+	private final RedisScript<List> boughtTogetherScoresScript;
 
 	/**
 	 * 상품별 ZSET 을 통째로 교체한다. 임시 키에 채운 뒤 RENAME 으로 스왑해, 집계 도중 조회하는 쪽이 절반만 채워진
 	 * ZSET 을 보지 않게 한다. 상대 상품이 없는 항목은 건너뛴다(RENAME 대상 임시 키가 생기지 않으므로).
+	 * 파이프라인이라 전용 연결을 하나 열었다 닫는다(시간 단위 배치라 허용한다).
 	 */
 	public void replaceAll(Map<Long, Map<Long, Long>> countsByProduct) {
 		if (countsByProduct.isEmpty()) {
@@ -75,23 +78,20 @@ public class BoughtTogetherRedisService {
 		}
 	}
 
-	/** 여러 상품의 점수를 파이프라인 한 번으로 조회한다. 결과가 없는 상품은 빈 맵으로 채운다. */
+	/** 여러 상품의 점수를 Lua 스크립트 EVAL 한 번으로 조회한다. 결과가 없는 상품은 빈 맵으로 채운다. */
+	@SuppressWarnings("unchecked")
 	public Map<Long, Map<Long, Double>> findScores(Collection<Long> productIds) {
 		if (productIds.isEmpty()) {
 			return Map.of();
 		}
 		try {
 			List<Long> orderedIds = List.copyOf(productIds);
-			List<Object> pipelinedResults = redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
-				StringRedisConnection stringConnection = (StringRedisConnection) connection;
-				for (Long productId : orderedIds) {
-					stringConnection.zRevRangeWithScores(boughtTogetherKey(productId), 0, -1);
-				}
-				return null;
-			});
+			List<String> keys = orderedIds.stream().map(BoughtTogetherRedisService::boughtTogetherKey).toList();
+			List<Object> results = redisTemplate.execute(boughtTogetherScoresScript, keys);
 			Map<Long, Map<Long, Double>> scoresByProduct = new LinkedHashMap<>();
 			for (int i = 0; i < orderedIds.size(); i++) {
-				scoresByProduct.put(orderedIds.get(i), toScoreMap(pipelinedResults.get(i)));
+				List<String> flatMembersAndScores = (List<String>) results.get(i);
+				scoresByProduct.put(orderedIds.get(i), toFlatScoreMap(flatMembersAndScores));
 			}
 			return scoresByProduct;
 		} catch (DataAccessException | NumberFormatException e) {
@@ -100,7 +100,7 @@ public class BoughtTogetherRedisService {
 		}
 	}
 
-	/** {@link StringTuple}(파이프라인 조회)과 {@link TypedTuple}(단건 조회) 둘 다 올 수 있어 함께 처리한다. */
+	/** {@link StringTuple}/{@link TypedTuple}(단건 조회)을 함께 처리한다. */
 	private Map<Long, Double> toScoreMap(Object tuples) {
 		if (!(tuples instanceof Set<?> tupleSet) || tupleSet.isEmpty()) {
 			return Map.of();
@@ -112,6 +112,18 @@ public class BoughtTogetherRedisService {
 			} else if (tuple instanceof TypedTuple<?> typedTuple && typedTuple.getValue() instanceof String value) {
 				scores.put(Long.valueOf(value), typedTuple.getScore());
 			}
+		}
+		return scores;
+	}
+
+	/** EVAL 로 조회한 평탄 배열([member, score, member, score, ...])을 score 내림차순 맵으로 바꾼다. */
+	private static Map<Long, Double> toFlatScoreMap(List<String> flatMembersAndScores) {
+		if (flatMembersAndScores == null || flatMembersAndScores.isEmpty()) {
+			return Map.of();
+		}
+		Map<Long, Double> scores = new LinkedHashMap<>();
+		for (int i = 0; i < flatMembersAndScores.size(); i += 2) {
+			scores.put(Long.valueOf(flatMembersAndScores.get(i)), Double.valueOf(flatMembersAndScores.get(i + 1)));
 		}
 		return scores;
 	}
