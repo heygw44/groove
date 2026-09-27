@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
-import com.groove.auth.repository.RefreshTokenRepository;
+import com.groove.auth.service.SessionRevoker;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
@@ -42,7 +42,7 @@ public class AdminMemberService {
 	private final MemberRepository memberRepository;
 	private final MemberQueryMapper memberQueryMapper;
 	private final OrderQueryMapper orderQueryMapper;
-	private final RefreshTokenRepository refreshTokenRepository;
+	private final SessionRevoker sessionRevoker;
 	private final AdminAuditLogService adminAuditLogService;
 	private final Clock clock;
 
@@ -81,7 +81,7 @@ public class AdminMemberService {
 
 		if (next == MemberStatus.SUSPENDED) {
 			member.suspend();
-			refreshTokenRepository.deleteAllByMemberId(memberId);
+			sessionRevoker.revokeAll(memberId);
 		} else {
 			member.activate();
 		}

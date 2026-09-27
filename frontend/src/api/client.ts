@@ -1,8 +1,11 @@
 import axios, { type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 
+import type { LoginReason } from '@/constants/authSession';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/store/authStore';
 import type { ApiError, ApiResponse } from '@/types/api';
+import { postAuthMessage } from '@/utils/authChannel';
+import { buildLoginUrl, currentPath } from '@/utils/loginUrl';
 import { withReissueLock } from '@/utils/reissueLock';
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
@@ -61,17 +64,16 @@ const getErrorCode = (error: unknown): string | undefined => {
   return data?.error?.code;
 };
 
-/** 재발급으로 살릴 수 없는 상태. 스토어·캐시를 비우고 로그인으로 보낸다. */
-const handleSessionExpired = () => {
+/** 재발급으로 살릴 수 없는 상태. 스토어·캐시를 비우고 다른 탭에도 알린 뒤 로그인으로 보낸다. */
+const handleSessionExpired = (reason?: LoginReason) => {
   useAuthStore.getState().clearAuth();
   queryClient.clear();
+  postAuthMessage({ type: 'logout', reason });
 
-  const { pathname, search } = window.location;
-  if (pathname === '/login') {
+  if (window.location.pathname === '/login') {
     return;
   }
-  const redirect = encodeURIComponent(`${pathname}${search}`);
-  window.location.href = `/login?redirect=${redirect}`;
+  window.location.href = buildLoginUrl({ reason, redirect: currentPath() });
 };
 
 interface PendingRequest {
@@ -128,7 +130,7 @@ client.interceptors.response.use(
     }
 
     /*
-     * 만료가 아닌 401(토큰 없음·서명 오류)은 재발급해도 살아나지 않는다.
+     * 만료가 아닌 401(토큰 없음·서명 오류·폐기)은 재발급해도 살아나지 않는다.
      * 다만 애초에 로그인 상태가 아니었다면 라우트 가드가 처리할 몫이라
      * 여기서 리다이렉트하지 않는다.
      */
@@ -171,7 +173,8 @@ client.interceptors.response.use(
     } catch (reissueError) {
       /* 대기 중이던 요청을 반드시 깨운다. 비우기만 하면 영원히 pending 이다. */
       rejectPending(reissueError);
-      handleSessionExpired();
+      const reason = getErrorCode(reissueError) === 'AUTH_SESSION_EXPIRED' ? 'expired' : undefined;
+      handleSessionExpired(reason);
       return Promise.reject(reissueError);
     } finally {
       isRefreshing = false;

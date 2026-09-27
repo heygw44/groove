@@ -69,7 +69,11 @@ public class JwtProvider {
 		Claims claims = parse(token, TYPE_ACCESS);
 		Long memberId = Long.valueOf(claims.getSubject());
 		MemberRole role = MemberRole.valueOf(claims.get(CLAIM_ROLE, String.class));
-		return new TokenClaims(memberId, role);
+		Date issuedAt = claims.getIssuedAt();
+		if (issuedAt == null) {
+			throw new BusinessException(ErrorCode.AUTH_INVALID_TOKEN);
+		}
+		return new TokenClaims(memberId, role, issuedAt.getTime() / 1000);
 	}
 
 	public RefreshTokenClaims parseRefreshToken(String token) {

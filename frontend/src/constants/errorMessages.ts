@@ -73,6 +73,9 @@ export const ERROR_MESSAGES: Record<string, string> = {
   ADMIN_CANNOT_MODIFY_ADMIN: '다른 관리자의 상태는 변경할 수 없습니다.',
   MEMBER_NOT_FOUND: '삭제되었거나 존재하지 않는 회원입니다.',
   AUTH_MEMBER_SUSPENDED: '정지된 계정입니다. 고객센터에 문의해주세요.',
+  AUTH_LOGIN_LOCKED:
+    '로그인에 여러 번 실패해 로그인이 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.',
+  AUTH_RATE_LIMITED: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
   RECOMMEND_PROFILE_NOT_FOUND: '아직 취향 프로필이 없습니다.',
   CATALOG_LOOKUP_FAILED: 'Discogs 조회에 실패했습니다. 잠시 후 다시 시도해주세요.',
   CATALOG_RELEASE_NOT_FOUND: '존재하지 않는 음반입니다.',

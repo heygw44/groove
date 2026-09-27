@@ -16,7 +16,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Redis 에 회원의 로그인 세션별 Refresh Token 을 보관한다.
- * 세션 키(Hash) {@code refresh:{memberId}:{sessionId}} 는 current/prev/prev_exp 필드를 갖고,
+ * 세션 키(Hash) {@code refresh:{memberId}:{sessionId}} 는 current/prev/prev_exp/abs_exp 필드를 갖고,
  * 인덱스 키(Set) {@code refresh-sessions:{memberId}} 는 회원의 살아있는 sessionId 목록을 갖는다.
  */
 @Repository
@@ -32,21 +32,23 @@ public class RefreshTokenRepository {
 	private final RedisScript<Long> refreshSaveScript;
 	private final RedisScript<List> refreshRotateScript;
 
-	public void save(Long memberId, String sessionId, String token) {
+	public void save(Long memberId, String sessionId, String token, long absExpMillis, long nowMillis) {
 		String ttlMillis = String.valueOf(jwtProperties.refreshTokenExpiry().toMillis());
 		redisTemplate.execute(refreshSaveScript,
 				List.of(sessionKey(memberId, sessionId), indexKey(memberId)),
-				token, sessionId, ttlMillis, sessionKeyPrefix(memberId));
+				token, sessionId, ttlMillis, sessionKeyPrefix(memberId),
+				String.valueOf(absExpMillis), String.valueOf(nowMillis));
 	}
 
 	@SuppressWarnings("unchecked")
 	public RefreshRotation rotate(Long memberId, String sessionId, String presented, String newToken,
-			long nowMillis) {
+			long nowMillis, long legacyAbsExpMillis) {
 		String graceMillis = String.valueOf(jwtProperties.refreshTokenGrace().toMillis());
 		String ttlMillis = String.valueOf(jwtProperties.refreshTokenExpiry().toMillis());
 		List<Object> result = redisTemplate.execute(refreshRotateScript,
 				List.of(sessionKey(memberId, sessionId), indexKey(memberId)),
-				presented, newToken, String.valueOf(nowMillis), graceMillis, ttlMillis, sessionId);
+				presented, newToken, String.valueOf(nowMillis), graceMillis, ttlMillis, sessionId,
+				String.valueOf(legacyAbsExpMillis));
 		return toRotation(result);
 	}
 
@@ -76,10 +78,11 @@ public class RefreshTokenRepository {
 		}
 		int code = ((Long) result.get(0)).intValue();
 		return switch (code) {
-			case 0 -> new RefreshRotation(RotationResult.NOT_FOUND, null);
-			case 1 -> new RefreshRotation(RotationResult.ROTATED, (String) result.get(1));
-			case 2 -> new RefreshRotation(RotationResult.GRACE, (String) result.get(1));
-			case 3 -> new RefreshRotation(RotationResult.REUSED, null);
+			case 0 -> new RefreshRotation(RotationResult.NOT_FOUND, null, 0L);
+			case 1 -> new RefreshRotation(RotationResult.ROTATED, (String) result.get(1), (Long) result.get(2));
+			case 2 -> new RefreshRotation(RotationResult.GRACE, (String) result.get(1), (Long) result.get(2));
+			case 3 -> new RefreshRotation(RotationResult.REUSED, null, 0L);
+			case 4 -> new RefreshRotation(RotationResult.EXPIRED, null, 0L);
 			default -> throw new IllegalStateException("알 수 없는 refresh_rotate 결과 코드: " + code);
 		};
 	}

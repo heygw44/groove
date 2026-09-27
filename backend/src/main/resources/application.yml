@@ -89,6 +89,9 @@ jwt:
 auth:
   cookie:
     secure: false   # 로컬 HTTP. 운영은 application-prod.yml 에서 true
+  session:
+    absolute-expiry: 30d
+    admin-absolute-expiry: 12h
 
 toss:
   client-key: ${TOSS_CLIENT_KEY:}
@@ -118,6 +121,11 @@ limited:
   meta-cache-ttl: 3s
 
 groove:
+  auth:
+    login-lock:
+      # 같은 이메일로 5회 연속 실패하면 15분 잠근다. 실패마다 창을 다시 걸어 마지막 실패로부터 15분이다.
+      max-failures: 5
+      window: 15m
   payment:
     reconcile:
       interval: 60s

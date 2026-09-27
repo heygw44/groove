@@ -1,6 +1,7 @@
 package com.groove.auth.service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.UUID;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,24 +19,43 @@ import com.groove.auth.repository.RefreshRotation;
 import com.groove.auth.repository.RefreshTokenRepository;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.config.AuthSessionProperties;
 import com.groove.global.config.JwtProperties;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 
-import lombok.RequiredArgsConstructor;
-
 /** 회원가입/로그인/토큰 재발급을 담당한다. */
 @Service
 @Transactional(readOnly = true)
-@RequiredArgsConstructor
 public class AuthService {
+
+	// 존재하지 않는 이메일도 실제 회원과 같은 BCrypt 연산을 한 번 겪게 해 응답 시간으로 이메일 존재 여부가
+	// 드러나지 않게 한다. 값 자체는 의미가 없고 비용만 맞추면 된다.
+	private static final String DUMMY_PASSWORD = "login-attempt-guard-dummy-password";
 
 	private final MemberRepository memberRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final RefreshTokenRepository refreshTokenRepository;
 	private final JwtProvider jwtProvider;
 	private final JwtProperties jwtProperties;
+	private final AuthSessionProperties sessionProperties;
 	private final Clock clock;
+	private final LoginAttemptGuard loginAttemptGuard;
+	private final String dummyPasswordHash;
+
+	public AuthService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
+			RefreshTokenRepository refreshTokenRepository, JwtProvider jwtProvider, JwtProperties jwtProperties,
+			AuthSessionProperties sessionProperties, Clock clock, LoginAttemptGuard loginAttemptGuard) {
+		this.memberRepository = memberRepository;
+		this.passwordEncoder = passwordEncoder;
+		this.refreshTokenRepository = refreshTokenRepository;
+		this.jwtProvider = jwtProvider;
+		this.jwtProperties = jwtProperties;
+		this.sessionProperties = sessionProperties;
+		this.clock = clock;
+		this.loginAttemptGuard = loginAttemptGuard;
+		this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD);
+	}
 
 	@Transactional
 	public SignupResponse signup(SignupRequest request) {
@@ -47,15 +67,22 @@ public class AuthService {
 	}
 
 	public AuthTokens login(LoginRequest request) {
-		Member member = memberRepository.findByEmail(request.email())
-				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
-		if (!passwordEncoder.matches(request.password(), member.getPassword())) {
+		loginAttemptGuard.checkNotLocked(request.email());
+		Member member = memberRepository.findByEmail(request.email()).orElse(null);
+		String hash = member != null ? member.getPassword() : dummyPasswordHash;
+		boolean matched = passwordEncoder.matches(request.password(), hash);
+		if (member == null || !matched) {
+			loginAttemptGuard.recordFailure(request.email());
 			throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
 		}
+		// 비밀번호가 맞았으니 정지/탈퇴는 로그인 시도 실패로 세지 않는다.
 		member.validateActive();
+		loginAttemptGuard.reset(request.email());
 		String sessionId = UUID.randomUUID().toString();
-		AuthTokens tokens = issueTokens(member, sessionId);
-		refreshTokenRepository.save(member.getId(), sessionId, tokens.refreshToken());
+		long now = clock.millis();
+		long absExp = now + sessionProperties.absoluteExpiry(member.getRole()).toMillis();
+		AuthTokens tokens = issueTokens(member, sessionId, capMaxAge(absExp - now));
+		refreshTokenRepository.save(member.getId(), sessionId, tokens.refreshToken(), absExp, now);
 		return tokens;
 	}
 
@@ -66,22 +93,29 @@ public class AuthService {
 		RefreshTokenClaims claims = jwtProvider.parseRefreshToken(refreshToken);
 		Long memberId = claims.memberId();
 		String sessionId = claims.sessionId();
-		String newToken = jwtProvider.createRefreshToken(memberId, sessionId);
 
+		// 세션 회전을 기록하기 전에 회원 상태부터 본다. 정지·탈퇴 회원의 회전 기록은 되살릴 수 없는 헛수고다.
+		Member member = memberRepository.findById(memberId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+		member.validateActive();
+
+		String newToken = jwtProvider.createRefreshToken(memberId, sessionId);
+		long now = clock.millis();
+		long legacyAbsExp = now + sessionProperties.absoluteExpiry(member.getRole()).toMillis();
 		RefreshRotation rotation =
-				refreshTokenRepository.rotate(memberId, sessionId, refreshToken, newToken, clock.millis());
+				refreshTokenRepository.rotate(memberId, sessionId, refreshToken, newToken, now, legacyAbsExp);
 		switch (rotation.result()) {
 			case NOT_FOUND -> throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND);
 			case REUSED -> throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_MISMATCH);
+			case EXPIRED -> throw new BusinessException(ErrorCode.AUTH_SESSION_EXPIRED);
 			default -> {
 			}
 		}
 
-		Member member = memberRepository.findById(memberId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
-		member.validateActive();
 		String accessToken = jwtProvider.createAccessToken(member.getId(), member.getRole());
-		return new AuthTokens(accessToken, rotation.refreshToken(), jwtProperties.accessTokenExpiry().toSeconds());
+		Duration maxAge = capMaxAge(rotation.absoluteExpiresAt() - now);
+		return new AuthTokens(accessToken, rotation.refreshToken(), jwtProperties.accessTokenExpiry().toSeconds(),
+				maxAge);
 	}
 
 	public void logout(Long memberId, String refreshToken) {
@@ -98,9 +132,15 @@ public class AuthService {
 		}
 	}
 
-	private AuthTokens issueTokens(Member member, String sessionId) {
+	private AuthTokens issueTokens(Member member, String sessionId, Duration maxAge) {
 		String accessToken = jwtProvider.createAccessToken(member.getId(), member.getRole());
 		String refreshToken = jwtProvider.createRefreshToken(member.getId(), sessionId);
-		return new AuthTokens(accessToken, refreshToken, jwtProperties.accessTokenExpiry().toSeconds());
+		return new AuthTokens(accessToken, refreshToken, jwtProperties.accessTokenExpiry().toSeconds(), maxAge);
+	}
+
+	private Duration capMaxAge(long remainingMillis) {
+		Duration remaining = Duration.ofMillis(remainingMillis);
+		Duration refreshTokenExpiry = jwtProperties.refreshTokenExpiry();
+		return remaining.compareTo(refreshTokenExpiry) < 0 ? remaining : refreshTokenExpiry;
 	}
 }

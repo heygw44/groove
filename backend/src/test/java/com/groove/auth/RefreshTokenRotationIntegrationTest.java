@@ -2,6 +2,11 @@ package com.groove.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +24,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.web.servlet.MockMvc;
 
 import com.groove.auth.dto.AuthTokens;
 import com.groove.auth.dto.LoginRequest;
@@ -31,6 +38,9 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.support.IntegrationTestSupport;
 
+import jakarta.servlet.http.Cookie;
+
+@AutoConfigureMockMvc
 class RefreshTokenRotationIntegrationTest extends IntegrationTestSupport {
 
 	private static final int CONCURRENT_REQUEST_COUNT = 20;
@@ -47,6 +57,9 @@ class RefreshTokenRotationIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	StringRedisTemplate redisTemplate;
+
+	@Autowired
+	MockMvc mockMvc;
 
 	private ExecutorService executorService;
 
@@ -250,6 +263,29 @@ class RefreshTokenRotationIntegrationTest extends IntegrationTestSupport {
 		}
 	}
 
+	@Nested
+	@DisplayName("절대 만료")
+	class AbsoluteExpiry {
+
+		@Test
+		@DisplayName("절대 만료가 지난 세션으로 /auth/reissue 를 호출하면 401 AUTH_SESSION_EXPIRED 와 만료 쿠키를 반환한다")
+		void returnsSessionExpiredWithExpiredCookie() throws Exception {
+			// given
+			String email = signup();
+			AuthTokens loginTokens = login(email);
+			Long memberId = jwtProvider.parseAccessToken(loginTokens.accessToken()).memberId();
+			String sessionId = jwtProvider.parseRefreshToken(loginTokens.refreshToken()).sessionId();
+			expireAbsoluteExpiry(memberId, sessionId);
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/reissue")
+							.cookie(new Cookie("refreshToken", loginTokens.refreshToken())))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_SESSION_EXPIRED")))
+					.andExpect(cookie().maxAge("refreshToken", 0));
+		}
+	}
+
 	private String signup() {
 		String email = "rotation-" + UUID.randomUUID() + "@groove.com";
 		authService.signup(new SignupRequest(email, PASSWORD, "그루버"));
@@ -262,5 +298,9 @@ class RefreshTokenRotationIntegrationTest extends IntegrationTestSupport {
 
 	private void expirePrevGrace(Long memberId, String sessionId) {
 		redisTemplate.opsForHash().put("refresh:" + memberId + ":" + sessionId, "prev_exp", "0");
+	}
+
+	private void expireAbsoluteExpiry(Long memberId, String sessionId) {
+		redisTemplate.opsForHash().put("refresh:" + memberId + ":" + sessionId, "abs_exp", "0");
 	}
 }

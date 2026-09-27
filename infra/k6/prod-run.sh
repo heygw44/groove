@@ -308,6 +308,14 @@ check_tunnel_route() {
 
 check_tunnel_route
 
+# setup 이 한 IP 에서 VU 수만큼 로그인하므로 nginx 로그인 rate limit 허용 목록에 넣는다. 중단돼도 반드시 뺀다.
+RATELIMIT_ALLOW_SCRIPT="${SCRIPT_DIR}/ratelimit-allow.sh"
+if ! "$RATELIMIT_ALLOW_SCRIPT" on >> "$RUN_LOG" 2>&1; then
+	log "ratelimit-allow.sh on 실패 — SSH_KEY/SSH_HOST 를 확인해라. 허용 목록 없이는 setup 로그인이 429 로 막힌다."
+	exit 2
+fi
+trap '"$RATELIMIT_ALLOW_SCRIPT" off >> "$RUN_LOG" 2>&1 || log "ratelimit-allow.sh off 실패 — 수동으로 비워라"' EXIT
+
 log "=== prod-run 시작: base=${BASE_URL} stages=[${VU_STAGES}] stock=${STOCK} out=${OUT_DIR} ==="
 SERVICE_DOWN=0
 

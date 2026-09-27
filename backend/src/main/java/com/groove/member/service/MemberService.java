@@ -4,7 +4,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.groove.auth.repository.RefreshTokenRepository;
+import com.groove.auth.service.SessionRevoker;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.dto.MemberResponse;
@@ -22,7 +22,7 @@ import lombok.RequiredArgsConstructor;
 public class MemberService {
 
 	private final MemberRepository memberRepository;
-	private final RefreshTokenRepository refreshTokenRepository;
+	private final SessionRevoker sessionRevoker;
 	private final PasswordEncoder passwordEncoder;
 
 	public MemberResponse getMyInfo(Long memberId) {
@@ -43,14 +43,16 @@ public class MemberService {
 			throw new BusinessException(ErrorCode.MEMBER_PASSWORD_MISMATCH);
 		}
 		member.changePassword(passwordEncoder.encode(request.newPassword()));
+		// refresh 쿠키 Path 가 /api/v1/auth 라 이 요청에선 현재 세션을 구분할 수 없어 전부 폐기한다.
+		sessionRevoker.revokeAll(memberId);
 	}
 
 	@Transactional
 	public void withdraw(Long memberId) {
 		Member member = findActiveMember(memberId);
 		member.withdraw();
-		// 탈퇴 즉시 재발급을 막기 위해 모든 세션을 폐기한다.
-		refreshTokenRepository.deleteAllByMemberId(memberId);
+		// 탈퇴 즉시 재발급·기존 access token 사용을 막기 위해 모든 세션을 폐기한다.
+		sessionRevoker.revokeAll(memberId);
 	}
 
 	private Member findActiveMember(Long memberId) {
