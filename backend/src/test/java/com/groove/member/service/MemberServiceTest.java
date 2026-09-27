@@ -18,7 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import com.groove.auth.repository.RefreshTokenRepository;
+import com.groove.auth.service.SessionRevoker;
 import com.groove.fixture.MemberFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -39,7 +39,7 @@ class MemberServiceTest {
 	MemberRepository memberRepository;
 
 	@Mock
-	RefreshTokenRepository refreshTokenRepository;
+	SessionRevoker sessionRevoker;
 
 	@Mock
 	PasswordEncoder passwordEncoder;
@@ -48,7 +48,7 @@ class MemberServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		memberService = new MemberService(memberRepository, refreshTokenRepository, passwordEncoder);
+		memberService = new MemberService(memberRepository, sessionRevoker, passwordEncoder);
 	}
 
 	@Nested
@@ -155,6 +155,7 @@ class MemberServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_PASSWORD_MISMATCH);
 			verify(passwordEncoder, never()).encode(any());
+			verify(sessionRevoker, never()).revokeAll(any());
 		}
 
 		@Test
@@ -172,6 +173,7 @@ class MemberServiceTest {
 
 			// then
 			assertThat(member.getPassword()).isEqualTo("new-encoded");
+			verify(sessionRevoker).revokeAll(MEMBER_ID);
 		}
 	}
 
@@ -191,7 +193,7 @@ class MemberServiceTest {
 
 			// then
 			assertThat(member.getStatus()).isEqualTo(MemberStatus.WITHDRAWN);
-			verify(refreshTokenRepository).deleteAllByMemberId(MEMBER_ID);
+			verify(sessionRevoker).revokeAll(MEMBER_ID);
 		}
 
 		@Test
@@ -206,7 +208,7 @@ class MemberServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
-			verify(refreshTokenRepository, never()).deleteAllByMemberId(any());
+			verify(sessionRevoker, never()).revokeAll(any());
 		}
 	}
 }

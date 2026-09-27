@@ -28,7 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
-import com.groove.auth.repository.RefreshTokenRepository;
+import com.groove.auth.service.SessionRevoker;
 import com.groove.fixture.MemberFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -61,7 +61,7 @@ class AdminMemberServiceTest {
 	OrderQueryMapper orderQueryMapper;
 
 	@Mock
-	RefreshTokenRepository refreshTokenRepository;
+	SessionRevoker sessionRevoker;
 
 	@Mock
 	AdminAuditLogService adminAuditLogService;
@@ -75,7 +75,7 @@ class AdminMemberServiceTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		adminMemberService = new AdminMemberService(memberRepository, memberQueryMapper, orderQueryMapper,
-				refreshTokenRepository, adminAuditLogService, clock);
+				sessionRevoker, adminAuditLogService, clock);
 	}
 
 	@Nested
@@ -236,7 +236,7 @@ class AdminMemberServiceTest {
 
 			// then
 			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
-			verify(refreshTokenRepository, never()).deleteAllByMemberId(any());
+			verify(sessionRevoker, never()).revokeAll(any());
 		}
 
 		@Test
@@ -255,7 +255,7 @@ class AdminMemberServiceTest {
 
 			// then
 			assertThat(response.status()).isEqualTo(MemberStatus.SUSPENDED);
-			verify(refreshTokenRepository).deleteAllByMemberId(MEMBER_ID);
+			verify(sessionRevoker).revokeAll(MEMBER_ID);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
 					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED");
 		}
@@ -276,7 +276,7 @@ class AdminMemberServiceTest {
 
 			// then
 			assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
-			verify(refreshTokenRepository, never()).deleteAllByMemberId(anyLong());
+			verify(sessionRevoker, never()).revokeAll(anyLong());
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
 					AdminAuditTargetType.MEMBER, MEMBER_ID, "SUSPENDED->ACTIVE");
 		}

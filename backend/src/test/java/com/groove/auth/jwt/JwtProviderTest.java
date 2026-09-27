@@ -44,6 +44,20 @@ class JwtProviderTest {
 			assertThat(claims.memberId()).isEqualTo(MEMBER_ID);
 			assertThat(claims.role()).isEqualTo(role);
 		}
+
+		@Test
+		@DisplayName("발급한 토큰을 파싱하면 issuedAt이 현재 시각(초 단위)으로 채워진다")
+		void parsedClaimsIncludeIssuedAt() {
+			// given
+			long beforeIssue = System.currentTimeMillis() / 1000;
+			String token = jwtProvider.createAccessToken(MEMBER_ID, MemberRole.USER);
+
+			// when
+			TokenClaims claims = jwtProvider.parseAccessToken(token);
+
+			// then
+			assertThat(claims.issuedAt()).isGreaterThanOrEqualTo(beforeIssue);
+		}
 	}
 
 	@Nested

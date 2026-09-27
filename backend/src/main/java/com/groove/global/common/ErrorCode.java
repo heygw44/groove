@@ -31,6 +31,7 @@ public enum ErrorCode {
 	AUTH_REFRESH_TOKEN_MISMATCH(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_SESSION_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인 유지 기간이 끝났습니다. 다시 로그인해주세요."),
 	AUTH_MEMBER_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 회원입니다."),
+	AUTH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 
 	// ===== MEMBER =====
 	MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다."),

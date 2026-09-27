@@ -6,6 +6,7 @@ import { Button } from '@/components/common/Button';
 import { Field } from '@/components/common/Field';
 import { FormError } from '@/components/common/FormError';
 import { Input } from '@/components/common/Input';
+import { LOGIN_NOTICE_MESSAGES } from '@/constants/authMessages';
 import { useLogin } from '@/hooks/mutations/useAuthMutations';
 import { loginSchema, type LoginFormValues } from '@/schemas/auth';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const loginMutation = useLogin();
+  const notice = LOGIN_NOTICE_MESSAGES.get(searchParams.get('reason') ?? '');
   const {
     register,
     handleSubmit,
@@ -43,6 +45,15 @@ export default function LoginPage() {
         <p className="mt-1.5 text-sm text-content-muted">
           주문 내역과 배송지를 관리하려면 로그인해주세요.
         </p>
+
+        {notice && (
+          <p
+            role="status"
+            className="mt-4 rounded-md border border-line bg-surface-muted px-3 py-2.5 text-sm text-content-muted"
+          >
+            {notice}
+          </p>
+        )}
 
         <form className="mt-6 flex flex-col gap-4" onSubmit={onSubmit} noValidate>
           <FormError message={errors.root?.serverError?.message} />

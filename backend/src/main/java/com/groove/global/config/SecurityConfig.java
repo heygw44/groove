@@ -2,6 +2,7 @@ package com.groove.global.config;
 
 import static org.springframework.security.config.Customizer.withDefaults;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import com.groove.auth.jwt.AccessTokenRevocationChecker;
 import com.groove.auth.jwt.JwtAuthenticationFilter;
 import com.groove.auth.jwt.JwtProvider;
 
@@ -34,6 +36,7 @@ public class SecurityConfig {
 	private final RestAuthenticationEntryPoint authenticationEntryPoint;
 	private final RestAccessDeniedHandler accessDeniedHandler;
 	private final JwtProvider jwtProvider;
+	private final ObjectProvider<AccessTokenRevocationChecker> revocationCheckerProvider;
 
 	private static final String[] PUBLIC_PATHS = {
 		"/api/v1/health",
@@ -74,7 +77,8 @@ public class SecurityConfig {
 						.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 						.requestMatchers(HttpMethod.POST, "/api/v1/files/**").hasRole("ADMIN")
 						.anyRequest().authenticated())
-				.addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class);
+				.addFilterBefore(new JwtAuthenticationFilter(jwtProvider, revocationCheckerProvider.getIfAvailable()),
+						UsernamePasswordAuthenticationFilter.class);
 		return http.build();
 	}
 
