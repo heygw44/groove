@@ -14,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Duration;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -140,7 +142,7 @@ class AuthControllerTest {
 		void returnsTokenResponseWithRefreshCookie() throws Exception {
 			// given
 			LoginRequest request = new LoginRequest("groover@groove.com", "password1");
-			AuthTokens tokens = new AuthTokens("access-token", "refresh", 1800L);
+			AuthTokens tokens = new AuthTokens("access-token", "refresh", 1800L, jwtProperties.refreshTokenExpiry());
 			given(authService.login(any(LoginRequest.class))).willReturn(tokens);
 
 			// when & then
@@ -216,18 +218,20 @@ class AuthControllerTest {
 		@DisplayName("유효한 쿠키면 200 과 새 토큰, 새 refresh 쿠키를 반환한다")
 		void returnsNewTokensWhenCookieValid() throws Exception {
 			// given
-			AuthTokens tokens = new AuthTokens("new-access", "new-refresh", 1800L);
+			Duration maxAge = Duration.ofHours(12);
+			AuthTokens tokens = new AuthTokens("new-access", "new-refresh", 1800L, maxAge);
 			given(authService.reissue("old")).willReturn(tokens);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "old")))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.accessToken", is("new-access")))
-					.andExpect(cookie().value("refreshToken", "new-refresh"));
+					.andExpect(cookie().value("refreshToken", "new-refresh"))
+					.andExpect(cookie().maxAge("refreshToken", (int) maxAge.toSeconds()));
 		}
 
 		@Test
-		@DisplayName("쿠키가 없으면 401 AUTH_REFRESH_TOKEN_NOT_FOUND 를 반환한다")
+		@DisplayName("쿠키가 없으면 401 AUTH_REFRESH_TOKEN_NOT_FOUND 와 만료된 쿠키를 반환한다")
 		void returnsUnauthorizedWhenCookieMissing() throws Exception {
 			// given
 			willThrow(new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND))
@@ -236,12 +240,14 @@ class AuthControllerTest {
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue"))
 					.andExpect(status().isUnauthorized())
-					.andExpect(jsonPath("$.error.code", is("AUTH_REFRESH_TOKEN_NOT_FOUND")));
+					.andExpect(jsonPath("$.error.code", is("AUTH_REFRESH_TOKEN_NOT_FOUND")))
+					.andExpect(cookie().value("refreshToken", ""))
+					.andExpect(cookie().maxAge("refreshToken", 0));
 			verify(authService).reissue(isNull());
 		}
 
 		@Test
-		@DisplayName("저장된 토큰과 다르면 401 AUTH_REFRESH_TOKEN_MISMATCH 를 반환한다")
+		@DisplayName("저장된 토큰과 다르면 401 AUTH_REFRESH_TOKEN_MISMATCH 와 만료된 쿠키를 반환한다")
 		void returnsUnauthorizedWhenTokenMismatch() throws Exception {
 			// given
 			willThrow(new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_MISMATCH))
@@ -250,7 +256,22 @@ class AuthControllerTest {
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "stolen")))
 					.andExpect(status().isUnauthorized())
-					.andExpect(jsonPath("$.error.code", is("AUTH_REFRESH_TOKEN_MISMATCH")));
+					.andExpect(jsonPath("$.error.code", is("AUTH_REFRESH_TOKEN_MISMATCH")))
+					.andExpect(cookie().maxAge("refreshToken", 0));
+		}
+
+		@Test
+		@DisplayName("절대 만료가 지났으면 401 AUTH_SESSION_EXPIRED 와 만료된 쿠키를 반환한다")
+		void returnsUnauthorizedWhenSessionExpired() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.AUTH_SESSION_EXPIRED))
+					.given(authService).reissue(eq("expired-session"));
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "expired-session")))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_SESSION_EXPIRED")))
+					.andExpect(cookie().maxAge("refreshToken", 0));
 		}
 	}
 
