@@ -6,7 +6,6 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
 import com.groove.global.config.AuthCookieProperties;
-import com.groove.global.config.JwtProperties;
 
 import lombok.RequiredArgsConstructor;
 
@@ -20,11 +19,10 @@ public class RefreshTokenCookieFactory {
 	private static final String PATH = "/api/v1/auth";
 	private static final String SAME_SITE = "Lax";
 
-	private final JwtProperties jwtProperties;
 	private final AuthCookieProperties cookieProperties;
 
-	public ResponseCookie create(String refreshToken) {
-		return build(refreshToken, jwtProperties.refreshTokenExpiry());
+	public ResponseCookie create(String refreshToken, Duration maxAge) {
+		return build(refreshToken, maxAge);
 	}
 
 	public ResponseCookie expire() {

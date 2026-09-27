@@ -94,9 +94,10 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_MEMBER_SUSPENDED")));
 
+			// 재발급은 세션 회전보다 회원 상태를 먼저 봐서 정지 사유를 그대로 드러낸다.
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(refreshCookie))
-					.andExpect(status().isUnauthorized())
-					.andExpect(jsonPath("$.error.code", is("AUTH_REFRESH_TOKEN_NOT_FOUND")));
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_MEMBER_SUSPENDED")));
 
 			mockMvc.perform(get("/api/v1/members/me").header(HttpHeaders.AUTHORIZATION, accessToken))
 					.andExpect(status().isForbidden())

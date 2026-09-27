@@ -89,6 +89,9 @@ jwt:
 auth:
   cookie:
     secure: false   # 로컬 HTTP. 운영은 application-prod.yml 에서 true
+  session:
+    absolute-expiry: 30d
+    admin-absolute-expiry: 12h
 
 toss:
   client-key: ${TOSS_CLIENT_KEY:}
