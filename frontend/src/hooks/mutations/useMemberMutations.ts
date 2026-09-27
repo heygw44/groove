@@ -4,6 +4,8 @@ import { changePassword, updateNickname, withdraw } from '@/api/member';
 import { memberKeys } from '@/hooks/queries/queryKeys';
 import { useAuthStore } from '@/store/authStore';
 import type { NicknameUpdateRequest, PasswordChangeRequest } from '@/types/member';
+import { postAuthMessage } from '@/utils/authChannel';
+import { buildLoginUrl } from '@/utils/loginUrl';
 
 export const useUpdateNickname = () => {
   const queryClient = useQueryClient();
@@ -25,7 +27,8 @@ export const useChangePassword = () =>
     /* 서버가 비밀번호 변경 시 refresh 세션을 전부 지우고 access token 도 무효화한다.
      * 탈퇴와 같은 이유로 하드 이동한다. */
     onSuccess: () => {
-      window.location.replace('/login?reason=password-changed');
+      postAuthMessage({ type: 'logout', reason: 'password-changed' });
+      window.location.replace(buildLoginUrl({ reason: 'password-changed' }));
     },
   });
 
@@ -41,6 +44,7 @@ export const useWithdraw = () =>
      * 새로 열면 스토어와 캐시가 함께 사라져 정리할 것도 없다.
      */
     onSuccess: () => {
+      postAuthMessage({ type: 'logout' });
       window.location.replace('/');
     },
   });

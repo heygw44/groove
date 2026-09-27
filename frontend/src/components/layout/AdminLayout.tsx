@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { AdminIdleGuard } from '@/components/admin/AdminIdleGuard';
 import { PageContainer } from '@/components/common/PageContainer';
 import { RouteFallback } from '@/components/common/RouteFallback';
 
@@ -184,6 +185,7 @@ const NAV_ITEMS: AdminNavItem[] = [
 export function AdminLayout() {
   return (
     <PageContainer size="xl">
+      <AdminIdleGuard />
       <h1 className="mb-6 text-2xl font-bold tracking-tight">관리자</h1>
 
       <div className="grid gap-6 md:grid-cols-[196px_minmax(0,1fr)] md:gap-11">
