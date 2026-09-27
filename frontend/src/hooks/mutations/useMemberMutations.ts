@@ -20,7 +20,14 @@ export const useUpdateNickname = () => {
 };
 
 export const useChangePassword = () =>
-  useMutation({ mutationFn: (payload: PasswordChangeRequest) => changePassword(payload) });
+  useMutation({
+    mutationFn: (payload: PasswordChangeRequest) => changePassword(payload),
+    /* 서버가 비밀번호 변경 시 refresh 세션을 전부 지우고 access token 도 무효화한다.
+     * 탈퇴와 같은 이유로 하드 이동한다. */
+    onSuccess: () => {
+      window.location.replace('/login?reason=password-changed');
+    },
+  });
 
 export const useWithdraw = () =>
   useMutation({

@@ -5,18 +5,15 @@ import { Button } from '@/components/common/Button';
 import { Field } from '@/components/common/Field';
 import { FormError } from '@/components/common/FormError';
 import { Input } from '@/components/common/Input';
-import { useToast } from '@/components/common/toastContext';
 import { useChangePassword } from '@/hooks/mutations/useMemberMutations';
 import { passwordChangeSchema, type PasswordChangeFormValues } from '@/schemas/member';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
 
 export function PasswordChangeForm() {
-  const { showToast } = useToast();
   const changeMutation = useChangePassword();
   const {
     register,
     handleSubmit,
-    reset,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<PasswordChangeFormValues>({
@@ -30,11 +27,8 @@ export function PasswordChangeForm() {
       currentPassword: values.currentPassword,
       newPassword: values.newPassword,
     };
+    // 성공하면 useChangePassword 가 로그인 화면으로 하드 이동시킨다. 토스트·reset 은 무의미하다.
     changeMutation.mutate(payload, {
-      onSuccess: () => {
-        showToast('success', '비밀번호를 변경했습니다.');
-        reset();
-      },
       onError: (error) => {
         if (!applyFieldErrors(error, setError)) {
           setError('root.serverError', { message: getErrorMessage(error) });

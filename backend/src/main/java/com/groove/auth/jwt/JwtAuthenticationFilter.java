@@ -31,9 +31,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 	private static final String BEARER_PREFIX = "Bearer ";
 
 	private final JwtProvider jwtProvider;
+	private final AccessTokenRevocationChecker revocationChecker;
 
-	public JwtAuthenticationFilter(JwtProvider jwtProvider) {
+	/** revocationChecker 는 null 을 허용한다. plain @Component 라 @WebMvcTest 슬라이스에는 빈이 없다. */
+	public JwtAuthenticationFilter(JwtProvider jwtProvider, AccessTokenRevocationChecker revocationChecker) {
 		this.jwtProvider = jwtProvider;
+		this.revocationChecker = revocationChecker;
 	}
 
 	@Override
@@ -65,6 +68,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
 	private void authenticate(String token) {
 		TokenClaims claims = jwtProvider.parseAccessToken(token);
+		if (revocationChecker != null) {
+			revocationChecker.check(claims);
+		}
 		LoginMember loginMember = new LoginMember(claims.memberId(), claims.role());
 		List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority(claims.role().authority()));
 		Authentication authentication = new UsernamePasswordAuthenticationToken(loginMember, null, authorities);
