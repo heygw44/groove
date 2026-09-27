@@ -6,8 +6,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -66,6 +68,9 @@ class AuthServiceTest {
 	@Mock
 	JwtProvider jwtProvider;
 
+	@Mock
+	LoginAttemptGuard loginAttemptGuard;
+
 	JwtProperties jwtProperties = new JwtProperties(
 			"test-secret-key-for-jwt-signing-must-be-long-enough-000000", Duration.ofMinutes(30), Duration.ofDays(14),
 			Duration.ofSeconds(10));
@@ -79,7 +84,7 @@ class AuthServiceTest {
 	@BeforeEach
 	void setUp() {
 		authService = new AuthService(memberRepository, passwordEncoder, refreshTokenRepository, jwtProvider,
-				jwtProperties, sessionProperties, clock);
+				jwtProperties, sessionProperties, clock, loginAttemptGuard);
 	}
 
 	@Nested
@@ -133,7 +138,24 @@ class AuthServiceTest {
 	class Login {
 
 		@Test
-		@DisplayName("이메일이 존재하지 않으면 AUTH_INVALID_CREDENTIALS 예외를 던진다")
+		@DisplayName("잠겨 있으면 AUTH_LOGIN_LOCKED 예외를 던지고 인증을 시도하지 않는다")
+		void throwsWhenLocked() {
+			// given
+			LoginRequest request = new LoginRequest("groover@groove.com", "password1");
+			willThrow(new BusinessException(ErrorCode.AUTH_LOGIN_LOCKED))
+					.given(loginAttemptGuard).checkNotLocked(request.email());
+
+			// when & then
+			assertThatThrownBy(() -> authService.login(request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_LOGIN_LOCKED);
+			verify(memberRepository, never()).findByEmail(any());
+			verify(passwordEncoder, never()).matches(any(), any());
+		}
+
+		@Test
+		@DisplayName("이메일이 존재하지 않으면 AUTH_INVALID_CREDENTIALS 예외를 던지고 실패를 기록한다")
 		void throwsWhenEmailNotFound() {
 			// given
 			LoginRequest request = new LoginRequest("groover@groove.com", "password1");
@@ -144,10 +166,13 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS);
+			// 존재하지 않는 이메일도 더미 해시로 BCrypt 를 한 번 태워 타이밍으로 이메일 존재 여부가 드러나지 않게 한다.
+			verify(passwordEncoder).matches(eq(request.password()), isNull());
+			verify(loginAttemptGuard).recordFailure(request.email());
 		}
 
 		@Test
-		@DisplayName("비밀번호가 일치하지 않으면 AUTH_INVALID_CREDENTIALS 예외를 던진다")
+		@DisplayName("비밀번호가 일치하지 않으면 AUTH_INVALID_CREDENTIALS 예외를 던지고 실패를 기록한다")
 		void throwsWhenPasswordMismatch() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
@@ -161,10 +186,11 @@ class AuthServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS);
 			verify(refreshTokenRepository, never()).save(anyLong(), anyString(), anyString(), anyLong(), anyLong());
+			verify(loginAttemptGuard).recordFailure(request.email());
 		}
 
 		@Test
-		@DisplayName("탈퇴한 회원이면 MEMBER_WITHDRAWN 예외를 던진다")
+		@DisplayName("탈퇴한 회원이면 MEMBER_WITHDRAWN 예외를 던지고 실패로 기록하지 않는다")
 		void throwsWhenMemberWithdrawn() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.createWithdrawn(), MEMBER_ID);
@@ -177,10 +203,12 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
+			verify(loginAttemptGuard, never()).recordFailure(any());
+			verify(loginAttemptGuard, never()).reset(any());
 		}
 
 		@Test
-		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던진다")
+		@DisplayName("정지된 회원이면 AUTH_MEMBER_SUSPENDED 예외를 던지고 실패로 기록하지 않는다")
 		void throwsWhenMemberSuspended() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.createSuspended(), MEMBER_ID);
@@ -194,10 +222,12 @@ class AuthServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
 			verify(refreshTokenRepository, never()).save(anyLong(), anyString(), anyString(), anyLong(), anyLong());
+			verify(loginAttemptGuard, never()).recordFailure(any());
+			verify(loginAttemptGuard, never()).reset(any());
 		}
 
 		@Test
-		@DisplayName("인증에 성공하면 새 세션 id 로 토큰을 발급하고 저장한다")
+		@DisplayName("인증에 성공하면 실패 카운터를 초기화하고 새 세션 id 로 토큰을 발급해 저장한다")
 		void issuesTokensAndSavesRefresh() {
 			// given
 			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
@@ -212,6 +242,7 @@ class AuthServiceTest {
 
 			// then
 			verify(refreshTokenRepository).save(eq(MEMBER_ID), anyString(), eq("refresh"), anyLong(), anyLong());
+			verify(loginAttemptGuard).reset(request.email());
 			assertThat(tokens.accessToken()).isEqualTo("access");
 			assertThat(tokens.expiresIn()).isEqualTo(1800L);
 		}

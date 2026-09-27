@@ -24,13 +24,14 @@ import com.groove.global.config.JwtProperties;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 
-import lombok.RequiredArgsConstructor;
-
 /** 회원가입/로그인/토큰 재발급을 담당한다. */
 @Service
 @Transactional(readOnly = true)
-@RequiredArgsConstructor
 public class AuthService {
+
+	// 존재하지 않는 이메일도 실제 회원과 같은 BCrypt 연산을 한 번 겪게 해 응답 시간으로 이메일 존재 여부가
+	// 드러나지 않게 한다. 값 자체는 의미가 없고 비용만 맞추면 된다.
+	private static final String DUMMY_PASSWORD = "login-attempt-guard-dummy-password";
 
 	private final MemberRepository memberRepository;
 	private final PasswordEncoder passwordEncoder;
@@ -39,6 +40,22 @@ public class AuthService {
 	private final JwtProperties jwtProperties;
 	private final AuthSessionProperties sessionProperties;
 	private final Clock clock;
+	private final LoginAttemptGuard loginAttemptGuard;
+	private final String dummyPasswordHash;
+
+	public AuthService(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
+			RefreshTokenRepository refreshTokenRepository, JwtProvider jwtProvider, JwtProperties jwtProperties,
+			AuthSessionProperties sessionProperties, Clock clock, LoginAttemptGuard loginAttemptGuard) {
+		this.memberRepository = memberRepository;
+		this.passwordEncoder = passwordEncoder;
+		this.refreshTokenRepository = refreshTokenRepository;
+		this.jwtProvider = jwtProvider;
+		this.jwtProperties = jwtProperties;
+		this.sessionProperties = sessionProperties;
+		this.clock = clock;
+		this.loginAttemptGuard = loginAttemptGuard;
+		this.dummyPasswordHash = passwordEncoder.encode(DUMMY_PASSWORD);
+	}
 
 	@Transactional
 	public SignupResponse signup(SignupRequest request) {
@@ -50,12 +67,17 @@ public class AuthService {
 	}
 
 	public AuthTokens login(LoginRequest request) {
-		Member member = memberRepository.findByEmail(request.email())
-				.orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
-		if (!passwordEncoder.matches(request.password(), member.getPassword())) {
+		loginAttemptGuard.checkNotLocked(request.email());
+		Member member = memberRepository.findByEmail(request.email()).orElse(null);
+		String hash = member != null ? member.getPassword() : dummyPasswordHash;
+		boolean matched = passwordEncoder.matches(request.password(), hash);
+		if (member == null || !matched) {
+			loginAttemptGuard.recordFailure(request.email());
 			throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
 		}
+		// 비밀번호가 맞았으니 정지/탈퇴는 로그인 시도 실패로 세지 않는다.
 		member.validateActive();
+		loginAttemptGuard.reset(request.email());
 		String sessionId = UUID.randomUUID().toString();
 		long now = clock.millis();
 		long absExp = now + sessionProperties.absoluteExpiry(member.getRole()).toMillis();

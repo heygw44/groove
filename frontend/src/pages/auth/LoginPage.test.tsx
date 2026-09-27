@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { AxiosError } from 'axios';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -79,5 +81,33 @@ describe('LoginPage', () => {
 
     // then
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      'AUTH_LOGIN_LOCKED',
+      '로그인에 여러 번 실패해 로그인이 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.',
+    ],
+    ['AUTH_RATE_LIMITED', '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'],
+  ])('%s 로 거절되면 제한 안내를 보여준다', async (code, message) => {
+    // given
+    const error = new AxiosError('Request failed', undefined, undefined, undefined, {
+      status: 429,
+      data: { error: { code, message: 'server message' } },
+    } as never);
+    const mutate = vi.fn((_values: unknown, options: { onError: (e: unknown) => void }) =>
+      options.onError(error),
+    );
+    vi.mocked(useLogin).mockReturnValue({ mutate } as unknown as ReturnType<typeof useLogin>);
+    const user = userEvent.setup();
+    renderPage('');
+
+    // when
+    await user.type(screen.getByLabelText('이메일'), 'member@groove.com');
+    await user.type(screen.getByLabelText('비밀번호'), 'password1234!');
+    await user.click(screen.getByRole('button', { name: '로그인' }));
+
+    // then
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
   });
 });

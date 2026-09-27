@@ -7,6 +7,7 @@ set -euo pipefail
 SRC_DIR="${SRC_DIR:-/opt/groove/nginx}"
 NGINX_CONF="/etc/nginx/nginx.conf"
 SITE_CONF="/etc/nginx/sites-available/groove.conf"
+RATELIMIT_ALLOW="/etc/nginx/groove-ratelimit-allow.conf"
 
 # 이번 실행에서 실제로 덮어쓴 대상만 담는다 — 복원 대상을 이걸로 한정해야
 # 이전 배포가 남긴 다른 파일의 .bak 을 엉뚱하게 다시 덮어쓰지 않는다.
@@ -60,6 +61,13 @@ fi
 
 sudo ln -sf "$SITE_CONF" /etc/nginx/sites-enabled/groove.conf
 sudo rm -f /etc/nginx/sites-enabled/default
+
+# nginx.conf 의 geo 가 include 하는 rate limit 허용 목록. 파일이 없으면 nginx -t 가 실패한다.
+# 내용은 infra/k6/ratelimit-allow.sh 가 관리하므로 있으면 건드리지 않는다.
+if [ ! -f "$RATELIMIT_ALLOW" ]; then
+	sudo touch "$RATELIMIT_ALLOW"
+	log "생성함(빈 허용 목록): ${RATELIMIT_ALLOW}"
+fi
 
 if [ "$changed" -eq 0 ]; then
 	log "변경 없음: nginx 설정 유지"
