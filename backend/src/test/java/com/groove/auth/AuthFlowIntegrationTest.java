@@ -286,6 +286,77 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 		}
 	}
 
+	@Nested
+	@DisplayName("로그인 실패 잠금")
+	class LoginLockFlow {
+
+		@Test
+		@DisplayName("같은 이메일로 5회 연속 실패하면 올바른 비밀번호로도 429 를 반환한다")
+		void locksAfterFiveConsecutiveFailures() throws Exception {
+			// given
+			String email = "flow-" + UUID.randomUUID() + "@groove.com";
+			String password = "password1";
+			signup(email, password);
+			for (int i = 0; i < 5; i++) {
+				attemptLogin(email, "wrong-password");
+			}
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/login")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new LoginRequest(email, password))))
+					.andExpect(status().isTooManyRequests())
+					.andExpect(jsonPath("$.error.code", is("AUTH_LOGIN_LOCKED")));
+		}
+
+		@Test
+		@DisplayName("잠기기 전에 로그인에 성공하면 실패 카운터가 초기화된다")
+		void resetsCounterOnSuccessBeforeLock() throws Exception {
+			// given
+			String email = "flow-" + UUID.randomUUID() + "@groove.com";
+			String password = "password1";
+			signup(email, password);
+			for (int i = 0; i < 4; i++) {
+				attemptLogin(email, "wrong-password");
+			}
+			login(email, password);
+			for (int i = 0; i < 4; i++) {
+				attemptLogin(email, "wrong-password");
+			}
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/login")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new LoginRequest(email, "wrong-password"))))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_INVALID_CREDENTIALS")));
+		}
+
+		@Test
+		@DisplayName("존재하지 않는 이메일도 5회 시도 후 잠긴다")
+		void locksUnknownEmailAfterFiveAttempts() throws Exception {
+			// given
+			String email = "flow-" + UUID.randomUUID() + "@groove.com";
+			for (int i = 0; i < 5; i++) {
+				attemptLogin(email, "password1");
+			}
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/login")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new LoginRequest(email, "password1"))))
+					.andExpect(status().isTooManyRequests())
+					.andExpect(jsonPath("$.error.code", is("AUTH_LOGIN_LOCKED")));
+		}
+	}
+
+	private void attemptLogin(String email, String password) throws Exception {
+		mockMvc.perform(post("/api/v1/auth/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(new LoginRequest(email, password))))
+				.andExpect(status().isUnauthorized());
+	}
+
 	private MvcResult signup(String email, String password) throws Exception {
 		SignupRequest request = new SignupRequest(email, password, "그루버");
 		return mockMvc.perform(post("/api/v1/auth/signup")
