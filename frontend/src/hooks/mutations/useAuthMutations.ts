@@ -7,6 +7,7 @@ import { memberKeys } from '@/hooks/queries/queryKeys';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/store/authStore';
 import type { LoginRequest, SignupRequest } from '@/types/member';
+import { postAuthMessage } from '@/utils/authChannel';
 
 export const useSignup = () =>
   useMutation({ mutationFn: (payload: SignupRequest) => signup(payload) });
@@ -51,6 +52,7 @@ export const useLogout = () => {
     onSettled: () => {
       clearAuth();
       queryClient.clear();
+      postAuthMessage({ type: 'logout' });
       navigate('/login', { replace: true });
     },
   });

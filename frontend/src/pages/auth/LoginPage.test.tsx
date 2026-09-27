@@ -25,7 +25,9 @@ const renderPage = (search: string) => {
 };
 
 beforeEach(() => {
-  vi.mocked(useLogin).mockReturnValue({ mutate: vi.fn() } as unknown as ReturnType<typeof useLogin>);
+  vi.mocked(useLogin).mockReturnValue({ mutate: vi.fn() } as unknown as ReturnType<
+    typeof useLogin
+  >);
 });
 
 afterEach(() => {
@@ -40,6 +42,26 @@ describe('LoginPage', () => {
     // then
     expect(screen.getByRole('status')).toHaveTextContent(
       '비밀번호가 변경되어 다시 로그인해 주세요.',
+    );
+  });
+
+  it('reason=idle 이면 유휴 로그아웃 안내를 보여준다', () => {
+    // when
+    renderPage('?reason=idle');
+
+    // then
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '오랫동안 활동이 없어 로그아웃되었습니다. 다시 로그인해 주세요.',
+    );
+  });
+
+  it('reason=expired 면 세션 만료 안내를 보여준다', () => {
+    // when
+    renderPage('?reason=expired');
+
+    // then
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '로그인 유지 기간이 끝났습니다. 다시 로그인해 주세요.',
     );
   });
 

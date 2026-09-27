@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from 'react';
 import { reissue } from '@/api/auth';
 import { getMe } from '@/api/member';
 import { memberKeys } from '@/hooks/queries/queryKeys';
+import { useAuthChannelSync } from '@/hooks/useAuthChannelSync';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/store/authStore';
 import { withReissueLock } from '@/utils/reissueLock';
@@ -42,6 +43,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     bootstrapPromise ??= bootstrap();
   }, []);
+
+  /* 라우터 바깥이라 다른 탭의 로그아웃을 받으면 하드 네비게이션으로 이동한다. */
+  useAuthChannelSync();
 
   return <>{children}</>;
 }
