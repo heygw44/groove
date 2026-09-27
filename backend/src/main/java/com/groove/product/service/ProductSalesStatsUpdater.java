@@ -9,7 +9,7 @@ import com.groove.product.repository.ProductRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** 판매 수량 재계산을 호출하는 세 지점(결제 승인, 주문 취소, 관리자 상태 전이)의 중복을 없앤 협력자. */
+/** 판매 수량 재계산을 호출하는 두 지점(결제 승인, 결제된 주문의 취소 복구)의 중복을 없앤 협력자. */
 @Service
 @RequiredArgsConstructor
 public class ProductSalesStatsUpdater {
