@@ -68,6 +68,14 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 	}
 
 	private Order persistOrder(Member member, String orderNumber, Product product, int quantity) {
+		Order order = persistUnplacedOrder(member, orderNumber, product, quantity);
+		order.place(LocalDateTime.now());
+		em.flush();
+		return order;
+	}
+
+	/** 결제 전(미확정) 주문을 만든다. placed_at 필터로 숨겨지는지 검증할 때 쓴다. */
+	private Order persistUnplacedOrder(Member member, String orderNumber, Product product, int quantity) {
 		Order order = OrderFixture.create(member, orderNumber);
 		order.addItem(product, quantity);
 		em.persist(order);
@@ -125,7 +133,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
-		@DisplayName("최신순(created_at DESC, id DESC)으로 반환한다")
+		@DisplayName("최신순(placed_at DESC, id DESC)으로 반환한다")
 		void sortsByLatest() {
 			// given
 			Order first = persistOrder(owner, "20260903-OQM00005", kindOfBlue, 1);
@@ -140,6 +148,43 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(result).extracting(OrderSummaryResponse::id)
 					.containsExactly(third.getId(), second.getId(), first.getId());
+		}
+
+		@Test
+		@DisplayName("생성 순서와 달라도 확정 시각(placed_at) 순으로 반환한다")
+		void sortsByPlacedAtEvenWhenCreationOrderDiffers() {
+			// given: created_at 순서는 first -> second 지만, 확정은 second 를 먼저 한다
+			Order first = persistUnplacedOrder(owner, "20260903-OQM00024", kindOfBlue, 1);
+			Order second = persistUnplacedOrder(owner, "20260903-OQM00025", kindOfBlue, 1);
+			LocalDateTime baseTime = LocalDateTime.now();
+			second.place(baseTime);
+			first.place(baseTime.plusMinutes(1));
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), null, 0, 20));
+
+			// then
+			assertThat(result).extracting(OrderSummaryResponse::id)
+					.containsExactly(first.getId(), second.getId());
+		}
+
+		@Test
+		@DisplayName("결제 전이라 확정되지 않은 주문은 조회되지 않는다")
+		void excludesUnplacedOrders() {
+			// given
+			Order placed = persistOrder(owner, "20260903-OQM00026", kindOfBlue, 1);
+			persistUnplacedOrder(owner, "20260903-OQM00027", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), null, 0, 20));
+
+			// then
+			assertThat(result).extracting(OrderSummaryResponse::id).containsExactly(placed.getId());
 		}
 
 		@Test
@@ -166,6 +211,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			Order order = OrderFixture.create(owner, "20260903-OQM00011");
 			order.addItem(kindOfBlue, 1);
 			order.addItem(loveSupreme, 2);
+			order.place(LocalDateTime.now());
 			em.persist(order);
 			em.flush();
 			em.clear();
@@ -229,6 +275,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			Order order = OrderFixture.create(owner, "20260903-OQM00016");
 			order.addItem(kindOfBlue, 1);
 			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+			order.place(LocalDateTime.now());
 			em.persist(order);
 			em.flush();
 			em.clear();
@@ -284,6 +331,20 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(count).isEqualTo(result.size());
+		}
+
+		@Test
+		@DisplayName("확정되지 않은 주문은 개수에 포함하지 않는다")
+		void excludesUnplacedOrders() {
+			// given
+			persistUnplacedOrder(owner, "20260903-OQM00028", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			long count = orderQueryMapper.countMyOrders(condition(owner.getId(), null, 0, 20));
+
+			// then
+			assertThat(count).isZero();
 		}
 	}
 
@@ -466,6 +527,21 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result).extracting(AdminOrderSummaryResponse::id).contains(order.getId());
+		}
+
+		@Test
+		@DisplayName("결제 전이라 확정되지 않은 주문은 조회되지 않는다")
+		void excludesUnplacedOrders() {
+			// given
+			Order unplaced = persistUnplacedOrder(owner, "20260903-OQMADM010", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderSummaryResponse> result = orderQueryMapper.findAdminOrders(
+					adminCondition(null, null, null, null));
+
+			// then
+			assertThat(result).extracting(AdminOrderSummaryResponse::id).doesNotContain(unplaced.getId());
 		}
 	}
 

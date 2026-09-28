@@ -59,7 +59,7 @@ class OrderCancelServiceTest {
 			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, request.reason(), null))
 					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
 							20L, 30L));
-			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
 
 			// when
 			OrderDetailResponse response = service.cancel(MEMBER_ID, ORDER_ID, request);
@@ -75,7 +75,7 @@ class OrderCancelServiceTest {
 			given(writer.findTarget(MEMBER_ID, ORDER_ID))
 					.willReturn(new OrderCancelTarget(OrderStatus.PENDING, PaymentStatus.READY));
 			given(writer.cancelUnpaid(MEMBER_ID, ORDER_ID, null)).willReturn(UnpaidCancelResult.canceled(30L));
-			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
 
 			// when
 			OrderDetailResponse response = service.cancel(MEMBER_ID, ORDER_ID, null);
@@ -96,7 +96,7 @@ class OrderCancelServiceTest {
 			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, null, null))
 					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
 							20L, null));
-			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
 
 			// when
 			service.cancel(MEMBER_ID, ORDER_ID, null);
@@ -118,7 +118,7 @@ class OrderCancelServiceTest {
 					new RefundAccountInfo("088", "12345678901234", "홍길동")))
 					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
 							20L, null));
-			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
 
 			// when
 			service.cancel(MEMBER_ID, ORDER_ID, request);
@@ -135,7 +135,7 @@ class OrderCancelServiceTest {
 			given(writer.findTarget(MEMBER_ID, ORDER_ID))
 					.willReturn(new OrderCancelTarget(OrderStatus.PENDING, PaymentStatus.WAITING_FOR_DEPOSIT));
 			given(pendingVirtualAccountCancelHook.cancel(ORDER_ID, MEMBER_ID, null)).willReturn(30L);
-			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
 
 			// when
 			OrderDetailResponse response = service.cancel(MEMBER_ID, ORDER_ID, null);

@@ -32,7 +32,7 @@ public class OrderCancelService {
 					? paidOrderCancelHook.cancel(orderId, memberId, reason, refundAccount).limitedDropId()
 					: result.limitedDropId();
 		}
-		return orderService.getDetail(memberId, orderId).withLimitedDropId(limitedDropId);
+		return orderService.getDetailAfterAction(memberId, orderId).withLimitedDropId(limitedDropId);
 	}
 
 	private RefundAccountInfo toRefundAccount(OrderCancelRequest request) {

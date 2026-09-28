@@ -549,8 +549,10 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			persistOrderWithPayment("20310611-ASMSUM003", product, 1, "asm-summary-key-3",
 					LocalDateTime.of(2031, 6, 11, 9, 0));
 
+			// 입금대기(가상계좌 발급) 같은 확정된 PENDING 만 pendingOrderCount 에 잡혀야 한다.
 			Order pendingOrder = OrderFixture.create(member, "20310610-ASMSUM004");
 			pendingOrder.addItem(product, 1);
+			pendingOrder.place(LocalDateTime.of(2031, 6, 10, 9, 30));
 			em.persist(pendingOrder);
 
 			em.flush();
@@ -565,6 +567,31 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			assertThat(result.todayOrderCount()).isEqualTo(2);
 			assertThat(result.todayNewMemberCount()).isZero();
 			assertThat(result.pendingOrderCount()).isGreaterThanOrEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("결제 전이라 확정되지 않은 PENDING 주문은 pendingOrderCount 를 늘리지 않는다")
+		void excludesUnplacedPendingOrderFromPendingOrderCount() {
+			// given: 공유 DB 라 절대 개수 대신 주문 추가 전후의 증분으로 단언한다
+			LocalDateTime todayStart = LocalDateTime.of(2031, 7, 10, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2031, 7, 11, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Unplaced Product", new BigDecimal("25000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			long countBefore = adminStatsMapper.findSummary(todayStart, tomorrowStart).pendingOrderCount();
+
+			Order unplacedOrder = OrderFixture.create(member, "20310710-ASMSUM007");
+			unplacedOrder.addItem(product, 1);
+			em.persist(unplacedOrder);
+
+			em.flush();
+			em.clear();
+
+			// when
+			AdminStatsSummaryResponse result = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			// then
+			assertThat(result.pendingOrderCount()).isEqualTo(countBefore);
 		}
 
 		@Test

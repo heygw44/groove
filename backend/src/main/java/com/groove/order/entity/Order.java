@@ -51,7 +51,8 @@ import lombok.NoArgsConstructor;
 			@Index(name = "idx_orders_member_created", columnList = "member_id, created_at"),
 			@Index(name = "idx_orders_status_expires", columnList = "status, expires_at"),
 			@Index(name = "idx_orders_created", columnList = "created_at"),
-			@Index(name = "idx_orders_status_created", columnList = "status, created_at")
+			@Index(name = "idx_orders_status_created", columnList = "status, created_at"),
+			@Index(name = "idx_orders_member_placed", columnList = "member_id, placed_at")
 		})
 public class Order extends BaseTimeEntity {
 
@@ -91,6 +92,15 @@ public class Order extends BaseTimeEntity {
 	@ColumnDefault("'PENDING'")
 	private OrderStatus status;
 
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(name = "order_source", nullable = false, length = 10)
+	@ColumnDefault("'CART'")
+	private OrderSource orderSource;
+
+	@Column(name = "placed_at")
+	private LocalDateTime placedAt;
+
 	@Embedded
 	private ShippingAddress shippingAddress;
 
@@ -107,22 +117,26 @@ public class Order extends BaseTimeEntity {
 	private List<OrderItem> items = new ArrayList<>();
 
 	@Builder(access = PRIVATE)
-	private Order(String orderNumber, Member member, ShippingAddress shippingAddress, LocalDateTime now) {
+	private Order(String orderNumber, Member member, ShippingAddress shippingAddress, OrderSource orderSource,
+			LocalDateTime now) {
 		this.orderNumber = orderNumber;
 		this.member = member;
 		this.shippingAddress = shippingAddress;
 		this.status = OrderStatus.PENDING;
+		this.orderSource = orderSource;
 		this.expiresAt = now.plusMinutes(PENDING_EXPIRATION_MINUTES);
 		this.totalAmount = BigDecimal.ZERO;
 		this.discountAmount = BigDecimal.ZERO;
 		this.finalAmount = BigDecimal.ZERO;
 	}
 
-	public static Order create(String orderNumber, Member member, ShippingAddress shippingAddress, LocalDateTime now) {
+	public static Order create(String orderNumber, Member member, ShippingAddress shippingAddress,
+			OrderSource orderSource, LocalDateTime now) {
 		return Order.builder()
 				.orderNumber(orderNumber)
 				.member(member)
 				.shippingAddress(shippingAddress)
+				.orderSource(orderSource)
 				.now(now)
 				.build();
 	}
@@ -225,6 +239,17 @@ public class Order extends BaseTimeEntity {
 
 	public boolean isExpired(LocalDateTime now) {
 		return this.status == OrderStatus.PENDING && !now.isBefore(this.expiresAt);
+	}
+
+	/** 결제 승인이나 가상계좌 발급으로 주문을 확정한다. 이미 확정된 주문은 최초 확정 시각을 유지한다(멱등). */
+	public void place(LocalDateTime at) {
+		if (this.placedAt == null) {
+			this.placedAt = at;
+		}
+	}
+
+	public boolean isPlaced() {
+		return this.placedAt != null;
 	}
 
 	/** 스케줄러가 결제 기한이 지난 PENDING 주문을 취소할 때 쓴다. 상태값을 새로 두지 않고 CANCELED + 사유로 구분한다. */

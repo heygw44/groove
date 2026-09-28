@@ -26,6 +26,7 @@ import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderNumberGenerator;
@@ -86,7 +87,7 @@ public class LimitedPurchaseWriter {
 			throw new BusinessException(ErrorCode.LIMITED_SOLD_OUT);
 		}
 
-		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), now);
+		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), OrderSource.LIMITED, now);
 		order.addItem(product, PURCHASE_QUANTITY);
 		orderRepository.save(order);
 

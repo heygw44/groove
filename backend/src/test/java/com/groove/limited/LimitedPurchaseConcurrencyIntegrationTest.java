@@ -454,6 +454,7 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 					buyer.addressId());
 			Order order = orderRepository.findById(purchaseResponse.orderId()).orElseThrow();
 			OrderFixture.markPaid(order);
+			order.place(LocalDateTime.now(clock));
 			orderRepository.saveAndFlush(order);
 			Payment payment = paymentRepository.save(PaymentFixture.approved(order, "toss-" + UUID.randomUUID()));
 			given(paymentClient.cancel(any(), any(), any()))

@@ -14,6 +14,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
+import com.groove.order.service.OrderPlacementService;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.dto.PaymentConfirmRequest;
@@ -36,6 +37,7 @@ public class PaymentConfirmWriter {
 	private final OrderRepository orderRepository;
 	private final PaymentRepository paymentRepository;
 	private final ProductSalesStatsUpdater productSalesStatsUpdater;
+	private final OrderPlacementService orderPlacementService;
 	private final Clock clock;
 
 	@Transactional
@@ -101,6 +103,7 @@ public class PaymentConfirmWriter {
 		LocalDateTime approvedAt = result.approvedAt() != null ? result.approvedAt() : LocalDateTime.now(clock);
 		payment.approve(paymentKey, result.method(), approvedAt, result.easyPayProvider());
 		order.markPaid();
+		orderPlacementService.place(order, approvedAt);
 
 		try {
 			paymentRepository.flush();
@@ -141,6 +144,7 @@ public class PaymentConfirmWriter {
 				virtualAccount.accountNumber(), virtualAccount.customerName(), virtualAccount.dueDate(),
 				VirtualAccountSecretHasher.hash(virtualAccount.secret()));
 		order.extendExpiry(virtualAccount.dueDate());
+		orderPlacementService.place(order, LocalDateTime.now(clock));
 
 		try {
 			paymentRepository.flush();

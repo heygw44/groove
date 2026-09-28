@@ -44,7 +44,7 @@ class OrderTest {
 			LocalDateTime now = LocalDateTime.now();
 
 			// when
-			Order order = Order.create("20260903-TESTAB12", member, shippingAddress, now);
+			Order order = Order.create("20260903-TESTAB12", member, shippingAddress, OrderSource.CART, now);
 
 			// then
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
@@ -52,6 +52,8 @@ class OrderTest {
 			assertThat(order.getDiscountAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getFinalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getShippingAddress()).isEqualTo(shippingAddress);
+			assertThat(order.getOrderSource()).isEqualTo(OrderSource.CART);
+			assertThat(order.isPlaced()).isFalse();
 			LocalDateTime expectedExpiresAt = now.plusMinutes(Order.PENDING_EXPIRATION_MINUTES);
 			assertThat(order.getExpiresAt()).isEqualTo(expectedExpiresAt);
 		}
@@ -550,6 +552,56 @@ class OrderTest {
 
 			// when & then
 			assertThat(order.isExpired(now)).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("place()")
+	class Place {
+
+		@Test
+		@DisplayName("처음 호출하면 확정 시각이 기록되고 isPlaced() 는 true 다")
+		void recordsPlacedAtOnFirstCall() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime placedAt = LocalDateTime.of(2026, 9, 28, 10, 0);
+
+			// when
+			order.place(placedAt);
+
+			// then
+			assertThat(order.getPlacedAt()).isEqualTo(placedAt);
+			assertThat(order.isPlaced()).isTrue();
+		}
+
+		@Test
+		@DisplayName("이미 확정된 주문에 다시 호출해도 최초 확정 시각을 유지한다")
+		void keepsFirstPlacedAtOnSecondCall() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime firstPlacedAt = LocalDateTime.of(2026, 9, 28, 10, 0);
+			order.place(firstPlacedAt);
+
+			// when
+			order.place(firstPlacedAt.plusDays(1));
+
+			// then
+			assertThat(order.getPlacedAt()).isEqualTo(firstPlacedAt);
+		}
+	}
+
+	@Nested
+	@DisplayName("isPlaced()")
+	class IsPlaced {
+
+		@Test
+		@DisplayName("생성 직후에는 false 를 반환한다")
+		void returnsFalseRightAfterCreate() {
+			// given
+			Order order = OrderFixture.create(member);
+
+			// when & then
+			assertThat(order.isPlaced()).isFalse();
 		}
 	}
 }

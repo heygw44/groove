@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
@@ -227,10 +228,11 @@ public class LocalSignalSeeder {
 			// 매출 통계 백필이 최근 90일을 다시 채우므로, 주문·결제 승인 시각도 이 창 안에 흩어 놓는다.
 			LocalDateTime orderedAt = now.minusDays(random.nextInt(PAYMENT_BACKFILL_DAYS))
 					.minusHours(random.nextInt(24));
-			Order order = Order.create(orderNumber, member, dummyAddress(member), orderedAt);
+			Order order = Order.create(orderNumber, member, dummyAddress(member), OrderSource.CART, orderedAt);
 			// 시드 주문은 재고를 차감하지 않는다. 추천 신호가 목적이고 재고 정합성은 주문 도메인 테스트가 다룬다.
 			items.forEach(product -> order.addItem(product, 1));
 			order.markPaid();
+			order.place(orderedAt);
 			orderRepository.save(order);
 
 			Payment payment = Payment.ready(order);
