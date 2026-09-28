@@ -54,6 +54,7 @@ public class AdminOrderService {
 
 	public AdminOrderDetailResponse getDetail(Long orderId) {
 		Order order = orderRepository.findWithItemsAndMemberById(orderId)
+				.filter(Order::isPlaced)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId), resolveThumbnails(order));
 	}

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -127,6 +128,7 @@ class AdminOrderServiceTest {
 		void includesPaymentStatus() {
 			// given
 			Order order = orderWithStatus(OrderStatus.PAID);
+			order.place(LocalDateTime.now());
 			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(PaymentFixture.approved(order)));
 
@@ -135,6 +137,20 @@ class AdminOrderServiceTest {
 
 			// then
 			assertThat(response.paymentStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("결제 전이라 확정되지 않은 주문이면 ORDER_NOT_FOUND 예외를 던진다")
+		void throwsWhenOrderNotPlaced() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
+
+			// when & then
+			assertThatThrownBy(() -> service.getDetail(ORDER_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
 		}
 	}
 

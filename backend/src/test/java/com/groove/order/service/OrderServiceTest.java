@@ -23,6 +23,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -65,6 +66,7 @@ import com.groove.order.dto.OrderListItemRow;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
@@ -110,6 +112,9 @@ class OrderServiceTest {
 	OrderStockService orderStockService;
 
 	@Mock
+	OrderDraftReleaser orderDraftReleaser;
+
+	@Mock
 	OrderRepository orderRepository;
 
 	@Mock
@@ -143,8 +148,8 @@ class OrderServiceTest {
 		now = LocalDateTime.now(clock);
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, cartItemRepository, memberCouponRepository, orderStockService,
-				orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository, productImageRepository,
-				clock);
+				orderDraftReleaser, orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository,
+				productImageRepository, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -157,8 +162,8 @@ class OrderServiceTest {
 	class Create {
 
 		@Test
-		@DisplayName("장바구니 항목으로 주문하면 재고를 차감하고 장바구니 항목을 삭제한다")
-		void createsOrderFromCartAndDeletesCartItems() {
+		@DisplayName("장바구니 항목으로 주문하면 재고를 차감하고 장바구니는 그대로 둔다")
+		void createsOrderFromCartWithoutTouchingCartItems() {
 			// given
 			Cart cart = CartFixture.withId(CartFixture.createCart(member), 20L);
 			CartItem cartItem = CartFixture.withId(CartFixture.createItem(cart, product, 2), CART_ITEM_ID);
@@ -172,16 +177,20 @@ class OrderServiceTest {
 			// when
 			OrderCreateResponse response = orderService.create(MEMBER_ID, request);
 
-			// then
+			// then: 장바구니 삭제는 결제 확정 시점(OrderPlacementService)으로 옮겨져 생성 시점엔 지워지지 않는다
 			BigDecimal expectedAmount = product.getPrice().multiply(BigDecimal.valueOf(2));
 			assertThat(response.orderNumber()).isEqualTo("20260903-TESTAB12");
 			assertThat(response.finalAmount()).isEqualByComparingTo(expectedAmount);
+			assertThat(response.expiresAt()).isEqualTo(now.plusMinutes(Order.PENDING_EXPIRATION_MINUTES));
 			verify(orderStockService).deduct(any());
-			verify(cartItemRepository).deleteAll(List.of(cartItem));
+			verify(cartItemRepository, never()).deleteAll(any());
+			ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+			verify(orderRepository).save(captor.capture());
+			assertThat(captor.getValue().getOrderSource()).isEqualTo(OrderSource.CART);
 		}
 
 		@Test
-		@DisplayName("단일 상품으로 주문하면 재고를 차감하고 주문을 생성한다")
+		@DisplayName("단일 상품으로 주문하면 재고를 차감하고 DIRECT 출처로 주문을 생성한다")
 		void createsOrderFromDirectProduct() {
 			// given
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
@@ -198,6 +207,26 @@ class OrderServiceTest {
 			assertThat(response.finalAmount()).isEqualByComparingTo(expectedAmount);
 			verify(orderStockService).deduct(any());
 			verify(cartItemRepository, never()).deleteAll(any());
+			ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+			verify(orderRepository).save(captor.capture());
+			assertThat(captor.getValue().getOrderSource()).isEqualTo(OrderSource.DIRECT);
+		}
+
+		@Test
+		@DisplayName("새 주문을 만들기 전에 이전 미확정 주문 해제를 먼저 호출한다")
+		void releasesPreviousDraftsBeforeCreatingNewOrder() {
+			// given
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, null);
+
+			// when
+			orderService.create(MEMBER_ID, request);
+
+			// then
+			verify(orderDraftReleaser).releaseDrafts(MEMBER_ID, now);
 		}
 
 		@Test
@@ -537,7 +566,8 @@ class OrderServiceTest {
 		@DisplayName("본인 주문이면 상세 정보를 반환한다")
 		void returnsDetailForOwner() {
 			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 2), 600L);
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 2),
+					600L));
 			given(orderRepository.findWithItemsByIdAndMemberId(600L, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when
@@ -552,7 +582,8 @@ class OrderServiceTest {
 		@DisplayName("상품에 sort_order 0 이미지가 있으면 주문 상품 응답에 썸네일 URL 을 채운다")
 		void returnsThumbnailUrlWhenProductHasImage() {
 			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 604L);
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 1),
+					604L));
 			ProductImage image = ProductImage.of(product, "https://cdn.groove.com/thumb.jpg", 0);
 			given(orderRepository.findWithItemsByIdAndMemberId(604L, MEMBER_ID)).willReturn(Optional.of(order));
 			given(productImageRepository.findAllByProductIdInAndSortOrder(List.of(PRODUCT_ID), 0))
@@ -582,7 +613,8 @@ class OrderServiceTest {
 		@DisplayName("한정반 구매로 생긴 주문이면 limitedDropId 를 채운다")
 		void returnsLimitedDropIdForLimitedOrder() {
 			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 602L);
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 1),
+					602L));
 			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.open(product, 10), 700L);
 			LimitedPurchase purchase = LimitedPurchaseFixture.create(drop, member, order, 1);
 			given(orderRepository.findWithItemsByIdAndMemberId(602L, MEMBER_ID)).willReturn(Optional.of(order));
@@ -599,7 +631,8 @@ class OrderServiceTest {
 		@DisplayName("일반 주문이면 limitedDropId 는 null 이다")
 		void returnsNullLimitedDropIdForNormalOrder() {
 			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 603L);
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 1),
+					603L));
 			given(orderRepository.findWithItemsByIdAndMemberId(603L, MEMBER_ID)).willReturn(Optional.of(order));
 			given(limitedPurchaseRepository.findByOrderId(603L)).willReturn(Optional.empty());
 
@@ -614,7 +647,8 @@ class OrderServiceTest {
 		@DisplayName("승인된 결제가 있으면 payment 를 함께 내려준다")
 		void includesPaymentWhenApproved() {
 			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 604L);
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 1),
+					604L));
 			order.markPaid();
 			Payment payment = PaymentFixture.approved(order);
 			given(orderRepository.findWithItemsByIdAndMemberId(604L, MEMBER_ID)).willReturn(Optional.of(order));
@@ -633,7 +667,8 @@ class OrderServiceTest {
 		@DisplayName("결제가 없으면 payment 가 null 이다")
 		void returnsNullPaymentWhenNoPayment() {
 			// given
-			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 605L);
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 1),
+					605L));
 			given(orderRepository.findWithItemsByIdAndMemberId(605L, MEMBER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findByOrderId(605L)).willReturn(Optional.empty());
 
@@ -642,6 +677,20 @@ class OrderServiceTest {
 
 			// then
 			assertThat(response.payment()).isNull();
+		}
+
+		@Test
+		@DisplayName("결제 전이라 확정되지 않은 주문이면 ORDER_NOT_FOUND 예외를 던진다")
+		void throwsWhenOrderNotPlaced() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 606L);
+			given(orderRepository.findWithItemsByIdAndMemberId(606L, MEMBER_ID)).willReturn(Optional.of(order));
+
+			// when & then
+			assertThatThrownBy(() -> orderService.getDetail(MEMBER_ID, 606L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
 		}
 	}
 

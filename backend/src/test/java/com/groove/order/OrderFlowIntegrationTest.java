@@ -132,6 +132,9 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 					.andReturn();
 			long orderId = objectMapper.readTree(createResult.getResponse().getContentAsString())
 					.path("data").path("orderId").asLong();
+			// 목록·상세는 결제 확정(placed_at) 전 주문을 숨긴다. 가상계좌 발급처럼 결제 전에도 확정될 수
+			// 있는 상황을 흉내내 이 테스트에서는 결제 승인 없이 placed_at 만 채운다.
+			placeOrder(orderId);
 
 			// then: 재고가 전량 소진되고 상품은 품절 상태가 된다
 			Stock stockAfterCreate = stockRepository.findByProductId(product.getId()).orElseThrow();
@@ -196,6 +199,7 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 					.path("data").path("orderId").asLong();
 			Order order = orderRepository.findById(orderId).orElseThrow();
 			order.markPaid();
+			order.place(LocalDateTime.now());
 			orderRepository.save(order);
 
 			Member admin = memberRepository.save(
@@ -233,8 +237,8 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 	class CartBasedOrder {
 
 		@Test
-		@DisplayName("장바구니 상품으로 주문하면 장바구니가 비워지고 각 상품 재고가 차감된다")
-		void createsOrderFromCartAndClearsCart() throws Exception {
+		@DisplayName("장바구니 상품으로 주문하면 재고가 차감되지만 결제 전에는 장바구니가 그대로 남는다")
+		void createsOrderFromCartAndKeepsCartUntilPayment() throws Exception {
 			// given: 회원, 배송지, 장바구니에 담은 두 상품을 준비한다
 			Member member = signup();
 			String accessToken = login(member.getEmail());
@@ -256,10 +260,10 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(createRequest)))
 					.andExpect(status().isCreated());
 
-			// then: 장바구니가 비워진다
+			// then: 결제 확정 전이라 장바구니 상품이 그대로 남는다(삭제는 결제 승인 시점으로 옮김)
 			mockMvc.perform(get("/api/v1/cart").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
 					.andExpect(status().isOk())
-					.andExpect(jsonPath("$.data.items", hasSize(0)));
+					.andExpect(jsonPath("$.data.items", hasSize(2)));
 
 			// then: 두 상품의 재고가 각각 주문 수량만큼 차감되고 OUT 이력이 남는다
 			assertStockDeductedByOut(firstProduct.getId(), 5, firstQuantity);
@@ -328,6 +332,10 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 					.andReturn();
 			long orderId = objectMapper.readTree(createResult.getResponse().getContentAsString())
 					.path("data").path("orderId").asLong();
+			// POST /orders 는 같은 회원의 미확정(placed_at 없는) PENDING 주문을 새 주문서 제출 전에
+			// SUPERSEDED 로 푼다. 이 시나리오는 "이미 확정된 주문의 쿠폰은 재사용할 수 없다"를 보려는
+			// 것이므로 결제 확정을 흉내내 이 주문을 미확정 해제 대상에서 뺀다.
+			placeOrder(orderId);
 
 			// then: 재고는 주문한 만큼만 차감된다
 			Stock stockAfterFirstOrder = stockRepository.findByProductId(product.getId()).orElseThrow();
@@ -357,6 +365,12 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isCreated())
 					.andExpect(jsonPath("$.data.discountAmount", is(5000.0)));
 		}
+	}
+
+	private void placeOrder(long orderId) {
+		Order order = orderRepository.findById(orderId).orElseThrow();
+		order.place(LocalDateTime.now());
+		orderRepository.save(order);
 	}
 
 	private Product seedProduct(int stockQuantity) {

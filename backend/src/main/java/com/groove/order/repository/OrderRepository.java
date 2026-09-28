@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
 import com.groove.payment.entity.PaymentStatus;
 
@@ -52,4 +53,16 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 			""")
 	List<Long> findIdsByStatusAndExpiresAtBefore(@Param("status") OrderStatus status, @Param("now") LocalDateTime now,
 			@Param("unresolvedPaymentStatuses") Collection<PaymentStatus> unresolvedPaymentStatuses, Limit limit);
+
+	// 주문서 재제출 전, 같은 회원의 이전 미확정 주문(한정반 제외)을 찾는다. 결제가 READY/UNKNOWN 이면 대사가
+	// 끝날 때까지 건드리지 않는다 - LEFT JOIN ... IS NULL 을 쓰는 이유는 findIdsByStatusAndExpiresAtBefore 와 같다.
+	@Query("""
+			select o.id from Order o
+			left join Payment p on p.order.id = o.id and p.status in :unresolvedPaymentStatuses
+			where o.member.id = :memberId and o.status = :status and o.placedAt is null
+			and o.orderSource <> :excludedSource and p.id is null
+			""")
+	List<Long> findDraftIdsToSupersede(@Param("memberId") Long memberId, @Param("status") OrderStatus status,
+			@Param("excludedSource") OrderSource excludedSource,
+			@Param("unresolvedPaymentStatuses") Collection<PaymentStatus> unresolvedPaymentStatuses);
 }

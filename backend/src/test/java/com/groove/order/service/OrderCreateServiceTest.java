@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -40,7 +41,7 @@ class OrderCreateServiceTest {
 
 	private OrderCreateResponse sampleResponse() {
 		return new OrderCreateResponse(1L, "20260903-TESTAB12", new BigDecimal("90000"), BigDecimal.ZERO,
-				new BigDecimal("90000"), null);
+				new BigDecimal("90000"), null, LocalDateTime.of(2026, 9, 3, 12, 10));
 	}
 
 	@Nested

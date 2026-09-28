@@ -44,7 +44,7 @@ class OrderTest {
 			LocalDateTime now = LocalDateTime.now();
 
 			// when
-			Order order = Order.create("20260903-TESTAB12", member, shippingAddress, now);
+			Order order = Order.create("20260903-TESTAB12", member, shippingAddress, OrderSource.CART, now);
 
 			// then
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
@@ -52,6 +52,8 @@ class OrderTest {
 			assertThat(order.getDiscountAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getFinalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(order.getShippingAddress()).isEqualTo(shippingAddress);
+			assertThat(order.getOrderSource()).isEqualTo(OrderSource.CART);
+			assertThat(order.isPlaced()).isFalse();
 			LocalDateTime expectedExpiresAt = now.plusMinutes(Order.PENDING_EXPIRATION_MINUTES);
 			assertThat(order.getExpiresAt()).isEqualTo(expectedExpiresAt);
 		}
@@ -505,6 +507,93 @@ class OrderTest {
 	}
 
 	@Nested
+	@DisplayName("supersede()")
+	class Supersede {
+
+		@Test
+		@DisplayName("PENDING 이면 CANCELED 로 바뀌고 SUPERSEDED 사유가 기록된다")
+		void cancelsWithSupersededReasonWhenPending() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime now = LocalDateTime.now();
+
+			// when
+			order.supersede(now);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isEqualTo(now);
+			assertThat(order.getCancelReason()).isEqualTo(Order.SUPERSEDED_CANCEL_REASON);
+		}
+
+		@Test
+		@DisplayName("PAID 면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenPaid() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+
+			// when & then
+			assertThatThrownBy(() -> order.supersede(LocalDateTime.now()))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("changeShippingAddress()")
+	class ChangeShippingAddress {
+
+		@Test
+		@DisplayName("확정 전 PENDING 주문이면 배송지가 바뀐다")
+		void changesAddressWhenPendingAndNotPlaced() {
+			// given
+			Order order = OrderFixture.create(member);
+			ShippingAddress newAddress = ShippingAddress.of("김바이닐", "010-9999-8888", "12345", "서울시 서초구 1",
+					null);
+
+			// when
+			order.changeShippingAddress(newAddress);
+
+			// then
+			assertThat(order.getShippingAddress()).isEqualTo(newAddress);
+		}
+
+		@Test
+		@DisplayName("이미 확정된 주문이면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenAlreadyPlaced() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.place(LocalDateTime.now());
+			ShippingAddress newAddress = ShippingAddress.of("김바이닐", "010-9999-8888", "12345", "서울시 서초구 1",
+					null);
+
+			// when & then
+			assertThatThrownBy(() -> order.changeShippingAddress(newAddress))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+
+		@Test
+		@DisplayName("PENDING 이 아니면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenNotPending() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+			ShippingAddress newAddress = ShippingAddress.of("김바이닐", "010-9999-8888", "12345", "서울시 서초구 1",
+					null);
+
+			// when & then
+			assertThatThrownBy(() -> order.changeShippingAddress(newAddress))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
 	@DisplayName("isExpired()")
 	class IsExpired {
 
@@ -550,6 +639,56 @@ class OrderTest {
 
 			// when & then
 			assertThat(order.isExpired(now)).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("place()")
+	class Place {
+
+		@Test
+		@DisplayName("처음 호출하면 확정 시각이 기록되고 isPlaced() 는 true 다")
+		void recordsPlacedAtOnFirstCall() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime placedAt = LocalDateTime.of(2026, 9, 28, 10, 0);
+
+			// when
+			order.place(placedAt);
+
+			// then
+			assertThat(order.getPlacedAt()).isEqualTo(placedAt);
+			assertThat(order.isPlaced()).isTrue();
+		}
+
+		@Test
+		@DisplayName("이미 확정된 주문에 다시 호출해도 최초 확정 시각을 유지한다")
+		void keepsFirstPlacedAtOnSecondCall() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime firstPlacedAt = LocalDateTime.of(2026, 9, 28, 10, 0);
+			order.place(firstPlacedAt);
+
+			// when
+			order.place(firstPlacedAt.plusDays(1));
+
+			// then
+			assertThat(order.getPlacedAt()).isEqualTo(firstPlacedAt);
+		}
+	}
+
+	@Nested
+	@DisplayName("isPlaced()")
+	class IsPlaced {
+
+		@Test
+		@DisplayName("생성 직후에는 false 를 반환한다")
+		void returnsFalseRightAfterCreate() {
+			// given
+			Order order = OrderFixture.create(member);
+
+			// when & then
+			assertThat(order.isPlaced()).isFalse();
 		}
 	}
 }

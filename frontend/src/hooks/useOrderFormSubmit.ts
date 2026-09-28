@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useToast } from '@/components/common/toastContext';
 import { usePurchaseLimitedDrop } from '@/hooks/mutations/useLimitedDropMutations';
-import { useCreateOrder } from '@/hooks/mutations/useOrderMutations';
+import { useCreateOrder, useUpdateOrderShippingAddress } from '@/hooks/mutations/useOrderMutations';
 import { addressKeys, couponKeys, limitedDropKeys, orderKeys } from '@/hooks/queries/queryKeys';
 import { usePaymentWindow } from '@/hooks/usePaymentWindow';
 import { useAuthStore } from '@/store/authStore';
@@ -12,10 +12,14 @@ import type { PaymentMethodOption } from '@/types/payment';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { buildLimitedPurchaseResultState, classifyPurchaseError } from '@/utils/limitedDrop';
 import {
+  buildOrderFingerprint,
+  saveOrderFormDraft,
   toOrderCreateRequest,
   type OrderDraft,
+  type PendingOrder,
   type PurchasableOrderDraft,
 } from '@/utils/orderDraft';
+import { getServerNowMs, toServerMs } from '@/utils/serverTime';
 
 const STOCK_ERROR_CODES = new Set(['STOCK_INSUFFICIENT', 'STOCK_CONFLICT']);
 const IDEMPOTENCY_KEY_REUSED = 'IDEMPOTENCY_KEY_REUSED';
@@ -26,12 +30,11 @@ const COUPON_ERROR_CODES = new Set([
   'COUPON_ALREADY_USED',
   'COUPON_MIN_ORDER_AMOUNT_NOT_MET',
 ]);
+const ORDER_NOT_FOUND = 'ORDER_NOT_FOUND';
+const MEMBER_ADDRESS_NOT_FOUND = 'MEMBER_ADDRESS_NOT_FOUND';
 
-export interface PendingOrder {
-  orderId: number;
-  orderNumber: string;
-  amount: number;
-}
+/** 한정반은 지문 비교를 하지 않고 항상 재사용하므로, 저장용으로만 쓰는 표식이다. */
+const LIMITED_FINGERPRINT = 'limited';
 
 interface UseOrderFormSubmitParams {
   draft: OrderDraft | null;
@@ -40,12 +43,14 @@ interface UseOrderFormSubmitParams {
   /** 결제창에 넘길 주문명("생수 외 1건"). buildOrderName 으로 미리 만들어 넘긴다. */
   orderName: string;
   onCouponRejected: () => void;
+  /** sessionStorage 초안에서 복원한 PENDING 주문. 지문이 같으면 그대로 재사용한다. */
+  initialPendingOrder?: PendingOrder | null;
 }
 
 interface UseOrderFormSubmitResult {
   submit: (method: PaymentMethodOption) => void;
   isSubmitting: boolean;
-  /** 이 주문서에서 이미 만든 PENDING 주문. 있으면 주문 내용은 고정되고 결제창만 다시 연다. */
+  /** 이 주문서에서 만든(또는 초안에서 복원한) PENDING 주문. */
   pendingOrder: PendingOrder | null;
   /** 제출이 확정돼 이동하는 중임을 표시한다. useBlocker 가 이탈 확인창을 띄우지 않게 참조한다. */
   submittedRef: MutableRefObject<boolean>;
@@ -55,10 +60,10 @@ interface UseOrderFormSubmitResult {
  * 주문서 제출을 draft 종류별로 나눠 처리한다. cart/direct 는 POST /orders 로,
  * limited 는 한정반 선착순 구매 API 로 확정한 뒤 곧바로 결제창을 연다.
  *
- * 만든 PENDING 주문을 기억해 두고, 결제창을 닫았다 다시 누르면 같은 주문으로 결제창만 연다.
- * 주문을 새로 만들지 않는 이유: 장바구니 주문은 생성 시 장바구니 항목이 지워지고 취소해도
- * 돌아오지 않으며, 한정반은 재구매(ALREADY_PURCHASED)가 막혀 있다. 그래서 주문이 생기면
- * 배송지·쿠폰은 고정하고 결제수단만 바꿀 수 있게 한다.
+ * 만든 PENDING 주문은 상품+쿠폰 지문이 같고 만료 전이면 그대로 재사용한다 - 배송지만
+ * 바뀌었으면 PATCH 로 고친 뒤 같은 주문으로 결제창을 연다. 지문이 다르거나 만료면
+ * POST /orders 로 새로 만든다(서버가 이전 PENDING 을 SUPERSEDED 로 해제한다). 한정반은
+ * 재구매(ALREADY_PURCHASED)가 막혀 있어 지문 비교 없이 항상 같은 주문을 재사용한다.
  */
 export function useOrderFormSubmit({
   draft,
@@ -66,22 +71,32 @@ export function useOrderFormSubmit({
   memberCouponId,
   orderName,
   onCouponRejected,
+  initialPendingOrder = null,
 }: UseOrderFormSubmitParams): UseOrderFormSubmitResult {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const member = useAuthStore((s) => s.member);
   const submittedRef = useRef(false);
-  const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null);
+  const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(initialPendingOrder);
   const { openPaymentWindow, isOpening } = usePaymentWindow();
 
   const createOrderMutation = useCreateOrder();
+  const updateShippingAddressMutation = useUpdateOrderShippingAddress();
   const purchaseLimitedMutation = usePurchaseLimitedDrop(
     draft?.kind === 'limited' ? draft.dropId : 0,
   );
 
-  const openForOrder = (order: PendingOrder, method: PaymentMethodOption) =>
-    openPaymentWindow({
+  /** 결제창을 열기 직전에 이번 시도를 sessionStorage 에 남긴다(결제 실패 시 주문서 복원용). */
+  const openForOrder = (source: OrderDraft, order: PendingOrder, method: PaymentMethodOption) => {
+    saveOrderFormDraft({
+      source,
+      addressId: order.addressId,
+      memberCouponId,
+      method,
+      pendingOrder: order,
+    });
+    return openPaymentWindow({
       orderId: order.orderId,
       orderNumber: order.orderNumber,
       orderName,
@@ -89,6 +104,41 @@ export function useOrderFormSubmit({
       method,
       customerEmail: member?.email,
     });
+  };
+
+  /** 이미 만든 주문을 재사용한다. 배송지가 그때와 다르면 먼저 PATCH 로 고친다. */
+  const reuseWithAddress = (
+    source: OrderDraft,
+    order: PendingOrder,
+    method: PaymentMethodOption,
+    nextAddressId: number,
+  ) => {
+    if (nextAddressId === order.addressId) {
+      void openForOrder(source, order, method);
+      return;
+    }
+    updateShippingAddressMutation.mutate(
+      { orderId: order.orderId, addressId: nextAddressId },
+      {
+        onSuccess: () => {
+          const updated: PendingOrder = { ...order, addressId: nextAddressId };
+          setPendingOrder(updated);
+          void openForOrder(source, updated, method);
+        },
+        onError: (error) => {
+          const code = getErrorCode(error);
+          if (code === MEMBER_ADDRESS_NOT_FOUND) {
+            queryClient.invalidateQueries({ queryKey: addressKeys.all });
+          }
+          if (code === ORDER_NOT_FOUND) {
+            // 이 주문이 이미 사라졌다(다른 곳에서 해제·만료됨) - 다음 제출이 새 주문을 만들게 한다.
+            setPendingOrder(null);
+          }
+          showToast('error', getErrorMessage(error));
+        },
+      },
+    );
+  };
 
   const submitLimitedPurchase = (dropId: number, method: PaymentMethodOption) => {
     if (addressId === undefined) {
@@ -102,9 +152,12 @@ export function useOrderFormSubmit({
             orderId: data.orderId,
             orderNumber: data.orderNumber,
             amount: data.finalAmount,
+            fingerprint: LIMITED_FINGERPRINT,
+            addressId,
+            expiresAtMs: toServerMs(data.expiresAt),
           };
           setPendingOrder(order);
-          void openForOrder(order, method);
+          void openForOrder({ kind: 'limited', dropId }, order, method);
         },
         onError: (error) => {
           const kind = classifyPurchaseError(getErrorCode(error));
@@ -153,9 +206,12 @@ export function useOrderFormSubmit({
             orderId: data.orderId,
             orderNumber: data.orderNumber,
             amount: data.finalAmount,
+            fingerprint: buildOrderFingerprint(payloadDraft, memberCouponId),
+            addressId,
+            expiresAtMs: data.expiresAt ? toServerMs(data.expiresAt) : null,
           };
           setPendingOrder(order);
-          void openForOrder(order, method);
+          void openForOrder(payloadDraft, order, method);
         },
         onError: (error) => {
           const code = getErrorCode(error);
@@ -172,7 +228,7 @@ export function useOrderFormSubmit({
             navigate('/cart', { replace: true });
             return;
           }
-          if (code === 'MEMBER_ADDRESS_NOT_FOUND') {
+          if (code === MEMBER_ADDRESS_NOT_FOUND) {
             queryClient.invalidateQueries({ queryKey: addressKeys.all });
             showToast('error', getErrorMessage(error));
             return;
@@ -190,13 +246,25 @@ export function useOrderFormSubmit({
   };
 
   const submit = (method: PaymentMethodOption) => {
-    if (draft === null) {
+    if (draft === null || addressId === undefined) {
       return;
     }
+
     if (pendingOrder) {
-      void openForOrder(pendingOrder, method);
-      return;
+      if (draft.kind === 'limited') {
+        reuseWithAddress(draft, pendingOrder, method, addressId);
+        return;
+      }
+      const fingerprint = buildOrderFingerprint(draft, memberCouponId);
+      const notExpired =
+        pendingOrder.expiresAtMs === null || getServerNowMs() < pendingOrder.expiresAtMs;
+      if (pendingOrder.fingerprint === fingerprint && notExpired) {
+        reuseWithAddress(draft, pendingOrder, method, addressId);
+        return;
+      }
+      // 지문이 바뀌었거나 만료됐다 - POST /orders 가 이전 PENDING 을 SUPERSEDED 로 풀고 새로 만든다.
     }
+
     if (draft.kind === 'limited') {
       submitLimitedPurchase(draft.dropId, method);
       return;
@@ -207,7 +275,9 @@ export function useOrderFormSubmit({
   const isSubmitting =
     (draft?.kind === 'limited'
       ? purchaseLimitedMutation.isPending
-      : createOrderMutation.isPending) || isOpening;
+      : createOrderMutation.isPending) ||
+    updateShippingAddressMutation.isPending ||
+    isOpening;
 
   return { submit, isSubmitting, pendingOrder, submittedRef };
 }

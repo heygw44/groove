@@ -34,6 +34,7 @@ import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
@@ -60,6 +61,7 @@ public class OrderService {
 	private final CartItemRepository cartItemRepository;
 	private final MemberCouponRepository memberCouponRepository;
 	private final OrderStockService orderStockService;
+	private final OrderDraftReleaser orderDraftReleaser;
 	private final OrderRepository orderRepository;
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final OrderQueryMapper orderQueryMapper;
@@ -70,6 +72,7 @@ public class OrderService {
 	@Transactional
 	public OrderCreateResponse create(Long memberId, OrderCreateRequest request) {
 		Member member = findActiveMember(memberId);
+		orderDraftReleaser.releaseDrafts(memberId, LocalDateTime.now(clock));
 		Address address = addressRepository.findByIdAndMemberId(request.addressId(), memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_ADDRESS_NOT_FOUND));
 		MemberCoupon memberCoupon = request.memberCouponId() == null ? null
@@ -84,7 +87,9 @@ public class OrderService {
 				: resolveDirectLine(request.productId(), request.quantity());
 
 		String orderNumber = orderNumberGenerator.generate();
-		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), LocalDateTime.now(clock));
+		OrderSource orderSource = request.isFromCart() ? OrderSource.CART : OrderSource.DIRECT;
+		Order order = Order.create(orderNumber, member, ShippingAddress.from(address), orderSource,
+				LocalDateTime.now(clock));
 		for (OrderLine line : lines) {
 			order.addItem(line.product(), line.quantity());
 		}
@@ -100,9 +105,8 @@ public class OrderService {
 			memberCoupon.use(order.getId());
 		}
 
-		if (request.isFromCart()) {
-			cartItemRepository.deleteAll(cartItems);
-		}
+		// 장바구니 삭제는 결제 확정 시점(OrderPlacementService)으로 옮겼다. 여기서 지우면 결제창을 닫아도
+		// 장바구니 상품이 사라진다.
 		return OrderCreateResponse.from(order);
 	}
 
@@ -133,7 +137,23 @@ public class OrderService {
 
 	public OrderDetailResponse getDetail(Long memberId, Long orderId) {
 		Order order = orderRepository.findWithItemsByIdAndMemberId(orderId, memberId)
+				.filter(Order::isPlaced)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		return buildDetail(order);
+	}
+
+	/**
+	 * 취소 같은 사용자 액션 직후 응답을 만들 때 쓴다. 결제 전(미확정) 주문도 본인이 방금 취소한 결과는
+	 * 그대로 보여줘야 하므로 {@link #getDetail} 과 달리 placed_at 을 따지지 않는다.
+	 */
+	public OrderDetailResponse getDetailAfterAction(Long memberId, Long orderId) {
+		Order order = orderRepository.findWithItemsByIdAndMemberId(orderId, memberId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		return buildDetail(order);
+	}
+
+	private OrderDetailResponse buildDetail(Order order) {
+		Long orderId = order.getId();
 		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
 				.map(purchase -> purchase.getDrop().getId())
 				.orElse(null);

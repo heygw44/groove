@@ -252,8 +252,8 @@ class OrderIdempotencyIntegrationTest extends IntegrationTestSupport {
 		}
 
 		@Test
-		@DisplayName("장바구니 주문도 같은 키로 재요청하면 항목이 삭제된 뒤에도 replayed 로 같은 응답을 반환한다")
-		void replaysCartOrderEvenAfterCartItemsDeleted() {
+		@DisplayName("장바구니 주문은 결제 전이라 항목이 남아 있고, 같은 키로 재요청하면 replayed 로 같은 응답을 반환한다")
+		void replaysCartOrderWhileCartItemsRemainUntilPayment() {
 			// given
 			Product product = createProduct(5);
 			Member member = createMember();
@@ -266,8 +266,8 @@ class OrderIdempotencyIntegrationTest extends IntegrationTestSupport {
 			// when
 			IdempotentResult<OrderCreateResponse> first = orderCreateService.create(member.getId(), key, request);
 
-			// then
-			assertThat(cartItemRepository.findById(cartItem.getId())).isEmpty();
+			// then: 장바구니 삭제는 결제 확정 시점으로 옮겨져 생성 직후에는 그대로 남는다
+			assertThat(cartItemRepository.findById(cartItem.getId())).isPresent();
 
 			// when
 			IdempotentResult<OrderCreateResponse> second = orderCreateService.create(member.getId(), key, request);
