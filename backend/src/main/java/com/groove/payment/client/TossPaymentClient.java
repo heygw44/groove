@@ -113,7 +113,7 @@ public class TossPaymentClient implements PaymentClient {
 		String easyPayProvider = response.easyPay() == null ? null : response.easyPay().provider();
 		return new PaymentConfirmResult(response.paymentKey(), response.orderId(), response.method(),
 				response.totalAmount(), toServerTime(response.approvedAt()), status, easyPayProvider,
-				toVirtualAccountInfo(response.virtualAccount()));
+				toVirtualAccountInfo(response.virtualAccount(), response.secret()));
 	}
 
 	@Override
@@ -328,12 +328,12 @@ public class TossPaymentClient implements PaymentClient {
 				toServerTime(response.approvedAt()), canceledAt);
 	}
 
-	private VirtualAccountInfo toVirtualAccountInfo(TossPaymentResponse.VirtualAccount virtualAccount) {
+	private VirtualAccountInfo toVirtualAccountInfo(TossPaymentResponse.VirtualAccount virtualAccount, String secret) {
 		if (virtualAccount == null) {
 			return null;
 		}
 		return new VirtualAccountInfo(virtualAccount.bankCode(), virtualAccount.accountNumber(),
-				virtualAccount.customerName(), toServerTime(virtualAccount.dueDate()), virtualAccount.secret());
+				virtualAccount.customerName(), toServerTime(virtualAccount.dueDate()), secret);
 	}
 
 	private PaymentLookupStatus parseLookupStatus(String status) {

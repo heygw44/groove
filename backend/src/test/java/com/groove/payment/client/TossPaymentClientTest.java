@@ -74,6 +74,24 @@ class TossPaymentClientTest {
 			}
 			""";
 
+	private static final String VIRTUAL_ACCOUNT_CONFIRM_RESPONSE = """
+			{
+				"paymentKey": "tviva20260902abcdef",
+				"orderId": "20260902-K7Q2M9XZ",
+				"status": "WAITING_FOR_DEPOSIT",
+				"method": "가상계좌",
+				"totalAmount": 75600,
+				"approvedAt": null,
+				"secret": "ps_deposit_check_value",
+				"virtualAccount": {
+					"accountNumber": "X6505636518308",
+					"bankCode": "88",
+					"customerName": "박그루브",
+					"dueDate": "2026-09-03T10:01:12+09:00"
+				}
+			}
+			""";
+
 	private static final String CONFIRM_RESPONSE_WITHOUT_APPROVED_AT = """
 			{
 				"paymentKey": "tviva20260902abcdef",
@@ -228,6 +246,25 @@ class TossPaymentClientTest {
 			assertThat(result.method()).isEqualTo("카드");
 			assertThat(result.totalAmount()).isEqualByComparingTo("75600");
 			assertThat(result.approvedAt()).isEqualTo(LocalDateTime.of(2026, 9, 2, 10, 1, 12));
+		}
+
+		@Test
+		@DisplayName("가상계좌 승인이면 Payment 최상위 secret 을 계좌 정보와 함께 매핑한다")
+		void mapsTopLevelSecretForVirtualAccount() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withSuccess(VIRTUAL_ACCOUNT_CONFIRM_RESPONSE, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentConfirmResult result = tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER,
+					new BigDecimal("75600"));
+
+			// then
+			assertThat(result.status()).isEqualTo(PaymentLookupStatus.WAITING_FOR_DEPOSIT);
+			assertThat(result.virtualAccount().bankCode()).isEqualTo("88");
+			assertThat(result.virtualAccount().accountNumber()).isEqualTo("X6505636518308");
+			assertThat(result.virtualAccount().dueDate()).isEqualTo(LocalDateTime.of(2026, 9, 3, 10, 1, 12));
+			assertThat(result.virtualAccount().secret()).isEqualTo("ps_deposit_check_value");
 		}
 
 		@Test
