@@ -3,6 +3,7 @@ package com.groove.order.dto;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
@@ -26,17 +27,16 @@ public record OrderDetailResponse(
 ) {
 
 	public static OrderDetailResponse from(Order order) {
-		return from(order, null, null);
+		return from(order, null, null, Map.of());
 	}
 
 	public static OrderDetailResponse from(Order order, Long limitedDropId) {
-		return from(order, limitedDropId, null);
+		return from(order, limitedDropId, null, Map.of());
 	}
 
-	public static OrderDetailResponse from(Order order, Long limitedDropId, OrderPaymentResponse payment) {
-		List<OrderItemResponse> items = order.getItems().stream()
-				.map(OrderItemResponse::from)
-				.toList();
+	public static OrderDetailResponse from(Order order, Long limitedDropId, OrderPaymentResponse payment,
+			Map<Long, String> thumbnailsByProductId) {
+		List<OrderItemResponse> items = OrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId);
 		return new OrderDetailResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
 				order.getTotalAmount(), order.getDiscountAmount(), order.getFinalAmount(), order.getCouponName(),
 				items, ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(),

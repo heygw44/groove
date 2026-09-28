@@ -1,6 +1,8 @@
 package com.groove.order.service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
+import com.groove.product.entity.ProductImage;
+import com.groove.product.repository.ProductImageRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,6 +40,7 @@ public class AdminOrderService {
 	private final OrderQueryMapper orderQueryMapper;
 	private final AdminAuditLogService adminAuditLogService;
 	private final PaymentRepository paymentRepository;
+	private final ProductImageRepository productImageRepository;
 
 	public PageResponse<AdminOrderSummaryResponse> getList(AdminOrderSearchRequest request) {
 		AdminOrderSearchCondition condition = request.toCondition();
@@ -50,7 +55,7 @@ public class AdminOrderService {
 	public AdminOrderDetailResponse getDetail(Long orderId) {
 		Order order = orderRepository.findWithItemsAndMemberById(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId));
+		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId), resolveThumbnails(order));
 	}
 
 	@Transactional
@@ -71,11 +76,22 @@ public class AdminOrderService {
 
 		adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
 				orderId, previous.name() + "->" + next.name());
-		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId));
+		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId), resolveThumbnails(order));
 	}
 
 	private PaymentStatus resolvePaymentStatus(Long orderId) {
 		return paymentRepository.findByOrderId(orderId).map(Payment::getStatus).orElse(null);
+	}
+
+	/** 주문 상품 썸네일(상품 sort_order = 0 이미지)을 한 번에 조회한다. */
+	private Map<Long, String> resolveThumbnails(Order order) {
+		List<Long> productIds = order.getItems().stream()
+				.map(item -> item.getProduct().getId())
+				.distinct()
+				.toList();
+		return productImageRepository.findAllByProductIdInAndSortOrder(productIds, 0).stream()
+				.collect(Collectors.toMap(image -> image.getProduct().getId(), ProductImage::getImageUrl,
+						(first, second) -> first));
 	}
 
 }

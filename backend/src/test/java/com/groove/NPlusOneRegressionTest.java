@@ -210,7 +210,8 @@ class NPlusOneRegressionTest extends IntegrationTestSupport {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.items.length()").value(5));
 			assertThat(queriesForFive).isEqualTo(queriesForOne);
-			assertThat(queriesForFive).isLessThanOrEqualTo(3);
+			// 주문+상품 조회, 한정반 조회, 결제 조회, 상품 썸네일 일괄 조회 = 4.
+			assertThat(queriesForFive).isLessThanOrEqualTo(4);
 		}
 
 		private long createOrderWithItems(String bearer, Member owner, int itemCount) throws Exception {

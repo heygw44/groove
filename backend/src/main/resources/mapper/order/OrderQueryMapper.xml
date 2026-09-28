@@ -53,6 +53,32 @@
 		<include refid="myOrdersWhere"/>
 	</select>
 
+	<resultMap id="orderListItemRowMap" type="com.groove.order.dto.OrderListItemRow">
+		<constructor>
+			<arg column="order_id" javaType="java.lang.Long"/>
+			<arg column="product_id" javaType="java.lang.Long"/>
+			<arg column="product_name" javaType="java.lang.String"/>
+			<arg column="quantity" javaType="_int"/>
+			<arg column="line_amount" javaType="java.math.BigDecimal"/>
+			<arg column="thumbnail_url" javaType="java.lang.String"/>
+		</constructor>
+	</resultMap>
+
+	<!-- 썸네일은 findMyOrders 와 같은 규약: 상품의 sort_order = 0 이미지. -->
+	<select id="findItemsByOrderIds" resultMap="orderListItemRowMap">
+		SELECT
+			oi.order_id, oi.product_id, oi.product_name_snapshot AS product_name, oi.quantity,
+			oi.price_snapshot * oi.quantity AS line_amount,
+			(SELECT MIN(pi.image_url) FROM product_image pi
+				WHERE pi.product_id = oi.product_id AND pi.sort_order = 0) AS thumbnail_url
+		FROM order_item oi
+		WHERE oi.order_id IN
+		<foreach item="orderId" collection="orderIds" open="(" separator="," close=")">
+			#{orderId}
+		</foreach>
+		ORDER BY oi.order_id, oi.id
+	</select>
+
 	<resultMap id="adminOrderSummaryMap" type="com.groove.order.dto.AdminOrderSummaryResponse">
 		<constructor>
 			<arg column="id" javaType="java.lang.Long"/>
