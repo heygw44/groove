@@ -9,10 +9,12 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import com.groove.coupon.entity.Coupon;
 import com.groove.coupon.entity.MemberCoupon;
@@ -21,6 +23,7 @@ import com.groove.coupon.repository.MemberCouponRepository;
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.CouponFixture;
+import com.groove.fixture.LimitedDropFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
@@ -30,6 +33,11 @@ import com.groove.inventory.entity.Stock;
 import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.repository.StockHistoryRepository;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.limited.dto.LimitedPurchaseResponse;
+import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.service.LimitedDropRedisService;
+import com.groove.limited.service.LimitedPurchaseService;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -86,7 +94,28 @@ class OrderExpirationIntegrationTest extends IntegrationTestSupport {
 	private OrderExpirationScheduler orderExpirationScheduler;
 
 	@Autowired
+	private LimitedDropRepository limitedDropRepository;
+
+	@Autowired
+	private LimitedPurchaseService limitedPurchaseService;
+
+	@Autowired
+	private LimitedDropRedisService limitedDropRedisService;
+
+	@Autowired
+	private StringRedisTemplate redisTemplate;
+
+	@Autowired
 	private Clock clock;
+
+	private Long limitedDropId;
+
+	@AfterEach
+	void tearDown() {
+		if (limitedDropId != null) {
+			limitedDropRedisService.clear(limitedDropId);
+		}
+	}
 
 	private Member createMember() {
 		return memberRepository.save(MemberFixture.create("buyer-" + UUID.randomUUID() + "@groove.com"));
@@ -99,6 +128,20 @@ class OrderExpirationIntegrationTest extends IntegrationTestSupport {
 		Product product = productRepository.save(createdProduct);
 		stockRepository.saveAndFlush(StockFixture.create(product, quantity));
 		return product;
+	}
+
+	private Long prepareOpenDrop(Product product, int totalQuantity) {
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, totalQuantity);
+		drop.open();
+		LocalDateTime now = LocalDateTime.now(clock);
+		LimitedDropFixture.withOpenAt(drop, now.minusHours(1));
+		LimitedDropFixture.withCloseAt(drop, now.plusHours(1));
+		limitedDropRepository.saveAndFlush(drop);
+
+		limitedDropId = drop.getId();
+		limitedDropRedisService.clear(limitedDropId);
+		limitedDropRedisService.initStock(limitedDropId, totalQuantity);
+		return limitedDropId;
 	}
 
 	@Nested
@@ -192,6 +235,37 @@ class OrderExpirationIntegrationTest extends IntegrationTestSupport {
 
 			Stock reloadedStock = stockRepository.findByProductId(product.getId()).orElseThrow();
 			assertThat(reloadedStock.getQuantity()).isEqualTo(4);
+		}
+
+		@Test
+		@DisplayName("한정반 주문이 만료되면 커밋 뒤 Redis 선점도 함께 풀린다")
+		void releasesLimitedDropRedisReservationWhenExpired() {
+			// given
+			Member member = createMember();
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = createProductWithStock(5);
+			Long dropId = prepareOpenDrop(product, 5);
+
+			LimitedPurchaseResponse purchase = limitedPurchaseService.purchase(dropId, member.getId(),
+					address.getId());
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("4");
+			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(dropId),
+					member.getId().toString())).isTrue();
+
+			LocalDateTime now = LocalDateTime.now(clock);
+			Order order = orderRepository.findById(purchase.orderId()).orElseThrow();
+			OrderFixture.withExpiresAt(order, now.minusMinutes(1));
+			orderRepository.saveAndFlush(order);
+
+			// when
+			orderExpirationScheduler.expireOrders();
+
+			// then
+			Order canceled = orderRepository.findById(order.getId()).orElseThrow();
+			assertThat(canceled.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("5");
+			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(dropId),
+					member.getId().toString())).isFalse();
 		}
 	}
 }

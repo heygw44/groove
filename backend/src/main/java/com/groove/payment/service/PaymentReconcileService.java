@@ -12,7 +12,6 @@ import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
-import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.PaymentCancelResult;

@@ -12,7 +12,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,8 +22,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.groove.global.lifecycle.ShutdownSignal;
-import com.groove.limited.service.LimitedDropRedisService;
-import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderExpirationLock;
@@ -42,9 +39,6 @@ class OrderExpirationSchedulerTest {
 	private OrderExpirationService orderExpirationService;
 
 	@Mock
-	private LimitedDropRedisService limitedDropRedisService;
-
-	@Mock
 	private OrderExpirationLock orderExpirationLock;
 
 	@Mock
@@ -58,8 +52,8 @@ class OrderExpirationSchedulerTest {
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
-		scheduler = new OrderExpirationScheduler(orderRepository, orderExpirationService, limitedDropRedisService,
-				orderExpirationLock, shutdownSignal, clock);
+		scheduler = new OrderExpirationScheduler(orderRepository, orderExpirationService, orderExpirationLock,
+				shutdownSignal, clock);
 	}
 
 	@Nested
@@ -115,9 +109,9 @@ class OrderExpirationSchedulerTest {
 			stubLockToRunTask();
 			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L, 2L, 3L));
-			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
+			given(orderExpirationService.expire(1L, now)).willReturn(false);
 			given(orderExpirationService.expire(2L, now)).willThrow(new RuntimeException("boom"));
-			given(orderExpirationService.expire(3L, now)).willReturn(Optional.empty());
+			given(orderExpirationService.expire(3L, now)).willReturn(true);
 
 			// when
 			scheduler.expireOrders();
@@ -129,39 +123,6 @@ class OrderExpirationSchedulerTest {
 		}
 
 		@Test
-		@DisplayName("한정반 선점 정보가 반환되면 Redis 선점을 해제한다")
-		void releasesLimitedDropReservationWhenPresent() {
-			// given
-			stubLockToRunTask();
-			LimitedRelease release = new LimitedRelease(10L, 20L);
-			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
-					.willReturn(List.of(1L));
-			given(orderExpirationService.expire(1L, now)).willReturn(Optional.of(release));
-
-			// when
-			scheduler.expireOrders();
-
-			// then
-			verify(limitedDropRedisService).release(10L, 20L);
-		}
-
-		@Test
-		@DisplayName("한정반 선점 정보가 없으면 Redis 를 건드리지 않는다")
-		void skipsRedisReleaseWhenEmpty() {
-			// given
-			stubLockToRunTask();
-			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
-					.willReturn(List.of(1L));
-			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
-
-			// when
-			scheduler.expireOrders();
-
-			// then
-			verify(limitedDropRedisService, never()).release(any(), any());
-		}
-
-		@Test
 		@DisplayName("첫 건 처리 후 셧다운 신호가 오면 두 번째 건을 처리하지 않는다")
 		void stopsProcessingWhenShutdownSignaledMidLoop() {
 			// given
@@ -169,7 +130,7 @@ class OrderExpirationSchedulerTest {
 			given(shutdownSignal.isShuttingDown()).willReturn(false, false, true);
 			given(orderRepository.findIdsByStatusAndExpiresAtBefore(eq(OrderStatus.PENDING), any(), any(), any()))
 					.willReturn(List.of(1L, 2L));
-			given(orderExpirationService.expire(1L, now)).willReturn(Optional.empty());
+			given(orderExpirationService.expire(1L, now)).willReturn(true);
 
 			// when
 			scheduler.expireOrders();
