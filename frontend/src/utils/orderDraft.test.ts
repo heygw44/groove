@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseOrderDraft, toOrderCreateRequest, type OrderDraft } from '@/utils/orderDraft';
+import {
+  parseOrderDraft,
+  toOrderCreateRequest,
+  type PurchasableOrderDraft,
+} from '@/utils/orderDraft';
 
 describe('parseOrderDraft()', () => {
   it('양의 정수 배열인 cartItemIds 는 장바구니 draft 로 판단한다', () => {
@@ -65,12 +69,34 @@ describe('parseOrderDraft()', () => {
     expect(parseOrderDraft({})).toBeNull();
     expect(parseOrderDraft('cartItemIds')).toBeNull();
   });
+
+  it('양의 정수 dropId 는 한정반 draft 로 판단한다', () => {
+    // given
+    const state = { dropId: 7 };
+
+    // when
+    const result = parseOrderDraft(state);
+
+    // then
+    expect(result).toEqual({ kind: 'limited', dropId: 7 });
+  });
+
+  it.each([{ dropId: 0 }, { dropId: -1 }, { dropId: '7' }])(
+    '유효하지 않은 dropId(%o)는 무효로 판단한다',
+    (state) => {
+      // when
+      const result = parseOrderDraft(state);
+
+      // then
+      expect(result).toBeNull();
+    },
+  );
 });
 
 describe('toOrderCreateRequest()', () => {
   it('장바구니 draft 는 cartItemIds 와 addressId 를 담는다', () => {
     // given
-    const draft: OrderDraft = { kind: 'cart', cartItemIds: [1, 2] };
+    const draft: PurchasableOrderDraft = { kind: 'cart', cartItemIds: [1, 2] };
 
     // when
     const result = toOrderCreateRequest(draft, 5);
@@ -81,7 +107,7 @@ describe('toOrderCreateRequest()', () => {
 
   it('직접 구매 draft 는 productId 와 quantity 를 담는다', () => {
     // given
-    const draft: OrderDraft = { kind: 'direct', productId: 10, quantity: 3 };
+    const draft: PurchasableOrderDraft = { kind: 'direct', productId: 10, quantity: 3 };
 
     // when
     const result = toOrderCreateRequest(draft, 5);
@@ -92,7 +118,7 @@ describe('toOrderCreateRequest()', () => {
 
   it('장바구니 draft 에 memberCouponId 를 넘기면 그대로 담긴다', () => {
     // given
-    const draft: OrderDraft = { kind: 'cart', cartItemIds: [1, 2] };
+    const draft: PurchasableOrderDraft = { kind: 'cart', cartItemIds: [1, 2] };
 
     // when
     const result = toOrderCreateRequest(draft, 5, 7);
@@ -103,7 +129,7 @@ describe('toOrderCreateRequest()', () => {
 
   it('직접 구매 draft 에 memberCouponId 를 넘기면 그대로 담긴다', () => {
     // given
-    const draft: OrderDraft = { kind: 'direct', productId: 10, quantity: 3 };
+    const draft: PurchasableOrderDraft = { kind: 'direct', productId: 10, quantity: 3 };
 
     // when
     const result = toOrderCreateRequest(draft, 5, 7);

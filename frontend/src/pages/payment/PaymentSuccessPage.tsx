@@ -100,7 +100,7 @@ export default function PaymentSuccessPage() {
       {
         onSuccess: (data) => {
           showToast('success', '결제가 완료되었습니다.');
-          navigate(`/orders/${data.orderId}`, { replace: true });
+          navigate(`/orders/${data.orderId}/complete`, { replace: true });
         },
         onError: (error) => {
           setConfirmError(error);

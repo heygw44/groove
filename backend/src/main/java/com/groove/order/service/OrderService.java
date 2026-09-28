@@ -2,7 +2,10 @@ package com.groove.order.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +27,8 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderListItemResponse;
+import com.groove.order.dto.OrderListItemRow;
 import com.groove.order.dto.OrderPaymentResponse;
 import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSearchRequest;
@@ -35,6 +40,8 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Product;
+import com.groove.product.entity.ProductImage;
+import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -57,6 +64,7 @@ public class OrderService {
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final OrderQueryMapper orderQueryMapper;
 	private final PaymentRepository paymentRepository;
+	private final ProductImageRepository productImageRepository;
 	private final Clock clock;
 
 	@Transactional
@@ -105,7 +113,22 @@ public class OrderService {
 			return PageResponse.of(List.of(), condition.page(), condition.size(), 0);
 		}
 		List<OrderSummaryResponse> content = orderQueryMapper.findMyOrders(condition);
-		return PageResponse.of(content, condition.page(), condition.size(), totalElements);
+		List<OrderSummaryResponse> withItems = attachItems(content);
+		return PageResponse.of(withItems, condition.page(), condition.size(), totalElements);
+	}
+
+	/** 페이지의 주문 id 로 상품 행을 한 번에 조회해 붙인다. 페이지가 비어 있으면 이 조회를 건너뛴다. */
+	private List<OrderSummaryResponse> attachItems(List<OrderSummaryResponse> summaries) {
+		if (summaries.isEmpty()) {
+			return summaries;
+		}
+		List<Long> orderIds = summaries.stream().map(OrderSummaryResponse::id).toList();
+		Map<Long, List<OrderListItemResponse>> itemsByOrderId = orderQueryMapper.findItemsByOrderIds(orderIds).stream()
+				.collect(Collectors.groupingBy(OrderListItemRow::orderId, LinkedHashMap::new,
+						Collectors.mapping(OrderListItemRow::toResponse, Collectors.toList())));
+		return summaries.stream()
+				.map(summary -> summary.withItems(itemsByOrderId.getOrDefault(summary.id(), List.of())))
+				.toList();
 	}
 
 	public OrderDetailResponse getDetail(Long memberId, Long orderId) {
@@ -114,15 +137,27 @@ public class OrderService {
 		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
 				.map(purchase -> purchase.getDrop().getId())
 				.orElse(null);
-		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId));
+		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId), resolveThumbnails(order));
 	}
 
-	/** 승인 이력이 있는 결제(DONE/CANCEL_REQUESTED/CANCELED)만 상세 응답에 포함한다. */
+	/** 주문 상품 썸네일(상품 sort_order = 0 이미지)을 한 번에 조회한다. */
+	private Map<Long, String> resolveThumbnails(Order order) {
+		List<Long> productIds = order.getItems().stream()
+				.map(item -> item.getProduct().getId())
+				.distinct()
+				.toList();
+		return productImageRepository.findAllByProductIdInAndSortOrder(productIds, 0).stream()
+				.collect(Collectors.toMap(image -> image.getProduct().getId(), ProductImage::getImageUrl,
+						(first, second) -> first));
+	}
+
+	/** 승인 이력이 있거나 입금대기 중인 결제(DONE/CANCEL_REQUESTED/CANCELED/WAITING_FOR_DEPOSIT)만 상세 응답에 포함한다. */
 	private OrderPaymentResponse resolvePayment(Long orderId) {
 		return paymentRepository.findByOrderId(orderId)
 				.filter(payment -> payment.getStatus() == PaymentStatus.DONE
 						|| payment.getStatus() == PaymentStatus.CANCEL_REQUESTED
-						|| payment.getStatus() == PaymentStatus.CANCELED)
+						|| payment.getStatus() == PaymentStatus.CANCELED
+						|| payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT)
 				.map(OrderPaymentResponse::from)
 				.orElse(null);
 	}

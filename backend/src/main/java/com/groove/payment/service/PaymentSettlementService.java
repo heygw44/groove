@@ -33,7 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PaymentSettlementService {
 
 	private static final Set<PaymentStatus> LATE_APPLY_STATUSES = Set.of(PaymentStatus.READY, PaymentStatus.UNKNOWN,
-			PaymentStatus.CANCEL_REQUESTED, PaymentStatus.FAILED);
+			PaymentStatus.CANCEL_REQUESTED, PaymentStatus.FAILED, PaymentStatus.WAITING_FOR_DEPOSIT);
 
 	private static final Set<PaymentStatus> MISSING_FROM_TOSS_TARGET_STATUSES = Set.of(PaymentStatus.DONE,
 			PaymentStatus.CANCELED, PaymentStatus.CANCEL_REQUESTED);
@@ -139,7 +139,7 @@ public class PaymentSettlementService {
 			case DONE -> "DONE".equals(tossStatus);
 			case CANCELED -> CANCELED_TOSS_STATUS.equals(tossStatus);
 			case FAILED -> "ABORTED".equals(tossStatus) || "EXPIRED".equals(tossStatus);
-			case READY, UNKNOWN, CANCEL_REQUESTED -> false;
+			case READY, UNKNOWN, CANCEL_REQUESTED, WAITING_FOR_DEPOSIT -> false;
 		};
 	}
 

@@ -10,6 +10,7 @@ import { LOGIN_NOTICE_MESSAGES } from '@/constants/authMessages';
 import { useLogin } from '@/hooks/mutations/useAuthMutations';
 import { loginSchema, type LoginFormValues } from '@/schemas/auth';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
+import { getSafeRedirect } from '@/utils/loginUrl';
 
 export default function LoginPage() {
   const [searchParams] = useSearchParams();
@@ -29,7 +30,7 @@ export default function LoginPage() {
 
   const onSubmit = handleSubmit((values) => {
     loginMutation.mutate(values, {
-      onSuccess: () => navigate(searchParams.get('redirect') ?? '/', { replace: true }),
+      onSuccess: () => navigate(getSafeRedirect(searchParams.get('redirect')), { replace: true }),
       onError: (error) => {
         if (!applyFieldErrors(error, setError)) {
           setError('root.serverError', { message: getErrorMessage(error) });

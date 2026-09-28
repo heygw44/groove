@@ -1,29 +1,29 @@
-import { useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { PageContainer } from '@/components/common/PageContainer';
 import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
-import { useToast } from '@/components/common/toastContext';
 import { CountdownTimer } from '@/components/limited/CountdownTimer';
 import { DropStatusBadge } from '@/components/limited/DropStatusBadge';
-import { LimitedPurchaseSheet } from '@/components/limited/LimitedPurchaseSheet';
 import { PurchaseResultModal } from '@/components/limited/PurchaseResultModal';
 import { RemainingGauge } from '@/components/limited/RemainingGauge';
 import { TasteMatchBadge } from '@/components/limited/TasteMatchBadge';
-import { usePurchaseLimitedDrop } from '@/hooks/mutations/useLimitedDropMutations';
-import { addressKeys } from '@/hooks/queries/queryKeys';
 import { useLimitedDrop } from '@/hooks/queries/useLimitedDrop';
 import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { useAuthStore } from '@/store/authStore';
-import { getErrorCode, getErrorMessage } from '@/utils/apiError';
+import { getErrorCode } from '@/utils/apiError';
 import { formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
-import { classifyPurchaseError, getDropPhase, getPurchaseButtonState } from '@/utils/limitedDrop';
+import {
+  getDropPhase,
+  getLimitedPurchaseResultContent,
+  getPurchaseButtonState,
+  parseLimitedPurchaseResultState,
+} from '@/utils/limitedDrop';
 import { applyServerTime, toServerMs } from '@/utils/serverTime';
 
 const NOT_FOUND_CODES = new Set(['LIMITED_DROP_NOT_FOUND']);
@@ -40,20 +40,24 @@ export default function LimitedDropDetailPage() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { showToast } = useToast();
-  const queryClient = useQueryClient();
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
   const nowMs = useServerNow();
   const { data: drop, isPending, isError, error, refetch } = useLimitedDrop(id);
-  const purchaseMutation = usePurchaseLimitedDrop(id);
 
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [resultModal, setResultModal] = useState<
-    { title: string; description: string; linkTo?: string; linkLabel?: string } | undefined
-  >(undefined);
+  // 주문서에서 구매 실패(매진/이미 구매)를 알리며 navigate state 로 넘긴 결과.
+  const purchaseResultKind = parseLimitedPurchaseResultState(location.state);
+  const purchaseResultContent = purchaseResultKind
+    ? getLimitedPurchaseResultContent(purchaseResultKind)
+    : undefined;
 
   const phase = drop ? getDropPhase(drop, nowMs) : undefined;
   const previousPhaseRef = useRef(phase);
+
+  useEffect(() => {
+    if (purchaseResultKind) {
+      void refetch();
+    }
+  }, [purchaseResultKind, refetch]);
 
   useEffect(() => {
     if (drop) {
@@ -124,53 +128,12 @@ export default function LimitedDropDetailPage() {
       navigate(`/login?redirect=${redirect}`);
       return;
     }
-    setIsSheetOpen(true);
+    navigate('/orders/new', { state: { dropId: id } });
   };
 
-  const handleConfirmPurchase = (addressId: number) => {
-    purchaseMutation.mutate(
-      { addressId },
-      {
-        onSuccess: (data) => {
-          setIsSheetOpen(false);
-          navigate(`/orders/${data.orderId}`);
-        },
-        onError: (mutationError) => {
-          const code = getErrorCode(mutationError);
-          switch (classifyPurchaseError(code)) {
-            case 'SOLD_OUT':
-              setIsSheetOpen(false);
-              setResultModal({
-                title: '매진되었습니다',
-                description: '아쉽지만 이번 한정반은 모두 판매되었습니다.',
-              });
-              void refetch();
-              break;
-            case 'ALREADY_PURCHASED':
-              setIsSheetOpen(false);
-              setResultModal({
-                title: '이미 구매했습니다',
-                description: '한정반은 한 사람당 한 번만 구매할 수 있습니다.',
-                linkTo: '/orders',
-                linkLabel: '내 주문 보기',
-              });
-              void refetch();
-              break;
-            case 'STATE_CHANGED':
-              showToast('error', getErrorMessage(mutationError));
-              void refetch();
-              break;
-            case 'ADDRESS_MISSING':
-              showToast('error', getErrorMessage(mutationError));
-              void queryClient.invalidateQueries({ queryKey: addressKeys.all });
-              break;
-            default:
-              showToast('error', getErrorMessage(mutationError));
-              break;
-          }
-        },
-      },
-    );
+  // 새로고침/뒤로가기 시 결과 안내가 다시 뜨지 않게 state 를 비운다.
+  const closePurchaseResult = () => {
+    navigate(location.pathname, { replace: true, state: null });
   };
 
   return (
@@ -219,21 +182,13 @@ export default function LimitedDropDetailPage() {
         {buttonState.label}
       </Button>
 
-      <LimitedPurchaseSheet
-        open={isSheetOpen}
-        onClose={() => setIsSheetOpen(false)}
-        drop={drop}
-        pending={purchaseMutation.isPending}
-        onConfirm={handleConfirmPurchase}
-      />
-
       <PurchaseResultModal
-        open={resultModal !== undefined}
-        onClose={() => setResultModal(undefined)}
-        title={resultModal?.title ?? ''}
-        description={resultModal?.description ?? ''}
-        linkTo={resultModal?.linkTo}
-        linkLabel={resultModal?.linkLabel}
+        open={purchaseResultContent !== undefined}
+        onClose={closePurchaseResult}
+        title={purchaseResultContent?.title ?? ''}
+        description={purchaseResultContent?.description ?? ''}
+        linkTo={purchaseResultContent?.linkTo}
+        linkLabel={purchaseResultContent?.linkLabel}
       />
     </PageContainer>
   );

@@ -101,6 +101,9 @@ public enum ErrorCode {
 	PAYMENT_CANCEL_FAILED(HttpStatus.BAD_REQUEST, "결제 취소에 실패했습니다."),
 	PAYMENT_KEY_MISMATCH(HttpStatus.CONFLICT, "결제 키가 주문과 일치하지 않습니다."),
 	PAYMENT_RESULT_UNKNOWN(HttpStatus.SERVICE_UNAVAILABLE, "결제 처리 결과를 확인하고 있습니다."),
+	PAYMENT_METHOD_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "이 주문에는 사용할 수 없는 결제수단입니다."),
+	PAYMENT_REFUND_ACCOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "환불 계좌 정보가 필요합니다."),
+	PAYMENT_DEPOSIT_SECRET_MISMATCH(HttpStatus.BAD_REQUEST, "입금 확인 정보가 일치하지 않습니다."),
 
 	// ===== WISHLIST =====
 	WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 등록된 상품입니다."),

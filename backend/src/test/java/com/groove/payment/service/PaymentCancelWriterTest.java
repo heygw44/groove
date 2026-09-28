@@ -35,6 +35,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderCancelRestorer;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
@@ -188,6 +189,49 @@ class PaymentCancelWriterTest {
 
 			// then
 			assertThat(result.tossReason()).isEqualTo("관리자 취소");
+		}
+
+		@Test
+		@DisplayName("가상계좌로 결제됐는데 환불계좌가 없으면 PAYMENT_REFUND_ACCOUNT_REQUIRED 예외를 던지고 상태를 바꾸지 않는다")
+		void rejectsVirtualAccountCancelWithoutRefundAccount() {
+			// given
+			Payment virtualAccountPayment = virtualAccountDonePayment();
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(virtualAccountPayment));
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(virtualAccountPayment.getStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("가상계좌로 결제됐고 환불계좌가 있으면 취소 요청에 그대로 실어 보낸다")
+		void acceptsVirtualAccountCancelWithRefundAccount() {
+			// given
+			Payment virtualAccountPayment = virtualAccountDonePayment();
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(virtualAccountPayment));
+			RefundAccountInfo refundAccount = new RefundAccountInfo("088", "12345678901234", "홍길동");
+
+			// when
+			CancelRequest result = writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", refundAccount);
+
+			// then
+			assertThat(result.refundAccount()).isEqualTo(refundAccount);
+			assertThat(virtualAccountPayment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
+		}
+
+		private Payment virtualAccountDonePayment() {
+			Payment virtualAccountPayment = Payment.ready(order);
+			virtualAccountPayment.issueVirtualAccount(PaymentFixture.PAYMENT_KEY, "가상계좌", "088", "12345678901234",
+					"홍길동", NOW.plusHours(24), "hash");
+			virtualAccountPayment.approve(PaymentFixture.PAYMENT_KEY, "가상계좌", PaymentFixture.APPROVED_AT);
+			ReflectionTestUtils.setField(virtualAccountPayment, "id", PAYMENT_ID);
+			return virtualAccountPayment;
 		}
 	}
 

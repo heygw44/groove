@@ -116,3 +116,53 @@ export function classifyPurchaseError(code: string | undefined): PurchaseErrorKi
   }
   return PURCHASE_ERROR_CODE_KIND[code] ?? 'UNKNOWN';
 }
+
+export type LimitedPurchaseResultKind = 'SOLD_OUT' | 'ALREADY_PURCHASED';
+
+interface LimitedPurchaseResultContent {
+  title: string;
+  description: string;
+  linkTo?: string;
+  linkLabel?: string;
+}
+
+const LIMITED_PURCHASE_RESULT_CONTENT: Record<
+  LimitedPurchaseResultKind,
+  LimitedPurchaseResultContent
+> = {
+  SOLD_OUT: {
+    title: '매진되었습니다',
+    description: '아쉽지만 이번 한정반은 모두 판매되었습니다.',
+  },
+  ALREADY_PURCHASED: {
+    title: '이미 구매했습니다',
+    description: '한정반은 한 사람당 한 번만 구매할 수 있습니다.',
+    linkTo: '/orders',
+    linkLabel: '내 주문 보기',
+  },
+};
+
+export function getLimitedPurchaseResultContent(
+  kind: LimitedPurchaseResultKind,
+): LimitedPurchaseResultContent {
+  return LIMITED_PURCHASE_RESULT_CONTENT[kind];
+}
+
+/** 주문서에서 결과를 알리며 넘긴 navigate state 를 판독한다. */
+export function parseLimitedPurchaseResultState(state: unknown): LimitedPurchaseResultKind | null {
+  if (typeof state !== 'object' || state === null || !('limitedPurchaseResult' in state)) {
+    return null;
+  }
+  const { limitedPurchaseResult } = state as { limitedPurchaseResult: unknown };
+  if (limitedPurchaseResult === 'SOLD_OUT' || limitedPurchaseResult === 'ALREADY_PURCHASED') {
+    return limitedPurchaseResult;
+  }
+  return null;
+}
+
+/** 주문서가 결과 안내를 위해 한정반 상세로 넘기는 navigate state. */
+export function buildLimitedPurchaseResultState(kind: LimitedPurchaseResultKind): {
+  limitedPurchaseResult: LimitedPurchaseResultKind;
+} {
+  return { limitedPurchaseResult: kind };
+}

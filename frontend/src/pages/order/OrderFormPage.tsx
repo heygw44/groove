@@ -1,5 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
@@ -9,40 +8,38 @@ import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { CouponSection } from '@/components/order/CouponSection';
-import type { OrderSummaryItem } from '@/components/order/OrderItemSummaryList';
-import { OrderItemSummaryList } from '@/components/order/OrderItemSummaryList';
+import {
+  OrderItemSummaryList,
+  type OrderSummaryItem,
+} from '@/components/order/OrderItemSummaryList';
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
+import { PaymentMethodSection } from '@/components/order/PaymentMethodSection';
 import { ShippingAddressSection } from '@/components/order/ShippingAddressSection';
-import { useCreateOrder } from '@/hooks/mutations/useOrderMutations';
-import { addressKeys, couponKeys, orderKeys } from '@/hooks/queries/queryKeys';
 import { useAddresses } from '@/hooks/queries/useAddresses';
-import { useCart } from '@/hooks/queries/useCart';
-import { useProduct } from '@/hooks/queries/useProduct';
+import { useOrderFormSource } from '@/hooks/useOrderFormSource';
+import { useOrderFormSubmit } from '@/hooks/useOrderFormSubmit';
 import type { AvailableCoupon } from '@/types/coupon';
-import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { parseOrderDraft, toOrderCreateRequest } from '@/utils/orderDraft';
+import type { PaymentMethodOption } from '@/types/payment';
+import { formatServerDateTime } from '@/utils/formatDate';
+import { formatPrice } from '@/utils/formatPrice';
+import { parseOrderDraft } from '@/utils/orderDraft';
+import { buildOrderName } from '@/utils/paymentRedirect';
 
-const STOCK_ERROR_CODES = new Set(['STOCK_INSUFFICIENT', 'STOCK_CONFLICT']);
-const IDEMPOTENCY_KEY_REUSED = 'IDEMPOTENCY_KEY_REUSED';
-const COUPON_ERROR_CODES = new Set([
-  'COUPON_NOT_FOUND',
-  'COUPON_EXPIRED',
-  'COUPON_DISABLED',
-  'COUPON_ALREADY_USED',
-  'COUPON_MIN_ORDER_AMOUNT_NOT_MET',
-]);
+interface CheckoutSnapshot {
+  items: OrderSummaryItem[];
+  totalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+}
 
 export default function OrderFormPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const queryClient = useQueryClient();
-  const createOrderMutation = useCreateOrder();
 
   const draft = useMemo(() => parseOrderDraft(location.state), [location.state]);
+  const source = useOrderFormSource(draft);
 
-  const cartQuery = useCart();
-  const productQuery = useProduct(draft?.kind === 'direct' ? draft.productId : 0);
   const {
     data: addresses,
     isPending: isAddressesPending,
@@ -53,147 +50,82 @@ export default function OrderFormPage() {
 
   const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
   const [selectedCoupon, setSelectedCoupon] = useState<AvailableCoupon | null>(null);
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const submittedRef = useRef(false);
-
-  const cartItems = cartQuery.data?.items ?? [];
-  const cartOrderItems =
-    draft?.kind === 'cart' ? cartItems.filter((item) => draft.cartItemIds.includes(item.id)) : [];
-
-  const shouldReturnToCart =
-    draft === null ||
-    (draft.kind === 'cart' &&
-      cartQuery.data !== undefined &&
-      cartOrderItems.length !== draft.cartItemIds.length);
-
-  /*
-   * 주문 생성 성공 시 cart 가 무효화되어 항목이 사라지지만 그 전에 navigate 로
-   * 언마운트되므로 이 효과는 돌지 않는다. submittedRef 체크는 StrictMode 의
-   * 이펙트 이중 실행(ref 는 유지됨) 때문에 토스트가 중복으로 뜨는 것을 막는다.
-   */
-  useEffect(() => {
-    if (!shouldReturnToCart || submittedRef.current) {
-      return;
-    }
-    submittedRef.current = true;
-    showToast('info', '주문할 상품을 다시 선택해주세요.');
-    navigate('/cart', { replace: true });
-  }, [shouldReturnToCart, navigate, showToast]);
-
-  const orderItems: OrderSummaryItem[] =
-    draft?.kind === 'cart'
-      ? cartOrderItems.map((item) => ({
-          key: item.id,
-          title: item.title,
-          artistName: item.artistName,
-          thumbnailUrl: item.thumbnailUrl,
-          price: item.price,
-          quantity: item.quantity,
-          lineAmount: item.subtotal,
-        }))
-      : draft?.kind === 'direct' && productQuery.data
-        ? [
-            {
-              key: productQuery.data.id,
-              title: productQuery.data.title,
-              artistName: productQuery.data.artist.name,
-              thumbnailUrl: productQuery.data.images[0]?.url,
-              price: productQuery.data.price,
-              quantity: draft.quantity,
-              lineAmount: productQuery.data.price * draft.quantity,
-            },
-          ]
-        : [];
+  const [method, setMethod] = useState<PaymentMethodOption>('CARD');
+  const [isAgreed, setIsAgreed] = useState(false);
+  const [snapshot, setSnapshot] = useState<CheckoutSnapshot | null>(null);
 
   const effectiveSelectedId =
     selectedId ?? (addresses?.find((address) => address.isDefault) ?? addresses?.[0])?.id;
+  const allowVirtualAccount = draft?.kind !== 'limited';
 
-  const totalAmount = orderItems.reduce((sum, item) => sum + item.lineAmount, 0);
-  const discountAmount = selectedCoupon?.expectedDiscount ?? 0;
-  const finalAmount = Math.max(0, totalAmount - discountAmount);
+  const { submit, isSubmitting, pendingOrder, submittedRef } = useOrderFormSubmit({
+    draft,
+    addressId: effectiveSelectedId,
+    memberCouponId: selectedCoupon?.memberCouponId ?? null,
+    orderName: buildOrderName(
+      (snapshot?.items ?? source.items).map((item) => ({ productName: item.title })),
+    ),
+    onCouponRejected: () => setSelectedCoupon(null),
+  });
+  const isOrderLocked = pendingOrder !== null;
+
+  /*
+   * 주문 생성 성공 시 draft 가 가리키던 데이터가 무효화되어 사라지지만 그 전에
+   * navigate 로 언마운트되므로 이 효과는 돌지 않는다. submittedRef 체크는 StrictMode 의
+   * 이펙트 이중 실행(ref 는 유지됨) 때문에 토스트가 중복으로 뜨는 것을 막는다.
+   */
+  useEffect(() => {
+    // 주문이 이미 생겼으면 장바구니 항목이 지워져 source 가 invalid 로 바뀐다. 결제창을 여는 중이니 튕기지 않는다.
+    if (!source.invalid || submittedRef.current || isOrderLocked) {
+      return;
+    }
+    submittedRef.current = true;
+    showToast('info', source.invalidMessage);
+    navigate(source.returnTo, { replace: true });
+  }, [
+    source.invalid,
+    source.invalidMessage,
+    source.returnTo,
+    navigate,
+    showToast,
+    submittedRef,
+    isOrderLocked,
+  ]);
+
+  const liveTotalAmount = source.items.reduce((sum, item) => sum + item.lineAmount, 0);
+  const liveDiscountAmount = source.couponAllowed ? (selectedCoupon?.expectedDiscount ?? 0) : 0;
+  const view: CheckoutSnapshot = snapshot ?? {
+    items: source.items,
+    totalAmount: liveTotalAmount,
+    discountAmount: liveDiscountAmount,
+    finalAmount: Math.max(0, liveTotalAmount - liveDiscountAmount),
+  };
+  const finalAmount = pendingOrder?.amount ?? view.finalAmount;
+  const isLimitedBlocked =
+    !isOrderLocked && source.limited !== undefined && !source.limited.isPurchasable;
+
+  const handleSubmit = () => {
+    // 주문 생성 뒤 장바구니·한정반 데이터가 무효화돼도 제출 시점의 주문 내용을 그대로 보여 준다.
+    if (!snapshot) {
+      setSnapshot(view);
+    }
+    submit(method);
+  };
 
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       !submittedRef.current && currentLocation.pathname !== nextLocation.pathname,
   );
 
-  const isLoading =
-    draft?.kind === 'cart'
-      ? cartQuery.isPending || isAddressesPending
-      : draft?.kind === 'direct'
-        ? productQuery.isPending || isAddressesPending
-        : true;
-
-  const isError =
-    draft?.kind === 'cart'
-      ? cartQuery.isError || isAddressesError
-      : draft?.kind === 'direct'
-        ? productQuery.isError || isAddressesError
-        : false;
-
-  const formError =
-    draft?.kind === 'cart'
-      ? (cartQuery.error ?? addressesError)
-      : draft?.kind === 'direct'
-        ? (productQuery.error ?? addressesError)
-        : undefined;
+  const isLoading = source.isLoading || isAddressesPending;
+  const isError = source.isError || isAddressesError;
+  const formError = source.error ?? addressesError;
 
   const handleRetry = () => {
-    if (draft?.kind === 'cart') {
-      cartQuery.refetch();
-    } else if (draft?.kind === 'direct') {
-      productQuery.refetch();
-    }
+    source.retry();
     if (isAddressesError) {
       refetchAddresses();
     }
-  };
-
-  const handleSubmit = () => {
-    if (draft === null || effectiveSelectedId === undefined) {
-      return;
-    }
-
-    createOrderMutation.mutate(
-      {
-        payload: toOrderCreateRequest(draft, effectiveSelectedId, selectedCoupon?.memberCouponId ?? null),
-        idempotencyKey,
-      },
-      {
-        onSuccess: (data) => {
-          submittedRef.current = true;
-          navigate(`/orders/${data.orderId}`, { replace: true });
-        },
-        onError: (error) => {
-          const code = getErrorCode(error);
-          if (code === IDEMPOTENCY_KEY_REUSED) {
-            submittedRef.current = true;
-            queryClient.invalidateQueries({ queryKey: orderKeys.all });
-            showToast('error', getErrorMessage(error));
-            navigate('/orders', { replace: true });
-            return;
-          }
-          if (code && STOCK_ERROR_CODES.has(code)) {
-            submittedRef.current = true;
-            showToast('error', getErrorMessage(error));
-            navigate('/cart', { replace: true });
-            return;
-          }
-          if (code === 'MEMBER_ADDRESS_NOT_FOUND') {
-            queryClient.invalidateQueries({ queryKey: addressKeys.all });
-            showToast('error', getErrorMessage(error));
-            return;
-          }
-          if (code && COUPON_ERROR_CODES.has(code)) {
-            setSelectedCoupon(null);
-            queryClient.invalidateQueries({ queryKey: couponKeys.all });
-            showToast('error', `${getErrorMessage(error)} 쿠폰을 해제했으니 다시 확인해주세요.`);
-            return;
-          }
-          showToast('error', getErrorMessage(error));
-        },
-      },
-    );
   };
 
   if (draft === null) {
@@ -230,38 +162,82 @@ export default function OrderFormPage() {
         <div className="flex flex-col gap-8">
           <div>
             <h2 className="mb-3 text-base font-bold">주문 상품</h2>
+            {source.limited && (
+              <div className="mb-3 rounded-lg border border-line-strong bg-surface-muted px-4 py-3 text-sm text-content-muted">
+                주문하기를 누르는 순간 선착순으로 구매가 확정됩니다. 마감{' '}
+                {formatServerDateTime(source.limited.drop.closeAt)}
+              </div>
+            )}
             <div className="rounded-lg border border-line bg-surface px-5 py-4">
-              <OrderItemSummaryList items={orderItems} />
+              <OrderItemSummaryList items={view.items} />
             </div>
           </div>
 
-          <ShippingAddressSection
-            addresses={addresses ?? []}
-            selectedId={effectiveSelectedId}
-            onSelect={setSelectedId}
-          />
+          {isOrderLocked && (
+            <p className="rounded-lg border border-line-strong bg-surface-muted px-4 py-3 text-sm text-content-muted">
+              주문이 생성되어 배송지와 쿠폰은 바꿀 수 없습니다. 결제수단만 바꿔 다시 결제할 수
+              있어요.
+            </p>
+          )}
 
-          <CouponSection
-            orderAmount={totalAmount}
-            selected={selectedCoupon}
-            onSelect={setSelectedCoupon}
+          <fieldset disabled={isOrderLocked} className="contents">
+            <ShippingAddressSection
+              addresses={addresses ?? []}
+              selectedId={effectiveSelectedId}
+              onSelect={setSelectedId}
+            />
+
+            {source.couponAllowed ? (
+              <CouponSection
+                orderAmount={view.totalAmount}
+                selected={selectedCoupon}
+                onSelect={setSelectedCoupon}
+              />
+            ) : (
+              <div>
+                <h2 className="mb-3 text-base font-bold">쿠폰</h2>
+                <div className="rounded-lg border border-line bg-surface px-5 py-4 text-sm text-content-muted">
+                  한정반은 쿠폰을 적용할 수 없습니다.
+                </div>
+              </div>
+            )}
+          </fieldset>
+
+          <PaymentMethodSection
+            method={method}
+            onChange={setMethod}
+            allowVirtualAccount={allowVirtualAccount}
           />
         </div>
 
         <div className="h-fit rounded-lg border border-line bg-surface p-5 md:sticky md:top-6">
           <OrderPriceSummary
-            totalAmount={totalAmount}
-            discountAmount={discountAmount}
+            totalAmount={view.totalAmount}
+            discountAmount={view.discountAmount}
             finalAmount={finalAmount}
-            couponName={selectedCoupon?.couponName}
+            couponName={source.couponAllowed ? selectedCoupon?.couponName : undefined}
           />
+          <label className="mt-5 flex cursor-pointer items-start gap-2 text-sm text-content-muted">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-content"
+              checked={isAgreed}
+              onChange={(event) => setIsAgreed(event.target.checked)}
+            />
+            주문 내용을 확인했으며 결제에 동의합니다
+          </label>
           <Button
-            className="mt-5 w-full"
+            className="mt-3 w-full"
             onClick={handleSubmit}
-            disabled={effectiveSelectedId === undefined || orderItems.length === 0}
-            loading={createOrderMutation.isPending}
+            disabled={
+              effectiveSelectedId === undefined ||
+              view.items.length === 0 ||
+              isLimitedBlocked ||
+              !isAgreed
+            }
+            loading={isSubmitting}
           >
-            주문하기
+            {formatPrice(finalAmount)} 결제하기
           </Button>
         </div>
       </div>

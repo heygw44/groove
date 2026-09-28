@@ -60,6 +60,8 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderListItemResponse;
+import com.groove.order.dto.OrderListItemRow;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
@@ -70,6 +72,8 @@ import com.groove.payment.entity.Payment;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.entity.ProductImage;
+import com.groove.product.repository.ProductImageRepository;
 import com.groove.product.repository.ProductRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -114,6 +118,9 @@ class OrderServiceTest {
 	@Mock
 	PaymentRepository paymentRepository;
 
+	@Mock
+	ProductImageRepository productImageRepository;
+
 	OrderService orderService;
 
 	Member member;
@@ -136,7 +143,8 @@ class OrderServiceTest {
 		now = LocalDateTime.now(clock);
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, cartItemRepository, memberCouponRepository, orderStockService,
-				orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository, clock);
+				orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository, productImageRepository,
+				clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -472,6 +480,7 @@ class OrderServiceTest {
 			assertThat(response.content()).isEmpty();
 			assertThat(response.totalElements()).isZero();
 			verify(orderQueryMapper, never()).findMyOrders(any());
+			verify(orderQueryMapper, never()).findItemsByOrderIds(any());
 		}
 
 		@Test
@@ -490,6 +499,33 @@ class OrderServiceTest {
 			// then
 			assertThat(response.content()).containsExactly(summary);
 			assertThat(response.totalElements()).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("주문마다 페이지에서 한 번에 조회한 상품 행을 주문 id 로 묶어 붙인다")
+		void attachesItemsGroupedByOrderId() {
+			// given
+			OrderSummaryResponse first = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
+					new BigDecimal("30000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, null);
+			OrderSummaryResponse second = new OrderSummaryResponse(2L, "20260903-TESTAB13", OrderStatus.PENDING,
+					new BigDecimal("45000"), BigDecimal.ZERO, null, "A Love Supreme", 1, null, null);
+			OrderListItemRow firstItem = new OrderListItemRow(1L, PRODUCT_ID, "Kind of Blue", 1,
+					new BigDecimal("30000"), null);
+			OrderListItemRow secondItem = new OrderListItemRow(2L, 200L, "A Love Supreme", 1,
+					new BigDecimal("45000"), "https://cdn.groove.com/love-supreme-0.jpg");
+			given(orderQueryMapper.countMyOrders(any())).willReturn(2L);
+			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(first, second));
+			given(orderQueryMapper.findItemsByOrderIds(List.of(1L, 2L))).willReturn(List.of(firstItem, secondItem));
+			OrderSearchRequest request = new OrderSearchRequest(null, null, null);
+
+			// when
+			PageResponse<OrderSummaryResponse> response = orderService.getMyOrders(MEMBER_ID, request);
+
+			// then
+			assertThat(response.content().get(0).items()).extracting(OrderListItemResponse::productName)
+					.containsExactly("Kind of Blue");
+			assertThat(response.content().get(1).items()).extracting(OrderListItemResponse::thumbnailUrl)
+					.containsExactly("https://cdn.groove.com/love-supreme-0.jpg");
 		}
 	}
 
@@ -510,6 +546,23 @@ class OrderServiceTest {
 			// then
 			assertThat(response.id()).isEqualTo(600L);
 			assertThat(response.items()).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("상품에 sort_order 0 이미지가 있으면 주문 상품 응답에 썸네일 URL 을 채운다")
+		void returnsThumbnailUrlWhenProductHasImage() {
+			// given
+			Order order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), 604L);
+			ProductImage image = ProductImage.of(product, "https://cdn.groove.com/thumb.jpg", 0);
+			given(orderRepository.findWithItemsByIdAndMemberId(604L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(productImageRepository.findAllByProductIdInAndSortOrder(List.of(PRODUCT_ID), 0))
+					.willReturn(List.of(image));
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 604L);
+
+			// then
+			assertThat(response.items().get(0).thumbnailUrl()).isEqualTo("https://cdn.groove.com/thumb.jpg");
 		}
 
 		@Test

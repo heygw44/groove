@@ -92,6 +92,23 @@ class PaymentReconcileServiceTest {
 	}
 
 	@Nested
+	@DisplayName("findCandidates()")
+	class FindCandidates {
+
+		@Test
+		@DisplayName("입금대기 결제는 스케줄러 대사 후보에서 뺀다")
+		void excludesWaitingForDepositFromScheduledCandidates() {
+			// when
+			service.findCandidates(now);
+
+			// then
+			verify(paymentRepository).findReconcileCandidates(eq(PaymentStatus.SCHEDULED_RECONCILE_TARGETS),
+					eq(now.minusMinutes(2)), eq(10), any());
+			assertThat(PaymentStatus.SCHEDULED_RECONCILE_TARGETS).doesNotContain(PaymentStatus.WAITING_FOR_DEPOSIT);
+		}
+	}
+
+	@Nested
 	@DisplayName("apply()")
 	class Apply {
 
@@ -203,6 +220,24 @@ class PaymentReconcileServiceTest {
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
 			assertThat(payment.getReconcileAttempts()).isEqualTo(1);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.SKIPPED);
+		}
+
+		@Test
+		@DisplayName("가상계좌가 여전히 입금대기면 대사 상한 카운트 없이 SKIPPED 로만 남긴다")
+		void appliesSkipDecisionWithoutCountingAttemptsWhenWaitingForDeposit() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = waitingForDepositPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when
+			service.apply(candidate(), lookupOf(PaymentLookupStatus.WAITING_FOR_DEPOSIT, AMOUNT));
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.WAITING_FOR_DEPOSIT);
+			assertThat(payment.getReconcileAttempts()).isZero();
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.SKIPPED);
 		}
 
@@ -471,6 +506,23 @@ class PaymentReconcileServiceTest {
 		}
 
 		@Test
+		@DisplayName("입금대기 결제는 조회 실패를 재시도 횟수로 세지 않는다")
+		void doesNotCountMissWhenWaitingForDeposit() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = waitingForDepositPayment(order);
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when
+			service.recordFailure(candidate(), "조회 실패");
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.WAITING_FOR_DEPOSIT);
+			assertThat(payment.getReconcileAttempts()).isZero();
+			verify(logRepository, never()).save(any());
+		}
+
+		@Test
 		@DisplayName("결제가 이미 해소됐으면 아무것도 하지 않는다")
 		void doesNothingWhenPaymentAlreadyResolved() {
 			// given
@@ -545,6 +597,12 @@ class PaymentReconcileServiceTest {
 	private Payment compensatedPayment(Order order) {
 		Payment payment = readyPayment(order);
 		payment.compensate(PAYMENT_KEY, now.minusMinutes(10), now, "대사: 토스에서 이미 취소됨");
+		return payment;
+	}
+
+	private Payment waitingForDepositPayment(Order order) {
+		Payment payment = readyPayment(order);
+		payment.issueVirtualAccount(PAYMENT_KEY, "가상계좌", "088", "12345678901234", "홍길동", now.plusHours(24), "hash");
 		return payment;
 	}
 }

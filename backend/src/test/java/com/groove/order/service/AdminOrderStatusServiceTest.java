@@ -59,7 +59,7 @@ class AdminOrderStatusServiceTest {
 		void recordsCompletedCancelLogs() {
 			// given
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
-			given(paidOrderCancelHook.cancel(ORDER_ID, null, null)).willReturn(
+			given(paidOrderCancelHook.cancel(ORDER_ID, null, null, null)).willReturn(
 					new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
 							PAYMENT_ID, null));
 
@@ -78,7 +78,7 @@ class AdminOrderStatusServiceTest {
 		void recordsInProgressCancelLogs() {
 			// given
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
-			given(paidOrderCancelHook.cancel(ORDER_ID, null, null)).willReturn(
+			given(paidOrderCancelHook.cancel(ORDER_ID, null, null, null)).willReturn(
 					new PaidOrderCancelResult(PaidOrderCancelStatus.IN_PROGRESS, false, OrderStatus.PREPARING,
 							PAYMENT_ID, null));
 
@@ -97,7 +97,7 @@ class AdminOrderStatusServiceTest {
 		void skipsLogsForDuplicateRequest() {
 			// given
 			AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(OrderStatus.CANCELED);
-			given(paidOrderCancelHook.cancel(ORDER_ID, null, null)).willReturn(
+			given(paidOrderCancelHook.cancel(ORDER_ID, null, null, null)).willReturn(
 					new PaidOrderCancelResult(PaidOrderCancelStatus.IN_PROGRESS, true, OrderStatus.PAID,
 							PAYMENT_ID, null));
 
@@ -123,7 +123,7 @@ class AdminOrderStatusServiceTest {
 			assertThat(response).isSameAs(detail);
 			verify(adminOrderService).changeStatus(ADMIN_ID, ORDER_ID, request);
 			verify(adminOrderService, times(1)).getDetail(ORDER_ID);
-			verify(paidOrderCancelHook, never()).cancel(any(), any(), any());
+			verify(paidOrderCancelHook, never()).cancel(any(), any(), any(), any());
 		}
 	}
 }

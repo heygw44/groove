@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
@@ -12,6 +13,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.dto.PaymentCompensationCandidate;
+import com.groove.payment.dto.PaymentDepositCallbackRequest;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.dto.PaymentWebhookRequest;
 import com.groove.payment.entity.Payment;
@@ -41,6 +43,7 @@ import lombok.extern.slf4j.Slf4j;
 public class PaymentWebhookService {
 
 	private static final String TARGET_EVENT_TYPE = "PAYMENT_STATUS_CHANGED";
+	private static final String DEPOSIT_CALLBACK_EVENT_TYPE = "DEPOSIT_CALLBACK";
 
 	private final ObjectMapper objectMapper;
 	private final PaymentWebhookEventWriter eventWriter;
@@ -51,10 +54,34 @@ public class PaymentWebhookService {
 	private final PaymentLateResultApplier lateResultApplier;
 	private final AlertNotifier alertNotifier;
 
+	/**
+	 * PAYMENT_STATUS_CHANGED 는 {eventType, createdAt, data:{...}} 로 오고, DEPOSIT_CALLBACK 은
+	 * eventType 없이 {createdAt, secret, status, transactionKey, orderId} 평평한 스키마로 온다 - 트리로
+	 * 먼저 받아 모양을 구분한다.
+	 */
 	public void handle(String rawBody) {
+		JsonNode root;
+		try {
+			root = objectMapper.readTree(rawBody);
+		} catch (Exception ex) {
+			log.warn("토스 웹훅 본문 파싱 실패, 저장하지 않음: {}", ex.getMessage());
+			return;
+		}
+		if (root.hasNonNull("eventType")) {
+			handlePaymentStatusChanged(root);
+			return;
+		}
+		if (root.hasNonNull("secret") && root.hasNonNull("orderId")) {
+			handleDepositCallback(root);
+			return;
+		}
+		log.warn("토스 웹훅 알 수 없는 형식, 저장하지 않음");
+	}
+
+	private void handlePaymentStatusChanged(JsonNode root) {
 		PaymentWebhookRequest request;
 		try {
-			request = objectMapper.readValue(rawBody, PaymentWebhookRequest.class);
+			request = objectMapper.treeToValue(root, PaymentWebhookRequest.class);
 		} catch (Exception ex) {
 			log.warn("토스 웹훅 본문 파싱 실패, 저장하지 않음: {}", ex.getMessage());
 			return;
@@ -108,6 +135,40 @@ public class PaymentWebhookService {
 		}
 		compensationRetrier.retry(new PaymentCompensationCandidate(paymentKey, compensation.getReason()));
 		eventWriter.markResult(event.get().getId(), PaymentWebhookResult.APPLIED, "payment_compensation 즉시 회수");
+	}
+
+	/**
+	 * 입금 웹훅. paymentKey 가 없는 평평한 스키마라 이벤트 dedup 키(payment_key 컬럼)에는 대신
+	 * transactionKey 를 쓴다 - null 로 두면 MySQL 이 NULL 을 서로 다른 값으로 취급해 유니크 제약이 dedup
+	 * 역할을 못 한다. secret 불일치는 위조·오발신 요청으로 보고 ERROR 로만 남기고 재전송을 유도하지 않는다.
+	 */
+	private void handleDepositCallback(JsonNode root) {
+		PaymentDepositCallbackRequest request;
+		try {
+			request = objectMapper.treeToValue(root, PaymentDepositCallbackRequest.class);
+		} catch (Exception ex) {
+			log.warn("토스 입금 웹훅 본문 파싱 실패, 저장하지 않음: {}", ex.getMessage());
+			return;
+		}
+		String tossOrderId = request.orderId();
+		Optional<Payment> payment = paymentRepository.findByTossOrderId(tossOrderId);
+		if (payment.isEmpty()) {
+			log.warn("토스 입금 웹훅 결제 없음, 저장하지 않음: tossOrderId={}", tossOrderId);
+			return;
+		}
+
+		Optional<PaymentWebhookEvent> event = eventWriter.receive(DEPOSIT_CALLBACK_EVENT_TYPE,
+				request.transactionKey(), tossOrderId, request.status(), request.createdAt());
+		if (event.isEmpty()) {
+			return;
+		}
+		if (!VirtualAccountSecretHasher.matches(request.secret(), payment.get().getVaSecretHash())) {
+			log.warn("토스 입금 웹훅 secret 불일치: tossOrderId={}", tossOrderId);
+			eventWriter.markResult(event.get().getId(), PaymentWebhookResult.ERROR,
+					ErrorCode.PAYMENT_DEPOSIT_SECRET_MISMATCH.name());
+			return;
+		}
+		resolve(event.get().getId(), payment.get(), tossOrderId);
 	}
 
 	/**

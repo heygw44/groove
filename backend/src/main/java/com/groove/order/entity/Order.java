@@ -213,6 +213,16 @@ public class Order extends BaseTimeEntity {
 		}
 	}
 
+	/** 가상계좌 발급 시 입금기한으로 만료를 늘린다. PENDING 이 아니거나 기존 기한보다 이르면 무시한다. */
+	public void extendExpiry(LocalDateTime dueDate) {
+		if (this.status != OrderStatus.PENDING) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		if (dueDate != null && dueDate.isAfter(this.expiresAt)) {
+			this.expiresAt = dueDate;
+		}
+	}
+
 	public boolean isExpired(LocalDateTime now) {
 		return this.status == OrderStatus.PENDING && !now.isBefore(this.expiresAt);
 	}

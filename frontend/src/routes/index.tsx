@@ -6,6 +6,7 @@ import { RootLayout } from '@/components/layout/RootLayout';
 import HomePage from '@/pages/HomePage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { AdminRoute } from '@/routes/AdminRoute';
+import { GuestRoute } from '@/routes/GuestRoute';
 import {
   AddressListPage,
   AdminAuditLogsPage,
@@ -27,6 +28,7 @@ import {
   LoginPage,
   MyPage,
   NotificationListPage,
+  OrderCompletePage,
   OrderDetailPage,
   OrderFormPage,
   OrderListPage,
@@ -70,6 +72,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'orders/:id/complete',
+        element: (
+          <PrivateRoute>
+            <OrderCompletePage />
+          </PrivateRoute>
+        ),
+      },
+      {
         path: 'payments/success',
         element: (
           <PrivateRoute>
@@ -85,8 +95,22 @@ export const router = createBrowserRouter([
           </PrivateRoute>
         ),
       },
-      { path: 'login', element: <LoginPage /> },
-      { path: 'signup', element: <SignupPage /> },
+      {
+        path: 'login',
+        element: (
+          <GuestRoute>
+            <LoginPage />
+          </GuestRoute>
+        ),
+      },
+      {
+        path: 'signup',
+        element: (
+          <GuestRoute>
+            <SignupPage />
+          </GuestRoute>
+        ),
+      },
       { path: 'albums/:id', element: <AlbumDetailPage /> },
       {
         element: (

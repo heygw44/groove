@@ -3,14 +3,11 @@ package com.groove.order.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -21,59 +18,41 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.groove.coupon.entity.MemberCoupon;
-import com.groove.fixture.ArtistFixture;
-import com.groove.fixture.CouponFixture;
-import com.groove.fixture.MemberCouponFixture;
-import com.groove.fixture.MemberFixture;
-import com.groove.fixture.OrderFixture;
-import com.groove.fixture.PaymentFixture;
-import com.groove.fixture.ProductFixture;
-import com.groove.limited.service.LimitedPurchaseWriter;
-import com.groove.limited.service.LimitedRelease;
-import com.groove.member.entity.Member;
-import com.groove.order.entity.Order;
-import com.groove.order.entity.OrderStatus;
-import com.groove.order.repository.OrderRepository;
-import com.groove.payment.entity.Payment;
-import com.groove.payment.repository.PaymentRepository;
-import com.groove.product.entity.Artist;
-import com.groove.product.entity.Product;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
+import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.dto.PaymentReconcileCandidate;
+import com.groove.payment.service.PaymentLateResultApplier;
 
+/**
+ * 오케스트레이션(락·전이는 {@link OrderExpirationWriter}, 토스 호출만 여기서)만 검증한다. 락·상태 전이
+ * 시나리오는 {@link OrderExpirationWriterTest} 가 맡는다.
+ */
 @ExtendWith(MockitoExtension.class)
 class OrderExpirationServiceTest {
 
 	private static final Long ORDER_ID = 500L;
-	private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+	private static final Long PAYMENT_ID = 30L;
+	private static final String TOSS_ORDER_ID = "20260904-TESTAB12";
+	private static final String PAYMENT_KEY = "tviva-va-key";
+	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 4, 12, 0);
 
 	@Mock
-	private OrderRepository orderRepository;
+	private OrderExpirationWriter writer;
 
 	@Mock
-	private OrderStockService orderStockService;
+	private PaymentClient paymentClient;
 
 	@Mock
-	private LimitedPurchaseWriter limitedPurchaseWriter;
+	private PaymentLateResultApplier paymentLateResultApplier;
 
-	@Mock
-	private PaymentRepository paymentRepository;
-
-	private OrderExpirationService orderExpirationService;
-
-	private Member member;
-	private Product product;
-	private LocalDateTime now;
+	private OrderExpirationService service;
 
 	@BeforeEach
 	void setUp() {
-		orderExpirationService = new OrderExpirationService(orderRepository, orderStockService,
-				limitedPurchaseWriter, paymentRepository);
-
-		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
-		now = LocalDateTime.now(clock);
-		member = MemberFixture.withId(MemberFixture.create(), 1L);
-		Artist artist = ArtistFixture.withId(1L);
-		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
+		service = new OrderExpirationService(writer, paymentClient, paymentLateResultApplier);
 	}
 
 	@Nested
@@ -81,129 +60,114 @@ class OrderExpirationServiceTest {
 	class Expire {
 
 		@Test
-		@DisplayName("만료된 PENDING 주문이면 취소하고 재고를 복구한다")
-		void expiresAndRestoresStockWhenPending() {
+		@DisplayName("만료 대상이 아니면 false 를 반환하고 토스를 부르지 않는다")
+		void returnsFalseWhenNotExpirable() {
 			// given
-			Order order = expiredOrder();
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(limitedPurchaseWriter.revertByOrder(ORDER_ID, now)).willReturn(Optional.empty());
+			given(writer.checkExpirable(ORDER_ID, NOW)).willReturn(Optional.empty());
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = service.expire(ORDER_ID, NOW);
 
 			// then
-			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
-			assertThat(order.getCancelReason()).isEqualTo(Order.EXPIRED_CANCEL_REASON);
-			assertThat(result).isEmpty();
-			verify(orderStockService).restore(order);
+			assertThat(result).isFalse();
+			verify(paymentClient, never()).lookup(any());
 		}
 
 		@Test
-		@DisplayName("쿠폰을 사용한 주문이 만료되면 쿠폰이 미사용 상태로 복구된다")
-		void restoresCouponWhenExpired() {
+		@DisplayName("단순 만료 대상이면(가상계좌 아님) writer 가 이미 끝낸 것이라 true 만 반환한다")
+		void returnsTrueForSimpleTargetWithoutCallingToss() {
 			// given
-			Order order = expiredOrder();
-			MemberCoupon memberCoupon = MemberCouponFixture.create(member,
-					CouponFixture.fixed("EXPIRE5000", new BigDecimal("5000")));
-			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
-			memberCoupon.use(order.getId());
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(limitedPurchaseWriter.revertByOrder(ORDER_ID, now)).willReturn(Optional.empty());
+			given(writer.checkExpirable(ORDER_ID, NOW)).willReturn(Optional.of(OrderExpirationTarget.simple()));
 
 			// when
-			orderExpirationService.expire(ORDER_ID, now);
+			boolean result = service.expire(ORDER_ID, NOW);
 
 			// then
-			assertThat(memberCoupon.isUsed()).isFalse();
+			assertThat(result).isTrue();
+			verify(paymentClient, never()).lookup(any());
 		}
 
 		@Test
-		@DisplayName("한정반 주문이면 revertByOrder 결과를 그대로 반환한다")
-		void returnsLimitedReleaseFromWriter() {
+		@DisplayName("가상계좌 대상인데 토스가 이미 DONE 이면 대사를 적용하고 계좌는 닫지 않는다")
+		void appliesLateResultWhenTossAlreadyDone() {
 			// given
-			Order order = expiredOrder();
-			LimitedRelease release = new LimitedRelease(10L, member.getId());
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(limitedPurchaseWriter.revertByOrder(ORDER_ID, now)).willReturn(Optional.of(release));
+			given(writer.checkExpirable(ORDER_ID, NOW))
+					.willReturn(Optional.of(OrderExpirationTarget.virtualAccount(ORDER_ID, PAYMENT_ID, TOSS_ORDER_ID,
+							PAYMENT_KEY)));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.DONE, PAYMENT_KEY, "가상계좌", null,
+					NOW, null);
+			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(lookup);
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = service.expire(ORDER_ID, NOW);
 
 			// then
-			assertThat(result).contains(release);
+			assertThat(result).isTrue();
+			verify(paymentLateResultApplier).apply(
+					new PaymentReconcileCandidate(PAYMENT_ID, ORDER_ID, TOSS_ORDER_ID), lookup,
+					"입금기한 만료 처리 중 입금 확인");
+			verify(paymentClient, never()).cancel(any(), any());
+			verify(writer, never()).finalizeVirtualAccountExpiry(any(), any(), any(), any());
 		}
 
 		@Test
-		@DisplayName("주문을 찾을 수 없으면 아무것도 하지 않고 empty 를 반환한다")
-		void returnsEmptyWhenOrderNotFound() {
+		@DisplayName("가상계좌 대상이고 토스도 여전히 입금대기면 계좌를 닫고 만료를 확정한다")
+		void closesAccountAndFinalizesWhenStillWaiting() {
 			// given
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.empty());
+			given(writer.checkExpirable(ORDER_ID, NOW))
+					.willReturn(Optional.of(OrderExpirationTarget.virtualAccount(ORDER_ID, PAYMENT_ID, TOSS_ORDER_ID,
+							PAYMENT_KEY)));
+			given(paymentClient.lookup(TOSS_ORDER_ID))
+					.willReturn(new PaymentLookupResult(PaymentLookupStatus.WAITING_FOR_DEPOSIT, PAYMENT_KEY, "가상계좌",
+							null, null, null));
+			given(writer.finalizeVirtualAccountExpiry(ORDER_ID, PAYMENT_ID, "입금기한 만료", NOW)).willReturn(true);
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = service.expire(ORDER_ID, NOW);
 
 			// then
-			assertThat(result).isEmpty();
-			verify(orderStockService, never()).restore(any());
-			verify(limitedPurchaseWriter, never()).revertByOrder(any(), any());
+			assertThat(result).isTrue();
+			verify(paymentClient).cancel(PAYMENT_KEY, "입금기한 만료");
+			verify(writer).finalizeVirtualAccountExpiry(ORDER_ID, PAYMENT_ID, "입금기한 만료", NOW);
 		}
 
 		@Test
-		@DisplayName("이미 PAID 인 주문이면 아무것도 하지 않고 empty 를 반환한다")
-		void returnsEmptyWhenAlreadyPaid() {
+		@DisplayName("토스 재조회가 실패하면 다음 스케줄로 미루고 false 를 반환한다")
+		void returnsFalseWhenLookupFails() {
 			// given
-			Order order = OrderFixture.withId(OrderFixture.markPaid(
-					OrderFixture.withExpiresAt(OrderFixture.createWithItem(member, product, 1),
-							now.minusMinutes(1))), ORDER_ID);
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(writer.checkExpirable(ORDER_ID, NOW))
+					.willReturn(Optional.of(OrderExpirationTarget.virtualAccount(ORDER_ID, PAYMENT_ID, TOSS_ORDER_ID,
+							PAYMENT_KEY)));
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN)).given(paymentClient)
+					.lookup(TOSS_ORDER_ID);
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = service.expire(ORDER_ID, NOW);
 
 			// then
-			assertThat(result).isEmpty();
-			verify(orderStockService, never()).restore(any());
+			assertThat(result).isFalse();
+			verify(writer, never()).finalizeVirtualAccountExpiry(any(), any(), any(), any());
 		}
 
 		@Test
-		@DisplayName("PENDING 이지만 아직 만료 시각 전이면 아무것도 하지 않고 empty 를 반환한다")
-		void returnsEmptyWhenNotYetExpired() {
+		@DisplayName("계좌 폐쇄가 실패하면 다음 스케줄로 미루고 false 를 반환한다")
+		void returnsFalseWhenCloseAccountFails() {
 			// given
-			Order order = OrderFixture.withId(
-					OrderFixture.withExpiresAt(OrderFixture.createWithItem(member, product, 1),
-							now.plusMinutes(1)), ORDER_ID);
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(writer.checkExpirable(ORDER_ID, NOW))
+					.willReturn(Optional.of(OrderExpirationTarget.virtualAccount(ORDER_ID, PAYMENT_ID, TOSS_ORDER_ID,
+							PAYMENT_KEY)));
+			given(paymentClient.lookup(TOSS_ORDER_ID))
+					.willReturn(new PaymentLookupResult(PaymentLookupStatus.WAITING_FOR_DEPOSIT, PAYMENT_KEY, "가상계좌",
+							null, null, null));
+			willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED)).given(paymentClient)
+					.cancel(PAYMENT_KEY, "입금기한 만료");
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = service.expire(ORDER_ID, NOW);
 
 			// then
-			assertThat(result).isEmpty();
-			verify(orderStockService, never()).restore(any());
+			assertThat(result).isFalse();
+			verify(writer, never()).finalizeVirtualAccountExpiry(any(), any(), any(), any());
 		}
-
-		@Test
-		@DisplayName("결제가 READY/UNKNOWN 이면 대사가 결론을 낼 때까지 만료를 건너뛰고 empty 를 반환한다")
-		void skipsWhenPaymentIsUnresolved() {
-			// given
-			Order order = expiredOrder();
-			Payment payment = PaymentFixture.unknown(order, "확인 중");
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
-
-			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
-
-			// then
-			assertThat(result).isEmpty();
-			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
-			verify(orderStockService, never()).restore(any());
-		}
-	}
-
-	private Order expiredOrder() {
-		return OrderFixture.withId(
-				OrderFixture.withExpiresAt(OrderFixture.createWithItem(member, product, 1), now.minusMinutes(1)),
-				ORDER_ID);
 	}
 }

@@ -29,6 +29,6 @@ public class PaymentService {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 		return PaymentCancelResponse.from(orderCancelService.cancel(memberId, target.orderId(),
-				new OrderCancelRequest(request.reason())));
+				new OrderCancelRequest(request.reason(), request.refundAccount())));
 	}
 }

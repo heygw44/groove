@@ -9,6 +9,15 @@ public record PaymentConfirmResult(
 		String orderId,
 		String method,
 		BigDecimal totalAmount,
-		LocalDateTime approvedAt
+		LocalDateTime approvedAt,
+		PaymentLookupStatus status,
+		String easyPayProvider,
+		VirtualAccountInfo virtualAccount
 ) {
+
+	/** 카드·간편결제 DONE 응답 전용. status 는 DONE 으로 고정된다. */
+	public PaymentConfirmResult(String paymentKey, String orderId, String method, BigDecimal totalAmount,
+			LocalDateTime approvedAt) {
+		this(paymentKey, orderId, method, totalAmount, approvedAt, PaymentLookupStatus.DONE, null, null);
+	}
 }

@@ -96,6 +96,25 @@ public class Payment extends BaseTimeEntity {
 	@ColumnDefault("0")
 	private int reconcileAttempts;
 
+	@Column(name = "easy_pay_provider", length = 30)
+	private String easyPayProvider;
+
+	@Column(name = "va_bank_code", length = 10)
+	private String vaBankCode;
+
+	@Column(name = "va_account_number", length = 64)
+	private String vaAccountNumber;
+
+	@Column(name = "va_customer_name", length = 100)
+	private String vaCustomerName;
+
+	@Column(name = "va_due_date")
+	private LocalDateTime vaDueDate;
+
+	/** 입금 웹훅의 secret 상수시간 비교용 SHA-256 해시. 평문 secret 은 저장하지 않는다. */
+	@Column(name = "va_secret_hash", length = 64)
+	private String vaSecretHash;
+
 	private Payment(Order order) {
 		this.order = order;
 		this.tossOrderId = order.getOrderNumber();
@@ -112,12 +131,51 @@ public class Payment extends BaseTimeEntity {
 	 * UNKNOWN 에서도 승인을 허용한다. 재시도나 대사 과정에서 실제로는 승인된 결제였음이 뒤늦게 확인될 수 있다.
 	 */
 	public void approve(String key, String payMethod, LocalDateTime approvedTime) {
+		approve(key, payMethod, approvedTime, null);
+	}
+
+	/** 카드·간편결제 승인. 간편결제가 아니면 easyPayProvider 는 null 이다. */
+	public void approve(String key, String payMethod, LocalDateTime approvedTime, String easyPayProvider) {
 		validateApprovable();
 		this.paymentKey = key;
 		this.method = payMethod;
 		this.approvedAt = approvedTime;
 		this.failReason = null;
+		this.easyPayProvider = easyPayProvider;
 		this.status = PaymentStatus.DONE;
+	}
+
+	/** 가상계좌 발급. 입금 전까지 WAITING_FOR_DEPOSIT 로 남고, 입금 확인은 approve() 로 DONE 전이한다. */
+	public void issueVirtualAccount(String key, String payMethod, String bankCode, String accountNumber,
+			String customerName, LocalDateTime dueDate, String secretHash) {
+		validateApprovable();
+		this.paymentKey = key;
+		this.method = payMethod;
+		this.failReason = null;
+		this.vaBankCode = bankCode;
+		this.vaAccountNumber = accountNumber;
+		this.vaCustomerName = customerName;
+		this.vaDueDate = dueDate;
+		this.vaSecretHash = secretHash;
+		this.status = PaymentStatus.WAITING_FOR_DEPOSIT;
+	}
+
+	public boolean isVirtualAccount() {
+		return this.vaBankCode != null;
+	}
+
+	/**
+	 * 입금 전 가상계좌를 닫을 때 쓴다(사용자 취소·입금기한 만료). 한 번도 승인된 적이 없어 approvedAt 은
+	 * 비워 둔다 - 매출 집계는 DONE/CANCELED 의 approved_at 으로 날짜를 잡으므로, 비워두면 애초에 매출로
+	 * 잡히지 않았던 결제가 취소 집계에도 섞이지 않는다.
+	 */
+	public void cancelVirtualAccount(String reason, LocalDateTime canceledTime) {
+		if (this.status != PaymentStatus.WAITING_FOR_DEPOSIT) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		this.canceledAt = canceledTime;
+		this.failReason = truncate(reason);
+		this.status = PaymentStatus.CANCELED;
 	}
 
 	public void fail(String reason) {
