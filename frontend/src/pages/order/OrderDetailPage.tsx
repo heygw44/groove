@@ -13,19 +13,17 @@ import type { OrderSummaryItem } from '@/components/order/OrderItemSummaryList';
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
+import { PaymentResumeSection } from '@/components/order/PaymentResumeSection';
 import { PendingExpiryBanner } from '@/components/order/PendingExpiryBanner';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
 import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
-import { PaymentWidgetSection } from '@/components/payment/PaymentWidgetSection';
 import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
 import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
-import { useAuthStore } from '@/store/authStore';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatServerDateTime } from '@/utils/formatDate';
 import { isCancelableStatus } from '@/utils/orderStatus';
-import { buildOrderName } from '@/utils/paymentRedirect';
 import {
   CANCEL_REQUESTED_MESSAGES,
   getOrderCancelSuccessMessage,
@@ -46,7 +44,6 @@ export default function OrderDetailPage() {
   const id = isValidId ? Number(idParam) : -1;
 
   const { showToast } = useToast();
-  const member = useAuthStore((s) => s.member);
   const nowMs = useServerNow();
   const [isExpired, setIsExpired] = useState(false);
   const {
@@ -181,16 +178,7 @@ export default function OrderDetailPage() {
         />
       </section>
 
-      {order.status === 'PENDING' && (
-        <PaymentWidgetSection
-          orderId={order.id}
-          orderNumber={order.orderNumber}
-          orderName={buildOrderName(order.items.map((item) => ({ productName: item.productName })))}
-          amount={order.finalAmount}
-          customerEmail={member?.email}
-          disabled={isExpired}
-        />
-      )}
+      <PaymentResumeSection order={order} disabled={isExpired} />
 
       {order.payment && (
         <section className="mt-8">

@@ -8,15 +8,29 @@ import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { CouponSection } from '@/components/order/CouponSection';
-import { OrderItemSummaryList } from '@/components/order/OrderItemSummaryList';
+import {
+  OrderItemSummaryList,
+  type OrderSummaryItem,
+} from '@/components/order/OrderItemSummaryList';
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
+import { PaymentMethodSection } from '@/components/order/PaymentMethodSection';
 import { ShippingAddressSection } from '@/components/order/ShippingAddressSection';
 import { useAddresses } from '@/hooks/queries/useAddresses';
 import { useOrderFormSource } from '@/hooks/useOrderFormSource';
 import { useOrderFormSubmit } from '@/hooks/useOrderFormSubmit';
 import type { AvailableCoupon } from '@/types/coupon';
+import type { PaymentMethodOption } from '@/types/payment';
 import { formatServerDateTime } from '@/utils/formatDate';
+import { formatPrice } from '@/utils/formatPrice';
 import { parseOrderDraft } from '@/utils/orderDraft';
+import { buildOrderName } from '@/utils/paymentRedirect';
+
+interface CheckoutSnapshot {
+  items: OrderSummaryItem[];
+  totalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+}
 
 export default function OrderFormPage() {
   const location = useLocation();
@@ -36,16 +50,24 @@ export default function OrderFormPage() {
 
   const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
   const [selectedCoupon, setSelectedCoupon] = useState<AvailableCoupon | null>(null);
+  const [method, setMethod] = useState<PaymentMethodOption>('CARD');
+  const [isAgreed, setIsAgreed] = useState(false);
+  const [snapshot, setSnapshot] = useState<CheckoutSnapshot | null>(null);
 
   const effectiveSelectedId =
     selectedId ?? (addresses?.find((address) => address.isDefault) ?? addresses?.[0])?.id;
+  const allowVirtualAccount = draft?.kind !== 'limited';
 
-  const { submit, isSubmitting, submittedRef } = useOrderFormSubmit({
+  const { submit, isSubmitting, pendingOrder, submittedRef } = useOrderFormSubmit({
     draft,
     addressId: effectiveSelectedId,
     memberCouponId: selectedCoupon?.memberCouponId ?? null,
+    orderName: buildOrderName(
+      (snapshot?.items ?? source.items).map((item) => ({ productName: item.title })),
+    ),
     onCouponRejected: () => setSelectedCoupon(null),
   });
+  const isOrderLocked = pendingOrder !== null;
 
   /*
    * 주문 생성 성공 시 draft 가 가리키던 데이터가 무효화되어 사라지지만 그 전에
@@ -53,18 +75,42 @@ export default function OrderFormPage() {
    * 이펙트 이중 실행(ref 는 유지됨) 때문에 토스트가 중복으로 뜨는 것을 막는다.
    */
   useEffect(() => {
-    if (!source.invalid || submittedRef.current) {
+    // 주문이 이미 생겼으면 장바구니 항목이 지워져 source 가 invalid 로 바뀐다. 결제창을 여는 중이니 튕기지 않는다.
+    if (!source.invalid || submittedRef.current || isOrderLocked) {
       return;
     }
     submittedRef.current = true;
     showToast('info', source.invalidMessage);
     navigate(source.returnTo, { replace: true });
-  }, [source.invalid, source.invalidMessage, source.returnTo, navigate, showToast, submittedRef]);
+  }, [
+    source.invalid,
+    source.invalidMessage,
+    source.returnTo,
+    navigate,
+    showToast,
+    submittedRef,
+    isOrderLocked,
+  ]);
 
-  const totalAmount = source.items.reduce((sum, item) => sum + item.lineAmount, 0);
-  const discountAmount = source.couponAllowed ? (selectedCoupon?.expectedDiscount ?? 0) : 0;
-  const finalAmount = Math.max(0, totalAmount - discountAmount);
-  const isLimitedBlocked = source.limited !== undefined && !source.limited.isPurchasable;
+  const liveTotalAmount = source.items.reduce((sum, item) => sum + item.lineAmount, 0);
+  const liveDiscountAmount = source.couponAllowed ? (selectedCoupon?.expectedDiscount ?? 0) : 0;
+  const view: CheckoutSnapshot = snapshot ?? {
+    items: source.items,
+    totalAmount: liveTotalAmount,
+    discountAmount: liveDiscountAmount,
+    finalAmount: Math.max(0, liveTotalAmount - liveDiscountAmount),
+  };
+  const finalAmount = pendingOrder?.amount ?? view.finalAmount;
+  const isLimitedBlocked =
+    !isOrderLocked && source.limited !== undefined && !source.limited.isPurchasable;
+
+  const handleSubmit = () => {
+    // 주문 생성 뒤 장바구니·한정반 데이터가 무효화돼도 제출 시점의 주문 내용을 그대로 보여 준다.
+    if (!snapshot) {
+      setSnapshot(view);
+    }
+    submit(method);
+  };
 
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
@@ -123,48 +169,75 @@ export default function OrderFormPage() {
               </div>
             )}
             <div className="rounded-lg border border-line bg-surface px-5 py-4">
-              <OrderItemSummaryList items={source.items} />
+              <OrderItemSummaryList items={view.items} />
             </div>
           </div>
 
-          <ShippingAddressSection
-            addresses={addresses ?? []}
-            selectedId={effectiveSelectedId}
-            onSelect={setSelectedId}
-          />
-
-          {source.couponAllowed ? (
-            <CouponSection
-              orderAmount={totalAmount}
-              selected={selectedCoupon}
-              onSelect={setSelectedCoupon}
-            />
-          ) : (
-            <div>
-              <h2 className="mb-3 text-base font-bold">쿠폰</h2>
-              <div className="rounded-lg border border-line bg-surface px-5 py-4 text-sm text-content-muted">
-                한정반은 쿠폰을 적용할 수 없습니다.
-              </div>
-            </div>
+          {isOrderLocked && (
+            <p className="rounded-lg border border-line-strong bg-surface-muted px-4 py-3 text-sm text-content-muted">
+              주문이 생성되어 배송지와 쿠폰은 바꿀 수 없습니다. 결제수단만 바꿔 다시 결제할 수
+              있어요.
+            </p>
           )}
+
+          <fieldset disabled={isOrderLocked} className="contents">
+            <ShippingAddressSection
+              addresses={addresses ?? []}
+              selectedId={effectiveSelectedId}
+              onSelect={setSelectedId}
+            />
+
+            {source.couponAllowed ? (
+              <CouponSection
+                orderAmount={view.totalAmount}
+                selected={selectedCoupon}
+                onSelect={setSelectedCoupon}
+              />
+            ) : (
+              <div>
+                <h2 className="mb-3 text-base font-bold">쿠폰</h2>
+                <div className="rounded-lg border border-line bg-surface px-5 py-4 text-sm text-content-muted">
+                  한정반은 쿠폰을 적용할 수 없습니다.
+                </div>
+              </div>
+            )}
+          </fieldset>
+
+          <PaymentMethodSection
+            method={method}
+            onChange={setMethod}
+            allowVirtualAccount={allowVirtualAccount}
+          />
         </div>
 
         <div className="h-fit rounded-lg border border-line bg-surface p-5 md:sticky md:top-6">
           <OrderPriceSummary
-            totalAmount={totalAmount}
-            discountAmount={discountAmount}
+            totalAmount={view.totalAmount}
+            discountAmount={view.discountAmount}
             finalAmount={finalAmount}
             couponName={source.couponAllowed ? selectedCoupon?.couponName : undefined}
           />
+          <label className="mt-5 flex cursor-pointer items-start gap-2 text-sm text-content-muted">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-content"
+              checked={isAgreed}
+              onChange={(event) => setIsAgreed(event.target.checked)}
+            />
+            주문 내용을 확인했으며 결제에 동의합니다
+          </label>
           <Button
-            className="mt-5 w-full"
-            onClick={submit}
+            className="mt-3 w-full"
+            onClick={handleSubmit}
             disabled={
-              effectiveSelectedId === undefined || source.items.length === 0 || isLimitedBlocked
+              effectiveSelectedId === undefined ||
+              view.items.length === 0 ||
+              isLimitedBlocked ||
+              !isAgreed
             }
             loading={isSubmitting}
           >
-            주문하기
+            {formatPrice(finalAmount)} 결제하기
           </Button>
         </div>
       </div>

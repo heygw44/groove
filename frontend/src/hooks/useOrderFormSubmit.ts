@@ -6,6 +6,9 @@ import { useToast } from '@/components/common/toastContext';
 import { usePurchaseLimitedDrop } from '@/hooks/mutations/useLimitedDropMutations';
 import { useCreateOrder } from '@/hooks/mutations/useOrderMutations';
 import { addressKeys, couponKeys, limitedDropKeys, orderKeys } from '@/hooks/queries/queryKeys';
+import { usePaymentWindow } from '@/hooks/usePaymentWindow';
+import { useAuthStore } from '@/store/authStore';
+import type { PaymentMethodOption } from '@/types/payment';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { buildLimitedPurchaseResultState, classifyPurchaseError } from '@/utils/limitedDrop';
 import {
@@ -24,42 +27,70 @@ const COUPON_ERROR_CODES = new Set([
   'COUPON_MIN_ORDER_AMOUNT_NOT_MET',
 ]);
 
+export interface PendingOrder {
+  orderId: number;
+  orderNumber: string;
+  amount: number;
+}
+
 interface UseOrderFormSubmitParams {
   draft: OrderDraft | null;
   addressId: number | undefined;
   memberCouponId: number | null;
+  /** 결제창에 넘길 주문명("생수 외 1건"). buildOrderName 으로 미리 만들어 넘긴다. */
+  orderName: string;
   onCouponRejected: () => void;
 }
 
 interface UseOrderFormSubmitResult {
-  submit: () => void;
+  submit: (method: PaymentMethodOption) => void;
   isSubmitting: boolean;
+  /** 이 주문서에서 이미 만든 PENDING 주문. 있으면 주문 내용은 고정되고 결제창만 다시 연다. */
+  pendingOrder: PendingOrder | null;
   /** 제출이 확정돼 이동하는 중임을 표시한다. useBlocker 가 이탈 확인창을 띄우지 않게 참조한다. */
   submittedRef: MutableRefObject<boolean>;
 }
 
 /**
  * 주문서 제출을 draft 종류별로 나눠 처리한다. cart/direct 는 POST /orders 로,
- * limited 는 한정반 선착순 구매 API 로 확정한 뒤 결과에 따라 이동한다.
+ * limited 는 한정반 선착순 구매 API 로 확정한 뒤 곧바로 결제창을 연다.
+ *
+ * 만든 PENDING 주문을 기억해 두고, 결제창을 닫았다 다시 누르면 같은 주문으로 결제창만 연다.
+ * 주문을 새로 만들지 않는 이유: 장바구니 주문은 생성 시 장바구니 항목이 지워지고 취소해도
+ * 돌아오지 않으며, 한정반은 재구매(ALREADY_PURCHASED)가 막혀 있다. 그래서 주문이 생기면
+ * 배송지·쿠폰은 고정하고 결제수단만 바꿀 수 있게 한다.
  */
 export function useOrderFormSubmit({
   draft,
   addressId,
   memberCouponId,
+  orderName,
   onCouponRejected,
 }: UseOrderFormSubmitParams): UseOrderFormSubmitResult {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const member = useAuthStore((s) => s.member);
   const submittedRef = useRef(false);
+  const [pendingOrder, setPendingOrder] = useState<PendingOrder | null>(null);
+  const { openPaymentWindow, isOpening } = usePaymentWindow();
 
   const createOrderMutation = useCreateOrder();
   const purchaseLimitedMutation = usePurchaseLimitedDrop(
     draft?.kind === 'limited' ? draft.dropId : 0,
   );
 
-  const submitLimitedPurchase = (dropId: number) => {
+  const openForOrder = (order: PendingOrder, method: PaymentMethodOption) =>
+    openPaymentWindow({
+      orderId: order.orderId,
+      orderNumber: order.orderNumber,
+      orderName,
+      amount: order.amount,
+      method,
+      customerEmail: member?.email,
+    });
+
+  const submitLimitedPurchase = (dropId: number, method: PaymentMethodOption) => {
     if (addressId === undefined) {
       return;
     }
@@ -67,8 +98,13 @@ export function useOrderFormSubmit({
       { addressId },
       {
         onSuccess: (data) => {
-          submittedRef.current = true;
-          navigate(`/orders/${data.orderId}`, { replace: true });
+          const order: PendingOrder = {
+            orderId: data.orderId,
+            orderNumber: data.orderNumber,
+            amount: data.finalAmount,
+          };
+          setPendingOrder(order);
+          void openForOrder(order, method);
         },
         onError: (error) => {
           const kind = classifyPurchaseError(getErrorCode(error));
@@ -99,19 +135,27 @@ export function useOrderFormSubmit({
     );
   };
 
-  const submitCartOrDirectOrder = (payloadDraft: PurchasableOrderDraft) => {
+  const submitCartOrDirectOrder = (
+    payloadDraft: PurchasableOrderDraft,
+    method: PaymentMethodOption,
+  ) => {
     if (addressId === undefined) {
       return;
     }
     createOrderMutation.mutate(
       {
         payload: toOrderCreateRequest(payloadDraft, addressId, memberCouponId),
-        idempotencyKey,
+        idempotencyKey: crypto.randomUUID(),
       },
       {
         onSuccess: (data) => {
-          submittedRef.current = true;
-          navigate(`/orders/${data.orderId}`, { replace: true });
+          const order: PendingOrder = {
+            orderId: data.orderId,
+            orderNumber: data.orderNumber,
+            amount: data.finalAmount,
+          };
+          setPendingOrder(order);
+          void openForOrder(order, method);
         },
         onError: (error) => {
           const code = getErrorCode(error);
@@ -145,19 +189,25 @@ export function useOrderFormSubmit({
     );
   };
 
-  const submit = () => {
+  const submit = (method: PaymentMethodOption) => {
     if (draft === null) {
       return;
     }
-    if (draft.kind === 'limited') {
-      submitLimitedPurchase(draft.dropId);
+    if (pendingOrder) {
+      void openForOrder(pendingOrder, method);
       return;
     }
-    submitCartOrDirectOrder(draft);
+    if (draft.kind === 'limited') {
+      submitLimitedPurchase(draft.dropId, method);
+      return;
+    }
+    submitCartOrDirectOrder(draft, method);
   };
 
   const isSubmitting =
-    draft?.kind === 'limited' ? purchaseLimitedMutation.isPending : createOrderMutation.isPending;
+    (draft?.kind === 'limited'
+      ? purchaseLimitedMutation.isPending
+      : createOrderMutation.isPending) || isOpening;
 
-  return { submit, isSubmitting, submittedRef };
+  return { submit, isSubmitting, pendingOrder, submittedRef };
 }
