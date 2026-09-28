@@ -31,6 +31,16 @@ const mockConfirmPaymentError = (code: string, message: string) => {
   vi.mocked(useConfirmPayment).mockReturnValue({ mutate } as ConfirmPaymentMutation);
 };
 
+const mockConfirmPaymentSuccess = (orderId: number) => {
+  const mutate = ((
+    _payload: PaymentConfirmRequest,
+    options?: { onSuccess?: (data: { orderId: number }) => void },
+  ) => {
+    options?.onSuccess?.({ orderId });
+  }) as ConfirmPaymentMutation['mutate'];
+  vi.mocked(useConfirmPayment).mockReturnValue({ mutate } as ConfirmPaymentMutation);
+};
+
 const renderPage = (search: string) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -40,6 +50,7 @@ const renderPage = (search: string) => {
         <MemoryRouter initialEntries={[`/payments/success${search}`]}>
           <Routes>
             <Route path="/payments/success" element={<PaymentSuccessPage />} />
+            <Route path="/orders/:id/complete" element={<p>주문완료 페이지</p>} />
           </Routes>
         </MemoryRouter>
       </ToastProvider>
@@ -53,6 +64,17 @@ afterEach(() => {
 
 describe('PaymentSuccessPage', () => {
   const search = '?paymentKey=pk-1&orderId=order-1&amount=10000&orderRef=7';
+
+  it('승인에 성공하면 주문완료 페이지로 이동한다', async () => {
+    // given
+    mockConfirmPaymentSuccess(7);
+
+    // when
+    renderPage(search);
+
+    // then
+    expect(await screen.findByText('주문완료 페이지')).toBeInTheDocument();
+  });
 
   it('결제 결과가 불명이면 확인 중 안내와 주문 상세 보기 버튼을 보여준다', async () => {
     // given

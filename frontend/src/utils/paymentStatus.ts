@@ -1,5 +1,5 @@
 import type { BadgeVariant } from '@/components/common/Badge';
-import type { PaymentStatus } from '@/types/payment';
+import type { OrderPayment, PaymentStatus } from '@/types/payment';
 
 export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
   'READY',
@@ -8,6 +8,7 @@ export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
   'FAILED',
   'UNKNOWN',
   'CANCEL_REQUESTED',
+  'WAITING_FOR_DEPOSIT',
 ];
 
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
@@ -17,6 +18,7 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   FAILED: '결제실패',
   UNKNOWN: '결과 확인 중',
   CANCEL_REQUESTED: '취소 처리 중',
+  WAITING_FOR_DEPOSIT: '입금대기',
 };
 
 export const PAYMENT_STATUS_BADGE: Record<PaymentStatus, BadgeVariant> = {
@@ -26,6 +28,7 @@ export const PAYMENT_STATUS_BADGE: Record<PaymentStatus, BadgeVariant> = {
   FAILED: 'danger',
   UNKNOWN: 'accent',
   CANCEL_REQUESTED: 'accent',
+  WAITING_FOR_DEPOSIT: 'accent',
 };
 
 const RECONCILE_PENDING_STATUSES = new Set<PaymentStatus>(['UNKNOWN', 'CANCEL_REQUESTED']);
@@ -47,3 +50,25 @@ export const isCancellationPending = (status?: PaymentStatus): boolean =>
 
 export const getOrderCancelSuccessMessage = (status?: PaymentStatus): string =>
   isCancellationPending(status) ? CANCEL_REQUESTED_MESSAGES.success : ORDER_CANCEL_SUCCESS_MESSAGE;
+
+const NO_PAYMENT_LABEL = '결제 전';
+const VIRTUAL_ACCOUNT_LABEL = '무통장입금';
+
+/**
+ * 결제정보 카드의 결제수단 줄. 간편결제(easyPayProvider) > 무통장입금(virtualAccount) > 원문
+ * method 순으로 고른다. 결제 이력이 아직 없으면 "결제 전"을 보여준다.
+ */
+export const getPaymentMethodLabel = (payment?: OrderPayment): string => {
+  if (!payment) {
+    return NO_PAYMENT_LABEL;
+  }
+  if (payment.easyPayProvider) {
+    return payment.easyPayProvider;
+  }
+  if (payment.virtualAccount) {
+    return payment.status === 'WAITING_FOR_DEPOSIT'
+      ? `${VIRTUAL_ACCOUNT_LABEL} (${PAYMENT_STATUS_LABEL.WAITING_FOR_DEPOSIT})`
+      : VIRTUAL_ACCOUNT_LABEL;
+  }
+  return payment.method;
+};

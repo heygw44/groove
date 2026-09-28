@@ -28,6 +28,7 @@ import {
   LoginPage,
   MyPage,
   NotificationListPage,
+  OrderCompletePage,
   OrderDetailPage,
   OrderFormPage,
   OrderListPage,
@@ -67,6 +68,14 @@ export const router = createBrowserRouter([
         element: (
           <PrivateRoute>
             <OrderFormPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'orders/:id/complete',
+        element: (
+          <PrivateRoute>
+            <OrderCompletePage />
           </PrivateRoute>
         ),
       },

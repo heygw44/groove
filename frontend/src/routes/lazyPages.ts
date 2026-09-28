@@ -3,7 +3,9 @@
 import { lazy } from 'react';
 
 export const AdminAuditLogsPage = lazy(() => import('@/pages/admin/AdminAuditLogsPage'));
-export const AdminCatalogImportJobsPage = lazy(() => import('@/pages/admin/AdminCatalogImportJobsPage'));
+export const AdminCatalogImportJobsPage = lazy(
+  () => import('@/pages/admin/AdminCatalogImportJobsPage'),
+);
 export const AdminCouponsPage = lazy(() => import('@/pages/admin/AdminCouponsPage'));
 export const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
 export const AdminLimitedDropsPage = lazy(() => import('@/pages/admin/AdminLimitedDropsPage'));
@@ -25,6 +27,7 @@ export const RecentViewsPage = lazy(() => import('@/pages/mypage/RecentViewsPage
 export const TastePage = lazy(() => import('@/pages/mypage/TastePage'));
 export const WishlistPage = lazy(() => import('@/pages/mypage/WishlistPage'));
 export const NotificationListPage = lazy(() => import('@/pages/notification/NotificationListPage'));
+export const OrderCompletePage = lazy(() => import('@/pages/order/OrderCompletePage'));
 export const OrderDetailPage = lazy(() => import('@/pages/order/OrderDetailPage'));
 export const OrderFormPage = lazy(() => import('@/pages/order/OrderFormPage'));
 export const OrderListPage = lazy(() => import('@/pages/order/OrderListPage'));

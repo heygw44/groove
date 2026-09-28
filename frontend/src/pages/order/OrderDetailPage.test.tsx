@@ -44,6 +44,8 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
     status: 'DONE',
     amount: 10000,
     approvedAt: '2026-09-13T00:01:00',
+    easyPayProvider: null,
+    virtualAccount: null,
   },
   ...overrides,
 });
@@ -95,6 +97,8 @@ describe('OrderDetailPage', () => {
         status: 'CANCEL_REQUESTED',
         amount: 10000,
         approvedAt: '2026-09-13T00:01:00',
+        easyPayProvider: null,
+        virtualAccount: null,
       },
     });
     mockOrder(order);
@@ -123,6 +127,8 @@ describe('OrderDetailPage', () => {
         status: 'CANCEL_REQUESTED',
         amount: 10000,
         approvedAt: '2026-09-13T00:01:00',
+        easyPayProvider: null,
+        virtualAccount: null,
       },
     });
     mockOrder(order);

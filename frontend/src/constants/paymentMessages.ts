@@ -12,4 +12,5 @@ export const TOSS_FAIL_MESSAGES: Record<string, string> = {
  */
 export const PAYMENT_CONFIRM_ERROR_MESSAGES: Record<string, string> = {
   ORDER_EXPIRED: '주문 시간이 지나 결제가 자동 취소됐습니다.',
+  PAYMENT_METHOD_NOT_ALLOWED: '한정반은 무통장입금으로 결제할 수 없습니다.',
 };
