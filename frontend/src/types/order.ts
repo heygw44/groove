@@ -86,8 +86,16 @@ export interface OrderListParams {
   size?: number;
 }
 
+/** 입금 완료(PAID) 가상계좌 결제 취소 시 토스가 요구하는 환불계좌. */
+export interface RefundAccount {
+  bankCode: string;
+  accountNumber: string;
+  holderName: string;
+}
+
 export interface OrderCancelRequest {
   reason?: string;
+  refundAccount?: RefundAccount;
 }
 
 export interface AdminOrderSummary {

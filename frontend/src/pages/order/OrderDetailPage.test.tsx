@@ -22,6 +22,10 @@ vi.mock('@/hooks/useServerNow', () => ({
   useServerNow: vi.fn(),
 }));
 
+vi.mock('@/hooks/mutations/useCartMutations', () => ({
+  useAddCartItem: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
   id: 1,
   orderNumber: 'ORD-1',
@@ -29,7 +33,16 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
   totalAmount: 10000,
   discountAmount: 0,
   finalAmount: 10000,
-  items: [],
+  items: [
+    {
+      productId: 1,
+      productName: '레코드 판',
+      price: 10000,
+      quantity: 1,
+      lineAmount: 10000,
+      thumbnailUrl: null,
+    },
+  ],
   shippingAddress: {
     recipientName: '김그루브',
     phone: '010-0000-0000',
@@ -88,6 +101,68 @@ afterEach(() => {
 });
 
 describe('OrderDetailPage', () => {
+  it('주문 상품 카드에 재구매 액션을 보여준다', () => {
+    // given
+    mockOrder(buildOrder());
+    mockCancelMutation(buildOrder());
+    vi.mocked(useServerNow).mockReturnValue(0);
+
+    // when
+    renderPage();
+
+    // then
+    expect(screen.getByText('레코드 판')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '장바구니 담기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '바로 구매하기' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '리뷰 쓰기' })).not.toBeInTheDocument();
+  });
+
+  it('배송완료(DELIVERED) 주문이면 상품 카드에 리뷰 쓰기 링크를 보여준다', () => {
+    // given
+    mockOrder(buildOrder({ status: 'DELIVERED' }));
+    mockCancelMutation(buildOrder({ status: 'DELIVERED' }));
+    vi.mocked(useServerNow).mockReturnValue(0);
+
+    // when
+    renderPage();
+
+    // then
+    const reviewLink = screen.getByRole('link', { name: '리뷰 쓰기' });
+    expect(reviewLink).toHaveAttribute('href', '/products/1#reviews');
+  });
+
+  it('가상계좌 입금대기(WAITING_FOR_DEPOSIT)면 계좌 안내를 보여주고 결제대기 배너는 숨긴다', () => {
+    // given
+    const order = buildOrder({
+      status: 'PENDING',
+      payment: {
+        paymentId: 2,
+        method: '가상계좌',
+        status: 'WAITING_FOR_DEPOSIT',
+        amount: 10000,
+        approvedAt: '',
+        easyPayProvider: null,
+        virtualAccount: {
+          bankCode: '020',
+          accountNumber: '110123456789',
+          customerName: '김그루브',
+          dueDate: '2026-09-15T23:59:59',
+        },
+      },
+    });
+    mockOrder(order);
+    mockCancelMutation(order);
+    vi.mocked(useServerNow).mockReturnValue(0);
+
+    // when
+    renderPage();
+
+    // then
+    expect(screen.getByText('110123456789')).toBeInTheDocument();
+    expect(screen.getAllByText('입금대기').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/결제 대기 중입니다/)).not.toBeInTheDocument();
+  });
+
   it('결제 취소 처리 중이면 상태를 표시하고 주문 취소를 비활성화한다', () => {
     // given
     const order = buildOrder({

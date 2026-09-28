@@ -1,5 +1,7 @@
 import type { BadgeVariant } from '@/components/common/Badge';
 import type { OrderStatus } from '@/types/order';
+import type { PaymentStatus } from '@/types/payment';
+import { PAYMENT_STATUS_BADGE, PAYMENT_STATUS_LABEL } from '@/utils/paymentStatus';
 
 export const ORDER_STATUSES: readonly OrderStatus[] = [
   'PENDING',
@@ -53,3 +55,25 @@ export const ADMIN_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 export const isOrderStatus = (value: unknown): value is OrderStatus =>
   typeof value === 'string' && ORDER_STATUS_SET.has(value);
+
+export interface OrderDisplayStatus {
+  label: string;
+  variant: BadgeVariant;
+}
+
+/**
+ * 주문 배지에 쓰는 파생 상태. PENDING + 가상계좌 입금대기(WAITING_FOR_DEPOSIT)면
+ * "결제대기" 대신 "입금대기"로 보여준다.
+ */
+export const getOrderDisplayStatus = (
+  status: OrderStatus,
+  paymentStatus?: PaymentStatus,
+): OrderDisplayStatus => {
+  if (status === 'PENDING' && paymentStatus === 'WAITING_FOR_DEPOSIT') {
+    return {
+      label: PAYMENT_STATUS_LABEL.WAITING_FOR_DEPOSIT,
+      variant: PAYMENT_STATUS_BADGE.WAITING_FOR_DEPOSIT,
+    };
+  }
+  return { label: ORDER_STATUS_LABEL[status], variant: ORDER_STATUS_BADGE[status] };
+};

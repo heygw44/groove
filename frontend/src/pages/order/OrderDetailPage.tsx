@@ -8,21 +8,21 @@ import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { OrderCancelDialog } from '@/components/order/OrderCancelDialog';
-import { OrderItemSummaryList } from '@/components/order/OrderItemSummaryList';
-import type { OrderSummaryItem } from '@/components/order/OrderItemSummaryList';
-import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
+import { OrderItemCard } from '@/components/order/OrderItemCard';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
+import { PaymentInfoCard } from '@/components/order/PaymentInfoCard';
 import { PaymentResumeSection } from '@/components/order/PaymentResumeSection';
 import { PendingExpiryBanner } from '@/components/order/PendingExpiryBanner';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
-import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
+import { VirtualAccountNotice } from '@/components/order/VirtualAccountNotice';
 import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
 import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
+import type { RefundAccount } from '@/types/order';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
-import { formatServerDateTime } from '@/utils/formatDate';
+import { formatServerDate, formatServerDateTime } from '@/utils/formatDate';
 import { isCancelableStatus } from '@/utils/orderStatus';
 import {
   CANCEL_REQUESTED_MESSAGES,
@@ -96,17 +96,18 @@ export default function OrderDetailPage() {
     return <QueryErrorState error={error} onRetry={refetch} title="주문을 불러오지 못했습니다." />;
   }
 
-  const orderItems: OrderSummaryItem[] = order.items.map((item) => ({
-    key: item.productId,
-    title: item.productName,
-    price: item.price,
-    quantity: item.quantity,
-    lineAmount: item.lineAmount,
-  }));
+  const handleCopyOrderNumber = async () => {
+    try {
+      await navigator.clipboard.writeText(order.orderNumber);
+      showToast('success', '주문번호를 복사했습니다.');
+    } catch {
+      showToast('error', '복사에 실패했습니다.');
+    }
+  };
 
-  const handleCancel = (reason?: string) => {
+  const handleCancel = (reason?: string, refundAccount?: RefundAccount) => {
     cancelOrderMutation.mutate(
-      { orderId: order.id, reason },
+      { orderId: order.id, reason, refundAccount },
       {
         onSuccess: (response) => {
           showToast('success', getOrderCancelSuccessMessage(response.payment?.status));
@@ -120,6 +121,7 @@ export default function OrderDetailPage() {
   };
 
   const cancellationPending = isCancellationPending(order.payment?.status);
+  const isWaitingForDeposit = order.payment?.status === 'WAITING_FOR_DEPOSIT';
 
   return (
     <div>
@@ -128,26 +130,46 @@ export default function OrderDetailPage() {
       </Link>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h2 className="font-mono text-lg font-bold">{order.orderNumber}</h2>
-        <OrderStatusBadge status={order.status} />
+        <span className="text-sm text-content-muted">{formatServerDate(order.createdAt)}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-mono text-sm font-bold">{order.orderNumber}</span>
+          <button
+            type="button"
+            onClick={handleCopyOrderNumber}
+            className="shrink-0 text-xs text-accent hover:text-accent-hover"
+          >
+            복사
+          </button>
+        </div>
+        <OrderStatusBadge status={order.status} paymentStatus={order.payment?.status} />
         {order.limitedDropId !== undefined && (
           <Link to={`/limited-drops/${order.limitedDropId}`}>
             <Badge variant="accent">한정반</Badge>
           </Link>
         )}
-        <span className="text-sm text-content-muted">{formatServerDateTime(order.createdAt)}</span>
       </div>
 
       <div className="mt-6">
         <OrderStatusTimeline status={order.status} />
       </div>
 
-      {order.status === 'PENDING' && (
-        <PendingExpiryBanner
-          expiresAtMs={toServerMs(order.expiresAt)}
-          nowMs={nowMs}
-          onExpired={handleExpired}
-        />
+      {order.status === 'PENDING' && !isWaitingForDeposit && (
+        <div className="mt-6">
+          <PendingExpiryBanner
+            expiresAtMs={toServerMs(order.expiresAt)}
+            nowMs={nowMs}
+            onExpired={handleExpired}
+          />
+        </div>
+      )}
+
+      {isWaitingForDeposit && order.payment?.virtualAccount && (
+        <div className="mt-6">
+          <VirtualAccountNotice
+            virtualAccount={order.payment.virtualAccount}
+            amount={order.finalAmount}
+          />
+        </div>
       )}
 
       {order.status === 'CANCELED' && order.canceledAt && (
@@ -159,8 +181,15 @@ export default function OrderDetailPage() {
 
       <section className="mt-8">
         <h2 className="mb-3 text-base font-bold">주문 상품</h2>
-        <div className="rounded-lg border border-line bg-surface px-5 py-4">
-          <OrderItemSummaryList items={orderItems} />
+        <div className="flex flex-col gap-3">
+          {order.items.map((item, index) => (
+            <OrderItemCard
+              key={`${item.productId}-${index}`}
+              item={item}
+              orderStatus={order.status}
+              paymentStatus={order.payment?.status}
+            />
+          ))}
         </div>
       </section>
 
@@ -169,46 +198,15 @@ export default function OrderDetailPage() {
         <ShippingAddressCard address={order.shippingAddress} />
       </section>
 
-      <section className="mt-8 rounded-lg border border-line bg-surface p-5">
-        <OrderPriceSummary
-          totalAmount={order.totalAmount}
-          discountAmount={order.discountAmount}
-          finalAmount={order.finalAmount}
-          couponName={order.couponName}
-        />
-      </section>
-
       <PaymentResumeSection order={order} disabled={isExpired} />
 
-      {order.payment && (
-        <section className="mt-8">
-          <h2 className="mb-3 text-base font-bold">결제 정보</h2>
-          <div className="space-y-1.5 rounded-lg border border-line bg-surface px-5 py-4 text-sm">
-            {cancellationPending && (
-              <p className="flex items-center gap-2">
-                <span className="text-content-muted">결제 상태</span>
-                <PaymentStatusBadge status={order.payment.status} />
-              </p>
-            )}
-            <p>
-              <span className="text-content-muted">결제 수단</span>{' '}
-              <span className="font-medium">{order.payment.method}</span>
-            </p>
-            <p>
-              <span className="text-content-muted">승인 시각</span>{' '}
-              <span className="font-medium">{formatServerDateTime(order.payment.approvedAt)}</span>
-            </p>
-            {order.payment.status === 'CANCELED' && order.payment.canceledAt && (
-              <p>
-                <span className="text-content-muted">취소 시각</span>{' '}
-                <span className="font-medium">
-                  {formatServerDateTime(order.payment.canceledAt)}
-                </span>
-              </p>
-            )}
-          </div>
-        </section>
-      )}
+      <PaymentInfoCard
+        totalAmount={order.totalAmount}
+        discountAmount={order.discountAmount}
+        finalAmount={order.finalAmount}
+        couponName={order.couponName}
+        payment={order.payment}
+      />
 
       {isCancelableStatus(order.status) && (
         <div className="mt-6 flex flex-col items-end gap-2">
@@ -230,7 +228,7 @@ export default function OrderDetailPage() {
         onClose={() => setIsCancelDialogOpen(false)}
         onConfirm={handleCancel}
         pending={cancelOrderMutation.isPending}
-        refundNotice={order.status === 'PAID'}
+        payment={order.payment}
       />
     </div>
   );
