@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { confirmPayment } from '@/api/payment';
-import { orderKeys, recommendKeys } from '@/hooks/queries/queryKeys';
+import { cartKeys, orderKeys, recommendKeys } from '@/hooks/queries/queryKeys';
 import type { PaymentConfirmRequest } from '@/types/payment';
 
 export const useConfirmPayment = () => {
@@ -12,6 +12,8 @@ export const useConfirmPayment = () => {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: orderKeys.all });
       queryClient.invalidateQueries({ queryKey: orderKeys.detail(data.orderId) });
+      // 장바구니는 주문 생성이 아니라 이 승인 시점에 서버가 지운다(D3).
+      queryClient.invalidateQueries({ queryKey: cartKeys.all });
       // 추천은 구매 신호를 서버가 반영하므로 함께 무효화한다.
       queryClient.invalidateQueries({ queryKey: recommendKeys.all });
     },

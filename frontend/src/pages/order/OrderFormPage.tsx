@@ -8,10 +8,7 @@ import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
 import { CouponSection } from '@/components/order/CouponSection';
-import {
-  OrderItemSummaryList,
-  type OrderSummaryItem,
-} from '@/components/order/OrderItemSummaryList';
+import { OrderItemSummaryList } from '@/components/order/OrderItemSummaryList';
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 import { PaymentMethodSection } from '@/components/order/PaymentMethodSection';
 import { ShippingAddressSection } from '@/components/order/ShippingAddressSection';
@@ -22,15 +19,8 @@ import type { AvailableCoupon } from '@/types/coupon';
 import type { PaymentMethodOption } from '@/types/payment';
 import { formatServerDateTime } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
-import { parseOrderDraft } from '@/utils/orderDraft';
+import { isSameOrderDraftSource, loadOrderFormDraft, parseOrderDraft } from '@/utils/orderDraft';
 import { buildOrderName } from '@/utils/paymentRedirect';
-
-interface CheckoutSnapshot {
-  items: OrderSummaryItem[];
-  totalAmount: number;
-  discountAmount: number;
-  finalAmount: number;
-}
 
 export default function OrderFormPage() {
   const location = useLocation();
@@ -48,11 +38,23 @@ export default function OrderFormPage() {
     refetch: refetchAddresses,
   } = useAddresses();
 
-  const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
+  /*
+   * 결제 실패 후 "주문서로 돌아가기"는 같은 location.state 로 이 페이지를 다시 연다.
+   * 저장된 초안이 지금 draft 와 같은 상품 구성을 가리키면 입력값을 복원한다. 최초
+   * 마운트에서만 읽으면 되므로 lazy init 을 쓴다(location.state 가 그 뒤 바뀌지 않는다).
+   */
+  const [restoredDraft] = useState(() => {
+    const stored = loadOrderFormDraft();
+    if (stored === null || draft === null || !isSameOrderDraftSource(stored.source, draft)) {
+      return null;
+    }
+    return stored;
+  });
+
+  const [selectedId, setSelectedId] = useState<number | undefined>(restoredDraft?.addressId);
   const [selectedCoupon, setSelectedCoupon] = useState<AvailableCoupon | null>(null);
-  const [method, setMethod] = useState<PaymentMethodOption>('CARD');
+  const [method, setMethod] = useState<PaymentMethodOption>(restoredDraft?.method ?? 'CARD');
   const [isAgreed, setIsAgreed] = useState(false);
-  const [snapshot, setSnapshot] = useState<CheckoutSnapshot | null>(null);
 
   const effectiveSelectedId =
     selectedId ?? (addresses?.find((address) => address.isDefault) ?? addresses?.[0])?.id;
@@ -62,53 +64,33 @@ export default function OrderFormPage() {
     draft,
     addressId: effectiveSelectedId,
     memberCouponId: selectedCoupon?.memberCouponId ?? null,
-    orderName: buildOrderName(
-      (snapshot?.items ?? source.items).map((item) => ({ productName: item.title })),
-    ),
+    orderName: buildOrderName(source.items.map((item) => ({ productName: item.title }))),
     onCouponRejected: () => setSelectedCoupon(null),
+    initialPendingOrder: restoredDraft?.pendingOrder ?? null,
   });
-  const isOrderLocked = pendingOrder !== null;
 
   /*
-   * 주문 생성 성공 시 draft 가 가리키던 데이터가 무효화되어 사라지지만 그 전에
-   * navigate 로 언마운트되므로 이 효과는 돌지 않는다. submittedRef 체크는 StrictMode 의
-   * 이펙트 이중 실행(ref 는 유지됨) 때문에 토스트가 중복으로 뜨는 것을 막는다.
+   * 화면은 항상 배송지·쿠폰을 자유롭게 바꿀 수 있다("잠긴다" 는 동작이 없다, D2) - 상품·쿠폰이
+   * 그대로면 배송지 변경은 PATCH, 그대로 재결제는 초안 재사용, 바뀌면 새 주문으로 넘어간다.
    */
   useEffect(() => {
-    // 주문이 이미 생겼으면 장바구니 항목이 지워져 source 가 invalid 로 바뀐다. 결제창을 여는 중이니 튕기지 않는다.
-    if (!source.invalid || submittedRef.current || isOrderLocked) {
+    if (!source.invalid || submittedRef.current) {
       return;
     }
     submittedRef.current = true;
     showToast('info', source.invalidMessage);
     navigate(source.returnTo, { replace: true });
-  }, [
-    source.invalid,
-    source.invalidMessage,
-    source.returnTo,
-    navigate,
-    showToast,
-    submittedRef,
-    isOrderLocked,
-  ]);
+  }, [source.invalid, source.invalidMessage, source.returnTo, navigate, showToast, submittedRef]);
 
-  const liveTotalAmount = source.items.reduce((sum, item) => sum + item.lineAmount, 0);
-  const liveDiscountAmount = source.couponAllowed ? (selectedCoupon?.expectedDiscount ?? 0) : 0;
-  const view: CheckoutSnapshot = snapshot ?? {
-    items: source.items,
-    totalAmount: liveTotalAmount,
-    discountAmount: liveDiscountAmount,
-    finalAmount: Math.max(0, liveTotalAmount - liveDiscountAmount),
-  };
-  const finalAmount = pendingOrder?.amount ?? view.finalAmount;
+  const totalAmount = source.items.reduce((sum, item) => sum + item.lineAmount, 0);
+  const discountAmount = source.couponAllowed ? (selectedCoupon?.expectedDiscount ?? 0) : 0;
+  const finalAmount = pendingOrder?.amount ?? Math.max(0, totalAmount - discountAmount);
+  // 한정반은 구매 직후 drop.purchased 가 true 로 바뀌어 "구매 완료" 로 막히는데, 그건 방금
+  // 만든 내 주문 때문이지 다시 막을 이유가 아니다(pendingOrder 가 있으면 이 막힘을 무시한다).
   const isLimitedBlocked =
-    !isOrderLocked && source.limited !== undefined && !source.limited.isPurchasable;
+    pendingOrder === null && source.limited !== undefined && !source.limited.isPurchasable;
 
   const handleSubmit = () => {
-    // 주문 생성 뒤 장바구니·한정반 데이터가 무효화돼도 제출 시점의 주문 내용을 그대로 보여 준다.
-    if (!snapshot) {
-      setSnapshot(view);
-    }
     submit(method);
   };
 
@@ -169,39 +151,31 @@ export default function OrderFormPage() {
               </div>
             )}
             <div className="rounded-lg border border-line bg-surface px-5 py-4">
-              <OrderItemSummaryList items={view.items} />
+              <OrderItemSummaryList items={source.items} />
             </div>
           </div>
 
-          {isOrderLocked && (
-            <p className="rounded-lg border border-line-strong bg-surface-muted px-4 py-3 text-sm text-content-muted">
-              주문이 생성되어 배송지와 쿠폰은 바꿀 수 없습니다. 결제수단만 바꿔 다시 결제할 수
-              있어요.
-            </p>
-          )}
+          <ShippingAddressSection
+            addresses={addresses ?? []}
+            selectedId={effectiveSelectedId}
+            onSelect={setSelectedId}
+          />
 
-          <fieldset disabled={isOrderLocked} className="contents">
-            <ShippingAddressSection
-              addresses={addresses ?? []}
-              selectedId={effectiveSelectedId}
-              onSelect={setSelectedId}
+          {source.couponAllowed ? (
+            <CouponSection
+              orderAmount={totalAmount}
+              selected={selectedCoupon}
+              onSelect={setSelectedCoupon}
+              restoreCouponId={restoredDraft?.memberCouponId ?? undefined}
             />
-
-            {source.couponAllowed ? (
-              <CouponSection
-                orderAmount={view.totalAmount}
-                selected={selectedCoupon}
-                onSelect={setSelectedCoupon}
-              />
-            ) : (
-              <div>
-                <h2 className="mb-3 text-base font-bold">쿠폰</h2>
-                <div className="rounded-lg border border-line bg-surface px-5 py-4 text-sm text-content-muted">
-                  한정반은 쿠폰을 적용할 수 없습니다.
-                </div>
+          ) : (
+            <div>
+              <h2 className="mb-3 text-base font-bold">쿠폰</h2>
+              <div className="rounded-lg border border-line bg-surface px-5 py-4 text-sm text-content-muted">
+                한정반은 쿠폰을 적용할 수 없습니다.
               </div>
-            )}
-          </fieldset>
+            </div>
+          )}
 
           <PaymentMethodSection
             method={method}
@@ -212,8 +186,8 @@ export default function OrderFormPage() {
 
         <div className="h-fit rounded-lg border border-line bg-surface p-5 md:sticky md:top-6">
           <OrderPriceSummary
-            totalAmount={view.totalAmount}
-            discountAmount={view.discountAmount}
+            totalAmount={totalAmount}
+            discountAmount={discountAmount}
             finalAmount={finalAmount}
             couponName={source.couponAllowed ? selectedCoupon?.couponName : undefined}
           />
@@ -231,7 +205,7 @@ export default function OrderFormPage() {
             onClick={handleSubmit}
             disabled={
               effectiveSelectedId === undefined ||
-              view.items.length === 0 ||
+              source.items.length === 0 ||
               isLimitedBlocked ||
               !isAgreed
             }

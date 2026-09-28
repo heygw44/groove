@@ -99,7 +99,7 @@ export default function AdminDashboardPage() {
             <StatCard label="오늘 주문" value={`${summaryQuery.data.todayOrderCount}건`} />
             <StatCard label="오늘 신규 회원" value={`${summaryQuery.data.todayNewMemberCount}명`} />
             <StatCard
-              label="결제 대기"
+              label="입금 대기"
               value={`${summaryQuery.data.pendingOrderCount}건`}
               to="/admin/orders?status=PENDING"
             />
@@ -111,9 +111,7 @@ export default function AdminDashboardPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-bold text-content">일별 매출</h3>
-            {dailySalesQuery.data && (
-              <AsOfBadge aggregatedAt={dailySalesQuery.data.aggregatedAt} />
-            )}
+            {dailySalesQuery.data && <AsOfBadge aggregatedAt={dailySalesQuery.data.aggregatedAt} />}
           </div>
           <StatsPeriodSelector value={period} onChange={handlePeriodChange} />
         </div>

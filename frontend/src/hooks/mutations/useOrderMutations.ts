@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { cancelOrder, createOrder } from '@/api/order';
+import { cancelOrder, createOrder, updateOrderShippingAddress } from '@/api/order';
 import { cartKeys, couponKeys, orderKeys } from '@/hooks/queries/queryKeys';
 import type { OrderCreateRequest, RefundAccount } from '@/types/order';
 
@@ -15,14 +15,26 @@ export const useCreateOrder = () => {
   return useMutation({
     mutationFn: ({ payload, idempotencyKey }: CreateOrderVariables) =>
       createOrder(payload, idempotencyKey),
+    // 장바구니는 주문 생성이 아니라 결제 확정 시점에 서버가 지운다(D3) - 여기서 무효화하지 않는다.
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cartKeys.all });
       queryClient.invalidateQueries({ queryKey: orderKeys.all });
       // 주문에 쓴 쿠폰이 사용 완료로 바뀌므로 쿠폰함도 함께 무효화한다.
       queryClient.invalidateQueries({ queryKey: couponKeys.all });
     },
   });
 };
+
+interface UpdateOrderShippingAddressVariables {
+  orderId: number;
+  addressId: number;
+}
+
+/** 주문서 재제출 시 배송지만 바뀐 경우 쓴다(D2). 상품·쿠폰이 같은 PENDING 주문에만 적용된다. */
+export const useUpdateOrderShippingAddress = () =>
+  useMutation({
+    mutationFn: ({ orderId, addressId }: UpdateOrderShippingAddressVariables) =>
+      updateOrderShippingAddress(orderId, addressId),
+  });
 
 interface CancelOrderVariables {
   orderId: number;

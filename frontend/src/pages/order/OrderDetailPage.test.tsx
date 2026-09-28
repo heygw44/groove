@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/components/common/Toast';
 import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
-import { useServerNow } from '@/hooks/useServerNow';
 import OrderDetailPage from '@/pages/order/OrderDetailPage';
 import type { OrderDetail } from '@/types/order';
 
@@ -16,10 +15,6 @@ vi.mock('@/hooks/mutations/useOrderMutations', () => ({
 
 vi.mock('@/hooks/queries/useOrder', () => ({
   useOrder: vi.fn(),
-}));
-
-vi.mock('@/hooks/useServerNow', () => ({
-  useServerNow: vi.fn(),
 }));
 
 vi.mock('@/hooks/mutations/useCartMutations', () => ({
@@ -105,7 +100,6 @@ describe('OrderDetailPage', () => {
     // given
     mockOrder(buildOrder());
     mockCancelMutation(buildOrder());
-    vi.mocked(useServerNow).mockReturnValue(0);
 
     // when
     renderPage();
@@ -121,7 +115,6 @@ describe('OrderDetailPage', () => {
     // given
     mockOrder(buildOrder({ status: 'DELIVERED' }));
     mockCancelMutation(buildOrder({ status: 'DELIVERED' }));
-    vi.mocked(useServerNow).mockReturnValue(0);
 
     // when
     renderPage();
@@ -131,7 +124,7 @@ describe('OrderDetailPage', () => {
     expect(reviewLink).toHaveAttribute('href', '/products/1#reviews');
   });
 
-  it('가상계좌 입금대기(WAITING_FOR_DEPOSIT)면 계좌 안내를 보여주고 결제대기 배너는 숨긴다', () => {
+  it('가상계좌 입금대기(WAITING_FOR_DEPOSIT)면 계좌 안내와 입금대기 배지를 보여준다', () => {
     // given
     const order = buildOrder({
       status: 'PENDING',
@@ -152,7 +145,6 @@ describe('OrderDetailPage', () => {
     });
     mockOrder(order);
     mockCancelMutation(order);
-    vi.mocked(useServerNow).mockReturnValue(0);
 
     // when
     renderPage();
@@ -160,7 +152,6 @@ describe('OrderDetailPage', () => {
     // then
     expect(screen.getByText('110123456789')).toBeInTheDocument();
     expect(screen.getAllByText('입금대기').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/결제 대기 중입니다/)).not.toBeInTheDocument();
   });
 
   it('결제 취소 처리 중이면 상태를 표시하고 주문 취소를 비활성화한다', () => {
@@ -178,7 +169,6 @@ describe('OrderDetailPage', () => {
     });
     mockOrder(order);
     mockCancelMutation(order);
-    vi.mocked(useServerNow).mockReturnValue(0);
 
     // when
     renderPage();
@@ -208,7 +198,6 @@ describe('OrderDetailPage', () => {
     });
     mockOrder(order);
     mockCancelMutation(response);
-    vi.mocked(useServerNow).mockReturnValue(0);
 
     // when
     renderPage();

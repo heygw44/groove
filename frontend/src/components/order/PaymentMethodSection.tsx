@@ -17,7 +17,7 @@ interface PaymentMethodSectionProps {
   allowVirtualAccount: boolean;
 }
 
-/** 결제수단 라디오 목록. 주문서와 결제 이어하기 다이얼로그(#522)에서 함께 쓴다. */
+/** 결제수단 라디오 목록. 주문서에서 쓴다. */
 export function PaymentMethodSection({
   method,
   onChange,

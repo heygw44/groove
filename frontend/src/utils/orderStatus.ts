@@ -16,7 +16,8 @@ export const ORDER_STATUSES: readonly OrderStatus[] = [
 const ORDER_STATUS_SET = new Set<string>(ORDER_STATUSES);
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
-  PENDING: '결제대기',
+  // 결제 전 주문은 목록에 나타나지 않으므로(placed_at 없음), 보이는 PENDING 은 가상계좌 입금대기뿐이다.
+  PENDING: '입금대기',
   PAID: '결제완료',
   PREPARING: '배송준비',
   SHIPPED: '배송중',
@@ -62,8 +63,8 @@ export interface OrderDisplayStatus {
 }
 
 /**
- * 주문 배지에 쓰는 파생 상태. PENDING + 가상계좌 입금대기(WAITING_FOR_DEPOSIT)면
- * "결제대기" 대신 "입금대기"로 보여준다.
+ * 주문 배지에 쓰는 파생 상태. 결제가 WAITING_FOR_DEPOSIT 이면 결제정보의 라벨·배지를
+ * 그대로 쓰고, 아니면 주문 상태 라벨을 쓴다(둘 다 현재는 "입금대기"로 같다).
  */
 export const getOrderDisplayStatus = (
   status: OrderStatus,

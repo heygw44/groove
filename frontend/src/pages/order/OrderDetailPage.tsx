@@ -12,13 +12,10 @@ import { OrderItemCard } from '@/components/order/OrderItemCard';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
 import { PaymentInfoCard } from '@/components/order/PaymentInfoCard';
-import { PaymentResumeSection } from '@/components/order/PaymentResumeSection';
-import { PendingExpiryBanner } from '@/components/order/PendingExpiryBanner';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
 import { VirtualAccountNotice } from '@/components/order/VirtualAccountNotice';
 import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
-import { useServerNow } from '@/hooks/useServerNow';
 import NotFoundPage from '@/pages/NotFoundPage';
 import type { RefundAccount } from '@/types/order';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
@@ -29,14 +26,10 @@ import {
   getOrderCancelSuccessMessage,
   isCancellationPending,
 } from '@/utils/paymentStatus';
-import { toServerMs } from '@/utils/serverTime';
 
 const NOT_FOUND_CODES = new Set(['ORDER_NOT_FOUND']);
 
 const ID_PATTERN = /^\d+$/;
-
-// 만료 스케줄러 반영을 기다리는 동안 짧은 간격으로 다시 확인한다. 상태가 PENDING 을 벗어나면 멈춘다.
-const EXPIRY_POLL_MS = 5_000;
 
 export default function OrderDetailPage() {
   const { id: idParam } = useParams();
@@ -44,17 +37,7 @@ export default function OrderDetailPage() {
   const id = isValidId ? Number(idParam) : -1;
 
   const { showToast } = useToast();
-  const nowMs = useServerNow();
-  const [isExpired, setIsExpired] = useState(false);
-  const {
-    data: order,
-    isPending,
-    isError,
-    error,
-    refetch,
-  } = useOrder(id, (query) =>
-    isExpired && query.state.data?.status === 'PENDING' ? EXPIRY_POLL_MS : false,
-  );
+  const { data: order, isPending, isError, error, refetch } = useOrder(id);
   const cancelOrderMutation = useCancelOrder();
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
@@ -68,11 +51,6 @@ export default function OrderDetailPage() {
       document.title = previousTitle;
     };
   }, [order]);
-
-  const handleExpired = () => {
-    setIsExpired(true);
-    void refetch();
-  };
 
   // enabled:false 여도 isPending 은 true 이므로, 잘못된 id 분기를 로딩 분기보다 먼저 둔다.
   if (!isValidId) {
@@ -153,16 +131,6 @@ export default function OrderDetailPage() {
         <OrderStatusTimeline status={order.status} />
       </div>
 
-      {order.status === 'PENDING' && !isWaitingForDeposit && (
-        <div className="mt-6">
-          <PendingExpiryBanner
-            expiresAtMs={toServerMs(order.expiresAt)}
-            nowMs={nowMs}
-            onExpired={handleExpired}
-          />
-        </div>
-      )}
-
       {isWaitingForDeposit && order.payment?.virtualAccount && (
         <div className="mt-6">
           <VirtualAccountNotice
@@ -197,8 +165,6 @@ export default function OrderDetailPage() {
         <h2 className="mb-3 text-base font-bold">배송지</h2>
         <ShippingAddressCard address={order.shippingAddress} />
       </section>
-
-      <PaymentResumeSection order={order} disabled={isExpired} />
 
       <PaymentInfoCard
         totalAmount={order.totalAmount}
