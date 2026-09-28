@@ -55,6 +55,21 @@ afterEach(() => {
 });
 
 describe('PaymentFailPage', () => {
+  it('화면을 벗어나면 탭 제목을 이전 제목으로 되돌린다', async () => {
+    // given
+    document.title = 'GROOVE';
+    saveOrderFormDraft(buildDraftRecord());
+    renderPage('?code=PAY_PROCESS_CANCELED');
+    expect(document.title).toBe('결제 실패 | GROOVE');
+
+    // when
+    await userEvent.click(screen.getByRole('button', { name: '주문서로 돌아가기' }));
+
+    // then
+    expect(screen.getByText('주문서 페이지')).toBeInTheDocument();
+    expect(document.title).toBe('GROOVE');
+  });
+
   it('주문번호 없이 실패 사유만 보여준다', () => {
     // given & when
     renderPage('?code=REJECT_CARD_COMPANY&orderId=ORD-7&orderRef=7');

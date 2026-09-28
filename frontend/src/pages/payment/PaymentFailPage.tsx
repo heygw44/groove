@@ -19,7 +19,11 @@ export default function PaymentFailPage() {
   const { draft, backToOrderForm } = useOrderFormDraftReturn();
 
   useEffect(() => {
+    const previousTitle = document.title;
     document.title = '결제 실패 | GROOVE';
+    return () => {
+      document.title = previousTitle;
+    };
   }, []);
 
   const failMessage = getTossFailMessage(code, message);
