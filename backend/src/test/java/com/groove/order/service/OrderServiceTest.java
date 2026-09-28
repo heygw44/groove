@@ -112,6 +112,9 @@ class OrderServiceTest {
 	OrderStockService orderStockService;
 
 	@Mock
+	OrderDraftReleaser orderDraftReleaser;
+
+	@Mock
 	OrderRepository orderRepository;
 
 	@Mock
@@ -145,8 +148,8 @@ class OrderServiceTest {
 		now = LocalDateTime.now(clock);
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, cartItemRepository, memberCouponRepository, orderStockService,
-				orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository, productImageRepository,
-				clock);
+				orderDraftReleaser, orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository,
+				productImageRepository, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -178,6 +181,7 @@ class OrderServiceTest {
 			BigDecimal expectedAmount = product.getPrice().multiply(BigDecimal.valueOf(2));
 			assertThat(response.orderNumber()).isEqualTo("20260903-TESTAB12");
 			assertThat(response.finalAmount()).isEqualByComparingTo(expectedAmount);
+			assertThat(response.expiresAt()).isEqualTo(now.plusMinutes(Order.PENDING_EXPIRATION_MINUTES));
 			verify(orderStockService).deduct(any());
 			verify(cartItemRepository, never()).deleteAll(any());
 			ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
@@ -206,6 +210,23 @@ class OrderServiceTest {
 			ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
 			verify(orderRepository).save(captor.capture());
 			assertThat(captor.getValue().getOrderSource()).isEqualTo(OrderSource.DIRECT);
+		}
+
+		@Test
+		@DisplayName("새 주문을 만들기 전에 이전 미확정 주문 해제를 먼저 호출한다")
+		void releasesPreviousDraftsBeforeCreatingNewOrder() {
+			// given
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(addressRepository.findByIdAndMemberId(ADDRESS_ID, MEMBER_ID)).willReturn(Optional.of(address));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			OrderCreateRequest request = new OrderCreateRequest(null, PRODUCT_ID, 1, ADDRESS_ID, null);
+
+			// when
+			orderService.create(MEMBER_ID, request);
+
+			// then
+			verify(orderDraftReleaser).releaseDrafts(MEMBER_ID, now);
 		}
 
 		@Test

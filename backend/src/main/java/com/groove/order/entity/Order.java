@@ -58,6 +58,7 @@ public class Order extends BaseTimeEntity {
 
 	public static final int PENDING_EXPIRATION_MINUTES = 10;
 	public static final String EXPIRED_CANCEL_REASON = "EXPIRED";
+	public static final String SUPERSEDED_CANCEL_REASON = "SUPERSEDED";
 
 	private static final String ADMIN_CANCEL_REASON = "관리자 취소";
 
@@ -260,6 +261,24 @@ public class Order extends BaseTimeEntity {
 		this.status = OrderStatus.CANCELED;
 		this.canceledAt = now;
 		this.cancelReason = EXPIRED_CANCEL_REASON;
+	}
+
+	/** 주문서를 다시 제출해 이 주문이 필요 없어졌을 때 쓴다. 만료와 같은 복원을 하되 사유만 다르다. */
+	public void supersede(LocalDateTime now) {
+		if (this.status != OrderStatus.PENDING) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		this.status = OrderStatus.CANCELED;
+		this.canceledAt = now;
+		this.cancelReason = SUPERSEDED_CANCEL_REASON;
+	}
+
+	/** 주문서 배송지만 바꾼다. 확정 전(placed_at 없음) PENDING 주문에만 허용한다. */
+	public void changeShippingAddress(ShippingAddress shippingAddress) {
+		if (this.status != OrderStatus.PENDING || isPlaced()) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		this.shippingAddress = shippingAddress;
 	}
 
 	public List<OrderItem> getItems() {

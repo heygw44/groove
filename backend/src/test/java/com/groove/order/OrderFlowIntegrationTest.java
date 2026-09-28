@@ -332,6 +332,10 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 					.andReturn();
 			long orderId = objectMapper.readTree(createResult.getResponse().getContentAsString())
 					.path("data").path("orderId").asLong();
+			// POST /orders 는 같은 회원의 미확정(placed_at 없는) PENDING 주문을 새 주문서 제출 전에
+			// SUPERSEDED 로 푼다. 이 시나리오는 "이미 확정된 주문의 쿠폰은 재사용할 수 없다"를 보려는
+			// 것이므로 결제 확정을 흉내내 이 주문을 미확정 해제 대상에서 뺀다.
+			placeOrder(orderId);
 
 			// then: 재고는 주문한 만큼만 차감된다
 			Stock stockAfterFirstOrder = stockRepository.findByProductId(product.getId()).orElseThrow();

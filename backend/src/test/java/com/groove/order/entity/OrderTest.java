@@ -507,6 +507,93 @@ class OrderTest {
 	}
 
 	@Nested
+	@DisplayName("supersede()")
+	class Supersede {
+
+		@Test
+		@DisplayName("PENDING 이면 CANCELED 로 바뀌고 SUPERSEDED 사유가 기록된다")
+		void cancelsWithSupersededReasonWhenPending() {
+			// given
+			Order order = OrderFixture.create(member);
+			LocalDateTime now = LocalDateTime.now();
+
+			// when
+			order.supersede(now);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isEqualTo(now);
+			assertThat(order.getCancelReason()).isEqualTo(Order.SUPERSEDED_CANCEL_REASON);
+		}
+
+		@Test
+		@DisplayName("PAID 면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenPaid() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+
+			// when & then
+			assertThatThrownBy(() -> order.supersede(LocalDateTime.now()))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("changeShippingAddress()")
+	class ChangeShippingAddress {
+
+		@Test
+		@DisplayName("확정 전 PENDING 주문이면 배송지가 바뀐다")
+		void changesAddressWhenPendingAndNotPlaced() {
+			// given
+			Order order = OrderFixture.create(member);
+			ShippingAddress newAddress = ShippingAddress.of("김바이닐", "010-9999-8888", "12345", "서울시 서초구 1",
+					null);
+
+			// when
+			order.changeShippingAddress(newAddress);
+
+			// then
+			assertThat(order.getShippingAddress()).isEqualTo(newAddress);
+		}
+
+		@Test
+		@DisplayName("이미 확정된 주문이면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenAlreadyPlaced() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.place(LocalDateTime.now());
+			ShippingAddress newAddress = ShippingAddress.of("김바이닐", "010-9999-8888", "12345", "서울시 서초구 1",
+					null);
+
+			// when & then
+			assertThatThrownBy(() -> order.changeShippingAddress(newAddress))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+
+		@Test
+		@DisplayName("PENDING 이 아니면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenNotPending() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+			ShippingAddress newAddress = ShippingAddress.of("김바이닐", "010-9999-8888", "12345", "서울시 서초구 1",
+					null);
+
+			// when & then
+			assertThatThrownBy(() -> order.changeShippingAddress(newAddress))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
 	@DisplayName("isExpired()")
 	class IsExpired {
 
