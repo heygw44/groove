@@ -6,6 +6,7 @@ import {
   formatDday,
   getDropPhase,
   getPurchaseButtonState,
+  parseLimitedPurchaseResultState,
   pickBannerDrop,
   splitCountdown,
 } from '@/utils/limitedDrop';
@@ -192,5 +193,23 @@ describe('classifyPurchaseError()', () => {
     // when & then
     expect(classifyPurchaseError('COMMON_INTERNAL_ERROR')).toBe('UNKNOWN');
     expect(classifyPurchaseError(undefined)).toBe('UNKNOWN');
+  });
+});
+
+describe('parseLimitedPurchaseResultState()', () => {
+  it('SOLD_OUT/ALREADY_PURCHASED state 는 그대로 판독한다', () => {
+    // when & then
+    expect(parseLimitedPurchaseResultState({ limitedPurchaseResult: 'SOLD_OUT' })).toBe('SOLD_OUT');
+    expect(parseLimitedPurchaseResultState({ limitedPurchaseResult: 'ALREADY_PURCHASED' })).toBe(
+      'ALREADY_PURCHASED',
+    );
+  });
+
+  it('알 수 없는 모양의 state 는 null 이다', () => {
+    // when & then
+    expect(parseLimitedPurchaseResultState(null)).toBeNull();
+    expect(parseLimitedPurchaseResultState(undefined)).toBeNull();
+    expect(parseLimitedPurchaseResultState({})).toBeNull();
+    expect(parseLimitedPurchaseResultState({ limitedPurchaseResult: 'UNKNOWN_CODE' })).toBeNull();
   });
 });
