@@ -12,6 +12,7 @@ import { useCreateAddress, useUpdateAddress } from '@/hooks/mutations/useAddress
 import { addressSchema, addressUpdateSchema, type AddressFormValues } from '@/schemas/address';
 import type { Address } from '@/types/member';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
+import { formatPhone } from '@/utils/formatPhone';
 
 interface AddressFormModalProps {
   open: boolean;
@@ -41,6 +42,22 @@ const toFormValues = (address?: Address): AddressFormValues =>
       }
     : EMPTY_VALUES;
 
+/* 값을 바꾸면 커서가 끝으로 튀므로, 커서 앞 숫자 개수를 기준으로 위치를 되돌린다. */
+const formatPhoneInput = (input: HTMLInputElement) => {
+  const caret = input.selectionStart ?? input.value.length;
+  const digitsBeforeCaret = input.value.slice(0, caret).replace(/\D/g, '').length;
+  const formatted = formatPhone(input.value);
+  input.value = formatted;
+
+  let nextCaret = 0;
+  for (let seen = 0; nextCaret < formatted.length && seen < digitsBeforeCaret; nextCaret += 1) {
+    if (/\d/.test(formatted[nextCaret])) {
+      seen += 1;
+    }
+  }
+  input.setSelectionRange(nextCaret, nextCaret);
+};
+
 export function AddressFormModal({ open, onClose, address }: AddressFormModalProps) {
   const isEdit = Boolean(address);
   const { showToast } = useToast();
@@ -57,6 +74,8 @@ export function AddressFormModal({ open, onClose, address }: AddressFormModalPro
     mode: 'onBlur',
     defaultValues: EMPTY_VALUES,
   });
+
+  const phoneField = register('phone');
 
   useEffect(() => {
     if (open) {
@@ -132,8 +151,13 @@ export function AddressFormModal({ open, onClose, address }: AddressFormModalPro
               id="phone"
               inputMode="tel"
               placeholder="010-1234-5678"
+              maxLength={13}
               invalid={Boolean(errors.phone)}
-              {...register('phone')}
+              {...phoneField}
+              onChange={(event) => {
+                formatPhoneInput(event.target);
+                return phoneField.onChange(event);
+              }}
             />
           </Field>
         </div>
