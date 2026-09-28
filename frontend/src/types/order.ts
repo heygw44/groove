@@ -18,6 +18,8 @@ export interface OrderCreateResponse {
   discountAmount: number;
   finalAmount: number;
   couponName?: string;
+  /** 결제 대기 만료 시각. 없으면 만료 판정 없이 이 주문을 계속 재사용한다. */
+  expiresAt?: string;
 }
 
 export interface OrderItem {

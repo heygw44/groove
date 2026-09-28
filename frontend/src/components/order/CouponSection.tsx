@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
@@ -13,12 +13,20 @@ interface CouponSectionProps {
   orderAmount: number;
   selected: AvailableCoupon | null;
   onSelect: (coupon: AvailableCoupon | null) => void;
+  /** 결제 실패 후 주문서로 돌아왔을 때 자동으로 다시 선택할 쿠폰 id. 목록이 오면 한 번만 시도한다. */
+  restoreCouponId?: number;
 }
 
-export function CouponSection({ orderAmount, selected, onSelect }: CouponSectionProps) {
+export function CouponSection({
+  orderAmount,
+  selected,
+  onSelect,
+  restoreCouponId,
+}: CouponSectionProps) {
   const { showToast } = useToast();
   const { data: coupons, isPending, isError, refetch } = useAvailableCoupons(orderAmount);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const hasRestoredRef = useRef(false);
 
   // 재조회 결과에 선택된 쿠폰이 더 이상 없으면(만료·사용됨) 자동으로 해제한다.
   useEffect(() => {
@@ -33,6 +41,17 @@ export function CouponSection({ orderAmount, selected, onSelect }: CouponSection
       showToast('info', '선택한 쿠폰을 더 이상 적용할 수 없어 해제했습니다.');
     }
   }, [coupons, selected, onSelect, showToast]);
+
+  useEffect(() => {
+    if (hasRestoredRef.current || coupons === undefined || restoreCouponId === undefined) {
+      return;
+    }
+    hasRestoredRef.current = true;
+    const restored = coupons.find((coupon) => coupon.memberCouponId === restoreCouponId);
+    if (restored) {
+      onSelect(restored);
+    }
+  }, [coupons, restoreCouponId, onSelect]);
 
   return (
     <div>

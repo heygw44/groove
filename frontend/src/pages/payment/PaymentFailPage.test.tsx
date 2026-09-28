@@ -1,134 +1,107 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useOrder } from '@/hooks/queries/useOrder';
-import { usePaymentWindow } from '@/hooks/usePaymentWindow';
-import { useServerNow } from '@/hooks/useServerNow';
 import PaymentFailPage from '@/pages/payment/PaymentFailPage';
-import { useAuthStore } from '@/store/authStore';
-import type { OrderDetail } from '@/types/order';
+import { saveOrderFormDraft, type OrderFormDraftRecord } from '@/utils/orderDraft';
 
-vi.mock('@/hooks/queries/useOrder', () => ({
-  useOrder: vi.fn(),
-}));
-
-vi.mock('@/hooks/usePaymentWindow', () => ({
-  usePaymentWindow: vi.fn(),
-}));
-
-vi.mock('@/hooks/useServerNow', () => ({
-  useServerNow: vi.fn(),
-}));
-
-const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
-  id: 7,
-  orderNumber: 'ORD-7',
-  status: 'PENDING',
-  totalAmount: 10000,
-  discountAmount: 0,
-  finalAmount: 10000,
-  items: [
-    {
-      productId: 1,
-      productName: '앨범',
-      price: 10000,
-      quantity: 1,
-      lineAmount: 10000,
-      thumbnailUrl: null,
-    },
-  ],
-  shippingAddress: {
-    recipientName: '김그루브',
-    phone: '010-0000-0000',
-    zipCode: '00000',
-    address1: '서울시 어딘가',
+const buildDraftRecord = (overrides: Partial<OrderFormDraftRecord> = {}): OrderFormDraftRecord => ({
+  source: { kind: 'cart', cartItemIds: [1] },
+  addressId: 5,
+  memberCouponId: null,
+  method: 'CARD',
+  pendingOrder: {
+    orderId: 7,
+    orderNumber: 'ORD-7',
+    amount: 10000,
+    fingerprint: 'fp',
+    addressId: 5,
+    expiresAtMs: null,
   },
-  createdAt: '2026-09-28T00:00:00',
-  expiresAt: '2026-09-28T00:30:00',
   ...overrides,
 });
 
-const mockOrder = (order: OrderDetail | undefined) => {
-  vi.mocked(useOrder).mockReturnValue({
-    data: order,
-    isPending: false,
-    isError: false,
-    error: null,
-    refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useOrder>);
-};
+function OrderFormLandingProbe({ onLand }: { onLand: (state: unknown) => void }) {
+  const location = useLocation();
+  useEffect(() => {
+    onLand(location.state);
+  }, [location.state, onLand]);
+  return <p>주문서 페이지</p>;
+}
 
-const openPaymentWindow = vi.fn();
-
-const renderPage = (search: string) =>
+const renderPage = (search: string) => {
+  const onLand = vi.fn();
   render(
     <MemoryRouter initialEntries={[`/payments/fail${search}`]}>
       <Routes>
         <Route path="/payments/fail" element={<PaymentFailPage />} />
+        <Route path="/orders/new" element={<OrderFormLandingProbe onLand={onLand} />} />
+        <Route path="/cart" element={<p>장바구니 페이지</p>} />
+        <Route path="/" element={<p>홈 페이지</p>} />
       </Routes>
     </MemoryRouter>,
   );
+  return { onLand };
+};
 
 beforeEach(() => {
-  vi.mocked(usePaymentWindow).mockReturnValue({ openPaymentWindow, isOpening: false });
-  vi.mocked(useServerNow).mockReturnValue(new Date('2026-09-28T00:10:00+09:00').getTime());
-  useAuthStore.setState({ accessToken: 'token', member: null, isBootstrapping: false });
+  sessionStorage.clear();
 });
 
 afterEach(() => {
-  vi.clearAllMocks();
+  sessionStorage.clear();
 });
 
 describe('PaymentFailPage', () => {
-  it('PENDING 이고 기한이 남았으면 결제수단 선택과 다시 결제하기 버튼을 보여준다', () => {
-    // given
-    mockOrder(buildOrder());
-
-    // when
+  it('주문번호 없이 실패 사유만 보여준다', () => {
+    // given & when
     renderPage('?code=REJECT_CARD_COMPANY&orderId=ORD-7&orderRef=7');
 
     // then
-    expect(screen.getByRole('button', { name: '다시 결제하기' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '신용·체크카드' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '주문 내역' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '결제에 실패했습니다' })).toBeInTheDocument();
+    expect(screen.queryByText(/ORD-7/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/주문번호/)).not.toBeInTheDocument();
   });
 
-  it('다시 결제하기를 누르면 같은 주문으로 결제창을 연다', async () => {
+  it('초안이 남아있으면 주문서로 돌아가기와 장바구니 버튼을 보여준다', () => {
     // given
-    const user = userEvent.setup();
-    mockOrder(buildOrder());
-    renderPage('?code=REJECT_CARD_COMPANY&orderId=ORD-7&orderRef=7');
-
-    // when
-    await user.click(screen.getByRole('button', { name: '다시 결제하기' }));
-
-    // then
-    expect(openPaymentWindow).toHaveBeenCalledWith(
-      expect.objectContaining({ orderId: 7, orderNumber: 'ORD-7', method: 'CARD' }),
-    );
-  });
-
-  it('기한이 지났으면 다시 결제하기를 보여주지 않는다', () => {
-    // given
-    mockOrder(buildOrder({ expiresAt: '2026-09-28T00:05:00' }));
-
-    // when
-    renderPage('?code=REJECT_CARD_COMPANY&orderId=ORD-7&orderRef=7');
-
-    // then
-    expect(screen.queryByRole('button', { name: '다시 결제하기' })).not.toBeInTheDocument();
-  });
-
-  it('orderRef 가 없으면 다시 결제하기를 보여주지 않는다', () => {
-    // given
-    mockOrder(undefined);
+    saveOrderFormDraft(buildDraftRecord());
 
     // when
     renderPage('?code=REJECT_CARD_COMPANY');
 
     // then
+    expect(screen.getByRole('button', { name: '주문서로 돌아가기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '장바구니' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '다시 결제하기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '홈으로' })).not.toBeInTheDocument();
+  });
+
+  it('주문서로 돌아가기를 누르면 초안의 location.state 로 주문서를 다시 연다', async () => {
+    // given
+    const user = userEvent.setup();
+    saveOrderFormDraft(
+      buildDraftRecord({ source: { kind: 'direct', productId: 10, quantity: 2 } }),
+    );
+    const { onLand } = renderPage('?code=REJECT_CARD_COMPANY');
+
+    // when
+    await user.click(screen.getByRole('button', { name: '주문서로 돌아가기' }));
+
+    // then
+    expect(screen.getByText('주문서 페이지')).toBeInTheDocument();
+    expect(onLand).toHaveBeenCalledWith({ productId: 10, quantity: 2 });
+  });
+
+  it('초안이 없으면 장바구니와 홈 버튼만 보여준다', () => {
+    // given & when
+    renderPage('?code=REJECT_CARD_COMPANY');
+
+    // then
+    expect(screen.queryByRole('button', { name: '주문서로 돌아가기' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '장바구니' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '홈으로' })).toBeInTheDocument();
   });
 });
