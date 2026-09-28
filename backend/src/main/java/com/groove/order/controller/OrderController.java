@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,10 +22,12 @@ import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.dto.OrderSearchRequest;
+import com.groove.order.dto.OrderShippingAddressRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderCreateService;
 import com.groove.order.service.OrderService;
+import com.groove.order.service.OrderShippingAddressService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -41,6 +44,7 @@ public class OrderController {
 	private final OrderService orderService;
 	private final OrderCreateService orderCreateService;
 	private final OrderCancelService orderCancelService;
+	private final OrderShippingAddressService orderShippingAddressService;
 
 	@Operation(summary = "주문 생성")
 	@PostMapping
@@ -52,6 +56,14 @@ public class OrderController {
 				request);
 		HttpStatus status = result.replayed() ? HttpStatus.OK : HttpStatus.CREATED;
 		return ResponseEntity.status(status).body(ApiResponse.ok(result.response()));
+	}
+
+	@Operation(summary = "배송지 변경")
+	@PatchMapping("/{id}/shipping-address")
+	public ApiResponse<OrderDetailResponse> changeShippingAddress(@AuthMember LoginMember loginMember,
+			@PathVariable Long id, @Valid @RequestBody OrderShippingAddressRequest request) {
+		return ApiResponse.ok(
+				orderShippingAddressService.changeShippingAddress(loginMember.id(), id, request.addressId()));
 	}
 
 	@Operation(summary = "내 주문 목록 조회")

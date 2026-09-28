@@ -61,6 +61,7 @@ public class OrderService {
 	private final CartItemRepository cartItemRepository;
 	private final MemberCouponRepository memberCouponRepository;
 	private final OrderStockService orderStockService;
+	private final OrderDraftReleaser orderDraftReleaser;
 	private final OrderRepository orderRepository;
 	private final OrderNumberGenerator orderNumberGenerator;
 	private final OrderQueryMapper orderQueryMapper;
@@ -71,6 +72,7 @@ public class OrderService {
 	@Transactional
 	public OrderCreateResponse create(Long memberId, OrderCreateRequest request) {
 		Member member = findActiveMember(memberId);
+		orderDraftReleaser.releaseDrafts(memberId, LocalDateTime.now(clock));
 		Address address = addressRepository.findByIdAndMemberId(request.addressId(), memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_ADDRESS_NOT_FOUND));
 		MemberCoupon memberCoupon = request.memberCouponId() == null ? null

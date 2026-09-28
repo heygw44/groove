@@ -8,11 +8,13 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -44,11 +46,13 @@ import com.groove.member.entity.MemberRole;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderShippingAddressRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderCreateService;
 import com.groove.order.service.OrderService;
+import com.groove.order.service.OrderShippingAddressService;
 
 @WebMvcTest(OrderController.class)
 @Import({SecurityConfig.class, WebConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -76,13 +80,16 @@ class OrderControllerTest {
 	@MockitoBean
 	OrderCancelService orderCancelService;
 
+	@MockitoBean
+	OrderShippingAddressService orderShippingAddressService;
+
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
 	}
 
 	private OrderCreateResponse sampleResponse() {
 		return new OrderCreateResponse(1L, "20260903-TESTAB12", new BigDecimal("90000"), BigDecimal.ZERO,
-				new BigDecimal("90000"), null);
+				new BigDecimal("90000"), null, LocalDateTime.of(2026, 9, 3, 12, 10));
 	}
 
 	private OrderDetailResponse sampleDetailResponse(OrderStatus status) {
@@ -113,7 +120,8 @@ class OrderControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isCreated())
 					.andExpect(jsonPath("$.data.orderId", is(1)))
-					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")));
+					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")))
+					.andExpect(jsonPath("$.data.expiresAt", is("2026-09-03T12:10:00")));
 			verify(orderCreateService).create(eq(1L), eq(null), any());
 		}
 
@@ -283,7 +291,8 @@ class OrderControllerTest {
 		void createsOrderWithCoupon() throws Exception {
 			// given
 			OrderCreateResponse response = new OrderCreateResponse(1L, "20260903-TESTAB12",
-					new BigDecimal("90000"), new BigDecimal("5000"), new BigDecimal("85000"), "가을맞이 할인");
+					new BigDecimal("90000"), new BigDecimal("5000"), new BigDecimal("85000"), "가을맞이 할인",
+					LocalDateTime.of(2026, 9, 3, 12, 10));
 			given(orderCreateService.create(eq(1L), eq(null), any()))
 					.willReturn(new IdempotentResult<>(response, false));
 			OrderCreateRequest request = new OrderCreateRequest(null, 100L, 2, 10L, 5L);
@@ -392,6 +401,73 @@ class OrderControllerTest {
 			mockMvc.perform(post(BASE_URL + "/1/cancel").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+		}
+	}
+
+	@Nested
+	@DisplayName("PATCH /api/v1/orders/{id}/shipping-address")
+	class ChangeShippingAddress {
+
+		@Test
+		@DisplayName("유효한 요청이면 200 과 변경된 주문 상세를 반환한다")
+		void changesAddress() throws Exception {
+			// given
+			given(orderShippingAddressService.changeShippingAddress(eq(1L), eq(1L), eq(78L)))
+					.willReturn(sampleDetailResponse(OrderStatus.PENDING));
+
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/1/shipping-address")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderShippingAddressRequest(78L))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")));
+			verify(orderShippingAddressService).changeShippingAddress(eq(1L), eq(1L), eq(78L));
+		}
+
+		@Test
+		@DisplayName("addressId 가 없으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenAddressIdMissing() throws Exception {
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/1/shipping-address")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderShippingAddressRequest(null))))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(orderShippingAddressService, never()).changeShippingAddress(any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("확정 후이거나 결제가 READY/UNKNOWN 이면 409 ORDER_INVALID_STATUS 를 반환한다")
+		void returnsConflictWhenInvalidStatus() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.ORDER_INVALID_STATUS))
+					.given(orderShippingAddressService).changeShippingAddress(eq(1L), eq(1L), eq(78L));
+
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/1/shipping-address")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderShippingAddressRequest(78L))))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("ORDER_INVALID_STATUS")));
+		}
+
+		@Test
+		@DisplayName("본인 소유 배송지가 아니면 404 MEMBER_ADDRESS_NOT_FOUND 를 반환한다")
+		void returnsNotFoundWhenAddressNotOwned() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.MEMBER_ADDRESS_NOT_FOUND))
+					.given(orderShippingAddressService).changeShippingAddress(eq(1L), eq(1L), eq(78L));
+
+			// when & then
+			mockMvc.perform(patch(BASE_URL + "/1/shipping-address")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderShippingAddressRequest(78L))))
+					.andExpect(status().isNotFound())
+					.andExpect(jsonPath("$.error.code", is("MEMBER_ADDRESS_NOT_FOUND")));
 		}
 	}
 }
