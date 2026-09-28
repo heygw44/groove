@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseFormSetError } from 'react-hook-form';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -32,12 +32,19 @@ type ReviewFormSubmitHelpers = { setError: UseFormSetError<ReviewFormValues> };
 
 export function ReviewSection({ productId, averageRating, reviewCount }: ReviewSectionProps) {
   const sectionRef = useRef<HTMLElement>(null);
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
   const [sort, setSort] = useState<ReviewSort>('latest');
   const [page, setPage] = useState(0);
+
+  // 주문 상세의 "리뷰 쓰기"처럼 #reviews 로 들어오면 SPA 라 브라우저가 스크롤해 주지 않는다.
+  useEffect(() => {
+    if (hash === '#reviews') {
+      sectionRef.current?.scrollIntoView({ block: 'start' });
+    }
+  }, [hash]);
   const [isWriting, setIsWriting] = useState(false);
   const [editingId, setEditingId] = useState<number | undefined>(undefined);
   const [deleting, setDeleting] = useState<Review | undefined>(undefined);

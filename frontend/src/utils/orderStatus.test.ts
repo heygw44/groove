@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import type { OrderStatus } from '@/types/order';
 import {
   ADMIN_ORDER_TRANSITIONS,
+  ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
   ORDER_STATUSES,
+  getOrderDisplayStatus,
   isCancelableStatus,
   isOrderStatus,
 } from '@/utils/orderStatus';
+import { PAYMENT_STATUS_BADGE, PAYMENT_STATUS_LABEL } from '@/utils/paymentStatus';
 
 describe('ORDER_STATUS_LABEL', () => {
   it.each(ORDER_STATUSES)('%s 상태의 한글 라벨을 갖는다', (status) => {
@@ -70,5 +73,45 @@ describe('isOrderStatus()', () => {
     // given & when & then
     expect(isOrderStatus(1)).toBe(false);
     expect(isOrderStatus(undefined)).toBe(false);
+  });
+});
+
+describe('getOrderDisplayStatus()', () => {
+  it('PENDING 이고 결제가 WAITING_FOR_DEPOSIT 이면 입금대기로 파생 표시한다', () => {
+    // given & when
+    const result = getOrderDisplayStatus('PENDING', 'WAITING_FOR_DEPOSIT');
+
+    // then
+    expect(result).toEqual({
+      label: PAYMENT_STATUS_LABEL.WAITING_FOR_DEPOSIT,
+      variant: PAYMENT_STATUS_BADGE.WAITING_FOR_DEPOSIT,
+    });
+  });
+
+  it('PENDING 이어도 결제 상태가 WAITING_FOR_DEPOSIT 이 아니면 원래 라벨을 유지한다', () => {
+    // given & when
+    const result = getOrderDisplayStatus('PENDING', 'READY');
+
+    // then
+    expect(result).toEqual({
+      label: ORDER_STATUS_LABEL.PENDING,
+      variant: ORDER_STATUS_BADGE.PENDING,
+    });
+  });
+
+  it('결제 상태가 없어도 원래 주문 상태 라벨을 돌려준다', () => {
+    // given & when
+    const result = getOrderDisplayStatus('PAID');
+
+    // then
+    expect(result).toEqual({ label: ORDER_STATUS_LABEL.PAID, variant: ORDER_STATUS_BADGE.PAID });
+  });
+
+  it('PENDING 이 아니면 결제가 WAITING_FOR_DEPOSIT 이어도 원래 주문 상태 라벨을 유지한다', () => {
+    // given & when
+    const result = getOrderDisplayStatus('PAID', 'WAITING_FOR_DEPOSIT');
+
+    // then
+    expect(result).toEqual({ label: ORDER_STATUS_LABEL.PAID, variant: ORDER_STATUS_BADGE.PAID });
   });
 });
