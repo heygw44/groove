@@ -26,6 +26,15 @@ export interface OrderItem {
   price: number;
   quantity: number;
   lineAmount: number;
+  thumbnailUrl: string | null;
+}
+
+export interface OrderListItem {
+  productId: number;
+  productName: string;
+  quantity: number;
+  lineAmount: number;
+  thumbnailUrl: string | null;
 }
 
 export interface ShippingAddress {
@@ -46,6 +55,8 @@ export interface OrderSummary {
   representativeProductName: string;
   itemCount: number;
   thumbnailUrl?: string;
+  /** 주문에 담긴 상품 행 전부. items[0]이 representativeProductName/thumbnailUrl과 같다. */
+  items: OrderListItem[];
   createdAt: string;
 }
 
