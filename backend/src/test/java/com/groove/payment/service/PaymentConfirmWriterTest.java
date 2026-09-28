@@ -37,6 +37,8 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.PaymentConfirmResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
@@ -411,6 +413,77 @@ class PaymentConfirmWriterTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("issueVirtualAccount()")
+	class IssueVirtualAccount {
+
+		private PaymentConfirmResult virtualAccountResult(LocalDateTime dueDate) {
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동", dueDate,
+					"va-secret");
+			return new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, order.getOrderNumber(), "가상계좌", PRICE, null,
+					PaymentLookupStatus.WAITING_FOR_DEPOSIT, null, virtualAccount);
+		}
+
+		@Test
+		@DisplayName("가상계좌 정보를 저장하고 입금기한으로 주문 만료를 늘린다")
+		void issuesVirtualAccountAndExtendsExpiry() {
+			// given
+			OrderFixture.withExpiresAt(order, now.minusMinutes(1));
+			Payment payment = paymentWithId(Payment.ready(order), 20L);
+			given(paymentRepository.findById(20L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			LocalDateTime dueDate = now.plusHours(24);
+
+			// when
+			PaymentConfirmResponse response = writer.issueVirtualAccount(ORDER_ID, 20L, PaymentFixture.PAYMENT_KEY,
+					virtualAccountResult(dueDate));
+
+			// then
+			assertThat(response.status()).isEqualTo(PaymentStatus.WAITING_FOR_DEPOSIT);
+			assertThat(payment.getVaBankCode()).isEqualTo("088");
+			assertThat(payment.getVaSecretHash()).isNotBlank().isNotEqualTo("va-secret");
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+			assertThat(order.getExpiresAt()).isEqualTo(dueDate);
+			verify(paymentRepository).flush();
+		}
+
+		@Test
+		@DisplayName("이미 같은 키로 발급돼 있으면 그대로 반환한다")
+		void returnsUnchangedWhenAlreadyIssuedWithSameKey() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 21L);
+			payment.issueVirtualAccount(PaymentFixture.PAYMENT_KEY, "가상계좌", "088", "12345678901234", "홍길동",
+					now.plusHours(24), "existing-hash");
+			given(paymentRepository.findById(21L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+
+			// when
+			PaymentConfirmResponse response = writer.issueVirtualAccount(ORDER_ID, 21L, PaymentFixture.PAYMENT_KEY,
+					virtualAccountResult(now.plusHours(48)));
+
+			// then
+			assertThat(response.status()).isEqualTo(PaymentStatus.WAITING_FOR_DEPOSIT);
+			verify(paymentRepository, never()).flush();
+		}
+
+		@Test
+		@DisplayName("가상계좌 정보가 없으면 결과 불명 예외를 던진다")
+		void throwsWhenVirtualAccountInfoMissing() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 22L);
+			given(paymentRepository.findById(22L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, order.getOrderNumber(),
+					"가상계좌", PRICE, null, PaymentLookupStatus.WAITING_FOR_DEPOSIT, null, null);
+
+			// when & then
+			assertThatThrownBy(() -> writer.issueVirtualAccount(ORDER_ID, 22L, PaymentFixture.PAYMENT_KEY, result))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 		}
 	}
 

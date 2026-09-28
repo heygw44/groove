@@ -5,8 +5,10 @@ import org.springframework.stereotype.Service;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentConfirmResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 
@@ -27,6 +29,7 @@ public class PaymentConfirmService {
 	private final PaymentConfirmWriter writer;
 	private final PaymentClient paymentClient;
 	private final PaymentCompensator compensator;
+	private final LimitedPurchaseRepository limitedPurchaseRepository;
 
 	public PaymentConfirmResponse confirm(Long memberId, PaymentConfirmRequest request) {
 		ConfirmPreparation preparation = writer.prepare(memberId, request);
@@ -35,7 +38,37 @@ public class PaymentConfirmService {
 		}
 
 		PaymentConfirmResult result = requestTossConfirm(preparation, request);
+		if (result.status() == PaymentLookupStatus.WAITING_FOR_DEPOSIT) {
+			return applyVirtualAccountIssue(preparation, request, result);
+		}
 		return applyApproval(preparation, request, result);
+	}
+
+	/** 한정반은 선착순 재고가 입금기한만큼 묶이는 걸 막기 위해 가상계좌를 받지 않는다. */
+	private PaymentConfirmResponse applyVirtualAccountIssue(ConfirmPreparation preparation,
+			PaymentConfirmRequest request, PaymentConfirmResult result) {
+		if (limitedPurchaseRepository.existsByOrderId(preparation.orderId())) {
+			rejectLimitedVirtualAccount(preparation.paymentId(), request.paymentKey());
+			throw new BusinessException(ErrorCode.PAYMENT_METHOD_NOT_ALLOWED);
+		}
+		try {
+			return writer.issueVirtualAccount(preparation.orderId(), preparation.paymentId(), request.paymentKey(),
+					result);
+		} catch (RuntimeException ex) {
+			throw recoverFromApprovalFailure(preparation.paymentId(), ex);
+		}
+	}
+
+	/** 승인 전이라 한정반인지 알 수 없었다 - 확인되는 즉시 토스 계좌를 닫는다. */
+	private void rejectLimitedVirtualAccount(Long paymentId, String paymentKey) {
+		String reason = "한정반 가상계좌 결제 불가";
+		try {
+			paymentClient.cancel(paymentKey, reason);
+			writer.fail(paymentId, reason);
+		} catch (BusinessException ex) {
+			log.error("한정반 가상계좌 거절 후 계좌 폐쇄 실패: paymentId={}, paymentKey={}", paymentId, paymentKey, ex);
+			safeMarkUnknown(paymentId, "가상계좌 폐쇄 실패: " + ex.getMessage());
+		}
 	}
 
 	private PaymentConfirmResult requestTossConfirm(ConfirmPreparation preparation, PaymentConfirmRequest request) {

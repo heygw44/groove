@@ -15,6 +15,8 @@ public interface LimitedPurchaseRepository extends JpaRepository<LimitedPurchase
 
 	Optional<LimitedPurchase> findByOrderId(Long orderId);
 
+	boolean existsByOrderId(Long orderId);
+
 	long countByDropId(Long dropId);
 
 	@Query("select p from LimitedPurchase p join fetch p.member left join fetch p.order where p.drop.id = :dropId "

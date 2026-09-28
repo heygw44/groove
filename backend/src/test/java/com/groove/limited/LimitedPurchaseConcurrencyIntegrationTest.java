@@ -456,7 +456,7 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 			OrderFixture.markPaid(order);
 			orderRepository.saveAndFlush(order);
 			Payment payment = paymentRepository.save(PaymentFixture.approved(order, "toss-" + UUID.randomUUID()));
-			given(paymentClient.cancel(any(), any()))
+			given(paymentClient.cancel(any(), any(), any()))
 					.willReturn(new PaymentCancelResult(payment.getPaymentKey(), "CANCELED",
 							LocalDateTime.now(clock)));
 			Member admin = memberRepository.save(MemberFixture.createAdmin("admin-" + UUID.randomUUID()

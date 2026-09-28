@@ -273,6 +273,95 @@ class PaymentWebhookServiceTest {
 		}
 	}
 
+	@Nested
+	@DisplayName("handle() - DEPOSIT_CALLBACK")
+	class HandleDepositCallback {
+
+		private static final String VA_SECRET = "va-plain-secret";
+
+		@Test
+		@DisplayName("결제를 찾을 수 없으면 아무것도 하지 않는다")
+		void doesNothingWhenPaymentNotFound() {
+			// given
+			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.empty());
+
+			// when
+			service.handle(depositCallbackBody(VA_SECRET, "DONE"));
+
+			// then
+			verifyNoInteractions(eventWriter, paymentClient);
+		}
+
+		@Test
+		@DisplayName("secret 이 일치하지 않으면 ERROR 로만 남기고 재조회하지 않는다")
+		void marksErrorWithoutResolvingWhenSecretMismatches() {
+			// given
+			Payment virtualAccountPayment = virtualAccountPayment(VA_SECRET);
+			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(virtualAccountPayment));
+			given(eventWriter.receive(eq("DEPOSIT_CALLBACK"), any(), eq(TOSS_ORDER_ID), eq("DONE"), any()))
+					.willReturn(Optional.of(eventWithId()));
+
+			// when
+			service.handle(depositCallbackBody("다른-secret", "DONE"));
+
+			// then
+			verify(eventWriter).markResult(EVENT_ID, PaymentWebhookResult.ERROR,
+					ErrorCode.PAYMENT_DEPOSIT_SECRET_MISMATCH.name());
+			verifyNoInteractions(paymentClient);
+		}
+
+		@Test
+		@DisplayName("secret 이 일치하면 재조회 결과를 lateResultApplier 에 위임하고 APPLIED 로 남긴다")
+		void resolvesWhenSecretMatches() {
+			// given
+			Payment virtualAccountPayment = virtualAccountPayment(VA_SECRET);
+			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(virtualAccountPayment));
+			given(eventWriter.receive(eq("DEPOSIT_CALLBACK"), any(), eq(TOSS_ORDER_ID), eq("DONE"), any()))
+					.willReturn(Optional.of(eventWithId()));
+			PaymentLookupResult lookup = doneLookup();
+			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(lookup);
+			given(lateResultApplier.apply(any(), eq(lookup), eq("webhook")))
+					.willReturn(PaymentReconcileOutcome.applied());
+
+			// when
+			service.handle(depositCallbackBody(VA_SECRET, "DONE"));
+
+			// then
+			verify(lateResultApplier).apply(any(), eq(lookup), eq("webhook"));
+			verify(eventWriter).markResult(EVENT_ID, PaymentWebhookResult.APPLIED, "webhook");
+		}
+
+		@Test
+		@DisplayName("같은 transactionKey 로 재전송되면 다시 처리하지 않는다")
+		void doesNotResolveWhenEventIsDuplicate() {
+			// given
+			Payment virtualAccountPayment = virtualAccountPayment(VA_SECRET);
+			given(paymentRepository.findByTossOrderId(TOSS_ORDER_ID)).willReturn(Optional.of(virtualAccountPayment));
+			given(eventWriter.receive(eq("DEPOSIT_CALLBACK"), any(), eq(TOSS_ORDER_ID), eq("DONE"), any()))
+					.willReturn(Optional.empty());
+
+			// when
+			service.handle(depositCallbackBody(VA_SECRET, "DONE"));
+
+			// then
+			verifyNoInteractions(paymentClient);
+		}
+
+		private Payment virtualAccountPayment(String secret) {
+			Payment virtualAccountPayment = Payment.ready(order);
+			ReflectionTestUtils.setField(virtualAccountPayment, "id", PAYMENT_ID);
+			virtualAccountPayment.issueVirtualAccount(PAYMENT_KEY, "가상계좌", "088", "12345678901234", "홍길동", null,
+					VirtualAccountSecretHasher.hash(secret));
+			return virtualAccountPayment;
+		}
+
+		private String depositCallbackBody(String secret, String status) {
+			return ("{ \"createdAt\": \"2026-09-22T10:00:00+09:00\", \"secret\": \"%s\", \"status\": \"%s\", "
+					+ "\"transactionKey\": \"txn-1\", \"orderId\": \"%s\" }")
+					.formatted(secret, status, TOSS_ORDER_ID);
+		}
+	}
+
 	private PaymentWebhookEvent eventWithId() {
 		PaymentWebhookEvent event = PaymentWebhookEvent.receive("PAYMENT_STATUS_CHANGED", PAYMENT_KEY, TOSS_ORDER_ID,
 				"DONE", null, null);

@@ -30,11 +30,13 @@ import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.client.dto.PaymentTransaction;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.client.dto.TossCancelRequest;
 import com.groove.payment.client.dto.TossConfirmRequest;
 import com.groove.payment.client.dto.TossErrorResponse;
 import com.groove.payment.client.dto.TossPaymentResponse;
 import com.groove.payment.client.dto.TossTransactionResponse;
+import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.config.PaymentSettlementProperties;
 import com.groove.payment.config.TossProperties;
 
@@ -107,13 +109,16 @@ public class TossPaymentClient implements PaymentClient {
 		} catch (TossAlreadyProcessedException ex) {
 			return absorbAlreadyProcessed(paymentKey, orderId, amount, ex);
 		}
+		PaymentLookupStatus status = parseLookupStatus(response.status());
+		String easyPayProvider = response.easyPay() == null ? null : response.easyPay().provider();
 		return new PaymentConfirmResult(response.paymentKey(), response.orderId(), response.method(),
-				response.totalAmount(), toServerTime(response.approvedAt()));
+				response.totalAmount(), toServerTime(response.approvedAt()), status, easyPayProvider,
+				toVirtualAccountInfo(response.virtualAccount()));
 	}
 
 	@Override
-	public PaymentCancelResult cancel(String paymentKey, String reason) {
-		TossCancelRequest request = new TossCancelRequest(reason);
+	public PaymentCancelResult cancel(String paymentKey, String reason, RefundAccountInfo refundAccount) {
+		TossCancelRequest request = TossCancelRequest.of(reason, refundAccount);
 		String idempotencyKey = CANCEL_IDEMPOTENCY_PREFIX + paymentKey;
 		TossPaymentResponse response;
 		try {
@@ -321,6 +326,14 @@ public class TossPaymentClient implements PaymentClient {
 		LocalDateTime canceledAt = lastCancel == null ? null : toServerTime(lastCancel.canceledAt());
 		return new PaymentLookupResult(status, response.paymentKey(), response.method(), response.totalAmount(),
 				toServerTime(response.approvedAt()), canceledAt);
+	}
+
+	private VirtualAccountInfo toVirtualAccountInfo(TossPaymentResponse.VirtualAccount virtualAccount) {
+		if (virtualAccount == null) {
+			return null;
+		}
+		return new VirtualAccountInfo(virtualAccount.bankCode(), virtualAccount.accountNumber(),
+				virtualAccount.customerName(), toServerTime(virtualAccount.dueDate()), virtualAccount.secret());
 	}
 
 	private PaymentLookupStatus parseLookupStatus(String status) {

@@ -3,6 +3,7 @@ package com.groove.order.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderDetailResponse;
 import com.groove.order.entity.OrderStatus;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.entity.PaymentStatus;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,13 +33,16 @@ class OrderCancelServiceTest {
 	PaidOrderCancelHook paidOrderCancelHook;
 
 	@Mock
+	PendingVirtualAccountCancelHook pendingVirtualAccountCancelHook;
+
+	@Mock
 	OrderService orderService;
 
 	OrderCancelService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new OrderCancelService(writer, paidOrderCancelHook, orderService);
+		service = new OrderCancelService(writer, paidOrderCancelHook, pendingVirtualAccountCancelHook, orderService);
 	}
 
 	@Nested
@@ -51,7 +56,7 @@ class OrderCancelServiceTest {
 			OrderCancelRequest request = new OrderCancelRequest("고객 변심");
 			given(writer.findTarget(MEMBER_ID, ORDER_ID))
 					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
-			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, request.reason()))
+			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, request.reason(), null))
 					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
 							20L, 30L));
 			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
@@ -88,7 +93,7 @@ class OrderCancelServiceTest {
 					.willReturn(new OrderCancelTarget(OrderStatus.PENDING, PaymentStatus.READY));
 			given(writer.cancelUnpaid(MEMBER_ID, ORDER_ID, null))
 					.willReturn(UnpaidCancelResult.paymentCancelRequired());
-			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, null))
+			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, null, null))
 					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
 							20L, null));
 			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
@@ -97,7 +102,47 @@ class OrderCancelServiceTest {
 			service.cancel(MEMBER_ID, ORDER_ID, null);
 
 			// then
-			verify(paidOrderCancelHook).cancel(ORDER_ID, MEMBER_ID, null);
+			verify(paidOrderCancelHook).cancel(ORDER_ID, MEMBER_ID, null, null);
+		}
+
+		@Test
+		@DisplayName("환불계좌가 있으면 결제 취소 훅에 변환해 전달한다")
+		void convertsRefundAccountWhenPresent() {
+			// given
+			OrderCancelRequest.RefundAccount refundAccount = new OrderCancelRequest.RefundAccount("088",
+					"12345678901234", "홍길동");
+			OrderCancelRequest request = new OrderCancelRequest("고객 변심", refundAccount);
+			given(writer.findTarget(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
+			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, "고객 변심",
+					new RefundAccountInfo("088", "12345678901234", "홍길동")))
+					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
+							20L, null));
+			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+
+			// when
+			service.cancel(MEMBER_ID, ORDER_ID, request);
+
+			// then
+			verify(paidOrderCancelHook).cancel(ORDER_ID, MEMBER_ID, "고객 변심",
+					new RefundAccountInfo("088", "12345678901234", "홍길동"));
+		}
+
+		@Test
+		@DisplayName("입금 전 가상계좌면 가상계좌 취소 훅에 위임한다")
+		void delegatesPendingVirtualAccountCancel() {
+			// given
+			given(writer.findTarget(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelTarget(OrderStatus.PENDING, PaymentStatus.WAITING_FOR_DEPOSIT));
+			given(pendingVirtualAccountCancelHook.cancel(ORDER_ID, MEMBER_ID, null)).willReturn(30L);
+			given(orderService.getDetail(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+
+			// when
+			OrderDetailResponse response = service.cancel(MEMBER_ID, ORDER_ID, null);
+
+			// then
+			assertThat(response.limitedDropId()).isEqualTo(30L);
+			verify(writer, never()).cancelUnpaid(any(), any(), any());
 		}
 	}
 

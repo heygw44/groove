@@ -30,8 +30,11 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import com.groove.fixture.PaymentFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentConfirmResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
@@ -55,6 +58,9 @@ class PaymentConfirmServiceTest {
 	@Mock
 	PaymentCompensator compensator;
 
+	@Mock
+	LimitedPurchaseRepository limitedPurchaseRepository;
+
 	PaymentConfirmService service;
 
 	PaymentConfirmRequest request;
@@ -63,7 +69,7 @@ class PaymentConfirmServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new PaymentConfirmService(writer, paymentClient, compensator);
+		service = new PaymentConfirmService(writer, paymentClient, compensator, limitedPurchaseRepository);
 		request = new PaymentConfirmRequest(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT.longValueExact());
 		preparation = new ConfirmPreparation(PAYMENT_ID, ORDER_ID, ORDER_NUMBER, AMOUNT, Optional.empty());
 	}
@@ -219,6 +225,78 @@ class PaymentConfirmServiceTest {
 			// when & then
 			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
 					.isSameAs(resultUnknown);
+		}
+	}
+
+	@Nested
+	@DisplayName("confirm() 이 가상계좌 발급 응답을 받으면")
+	class VirtualAccountIssued {
+
+		private PaymentConfirmResult virtualAccountResult() {
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동",
+					LocalDateTime.now().plusHours(24), "va-secret");
+			return new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, "가상계좌", AMOUNT, null,
+					PaymentLookupStatus.WAITING_FOR_DEPOSIT, null, virtualAccount);
+		}
+
+		@Test
+		@DisplayName("한정반이 아니면 writer 에 가상계좌 발급을 위임한다")
+		void issuesVirtualAccountWhenNotLimited() {
+			// given
+			given(writer.prepare(MEMBER_ID, request)).willReturn(preparation);
+			PaymentConfirmResult result = virtualAccountResult();
+			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
+			given(limitedPurchaseRepository.existsByOrderId(ORDER_ID)).willReturn(false);
+			PaymentConfirmResponse issued = new PaymentConfirmResponse(PAYMENT_ID, ORDER_ID, ORDER_NUMBER,
+					PaymentStatus.WAITING_FOR_DEPOSIT, "가상계좌", AMOUNT, null);
+			given(writer.issueVirtualAccount(ORDER_ID, PAYMENT_ID, PaymentFixture.PAYMENT_KEY, result))
+					.willReturn(issued);
+
+			// when
+			PaymentConfirmResponse response = service.confirm(MEMBER_ID, request);
+
+			// then
+			assertThat(response).isEqualTo(issued);
+			verify(paymentClient, never()).cancel(any(), any());
+		}
+
+		@Test
+		@DisplayName("한정반이면 즉시 토스 계좌를 닫고 PAYMENT_METHOD_NOT_ALLOWED 를 던진다")
+		void rejectsAndClosesAccountWhenLimited() {
+			// given
+			given(writer.prepare(MEMBER_ID, request)).willReturn(preparation);
+			PaymentConfirmResult result = virtualAccountResult();
+			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
+			given(limitedPurchaseRepository.existsByOrderId(ORDER_ID)).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_METHOD_NOT_ALLOWED);
+			verify(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, "한정반 가상계좌 결제 불가");
+			verify(writer).fail(PAYMENT_ID, "한정반 가상계좌 결제 불가");
+			verify(writer, never()).issueVirtualAccount(any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("한정반 거절 후 계좌 폐쇄마저 실패하면 결제를 UNKNOWN 으로 남기고 그대로 거절한다")
+		void marksUnknownWhenCloseAccountFailsAfterRejectingLimited() {
+			// given
+			given(writer.prepare(MEMBER_ID, request)).willReturn(preparation);
+			PaymentConfirmResult result = virtualAccountResult();
+			given(paymentClient.confirm(PaymentFixture.PAYMENT_KEY, ORDER_NUMBER, AMOUNT)).willReturn(result);
+			given(limitedPurchaseRepository.existsByOrderId(ORDER_ID)).willReturn(true);
+			willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED)).given(paymentClient)
+					.cancel(PaymentFixture.PAYMENT_KEY, "한정반 가상계좌 결제 불가");
+
+			// when & then
+			assertThatThrownBy(() -> service.confirm(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_METHOD_NOT_ALLOWED);
+			verify(writer).markUnknown(eq(PAYMENT_ID), anyString());
+			verify(writer, never()).fail(any(), any());
 		}
 	}
 
