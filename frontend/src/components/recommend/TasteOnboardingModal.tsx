@@ -8,6 +8,9 @@ import { TASTE_ONBOARDING_DISMISSED_KEY } from '@/constants/taste';
 import { useTasteProfile } from '@/hooks/queries/useTasteProfile';
 import { useAuthStore } from '@/store/authStore';
 
+// 취향 관리 화면은 폼이 겹치고, 인증 화면은 리다이렉트 직전에 모달이 폼을 덮는다.
+const HIDDEN_PATHS = new Set(['/mypage/taste', '/login', '/signup']);
+
 /** 프라이빗 모드 등에서 sessionStorage 접근이 던질 수 있어 감싼다. */
 const readDismissed = () => {
   try {
@@ -42,7 +45,7 @@ export function TasteOnboardingModal() {
     !isBootstrapping &&
     profile === null &&
     !dismissed &&
-    pathname !== '/mypage/taste';
+    !HIDDEN_PATHS.has(pathname);
 
   return (
     <Modal

@@ -106,4 +106,12 @@ describe('TasteOnboardingModal', () => {
     // then
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it.each(['/login', '/signup'])('인증 화면 %s 에서는 모달을 보여주지 않는다', (path) => {
+    // given & when
+    renderModal({ profile: null, path });
+
+    // then
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
 });
