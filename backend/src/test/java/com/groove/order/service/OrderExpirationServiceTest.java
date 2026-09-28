@@ -2,11 +2,11 @@ package com.groove.order.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -21,16 +21,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.groove.coupon.entity.MemberCoupon;
 import com.groove.fixture.ArtistFixture;
-import com.groove.fixture.CouponFixture;
-import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
-import com.groove.limited.service.LimitedPurchaseWriter;
-import com.groove.limited.service.LimitedRelease;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
@@ -50,10 +45,7 @@ class OrderExpirationServiceTest {
 	private OrderRepository orderRepository;
 
 	@Mock
-	private OrderStockService orderStockService;
-
-	@Mock
-	private LimitedPurchaseWriter limitedPurchaseWriter;
+	private OrderCancelRestorer orderCancelRestorer;
 
 	@Mock
 	private PaymentRepository paymentRepository;
@@ -66,8 +58,7 @@ class OrderExpirationServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		orderExpirationService = new OrderExpirationService(orderRepository, orderStockService,
-				limitedPurchaseWriter, paymentRepository);
+		orderExpirationService = new OrderExpirationService(orderRepository, orderCancelRestorer, paymentRepository);
 
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
@@ -81,76 +72,39 @@ class OrderExpirationServiceTest {
 	class Expire {
 
 		@Test
-		@DisplayName("만료된 PENDING 주문이면 취소하고 재고를 복구한다")
-		void expiresAndRestoresStockWhenPending() {
+		@DisplayName("만료된 PENDING 주문이면 취소하고 재고·쿠폰·한정반 선점을 복구한 뒤 true 를 반환한다")
+		void expiresAndRestoresWhenPending() {
 			// given
 			Order order = expiredOrder();
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(limitedPurchaseWriter.revertByOrder(ORDER_ID, now)).willReturn(Optional.empty());
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = orderExpirationService.expire(ORDER_ID, now);
 
 			// then
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
 			assertThat(order.getCancelReason()).isEqualTo(Order.EXPIRED_CANCEL_REASON);
-			assertThat(result).isEmpty();
-			verify(orderStockService).restore(order);
+			assertThat(result).isTrue();
+			verify(orderCancelRestorer).restore(order, false);
 		}
 
 		@Test
-		@DisplayName("쿠폰을 사용한 주문이 만료되면 쿠폰이 미사용 상태로 복구된다")
-		void restoresCouponWhenExpired() {
-			// given
-			Order order = expiredOrder();
-			MemberCoupon memberCoupon = MemberCouponFixture.create(member,
-					CouponFixture.fixed("EXPIRE5000", new BigDecimal("5000")));
-			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
-			memberCoupon.use(order.getId());
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(limitedPurchaseWriter.revertByOrder(ORDER_ID, now)).willReturn(Optional.empty());
-
-			// when
-			orderExpirationService.expire(ORDER_ID, now);
-
-			// then
-			assertThat(memberCoupon.isUsed()).isFalse();
-		}
-
-		@Test
-		@DisplayName("한정반 주문이면 revertByOrder 결과를 그대로 반환한다")
-		void returnsLimitedReleaseFromWriter() {
-			// given
-			Order order = expiredOrder();
-			LimitedRelease release = new LimitedRelease(10L, member.getId());
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(limitedPurchaseWriter.revertByOrder(ORDER_ID, now)).willReturn(Optional.of(release));
-
-			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
-
-			// then
-			assertThat(result).contains(release);
-		}
-
-		@Test
-		@DisplayName("주문을 찾을 수 없으면 아무것도 하지 않고 empty 를 반환한다")
-		void returnsEmptyWhenOrderNotFound() {
+		@DisplayName("주문을 찾을 수 없으면 아무것도 하지 않고 false 를 반환한다")
+		void returnsFalseWhenOrderNotFound() {
 			// given
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.empty());
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = orderExpirationService.expire(ORDER_ID, now);
 
 			// then
-			assertThat(result).isEmpty();
-			verify(orderStockService, never()).restore(any());
-			verify(limitedPurchaseWriter, never()).revertByOrder(any(), any());
+			assertThat(result).isFalse();
+			verify(orderCancelRestorer, never()).restore(any(), anyBoolean());
 		}
 
 		@Test
-		@DisplayName("이미 PAID 인 주문이면 아무것도 하지 않고 empty 를 반환한다")
-		void returnsEmptyWhenAlreadyPaid() {
+		@DisplayName("이미 PAID 인 주문이면 아무것도 하지 않고 false 를 반환한다")
+		void returnsFalseWhenAlreadyPaid() {
 			// given
 			Order order = OrderFixture.withId(OrderFixture.markPaid(
 					OrderFixture.withExpiresAt(OrderFixture.createWithItem(member, product, 1),
@@ -158,16 +112,16 @@ class OrderExpirationServiceTest {
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = orderExpirationService.expire(ORDER_ID, now);
 
 			// then
-			assertThat(result).isEmpty();
-			verify(orderStockService, never()).restore(any());
+			assertThat(result).isFalse();
+			verify(orderCancelRestorer, never()).restore(any(), anyBoolean());
 		}
 
 		@Test
-		@DisplayName("PENDING 이지만 아직 만료 시각 전이면 아무것도 하지 않고 empty 를 반환한다")
-		void returnsEmptyWhenNotYetExpired() {
+		@DisplayName("PENDING 이지만 아직 만료 시각 전이면 아무것도 하지 않고 false 를 반환한다")
+		void returnsFalseWhenNotYetExpired() {
 			// given
 			Order order = OrderFixture.withId(
 					OrderFixture.withExpiresAt(OrderFixture.createWithItem(member, product, 1),
@@ -175,15 +129,15 @@ class OrderExpirationServiceTest {
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = orderExpirationService.expire(ORDER_ID, now);
 
 			// then
-			assertThat(result).isEmpty();
-			verify(orderStockService, never()).restore(any());
+			assertThat(result).isFalse();
+			verify(orderCancelRestorer, never()).restore(any(), anyBoolean());
 		}
 
 		@Test
-		@DisplayName("결제가 READY/UNKNOWN 이면 대사가 결론을 낼 때까지 만료를 건너뛰고 empty 를 반환한다")
+		@DisplayName("결제가 READY/UNKNOWN 이면 대사가 결론을 낼 때까지 만료를 건너뛰고 false 를 반환한다")
 		void skipsWhenPaymentIsUnresolved() {
 			// given
 			Order order = expiredOrder();
@@ -192,12 +146,12 @@ class OrderExpirationServiceTest {
 			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
 
 			// when
-			Optional<LimitedRelease> result = orderExpirationService.expire(ORDER_ID, now);
+			boolean result = orderExpirationService.expire(ORDER_ID, now);
 
 			// then
-			assertThat(result).isEmpty();
+			assertThat(result).isFalse();
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
-			verify(orderStockService, never()).restore(any());
+			verify(orderCancelRestorer, never()).restore(any(), anyBoolean());
 		}
 	}
 
