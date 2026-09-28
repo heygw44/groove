@@ -13,6 +13,7 @@ import com.groove.order.service.PaidOrderCancelResult;
 import com.groove.order.service.PaidOrderCancelStatus;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
+import com.groove.payment.client.dto.RefundAccountInfo;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,15 +28,15 @@ public class PaidOrderCancelService implements PaidOrderCancelHook {
 	private final Clock clock;
 
 	@Override
-	public PaidOrderCancelResult cancel(Long orderId, Long memberId, String reason) {
-		CancelRequest request = writer.requestCancel(orderId, memberId, reason);
+	public PaidOrderCancelResult cancel(Long orderId, Long memberId, String reason, RefundAccountInfo refundAccount) {
+		CancelRequest request = writer.requestCancel(orderId, memberId, reason, refundAccount);
 		if (request.alreadyRequested()) {
 			return result(request, PaidOrderCancelStatus.IN_PROGRESS, true, null);
 		}
 
 		PaymentCancelResult tossResult;
 		try {
-			tossResult = paymentClient.cancel(request.paymentKey(), request.tossReason());
+			tossResult = paymentClient.cancel(request.paymentKey(), request.tossReason(), request.refundAccount());
 		} catch (BusinessException ex) {
 			if (ex.getErrorCode() == ErrorCode.PAYMENT_RESULT_UNKNOWN) {
 				log.warn("토스 취소 결과 불명: orderId={}, paymentId={}", orderId, request.paymentId());

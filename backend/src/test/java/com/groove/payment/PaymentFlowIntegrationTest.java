@@ -334,7 +334,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			CountDownLatch tossCallStarted = new CountDownLatch(1);
 			CountDownLatch releaseTossCall = new CountDownLatch(1);
 			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-			given(paymentClient.cancel(eq(paymentKey), any())).willAnswer(invocation -> {
+			given(paymentClient.cancel(eq(paymentKey), any(), any())).willAnswer(invocation -> {
 				tossCallStarted.countDown();
 				releaseTossCall.await(10, TimeUnit.SECONDS);
 				return new PaymentCancelResult(paymentKey, "CANCELED", canceledAt);
@@ -408,7 +408,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(histories.get(1).getChangeType()).isEqualTo(StockChangeType.CANCEL);
 			MemberCoupon memberCoupon = memberCouponRepository.findById(orderInfo.memberCouponId()).orElseThrow();
 			assertThat(memberCoupon.isUsed()).isFalse();
-			verify(paymentClient).cancel(eq(paymentKey), eq(reason));
+			verify(paymentClient).cancel(eq(paymentKey), eq(reason), any());
 		}
 
 		@Test
@@ -462,7 +462,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS ALREADY_CANCELED_PAYMENT"))
-					.given(paymentClient).cancel(eq(paymentKey), any());
+					.given(paymentClient).cancel(eq(paymentKey), any(), any());
 
 			// when & then
 			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
@@ -499,7 +499,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(paymentKey), any());
+					.given(paymentClient).cancel(eq(paymentKey), any(), any());
 
 			// when
 			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
@@ -546,7 +546,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-			given(paymentClient.cancel(eq(paymentKey), any())).willAnswer(invocation -> {
+			given(paymentClient.cancel(eq(paymentKey), any(), any())).willAnswer(invocation -> {
 				jdbcTemplate.update("update orders set status = 'DELIVERED' where id = ?", orderInfo.orderId());
 				return new PaymentCancelResult(paymentKey, "CANCELED", canceledAt);
 			});
@@ -562,7 +562,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			// then: T1 은 유지되고 토스 취소는 한 번만 호출된다
 			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
 					.isEqualTo(PaymentStatus.CANCEL_REQUESTED);
-			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"));
+			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"), any());
 
 			// when: 대사가 조회한 CANCELED 결과를 반영할 수 있도록 주문 상태를 원래대로 되돌린다
 			jdbcTemplate.update("update orders set status = 'PAID' where id = ?", orderInfo.orderId());
@@ -579,7 +579,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(orderRepository.findById(orderInfo.orderId()).orElseThrow().getStatus())
 					.isEqualTo(OrderStatus.CANCELED);
 			assertThat(stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity()).isEqualTo(5);
-			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"));
+			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"), any());
 		}
 
 		@Test
@@ -595,7 +595,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(paymentKey), any());
+					.given(paymentClient).cancel(eq(paymentKey), any(), any());
 			PaymentCancelRequest request = new PaymentCancelRequest("고객 변심");
 
 			// when
@@ -612,7 +612,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(jsonPath("$.data.status", is("CANCEL_REQUESTED")));
 
 			// then
-			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"));
+			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"), any());
 		}
 
 		@Test
@@ -627,7 +627,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			String paymentKey = uniquePaymentKey();
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
-			given(paymentClient.cancel(eq(paymentKey), any()))
+			given(paymentClient.cancel(eq(paymentKey), any(), any()))
 					.willReturn(new PaymentCancelResult(paymentKey, "CANCELED",
 							LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS)));
 
@@ -640,7 +640,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			// then
 			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
-			verify(paymentClient).cancel(eq(paymentKey), any());
+			verify(paymentClient).cancel(eq(paymentKey), any(), any());
 		}
 
 		@Test
@@ -667,7 +667,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.error.code", is("PAYMENT_INVALID_STATUS")));
-			verify(paymentClient, never()).cancel(any(), any());
+			verify(paymentClient, never()).cancel(any(), any(), any());
 		}
 	}
 
@@ -728,7 +728,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(setup.dropId()),
 					String.valueOf(member.getId()))).isFalse();
 
-			verify(paymentClient).cancel(eq(paymentKey), eq(reason));
+			verify(paymentClient).cancel(eq(paymentKey), eq(reason), any());
 
 			limitedDropRedisService.clear(setup.dropId());
 		}
@@ -768,7 +768,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			// then
 			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
 					.isEqualTo(PaymentStatus.CANCELED);
-			verify(paymentClient).cancel(eq(paymentKey), any());
+			verify(paymentClient).cancel(eq(paymentKey), any(), any());
 			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
 			assertThat(logs).extracting(AdminAuditLog::getAction)
 					.containsExactly(AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditAction.PAYMENT_CANCEL);
@@ -790,7 +790,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(paymentKey), any());
+					.given(paymentClient).cancel(eq(paymentKey), any(), any());
 			Member admin = memberRepository.save(
 					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
 			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
@@ -827,7 +827,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
 			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(firstPaymentKey), any());
+					.given(paymentClient).cancel(eq(firstPaymentKey), any(), any());
 			requestPaymentCancel(accessToken, firstPaymentId);
 
 			// when & then: PAID -> PREPARING
@@ -845,7 +845,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.PREPARING)
 					.andExpect(status().isOk());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(secondPaymentKey), any());
+					.given(paymentClient).cancel(eq(secondPaymentKey), any(), any());
 			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.CANCELED)
 					.andExpect(status().isOk());
 
@@ -918,7 +918,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	private void stubCancelSuccess(String paymentKey) {
 		LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-		given(paymentClient.cancel(eq(paymentKey), any()))
+		given(paymentClient.cancel(eq(paymentKey), any(), any()))
 				.willReturn(new PaymentCancelResult(paymentKey, "CANCELED", canceledAt));
 	}
 

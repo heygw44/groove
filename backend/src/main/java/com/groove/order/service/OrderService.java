@@ -151,12 +151,13 @@ public class OrderService {
 						(first, second) -> first));
 	}
 
-	/** 승인 이력이 있는 결제(DONE/CANCEL_REQUESTED/CANCELED)만 상세 응답에 포함한다. */
+	/** 승인 이력이 있거나 입금대기 중인 결제(DONE/CANCEL_REQUESTED/CANCELED/WAITING_FOR_DEPOSIT)만 상세 응답에 포함한다. */
 	private OrderPaymentResponse resolvePayment(Long orderId) {
 		return paymentRepository.findByOrderId(orderId)
 				.filter(payment -> payment.getStatus() == PaymentStatus.DONE
 						|| payment.getStatus() == PaymentStatus.CANCEL_REQUESTED
-						|| payment.getStatus() == PaymentStatus.CANCELED)
+						|| payment.getStatus() == PaymentStatus.CANCELED
+						|| payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT)
 				.map(OrderPaymentResponse::from)
 				.orElse(null);
 	}

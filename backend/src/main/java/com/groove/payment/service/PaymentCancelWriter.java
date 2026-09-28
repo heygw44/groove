@@ -14,6 +14,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderCancelRestorer;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
@@ -33,6 +34,11 @@ public class PaymentCancelWriter {
 
 	@Transactional
 	public CancelRequest requestCancel(Long orderId, Long memberId, String reason) {
+		return requestCancel(orderId, memberId, reason, null);
+	}
+
+	@Transactional
+	public CancelRequest requestCancel(Long orderId, Long memberId, String reason, RefundAccountInfo refundAccount) {
 		Order order = orderRepository.findByIdForUpdate(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		if (memberId != null && !order.getMember().getId().equals(memberId)) {
@@ -45,14 +51,17 @@ public class PaymentCancelWriter {
 		Payment payment = foundPayment.get();
 		OrderStatus previousOrderStatus = order.getStatus();
 		if (payment.getStatus() == PaymentStatus.CANCEL_REQUESTED) {
-			return toRequest(order, payment, previousOrderStatus, true);
+			return toRequest(order, payment, previousOrderStatus, true, refundAccount);
 		}
 		if (payment.getStatus() != PaymentStatus.DONE) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
+		if (payment.isVirtualAccount() && refundAccount == null) {
+			throw new BusinessException(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+		}
 		order.requestCancel(reason, memberId == null);
 		payment.requestCancel();
-		return toRequest(order, payment, previousOrderStatus, false);
+		return toRequest(order, payment, previousOrderStatus, false, refundAccount);
 	}
 
 	@Transactional
@@ -96,10 +105,10 @@ public class PaymentCancelWriter {
 	}
 
 	private CancelRequest toRequest(Order order, Payment payment, OrderStatus previousOrderStatus,
-			boolean alreadyRequested) {
+			boolean alreadyRequested, RefundAccountInfo refundAccount) {
 		String cancelReason = order.getCancelReason();
 		String tossReason = cancelReason == null || cancelReason.isBlank() ? DEFAULT_CANCEL_REASON : cancelReason;
 		return new CancelRequest(order.getId(), payment.getId(), payment.getPaymentKey(), tossReason,
-				previousOrderStatus, alreadyRequested);
+				previousOrderStatus, alreadyRequested, refundAccount);
 	}
 }

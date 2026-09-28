@@ -63,7 +63,7 @@ class PaidOrderCancelServiceTest {
 		@DisplayName("이미 요청된 취소면 토스를 다시 호출하지 않는다")
 		void returnsInProgressWithoutCallingTossForDuplicate() {
 			// given
-			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심")).willReturn(request(true));
+			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(true));
 
 			// when
 			PaidOrderCancelResult result = service.cancel(ORDER_ID, MEMBER_ID, "고객 변심");
@@ -71,15 +71,15 @@ class PaidOrderCancelServiceTest {
 			// then
 			assertThat(result.status()).isEqualTo(PaidOrderCancelStatus.IN_PROGRESS);
 			assertThat(result.alreadyRequested()).isTrue();
-			verify(paymentClient, never()).cancel(any(), any());
+			verify(paymentClient, never()).cancel(any(), any(), any());
 		}
 
 		@Test
 		@DisplayName("토스 취소와 DB 복구가 성공하면 CANCELED 를 반환한다")
 		void completesCancel() {
 			// given
-			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심")).willReturn(request(false));
-			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심"))
+			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
+			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
 					.willReturn(new PaymentCancelResult(PAYMENT_KEY, "CANCELED", NOW));
 			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW))
 					.willReturn(Optional.of(new LimitedRelease(30L, MEMBER_ID)));
@@ -96,9 +96,9 @@ class PaidOrderCancelServiceTest {
 		@DisplayName("토스 결과를 알 수 없으면 CANCEL_REQUESTED 를 유지한다")
 		void keepsRequestWhenTossResultIsUnknown() {
 			// given
-			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심")).willReturn(request(false));
+			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(PAYMENT_KEY, "고객 변심");
+					.given(paymentClient).cancel(PAYMENT_KEY, "고객 변심", null);
 
 			// when
 			PaidOrderCancelResult result = service.cancel(ORDER_ID, MEMBER_ID, "고객 변심");
@@ -113,8 +113,8 @@ class PaidOrderCancelServiceTest {
 		void revertsRequestWhenTossRejects() {
 			// given
 			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
-			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심")).willReturn(request(false));
-			willThrow(failure).given(paymentClient).cancel(PAYMENT_KEY, "고객 변심");
+			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
+			willThrow(failure).given(paymentClient).cancel(PAYMENT_KEY, "고객 변심", null);
 
 			// when & then
 			assertThatThrownBy(() -> service.cancel(ORDER_ID, MEMBER_ID, "고객 변심")).isSameAs(failure);
@@ -125,8 +125,8 @@ class PaidOrderCancelServiceTest {
 		@DisplayName("토스 취소 후 DB 복구가 실패하면 CANCEL_REQUESTED 를 유지한다")
 		void keepsRequestWhenCompletionFails() {
 			// given
-			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심")).willReturn(request(false));
-			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심"))
+			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
+			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
 					.willReturn(new PaymentCancelResult(PAYMENT_KEY, "CANCELED", NOW));
 			willThrow(new IllegalStateException("T2 failed"))
 					.given(writer).completeCancel(ORDER_ID, PAYMENT_ID, NOW);
@@ -142,8 +142,8 @@ class PaidOrderCancelServiceTest {
 		@DisplayName("토스 응답에 취소 시각이 없으면 현재 시각을 사용한다")
 		void usesCurrentTimeWhenCanceledAtMissing() {
 			// given
-			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심")).willReturn(request(false));
-			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심"))
+			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
+			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
 					.willReturn(new PaymentCancelResult(PAYMENT_KEY, "CANCELED", null));
 			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW)).willReturn(Optional.empty());
 
@@ -157,6 +157,6 @@ class PaidOrderCancelServiceTest {
 
 	private CancelRequest request(boolean alreadyRequested) {
 		return new CancelRequest(ORDER_ID, PAYMENT_ID, PAYMENT_KEY, "고객 변심", OrderStatus.PAID,
-				alreadyRequested);
+				alreadyRequested, null);
 	}
 }

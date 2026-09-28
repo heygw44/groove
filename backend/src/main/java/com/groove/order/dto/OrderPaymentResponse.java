@@ -12,11 +12,32 @@ public record OrderPaymentResponse(
 		PaymentStatus status,
 		BigDecimal amount,
 		LocalDateTime approvedAt,
-		LocalDateTime canceledAt
+		LocalDateTime canceledAt,
+		String easyPayProvider,
+		VirtualAccountResponse virtualAccount
 ) {
+
+	public OrderPaymentResponse(Long paymentId, String method, PaymentStatus status, BigDecimal amount,
+			LocalDateTime approvedAt, LocalDateTime canceledAt) {
+		this(paymentId, method, status, amount, approvedAt, canceledAt, null, null);
+	}
 
 	public static OrderPaymentResponse from(Payment payment) {
 		return new OrderPaymentResponse(payment.getId(), payment.getMethod(), payment.getStatus(),
-				payment.getAmount(), payment.getApprovedAt(), payment.getCanceledAt());
+				payment.getAmount(), payment.getApprovedAt(), payment.getCanceledAt(), payment.getEasyPayProvider(),
+				VirtualAccountResponse.from(payment));
+	}
+
+	/** 가상계좌 결제가 아니면 null 이다. secret 은 절대 담지 않는다. */
+	public record VirtualAccountResponse(String bankCode, String accountNumber, String customerName,
+			LocalDateTime dueDate) {
+
+		static VirtualAccountResponse from(Payment payment) {
+			if (!payment.isVirtualAccount()) {
+				return null;
+			}
+			return new VirtualAccountResponse(payment.getVaBankCode(), payment.getVaAccountNumber(),
+					payment.getVaCustomerName(), payment.getVaDueDate());
+		}
 	}
 }

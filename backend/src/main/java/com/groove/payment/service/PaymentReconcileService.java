@@ -54,7 +54,7 @@ public class PaymentReconcileService {
 
 	public List<PaymentReconcileCandidate> findCandidates(LocalDateTime now) {
 		LocalDateTime before = now.minus(properties.grace());
-		return paymentRepository.findReconcileCandidates(PaymentStatus.RECONCILE_TARGETS, before,
+		return paymentRepository.findReconcileCandidates(PaymentStatus.SCHEDULED_RECONCILE_TARGETS, before,
 				properties.maxAttempts(),
 				Limit.of(properties.batchSize()));
 	}
@@ -115,7 +115,13 @@ public class PaymentReconcileService {
 				yield PaymentReconcileOutcome.applied();
 			}
 			case SKIP -> {
-				recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.SKIPPED, detail);
+				if (payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT) {
+					// 입금기한이 남아있는 정상 대기 상태다. 대사 상한을 적용하면 며칠씩 걸리는 입금 대기가
+					// 몇 번 폴링만에 FAILED 로 잘못 수렴한다 - 만료 처리는 OrderExpirationService 가 맡는다.
+					writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.SKIPPED, detail);
+				} else {
+					recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.SKIPPED, detail);
+				}
 				yield PaymentReconcileOutcome.applied();
 			}
 			case MANUAL_REVIEW -> {
@@ -208,6 +214,11 @@ public class PaymentReconcileService {
 	public void recordFailure(PaymentReconcileCandidate candidate, String detail) {
 		Payment payment = paymentRepository.findById(candidate.paymentId()).orElse(null);
 		if (payment == null || !payment.getStatus().isReconcileTarget()) {
+			return;
+		}
+		// 입금대기는 재시도 상한으로 수렴시키지 않는다 - 상한에 닿으면 입금기한이 남았는데도 FAILED 가 된다.
+		if (payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT) {
+			log.warn("입금대기 결제 대사 조회 실패, 만료 시점 재조회에 맡김: paymentId={}, detail={}", payment.getId(), detail);
 			return;
 		}
 		recordMiss(payment, payment.getStatus(), LOOKUP_ERROR_TOSS_STATUS, PaymentReconcileAction.SKIPPED, detail);

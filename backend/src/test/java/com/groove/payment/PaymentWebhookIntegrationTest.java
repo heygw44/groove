@@ -42,12 +42,16 @@ import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
+import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.VirtualAccountInfo;
+import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.payment.service.PaymentCompensator;
+import com.groove.payment.service.PaymentConfirmService;
 import com.groove.payment.service.PaymentWebhookService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -95,6 +99,9 @@ class PaymentWebhookIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private PaymentWebhookService paymentWebhookService;
+
+	@Autowired
+	private PaymentConfirmService paymentConfirmService;
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
@@ -288,6 +295,82 @@ class PaymentWebhookIntegrationTest extends IntegrationTestSupport {
 			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
 					.isEqualTo(OrderStatus.PENDING);
 		}
+	}
+
+	@Nested
+	@DisplayName("가상계좌 승인 → 입금 웹훅")
+	class VirtualAccountDeposit {
+
+		@Test
+		@DisplayName("승인 응답이 입금대기면 주문은 PENDING 을 유지하고, 입금 웹훅이 오면 PAID 로 확정한다")
+		void issuesVirtualAccountThenAppliesDepositWebhook() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			String paymentKey = "tviva-va-" + UUID.randomUUID();
+			String depositToken = "va-plain-token";
+			LocalDateTime dueDate = now().plusHours(24).truncatedTo(ChronoUnit.SECONDS);
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동", dueDate,
+					depositToken);
+			given(paymentClient.confirm(eq(paymentKey), eq(seeded.orderNumber()), eq(seeded.finalAmount())))
+					.willReturn(new PaymentConfirmResult(paymentKey, seeded.orderNumber(), "가상계좌",
+							seeded.finalAmount(), null, PaymentLookupStatus.WAITING_FOR_DEPOSIT, null,
+							virtualAccount));
+
+			// when: 결제창에서 가상계좌를 선택해 승인 응답을 받는다.
+			paymentConfirmService.confirm(seeded.memberId(),
+					new PaymentConfirmRequest(paymentKey, seeded.orderNumber(), seeded.finalAmount().longValueExact()));
+
+			// then: 주문은 PENDING 그대로, 결제는 입금대기, 만료는 입금기한으로 늘어난다.
+			Payment issued = paymentRepository.findByOrderId(seeded.orderId()).orElseThrow();
+			assertThat(issued.getStatus()).isEqualTo(PaymentStatus.WAITING_FOR_DEPOSIT);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.PENDING);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getExpiresAt()).isEqualTo(dueDate);
+
+			// given: 입금이 확인됐다는 웹훅이 온다.
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, paymentKey, "가상계좌", seeded.finalAmount(), now(), null));
+
+			// when
+			paymentWebhookService.handle(depositCallbackBody(depositToken, seeded.orderNumber(), "txn-1", "DONE"));
+
+			// then
+			assertThat(paymentRepository.findById(issued.getId()).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.DONE);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.PAID);
+		}
+
+		@Test
+		@DisplayName("secret 이 일치하지 않으면 PAID 로 넘어가지 않는다")
+		void doesNotApplyWhenDepositSecretMismatches() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			String paymentKey = "tviva-va-" + UUID.randomUUID();
+			LocalDateTime dueDate = now().plusHours(24).truncatedTo(ChronoUnit.SECONDS);
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동", dueDate,
+					"va-real-secret");
+			given(paymentClient.confirm(eq(paymentKey), eq(seeded.orderNumber()), eq(seeded.finalAmount())))
+					.willReturn(new PaymentConfirmResult(paymentKey, seeded.orderNumber(), "가상계좌",
+							seeded.finalAmount(), null, PaymentLookupStatus.WAITING_FOR_DEPOSIT, null,
+							virtualAccount));
+			paymentConfirmService.confirm(seeded.memberId(),
+					new PaymentConfirmRequest(paymentKey, seeded.orderNumber(), seeded.finalAmount().longValueExact()));
+
+			// when
+			paymentWebhookService.handle(depositCallbackBody("va-wrong-secret", seeded.orderNumber(), "txn-2",
+					"DONE"));
+
+			// then
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.PENDING);
+		}
+	}
+
+	private String depositCallbackBody(String secret, String tossOrderId, String transactionKey, String status) {
+		return ("{ \"createdAt\": \"2026-09-22T10:00:00+09:00\", \"secret\": \"%s\", \"status\": \"%s\", "
+				+ "\"transactionKey\": \"%s\", \"orderId\": \"%s\" }")
+				.formatted(secret, status, transactionKey, tossOrderId);
 	}
 
 	private LocalDateTime now() {

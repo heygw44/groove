@@ -9,7 +9,9 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
+import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.entity.OrderStatus;
+import com.groove.payment.client.dto.RefundAccountInfo;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,7 +34,8 @@ public class AdminOrderStatusService {
 		if (!current.status().canTransitionTo(OrderStatus.CANCELED)) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
 		}
-		PaidOrderCancelResult result = paidOrderCancelHook.cancel(orderId, null, null);
+		RefundAccountInfo refundAccount = toRefundAccount(request.refundAccount());
+		PaidOrderCancelResult result = paidOrderCancelHook.cancel(orderId, null, null, refundAccount);
 		if (!result.alreadyRequested()) {
 			String next = result.status() == PaidOrderCancelStatus.CANCELED ? "CANCELED" : "CANCEL_REQUESTED";
 			adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
@@ -41,5 +44,13 @@ public class AdminOrderStatusService {
 					result.paymentId(), "DONE->" + next);
 		}
 		return adminOrderService.getDetail(orderId);
+	}
+
+	private RefundAccountInfo toRefundAccount(OrderCancelRequest.RefundAccount refundAccount) {
+		if (refundAccount == null) {
+			return null;
+		}
+		return new RefundAccountInfo(refundAccount.bankCode(), refundAccount.accountNumber(),
+				refundAccount.holderName());
 	}
 }

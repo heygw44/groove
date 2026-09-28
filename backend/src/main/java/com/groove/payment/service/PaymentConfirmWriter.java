@@ -15,6 +15,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.PaymentConfirmResult;
+import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
@@ -98,7 +99,7 @@ public class PaymentConfirmWriter {
 		}
 
 		LocalDateTime approvedAt = result.approvedAt() != null ? result.approvedAt() : LocalDateTime.now(clock);
-		payment.approve(paymentKey, result.method(), approvedAt);
+		payment.approve(paymentKey, result.method(), approvedAt, result.easyPayProvider());
 		order.markPaid();
 
 		try {
@@ -111,6 +112,41 @@ public class PaymentConfirmWriter {
 		// StockChangeType 을 새로 추가하면 운영 DB 의 Hibernate enum CHECK 제약을 갱신해야 한다.
 
 		productSalesStatsUpdater.refreshFor(order);
+		return PaymentConfirmResponse.from(payment);
+	}
+
+	/**
+	 * 가상계좌 발급 응답의 DB 반영. 주문은 PENDING 을 유지하고 입금기한으로 만료만 늘린다 - order.markPaid() 는
+	 * 입금 확인 후 approve() 경로(웹훅·대사)에서만 호출된다.
+	 */
+	@Transactional
+	public PaymentConfirmResponse issueVirtualAccount(Long orderId, Long paymentId, String paymentKey,
+			PaymentConfirmResult result) {
+		Order order = orderRepository.findByIdForUpdate(orderId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		Payment payment = paymentRepository.findById(paymentId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		if (!payment.getOrder().getId().equals(orderId)) {
+			throw new BusinessException(ErrorCode.PAYMENT_NOT_FOUND);
+		}
+		if (payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT && paymentKey.equals(payment.getPaymentKey())) {
+			return PaymentConfirmResponse.from(payment);
+		}
+
+		VirtualAccountInfo virtualAccount = result.virtualAccount();
+		if (virtualAccount == null) {
+			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 가상계좌 정보가 없습니다.");
+		}
+		payment.issueVirtualAccount(paymentKey, result.method(), virtualAccount.bankCode(),
+				virtualAccount.accountNumber(), virtualAccount.customerName(), virtualAccount.dueDate(),
+				VirtualAccountSecretHasher.hash(virtualAccount.secret()));
+		order.extendExpiry(virtualAccount.dueDate());
+
+		try {
+			paymentRepository.flush();
+		} catch (DataIntegrityViolationException e) {
+			throw new BusinessException(ErrorCode.PAYMENT_KEY_MISMATCH);
+		}
 		return PaymentConfirmResponse.from(payment);
 	}
 
