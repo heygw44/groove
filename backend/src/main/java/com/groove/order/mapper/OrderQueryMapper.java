@@ -3,9 +3,11 @@ package com.groove.order.mapper;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSummaryResponse;
+import com.groove.order.dto.OrderListItemRow;
 import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSummaryResponse;
 
@@ -16,6 +18,9 @@ public interface OrderQueryMapper {
 	List<OrderSummaryResponse> findMyOrders(OrderSearchCondition condition);
 
 	long countMyOrders(OrderSearchCondition condition);
+
+	/** 페이지에 담긴 주문 id 들의 상품 행을 한 번에 조회한다. 정렬은 order_id, order_item.id 오름차순이다. */
+	List<OrderListItemRow> findItemsByOrderIds(@Param("orderIds") List<Long> orderIds);
 
 	List<AdminOrderSummaryResponse> findAdminOrders(AdminOrderSearchCondition condition);
 

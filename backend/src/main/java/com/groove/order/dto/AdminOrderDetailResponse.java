@@ -3,6 +3,7 @@ package com.groove.order.dto;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
@@ -27,10 +28,9 @@ public record AdminOrderDetailResponse(
 		PaymentStatus paymentStatus
 ) {
 
-	public static AdminOrderDetailResponse from(Order order, PaymentStatus paymentStatus) {
-		List<OrderItemResponse> items = order.getItems().stream()
-				.map(OrderItemResponse::from)
-				.toList();
+	public static AdminOrderDetailResponse from(Order order, PaymentStatus paymentStatus,
+			Map<Long, String> thumbnailsByProductId) {
+		List<OrderItemResponse> items = OrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId);
 		return new AdminOrderDetailResponse(order.getId(), order.getOrderNumber(), order.getMember().getId(),
 				order.getMember().getEmail(), order.getStatus(), order.getTotalAmount(), order.getDiscountAmount(),
 				order.getFinalAmount(), order.getCouponName(), items,

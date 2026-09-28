@@ -23,6 +23,7 @@ import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSummaryResponse;
+import com.groove.order.dto.OrderListItemRow;
 import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
@@ -283,6 +284,96 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(count).isEqualTo(result.size());
+		}
+	}
+
+	@Nested
+	@DisplayName("findItemsByOrderIds()")
+	class FindItemsByOrderIds {
+
+		@Test
+		@DisplayName("요청한 주문 id 에 속한 상품 행만 반환한다")
+		void returnsOnlyRowsForRequestedOrderIds() {
+			// given
+			Order target = OrderFixture.create(owner, "20260903-OQM00018");
+			target.addItem(kindOfBlue, 1);
+			target.addItem(loveSupreme, 2);
+			em.persist(target);
+			Order other = persistOrder(owner, "20260903-OQM00019", kindOfBlue, 1);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(target.getId()));
+
+			// then
+			assertThat(result).hasSize(2);
+			assertThat(result).extracting(OrderListItemRow::orderId).containsOnly(target.getId());
+			assertThat(other).isNotNull();
+		}
+
+		@Test
+		@DisplayName("한 주문의 상품 행은 order_item id 오름차순(담긴 순서)으로 반환한다")
+		void returnsRowsOrderedByItemId() {
+			// given
+			Order order = OrderFixture.create(owner, "20260903-OQM00020");
+			order.addItem(kindOfBlue, 1);
+			order.addItem(loveSupreme, 2);
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::productName)
+					.containsExactly("OQM Kind of Blue", "OQM A Love Supreme");
+		}
+
+		@Test
+		@DisplayName("상품에 sort_order 0 이미지가 있으면 썸네일 URL 을 반환한다")
+		void returnsThumbnailForProductWithImage() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQM00021", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::thumbnailUrl)
+					.containsExactly("https://cdn.groove.com/kind-of-blue-0.jpg");
+		}
+
+		@Test
+		@DisplayName("상품에 이미지가 없으면 썸네일 URL 이 null 이다")
+		void returnsNullThumbnailForProductWithoutImage() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQM00022", loveSupreme, 1);
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::thumbnailUrl).containsExactly((String) null);
+		}
+
+		@Test
+		@DisplayName("수량과 상품 금액(단가 x 수량)을 함께 반환한다")
+		void returnsQuantityAndLineAmount() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQM00023", kindOfBlue, 3);
+			em.clear();
+
+			// when
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+
+			// then
+			assertThat(result.quantity()).isEqualTo(3);
+			assertThat(result.lineAmount())
+					.isEqualByComparingTo(kindOfBlue.getPrice().multiply(BigDecimal.valueOf(3)));
 		}
 	}
 

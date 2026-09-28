@@ -45,6 +45,7 @@ import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
+import com.groove.product.repository.ProductImageRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AdminOrderServiceTest {
@@ -64,13 +65,17 @@ class AdminOrderServiceTest {
 	@Mock
 	PaymentRepository paymentRepository;
 
+	@Mock
+	ProductImageRepository productImageRepository;
+
 	AdminOrderService service;
 	Member member;
 	Product product;
 
 	@BeforeEach
 	void setUp() {
-		service = new AdminOrderService(orderRepository, orderQueryMapper, adminAuditLogService, paymentRepository);
+		service = new AdminOrderService(orderRepository, orderQueryMapper, adminAuditLogService, paymentRepository,
+				productImageRepository);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);

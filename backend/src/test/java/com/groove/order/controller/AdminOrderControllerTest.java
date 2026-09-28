@@ -78,7 +78,7 @@ class AdminOrderControllerTest {
 
 	private AdminOrderDetailResponse sampleDetailResponse(OrderStatus status) {
 		OrderItemResponse item = new OrderItemResponse(100L, "그루브 앨범", new BigDecimal("30000"), 1,
-				new BigDecimal("30000"));
+				new BigDecimal("30000"), "https://cdn.groove.com/groove-album-0.jpg");
 		ShippingAddressResponse shippingAddress = new ShippingAddressResponse("김그루브", "010-1234-5678", "06236",
 				"서울시 강남구 테헤란로 1", "101동 1001호");
 		return new AdminOrderDetailResponse(1L, "20260903-TESTAB12", 1L, "buyer@groove.com", status,
