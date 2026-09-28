@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -175,6 +176,7 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 	private void deliverOrder(long orderId) throws Exception {
 		Order order = orderRepository.findById(orderId).orElseThrow();
 		order.markPaid();
+		order.place(LocalDateTime.now());
 		orderRepository.save(order);
 
 		Member admin = memberRepository.save(

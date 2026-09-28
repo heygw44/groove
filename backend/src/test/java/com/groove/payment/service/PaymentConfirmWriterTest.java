@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.groove.cart.repository.CartItemRepository;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
@@ -34,8 +36,10 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
+import com.groove.order.service.OrderPlacementService;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.client.dto.VirtualAccountInfo;
@@ -64,9 +68,13 @@ class PaymentConfirmWriterTest {
 	@Mock
 	ProductSalesStatsUpdater productSalesStatsUpdater;
 
+	@Mock
+	CartItemRepository cartItemRepository;
+
 	PaymentConfirmWriter writer;
 
 	Member member;
+	Product product;
 	Order order;
 	Clock clock;
 	LocalDateTime now;
@@ -75,11 +83,13 @@ class PaymentConfirmWriterTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
-		writer = new PaymentConfirmWriter(orderRepository, paymentRepository, productSalesStatsUpdater, clock);
+		OrderPlacementService orderPlacementService = new OrderPlacementService(cartItemRepository);
+		writer = new PaymentConfirmWriter(orderRepository, paymentRepository, productSalesStatsUpdater,
+				orderPlacementService, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
-		Product product = ProductFixture.withId(ProductFixture.create(artist), 100L);
+		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
 		order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 1), ORDER_ID);
 	}
 
@@ -309,6 +319,46 @@ class PaymentConfirmWriterTest {
 		}
 
 		@Test
+		@DisplayName("승인하면 주문이 확정되고(placedAt 기록) 장바구니 담긴 상품이 지워진다")
+		void placesOrderAndDeletesCartItemsOnApproval() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 17L);
+			given(paymentRepository.findById(17L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY, order.getOrderNumber(),
+					PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
+
+			// when
+			writer.approve(ORDER_ID, 17L, PaymentFixture.PAYMENT_KEY, result);
+
+			// then
+			assertThat(order.isPlaced()).isTrue();
+			assertThat(order.getPlacedAt()).isEqualTo(PaymentFixture.APPROVED_AT);
+			verify(cartItemRepository).deleteByCartMemberIdAndProductIdIn(MEMBER_ID, List.of(product.getId()));
+		}
+
+		@Test
+		@DisplayName("한정반 주문을 승인해도 장바구니는 건드리지 않는다")
+		void doesNotTouchCartForLimitedOrder() {
+			// given
+			Order limitedOrder = OrderFixture.withId(
+					OrderFixture.createWithItems(member, List.of(product)), 501L);
+			ReflectionTestUtils.setField(limitedOrder, "orderSource", OrderSource.LIMITED);
+			Payment payment = paymentWithId(Payment.ready(limitedOrder), 18L);
+			given(paymentRepository.findById(18L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(501L)).willReturn(Optional.of(limitedOrder));
+			PaymentConfirmResult result = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY,
+					limitedOrder.getOrderNumber(), PaymentFixture.METHOD, PRICE, PaymentFixture.APPROVED_AT);
+
+			// when
+			writer.approve(501L, 18L, PaymentFixture.PAYMENT_KEY, result);
+
+			// then
+			assertThat(limitedOrder.isPlaced()).isTrue();
+			verify(cartItemRepository, never()).deleteByCartMemberIdAndProductIdIn(any(), any());
+		}
+
+		@Test
 		@DisplayName("결제를 승인하면 판매 수량을 재계산한다")
 		void refreshesSoldQuantityOnApproval() {
 			// given
@@ -448,6 +498,45 @@ class PaymentConfirmWriterTest {
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
 			assertThat(order.getExpiresAt()).isEqualTo(dueDate);
 			verify(paymentRepository).flush();
+		}
+
+		@Test
+		@DisplayName("가상계좌 발급 시점에 주문을 확정하고 장바구니 담긴 상품을 지운다")
+		void placesOrderAndDeletesCartItemsOnIssuance() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 23L);
+			given(paymentRepository.findById(23L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+
+			// when
+			writer.issueVirtualAccount(ORDER_ID, 23L, PaymentFixture.PAYMENT_KEY,
+					virtualAccountResult(now.plusHours(24)));
+
+			// then
+			assertThat(order.isPlaced()).isTrue();
+			assertThat(order.getPlacedAt()).isEqualTo(now);
+			verify(cartItemRepository).deleteByCartMemberIdAndProductIdIn(MEMBER_ID, List.of(product.getId()));
+		}
+
+		@Test
+		@DisplayName("발급 이후 입금이 확인돼 approve() 가 뒤따라도 확정 시점은 발급 시각 그대로다")
+		void keepsIssuanceTimeAsPlacedAtAfterLaterDepositApproval() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 24L);
+			given(paymentRepository.findById(24L)).willReturn(Optional.of(payment));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			writer.issueVirtualAccount(ORDER_ID, 24L, PaymentFixture.PAYMENT_KEY,
+					virtualAccountResult(now.plusHours(24)));
+			LocalDateTime issuedAt = order.getPlacedAt();
+			PaymentConfirmResult depositResult = new PaymentConfirmResult(PaymentFixture.PAYMENT_KEY,
+					order.getOrderNumber(), "가상계좌", PRICE, PaymentFixture.APPROVED_AT);
+
+			// when
+			writer.approve(ORDER_ID, 24L, PaymentFixture.PAYMENT_KEY, depositResult);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(order.getPlacedAt()).isEqualTo(issuedAt);
 		}
 
 		@Test

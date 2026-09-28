@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.product.entity.Product;
@@ -30,7 +31,11 @@ public final class OrderFixture {
 	}
 
 	public static Order create(Member member, String orderNumber) {
-		return Order.create(orderNumber, member, shippingAddress(), LocalDateTime.now());
+		return Order.create(orderNumber, member, shippingAddress(), OrderSource.CART, LocalDateTime.now());
+	}
+
+	public static Order create(Member member, String orderNumber, OrderSource orderSource) {
+		return Order.create(orderNumber, member, shippingAddress(), orderSource, LocalDateTime.now());
 	}
 
 	public static Order createWithItem(Member member, Product product, int quantity) {
@@ -42,6 +47,11 @@ public final class OrderFixture {
 	public static Order createWithItems(Member member, List<Product> products) {
 		Order order = create(member, "20260903-CP" + SEQUENCE.incrementAndGet());
 		products.forEach(product -> order.addItem(product, 1));
+		return order;
+	}
+
+	public static Order place(Order order) {
+		order.place(LocalDateTime.now());
 		return order;
 	}
 

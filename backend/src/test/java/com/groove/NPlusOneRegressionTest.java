@@ -47,6 +47,8 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.notification.entity.Notification;
 import com.groove.notification.repository.NotificationRepository;
 import com.groove.order.dto.OrderCreateRequest;
+import com.groove.order.entity.Order;
+import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Product;
@@ -80,6 +82,9 @@ class NPlusOneRegressionTest extends IntegrationTestSupport {
 
 	@Autowired
 	ObjectMapper objectMapper;
+
+	@Autowired
+	OrderRepository orderRepository;
 
 	@Autowired
 	EntityManagerFactory entityManagerFactory;
@@ -237,8 +242,13 @@ class NPlusOneRegressionTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(createRequest)))
 					.andExpect(status().isCreated())
 					.andReturn();
-			return objectMapper.readTree(createResult.getResponse().getContentAsString())
+			long orderId = objectMapper.readTree(createResult.getResponse().getContentAsString())
 					.path("data").path("orderId").asLong();
+			// 목록·상세는 결제 확정(placed_at) 전 주문을 숨기므로, 조회 대상 주문을 확정 상태로 만든다.
+			Order order = orderRepository.findById(orderId).orElseThrow();
+			order.place(LocalDateTime.now());
+			orderRepository.save(order);
+			return orderId;
 		}
 	}
 

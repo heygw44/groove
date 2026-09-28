@@ -28,4 +28,14 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
 	@Modifying(clearAutomatically = true)
 	@Query("delete from CartItem ci where ci.cart.id = :cartId")
 	void deleteAllByCartId(@Param("cartId") Long cartId);
+
+	/**
+	 * 주문 확정 시 원본 장바구니 항목을 지운다. 이미 지워졌거나 없는 상품이어도 안전하게 아무 일도 하지 않는다.
+	 * clearAutomatically 는 쓰지 않는다 - 이 호출은 order.markPaid()/place()·payment.approve() 가 아직
+	 * flush 되지 않은 같은 트랜잭션 중간에 실행되는데, 컨텍스트를 지우면 그 변경들이 커밋 없이 통째로 사라진다.
+	 */
+	@Modifying
+	@Query("delete from CartItem ci where ci.cart.member.id = :memberId and ci.product.id in :productIds")
+	void deleteByCartMemberIdAndProductIdIn(@Param("memberId") Long memberId,
+			@Param("productIds") Collection<Long> productIds);
 }
