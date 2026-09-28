@@ -103,7 +103,11 @@ export default function PaymentSuccessPage() {
   const confirmStatus = getConfirmStatus(confirmError);
 
   useEffect(() => {
+    const previousTitle = document.title;
     document.title = DOCUMENT_TITLE_BY_STATUS[confirmStatus];
+    return () => {
+      document.title = previousTitle;
+    };
   }, [confirmStatus]);
 
   useEffect(() => {
