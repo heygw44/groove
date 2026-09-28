@@ -17,7 +17,8 @@ public record TossPaymentResponse(
 		OffsetDateTime approvedAt,
 		List<Cancel> cancels,
 		EasyPay easyPay,
-		VirtualAccount virtualAccount
+		VirtualAccount virtualAccount,
+		String secret
 ) {
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -28,9 +29,9 @@ public record TossPaymentResponse(
 	public record EasyPay(String provider) {
 	}
 
+	/** 입금 웹훅 검증용 secret 은 여기가 아니라 Payment 최상위 필드({@link #secret()})로 온다. */
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record VirtualAccount(String accountNumber, String bankCode, String customerName, OffsetDateTime dueDate,
-			String secret) {
+	public record VirtualAccount(String accountNumber, String bankCode, String customerName, OffsetDateTime dueDate) {
 	}
 
 	/** 부분 취소를 여러 번 하면 이력이 쌓이므로 마지막 취소를 이번 결과로 본다. */
