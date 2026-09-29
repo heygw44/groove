@@ -111,13 +111,48 @@ describe('OrderItemCard', () => {
     expect(link).toHaveAttribute('href', '/products/1#reviews');
   });
 
-  it('결제 금액을 보여주고, 취소·반품 완료 상품은 환불 금액으로 보여준다', () => {
+  it.each(['CANCELED', 'CANCELED_BY_NOPAYMENT', 'RETURNED'] as const)(
+    '%s 상품은 환불 금액으로 보여준다',
+    (status) => {
+      // given & when
+      renderCard({ ...baseItem, status, paidAmount: 9000 });
+
+      // then
+      expect(screen.getByText('환불 금액 9,000원')).toBeInTheDocument();
+    },
+  );
+
+  it('진행 중 상품은 결제 금액으로 보여준다', () => {
     // given & when
-    renderCard({ ...baseItem, status: 'CANCELED', paidAmount: 9000 });
+    renderCard(baseItem);
 
     // then
-    expect(screen.getByText('환불 금액 9,000원')).toBeInTheDocument();
+    expect(screen.getByText('결제 금액 10,000원')).toBeInTheDocument();
   });
+
+  it.each(['CANCELED', 'CANCELED_BY_NOPAYMENT', 'RETURNED'] as const)(
+    '%s 상품이면 재구매 버튼을 보여준다',
+    (status) => {
+      // given & when
+      renderCard({ ...baseItem, status });
+
+      // then
+      expect(screen.getByRole('button', { name: '장바구니 담기' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '바로 구매하기' })).toBeInTheDocument();
+    },
+  );
+
+  it.each(['PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED'] as const)(
+    '%s 상품이면 재구매 버튼을 보여주지 않는다',
+    (status) => {
+      // given & when
+      renderCard({ ...baseItem, status });
+
+      // then
+      expect(screen.queryByRole('button', { name: '장바구니 담기' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '바로 구매하기' })).not.toBeInTheDocument();
+    },
+  );
 
   it('availableActions 에 없는 취소·반품·철회·구매확정 버튼은 그리지 않는다', () => {
     // given & when
