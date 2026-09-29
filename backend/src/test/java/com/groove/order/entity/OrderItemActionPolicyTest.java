@@ -65,7 +65,7 @@ class OrderItemActionPolicyTest {
 		}
 
 		@Test
-		@DisplayName("DELIVERED 이고 배송완료 7일이 지났으면 RETURN_REQUEST 없이 CONFIRM·WRITE_REVIEW 를 반환한다")
+		@DisplayName("DELIVERED 이고 배송완료 7일이 지났으면 RETURN_REQUEST 없이 CONFIRM 만 반환한다")
 		void returnsConfirmOnlyForDeliveredAfterReturnPeriod() {
 			// given
 			LocalDateTime deliveredAt = NOW.minusDays(OrderItemActionPolicy.RETURN_PERIOD_DAYS).minusSeconds(1);
@@ -74,12 +74,12 @@ class OrderItemActionPolicyTest {
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED, null,
 					deliveredAt, false, NOW);
 
-			// then: DELIVERED 는 리뷰 작성도 가능(OrderItemStatus.REVIEWABLE)해 WRITE_REVIEW 가 함께 나온다
-			assertThat(actions).containsExactly(OrderItemAction.CONFIRM, OrderItemAction.WRITE_REVIEW);
+			// then: 리뷰는 구매확정(PURCHASE_CONFIRMED) 부터라 DELIVERED 는 WRITE_REVIEW 를 아직 주지 않는다
+			assertThat(actions).containsExactly(OrderItemAction.CONFIRM);
 		}
 
 		@Test
-		@DisplayName("DELIVERED 이고 배송완료 7일 이내면 RETURN_REQUEST·CONFIRM·WRITE_REVIEW 를 이 순서로 반환한다")
+		@DisplayName("DELIVERED 이고 배송완료 7일 이내면 RETURN_REQUEST·CONFIRM 을 이 순서로 반환한다")
 		void returnsConfirmAndReturnRequestForDeliveredWithinReturnPeriod() {
 			// given
 			LocalDateTime deliveredAt = NOW.minusDays(1);
@@ -89,8 +89,7 @@ class OrderItemActionPolicyTest {
 					deliveredAt, false, NOW);
 
 			// then
-			assertThat(actions).containsExactly(OrderItemAction.RETURN_REQUEST, OrderItemAction.CONFIRM,
-					OrderItemAction.WRITE_REVIEW);
+			assertThat(actions).containsExactly(OrderItemAction.RETURN_REQUEST, OrderItemAction.CONFIRM);
 		}
 
 		@Test
@@ -183,8 +182,8 @@ class OrderItemActionPolicyTest {
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED,
 					OrderItemClaimStatus.COLLECTING, NOW.minusDays(1), false, NOW);
 
-			// then
-			assertThat(actions).containsExactly(OrderItemAction.WRITE_REVIEW);
+			// then: DELIVERED 는 아직 리뷰 작성 자격(PURCHASE_CONFIRMED)이 아니라 그 어떤 액션도 없다
+			assertThat(actions).isEmpty();
 		}
 
 		@Test
@@ -219,8 +218,8 @@ class OrderItemActionPolicyTest {
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED,
 					OrderItemClaimStatus.RETURN_REQUEST, deliveredAt, false, NOW);
 
-			// then: WRITE_REVIEW 는 클레임과 무관하게 REVIEWABLE 상태(DELIVERED)면 그대로 내려간다
-			assertThat(actions).containsExactly(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.WRITE_REVIEW);
+			// then: DELIVERED 는 아직 리뷰 작성 자격(PURCHASE_CONFIRMED)이 아니라 WRITE_REVIEW 는 나오지 않는다
+			assertThat(actions).containsExactly(OrderItemAction.WITHDRAW_CLAIM);
 		}
 
 		@ParameterizedTest
@@ -279,23 +278,23 @@ class OrderItemActionPolicyTest {
 	@DisplayName("resolve() - 리뷰 작성")
 	class WriteReview {
 
-		@ParameterizedTest
-		@CsvSource({"DELIVERED", "PURCHASE_CONFIRMED"})
-		@DisplayName("DELIVERED·PURCHASE_CONFIRMED 면 WRITE_REVIEW 를 포함한다")
-		void includesWriteReviewForReviewableStatuses(OrderItemStatus status) {
+		@Test
+		@DisplayName("PURCHASE_CONFIRMED 면 WRITE_REVIEW 를 포함한다")
+		void includesWriteReviewForPurchaseConfirmed() {
 			// when
-			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, false, NOW);
+			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PURCHASE_CONFIRMED, null,
+					null, false, NOW);
 
 			// then
 			assertThat(actions).contains(OrderItemAction.WRITE_REVIEW);
 		}
 
-		@Test
-		@DisplayName("SHIPPING 이면 아직 리뷰를 쓸 수 없다")
-		void excludesWriteReviewBeforeDelivery() {
+		@ParameterizedTest
+		@CsvSource({"SHIPPING", "DELIVERED"})
+		@DisplayName("SHIPPING·DELIVERED 면 아직 구매확정 전이라 리뷰를 쓸 수 없다")
+		void excludesWriteReviewBeforePurchaseConfirmed(OrderItemStatus status) {
 			// when
-			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.SHIPPING, null, null,
-					false, NOW);
+			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, false, NOW);
 
 			// then
 			assertThat(actions).doesNotContain(OrderItemAction.WRITE_REVIEW);

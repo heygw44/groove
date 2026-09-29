@@ -26,6 +26,7 @@ import com.groove.order.dto.OrderShippingAddressRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderCreateService;
+import com.groove.order.service.OrderItemConfirmService;
 import com.groove.order.service.OrderService;
 import com.groove.order.service.OrderShippingAddressService;
 
@@ -45,6 +46,7 @@ public class OrderController {
 	private final OrderCreateService orderCreateService;
 	private final OrderCancelService orderCancelService;
 	private final OrderShippingAddressService orderShippingAddressService;
+	private final OrderItemConfirmService orderItemConfirmService;
 
 	@Operation(summary = "주문 생성")
 	@PostMapping
@@ -84,5 +86,12 @@ public class OrderController {
 	public ApiResponse<OrderDetailResponse> cancel(@AuthMember LoginMember loginMember, @PathVariable Long id,
 			@RequestBody(required = false) @Valid OrderCancelRequest request) {
 		return ApiResponse.ok(orderCancelService.cancel(loginMember.id(), id, request));
+	}
+
+	@Operation(summary = "구매확정")
+	@PostMapping("/{orderId}/items/{itemId}/confirm")
+	public ApiResponse<OrderDetailResponse> confirmPurchase(@AuthMember LoginMember loginMember,
+			@PathVariable Long orderId, @PathVariable Long itemId) {
+		return ApiResponse.ok(orderItemConfirmService.confirm(loginMember.id(), orderId, itemId));
 	}
 }

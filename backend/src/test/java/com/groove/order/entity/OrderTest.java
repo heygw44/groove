@@ -883,4 +883,37 @@ class OrderTest {
 			assertThat(order.isPlaced()).isFalse();
 		}
 	}
+
+	@Nested
+	@DisplayName("alignStatusWithItems()")
+	class AlignStatusWithItems {
+
+		@Test
+		@DisplayName("허용되는 전이면 상태를 바꾼다")
+		void changesStatusWhenTransitionAllowed() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
+
+			// when
+			order.alignStatusWithItems(OrderStatus.PREPARING);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PREPARING);
+		}
+
+		@Test
+		@DisplayName("허용되지 않는 전이면 조용히 무시한다")
+		void ignoresDisallowedTransition() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			ReflectionTestUtils.setField(order, "status", OrderStatus.PENDING);
+
+			// when
+			order.alignStatusWithItems(OrderStatus.DELIVERED);
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+		}
+	}
 }

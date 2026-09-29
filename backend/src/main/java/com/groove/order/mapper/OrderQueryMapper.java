@@ -5,6 +5,8 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import com.groove.order.dto.AdminOrderItemSearchCondition;
+import com.groove.order.dto.AdminOrderItemSummaryResponse;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.dto.OrderListItemRow;
@@ -25,4 +27,8 @@ public interface OrderQueryMapper {
 	List<AdminOrderSummaryResponse> findAdminOrders(AdminOrderSearchCondition condition);
 
 	long countAdminOrders(AdminOrderSearchCondition condition);
+
+	List<AdminOrderItemSummaryResponse> findAdminOrderItems(AdminOrderItemSearchCondition condition);
+
+	long countAdminOrderItems(AdminOrderItemSearchCondition condition);
 }

@@ -267,6 +267,18 @@ public class Order extends BaseTimeEntity {
 		}
 	}
 
+	/**
+	 * 상품주문 일괄 처리(발주확인·발송처리·배송완료) 뒤, 주문 안 모든 상품주문이 같은 단계에 이르렀을 때만
+	 * Order.status 도 맞춘다. 상품 상태는 이미 개별 전이로 바뀐 뒤라 여기서는 건드리지 않고, 허용되지 않는
+	 * 전이면 조용히 무시한다 - 호출부가 "모두 같은 단계"를 먼저 확인하고 부르는 임시 동기화용이라 예외를
+	 * 던지지 않는다. Order.status 가 PENDING/PAID/CANCELED 로 좁아지면 없앤다.
+	 */
+	public void alignStatusWithItems(OrderStatus next) {
+		if (this.status.canTransitionTo(next)) {
+			this.status = next;
+		}
+	}
+
 	/** 가상계좌 발급 시 입금기한으로 만료를 늘린다. PENDING 이 아니거나 기존 기한보다 이르면 무시한다. */
 	public void extendExpiry(LocalDateTime dueDate) {
 		if (this.status != OrderStatus.PENDING) {

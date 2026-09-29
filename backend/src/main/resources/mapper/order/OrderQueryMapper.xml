@@ -151,4 +151,73 @@
 		<include refid="adminOrdersWhere"/>
 	</select>
 
+	<resultMap id="adminOrderItemSummaryMap" type="com.groove.order.dto.AdminOrderItemSummaryResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="product_order_number" javaType="java.lang.String"/>
+			<arg column="order_number" javaType="java.lang.String"/>
+			<arg column="member_email" javaType="java.lang.String"/>
+			<arg column="product_name" javaType="java.lang.String"/>
+			<arg column="quantity" javaType="_int"/>
+			<arg column="status" javaType="com.groove.order.entity.OrderItemStatus"/>
+			<arg column="claim_status" javaType="com.groove.order.entity.OrderItemClaimStatus"/>
+			<arg column="courier_code" javaType="com.groove.order.entity.CourierCode"/>
+			<arg column="tracking_number" javaType="java.lang.String"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+		</constructor>
+	</resultMap>
+
+	<!-- statusGroup 은 GET /orders 와 같은 그룹(OrderStatusGroup)을 재사용한다. CANCEL_RETURN 은 종결 status 뿐
+		아니라 진행 중 claim_status 도 포함하는 claim 기반 그룹이라 조건을 하나 더 얹는다. -->
+	<sql id="adminOrderItemsWhere">
+		<where>
+			o.placed_at IS NOT NULL
+			<if test="statusGroup != null">
+				AND (
+					oi.status IN
+					<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
+						#{s}
+					</foreach>
+					<if test="statusGroup.claimBased">
+						OR oi.claim_status IS NOT NULL
+					</if>
+				)
+			</if>
+			<if test="keyword != null and keyword != ''">
+				AND (m.email LIKE CONCAT('%', #{keyword}, '%')
+					OR o.order_number LIKE CONCAT('%', #{keyword}, '%')
+					OR oi.product_order_number LIKE CONCAT('%', #{keyword}, '%'))
+			</if>
+			<if test="fromAt != null">
+				AND oi.created_at &gt;= #{fromAt}
+			</if>
+			<if test="toExclusiveAt != null">
+				AND oi.created_at &lt; #{toExclusiveAt}
+			</if>
+		</where>
+	</sql>
+
+	<select id="findAdminOrderItems" parameterType="com.groove.order.dto.AdminOrderItemSearchCondition"
+			resultMap="adminOrderItemSummaryMap">
+		SELECT
+			oi.id, oi.product_order_number, o.order_number, m.email AS member_email,
+			oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
+			oi.courier_code, oi.tracking_number, oi.created_at
+		FROM order_item oi
+		JOIN orders o ON o.id = oi.order_id
+		JOIN member m ON m.id = o.member_id
+		<include refid="adminOrderItemsWhere"/>
+		ORDER BY oi.created_at DESC, oi.id DESC
+		LIMIT #{size} OFFSET #{offset}
+	</select>
+
+	<select id="countAdminOrderItems" parameterType="com.groove.order.dto.AdminOrderItemSearchCondition"
+			resultType="long">
+		SELECT COUNT(*)
+		FROM order_item oi
+		JOIN orders o ON o.id = oi.order_id
+		JOIN member m ON m.id = o.member_id
+		<include refid="adminOrderItemsWhere"/>
+	</select>
+
 </mapper>

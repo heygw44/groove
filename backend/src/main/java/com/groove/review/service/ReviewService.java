@@ -83,6 +83,9 @@ public class ReviewService {
 			return ReviewEligibilityResponse.deny(ReviewIneligibleReason.LOGIN_REQUIRED);
 		}
 		if (!hasPurchased(productId, memberId)) {
+			if (isAwaitingPurchaseConfirm(productId, memberId)) {
+				return ReviewEligibilityResponse.deny(ReviewIneligibleReason.PURCHASE_CONFIRM_REQUIRED);
+			}
 			return ReviewEligibilityResponse.deny(ReviewIneligibleReason.PURCHASE_REQUIRED);
 		}
 		if (reviewRepository.existsByProductIdAndMemberId(productId, memberId)) {
@@ -117,6 +120,12 @@ public class ReviewService {
 	private boolean hasPurchased(Long productId, Long memberId) {
 		return orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(memberId, productId,
 				OrderItemStatus.REVIEWABLE);
+	}
+
+	/** 배송완료됐지만 아직 구매확정 전이라 리뷰를 쓸 수 없는 상태인지. */
+	private boolean isAwaitingPurchaseConfirm(Long productId, Long memberId) {
+		return orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(memberId, productId,
+				OrderItemStatus.AWAITING_PURCHASE_CONFIRM);
 	}
 
 	private Product findProduct(Long productId) {

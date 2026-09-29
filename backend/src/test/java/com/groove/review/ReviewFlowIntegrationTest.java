@@ -92,13 +92,14 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 		@Test
 		@DisplayName("전체 흐름을 정상적으로 완료한다")
 		void completesFullReviewFlow() throws Exception {
-			// given: 구매자가 상품을 주문하고 DELIVERED 까지 전이한다
+			// given: 구매자가 상품을 주문하고 DELIVERED 까지 전이한 뒤 구매확정까지 마친다(리뷰는 PURCHASE_CONFIRMED 부터)
 			Member buyer = signup();
 			String buyerToken = login(buyer.getEmail());
 			Address address = addressRepository.save(AddressFixture.create(buyer));
 			Product product = seedProduct(5);
 			long orderId = createOrder(buyerToken, product.getId(), address.getId());
 			deliverOrder(orderId);
+			confirmPurchase(orderId, buyerToken);
 
 			// when & then: 리뷰를 작성하면 201 을 반환한다
 			MvcResult createResult = mockMvc.perform(post("/api/v1/products/{productId}/reviews", product.getId())
@@ -187,6 +188,14 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 		changeStatus(orderId, adminBearer, OrderStatus.PREPARING).andExpect(status().isOk());
 		changeStatus(orderId, adminBearer, OrderStatus.SHIPPED).andExpect(status().isOk());
 		changeStatus(orderId, adminBearer, OrderStatus.DELIVERED).andExpect(status().isOk());
+	}
+
+	private void confirmPurchase(long orderId, String buyerToken) throws Exception {
+		Order order = orderRepository.findWithItemsById(orderId).orElseThrow();
+		long itemId = order.getItems().get(0).getId();
+		mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/confirm", orderId, itemId)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken))
+				.andExpect(status().isOk());
 	}
 
 	private ResultActions changeStatus(long orderId, String adminBearer, OrderStatus status) throws Exception {
