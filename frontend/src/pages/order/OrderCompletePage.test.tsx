@@ -26,6 +26,10 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
       quantity: 1,
       lineAmount: 10000,
       thumbnailUrl: null,
+      productOrderNumber: 'ORD-1-01',
+      status: 'PAID',
+      paidAmount: 10000,
+      availableActions: [],
     },
   ],
   shippingAddress: {

@@ -3,6 +3,66 @@ import type { OrderPayment, PaymentStatus } from '@/types/payment';
 export type OrderStatus =
   'PENDING' | 'PAID' | 'PREPARING' | 'SHIPPED' | 'DELIVERED' | 'CANCELED' | 'REFUNDED';
 
+/** 상품주문(order_item) 단위 이행 상태. PAYMENT_PENDING 은 결제 전 내부 상태라 화면에 노출하지 않는다. */
+export type OrderItemStatus =
+  | 'PAYMENT_PENDING'
+  | 'PAYMENT_WAITING'
+  | 'PAID'
+  | 'PREPARING'
+  | 'SHIPPING'
+  | 'DELIVERED'
+  | 'PURCHASE_CONFIRMED'
+  | 'CANCELED'
+  | 'RETURNED'
+  | 'CANCELED_BY_NOPAYMENT';
+
+/** 상품주문에 걸린 진행 중·완료 클레임 파생 표시. 값이 없으면 클레임 없음. */
+export type OrderItemClaimStatus =
+  | 'CANCEL_REQUEST'
+  | 'CANCEL_DONE'
+  | 'CANCEL_REJECT'
+  | 'RETURN_REQUEST'
+  | 'COLLECTING'
+  | 'RETURN_DONE'
+  | 'RETURN_REJECT';
+
+/** 서버 OrderItemActionPolicy 가 계산해 내려주는 상품주문 액션. */
+export type OrderItemAction =
+  | 'CANCEL'
+  | 'CANCEL_REQUEST'
+  | 'RETURN_REQUEST'
+  | 'WITHDRAW_CLAIM'
+  | 'TRACK'
+  | 'CONFIRM'
+  | 'WRITE_REVIEW';
+
+/** 구매자 주문 목록 탭(`GET /orders?statusGroup=`). 생략하면 전체. */
+export type OrderStatusGroup =
+  | 'PAYMENT_WAITING'
+  | 'PAID'
+  | 'PREPARING'
+  | 'SHIPPING'
+  | 'DELIVERED'
+  | 'PURCHASE_CONFIRMED'
+  | 'CANCEL_RETURN';
+
+/** 발송처리 시 서버가 검증하는 택배사 코드. 조회 URL 템플릿은 constants/couriers.ts. */
+export type CourierCode = 'CJ' | 'HANJIN' | 'LOTTE' | 'EPOST' | 'LOGEN' | 'KDEXP';
+
+/** 목록·상세 응답이 상품주문 행마다 공통으로 내려주는 이행 정보. */
+export interface OrderItemFulfillment {
+  productOrderNumber: string;
+  status: OrderItemStatus;
+  /** 값이 있을 때만(클레임 없으면 키 자체가 없다). */
+  claimStatus?: OrderItemClaimStatus;
+  /** 할인 반영된 결제 금액(discount_share 뺀 값). */
+  paidAmount: number;
+  courierCode?: CourierCode;
+  /** 발송 전이면 생략. */
+  trackingNumber?: string;
+  availableActions: OrderItemAction[];
+}
+
 export interface OrderCreateRequest {
   cartItemIds?: number[];
   productId?: number;
@@ -22,7 +82,22 @@ export interface OrderCreateResponse {
   expiresAt?: string;
 }
 
-export interface OrderItem {
+export interface OrderItem extends OrderItemFulfillment {
+  productId: number;
+  productName: string;
+  price: number;
+  quantity: number;
+  lineAmount: number;
+  thumbnailUrl: string | null;
+  /** 배송완료 시각. 배송완료 전이면 생략. */
+  deliveredAt?: string;
+}
+
+/** 관리자 상세 상품 행. 구매자용 paidAmount·availableActions 는 내려오지 않는다. */
+export interface AdminOrderItem extends Pick<
+  OrderItemFulfillment,
+  'productOrderNumber' | 'status' | 'claimStatus'
+> {
   productId: number;
   productName: string;
   price: number;
@@ -31,7 +106,7 @@ export interface OrderItem {
   thumbnailUrl: string | null;
 }
 
-export interface OrderListItem {
+export interface OrderListItem extends OrderItemFulfillment {
   productId: number;
   productName: string;
   quantity: number;
@@ -83,7 +158,7 @@ export interface OrderDetail {
 }
 
 export interface OrderListParams {
-  status?: OrderStatus;
+  statusGroup?: OrderStatusGroup;
   page?: number;
   size?: number;
 }
@@ -120,7 +195,7 @@ export interface AdminOrderDetail {
   discountAmount: number;
   finalAmount: number;
   couponName?: string;
-  items: OrderItem[];
+  items: AdminOrderItem[];
   shippingAddress: ShippingAddress;
   createdAt: string;
   expiresAt: string;

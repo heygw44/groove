@@ -21,23 +21,23 @@ describe('parseOrderListFilters()', () => {
     const result = parseOrderListFilters(searchParams);
 
     // then
-    expect(result).toEqual({ status: undefined, page: 0 });
+    expect(result).toEqual({ statusGroup: undefined, page: 0 });
   });
 
-  it('유효한 status 값은 그대로 쓴다', () => {
+  it('유효한 statusGroup 값은 그대로 쓴다', () => {
     // given
-    const searchParams = new URLSearchParams('status=PAID');
+    const searchParams = new URLSearchParams('statusGroup=PAID');
 
     // when & then
-    expect(parseOrderListFilters(searchParams).status).toBe('PAID');
+    expect(parseOrderListFilters(searchParams).statusGroup).toBe('PAID');
   });
 
-  it('알 수 없는 status 값은 무시한다', () => {
+  it('알 수 없는 statusGroup 값은 무시한다', () => {
     // given
-    const searchParams = new URLSearchParams('status=UNKNOWN');
+    const searchParams = new URLSearchParams('statusGroup=UNKNOWN');
 
     // when & then
-    expect(parseOrderListFilters(searchParams).status).toBeUndefined();
+    expect(parseOrderListFilters(searchParams).statusGroup).toBeUndefined();
   });
 
   it.each(['-1', '1.5', 'abc', ''])('자연수가 아닌 page(%s) 는 0 으로 되돌린다', (value) => {
@@ -71,18 +71,18 @@ describe('serializeOrderListFilters()', () => {
 
   it('설정된 필터만 쿼리스트링으로 옮긴다', () => {
     // given
-    const value = filters({ status: 'CANCELED', page: 2 });
+    const value = filters({ statusGroup: 'CANCEL_RETURN', page: 2 });
 
     // when
     const params = serializeOrderListFilters(value);
 
     // then
-    expect(params.toString()).toBe('status=CANCELED&page=2');
+    expect(params.toString()).toBe('statusGroup=CANCEL_RETURN&page=2');
   });
 
   it('직렬화한 값을 다시 파싱하면 원래 필터로 돌아온다', () => {
     // given
-    const value = filters({ status: 'SHIPPED', page: 4 });
+    const value = filters({ statusGroup: 'SHIPPING', page: 4 });
 
     // when
     const result = parseOrderListFilters(serializeOrderListFilters(value));
@@ -95,12 +95,12 @@ describe('serializeOrderListFilters()', () => {
 describe('toOrderListParams()', () => {
   it('페이지 크기를 10 으로 채운다', () => {
     // given
-    const value = filters({ status: 'PAID', page: 1 });
+    const value = filters({ statusGroup: 'PAID', page: 1 });
 
     // when
     const params = toOrderListParams(value);
 
     // then
-    expect(params).toEqual({ status: 'PAID', page: 1, size: 10 });
+    expect(params).toEqual({ statusGroup: 'PAID', page: 1, size: 10 });
   });
 });
