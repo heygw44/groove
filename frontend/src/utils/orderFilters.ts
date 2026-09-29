@@ -1,16 +1,16 @@
-import type { OrderListParams, OrderStatus } from '@/types/order';
-import { isOrderStatus } from '@/utils/orderStatus';
+import type { OrderListParams, OrderStatusGroup } from '@/types/order';
+import { isOrderStatusGroup } from '@/utils/orderStatus';
 
 export interface OrderListFilters {
-  status?: OrderStatus;
+  statusGroup?: OrderStatusGroup;
   page: number;
 }
 
 const DEFAULT_PAGE = 0;
 const ORDER_PAGE_SIZE = 10;
 
-const parseStatus = (value: string | null): OrderStatus | undefined =>
-  value !== null && isOrderStatus(value) ? value : undefined;
+const parseStatusGroup = (value: string | null): OrderStatusGroup | undefined =>
+  value !== null && isOrderStatusGroup(value) ? value : undefined;
 
 /** 자연수(0 포함) 문자열만 통과시킨다 - 음수·NaN·소수 등은 기본값으로 무시. */
 const parsePage = (value: string | null): number => {
@@ -21,7 +21,7 @@ const parsePage = (value: string | null): number => {
 };
 
 export const parseOrderListFilters = (searchParams: URLSearchParams): OrderListFilters => ({
-  status: parseStatus(searchParams.get('status')),
+  statusGroup: parseStatusGroup(searchParams.get('statusGroup')),
   page: parsePage(searchParams.get('page')),
 });
 
@@ -29,8 +29,8 @@ export const parseOrderListFilters = (searchParams: URLSearchParams): OrderListF
 export const serializeOrderListFilters = (filters: OrderListFilters): URLSearchParams => {
   const params = new URLSearchParams();
 
-  if (filters.status !== undefined) {
-    params.set('status', filters.status);
+  if (filters.statusGroup !== undefined) {
+    params.set('statusGroup', filters.statusGroup);
   }
   if (filters.page !== DEFAULT_PAGE) {
     params.set('page', String(filters.page));
@@ -40,7 +40,7 @@ export const serializeOrderListFilters = (filters: OrderListFilters): URLSearchP
 };
 
 export const toOrderListParams = (filters: OrderListFilters): OrderListParams => ({
-  status: filters.status,
+  statusGroup: filters.statusGroup,
   page: filters.page,
   size: ORDER_PAGE_SIZE,
 });

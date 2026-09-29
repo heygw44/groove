@@ -23,8 +23,20 @@
 		<where>
 			o.member_id = #{memberId}
 			AND o.placed_at IS NOT NULL
-			<if test="status != null">
-				AND o.status = #{status}
+			<if test="statusGroup != null">
+				AND EXISTS (
+					SELECT 1 FROM order_item oi
+					WHERE oi.order_id = o.id
+					AND (
+						oi.status IN
+						<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
+							#{s}
+						</foreach>
+						<if test="statusGroup.claimBased">
+							OR oi.claim_status IS NOT NULL
+						</if>
+					)
+				)
 			</if>
 		</where>
 	</sql>
@@ -62,16 +74,26 @@
 			<arg column="quantity" javaType="_int"/>
 			<arg column="line_amount" javaType="java.math.BigDecimal"/>
 			<arg column="thumbnail_url" javaType="java.lang.String"/>
+			<arg column="product_order_number" javaType="java.lang.String"/>
+			<arg column="status" javaType="com.groove.order.entity.OrderItemStatus"/>
+			<arg column="claim_status" javaType="com.groove.order.entity.OrderItemClaimStatus"/>
+			<arg column="paid_amount" javaType="java.math.BigDecimal"/>
+			<arg column="courier_code" javaType="com.groove.order.entity.CourierCode"/>
+			<arg column="tracking_number" javaType="java.lang.String"/>
+			<arg column="delivered_at" javaType="java.time.LocalDateTime"/>
 		</constructor>
 	</resultMap>
 
-	<!-- 썸네일은 findMyOrders 와 같은 규약: 상품의 sort_order = 0 이미지. -->
+	<!-- 썸네일은 findMyOrders 와 같은 규약: 상품의 sort_order = 0 이미지. paid_amount = 단가 x 수량 - discount_share. -->
 	<select id="findItemsByOrderIds" resultMap="orderListItemRowMap">
 		SELECT
 			oi.order_id, oi.product_id, oi.product_name_snapshot AS product_name, oi.quantity,
 			oi.price_snapshot * oi.quantity AS line_amount,
 			(SELECT MIN(pi.image_url) FROM product_image pi
-				WHERE pi.product_id = oi.product_id AND pi.sort_order = 0) AS thumbnail_url
+				WHERE pi.product_id = oi.product_id AND pi.sort_order = 0) AS thumbnail_url,
+			oi.product_order_number, oi.status, oi.claim_status,
+			(oi.price_snapshot * oi.quantity - oi.discount_share) AS paid_amount,
+			oi.courier_code, oi.tracking_number, oi.delivered_at
 		FROM order_item oi
 		WHERE oi.order_id IN
 		<foreach item="orderId" collection="orderIds" open="(" separator="," close=")">

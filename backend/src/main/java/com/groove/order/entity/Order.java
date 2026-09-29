@@ -149,7 +149,7 @@ public class Order extends BaseTimeEntity {
 		if (quantity <= 0) {
 			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
 		}
-		this.items.add(OrderItem.of(this, product, quantity));
+		this.items.add(OrderItem.of(this, product, quantity, nextProductOrderNumber()));
 		calculateAmounts();
 	}
 
@@ -164,6 +164,11 @@ public class Order extends BaseTimeEntity {
 		this.memberCoupon = memberCoupon;
 		this.discountAmount = discountAmount;
 		calculateAmounts();
+		DiscountAllocator.allocate(this.items, this.discountAmount);
+	}
+
+	private String nextProductOrderNumber() {
+		return this.orderNumber + "-" + String.format("%02d", this.items.size() + 1);
 	}
 
 	public String getCouponName() {
@@ -173,12 +178,21 @@ public class Order extends BaseTimeEntity {
 	public void markPaid() {
 		if (this.status == OrderStatus.PENDING) {
 			this.status = OrderStatus.PAID;
+			this.items.forEach(OrderItem::markPaid);
 			return;
 		}
 		if (this.status == OrderStatus.PAID) {
 			throw new BusinessException(ErrorCode.ORDER_ALREADY_PAID);
 		}
 		throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+	}
+
+	/** 가상계좌 발급으로 입금 대기 상태가 됐음을 상품주문에도 반영한다. 주문 상태(PENDING)는 그대로 둔다. */
+	public void awaitDeposit() {
+		if (this.status != OrderStatus.PENDING) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		this.items.forEach(OrderItem::awaitDeposit);
 	}
 
 	public void cancel(String reason) {
@@ -188,6 +202,8 @@ public class Order extends BaseTimeEntity {
 		this.status = OrderStatus.CANCELED;
 		this.canceledAt = LocalDateTime.now();
 		this.cancelReason = reason;
+		LocalDateTime now = this.canceledAt;
+		this.items.forEach(item -> item.cancel(now));
 	}
 
 	public void requestCancel(String reason, boolean byAdmin) {
@@ -210,6 +226,7 @@ public class Order extends BaseTimeEntity {
 		}
 		this.status = OrderStatus.CANCELED;
 		this.canceledAt = now;
+		this.items.forEach(item -> item.cancel(now));
 	}
 
 	public void withdrawCancelRequest() {
@@ -222,9 +239,18 @@ public class Order extends BaseTimeEntity {
 			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
 		}
 		this.status = next;
-		if (next == OrderStatus.CANCELED) {
-			this.canceledAt = LocalDateTime.now();
-			this.cancelReason = ADMIN_CANCEL_REASON;
+		LocalDateTime now = LocalDateTime.now();
+		switch (next) {
+			case PREPARING -> this.items.forEach(item -> item.moveToPreparing(now));
+			case SHIPPED -> this.items.forEach(item -> item.moveToShipping(now));
+			case DELIVERED -> this.items.forEach(item -> item.moveToDelivered(now));
+			case CANCELED -> {
+				this.canceledAt = now;
+				this.cancelReason = ADMIN_CANCEL_REASON;
+				this.items.forEach(item -> item.cancel(now));
+			}
+			default -> {
+			}
 		}
 	}
 
@@ -253,7 +279,11 @@ public class Order extends BaseTimeEntity {
 		return this.placedAt != null;
 	}
 
-	/** 스케줄러가 결제 기한이 지난 PENDING 주문을 취소할 때 쓴다. 상태값을 새로 두지 않고 CANCELED + 사유로 구분한다. */
+	/**
+	 * 스케줄러가 결제 기한이 지난 PENDING 주문을 취소할 때 쓴다. 상태값을 새로 두지 않고 CANCELED + 사유로 구분한다.
+	 * 가상계좌 입금기한 만료(상품주문이 이미 PAYMENT_WAITING)는 CANCELED_BY_NOPAYMENT로, 그 외(10분 만료)는
+	 * CANCELED로 상품주문을 옮긴다.
+	 */
 	public void expire(LocalDateTime now) {
 		if (this.status != OrderStatus.PENDING) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
@@ -261,6 +291,13 @@ public class Order extends BaseTimeEntity {
 		this.status = OrderStatus.CANCELED;
 		this.canceledAt = now;
 		this.cancelReason = EXPIRED_CANCEL_REASON;
+		this.items.forEach(item -> {
+			if (item.getStatus() == OrderItemStatus.PAYMENT_WAITING) {
+				item.cancelByNoPayment(now);
+			} else {
+				item.cancel(now);
+			}
+		});
 	}
 
 	/** 주문서를 다시 제출해 이 주문이 필요 없어졌을 때 쓴다. 만료와 같은 복원을 하되 사유만 다르다. */
@@ -271,6 +308,7 @@ public class Order extends BaseTimeEntity {
 		this.status = OrderStatus.CANCELED;
 		this.canceledAt = now;
 		this.cancelReason = SUPERSEDED_CANCEL_REASON;
+		this.items.forEach(item -> item.cancel(now));
 	}
 
 	/** 주문서 배송지만 바꾼다. 확정 전(placed_at 없음) PENDING 주문에만 허용한다. */

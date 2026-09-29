@@ -1,5 +1,5 @@
 import type { BadgeVariant } from '@/components/common/Badge';
-import type { OrderStatus } from '@/types/order';
+import type { OrderStatus, OrderStatusGroup } from '@/types/order';
 import type { PaymentStatus } from '@/types/payment';
 import { PAYMENT_STATUS_BADGE, PAYMENT_STATUS_LABEL } from '@/utils/paymentStatus';
 
@@ -56,6 +56,32 @@ export const ADMIN_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 export const isOrderStatus = (value: unknown): value is OrderStatus =>
   typeof value === 'string' && ORDER_STATUS_SET.has(value);
+
+/** 주문 목록 탭(`?statusGroup=`) 값. 생략하면 전체. */
+export const ORDER_STATUS_GROUPS: readonly OrderStatusGroup[] = [
+  'PAYMENT_WAITING',
+  'PAID',
+  'PREPARING',
+  'SHIPPING',
+  'DELIVERED',
+  'PURCHASE_CONFIRMED',
+  'CANCEL_RETURN',
+];
+
+const ORDER_STATUS_GROUP_SET = new Set<string>(ORDER_STATUS_GROUPS);
+
+export const ORDER_STATUS_GROUP_LABEL: Record<OrderStatusGroup, string> = {
+  PAYMENT_WAITING: '입금대기',
+  PAID: '결제완료',
+  PREPARING: '배송준비',
+  SHIPPING: '배송중',
+  DELIVERED: '배송완료',
+  PURCHASE_CONFIRMED: '구매확정',
+  CANCEL_RETURN: '취소·반품',
+};
+
+export const isOrderStatusGroup = (value: unknown): value is OrderStatusGroup =>
+  typeof value === 'string' && ORDER_STATUS_GROUP_SET.has(value);
 
 export interface OrderDisplayStatus {
   label: string;

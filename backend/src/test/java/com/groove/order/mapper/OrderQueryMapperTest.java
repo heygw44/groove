@@ -27,7 +27,10 @@ import com.groove.order.dto.OrderListItemRow;
 import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderStatusGroup;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.support.MybatisTestSupport;
@@ -83,8 +86,8 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		return order;
 	}
 
-	private static OrderSearchCondition condition(Long memberId, OrderStatus status, int page, int size) {
-		return new OrderSearchCondition(memberId, status, page, size);
+	private static OrderSearchCondition condition(Long memberId, OrderStatusGroup statusGroup, int page, int size) {
+		return new OrderSearchCondition(memberId, statusGroup, page, size);
 	}
 
 	private static AdminOrderSearchCondition adminCondition(OrderStatus status, String keyword,
@@ -113,8 +116,8 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
-		@DisplayName("status 로 필터링하면 해당 상태의 주문만 반환한다")
-		void filtersByStatus() {
+		@DisplayName("statusGroup 으로 필터링하면 해당 그룹에 속한 상품주문이 있는 주문만 반환한다")
+		void filtersByStatusGroup() {
 			// given
 			Order pendingOrder = persistOrder(owner, "20260903-OQM00003", kindOfBlue, 1);
 			Order canceledOrder = persistOrder(owner, "20260903-OQM00004", loveSupreme, 1);
@@ -124,12 +127,51 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// when
 			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
-					condition(owner.getId(), OrderStatus.CANCELED, 0, 20));
+					condition(owner.getId(), OrderStatusGroup.CANCEL_RETURN, 0, 20));
 
 			// then
 			assertThat(result).extracting(OrderSummaryResponse::id).containsExactly(canceledOrder.getId());
 			assertThat(result).extracting(OrderSummaryResponse::status).containsOnly(OrderStatus.CANCELED);
 			assertThat(pendingOrder).isNotNull();
+		}
+
+		@Test
+		@DisplayName("PAID 그룹으로 필터링하면 PAID 상태 상품주문이 없는 주문은 제외한다")
+		void excludesOrdersWithoutMatchingStatusInGroup() {
+			// given
+			Order pendingOrder = persistOrder(owner, "20260903-OQM00029", kindOfBlue, 1);
+			Order paidOrder = persistOrder(owner, "20260903-OQM00030", loveSupreme, 1);
+			OrderFixture.markItemsStatus(paidOrder, OrderItemStatus.PAID);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), OrderStatusGroup.PAID, 0, 20));
+
+			// then
+			assertThat(result).extracting(OrderSummaryResponse::id).containsExactly(paidOrder.getId());
+			assertThat(pendingOrder).isNotNull();
+		}
+
+		@Test
+		@DisplayName("CANCEL_RETURN 그룹은 종결 상태가 아니어도 진행 중인 클레임이 있으면 포함한다")
+		void includesOrdersWithInProgressClaimInCancelReturnGroup() {
+			// given
+			Order preparingOrder = persistOrder(owner, "20260903-OQM00031", kindOfBlue, 1);
+			OrderFixture.markItemsStatus(preparingOrder, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(preparingOrder, OrderItemClaimStatus.CANCEL_REQUEST);
+			Order paidOrder = persistOrder(owner, "20260903-OQM00032", loveSupreme, 1);
+			OrderFixture.markItemsStatus(paidOrder, OrderItemStatus.PAID);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), OrderStatusGroup.CANCEL_RETURN, 0, 20));
+
+			// then
+			assertThat(result).extracting(OrderSummaryResponse::id).containsExactly(preparingOrder.getId());
 		}
 
 		@Test
@@ -346,6 +388,26 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(count).isZero();
 		}
+
+		@Test
+		@DisplayName("statusGroup 으로 필터링하면 findMyOrders 와 같은 개수를 반환한다")
+		void matchesFindResultSizeWithStatusGroup() {
+			// given
+			Order paidOrder = persistOrder(owner, "20260903-OQM00033", kindOfBlue, 1);
+			OrderFixture.markItemsStatus(paidOrder, OrderItemStatus.PAID);
+			persistOrder(owner, "20260903-OQM00034", loveSupreme, 1);
+			em.flush();
+			em.clear();
+
+			// when
+			long count = orderQueryMapper.countMyOrders(condition(owner.getId(), OrderStatusGroup.PAID, 0, 20));
+			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), OrderStatusGroup.PAID, 0, 20));
+
+			// then
+			assertThat(count).isEqualTo(1L);
+			assertThat(count).isEqualTo(result.size());
+		}
 	}
 
 	@Nested
@@ -435,6 +497,62 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			assertThat(result.quantity()).isEqualTo(3);
 			assertThat(result.lineAmount())
 					.isEqualByComparingTo(kindOfBlue.getPrice().multiply(BigDecimal.valueOf(3)));
+		}
+
+		@Test
+		@DisplayName("상품주문번호·상태·배송 정보를 함께 반환한다")
+		void returnsProductOrderNumberStatusAndShippingInfo() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQM00035", kindOfBlue, 1);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.SHIPPING);
+			em.flush();
+			em.clear();
+
+			// when
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+
+			// then
+			assertThat(result.productOrderNumber()).isEqualTo("20260903-OQM00035-01");
+			assertThat(result.status()).isEqualTo(OrderItemStatus.SHIPPING);
+			assertThat(result.claimStatus()).isNull();
+		}
+
+		@Test
+		@DisplayName("할인이 없으면 결제 금액은 상품 금액과 같다")
+		void returnsLineAmountAsPaidAmountWhenNoDiscount() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQM00036", kindOfBlue, 2);
+			em.clear();
+
+			// when
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+
+			// then
+			assertThat(result.paidAmount()).isEqualByComparingTo(result.lineAmount());
+		}
+
+		@Test
+		@DisplayName("할인 배분(discount_share)만큼 결제 금액이 상품 금액보다 작다")
+		void returnsLineAmountMinusDiscountShareAsPaidAmount() {
+			// given
+			Coupon coupon = CouponFixture.fixed("OQM-PAIDAMT", new BigDecimal("5000"));
+			em.persist(coupon);
+			MemberCoupon memberCoupon = MemberCouponFixture.create(owner, coupon);
+			em.persist(memberCoupon);
+			Order order = OrderFixture.create(owner, "20260903-OQM00037");
+			order.addItem(kindOfBlue, 1);
+			order.applyCoupon(memberCoupon, new BigDecimal("5000"));
+			order.place(LocalDateTime.now());
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+
+			// then
+			assertThat(result.paidAmount())
+					.isEqualByComparingTo(result.lineAmount().subtract(new BigDecimal("5000")));
 		}
 	}
 

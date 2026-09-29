@@ -47,13 +47,14 @@
 		</constructor>
 	</resultMap>
 
-	<!-- 한 주문 안의 상품 쌍을 양방향(a,b)/(b,a) 모두 집계한다. -->
+	<!-- 한 주문 안의 상품 쌍을 양방향(a,b)/(b,a) 모두 집계한다. 두 상품주문 모두 팔린 상태여야 한다. -->
 	<select id="countCoPurchases" resultMap="coPurchaseRowMap">
 		SELECT a.product_id AS product_id, b.product_id AS other_product_id, COUNT(DISTINCT o.id) AS cnt
 		FROM order_item a
 		JOIN order_item b ON b.order_id = a.order_id AND b.product_id &lt;&gt; a.product_id
 		JOIN orders o ON o.id = a.order_id
-		WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+		WHERE a.status IN ('PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED')
+		AND b.status IN ('PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED')
 		AND o.created_at &gt;= #{sinceAt}
 		GROUP BY a.product_id, b.product_id
 	</select>

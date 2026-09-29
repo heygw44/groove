@@ -19,7 +19,7 @@ public record AdminOrderDetailResponse(
 		BigDecimal discountAmount,
 		BigDecimal finalAmount,
 		String couponName,
-		List<OrderItemResponse> items,
+		List<AdminOrderItemResponse> items,
 		ShippingAddressResponse shippingAddress,
 		LocalDateTime createdAt,
 		LocalDateTime expiresAt,
@@ -30,7 +30,7 @@ public record AdminOrderDetailResponse(
 
 	public static AdminOrderDetailResponse from(Order order, PaymentStatus paymentStatus,
 			Map<Long, String> thumbnailsByProductId) {
-		List<OrderItemResponse> items = OrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId);
+		List<AdminOrderItemResponse> items = AdminOrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId);
 		return new AdminOrderDetailResponse(order.getId(), order.getOrderNumber(), order.getMember().getId(),
 				order.getMember().getEmail(), order.getStatus(), order.getTotalAmount(), order.getDiscountAmount(),
 				order.getFinalAmount(), order.getCouponName(), items,

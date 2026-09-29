@@ -35,7 +35,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -93,8 +93,8 @@ class ReviewServiceTest {
 			// given
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(MEMBER_ID, PRODUCT_ID,
-					OrderStatus.DELIVERED)).willReturn(true);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(true);
 			given(reviewRepository.existsByProductIdAndMemberId(PRODUCT_ID, MEMBER_ID)).willReturn(false);
 			Review saved = ReviewFixture.withId(ReviewFixture.create(product, member), REVIEW_ID);
 			given(reviewRepository.saveAndFlush(any())).willReturn(saved);
@@ -114,8 +114,8 @@ class ReviewServiceTest {
 			// given
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(MEMBER_ID, PRODUCT_ID,
-					OrderStatus.DELIVERED)).willReturn(false);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(false);
 
 			// when & then
 			assertThatThrownBy(
@@ -133,8 +133,8 @@ class ReviewServiceTest {
 			// given
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(MEMBER_ID, PRODUCT_ID,
-					OrderStatus.DELIVERED)).willReturn(true);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(true);
 			given(reviewRepository.existsByProductIdAndMemberId(PRODUCT_ID, MEMBER_ID)).willReturn(true);
 
 			// when & then
@@ -153,8 +153,8 @@ class ReviewServiceTest {
 			// given
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(MEMBER_ID, PRODUCT_ID,
-					OrderStatus.DELIVERED)).willReturn(true);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(true);
 			given(reviewRepository.existsByProductIdAndMemberId(PRODUCT_ID, MEMBER_ID)).willReturn(false);
 			given(reviewRepository.saveAndFlush(any())).willThrow(new DataIntegrityViolationException("duplicate"));
 
@@ -318,8 +318,8 @@ class ReviewServiceTest {
 		void returnsPurchaseRequiredWhenNotPurchased() {
 			// given
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(MEMBER_ID, PRODUCT_ID,
-					OrderStatus.DELIVERED)).willReturn(false);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(false);
 
 			// when
 			ReviewEligibilityResponse response = reviewService.checkEligibility(PRODUCT_ID, MEMBER_ID);
@@ -334,8 +334,8 @@ class ReviewServiceTest {
 		void returnsAlreadyReviewedWhenExists() {
 			// given
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(MEMBER_ID, PRODUCT_ID,
-					OrderStatus.DELIVERED)).willReturn(true);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(true);
 			given(reviewRepository.existsByProductIdAndMemberId(PRODUCT_ID, MEMBER_ID)).willReturn(true);
 
 			// when
@@ -351,8 +351,8 @@ class ReviewServiceTest {
 		void returnsEligibleWhenPurchasedAndNotReviewed() {
 			// given
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(MEMBER_ID, PRODUCT_ID,
-					OrderStatus.DELIVERED)).willReturn(true);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(true);
 			given(reviewRepository.existsByProductIdAndMemberId(PRODUCT_ID, MEMBER_ID)).willReturn(false);
 
 			// when

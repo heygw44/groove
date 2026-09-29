@@ -1,8 +1,6 @@
 package com.groove.order.entity;
 
-import java.util.List;
-
-/** 주문 상태. */
+/** 주문 상태(결제 생애주기). "팔렸다" 판정은 상품주문 단위인 {@link OrderItemStatus#SOLD} 를 쓴다. */
 public enum OrderStatus {
 
 	PENDING,
@@ -12,9 +10,6 @@ public enum OrderStatus {
 	DELIVERED,
 	CANCELED,
 	REFUNDED;
-
-	/** 결제가 끝나 실제 구매로 보는 상태. 통계·추천의 "PAID 이상" 기준. */
-	public static final List<OrderStatus> PAID_OR_LATER = List.of(PAID, PREPARING, SHIPPED, DELIVERED);
 
 	/** 관리자 상태 전이(PATCH /admin/orders/{id}/status)에서 허용되는 전이만 true. */
 	public boolean canTransitionTo(OrderStatus next) {

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 
+import { OrderItemStatusBadge } from '@/components/order/OrderItemStatusBadge';
 import type { OrderListItem } from '@/types/order';
 import { formatPrice } from '@/utils/formatPrice';
 
@@ -38,12 +39,15 @@ export function OrderItemRow({ item }: OrderItemRowProps) {
       <OrderItemThumbnail url={item.thumbnailUrl} />
 
       <div className="min-w-0 flex-1">
-        <Link
-          to={`/products/${item.productId}`}
-          className="line-clamp-1 text-sm font-medium text-content hover:underline"
-        >
-          {item.productName}
-        </Link>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Link
+            to={`/products/${item.productId}`}
+            className="line-clamp-1 text-sm font-medium text-content hover:underline"
+          >
+            {item.productName}
+          </Link>
+          <OrderItemStatusBadge status={item.status} claimStatus={item.claimStatus} />
+        </div>
         <p className="mt-0.5 text-xs text-content-muted">수량 {item.quantity}개</p>
       </div>
 

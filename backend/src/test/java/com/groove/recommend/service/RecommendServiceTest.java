@@ -35,7 +35,6 @@ import com.groove.fixture.TasteProfileFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.ProductStatus;
@@ -108,7 +107,7 @@ class RecommendServiceTest {
 
 	private void givenNoSeeds() {
 		given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of());
-		given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+		given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 				.willReturn(List.of());
 		given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
 	}
@@ -210,7 +209,7 @@ class RecommendServiceTest {
 			// given
 			givenNoTasteProfile(MEMBER_ID);
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of(100L));
-			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+			given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 					.willReturn(List.of());
 			given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
@@ -234,7 +233,7 @@ class RecommendServiceTest {
 			// given
 			givenTasteProfile(MEMBER_ID, Set.of(1L), Set.of(), Set.of());
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of(10L));
-			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+			given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 					.willReturn(List.of(20L));
 			given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
@@ -260,7 +259,7 @@ class RecommendServiceTest {
 			// given
 			givenNoTasteProfile(MEMBER_ID);
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of());
-			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+			given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 					.willReturn(List.of());
 			given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of(300L));
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
@@ -284,7 +283,7 @@ class RecommendServiceTest {
 			// given
 			givenNoTasteProfile(MEMBER_ID);
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of(500L));
-			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+			given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 					.willReturn(List.of());
 			given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
@@ -334,7 +333,7 @@ class RecommendServiceTest {
 			// given
 			givenNoTasteProfile(MEMBER_ID);
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of(100L));
-			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+			given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 					.willReturn(List.of());
 			given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
@@ -388,7 +387,7 @@ class RecommendServiceTest {
 			long albumId = 1000L;
 			givenNoTasteProfile(MEMBER_ID);
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of(10L));
-			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+			given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 					.willReturn(List.of());
 			given(recentViewService.findRecentProductIds(MEMBER_ID)).willReturn(List.of());
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
@@ -476,7 +475,7 @@ class RecommendServiceTest {
 			assertThat(items).extracting(item -> item.product().id()).containsExactly(60L);
 			assertThat(items.get(0).reasons()).containsExactly(RecommendReason.SAME_ARTIST);
 			verify(wishlistRepository, never()).findProductIdsByMemberId(any());
-			verify(orderItemRepository, never()).findProductIdsByMemberIdAndOrderStatusIn(any(), any());
+			verify(orderItemRepository, never()).findProductIdsByMemberIdAndStatusIn(any(), any());
 			verify(boughtTogetherRedisService, never()).findScores(any(Long.class));
 			verify(memberTasteProfileRepository, never()).findByMemberId(any());
 		}
@@ -505,7 +504,7 @@ class RecommendServiceTest {
 			// given
 			givenTasteProfile(MEMBER_ID, Set.of(2L), Set.of(), Set.of());
 			given(wishlistRepository.findProductIdsByMemberId(MEMBER_ID)).willReturn(List.of());
-			given(orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(eq(MEMBER_ID), any()))
+			given(orderItemRepository.findProductIdsByMemberIdAndStatusIn(eq(MEMBER_ID), any()))
 					.willReturn(List.of());
 			given(recommendQueryMapper.findProductFeatures()).willReturn(List.of(
 					row(PRODUCT_ID, 9L, ProductStatus.ON_SALE, null, NOW),

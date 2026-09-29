@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.recommend.dto.HomeRecommendResponse;
@@ -64,7 +64,7 @@ public class RecommendService {
 
 		Set<Long> wishlistIds = new HashSet<>(wishlistRepository.findProductIdsByMemberId(memberId));
 		Set<Long> purchasedIds = new HashSet<>(
-				orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(memberId, OrderStatus.PAID_OR_LATER));
+				orderItemRepository.findProductIdsByMemberIdAndStatusIn(memberId, OrderItemStatus.SOLD));
 		List<Long> recentIds = recentViewService.findRecentProductIds(memberId);
 		HomeSeeds homeSeeds = HomeSeeds.of(wishlistIds, purchasedIds, recentIds);
 		Set<Long> seedIds = homeSeeds.seedIds();
@@ -120,7 +120,7 @@ public class RecommendService {
 		} else {
 			excludeIds.addAll(wishlistRepository.findProductIdsByMemberId(memberId));
 			excludeIds.addAll(
-					orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(memberId, OrderStatus.PAID_OR_LATER));
+					orderItemRepository.findProductIdsByMemberIdAndStatusIn(memberId, OrderItemStatus.SOLD));
 			coPurchaseScores = boughtTogetherRedisService.findScores(productId);
 		}
 

@@ -63,9 +63,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 			SET p.sold_quantity = (
 				SELECT COALESCE(SUM(oi.quantity), 0)
 				FROM order_item oi
-				JOIN orders o ON o.id = oi.order_id
 				WHERE oi.product_id = p.id
-				AND o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED'))
+				AND oi.status IN ('PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED'))
 			WHERE p.id IN (:productIds)
 			""", nativeQuery = true)
 	void refreshSoldQuantities(@Param("productIds") Collection<Long> productIds);

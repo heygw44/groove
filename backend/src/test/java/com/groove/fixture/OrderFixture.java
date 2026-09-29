@@ -9,6 +9,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.ShippingAddress;
@@ -72,6 +74,28 @@ public final class OrderFixture {
 
 	public static Order markPaid(Order order) {
 		ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
+		return order;
+	}
+
+	/**
+	 * order.status 만 리플렉션으로 직접 바꾸는 markPaid()/markShipped()/markDelivered() 는 상품주문
+	 * 상태(item.status)까지는 옮기지 않는다. "팔렸다" 판정이 item.status 기준인 조회(추천·판매량·리뷰 자격 등)를
+	 * 검증하는 테스트는 이 메서드로 이미 담긴 항목의 상태를 함께 맞춰야 한다.
+	 */
+	public static Order markItemsStatus(Order order, OrderItemStatus status) {
+		order.getItems().forEach(item -> ReflectionTestUtils.setField(item, "status", status));
+		return order;
+	}
+
+	/** 첫 번째 상품주문에만 진행 중이거나 끝난 클레임 상태를 심는다. 클레임 워크플로 API 가 아직 없어 직접 설정한다. */
+	public static Order markFirstItemClaimStatus(Order order, OrderItemClaimStatus claimStatus) {
+		ReflectionTestUtils.setField(order.getItems().get(0), "claimStatus", claimStatus);
+		return order;
+	}
+
+	/** 첫 번째 상품주문의 배송완료 시각을 직접 심는다. 반품 기한(D7) 경계 테스트에 쓴다. */
+	public static Order markFirstItemDeliveredAt(Order order, LocalDateTime deliveredAt) {
+		ReflectionTestUtils.setField(order.getItems().get(0), "deliveredAt", deliveredAt);
 		return order;
 	}
 
