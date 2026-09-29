@@ -35,7 +35,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, OrderStatus.PENDING,
-					AMOUNT, lookup);
+					AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.APPROVE);
@@ -49,7 +49,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, OrderStatus.CANCELED,
-					AMOUNT, lookup);
+					AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.COMPENSATE);
@@ -64,7 +64,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, orderStatus, AMOUNT,
-					lookup);
+					BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.MANUAL_REVIEW);
@@ -79,7 +79,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, orderStatus, AMOUNT,
-					lookup);
+					BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.MANUAL_REVIEW);
@@ -94,7 +94,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, OrderStatus.PENDING,
-					AMOUNT, lookup);
+					AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.MANUAL_REVIEW);
@@ -109,7 +109,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, OrderStatus.PENDING,
-					AMOUNT, lookup);
+					AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.FAIL);
@@ -124,7 +124,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, OrderStatus.PENDING,
-					AMOUNT, lookup);
+					AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.SKIP);
@@ -138,7 +138,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, OrderStatus.PENDING,
-					AMOUNT, lookup);
+					AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.SYNC_CANCELED);
@@ -152,7 +152,7 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.READY, OrderStatus.PENDING,
-					AMOUNT, lookup);
+					AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.MANUAL_REVIEW);
@@ -177,10 +177,48 @@ class PaymentReconcileRuleTest {
 
 			// when
 			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.CANCEL_REQUESTED,
-					orderStatus, AMOUNT, lookup);
+					orderStatus, AMOUNT, BigDecimal.ZERO, lookup);
 
 			// then
 			assertThat(decision).isEqualTo(expected);
+		}
+
+		@ParameterizedTest(name = "결제={0}, 토스={1}, 취소잔액={2}, 남은금액={3} → {4}")
+		@CsvSource({
+			"DONE, PARTIAL_CANCELED, 10000, 10000, SKIP",
+			"DONE, PARTIAL_CANCELED, 9999, 10000, MANUAL_REVIEW",
+			"PARTIAL_CANCELED, PARTIAL_CANCELED, 5000, 5000, SKIP",
+			"PARTIAL_CANCELED, CANCELED, 0, 0, SKIP",
+			"PARTIAL_CANCELED, CANCELED, 100, 0, MANUAL_REVIEW",
+			"DONE, CANCELED, 0, 10000, MANUAL_REVIEW"
+		})
+		@DisplayName("DONE/PARTIAL_CANCELED 인데 토스가 PARTIAL_CANCELED/CANCELED 면 취소 잔액을 맞춰본다")
+		void decidesPartialCancelDrift(PaymentStatus paymentStatus, PaymentLookupStatus lookupStatus,
+				BigDecimal tossBalance, BigDecimal expectedRemaining, PaymentReconcileDecision expected) {
+			// given
+			BigDecimal canceledAmount = AMOUNT.subtract(expectedRemaining);
+			PaymentLookupResult lookup = lookupWithBalance(lookupStatus, tossBalance);
+
+			// when
+			PaymentReconcileDecision decision = PaymentReconcileRule.decide(paymentStatus, OrderStatus.PAID, AMOUNT,
+					canceledAmount, lookup);
+
+			// then
+			assertThat(decision).isEqualTo(expected);
+		}
+
+		@Test
+		@DisplayName("취소 잔액을 확인할 balanceAmount 가 없으면 MANUAL_REVIEW 한다")
+		void manualReviewsWhenBalanceAmountMissing() {
+			// given
+			PaymentLookupResult lookup = lookupOf(PaymentLookupStatus.PARTIAL_CANCELED);
+
+			// when
+			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.DONE, OrderStatus.PAID,
+					AMOUNT, BigDecimal.ZERO, lookup);
+
+			// then
+			assertThat(decision).isEqualTo(PaymentReconcileDecision.MANUAL_REVIEW);
 		}
 	}
 
@@ -190,5 +228,9 @@ class PaymentReconcileRuleTest {
 
 	private PaymentLookupResult lookupOf(PaymentLookupStatus status) {
 		return new PaymentLookupResult(status, "key", "카드", AMOUNT, APPROVED_AT, CANCELED_AT);
+	}
+
+	private PaymentLookupResult lookupWithBalance(PaymentLookupStatus status, BigDecimal balance) {
+		return new PaymentLookupResult(status, "key", "카드", AMOUNT, APPROVED_AT, CANCELED_AT, balance, "txn-key");
 	}
 }

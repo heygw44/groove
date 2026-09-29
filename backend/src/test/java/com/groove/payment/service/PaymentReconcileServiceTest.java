@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -86,7 +87,7 @@ class PaymentReconcileServiceTest {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
-				Duration.ofMinutes(2), 50, 10);
+				Duration.ofMinutes(2), 50, 10, Duration.ofMinutes(1));
 		service = new PaymentReconcileService(paymentRepository, orderRepository, writer, cancelWriter, logRepository,
 				properties, clock, alertNotifier);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
@@ -256,6 +257,44 @@ class PaymentReconcileServiceTest {
 
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.READY);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			verify(alertNotifier).notify(any(Alert.class));
+		}
+
+		@Test
+		@DisplayName("DONE 인데 토스가 부분취소를 보고하고 잔액이 일치하면 상태를 유지하고 재시도 횟수 없이 SKIPPED 로 남긴다")
+		void skipsPartialCancelDriftWhenBalanceMatches() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = donePayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when
+			service.apply(candidate(), lookupOf(PaymentLookupStatus.PARTIAL_CANCELED, AMOUNT, AMOUNT));
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(payment.getReconcileAttempts()).isZero();
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.SKIPPED);
+			verifyNoInteractions(alertNotifier);
+		}
+
+		@Test
+		@DisplayName("DONE 인데 토스가 부분취소를 보고하고 잔액이 다르면 상한 없이 MANUAL_REVIEW 로 남긴다")
+		void marksManualReviewForPartialCancelDriftWithoutCountingAttempts() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = donePayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when
+			service.apply(candidate(), lookupOf(PaymentLookupStatus.PARTIAL_CANCELED, AMOUNT, new BigDecimal("100")));
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(payment.getReconcileAttempts()).isZero();
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
 			verify(alertNotifier).notify(any(Alert.class));
 		}
@@ -564,6 +603,11 @@ class PaymentReconcileServiceTest {
 
 	private PaymentLookupResult lookupOf(PaymentLookupStatus status, BigDecimal amount) {
 		return new PaymentLookupResult(status, PAYMENT_KEY, "카드", amount, now.minusMinutes(5), now);
+	}
+
+	private PaymentLookupResult lookupOf(PaymentLookupStatus status, BigDecimal amount, BigDecimal balanceAmount) {
+		return new PaymentLookupResult(status, PAYMENT_KEY, "카드", amount, now.minusMinutes(5), now, balanceAmount,
+				"txn-recon");
 	}
 
 	private PaymentLookupResult lookupOf(PaymentStatus paymentStatus, PaymentLookupStatus lookupStatus,

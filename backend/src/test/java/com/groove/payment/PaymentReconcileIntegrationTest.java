@@ -1,6 +1,8 @@
 package com.groove.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -50,18 +52,24 @@ import com.groove.order.scheduler.OrderExpirationScheduler;
 import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderService;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
+import com.groove.payment.entity.PaymentCancelStatus;
 import com.groove.payment.entity.PaymentReconcileAction;
 import com.groove.payment.entity.PaymentReconcileLog;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentReconcileLogRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.payment.scheduler.PaymentReconcileScheduler;
 import com.groove.payment.service.PaymentCancelWriter;
 import com.groove.payment.service.PaymentCompensator;
+import com.groove.payment.service.PaymentRefundRequest;
+import com.groove.payment.service.PaymentRefundWriter;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.AlbumRepository;
@@ -117,6 +125,12 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private PaymentCancelWriter paymentCancelWriter;
+
+	@Autowired
+	private PaymentRefundWriter paymentRefundWriter;
+
+	@Autowired
+	private PaymentCancelRepository paymentCancelRepository;
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
@@ -374,6 +388,81 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
 			assertThat(payment.getReconcileAttempts()).isEqualTo(10);
 			assertThat(lastLogAction(seeded.paymentId())).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+		}
+
+		@Test
+		@DisplayName("결과불명으로 REQUESTED 에 남은 부분취소는 같은 idempotencyKey 로 재시도돼 PARTIAL_CANCELED 로 반영된다")
+		void retriesUnknownPartialCancelWithSameIdempotencyKeyAndCompletes() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			Order order = orderRepository.findById(seeded.orderId()).orElseThrow();
+			String paymentKey = "refund-recon-" + UUID.randomUUID();
+			Payment payment = Payment.ready(order);
+			payment.approve(paymentKey, "카드", now().minusMinutes(10));
+			Payment savedPayment = paymentRepository.saveAndFlush(payment);
+			// 결제 금액보다 1원 적게 취소해 PARTIAL_CANCELED 로 남긴다(전액이면 CANCELED 로 확정돼 버린다).
+			BigDecimal cancelAmount = seeded.finalAmount().subtract(BigDecimal.ONE);
+			PaymentRefundRequest refundRequest = paymentRefundWriter.requestRefund(savedPayment.getId(), cancelAmount,
+					"부분 반품", null);
+			jdbcTemplate.update("update payment_cancel set requested_at = ? where id = ?",
+					Timestamp.valueOf(now().minusMinutes(2)), refundRequest.paymentCancelId());
+			LocalDateTime canceledAt = now().minusMinutes(1).truncatedTo(ChronoUnit.SECONDS);
+			// 다른 테스트가 남긴 payment_cancel 행이 같은 배치에 섞여 들어와도(공유 DB) 이 스텁은 내 idempotencyKey
+			// 로만 반응하고, 다른 행은 매치 없이 넘어가 대사 자체는 실패하지 않는다.
+			given(paymentClient.cancel(argThat(command -> refundRequest.idempotencyKey().equals(
+					command.idempotencyKey())))).willReturn(new PaymentCancelResult(paymentKey, "PARTIAL_CANCELED",
+							canceledAt, "txn-refund-retry-1", BigDecimal.ONE));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			verify(paymentClient).cancel(argThat((PaymentCancelCommand command) -> refundRequest.idempotencyKey()
+					.equals(command.idempotencyKey())));
+			Payment reloadedPayment = paymentRepository.findById(savedPayment.getId()).orElseThrow();
+			assertThat(reloadedPayment.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+			assertThat(reloadedPayment.getCanceledAmount()).isEqualByComparingTo(cancelAmount);
+			PaymentCancel paymentCancel = paymentCancelRepository.findById(refundRequest.paymentCancelId())
+					.orElseThrow();
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
+			assertThat(paymentCancel.getTossTransactionKey()).isEqualTo("txn-refund-retry-1");
+		}
+
+		@Test
+		@DisplayName("재시도 상한을 넘기고 토스에 반영되지 않았으면 FAILED 로 닫아 새 부분취소가 막히지 않는다")
+		void failsUnknownPartialCancelWhenNotAppliedSoNextRefundIsNotBlocked() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			Order order = orderRepository.findById(seeded.orderId()).orElseThrow();
+			String paymentKey = "refund-recon-notapplied-" + UUID.randomUUID();
+			Payment payment = Payment.ready(order);
+			payment.approve(paymentKey, "카드", now().minusMinutes(20));
+			Payment savedPayment = paymentRepository.saveAndFlush(payment);
+			BigDecimal cancelAmount = seeded.finalAmount().subtract(BigDecimal.ONE);
+			PaymentRefundRequest refundRequest = paymentRefundWriter.requestRefund(savedPayment.getId(), cancelAmount,
+					"부분 반품", null);
+			// refundVerifyAfter(기본 10분)를 넘긴 11분 전 요청으로 만들어 재호출 대신 조회 확인 단계로 보낸다.
+			jdbcTemplate.update("update payment_cancel set requested_at = ? where id = ?",
+					Timestamp.valueOf(now().minusMinutes(11)), refundRequest.paymentCancelId());
+			// 취소 전 잔액 그대로라 이번 취소는 토스에 반영되지 않았다. 재호출은 이미 멈췄으니 뒤늦게 적용될
+			// 위험 없이 FAILED 로 닫아도 안전하다.
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, paymentKey, "카드", null, null, null, seeded.finalAmount(), null));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			PaymentCancel paymentCancel = paymentCancelRepository.findById(refundRequest.paymentCancelId())
+					.orElseThrow();
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.FAILED);
+			Payment reloadedPayment = paymentRepository.findById(savedPayment.getId()).orElseThrow();
+			assertThat(reloadedPayment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(reloadedPayment.getCanceledAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+
+			// PAYMENT_CANCEL_IN_PROGRESS 가드가 풀려 같은 결제에 새 부분취소를 요청해도 더 이상 막히지 않는다.
+			assertThatCode(() -> paymentRefundWriter.requestRefund(savedPayment.getId(), BigDecimal.ONE, "새 부분 반품",
+					null)).doesNotThrowAnyException();
 		}
 	}
 
