@@ -3,6 +3,7 @@ package com.groove.payment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -267,7 +268,7 @@ class PaymentReconcileServiceTest {
 			Payment payment = cancelRequestedPayment(order);
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
-			given(cancelWriter.completeCancel(eq(ORDER_ID), eq(PAYMENT_ID), eq(now)))
+			given(cancelWriter.completeCancel(eq(ORDER_ID), eq(PAYMENT_ID), eq(now), isNull()))
 					.willReturn(Optional.empty());
 
 			// when
@@ -276,7 +277,7 @@ class PaymentReconcileServiceTest {
 
 			// then
 			assertThat(outcome.needsCancelRetry()).isFalse();
-			verify(cancelWriter).completeCancel(ORDER_ID, PAYMENT_ID, now);
+			verify(cancelWriter).completeCancel(ORDER_ID, PAYMENT_ID, now, null);
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.CANCELED);
 		}
 
@@ -452,15 +453,15 @@ class PaymentReconcileServiceTest {
 			Payment payment = cancelRequestedPayment(order);
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
-			given(cancelWriter.completeCancel(eq(ORDER_ID), eq(PAYMENT_ID), eq(now)))
+			given(cancelWriter.completeCancel(eq(ORDER_ID), eq(PAYMENT_ID), eq(now), isNull()))
 					.willReturn(Optional.empty());
-			PaymentCancelResult result = new PaymentCancelResult(PAYMENT_KEY, "CANCELED", now);
+			PaymentCancelResult result = PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", now);
 
 			// when
 			service.recordCancelRetry(candidate(), result, null);
 
 			// then
-			verify(cancelWriter).completeCancel(ORDER_ID, PAYMENT_ID, now);
+			verify(cancelWriter).completeCancel(ORDER_ID, PAYMENT_ID, now, null);
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.CANCELED);
 		}
 

@@ -25,7 +25,11 @@
 		</constructor>
 	</resultMap>
 
-	<!-- orderCount = PENDING/CANCELED 를 제외한 주문 수, totalPaymentAmount = DONE 결제 금액 합계 -->
+	<!--
+		orderCount = PENDING/CANCELED 를 제외한 주문 수, totalPaymentAmount = 결제 금액에서 취소 누적액을 뺀
+		실제 보유 결제액 합계(DONE·PARTIAL_CANCELED). 부분취소 도입(V27) 전에는 취소되면 통째로 CANCELED 라
+		이 필터만으로 충분했지만, 지금은 canceled_amount 를 빼지 않으면 부분취소된 결제가 전액 잡힌다.
+	-->
 	<sql id="memberOrderStats">
 		LEFT JOIN (
 			SELECT member_id, COUNT(*) AS order_count
@@ -34,10 +38,10 @@
 			GROUP BY member_id
 		) o ON o.member_id = m.id
 		LEFT JOIN (
-			SELECT o2.member_id, SUM(p.amount) AS total_payment_amount
+			SELECT o2.member_id, SUM(p.amount - p.canceled_amount) AS total_payment_amount
 			FROM payment p
 			JOIN orders o2 ON o2.id = p.order_id
-			WHERE p.status = 'DONE'
+			WHERE p.status IN ('DONE', 'PARTIAL_CANCELED')
 			GROUP BY o2.member_id
 		) pay ON pay.member_id = m.id
 	</sql>
@@ -84,10 +88,10 @@
 				WHERE o.member_id = m.id
 				AND o.status NOT IN ('PENDING', 'CANCELED')) AS order_count,
 			<!-- orders 를 회원으로 좁힌 뒤 uk_payment_order (order_id) 유니크로 1건씩 붙는다 -->
-			COALESCE((SELECT SUM(p.amount) FROM payment p
+			COALESCE((SELECT SUM(p.amount - p.canceled_amount) FROM payment p
 				JOIN orders o2 ON o2.id = p.order_id
 				WHERE o2.member_id = m.id
-				AND p.status = 'DONE'), 0) AS total_payment_amount,
+				AND p.status IN ('DONE', 'PARTIAL_CANCELED')), 0) AS total_payment_amount,
 			<!-- uk_member_coupon_member_coupon (member_id, coupon_id) 좌측 프리픽스로 좁힌다 -->
 			(SELECT COUNT(*) FROM member_coupon mc2
 				JOIN coupon c ON c.id = mc2.coupon_id

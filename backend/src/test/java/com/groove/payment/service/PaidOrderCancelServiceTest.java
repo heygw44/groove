@@ -80,8 +80,8 @@ class PaidOrderCancelServiceTest {
 			// given
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
 			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
-					.willReturn(new PaymentCancelResult(PAYMENT_KEY, "CANCELED", NOW));
-			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW))
+					.willReturn(PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", NOW));
+			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW, null))
 					.willReturn(Optional.of(new LimitedRelease(30L, MEMBER_ID)));
 
 			// when
@@ -127,9 +127,9 @@ class PaidOrderCancelServiceTest {
 			// given
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
 			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
-					.willReturn(new PaymentCancelResult(PAYMENT_KEY, "CANCELED", NOW));
+					.willReturn(PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", NOW));
 			willThrow(new IllegalStateException("T2 failed"))
-					.given(writer).completeCancel(ORDER_ID, PAYMENT_ID, NOW);
+					.given(writer).completeCancel(ORDER_ID, PAYMENT_ID, NOW, null);
 
 			// when
 			PaidOrderCancelResult result = service.cancel(ORDER_ID, MEMBER_ID, "고객 변심");
@@ -144,19 +144,19 @@ class PaidOrderCancelServiceTest {
 			// given
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
 			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
-					.willReturn(new PaymentCancelResult(PAYMENT_KEY, "CANCELED", null));
-			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW)).willReturn(Optional.empty());
+					.willReturn(PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", null));
+			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW, null)).willReturn(Optional.empty());
 
 			// when
 			service.cancel(ORDER_ID, MEMBER_ID, "고객 변심");
 
 			// then
-			verify(writer).completeCancel(ORDER_ID, PAYMENT_ID, NOW);
+			verify(writer).completeCancel(ORDER_ID, PAYMENT_ID, NOW, null);
 		}
 	}
 
 	private CancelRequest request(boolean alreadyRequested) {
-		return new CancelRequest(ORDER_ID, PAYMENT_ID, PAYMENT_KEY, "고객 변심", OrderStatus.PAID,
-				alreadyRequested, null);
+		return new CancelRequest(ORDER_ID, PAYMENT_ID, PAYMENT_KEY, "고객 변심", "cancel-" + PAYMENT_KEY,
+				OrderStatus.PAID, alreadyRequested, null);
 	}
 }

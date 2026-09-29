@@ -14,6 +14,7 @@ public record TossPaymentResponse(
 		String status,
 		String method,
 		BigDecimal totalAmount,
+		BigDecimal balanceAmount,
 		OffsetDateTime approvedAt,
 		List<Cancel> cancels,
 		EasyPay easyPay,
@@ -22,7 +23,8 @@ public record TossPaymentResponse(
 ) {
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record Cancel(OffsetDateTime canceledAt) {
+	public record Cancel(String transactionKey, BigDecimal cancelAmount, OffsetDateTime canceledAt,
+			String cancelStatus) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)

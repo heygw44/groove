@@ -82,7 +82,7 @@ class PaymentCompensatorTest {
 			// given
 			LocalDateTime canceledAt = now.truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, REASON))
-					.willReturn(new PaymentCancelResult(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
 
 			// when
 			CompensationResult result = compensator.cancelApproved(PAYMENT_ID, PaymentFixture.PAYMENT_KEY,
@@ -92,7 +92,7 @@ class PaymentCompensatorTest {
 			assertThat(result.canceled()).isTrue();
 			assertThat(result.canceledAt()).isEqualTo(canceledAt);
 			verify(writer).markCompensated(PAYMENT_ID, PaymentFixture.PAYMENT_KEY, PaymentFixture.APPROVED_AT,
-					canceledAt, REASON);
+					canceledAt, REASON, null);
 		}
 
 		@Test
@@ -100,7 +100,7 @@ class PaymentCompensatorTest {
 		void usesServerTimeWhenCanceledAtMissing() {
 			// given
 			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, REASON))
-					.willReturn(new PaymentCancelResult(PaymentFixture.PAYMENT_KEY, "CANCELED", null));
+					.willReturn(PaymentCancelResult.of(PaymentFixture.PAYMENT_KEY, "CANCELED", null));
 
 			// when
 			CompensationResult result = compensator.cancelApproved(PAYMENT_ID, PaymentFixture.PAYMENT_KEY,
@@ -109,7 +109,7 @@ class PaymentCompensatorTest {
 			// then
 			assertThat(result.canceledAt()).isEqualTo(now);
 			verify(writer).markCompensated(PAYMENT_ID, PaymentFixture.PAYMENT_KEY, PaymentFixture.APPROVED_AT, now,
-					REASON);
+					REASON, null);
 		}
 
 		@Test
@@ -118,7 +118,7 @@ class PaymentCompensatorTest {
 			// given
 			LocalDateTime canceledAt = now.truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON))
-					.willReturn(new PaymentCancelResult(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
 
 			// when
 			CompensationResult result = compensator.cancelApproved(null, PaymentFixture.PAYMENT_KEY,
@@ -131,7 +131,7 @@ class PaymentCompensatorTest {
 					PaymentFixture.APPROVED_AT, DUPLICATE_REASON);
 			order.verify(paymentClient).cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON);
 			verify(compensationWriter).complete(PaymentFixture.PAYMENT_KEY, canceledAt);
-			verify(writer, never()).markCompensated(any(), any(), any(), any(), any());
+			verify(writer, never()).markCompensated(any(), any(), any(), any(), any(), any());
 		}
 
 		@Test
@@ -140,7 +140,7 @@ class PaymentCompensatorTest {
 			// given
 			LocalDateTime canceledAt = now.truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, DUPLICATE_REASON))
-					.willReturn(new PaymentCancelResult(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
 			willThrow(new IllegalStateException("보상 대기 행을 찾을 수 없습니다")).given(compensationWriter)
 					.complete(PaymentFixture.PAYMENT_KEY, canceledAt);
 
@@ -159,9 +159,9 @@ class PaymentCompensatorTest {
 			// given
 			LocalDateTime canceledAt = now.truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(PaymentFixture.PAYMENT_KEY, REASON))
-					.willReturn(new PaymentCancelResult(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(PaymentFixture.PAYMENT_KEY, "CANCELED", canceledAt));
 			willThrow(new CannotAcquireLockException("lock timeout")).given(writer)
-					.markCompensated(eq(PAYMENT_ID), eq(PaymentFixture.PAYMENT_KEY), any(), any(), anyString());
+					.markCompensated(eq(PAYMENT_ID), eq(PaymentFixture.PAYMENT_KEY), any(), any(), anyString(), any());
 
 			// when
 			CompensationResult result = compensator.cancelApproved(PAYMENT_ID, PaymentFixture.PAYMENT_KEY,

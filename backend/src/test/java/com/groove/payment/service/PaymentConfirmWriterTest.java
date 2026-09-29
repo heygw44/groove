@@ -21,6 +21,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -46,7 +47,9 @@ import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -64,6 +67,9 @@ class PaymentConfirmWriterTest {
 
 	@Mock
 	PaymentRepository paymentRepository;
+
+	@Mock
+	PaymentCancelRepository paymentCancelRepository;
 
 	@Mock
 	ProductSalesStatsUpdater productSalesStatsUpdater;
@@ -84,8 +90,8 @@ class PaymentConfirmWriterTest {
 		clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		OrderPlacementService orderPlacementService = new OrderPlacementService(cartItemRepository);
-		writer = new PaymentConfirmWriter(orderRepository, paymentRepository, productSalesStatsUpdater,
-				orderPlacementService, clock);
+		writer = new PaymentConfirmWriter(orderRepository, paymentRepository, paymentCancelRepository,
+				productSalesStatsUpdater, orderPlacementService, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
@@ -677,22 +683,41 @@ class PaymentConfirmWriterTest {
 	class MarkCompensated {
 
 		@Test
-		@DisplayName("READY 결제를 보상 취소로 CANCELED 로 기록한다")
+		@DisplayName("READY 결제를 보상 취소로 CANCELED 로 기록하고 DONE 상태 payment_cancel 행을 남긴다")
 		void compensatesReadyPayment() {
 			// given
 			Payment payment = paymentWithId(Payment.ready(order), 40L);
 			given(paymentRepository.findById(40L)).willReturn(Optional.of(payment));
 			LocalDateTime canceledAt = now.plusSeconds(1);
+			ArgumentCaptor<PaymentCancel> captor = ArgumentCaptor.forClass(PaymentCancel.class);
 
 			// when
 			writer.markCompensated(40L, PaymentFixture.PAYMENT_KEY, PaymentFixture.APPROVED_AT, canceledAt,
-					"승인 후 주문 무효로 자동 취소");
+					"승인 후 주문 무효로 자동 취소", "txn-1");
 
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
 			assertThat(payment.getPaymentKey()).isEqualTo(PaymentFixture.PAYMENT_KEY);
 			assertThat(payment.getApprovedAt()).isEqualTo(PaymentFixture.APPROVED_AT);
 			assertThat(payment.getCanceledAt()).isEqualTo(canceledAt);
+			verify(paymentCancelRepository).save(captor.capture());
+			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + PaymentFixture.PAYMENT_KEY);
+			assertThat(captor.getValue().getCancelAmount()).isEqualByComparingTo(payment.getAmount());
+			assertThat(captor.getValue().getTossTransactionKey()).isEqualTo("txn-1");
+		}
+
+		@Test
+		@DisplayName("이미 CANCELED 면 아무것도 남기지 않는다(멱등)")
+		void doesNothingWhenAlreadyCanceled() {
+			// given
+			Payment payment = paymentWithId(PaymentFixture.canceled(order), 40L);
+			given(paymentRepository.findById(40L)).willReturn(Optional.of(payment));
+
+			// when
+			writer.markCompensated(40L, PaymentFixture.PAYMENT_KEY, PaymentFixture.APPROVED_AT, now, "사유", "txn-1");
+
+			// then
+			verify(paymentCancelRepository, never()).save(any());
 		}
 
 		@Test
@@ -703,7 +728,7 @@ class PaymentConfirmWriterTest {
 
 			// when & then
 			assertThatThrownBy(() -> writer.markCompensated(41L, PaymentFixture.PAYMENT_KEY,
-					PaymentFixture.APPROVED_AT, now, "사유"))
+					PaymentFixture.APPROVED_AT, now, "사유", "txn-1"))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);

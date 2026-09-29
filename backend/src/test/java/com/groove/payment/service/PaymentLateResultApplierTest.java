@@ -102,7 +102,7 @@ class PaymentLateResultApplierTest {
 			PaymentLookupResult lookup = doneLookup();
 			given(reconcileService.applyLate(candidate, lookup, "webhook"))
 					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY));
-			PaymentCancelResult cancelResult = new PaymentCancelResult(PAYMENT_KEY, "CANCELED", lookup.approvedAt());
+			PaymentCancelResult cancelResult = PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", lookup.approvedAt());
 			given(paymentClient.cancel(PAYMENT_KEY, "주문 취소 재시도")).willReturn(cancelResult);
 
 			// when

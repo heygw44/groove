@@ -17,6 +17,8 @@
 		AdminStatsMapper.findDailySales 의 UNION ALL 을 하루로 좁힌 것이다.
 		order_count 는 payment 승인 건수(status IN ('DONE', 'CANCELED'))이고, 취소된 결제도 승인일 기준
 		건수에 그대로 남는다 — 순매출 개념을 넣지 않고 취소는 cancel_count/cancel_amount 로 취소일에 따로 센다.
+		부분취소 도입(V27) 뒤로는 payment_cancel 의 DONE 행이 취소 건 하나하나를 나타내므로, cancel_count/
+		cancel_amount 도 이 테이블 기준으로 센다(전액취소는 여전히 결제 한 건당 DONE 행 하나).
 		GROUP BY 없는 스칼라 서브쿼리 두 개라 매칭 행이 0건이어도 항상 정확히 1행이 나온다.
 	-->
 	<select id="findDailySalesOf" resultMap="dailySalesAggregateMap">
@@ -32,10 +34,10 @@
 			AND p.approved_at &gt;= #{saleDate} AND p.approved_at &lt; #{saleDate} + INTERVAL 1 DAY
 		) o,
 		(
-			SELECT COUNT(*) AS cancel_count, SUM(p.amount) AS cancel_amount
-			FROM payment p
-			WHERE p.status = 'CANCELED'
-			AND p.canceled_at &gt;= #{saleDate} AND p.canceled_at &lt; #{saleDate} + INTERVAL 1 DAY
+			SELECT COUNT(*) AS cancel_count, SUM(pc.cancel_amount) AS cancel_amount
+			FROM payment_cancel pc
+			WHERE pc.status = 'DONE'
+			AND pc.done_at &gt;= #{saleDate} AND pc.done_at &lt; #{saleDate} + INTERVAL 1 DAY
 		) c
 	</select>
 

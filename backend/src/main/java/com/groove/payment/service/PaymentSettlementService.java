@@ -138,6 +138,7 @@ public class PaymentSettlementService {
 		return switch (dbStatus) {
 			case DONE -> "DONE".equals(tossStatus);
 			case CANCELED -> CANCELED_TOSS_STATUS.equals(tossStatus);
+			case PARTIAL_CANCELED -> PARTIAL_CANCELED_TOSS_STATUS.equals(tossStatus);
 			case FAILED -> "ABORTED".equals(tossStatus) || "EXPIRED".equals(tossStatus);
 			case READY, UNKNOWN, CANCEL_REQUESTED, WAITING_FOR_DEPOSIT -> false;
 		};

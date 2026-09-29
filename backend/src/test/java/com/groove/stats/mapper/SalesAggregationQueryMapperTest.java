@@ -22,6 +22,7 @@ import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItemStatus;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.stats.dto.DailySalesAggregateRow;
@@ -68,6 +69,21 @@ class SalesAggregationQueryMapperTest extends MybatisTestSupport {
 		em.persist(PaymentFixture.approvedAt(order, paymentKey, approvedAt));
 	}
 
+	/**
+	 * findDailySalesOf 의 취소액은 payment_cancel 의 DONE 합계를 본다. PaymentFixture.canceledAt 은 엔티티
+	 * 메서드만 직접 불러 payment_cancel 행을 만들지 않으므로, 취소액을 단언하는 테스트는 짝이 되는 DONE 행까지
+	 * 같이 심는다.
+	 */
+	private void persistCanceledPayment(Order order, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt) {
+		Payment payment = PaymentFixture.canceledAt(order, paymentKey, approvedAt, canceledAt);
+		em.persist(payment);
+		PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-" + paymentKey, payment.getAmount(),
+				null, canceledAt);
+		paymentCancel.complete(null, canceledAt);
+		em.persist(paymentCancel);
+	}
+
 	@Nested
 	@DisplayName("findDailySalesOf()")
 	class FindDailySalesOf {
@@ -87,9 +103,8 @@ class SalesAggregationQueryMapperTest extends MybatisTestSupport {
 			canceledOrder.addItem(product, 1);
 			OrderFixture.markPaid(canceledOrder);
 			em.persist(canceledOrder);
-			Payment canceledPayment = PaymentFixture.canceledAt(canceledOrder, "sam-daily-key-3",
-					LocalDateTime.of(2031, 7, 9, 9, 0), LocalDateTime.of(2031, 7, 10, 9, 0));
-			em.persist(canceledPayment);
+			persistCanceledPayment(canceledOrder, "sam-daily-key-3", LocalDateTime.of(2031, 7, 9, 9, 0),
+					LocalDateTime.of(2031, 7, 10, 9, 0));
 
 			em.flush();
 			em.clear();
