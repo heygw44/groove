@@ -16,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -37,7 +38,10 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderCancelRestorer;
 import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
+import com.groove.payment.entity.PaymentCancelStatus;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -58,6 +62,9 @@ class PaymentCancelWriterTest {
 	PaymentRepository paymentRepository;
 
 	@Mock
+	PaymentCancelRepository paymentCancelRepository;
+
+	@Mock
 	OrderCancelRestorer restorer;
 
 	PaymentCancelWriter writer;
@@ -67,7 +74,7 @@ class PaymentCancelWriterTest {
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
-		writer = new PaymentCancelWriter(orderRepository, paymentRepository, restorer, clock);
+		writer = new PaymentCancelWriter(orderRepository, paymentRepository, paymentCancelRepository, restorer, clock);
 		Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
 		Product product = ProductFixture.withId(ProductFixture.create(artist), 100L);
@@ -77,16 +84,21 @@ class PaymentCancelWriterTest {
 		ReflectionTestUtils.setField(payment, "id", PAYMENT_ID);
 	}
 
+	private PaymentCancel requestedPaymentCancel() {
+		return PaymentCancel.request(payment, "cancel-" + payment.getPaymentKey(), payment.getAmount(), "고객 변심", NOW);
+	}
+
 	@Nested
 	@DisplayName("requestCancel()")
 	class RequestCancel {
 
 		@Test
-		@DisplayName("주문 락 뒤 주문과 결제를 취소 요청 상태로 바꾼다")
+		@DisplayName("주문 락 뒤 주문과 결제를 취소 요청 상태로 바꾸고 취소 요청 기록을 남긴다")
 		void requestsCancelAfterLockingOrder() {
 			// given
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+			ArgumentCaptor<PaymentCancel> captor = ArgumentCaptor.forClass(PaymentCancel.class);
 
 			// when
 			CancelRequest result = writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심");
@@ -100,6 +112,28 @@ class PaymentCancelWriterTest {
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
 			assertThat(result.alreadyRequested()).isFalse();
 			assertThat(result.tossReason()).isEqualTo("고객 변심");
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey());
+			verify(paymentCancelRepository).save(captor.capture());
+			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey());
+			assertThat(captor.getValue().getCancelAmount()).isEqualByComparingTo(payment.getAmount());
+		}
+
+		@Test
+		@DisplayName("같은 결제에 진행 중(REQUESTED)인 부분취소 건이 있으면 PAYMENT_CANCEL_IN_PROGRESS 예외를 던지고 상태를 바꾸지 않는다")
+		void rejectsWhenPartialCancelIsInProgress() {
+			// given: payment.status 는 DONE 그대로지만(부분취소는 status 를 옮기지 않는다) 진행 중 행이 있다
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(PAYMENT_ID, PaymentCancelStatus.REQUESTED))
+					.willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CANCEL_IN_PROGRESS);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(order.getCancelReason()).isNull();
 		}
 
 		@Test
@@ -240,19 +274,22 @@ class PaymentCancelWriterTest {
 	class CompleteCancel {
 
 		@Test
-		@DisplayName("주문 락 뒤 주문 복구와 결제 취소를 완료한다")
+		@DisplayName("주문 락 뒤 주문 복구와 결제 취소를 완료하고 취소 요청 기록을 DONE 으로 남긴다")
 		void completesOrderAndPaymentCancel() {
 			// given
 			order.requestCancel("고객 변심", false);
 			payment.requestCancel();
+			PaymentCancel paymentCancel = requestedPaymentCancel();
 			LimitedRelease release = new LimitedRelease(30L, MEMBER_ID);
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
 			given(restorer.restore(order, true)).willReturn(Optional.of(release));
+			given(paymentCancelRepository.findByIdempotencyKey("cancel-" + payment.getPaymentKey()))
+					.willReturn(Optional.of(paymentCancel));
 
 			// when
-			Optional<LimitedRelease> result = writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT);
+			Optional<LimitedRelease> result = writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT, "txn-1");
 
 			// then
 			verify(orderRepository).findByIdForUpdate(ORDER_ID);
@@ -260,6 +297,8 @@ class PaymentCancelWriterTest {
 			assertThat(order.getCanceledAt()).isEqualTo(NOW);
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
 			assertThat(payment.getCanceledAt()).isEqualTo(TOSS_CANCELED_AT);
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
+			assertThat(paymentCancel.getTossTransactionKey()).isEqualTo("txn-1");
 			assertThat(result).contains(release);
 		}
 
@@ -274,7 +313,7 @@ class PaymentCancelWriterTest {
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(canceled));
 
 			// when
-			Optional<LimitedRelease> result = writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT);
+			Optional<LimitedRelease> result = writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT, "txn-1");
 
 			// then
 			assertThat(result).isEmpty();
@@ -289,7 +328,7 @@ class PaymentCancelWriterTest {
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
 
 			// when & then
-			assertThatThrownBy(() -> writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT))
+			assertThatThrownBy(() -> writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT, "txn-1"))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
@@ -301,13 +340,16 @@ class PaymentCancelWriterTest {
 	class RevertCancelRequest {
 
 		@Test
-		@DisplayName("CANCEL_REQUESTED 면 결제를 DONE 으로 되돌리고 주문 사유를 지운다")
+		@DisplayName("CANCEL_REQUESTED 면 결제를 DONE 으로 되돌리고 주문 사유를 지우고 취소 요청 기록을 FAILED 로 남긴다")
 		void revertsPaymentAndOrderRequest() {
 			// given
 			order.requestCancel("고객 변심", false);
 			payment.requestCancel();
+			PaymentCancel paymentCancel = requestedPaymentCancel();
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.findByIdempotencyKey("cancel-" + payment.getPaymentKey()))
+					.willReturn(Optional.of(paymentCancel));
 
 			// when
 			writer.revertCancelRequest(ORDER_ID, PAYMENT_ID);
@@ -315,6 +357,7 @@ class PaymentCancelWriterTest {
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
 			assertThat(order.getCancelReason()).isNull();
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.FAILED);
 		}
 
 		@Test

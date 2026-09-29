@@ -180,7 +180,7 @@ class PaymentReconcileSchedulerTest {
 			given(paymentClient.lookup("toss-1")).willReturn(lookup);
 			given(reconcileService.apply(candidate, lookup))
 					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
-			PaymentCancelResult cancelResult = new PaymentCancelResult("tviva-key", "CANCELED", now);
+			PaymentCancelResult cancelResult = PaymentCancelResult.of("tviva-key", "CANCELED", now);
 			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willReturn(cancelResult);
 
 			// when

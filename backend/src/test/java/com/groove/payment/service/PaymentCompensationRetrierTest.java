@@ -59,7 +59,7 @@ class PaymentCompensationRetrierTest {
 			// given
 			PaymentCompensationCandidate candidate = new PaymentCompensationCandidate("tviva-dup", "중복 승인 자동 취소");
 			given(paymentClient.cancel("tviva-dup", "중복 승인 자동 취소"))
-					.willReturn(new PaymentCancelResult("tviva-dup", "CANCELED", now));
+					.willReturn(PaymentCancelResult.of("tviva-dup", "CANCELED", now));
 
 			// when
 			retrier.retry(candidate);

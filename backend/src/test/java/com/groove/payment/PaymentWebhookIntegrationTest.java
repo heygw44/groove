@@ -148,7 +148,7 @@ class PaymentWebhookIntegrationTest extends IntegrationTestSupport {
 			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
 					PaymentLookupStatus.DONE, "webhook-key-2", "카드", seeded.finalAmount(), approvedAt, null));
 			given(paymentClient.cancel(eq("webhook-key-2"), eq(PaymentCompensator.ORDER_INVALIDATED_REASON)))
-					.willReturn(new PaymentCancelResult("webhook-key-2", "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of("webhook-key-2", "CANCELED", canceledAt));
 
 			// when
 			paymentWebhookService.handle(webhookBody("webhook-key-2", seeded.orderNumber(), "DONE",

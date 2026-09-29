@@ -35,6 +35,7 @@ import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.stats.entity.SalesDaily;
@@ -75,6 +76,21 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		Payment payment = PaymentFixture.approvedAt(order, paymentKey, approvedAt);
 		em.persist(payment);
 		return order;
+	}
+
+	/**
+	 * AdminStatsMapper.findSummary 의 취소액은 payment_cancel 의 DONE 합계를 본다. PaymentFixture.canceledAt
+	 * 은 엔티티 메서드만 직접 불러 payment_cancel 행을 만들지 않으므로, 취소액을 단언하는 테스트는 이 헬퍼로
+	 * 짝이 되는 DONE 행까지 같이 심는다.
+	 */
+	private void persistCanceledPayment(Order order, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt) {
+		Payment payment = PaymentFixture.canceledAt(order, paymentKey, approvedAt, canceledAt);
+		em.persist(payment);
+		PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-" + paymentKey, payment.getAmount(),
+				null, canceledAt);
+		paymentCancel.complete(null, canceledAt);
+		em.persist(paymentCancel);
 	}
 
 	@Nested
@@ -625,8 +641,8 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			order.addItem(product, 1);
 			OrderFixture.markPaid(order);
 			em.persist(order);
-			em.persist(PaymentFixture.canceledAt(order, "asm-summary-key-5",
-					LocalDateTime.of(2032, 2, 1, 9, 0), LocalDateTime.of(2032, 2, 1, 12, 0)));
+			persistCanceledPayment(order, "asm-summary-key-5", LocalDateTime.of(2032, 2, 1, 9, 0),
+					LocalDateTime.of(2032, 2, 1, 12, 0));
 
 			em.flush();
 			em.clear();
@@ -655,8 +671,8 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			order.addItem(product, 1);
 			OrderFixture.markPaid(order);
 			em.persist(order);
-			em.persist(PaymentFixture.canceledAt(order, "asm-summary-key-6",
-					LocalDateTime.of(2032, 4, 9, 22, 0), LocalDateTime.of(2032, 4, 10, 8, 0)));
+			persistCanceledPayment(order, "asm-summary-key-6", LocalDateTime.of(2032, 4, 9, 22, 0),
+					LocalDateTime.of(2032, 4, 10, 8, 0));
 
 			em.flush();
 			em.clear();

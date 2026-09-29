@@ -130,7 +130,7 @@ class PaymentCompensationReconcileIntegrationTest extends IntegrationTestSupport
 					Timestamp.valueOf(oldUpdatedAt()), pending.getId());
 			LocalDateTime canceledAt = now().minusMinutes(1).truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(eq(paymentKey), eq(PaymentCompensator.DUPLICATE_APPROVAL_REASON)))
-					.willReturn(new PaymentCancelResult(paymentKey, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt));
 
 			// when
 			paymentReconcileScheduler.reconcile();
@@ -152,7 +152,7 @@ class PaymentCompensationReconcileIntegrationTest extends IntegrationTestSupport
 					paymentKey);
 			LocalDateTime canceledAt = now().minusMinutes(1).truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(eq(paymentKey), eq(PaymentCompensator.DUPLICATE_APPROVAL_REASON)))
-					.willReturn(new PaymentCancelResult(paymentKey, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt));
 
 			// when
 			paymentReconcileScheduler.reconcile();

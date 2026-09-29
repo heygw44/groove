@@ -137,7 +137,7 @@ class PaymentConfirmCompensationIntegrationTest extends IntegrationTestSupport {
 								orderInfo.finalAmount(), approvedAt);
 					});
 			given(paymentClient.cancel(eq(paymentKey), eq(PaymentCompensator.ORDER_INVALIDATED_REASON)))
-					.willReturn(new PaymentCancelResult(paymentKey, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt));
 
 			// when & then
 			mockMvc.perform(post("/api/v1/payments/confirm")

@@ -50,7 +50,8 @@ public class PaidOrderCancelService implements PaidOrderCancelHook {
 				? tossResult.canceledAt()
 				: LocalDateTime.now(clock);
 		try {
-			Long limitedDropId = writer.completeCancel(orderId, request.paymentId(), canceledAt)
+			Long limitedDropId = writer
+					.completeCancel(orderId, request.paymentId(), canceledAt, tossResult.transactionKey())
 					.map(LimitedRelease::dropId)
 					.orElse(null);
 			return result(request, PaidOrderCancelStatus.CANCELED, false, limitedDropId);

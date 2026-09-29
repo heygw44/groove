@@ -229,9 +229,9 @@ class PaymentConfirmConcurrencyIntegrationTest extends IntegrationTestSupport {
 					orderInfo.finalAmount(), bothApprovedByTossLatch);
 			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(eq(firstKey), any()))
-					.willReturn(new PaymentCancelResult(firstKey, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(firstKey, "CANCELED", canceledAt));
 			given(paymentClient.cancel(eq(secondKey), any()))
-					.willReturn(new PaymentCancelResult(secondKey, "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(secondKey, "CANCELED", canceledAt));
 
 			CountDownLatch readyLatch = new CountDownLatch(THREAD_COUNT);
 			CountDownLatch startLatch = new CountDownLatch(1);

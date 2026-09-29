@@ -8,6 +8,7 @@ public record CancelRequest(
 		Long paymentId,
 		String paymentKey,
 		String tossReason,
+		String idempotencyKey,
 		OrderStatus previousOrderStatus,
 		boolean alreadyRequested,
 		RefundAccountInfo refundAccount

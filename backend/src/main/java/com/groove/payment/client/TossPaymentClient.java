@@ -25,12 +25,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.client.dto.PaymentTransaction;
-import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.client.dto.TossCancelRequest;
 import com.groove.payment.client.dto.TossConfirmRequest;
 import com.groove.payment.client.dto.TossErrorResponse;
@@ -73,7 +73,6 @@ public class TossPaymentClient implements PaymentClient {
 	 */
 	private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
 	private static final String CONFIRM_IDEMPOTENCY_PREFIX = "confirm-";
-	private static final String CANCEL_IDEMPOTENCY_PREFIX = "cancel-";
 
 	/** 조회 대상 결제가 없다는 토스 에러 코드. */
 	private static final Set<String> NOT_FOUND_ERROR_CODES = Set.of("NOT_FOUND_PAYMENT", "NOT_FOUND");
@@ -117,23 +116,30 @@ public class TossPaymentClient implements PaymentClient {
 	}
 
 	@Override
-	public PaymentCancelResult cancel(String paymentKey, String reason, RefundAccountInfo refundAccount) {
-		TossCancelRequest request = TossCancelRequest.of(reason, refundAccount);
-		String idempotencyKey = CANCEL_IDEMPOTENCY_PREFIX + paymentKey;
+	public PaymentCancelResult cancel(PaymentCancelCommand command) {
+		TossCancelRequest request = TossCancelRequest.of(command);
+		String paymentKey = command.paymentKey();
 		TossPaymentResponse response;
 		try {
-			response = send(ErrorCode.PAYMENT_CANCEL_FAILED, paymentKey, idempotencyKey, CANCEL_PATH, request,
-					paymentKey);
+			response = send(ErrorCode.PAYMENT_CANCEL_FAILED, paymentKey, command.idempotencyKey(), CANCEL_PATH,
+					request, paymentKey);
 		} catch (TossAlreadyProcessedException ex) {
 			// ALREADY_PROCESSED_PAYMENT 는 승인 재전송을 흡수하는 코드라 취소 요청에서 나오면 예상 밖의 응답이다.
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, ex.getMessage());
 		} catch (TossAlreadyCanceledException ex) {
-			// 대사/보상 재시도가 먼저 성공한 취소를 다시 부르면 이미 원하는 결과(취소됨)에 도달한 것이므로 성공으로 흡수한다.
-			return new PaymentCancelResult(paymentKey, "CANCELED", null);
+			// 대사/보상 재시도가 먼저 성공한 전액취소를 다시 부르면 이미 원하는 결과(취소됨)에 도달한 것이라 성공으로 흡수한다.
+			// 부분취소가 이 코드를 받으면 어느 취소 건이 이미 반영됐는지 알 수 없어 결과 불명으로 넘긴다(대사가 이어받는다).
+			if (!command.isFullCancel()) {
+				throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN,
+						"TOSS ALREADY_CANCELED_PAYMENT: 부분취소 반영 여부 확인 필요");
+			}
+			return PaymentCancelResult.of(paymentKey, "CANCELED", null);
 		}
 		TossPaymentResponse.Cancel lastCancel = response.lastCancel();
 		LocalDateTime canceledAt = lastCancel == null ? null : toServerTime(lastCancel.canceledAt());
-		return new PaymentCancelResult(response.paymentKey(), response.status(), canceledAt);
+		String transactionKey = lastCancel == null ? null : lastCancel.transactionKey();
+		return new PaymentCancelResult(response.paymentKey(), response.status(), canceledAt, transactionKey,
+				response.balanceAmount());
 	}
 
 	@Override

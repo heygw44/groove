@@ -138,7 +138,8 @@ public class PaymentReconcileService {
 			case COMPENSATE -> PaymentReconcileOutcome.needsCompensation(lookup.paymentKey(), lookup.approvedAt());
 			case COMPLETE_CANCEL -> {
 				LocalDateTime canceledAt = lookup.canceledAt() != null ? lookup.canceledAt() : LocalDateTime.now(clock);
-				cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt);
+				// 토스 조회(lookup)에는 취소 거래의 transactionKey 가 없어 null 로 남긴다.
+				cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt, null);
 				writeLog(payment, beforeStatus, lookup.status().name(), PaymentReconcileAction.CANCELED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
@@ -159,7 +160,8 @@ public class PaymentReconcileService {
 		PaymentStatus beforeStatus = payment.getStatus();
 		if (result != null) {
 			LocalDateTime canceledAt = result.canceledAt() != null ? result.canceledAt() : LocalDateTime.now(clock);
-			cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt);
+			cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt,
+					result.transactionKey());
 			writeLog(payment, beforeStatus, "CANCELED", PaymentReconcileAction.CANCELED, null);
 			return;
 		}

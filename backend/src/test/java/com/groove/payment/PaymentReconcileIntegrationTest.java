@@ -167,7 +167,7 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
 					PaymentLookupStatus.DONE, "toss-key-compensate", "카드", seeded.finalAmount(), approvedAt, null));
 			given(paymentClient.cancel(eq("toss-key-compensate"), eq(PaymentCompensator.ORDER_INVALIDATED_REASON)))
-					.willReturn(new PaymentCancelResult("toss-key-compensate", "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of("toss-key-compensate", "CANCELED", canceledAt));
 
 			// when
 			paymentReconcileScheduler.reconcile();
@@ -316,7 +316,7 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 					PaymentLookupStatus.DONE, seeded.paymentKey(), "카드", seeded.finalAmount(),
 							now().minusMinutes(5), null));
 			given(paymentClient.cancel(seeded.paymentKey(), "주문 취소 재시도"))
-					.willReturn(new PaymentCancelResult(seeded.paymentKey(), "CANCELED", canceledAt));
+					.willReturn(PaymentCancelResult.of(seeded.paymentKey(), "CANCELED", canceledAt));
 
 			// when
 			paymentReconcileScheduler.reconcile();

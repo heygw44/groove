@@ -286,10 +286,11 @@ class PaymentTest {
 		}
 
 		@ParameterizedTest
-		@EnumSource(value = PaymentStatus.class, names = {"READY", "CANCELED", "FAILED"})
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "CANCELED", "FAILED", "PARTIAL_CANCELED"})
 		@DisplayName("DONE 이 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
 		void throwsInvalidStatusForNonDoneStatuses(PaymentStatus status) {
-			// given
+			// given: PARTIAL_CANCELED 도 이 경로(기존 전액취소)로는 들어올 수 없다 - 부분취소는 payment.status
+			// 를 옮기지 않고 payment_cancel 행만으로 진행 상태를 추적한다
 			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
 
 			// when & then
@@ -305,7 +306,7 @@ class PaymentTest {
 	class CompleteCancel {
 
 		@Test
-		@DisplayName("CANCEL_REQUESTED 면 CANCELED 로 바뀌고 취소 시각이 기록된다")
+		@DisplayName("CANCEL_REQUESTED 면 CANCELED 로 바뀌고 취소 시각과 취소 누적액이 기록된다")
 		void changesStatusToCanceledWhenRequested() {
 			// given
 			Payment payment = PaymentFixture.approved(order());
@@ -317,10 +318,12 @@ class PaymentTest {
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
 			assertThat(payment.getCanceledAt()).isEqualTo(CANCELED_AT);
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo(payment.getAmount());
 		}
 
 		@ParameterizedTest
-		@EnumSource(value = PaymentStatus.class, names = {"READY", "DONE", "CANCELED", "FAILED", "UNKNOWN"})
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "DONE", "CANCELED", "FAILED", "UNKNOWN",
+			"PARTIAL_CANCELED"})
 		@DisplayName("CANCEL_REQUESTED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
 		void throwsInvalidStatusWhenNotRequested(PaymentStatus status) {
 			// given
@@ -328,6 +331,72 @@ class PaymentTest {
 
 			// when & then
 			assertThatThrownBy(() -> payment.completeCancel(CANCELED_AT))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+	}
+
+	@Nested
+	@DisplayName("applyPartialCancel()")
+	class ApplyPartialCancel {
+
+		@Test
+		@DisplayName("DONE 에서 남은 금액보다 적게 취소하면 CANCEL_REQUESTED 를 거치지 않고 취소 누적액만 늘고 PARTIAL_CANCELED 로 바뀐다")
+		void movesToPartialCanceledWhenLessThanRemaining() {
+			// given
+			Payment payment = PaymentFixture.approved(order());
+
+			// when
+			payment.applyPartialCancel(new BigDecimal("10000"), CANCELED_AT);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo("10000");
+			assertThat(payment.remainingAmount()).isEqualByComparingTo(payment.getAmount().subtract(new BigDecimal(
+					"10000")));
+		}
+
+		@Test
+		@DisplayName("PARTIAL_CANCELED 에서 남은 금액까지 취소하면 CANCELED 로 바뀐다")
+		void movesToCanceledWhenRemainingReachesZero() {
+			// given
+			Payment payment = PaymentFixture.approved(order());
+			BigDecimal total = payment.getAmount();
+			payment.applyPartialCancel(new BigDecimal("10000"), CANCELED_AT);
+
+			// when
+			payment.applyPartialCancel(total.subtract(new BigDecimal("10000")), CANCELED_AT.plusMinutes(1));
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo(total);
+		}
+
+		@Test
+		@DisplayName("남은 금액을 초과해 취소하면 PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE 예외를 던진다")
+		void throwsWhenExceedsRemainingAmount() {
+			// given
+			Payment payment = PaymentFixture.approved(order());
+			BigDecimal total = payment.getAmount();
+
+			// when & then
+			assertThatThrownBy(() -> payment.applyPartialCancel(total.add(BigDecimal.ONE), CANCELED_AT))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "CANCELED", "FAILED", "UNKNOWN",
+			"CANCEL_REQUESTED"})
+		@DisplayName("DONE·PARTIAL_CANCELED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsInvalidStatusWhenNotDoneOrPartiallyCanceled(PaymentStatus status) {
+			// given
+			Payment payment = PaymentFixture.withStatus(Payment.ready(order()), status);
+
+			// when & then
+			assertThatThrownBy(() -> payment.applyPartialCancel(new BigDecimal("1000"), CANCELED_AT))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);

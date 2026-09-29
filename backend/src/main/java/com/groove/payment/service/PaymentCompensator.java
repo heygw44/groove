@@ -81,7 +81,7 @@ public class PaymentCompensator {
 		LocalDateTime canceledAt = result.canceledAt() != null ? result.canceledAt() : LocalDateTime.now(clock);
 		if (paymentId != null) {
 			try {
-				writer.markCompensated(paymentId, paymentKey, approvedAt, canceledAt, reason);
+				writer.markCompensated(paymentId, paymentKey, approvedAt, canceledAt, reason, result.transactionKey());
 			} catch (RuntimeException ex) {
 				log.error("보상 취소는 성공했으나 결제 반영에 실패함: paymentId={}", paymentId, ex);
 				alertNotifier.notify(Alert.critical("payment.compensation-failed",

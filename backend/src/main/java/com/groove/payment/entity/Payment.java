@@ -96,6 +96,10 @@ public class Payment extends BaseTimeEntity {
 	@ColumnDefault("0")
 	private int reconcileAttempts;
 
+	@Column(name = "canceled_amount", nullable = false, precision = 10, scale = 2)
+	@ColumnDefault("0")
+	private BigDecimal canceledAmount;
+
 	@Column(name = "easy_pay_provider", length = 30)
 	private String easyPayProvider;
 
@@ -120,6 +124,7 @@ public class Payment extends BaseTimeEntity {
 		this.tossOrderId = order.getOrderNumber();
 		this.amount = order.getFinalAmount();
 		this.status = PaymentStatus.READY;
+		this.canceledAmount = BigDecimal.ZERO;
 	}
 
 	public static Payment ready(Order order) {
@@ -191,6 +196,11 @@ public class Payment extends BaseTimeEntity {
 		this.status = PaymentStatus.UNKNOWN;
 	}
 
+	/**
+	 * 기존 전액취소 경로 전용. DONE 에서만 요청할 수 있다 - 부분취소는 이 상태를 거치지 않는다(대사 스케줄러가
+	 * CANCEL_REQUESTED 를 legacy 전액취소 재시도 대상으로 보기 때문에, 부분취소 중인 결제가 여기 들어오면
+	 * 결과불명일 때 전액이 잘못 재시도된다).
+	 */
 	public void requestCancel() {
 		if (this.status != PaymentStatus.DONE) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
@@ -198,12 +208,40 @@ public class Payment extends BaseTimeEntity {
 		this.status = PaymentStatus.CANCEL_REQUESTED;
 	}
 
+	/** 기존 전액취소 경로 전용. 남은 금액 전체를 취소 처리해 반드시 CANCELED 로 확정한다. */
 	public void completeCancel(LocalDateTime canceledTime) {
 		if (this.status != PaymentStatus.CANCEL_REQUESTED) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
+		applyCancelAmount(this.amount.subtract(this.canceledAmount), canceledTime);
+	}
+
+	/**
+	 * 부분취소 확정 전용. CANCEL_REQUESTED 전이를 거치지 않고 DONE·PARTIAL_CANCELED 에서 곧장 반영한다 -
+	 * 요청 단계(payment_cancel REQUESTED 행)에서도 이 결제의 status 는 그대로 두기 때문이다.
+	 */
+	public void applyPartialCancel(BigDecimal cancelAmount, LocalDateTime canceledTime) {
+		if (this.status != PaymentStatus.DONE && this.status != PaymentStatus.PARTIAL_CANCELED) {
+			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		applyCancelAmount(cancelAmount, canceledTime);
+	}
+
+	/** canceledAmount 를 누적하고 남은 금액이 0이면 CANCELED, 남으면 PARTIAL_CANCELED 로 전이한다. */
+	private void applyCancelAmount(BigDecimal cancelAmount, LocalDateTime canceledTime) {
+		BigDecimal newCanceledAmount = this.canceledAmount.add(cancelAmount);
+		if (newCanceledAmount.compareTo(this.amount) > 0) {
+			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE);
+		}
+		this.canceledAmount = newCanceledAmount;
 		this.canceledAt = canceledTime;
-		this.status = PaymentStatus.CANCELED;
+		this.status = newCanceledAmount.compareTo(this.amount) == 0 ? PaymentStatus.CANCELED
+				: PaymentStatus.PARTIAL_CANCELED;
+	}
+
+	/** 남은 취소 가능 금액. 부분취소 요청의 상한 검증에 쓴다. */
+	public BigDecimal remainingAmount() {
+		return this.amount.subtract(this.canceledAmount);
 	}
 
 	public void revertCancelRequest() {
