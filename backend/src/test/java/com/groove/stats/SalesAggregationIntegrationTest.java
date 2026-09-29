@@ -23,6 +23,7 @@ import com.groove.fixture.StockFixture;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.repository.PaymentRepository;
@@ -89,6 +90,7 @@ class SalesAggregationIntegrationTest extends IntegrationTestSupport {
 		Order order = OrderFixture.create(member, orderNumber);
 		order.addItem(product, quantity);
 		OrderFixture.markPaid(order);
+		OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
 		return orderRepository.saveAndFlush(order);
 	}
 

@@ -24,6 +24,7 @@ import com.groove.fixture.ProductFixture;
 import com.groove.fixture.ReviewFixture;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.product.dto.ProductSearchCondition;
 import com.groove.product.dto.ProductSortType;
 import com.groove.product.dto.ProductSuggestionResponse;
@@ -547,6 +548,7 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			Order order = OrderFixture.create(buyer, "20260905-SMTR" + System.nanoTime() % 100000);
 			order.addItem(em.find(Product.class, product.getId()), quantity);
 			OrderFixture.markPaid(order);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
 			em.persist(order);
 			// markPaid 는 리플렉션으로 status 만 세팅해 서비스 훅(ProductSalesStatsUpdater)을 안 타므로
 			// 매퍼가 읽는 product.sold_quantity 를 직접 재계산해준다.

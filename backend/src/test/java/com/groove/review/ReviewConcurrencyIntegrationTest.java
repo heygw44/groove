@@ -30,6 +30,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -92,7 +93,9 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
 			Member member = memberRepository.save(
 					MemberFixture.create("reviewer-" + UUID.randomUUID() + "@groove.com"));
 			Order order = OrderFixture.createWithItem(member, product, 1);
-			orderRepository.save(OrderFixture.markDelivered(order));
+			OrderFixture.markDelivered(order);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.DELIVERED);
+			orderRepository.save(order);
 
 			Long productId = product.getId();
 			Long memberId = member.getId();

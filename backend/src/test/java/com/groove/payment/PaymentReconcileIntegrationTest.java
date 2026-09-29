@@ -472,7 +472,8 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 
 	private CancelSeededOrder seedCancelRequestedOrder(int stockQuantity) {
 		SeededOrder seeded = seedPendingOrder(stockQuantity, 1);
-		Order order = orderRepository.findById(seeded.orderId()).orElseThrow();
+		// markPaid() 는 상품주문(items)도 같이 옮기므로 findWithItemsById 로 지연 로딩 없이 가져온다
+		Order order = orderRepository.findWithItemsById(seeded.orderId()).orElseThrow();
 		order.markPaid();
 		orderRepository.saveAndFlush(order);
 		String paymentKey = "cancel-recon-" + UUID.randomUUID();

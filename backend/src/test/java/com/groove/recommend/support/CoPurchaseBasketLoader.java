@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderItemStatus;
 
 import jakarta.persistence.EntityManager;
 
@@ -29,8 +29,8 @@ public final class CoPurchaseBasketLoader {
 		LocalDateTime sinceAt = LocalDateTime.now(clock).minusDays(WINDOW_DAYS);
 		List<Object[]> rows = entityManager.createQuery(
 				"select oi.order.id, oi.order.member.id, oi.product.id from OrderItem oi "
-						+ "where oi.order.status in :statuses and oi.order.createdAt >= :sinceAt", Object[].class)
-				.setParameter("statuses", OrderStatus.PAID_OR_LATER)
+						+ "where oi.status in :statuses and oi.order.createdAt >= :sinceAt", Object[].class)
+				.setParameter("statuses", OrderItemStatus.SOLD)
 				.setParameter("sinceAt", sinceAt)
 				.getResultList();
 

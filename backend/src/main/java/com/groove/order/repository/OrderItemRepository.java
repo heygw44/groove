@@ -8,14 +8,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.groove.order.entity.OrderItem;
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderItemStatus;
 
 public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
 
-	boolean existsByOrderMemberIdAndProductIdAndOrderStatus(Long memberId, Long productId, OrderStatus status);
+	boolean existsByOrderMemberIdAndProductIdAndStatusIn(Long memberId, Long productId,
+			Collection<OrderItemStatus> statuses);
 
 	@Query("select distinct oi.product.id from OrderItem oi "
-			+ "where oi.order.member.id = :memberId and oi.order.status in :statuses")
-	List<Long> findProductIdsByMemberIdAndOrderStatusIn(@Param("memberId") Long memberId,
-			@Param("statuses") Collection<OrderStatus> statuses);
+			+ "where oi.order.member.id = :memberId and oi.status in :statuses")
+	List<Long> findProductIdsByMemberIdAndStatusIn(@Param("memberId") Long memberId,
+			@Param("statuses") Collection<OrderItemStatus> statuses);
 }

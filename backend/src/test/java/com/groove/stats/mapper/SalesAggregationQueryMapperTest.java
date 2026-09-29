@@ -20,6 +20,7 @@ import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.payment.entity.Payment;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -134,6 +135,7 @@ class SalesAggregationQueryMapperTest extends MybatisTestSupport {
 			Order order1 = OrderFixture.create(member, "20310710-SAMPOP001");
 			order1.addItem(productA, 2);
 			OrderFixture.markPaid(order1);
+			OrderFixture.markItemsStatus(order1, OrderItemStatus.PAID);
 			em.persist(order1);
 			em.persist(PaymentFixture.approvedAt(order1, "sam-pop-key-1", LocalDateTime.of(2031, 7, 10, 10, 0)));
 
@@ -141,6 +143,7 @@ class SalesAggregationQueryMapperTest extends MybatisTestSupport {
 			order2.addItem(productA, 1);
 			order2.addItem(productB, 3);
 			OrderFixture.markDelivered(order2);
+			OrderFixture.markItemsStatus(order2, OrderItemStatus.DELIVERED);
 			em.persist(order2);
 			em.persist(PaymentFixture.approvedAt(order2, "sam-pop-key-2", LocalDateTime.of(2031, 7, 10, 12, 0)));
 
@@ -211,6 +214,7 @@ class SalesAggregationQueryMapperTest extends MybatisTestSupport {
 			Order otherDateOrder = OrderFixture.create(member, "20310711-SAMOTHER001");
 			otherDateOrder.addItem(product, 1);
 			OrderFixture.markPaid(otherDateOrder);
+			OrderFixture.markItemsStatus(otherDateOrder, OrderItemStatus.PAID);
 			em.persist(otherDateOrder);
 			em.persist(PaymentFixture.approvedAt(otherDateOrder, "sam-other-key-1",
 					LocalDateTime.of(2031, 7, 11, 10, 0)));

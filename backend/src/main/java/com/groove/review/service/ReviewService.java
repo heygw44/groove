@@ -11,7 +11,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.ProductRepository;
@@ -27,7 +27,7 @@ import com.groove.review.repository.ReviewRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** 상품 리뷰 작성/조회/수정/삭제. 구매 확정(DELIVERED) 회원만 상품당 1회 작성할 수 있다. */
+/** 상품 리뷰 작성/조회/수정/삭제. 배송완료 이상(DELIVERED·PURCHASE_CONFIRMED) 회원만 상품당 1회 작성할 수 있다. */
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -115,8 +115,8 @@ public class ReviewService {
 	}
 
 	private boolean hasPurchased(Long productId, Long memberId) {
-		return orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(memberId, productId,
-				OrderStatus.DELIVERED);
+		return orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(memberId, productId,
+				OrderItemStatus.REVIEWABLE);
 	}
 
 	private Product findProduct(Long productId) {

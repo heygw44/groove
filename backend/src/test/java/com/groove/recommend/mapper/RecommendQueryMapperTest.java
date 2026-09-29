@@ -26,6 +26,7 @@ import com.groove.fixture.ProductFixture;
 import com.groove.fixture.ProductViewLogFixture;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
@@ -209,6 +210,7 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			em.persist(member);
 			Order order = OrderFixture.createWithItems(member, List.of(productA, productB, productC));
 			order = OrderFixture.markPaid(order);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
 			em.persist(order);
 			em.flush();
 			em.clear();
@@ -233,8 +235,10 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			Member member = MemberFixture.create("copurchase-2orders@groove.com");
 			em.persist(member);
 			Order paidOrder = OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(productA, productB)));
+			OrderFixture.markItemsStatus(paidOrder, OrderItemStatus.PAID);
 			Order deliveredOrder = OrderFixture.markDelivered(
 					OrderFixture.createWithItems(member, List.of(productA, productB)));
+			OrderFixture.markItemsStatus(deliveredOrder, OrderItemStatus.DELIVERED);
 			em.persist(paidOrder);
 			em.persist(deliveredOrder);
 			em.flush();
@@ -278,6 +282,7 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			Member member = MemberFixture.create("copurchase-single@groove.com");
 			em.persist(member);
 			Order order = OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(productA)));
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
 			em.persist(order);
 			em.flush();
 			em.clear();
@@ -296,6 +301,7 @@ class RecommendQueryMapperTest extends MybatisTestSupport {
 			Member member = MemberFixture.create("copurchase-future@groove.com");
 			em.persist(member);
 			Order order = OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(productA, productB)));
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
 			em.persist(order);
 			em.flush();
 			em.clear();
