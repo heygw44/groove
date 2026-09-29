@@ -1,5 +1,6 @@
 import type { AdminAuditLogListParams } from '@/types/adminAuditLog';
 import type { AdminMemberListParams } from '@/types/adminMember';
+import type { AdminOrderClaimListParams, AdminOrderItemListParams } from '@/types/adminOrder';
 import type {
   LimitedDropStatsListParams,
   PopularProductParams,
@@ -11,7 +12,7 @@ import type { CatalogImportJobListParams, CatalogLookupParams } from '@/types/ca
 import type { AdminCouponListParams, MemberCouponStatus } from '@/types/coupon';
 import type { AdminLimitedDropListParams, LimitedDropStatus } from '@/types/limitedDrop';
 import type { NotificationListParams } from '@/types/notification';
-import type { AdminOrderListParams, OrderListParams } from '@/types/order';
+import type { OrderListParams } from '@/types/order';
 import type {
   AdminAlbumListParams,
   AdminProductListParams,
@@ -56,15 +57,23 @@ export const adminProductKeys = {
 export const orderKeys = {
   all: ['orders'] as const,
   list: (params: OrderListParams) => ['orders', params] as const,
+  detailAll: ['order'] as const,
   detail: (id: number) => ['order', id] as const,
 };
 
-// list 를 'list' sub-prefix 로 분리해 상태 변경 후 상세는 건드리지 않고 목록만 무효화한다.
+export const adminOrderItemKeys = {
+  all: ['adminOrderItems'] as const,
+  list: (params: AdminOrderItemListParams) => ['adminOrderItems', params] as const,
+};
+
 export const adminOrderKeys = {
   all: ['adminOrders'] as const,
-  lists: ['adminOrders', 'list'] as const,
-  list: (params: AdminOrderListParams) => ['adminOrders', 'list', params] as const,
   detail: (id: number) => ['adminOrders', 'detail', id] as const,
+};
+
+export const adminOrderClaimKeys = {
+  all: ['adminOrderClaims'] as const,
+  list: (params: AdminOrderClaimListParams) => ['adminOrderClaims', params] as const,
 };
 
 export const reviewKeys = {

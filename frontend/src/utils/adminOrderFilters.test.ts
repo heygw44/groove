@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseAdminOrderFilters,
   serializeAdminOrderFilters,
-  toAdminOrderListParams,
+  toAdminOrderItemListParams,
   type AdminOrderFilters,
 } from '@/utils/adminOrderFilters';
 
@@ -23,7 +23,7 @@ describe('parseAdminOrderFilters()', () => {
 
     // then
     expect(result).toEqual({
-      status: undefined,
+      statusGroup: undefined,
       keyword: '',
       from: undefined,
       to: undefined,
@@ -33,18 +33,18 @@ describe('parseAdminOrderFilters()', () => {
 
   it('유효한 status 값은 그대로 쓴다', () => {
     // given
-    const searchParams = new URLSearchParams('status=PAID');
+    const searchParams = new URLSearchParams('statusGroup=PAID');
 
     // when & then
-    expect(parseAdminOrderFilters(searchParams).status).toBe('PAID');
+    expect(parseAdminOrderFilters(searchParams).statusGroup).toBe('PAID');
   });
 
   it('알 수 없는 status 값은 무시한다', () => {
     // given
-    const searchParams = new URLSearchParams('status=UNKNOWN');
+    const searchParams = new URLSearchParams('statusGroup=UNKNOWN');
 
     // when & then
-    expect(parseAdminOrderFilters(searchParams).status).toBeUndefined();
+    expect(parseAdminOrderFilters(searchParams).statusGroup).toBeUndefined();
   });
 
   it('keyword 앞뒤 공백을 제거한다', () => {
@@ -122,7 +122,7 @@ describe('serializeAdminOrderFilters()', () => {
   it('설정된 필터만 쿼리스트링으로 옮긴다', () => {
     // given
     const value = filters({
-      status: 'CANCELED',
+      statusGroup: 'CANCEL_RETURN',
       keyword: 'user@test.com',
       from: '2026-01-01',
       to: '2026-01-31',
@@ -134,13 +134,13 @@ describe('serializeAdminOrderFilters()', () => {
 
     // then
     expect(params.toString()).toBe(
-      'status=CANCELED&keyword=user%40test.com&from=2026-01-01&to=2026-01-31&page=2',
+      'statusGroup=CANCEL_RETURN&keyword=user%40test.com&from=2026-01-01&to=2026-01-31&page=2',
     );
   });
 
   it('직렬화한 값을 다시 파싱하면 원래 필터로 돌아온다', () => {
     // given
-    const value = filters({ status: 'PAID', keyword: 'ORD-1', page: 4 });
+    const value = filters({ statusGroup: 'PAID', keyword: 'ORD-1', page: 4 });
 
     // when
     const result = parseAdminOrderFilters(serializeAdminOrderFilters(value));
@@ -150,17 +150,17 @@ describe('serializeAdminOrderFilters()', () => {
   });
 });
 
-describe('toAdminOrderListParams()', () => {
+describe('toAdminOrderItemListParams()', () => {
   it('페이지 크기를 20으로 채운다', () => {
     // given
-    const value = filters({ status: 'PAID', page: 1 });
+    const value = filters({ statusGroup: 'PAID', page: 1 });
 
     // when
-    const params = toAdminOrderListParams(value);
+    const params = toAdminOrderItemListParams(value);
 
     // then
     expect(params).toEqual({
-      status: 'PAID',
+      statusGroup: 'PAID',
       keyword: undefined,
       from: undefined,
       to: undefined,
@@ -174,7 +174,7 @@ describe('toAdminOrderListParams()', () => {
     const value = filters({ keyword: '' });
 
     // when
-    const params = toAdminOrderListParams(value);
+    const params = toAdminOrderItemListParams(value);
 
     // then
     expect(params.keyword).toBeUndefined();

@@ -11,6 +11,10 @@ import type { OrderDetail } from '@/types/order';
 
 vi.mock('@/hooks/mutations/useOrderMutations', () => ({
   useCancelOrder: vi.fn(),
+  useCancelOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
+  useReturnOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
+  useWithdrawOrderClaim: () => ({ mutate: vi.fn(), isPending: false }),
+  useConfirmOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock('@/hooks/queries/useOrder', () => ({
@@ -30,6 +34,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
   finalAmount: 10000,
   items: [
     {
+      id: 11,
       productId: 1,
       productName: '레코드 판',
       price: 10000,
@@ -110,6 +115,8 @@ describe('OrderDetailPage', () => {
 
     // then
     expect(screen.getByText('레코드 판')).toBeInTheDocument();
+    expect(screen.getByText('ORD-1-01')).toBeInTheDocument();
+    expect(screen.getByText('결제 금액 10,000원')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '장바구니 담기' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '바로 구매하기' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '리뷰 쓰기' })).not.toBeInTheDocument();
@@ -121,6 +128,7 @@ describe('OrderDetailPage', () => {
       status: 'PAID',
       items: [
         {
+          id: 11,
           productId: 1,
           productName: '레코드 판',
           price: 10000,

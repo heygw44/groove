@@ -18,6 +18,10 @@ interface OrderCancelDialogProps {
   pending?: boolean;
   /** 취소 대상 주문의 결제 정보. 가상계좌 여부·입금 여부에 따라 안내/입력을 다르게 보여준다. */
   payment?: OrderPayment;
+  title?: string;
+  description?: string;
+  /** 확정 버튼 라벨. 상품 단위 취소·취소 요청처럼 문구가 다른 곳에서 바꿔 쓴다. */
+  confirmLabel?: string;
 }
 
 const EMPTY_REFUND_ACCOUNT: RefundAccount = { bankCode: '', accountNumber: '', holderName: '' };
@@ -28,6 +32,9 @@ export function OrderCancelDialog({
   onConfirm,
   pending = false,
   payment,
+  title = '주문을 취소하시겠습니까?',
+  description = '취소하면 되돌릴 수 없습니다.',
+  confirmLabel = '주문 취소',
 }: OrderCancelDialogProps) {
   const [reason, setReason] = useState('');
   const [refundAccount, setRefundAccount] = useState<RefundAccount>(EMPTY_REFUND_ACCOUNT);
@@ -70,8 +77,8 @@ export function OrderCancelDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="주문을 취소하시겠습니까?"
-      description="취소하면 되돌릴 수 없습니다."
+      title={title}
+      description={description}
       size="sm"
       footer={
         <>
@@ -79,7 +86,7 @@ export function OrderCancelDialog({
             닫기
           </Button>
           <Button variant="danger" onClick={handleConfirm} loading={pending}>
-            주문 취소
+            {confirmLabel}
           </Button>
         </>
       }
