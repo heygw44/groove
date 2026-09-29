@@ -1,17 +1,17 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
-import { getAdminOrders } from '@/api/admin';
-import { adminOrderKeys } from '@/hooks/queries/queryKeys';
+import { getAdminOrderClaims } from '@/api/admin';
+import { adminOrderClaimKeys } from '@/hooks/queries/queryKeys';
 import { useAuthStore } from '@/store/authStore';
-import type { AdminOrderListParams } from '@/types/order';
+import type { AdminOrderClaimListParams } from '@/types/adminOrder';
 
-export const useAdminOrders = (params: AdminOrderListParams) => {
+export const useAdminOrderClaims = (params: AdminOrderClaimListParams) => {
   const accessToken = useAuthStore((s) => s.accessToken);
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
 
   return useQuery({
-    queryKey: adminOrderKeys.list(params),
-    queryFn: () => getAdminOrders(params),
+    queryKey: adminOrderClaimKeys.list(params),
+    queryFn: () => getAdminOrderClaims(params),
     enabled: Boolean(accessToken) && !isBootstrapping,
     placeholderData: keepPreviousData,
   });

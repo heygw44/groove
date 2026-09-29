@@ -452,10 +452,10 @@ class OrderControllerTest {
 		@DisplayName("주문 상품 행에 상품주문 상태·클레임·결제 금액·다음 동작을 함께 반환한다")
 		void returnsItemFieldsForProductOrder() throws Exception {
 			// given
-			OrderItemResponse item = new OrderItemResponse(620L, "Head Hunters", new BigDecimal("6000"), 1,
+			OrderItemResponse item = new OrderItemResponse(7L, 620L, "Head Hunters", new BigDecimal("6000"), 1,
 					new BigDecimal("6000"), null, "20260902-K7Q2M9XZ-02", OrderItemStatus.SHIPPING,
 					OrderItemClaimStatus.CANCEL_REQUEST, new BigDecimal("6000"), CourierCode.CJ, "123456789012", null,
-					List.of(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK));
+					List.of(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK), 900L);
 			OrderDetailResponse detail = new OrderDetailResponse(1L, "20260903-TESTAB12", OrderStatus.PAID,
 					new BigDecimal("6000"), BigDecimal.ZERO, new BigDecimal("6000"), null, List.of(item), null, null,
 					null, null, null, null, null);
@@ -464,6 +464,8 @@ class OrderControllerTest {
 			// when & then
 			mockMvc.perform(get(BASE_URL + "/1").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.items[0].id", is(7)))
+					.andExpect(jsonPath("$.data.items[0].claimId", is(900)))
 					.andExpect(jsonPath("$.data.items[0].productOrderNumber", is("20260902-K7Q2M9XZ-02")))
 					.andExpect(jsonPath("$.data.items[0].status", is("SHIPPING")))
 					.andExpect(jsonPath("$.data.items[0].claimStatus", is("CANCEL_REQUEST")))

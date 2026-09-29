@@ -98,6 +98,26 @@ const NAV_ITEMS: AdminNavItem[] = [
     ),
   },
   {
+    to: '/admin/order-claims',
+    label: '취소·반품',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M8 5 4 9l4 4" />
+        <path d="M4 9h8a4 4 0 0 1 0 8H9" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/members',
     label: '회원',
     icon: (

@@ -1,4 +1,4 @@
-import type { OrderPayment, PaymentStatus } from '@/types/payment';
+import type { OrderPayment } from '@/types/payment';
 
 export type OrderStatus = 'PENDING' | 'PAID' | 'CANCELED';
 
@@ -82,6 +82,10 @@ export interface OrderCreateResponse {
 }
 
 export interface OrderItem extends OrderItemFulfillment {
+  /** 상품주문(order_item) id. 취소·반품·구매확정 경로의 itemId. */
+  id: number;
+  /** 철회할 수 있는 진행 중 클레임 id. WITHDRAW_CLAIM 액션이 있을 때만 존재한다. */
+  claimId?: number;
   productId: number;
   productName: string;
   price: number;
@@ -90,19 +94,6 @@ export interface OrderItem extends OrderItemFulfillment {
   thumbnailUrl: string | null;
   /** 배송완료 시각. 배송완료 전이면 생략. */
   deliveredAt?: string;
-}
-
-/** 관리자 상세 상품 행. 구매자용 paidAmount·availableActions 는 내려오지 않는다. */
-export interface AdminOrderItem extends Pick<
-  OrderItemFulfillment,
-  'productOrderNumber' | 'status' | 'claimStatus'
-> {
-  productId: number;
-  productName: string;
-  price: number;
-  quantity: number;
-  lineAmount: number;
-  thumbnailUrl: string | null;
 }
 
 export interface OrderListItem extends OrderItemFulfillment {
@@ -174,41 +165,6 @@ export interface OrderCancelRequest {
   refundAccount?: RefundAccount;
 }
 
-export interface AdminOrderSummary {
-  id: number;
-  orderNumber: string;
-  memberEmail: string;
-  status: OrderStatus;
-  finalAmount: number;
-  itemCount: number;
-  createdAt: string;
-}
-
-export interface AdminOrderDetail {
-  id: number;
-  orderNumber: string;
-  memberId: number;
-  memberEmail: string;
-  status: OrderStatus;
-  totalAmount: number;
-  discountAmount: number;
-  finalAmount: number;
-  couponName?: string;
-  items: AdminOrderItem[];
-  shippingAddress: ShippingAddress;
-  createdAt: string;
-  expiresAt: string;
-  canceledAt?: string;
-  cancelReason?: string;
-  /** 결제 행이 없으면 응답에서 빠진다. */
-  paymentStatus?: PaymentStatus;
-}
-
-export interface AdminOrderListParams {
-  status?: OrderStatus;
-  keyword?: string;
-  from?: string;
-  to?: string;
-  page?: number;
-  size?: number;
+export interface OrderReturnRequest {
+  reason?: string;
 }

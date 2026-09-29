@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { AdminOrderDetailDrawer } from '@/components/admin/AdminOrderDetailDrawer';
 import { ToastProvider } from '@/components/common/Toast';
 import { adminOrderKeys } from '@/hooks/queries/queryKeys';
-import type { AdminOrderDetail } from '@/types/order';
+import type { AdminOrderDetail } from '@/types/adminOrder';
 
 const buildDetail = (overrides: Partial<AdminOrderDetail> = {}): AdminOrderDetail => ({
   id: 1,
@@ -16,7 +16,19 @@ const buildDetail = (overrides: Partial<AdminOrderDetail> = {}): AdminOrderDetai
   totalAmount: 10000,
   discountAmount: 0,
   finalAmount: 10000,
-  items: [],
+  items: [
+    {
+      productId: 7,
+      productName: '레코드 A',
+      price: 10000,
+      quantity: 1,
+      lineAmount: 10000,
+      thumbnailUrl: null,
+      productOrderNumber: 'ORD-1-01',
+      status: 'SHIPPING',
+      claimStatus: 'RETURN_REQUEST',
+    },
+  ],
   shippingAddress: {
     recipientName: '김그루브',
     phone: '010-0000-0000',
@@ -42,7 +54,22 @@ const renderDrawer = (detail: AdminOrderDetail) => {
 };
 
 describe('AdminOrderDetailDrawer', () => {
-  it('paymentStatus 가 대사 대기 상태면 결제 상태 배지를 함께 보여준다', async () => {
+  it('주문번호·회원·배송지와 상품주문 번호를 보여준다', async () => {
+    // given
+    const detail = buildDetail();
+
+    // when
+    renderDrawer(detail);
+
+    // then
+    expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
+    expect(screen.getByText('ORD-1')).toBeInTheDocument();
+    expect(screen.getByText('ORD-1-01')).toBeInTheDocument();
+    expect(screen.getByText('레코드 A')).toBeInTheDocument();
+    expect(screen.getByText(/김그루브/)).toBeInTheDocument();
+  });
+
+  it('paymentStatus 가 대사 대기 상태면 결제 상태 배지와 대사 대기 안내를 보여준다', async () => {
     // given
     const detail = buildDetail({ paymentStatus: 'UNKNOWN' });
 
@@ -54,16 +81,15 @@ describe('AdminOrderDetailDrawer', () => {
     expect(screen.getByText('대사 대기')).toBeInTheDocument();
   });
 
-  it('paymentStatus 가 DONE 이면 결제 상태 배지를 그리지 않는다', async () => {
-    // given: 주문 상태 라벨과 겹치지 않는 상태로 확인한다(둘 다 '결제완료').
-    const detail = buildDetail({ status: 'CANCELED', paymentStatus: 'DONE' });
+  it('paymentStatus 가 CANCEL_REQUESTED 면 취소 처리 중 배지를 보여준다', async () => {
+    // given
+    const detail = buildDetail({ paymentStatus: 'CANCEL_REQUESTED' });
 
     // when
     renderDrawer(detail);
 
     // then
-    expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
-    expect(screen.queryByText('결제완료')).not.toBeInTheDocument();
+    expect(await screen.findByText('취소 처리 중')).toBeInTheDocument();
   });
 
   it('paymentStatus 가 없으면 결제 상태 배지를 그리지 않는다', async () => {
@@ -75,18 +101,7 @@ describe('AdminOrderDetailDrawer', () => {
 
     // then
     expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
-    expect(screen.queryByText('승인대기')).not.toBeInTheDocument();
-    expect(screen.queryByText('결제완료')).not.toBeInTheDocument();
-  });
-
-  it('paymentStatus 가 CANCEL_REQUESTED 면 취소 처리 중 배지를 보여준다', async () => {
-    // given
-    const detail = buildDetail({ paymentStatus: 'CANCEL_REQUESTED' });
-
-    // when
-    renderDrawer(detail);
-
-    // then
-    expect(await screen.findByText('취소 처리 중')).toBeInTheDocument();
+    expect(screen.queryByText('취소 처리 중')).not.toBeInTheDocument();
+    expect(screen.queryByText('대사 대기')).not.toBeInTheDocument();
   });
 });

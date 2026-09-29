@@ -11,7 +11,6 @@ import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
 import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
 import { useAdminOrder } from '@/hooks/queries/useAdminOrder';
 import { formatServerDateTime } from '@/utils/formatDate';
-import { isReconcilePending } from '@/utils/paymentStatus';
 
 interface AdminOrderDetailDrawerProps {
   orderId?: number;
@@ -25,6 +24,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
     detail?.items.map((item) => ({
       key: item.productId,
       title: item.productName,
+      thumbnailUrl: item.thumbnailUrl ?? undefined,
       price: item.price,
       quantity: item.quantity,
       lineAmount: item.lineAmount,
@@ -56,9 +56,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
           <div>
             <div className="flex items-center gap-2">
               <OrderStatusBadge status={detail.status} />
-              {detail.paymentStatus && isReconcilePending(detail.paymentStatus) && (
-                <PaymentStatusBadge status={detail.paymentStatus} />
-              )}
+              {detail.paymentStatus && <PaymentStatusBadge status={detail.paymentStatus} />}
               <span className="text-xs text-content-muted">
                 {formatServerDateTime(detail.createdAt)}
               </span>

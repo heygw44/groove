@@ -253,7 +253,7 @@ class AdminStatsControllerTest {
 		void returnsSummaryForAdmin() throws Exception {
 			// given
 			AdminStatsSummaryResponse response = new AdminStatsSummaryResponse(new BigDecimal("100000"),
-					new BigDecimal("20000"), 2, 1, 3, 4, 5, 6, 7);
+					new BigDecimal("20000"), 2, 1, 4, 5, 6, 7);
 			given(adminStatsService.getSummary()).willReturn(response);
 
 			// when & then
@@ -261,7 +261,6 @@ class AdminStatsControllerTest {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.success", is(true)))
 					.andExpect(jsonPath("$.data.todayCancelAmount", is(20000)))
-					.andExpect(jsonPath("$.data.pendingOrderCount", is(3)))
 					.andExpect(jsonPath("$.data.newOrderCount", is(4)))
 					.andExpect(jsonPath("$.data.depositWaitingCount", is(5)))
 					.andExpect(jsonPath("$.data.cancelRequestCount", is(6)))

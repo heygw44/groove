@@ -10,6 +10,7 @@ export const AdminCouponsPage = lazy(() => import('@/pages/admin/AdminCouponsPag
 export const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
 export const AdminLimitedDropsPage = lazy(() => import('@/pages/admin/AdminLimitedDropsPage'));
 export const AdminMembersPage = lazy(() => import('@/pages/admin/AdminMembersPage'));
+export const AdminOrderClaimsPage = lazy(() => import('@/pages/admin/AdminOrderClaimsPage'));
 export const AdminOrdersPage = lazy(() => import('@/pages/admin/AdminOrdersPage'));
 export const AdminProductCreatePage = lazy(() => import('@/pages/admin/AdminProductCreatePage'));
 export const AdminProductEditPage = lazy(() => import('@/pages/admin/AdminProductEditPage'));

@@ -165,8 +165,10 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isOk());
 			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId)).isEmpty();
 
+			// 기존 토큰은 로그인·탈퇴가 초 경계를 넘으면 폐기(401)로 먼저 막혀 결과가 갈린다. 탈퇴 뒤 발급한 토큰으로 본다.
+			String accessTokenAfterWithdraw = jwtProvider.createAccessToken(memberId, MemberRole.USER);
 			mockMvc.perform(get("/api/v1/members/me")
-							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessTokenAfterWithdraw))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("MEMBER_WITHDRAWN")));
 

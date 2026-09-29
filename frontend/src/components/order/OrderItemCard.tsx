@@ -8,16 +8,23 @@ import {
 } from '@/components/common/buttonStyles';
 import { LinkButton } from '@/components/common/LinkButton';
 import { useToast } from '@/components/common/toastContext';
+import { OrderItemClaimActions } from '@/components/order/OrderItemClaimActions';
 import { OrderItemStatusBadge } from '@/components/order/OrderItemStatusBadge';
 import { COURIERS } from '@/constants/couriers';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
 import type { OrderItem } from '@/types/order';
+import type { OrderPayment } from '@/types/payment';
 import { getErrorMessage } from '@/utils/apiError';
 import { formatPrice } from '@/utils/formatPrice';
 
 interface OrderItemCardProps {
+  orderId: number;
   item: OrderItem;
+  /** 가상계좌 결제 여부에 따라 상품 취소 시 환불계좌 입력이 필요하다. */
+  payment?: OrderPayment;
 }
+
+const REFUNDED_STATUSES: ReadonlyArray<OrderItem['status']> = ['CANCELED', 'RETURNED'];
 
 function OrderItemThumbnail({ url }: { url: string | null }) {
   return (
@@ -45,11 +52,10 @@ function OrderItemThumbnail({ url }: { url: string | null }) {
 }
 
 /**
- * 주문 상품 카드 하나. 재구매(장바구니 담기/바로 구매하기)는 항상 보여주고, 배송조회·리뷰쓰기는
- * `availableActions` 에 있을 때만 보여준다. 취소·반품·요청철회·구매확정은 아직 처리 API 가 없어
- * `availableActions` 에 있어도 그리지 않는다(다음 이슈에서 API 와 함께 추가).
+ * 주문 상품 카드 하나. 재구매(장바구니 담기/바로 구매하기)는 항상 보여주고, 나머지 액션(취소·반품·요청 철회·
+ * 구매확정·배송조회·리뷰쓰기)은 서버가 내려준 `availableActions` 에 있을 때만 보여준다.
  */
-export function OrderItemCard({ item }: OrderItemCardProps) {
+export function OrderItemCard({ orderId, item, payment }: OrderItemCardProps) {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const addCartItemMutation = useAddCartItem();
@@ -76,6 +82,7 @@ export function OrderItemCard({ item }: OrderItemCardProps) {
     canTrack && item.courierCode && item.trackingNumber
       ? COURIERS[item.courierCode].trackingUrl(item.trackingNumber)
       : undefined;
+  const isRefunded = REFUNDED_STATUSES.includes(item.status);
   const canWriteReview = item.availableActions.includes('WRITE_REVIEW');
 
   return (
@@ -98,6 +105,9 @@ export function OrderItemCard({ item }: OrderItemCardProps) {
             {formatPrice(item.price)} · 수량 {item.quantity}개
           </p>
           <p className="mt-1 text-sm font-bold text-content">{formatPrice(item.lineAmount)}</p>
+          <p className="mt-0.5 text-xs text-content-muted">
+            {isRefunded ? '환불 금액' : '결제 금액'} {formatPrice(item.paidAmount)}
+          </p>
         </div>
       </div>
 
@@ -113,6 +123,7 @@ export function OrderItemCard({ item }: OrderItemCardProps) {
         <Button variant="secondary" size="sm" onClick={handleBuyNow}>
           바로 구매하기
         </Button>
+        <OrderItemClaimActions orderId={orderId} item={item} payment={payment} />
         {trackingUrl && (
           <a
             href={trackingUrl}

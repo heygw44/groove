@@ -123,7 +123,6 @@
 			<arg column="today_cancel_amount" javaType="java.math.BigDecimal"/>
 			<arg column="today_order_count" javaType="_long"/>
 			<arg column="today_new_member_count" javaType="_long"/>
-			<arg column="pending_order_count" javaType="_long"/>
 			<arg column="new_order_count" javaType="_long"/>
 			<arg column="deposit_waiting_count" javaType="_long"/>
 			<arg column="cancel_request_count" javaType="_long"/>
@@ -138,8 +137,6 @@
 			COALESCE(t.order_count, 0) AS today_order_count,
 			(SELECT COUNT(*) FROM member m
 				WHERE m.created_at &gt;= #{todayStart} AND m.created_at &lt; #{tomorrowStart}) AS today_new_member_count,
-			(SELECT COUNT(*) FROM orders o WHERE o.status = 'PENDING' AND o.placed_at IS NOT NULL)
-				AS pending_order_count,
 			(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
 				WHERE oi.status = 'PAID' AND o.placed_at IS NOT NULL) AS new_order_count,
 			(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id

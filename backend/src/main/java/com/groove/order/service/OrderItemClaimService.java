@@ -12,6 +12,7 @@ import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderItemResponse;
 import com.groove.order.dto.OrderReturnRequest;
 import com.groove.order.entity.OrderItem;
+import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.product.repository.ProductImageRepository;
@@ -30,6 +31,7 @@ public class OrderItemClaimService {
 	private final OrderClaimWriter writer;
 	private final OrderClaimRefundHook refundHook;
 	private final OrderItemRepository orderItemRepository;
+	private final OrderClaimRepository orderClaimRepository;
 	private final ProductImageRepository productImageRepository;
 	private final Clock clock;
 
@@ -66,7 +68,8 @@ public class OrderItemClaimService {
 				.findFirst()
 				.map(image -> image.getImageUrl())
 				.orElse(null);
-		return OrderItemResponse.from(item, thumbnailUrl, LocalDateTime.now(clock));
+		Long claimId = orderClaimRepository.findRequestedClaimIdsByOrderItemId(List.of(itemId)).get(itemId);
+		return OrderItemResponse.from(item, thumbnailUrl, claimId, LocalDateTime.now(clock));
 	}
 
 	private RefundAccountInfo toRefundAccount(OrderCancelRequest request) {
