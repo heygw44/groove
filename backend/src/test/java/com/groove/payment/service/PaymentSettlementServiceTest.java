@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -34,7 +35,9 @@ import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.client.dto.PaymentTransaction;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancelStatus;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,6 +49,9 @@ class PaymentSettlementServiceTest {
 
 	@Mock
 	private PaymentRepository paymentRepository;
+
+	@Mock
+	private PaymentCancelRepository paymentCancelRepository;
 
 	@Mock
 	private PaymentClient paymentClient;
@@ -60,7 +66,8 @@ class PaymentSettlementServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new PaymentSettlementService(paymentRepository, paymentClient, lateResultApplier, alertNotifier);
+		service = new PaymentSettlementService(paymentRepository, paymentCancelRepository, paymentClient,
+				lateResultApplier, alertNotifier);
 		given(paymentRepository.findByApprovedAtGreaterThanEqualAndApprovedAtLessThan(FROM, TO))
 				.willReturn(List.of());
 	}
@@ -405,10 +412,84 @@ class PaymentSettlementServiceTest {
 		}
 	}
 
+	@Nested
+	@DisplayName("reconcile() 부분취소 금액 대조")
+	class ReconcilePartialCancelAmount {
+
+		@Test
+		@DisplayName("취소 잔액이 일치하면 조회 후 matched 로 센다")
+		void countsMatchedWhenPartialCancelBalanceMatches() {
+			// given
+			Payment payment = partialCanceledPayment(20L, "20260921-PC0001", new BigDecimal("30000"),
+					new BigDecimal("10000"));
+			given(paymentRepository.findByTossOrderId("20260921-PC0001")).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(20L, PaymentCancelStatus.REQUESTED))
+					.willReturn(false);
+			PaymentTransaction transaction = transaction("txn-pc1", "20260921-PC0001", "PARTIAL_CANCELED",
+					FROM.plusHours(1));
+			given(paymentClient.lookup("20260921-PC0001")).willReturn(lookupWithBalance(new BigDecimal("20000")));
+
+			// when
+			PaymentSettlementReport report = service.reconcile(List.of(transaction), FROM, TO);
+
+			// then
+			assertThat(report.matched()).isEqualTo(1);
+			verifyNoInteractions(alertNotifier);
+		}
+
+		@Test
+		@DisplayName("취소 잔액이 다르면 조회 후 mismatched 로 세고 경보를 보낸다")
+		void countsMismatchedWhenPartialCancelBalanceDiffers() {
+			// given
+			Payment payment = partialCanceledPayment(21L, "20260921-PC0002", new BigDecimal("30000"),
+					new BigDecimal("10000"));
+			given(paymentRepository.findByTossOrderId("20260921-PC0002")).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(21L, PaymentCancelStatus.REQUESTED))
+					.willReturn(false);
+			PaymentTransaction transaction = transaction("txn-pc2", "20260921-PC0002", "PARTIAL_CANCELED",
+					FROM.plusHours(1));
+			given(paymentClient.lookup("20260921-PC0002")).willReturn(lookupWithBalance(new BigDecimal("15000")));
+
+			// when
+			PaymentSettlementReport report = service.reconcile(List.of(transaction), FROM, TO);
+
+			// then
+			assertThat(report.mismatched()).isEqualTo(1);
+			verify(alertNotifier).notify(any(Alert.class));
+		}
+
+		@Test
+		@DisplayName("진행 중인 부분취소(REQUESTED)가 있으면 조회 없이 matched 로 센다")
+		void countsMatchedWithoutLookupWhenRefundInProgress() {
+			// given
+			Payment payment = partialCanceledPayment(22L, "20260921-PC0003", new BigDecimal("30000"),
+					new BigDecimal("10000"));
+			given(paymentRepository.findByTossOrderId("20260921-PC0003")).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(22L, PaymentCancelStatus.REQUESTED))
+					.willReturn(true);
+			PaymentTransaction transaction = transaction("txn-pc3", "20260921-PC0003", "PARTIAL_CANCELED",
+					FROM.plusHours(1));
+
+			// when
+			PaymentSettlementReport report = service.reconcile(List.of(transaction), FROM, TO);
+
+			// then
+			assertThat(report.matched()).isEqualTo(1);
+			verifyNoInteractions(paymentClient, alertNotifier);
+		}
+	}
+
 	private Payment payment(Long id, String tossOrderId, PaymentStatus status) {
 		Order order = OrderFixture.withId(OrderFixture.create(MemberFixture.create(), tossOrderId), ORDER_ID);
 		Payment payment = PaymentFixture.withStatus(Payment.ready(order), status);
 		ReflectionTestUtils.setField(payment, "id", id);
+		return payment;
+	}
+
+	private Payment partialCanceledPayment(Long id, String tossOrderId, BigDecimal amount, BigDecimal canceledAmount) {
+		Payment payment = payment(id, tossOrderId, PaymentStatus.PARTIAL_CANCELED);
+		ReflectionTestUtils.setField(payment, "amount", amount);
+		ReflectionTestUtils.setField(payment, "canceledAmount", canceledAmount);
 		return payment;
 	}
 
@@ -419,5 +500,10 @@ class PaymentSettlementServiceTest {
 
 	private PaymentLookupResult lookup(PaymentLookupStatus status) {
 		return new PaymentLookupResult(status, "pk-lookup", "카드", null, FROM.plusHours(1), null);
+	}
+
+	private PaymentLookupResult lookupWithBalance(BigDecimal balance) {
+		return new PaymentLookupResult(PaymentLookupStatus.PARTIAL_CANCELED, "pk-lookup", "카드", null,
+				FROM.plusHours(1), null, balance, "txn-lookup");
 	}
 }

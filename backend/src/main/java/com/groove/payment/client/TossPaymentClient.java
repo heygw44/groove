@@ -330,8 +330,9 @@ public class TossPaymentClient implements PaymentClient {
 		PaymentLookupStatus status = parseLookupStatus(response.status());
 		TossPaymentResponse.Cancel lastCancel = response.lastCancel();
 		LocalDateTime canceledAt = lastCancel == null ? null : toServerTime(lastCancel.canceledAt());
+		String lastCancelTransactionKey = lastCancel == null ? null : lastCancel.transactionKey();
 		return new PaymentLookupResult(status, response.paymentKey(), response.method(), response.totalAmount(),
-				toServerTime(response.approvedAt()), canceledAt);
+				toServerTime(response.approvedAt()), canceledAt, response.balanceAmount(), lastCancelTransactionKey);
 	}
 
 	private VirtualAccountInfo toVirtualAccountInfo(TossPaymentResponse.VirtualAccount virtualAccount, String secret) {

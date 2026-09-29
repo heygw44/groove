@@ -132,6 +132,9 @@ groove:
       grace: 2m
       batch-size: 50
       max-attempts: 10
+      # 결과불명 부분취소를 같은 idempotencyKey 로 재호출하기까지 기다리는 시간. max-attempts 번 기다린
+      # 뒤(기본 10분)부터는 재호출 대신 토스 결제 조회로만 확인한다.
+      refund-retry-grace: 1m
     settlement:
       # 04:00 DB 백업(infra/scripts/backup.sh) 뒤에 돈다.
       cron: "0 10 5 * * *"
