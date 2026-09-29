@@ -65,6 +65,7 @@ import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.LimitedDropFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
 import com.groove.global.common.BusinessException;
@@ -86,12 +87,24 @@ import com.groove.member.entity.Member;
 import com.groove.member.entity.MemberRole;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.dto.AdminOrderClaimCompleteRequest;
+import com.groove.order.dto.AdminOrderClaimRejectRequest;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
+import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderCreateRequest;
+import com.groove.order.dto.OrderReturnRequest;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderClaim;
+import com.groove.order.entity.OrderClaimStatus;
+import com.groove.order.entity.OrderItem;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
+import com.groove.order.repository.OrderClaimRepository;
+import com.groove.order.repository.OrderItemRepository;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
+import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
@@ -201,6 +214,15 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	PaymentCancelRepository paymentCancelRepository;
+
+	@Autowired
+	OrderClaimRepository orderClaimRepository;
+
+	@Autowired
+	OrderItemRepository orderItemRepository;
+
+	@Autowired
+	OrderClaimFinalizeService orderClaimFinalizeService;
 
 	@MockitoBean
 	PaymentClient paymentClient;
@@ -822,6 +844,390 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.error.code", is("PAYMENT_CANCEL_IN_PROGRESS")));
 			verify(paymentClient, never()).cancel(any(), any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("상품 단위 취소·반품 클레임(#540)")
+	class ItemClaim {
+
+		@Test
+		@DisplayName("두 상품 중 하나만 즉시 취소하면 부분환불되고, 쿠폰은 나머지 하나까지 취소돼야 복원된다")
+		void cancelsOneItemImmediatelyAndRestoresCouponOnlyWhenAllItemsAreTerminal() throws Exception {
+			// given
+			Member member = signup();
+			addressRepository.save(AddressFixture.create(member));
+			Product first = seedProduct(5);
+			Product second = seedProduct(5);
+			String paymentKey = uniquePaymentKey();
+			TwoItemOrder order = createConfirmedTwoItemOrderWithCoupon(member, first, second, paymentKey);
+			String accessToken = login(member.getEmail());
+			BigDecimal firstRefundAmount = order.firstItem().getRefundableAmount();
+			stubPartialCancelSuccess(paymentKey);
+
+			// when: 첫 번째 상품만 취소한다
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", order.orderId(),
+							order.firstItem().getId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("고객 변심"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then: 첫 상품만 취소되고 주문은 아직 PAID, 쿠폰은 아직 사용 중이다
+			Order reloadedAfterFirst = orderRepository.findById(order.orderId()).orElseThrow();
+			assertThat(reloadedAfterFirst.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(memberCouponRepository.findById(order.memberCouponId()).orElseThrow().isUsed()).isTrue();
+			Payment paymentAfterFirst = paymentRepository.findByOrderId(order.orderId()).orElseThrow();
+			assertThat(paymentAfterFirst.getCanceledAmount()).isEqualByComparingTo(firstRefundAmount);
+
+			// when: 두 번째 상품도 취소한다
+			BigDecimal secondRefundAmount = orderItemRepository.findById(order.secondItemId()).orElseThrow()
+					.getRefundableAmount();
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", order.orderId(),
+							order.secondItemId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("고객 변심"))))
+					.andExpect(status().isOk());
+
+			// then: 주문 전체가 취소되고 쿠폰이 복원된다
+			Order reloadedAfterSecond = orderRepository.findById(order.orderId()).orElseThrow();
+			assertThat(reloadedAfterSecond.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(memberCouponRepository.findById(order.memberCouponId()).orElseThrow().isUsed()).isFalse();
+			Payment paymentAfterSecond = paymentRepository.findByOrderId(order.orderId()).orElseThrow();
+			assertThat(paymentAfterSecond.getCanceledAmount())
+					.isEqualByComparingTo(firstRefundAmount.add(secondRefundAmount));
+			assertThat(paymentAfterSecond.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+		}
+
+		@Test
+		@DisplayName("상품 하나를 먼저 즉시 취소한 뒤 POST /orders/{id}/cancel 을 부르면 남은 상품만 부분환불된다")
+		void cancelsOrderAfterOneItemAlreadyPartiallyCanceled() throws Exception {
+			// given: 첫 상품을 상품 단위 엔드포인트로 먼저 취소해 결제를 PARTIAL_CANCELED 로 만든다
+			Member member = signup();
+			addressRepository.save(AddressFixture.create(member));
+			Product first = seedProduct(5);
+			Product second = seedProduct(5);
+			String paymentKey = uniquePaymentKey();
+			TwoItemOrder order = createConfirmedTwoItemOrderWithCoupon(member, first, second, paymentKey);
+			String accessToken = login(member.getEmail());
+			BigDecimal firstRefundAmount = order.firstItem().getRefundableAmount();
+			BigDecimal secondRefundAmount = orderItemRepository.findById(order.secondItemId()).orElseThrow()
+					.getRefundableAmount();
+			stubPartialCancelSuccess(paymentKey);
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", order.orderId(),
+							order.firstItem().getId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("고객 변심"))))
+					.andExpect(status().isOk());
+			assertThat(paymentRepository.findByOrderId(order.orderId()).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+			reset(paymentClient);
+			stubPartialCancelSuccess(paymentKey);
+
+			// when: 나머지 상품을 주문 전체 취소로 정리한다
+			mockMvc.perform(post("/api/v1/orders/{id}/cancel", order.orderId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("고객 변심"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then: 두 번째 상품 금액만큼만 토스에 취소를 요청했다(이미 취소된 첫 상품을 다시 취소하지 않는다)
+			ArgumentCaptor<PaymentCancelCommand> captor = ArgumentCaptor.forClass(PaymentCancelCommand.class);
+			verify(paymentClient, times(1)).cancel(captor.capture());
+			assertThat(captor.getValue().cancelAmount()).isEqualByComparingTo(secondRefundAmount);
+
+			Order reloadedOrder = orderRepository.findById(order.orderId()).orElseThrow();
+			assertThat(reloadedOrder.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(memberCouponRepository.findById(order.memberCouponId()).orElseThrow().isUsed()).isFalse();
+			Payment finalPayment = paymentRepository.findByOrderId(order.orderId()).orElseThrow();
+			assertThat(finalPayment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(finalPayment.getCanceledAmount())
+					.isEqualByComparingTo(firstRefundAmount.add(secondRefundAmount));
+		}
+
+		@Test
+		@DisplayName("PREPARING 상품주문은 취소를 요청만 하고, 관리자가 승인해야 환불된다")
+		void requestsCancelForPreparingItemAndAdminApprovalRefunds() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
+			String adminToken = adminToken();
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
+			Long itemId = onlyItemId(orderInfo.orderId());
+
+			// when: 구매자가 취소를 요청한다
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", orderInfo.orderId(), itemId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("변심"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.claimStatus", is("CANCEL_REQUEST")));
+			verify(paymentClient, never()).cancel(any(PaymentCancelCommand.class));
+			OrderClaim claim = onlyClaimFor(itemId);
+			assertThat(claim.getStatus()).isEqualTo(OrderClaimStatus.REQUESTED);
+
+			// when: 관리자가 승인한다
+			stubPartialCancelSuccess(paymentKey);
+			mockMvc.perform(post("/api/v1/admin/order-claims/{id}/approve", claim.getId())
+							.header(HttpHeaders.AUTHORIZATION, adminToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then
+			OrderItem reloadedItem = orderItemRepository.findById(itemId).orElseThrow();
+			assertThat(reloadedItem.getStatus()).isEqualTo(OrderItemStatus.CANCELED);
+			assertThat(reloadedItem.getClaimStatus()).isEqualTo(OrderItemClaimStatus.CANCEL_DONE);
+		}
+
+		@Test
+		@DisplayName("관리자가 취소 요청을 거부하면 상품주문은 PREPARING 으로 남는다")
+		void rejectsRequestAndKeepsPreparing() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
+			String adminToken = adminToken();
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
+			Long itemId = onlyItemId(orderInfo.orderId());
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", orderInfo.orderId(), itemId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("변심"))))
+					.andExpect(status().isOk());
+			OrderClaim claim = onlyClaimFor(itemId);
+
+			// when
+			mockMvc.perform(post("/api/v1/admin/order-claims/{id}/reject", claim.getId())
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new AdminOrderClaimRejectRequest("이미 발송 완료"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("PREPARING")))
+					.andExpect(jsonPath("$.data.claimStatus", is("CANCEL_REJECT")));
+
+			// then
+			assertThat(orderClaimRepository.findById(claim.getId()).orElseThrow().getStatus())
+					.isEqualTo(OrderClaimStatus.REJECTED);
+			verify(paymentClient, never()).cancel(any(PaymentCancelCommand.class));
+		}
+
+		@Test
+		@DisplayName("배송완료 7일 이내 반품 요청은 수거·완료(재입고 포함)를 거쳐 환불된다")
+		void returnsWithinPeriodAndRestocksOnCompletion() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
+			String adminToken = adminToken();
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.SHIPPED).andExpect(status().isOk());
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.DELIVERED).andExpect(status().isOk());
+			Long itemId = onlyItemId(orderInfo.orderId());
+			int stockBeforeReturn = stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity();
+
+			// when: 반품을 요청한다
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/return", orderInfo.orderId(), itemId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderReturnRequest("사이즈가 안 맞음"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.claimStatus", is("RETURN_REQUEST")));
+			OrderClaim claim = onlyClaimFor(itemId);
+
+			// when: 관리자가 수거를 시작하고 재입고를 선택해 완료한다
+			mockMvc.perform(post("/api/v1/admin/order-claims/{id}/collect", claim.getId())
+							.header(HttpHeaders.AUTHORIZATION, adminToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.claimStatus", is("COLLECTING")));
+			stubPartialCancelSuccess(paymentKey);
+			mockMvc.perform(post("/api/v1/admin/order-claims/{id}/complete", claim.getId())
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new AdminOrderClaimCompleteRequest(true))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("RETURNED")));
+
+			// then
+			assertThat(stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity())
+					.isEqualTo(stockBeforeReturn + 1);
+			assertThat(orderClaimRepository.findById(claim.getId()).orElseThrow().getStatus())
+					.isEqualTo(OrderClaimStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("배송완료 7일이 지나면 반품 요청이 거절된다")
+		void rejectsReturnRequestPastReturnPeriod() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
+			String adminToken = adminToken();
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.SHIPPED).andExpect(status().isOk());
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.DELIVERED).andExpect(status().isOk());
+			Long itemId = onlyItemId(orderInfo.orderId());
+			setDeliveredAt(itemId, LocalDateTime.now(clock).minusDays(8));
+
+			// when & then
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/return", orderInfo.orderId(), itemId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderReturnRequest("사유"))))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("ORDER_RETURN_PERIOD_EXPIRED")));
+		}
+
+		@Test
+		@DisplayName("본인이 요청한 클레임을 철회하면 상품주문은 클레임 이전 상태로 돌아간다")
+		void withdrawsOwnClaim() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
+			String adminToken = adminToken();
+			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
+			Long itemId = onlyItemId(orderInfo.orderId());
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", orderInfo.orderId(), itemId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("변심"))))
+					.andExpect(status().isOk());
+			OrderClaim claim = onlyClaimFor(itemId);
+
+			// when
+			mockMvc.perform(post("/api/v1/order-claims/{claimId}/withdraw", claim.getId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("PREPARING")));
+
+			// then
+			assertThat(orderClaimRepository.findById(claim.getId()).orElseThrow().getStatus())
+					.isEqualTo(OrderClaimStatus.WITHDRAWN);
+			assertThat(orderItemRepository.findById(itemId).orElseThrow().getClaimStatus()).isNull();
+		}
+
+		@Test
+		@DisplayName("환불 결과가 불명이면 클레임은 진행 중으로 남고, 대사가 마무리하면 그제서야 확정된다")
+		void keepsClaimInProgressWhenRefundResultUnknownAndFinalizesLater() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
+			Long itemId = onlyItemId(orderInfo.orderId());
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
+					.given(paymentClient).cancel(any(PaymentCancelCommand.class));
+
+			// when: 즉시 취소를 시도하지만 토스 결과를 알 수 없다
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", orderInfo.orderId(), itemId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderCancelRequest("변심"))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.claimStatus", is("CANCEL_REQUEST")));
+
+			// then: 상품주문은 아직 PAID, 클레임은 REQUESTED 로 남는다
+			assertThat(orderItemRepository.findById(itemId).orElseThrow().getStatus())
+					.isEqualTo(OrderItemStatus.PAID);
+			OrderClaim claim = onlyClaimFor(itemId);
+			assertThat(claim.getStatus()).isEqualTo(OrderClaimStatus.REQUESTED);
+
+			// when: 대사가 나중에 결과를 확정한다
+			orderClaimFinalizeService.applyRefundDone(claim.getId(), LocalDateTime.now(clock));
+
+			// then
+			OrderItem finalizedItem = orderItemRepository.findById(itemId).orElseThrow();
+			assertThat(finalizedItem.getStatus()).isEqualTo(OrderItemStatus.CANCELED);
+			assertThat(finalizedItem.getClaimStatus()).isEqualTo(OrderItemClaimStatus.CANCEL_DONE);
+			assertThat(orderClaimRepository.findById(claim.getId()).orElseThrow().getStatus())
+					.isEqualTo(OrderClaimStatus.DONE);
+		}
+
+		private String adminToken() {
+			Member admin = memberRepository.save(
+					Member.create("item-claim-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
+			return "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+		}
+
+		private Long onlyItemId(Long orderId) {
+			Order order = orderRepository.findWithItemsById(orderId).orElseThrow();
+			return order.getItems().get(0).getId();
+		}
+
+		private OrderClaim onlyClaimFor(Long itemId) {
+			List<OrderClaim> claims = orderClaimRepository.findAll().stream()
+					.filter(claim -> claim.getOrderItem().getId().equals(itemId))
+					.toList();
+			assertThat(claims).hasSize(1);
+			return claims.get(0);
+		}
+
+		private void setDeliveredAt(Long itemId, LocalDateTime deliveredAt) {
+			jdbcTemplate.update("update order_item set delivered_at = ? where id = ?",
+					Timestamp.valueOf(deliveredAt), itemId);
+		}
+
+		private void stubPartialCancelSuccess(String paymentKey) {
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willAnswer(invocation -> {
+				PaymentCancelCommand command = invocation.getArgument(0);
+				LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+				return new PaymentCancelResult(paymentKey, "PARTIAL_CANCELED", canceledAt,
+						"txn-" + command.idempotencyKey(), null);
+			});
+		}
+
+		private TwoItemOrder createConfirmedTwoItemOrderWithCoupon(Member member, Product first, Product second,
+				String paymentKey) {
+			Order order = OrderFixture.create(member, "20260929-CLAIM" + UUID.randomUUID().toString()
+					.replace("-", "").substring(0, 8).toUpperCase());
+			order.addItem(first, 1);
+			order.addItem(second, 1);
+			orderRepository.saveAndFlush(order);
+			String code = "CLAIM" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
+			Coupon coupon = couponRepository.save(Coupon.create(code, "클레임 테스트 쿠폰", DiscountType.FIXED,
+					new BigDecimal("5000"), BigDecimal.ZERO, null, null, LocalDateTime.now(clock).plusDays(7)));
+			MemberCoupon memberCoupon = memberCouponRepository.save(MemberCoupon.issue(member, coupon));
+			order.applyCoupon(memberCoupon, memberCoupon.calculateDiscount(order.getTotalAmount()));
+			memberCoupon.use(order.getId());
+			memberCouponRepository.saveAndFlush(memberCoupon);
+			order.markPaid();
+			order.place(LocalDateTime.now(clock));
+			orderRepository.saveAndFlush(order);
+			Payment payment = PaymentFixture.approved(order, paymentKey);
+			paymentRepository.saveAndFlush(payment);
+			OrderItem firstItem = order.getItems().get(0);
+			return new TwoItemOrder(order.getId(), firstItem, order.getItems().get(1).getId(), memberCoupon.getId());
+		}
+
+		private record TwoItemOrder(Long orderId, OrderItem firstItem, Long secondItemId, Long memberCouponId) {
 		}
 	}
 

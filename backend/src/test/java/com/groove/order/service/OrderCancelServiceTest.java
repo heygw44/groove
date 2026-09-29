@@ -6,6 +6,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.util.List;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -36,13 +38,17 @@ class OrderCancelServiceTest {
 	PendingVirtualAccountCancelHook pendingVirtualAccountCancelHook;
 
 	@Mock
+	OrderItemClaimService orderItemClaimService;
+
+	@Mock
 	OrderService orderService;
 
 	OrderCancelService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new OrderCancelService(writer, paidOrderCancelHook, pendingVirtualAccountCancelHook, orderService);
+		service = new OrderCancelService(writer, paidOrderCancelHook, pendingVirtualAccountCancelHook,
+				orderItemClaimService, orderService);
 	}
 
 	@Nested
@@ -56,6 +62,7 @@ class OrderCancelServiceTest {
 			OrderCancelRequest request = new OrderCancelRequest("고객 변심");
 			given(writer.findTarget(MEMBER_ID, ORDER_ID))
 					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
+			given(writer.planCancel(MEMBER_ID, ORDER_ID)).willReturn(new OrderCancelPlan(List.of(100L), true));
 			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, request.reason(), null))
 					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
 							20L, 30L));
@@ -114,6 +121,7 @@ class OrderCancelServiceTest {
 			OrderCancelRequest request = new OrderCancelRequest("고객 변심", refundAccount);
 			given(writer.findTarget(MEMBER_ID, ORDER_ID))
 					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
+			given(writer.planCancel(MEMBER_ID, ORDER_ID)).willReturn(new OrderCancelPlan(List.of(100L), true));
 			given(paidOrderCancelHook.cancel(ORDER_ID, MEMBER_ID, "고객 변심",
 					new RefundAccountInfo("088", "12345678901234", "홍길동")))
 					.willReturn(new PaidOrderCancelResult(PaidOrderCancelStatus.CANCELED, false, OrderStatus.PAID,
@@ -126,6 +134,45 @@ class OrderCancelServiceTest {
 			// then
 			verify(paidOrderCancelHook).cancel(ORDER_ID, MEMBER_ID, "고객 변심",
 					new RefundAccountInfo("088", "12345678901234", "홍길동"));
+		}
+
+		@Test
+		@DisplayName("전액취소 대상이 아니면(PREPARING 혼재·클레임 이력 등) 상품 단위 클레임으로 각각 처리한다")
+		void cancelsPerItemWhenPreparingItemIsMixedIn() {
+			// given
+			OrderCancelRequest request = new OrderCancelRequest("고객 변심");
+			given(writer.findTarget(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
+			given(writer.planCancel(MEMBER_ID, ORDER_ID)).willReturn(new OrderCancelPlan(List.of(101L, 102L), false));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+
+			// when
+			OrderDetailResponse response = service.cancel(MEMBER_ID, ORDER_ID, request);
+
+			// then
+			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 101L, request);
+			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 102L, request);
+			verify(paidOrderCancelHook, never()).cancel(any(), any(), any(), any());
+			assertThat(response.limitedDropId()).isNull();
+		}
+
+		@Test
+		@DisplayName("결제가 PARTIAL_CANCELED 면(상품 하나를 먼저 취소한 뒤) 결제 있는 취소 경로로 가되 남은 상품만 처리한다")
+		void cancelsRemainingItemsWhenPaymentAlreadyPartiallyCanceled() {
+			// given
+			OrderCancelRequest request = new OrderCancelRequest("고객 변심");
+			given(writer.findTarget(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.PARTIAL_CANCELED));
+			given(writer.planCancel(MEMBER_ID, ORDER_ID)).willReturn(new OrderCancelPlan(List.of(102L), false));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+
+			// when
+			service.cancel(MEMBER_ID, ORDER_ID, request);
+
+			// then
+			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 102L, request);
+			verify(paidOrderCancelHook, never()).cancel(any(), any(), any(), any());
+			verify(writer, never()).cancelUnpaid(any(), any(), any());
 		}
 
 		@Test

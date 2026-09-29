@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
@@ -26,6 +28,8 @@ import com.groove.global.common.ErrorCode;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
@@ -148,6 +152,106 @@ class OrderCancelWriterTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("planCancel()")
+	class PlanCancel {
+
+		@Test
+		@DisplayName("모든 상품주문이 PAID 이고 클레임 이력이 없고 결제가 DONE 이면 전액취소 대상으로 표시한다")
+		void marksEligibleForFullCancelWhenAllPaidWithoutClaimHistory() {
+			// given
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
+			given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID))
+					.willReturn(Optional.of(PaymentFixture.approved(order)));
+
+			// when
+			OrderCancelPlan plan = writer.planCancel(MEMBER_ID, ORDER_ID);
+
+			// then
+			assertThat(plan.eligibleForFullCancel()).isTrue();
+			assertThat(plan.cancelableItemIds()).hasSize(1);
+		}
+
+		@Test
+		@DisplayName("PREPARING 상품주문이 섞여 있으면 취소 가능 목록에는 포함하되 전액취소 대상은 아니다")
+		void includesPreparingItemButNotEligibleForFullCancel() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			Artist artist = ArtistFixture.withId(1L);
+			Product first = ProductFixture.withId(ProductFixture.create(artist), 100L);
+			Product second = ProductFixture.withId(ProductFixture.create(artist), 200L);
+			Order mixedOrder = OrderFixture.withId(OrderFixture.createWithItems(member, List.of(first, second)),
+					ORDER_ID);
+			OrderFixture.markItemsStatus(mixedOrder, OrderItemStatus.PAID);
+			ReflectionTestUtils.setField(mixedOrder.getItems().get(1), "status", OrderItemStatus.PREPARING);
+			given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID))
+					.willReturn(Optional.of(mixedOrder));
+			given(paymentRepository.findByOrderId(ORDER_ID))
+					.willReturn(Optional.of(PaymentFixture.approved(mixedOrder)));
+
+			// when
+			OrderCancelPlan plan = writer.planCancel(MEMBER_ID, ORDER_ID);
+
+			// then
+			assertThat(plan.eligibleForFullCancel()).isFalse();
+			assertThat(plan.cancelableItemIds()).hasSize(2);
+		}
+
+		@Test
+		@DisplayName("진행 중인 클레임이 있는 상품주문은 취소 가능 목록에서 뺀다")
+		void excludesItemWithClaimInProgress() {
+			// given
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
+			OrderFixture.markFirstItemClaimStatus(order, OrderItemClaimStatus.CANCEL_REQUEST);
+			given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID))
+					.willReturn(Optional.of(PaymentFixture.approved(order)));
+
+			// when
+			OrderCancelPlan plan = writer.planCancel(MEMBER_ID, ORDER_ID);
+
+			// then
+			assertThat(plan.cancelableItemIds()).isEmpty();
+			assertThat(plan.eligibleForFullCancel()).isFalse();
+		}
+
+		@Test
+		@DisplayName("상품주문 상태는 PAID 로 돌아왔어도 클레임 이력(거부 표시)이 남아 있으면 전액취소 대상이 아니다")
+		void notEligibleWhenClaimHistoryRemainsEvenIfStatusIsPaid() {
+			// given: 취소 요청이 거부돼 상품주문은 PAID 로 남았지만 claim_status 는 CANCEL_REJECT 로 남는다
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
+			OrderFixture.markFirstItemClaimStatus(order, OrderItemClaimStatus.CANCEL_REJECT);
+			given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID))
+					.willReturn(Optional.of(PaymentFixture.approved(order)));
+
+			// when
+			OrderCancelPlan plan = writer.planCancel(MEMBER_ID, ORDER_ID);
+
+			// then
+			assertThat(plan.eligibleForFullCancel()).isFalse();
+		}
+
+		@Test
+		@DisplayName("결제가 PARTIAL_CANCELED 면 상품주문이 전부 PAID 여도 전액취소 대상이 아니다")
+		void notEligibleWhenPaymentAlreadyPartiallyCanceled() {
+			// given
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
+			given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID)).willReturn(Optional.of(order));
+			Payment partiallyCanceled = PaymentFixture.withStatus(PaymentFixture.approved(order),
+					PaymentStatus.PARTIAL_CANCELED);
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(partiallyCanceled));
+
+			// when
+			OrderCancelPlan plan = writer.planCancel(MEMBER_ID, ORDER_ID);
+
+			// then
+			assertThat(plan.eligibleForFullCancel()).isFalse();
+			assertThat(plan.cancelableItemIds()).hasSize(1);
 		}
 	}
 }

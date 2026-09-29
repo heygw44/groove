@@ -11,6 +11,7 @@ import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
@@ -63,6 +64,7 @@ public class PaymentCancelRetrier {
 	private final PaymentReconcileProperties properties;
 	private final Clock clock;
 	private final AlertNotifier alertNotifier;
+	private final OrderClaimFinalizeService orderClaimFinalizeService;
 
 	public void retry(PaymentCancelRetryCandidate candidate) {
 		LocalDateTime now = LocalDateTime.now(clock);
@@ -98,7 +100,9 @@ public class PaymentCancelRetrier {
 					result.transactionKey(), canceledAt);
 		} catch (RuntimeException ex) {
 			log.error("부분취소 재시도는 성공했으나 반영 실패, 다음 주기로 넘김: paymentCancelId={}", candidate.paymentCancelId(), ex);
+			return;
 		}
+		finalizeClaimDone(candidate, canceledAt);
 	}
 
 	private void safeFailRefund(PaymentCancelRetryCandidate candidate) {
@@ -106,7 +110,9 @@ public class PaymentCancelRetrier {
 			refundWriter.failRefund(candidate.paymentCancelId());
 		} catch (RuntimeException ex) {
 			log.error("부분취소 거절 기록 실패: paymentCancelId={}", candidate.paymentCancelId(), ex);
+			return;
 		}
+		finalizeClaimFailed(candidate);
 	}
 
 	private void verifyByLookup(PaymentCancelRetryCandidate candidate) {
@@ -152,7 +158,9 @@ public class PaymentCancelRetrier {
 			refundWriter.failRefund(candidate.paymentCancelId());
 		} catch (RuntimeException ex) {
 			log.error("부분취소 미반영 확정 실패: paymentCancelId={}", candidate.paymentCancelId(), ex);
+			return;
 		}
+		finalizeClaimFailed(candidate);
 	}
 
 	private void completeFromLookup(PaymentCancelRetryCandidate candidate, PaymentLookupResult lookup) {
@@ -162,6 +170,33 @@ public class PaymentCancelRetrier {
 					lookup.lastCancelTransactionKey(), canceledAt);
 		} catch (RuntimeException ex) {
 			log.error("부분취소 확인 조회로 완료를 반영하지 못함: paymentCancelId={}", candidate.paymentCancelId(), ex);
+			return;
+		}
+		finalizeClaimDone(candidate, canceledAt);
+	}
+
+	/** 클레임 승인으로 시작된 취소만 마무리 대상이다(orderClaimId 가 없으면 전액취소 등 클레임과 무관한 취소). */
+	private void finalizeClaimDone(PaymentCancelRetryCandidate candidate, LocalDateTime canceledAt) {
+		if (candidate.orderClaimId() == null) {
+			return;
+		}
+		try {
+			orderClaimFinalizeService.applyRefundDone(candidate.orderClaimId(), canceledAt);
+		} catch (RuntimeException ex) {
+			log.error("대사 확정 후 클레임 마무리 실패: orderClaimId={}, paymentCancelId={}", candidate.orderClaimId(),
+					candidate.paymentCancelId(), ex);
+		}
+	}
+
+	private void finalizeClaimFailed(PaymentCancelRetryCandidate candidate) {
+		if (candidate.orderClaimId() == null) {
+			return;
+		}
+		try {
+			orderClaimFinalizeService.applyRefundFailed(candidate.orderClaimId());
+		} catch (RuntimeException ex) {
+			log.error("대사 거절 후 클레임 되돌리기 실패: orderClaimId={}, paymentCancelId={}", candidate.orderClaimId(),
+					candidate.paymentCancelId(), ex);
 		}
 	}
 

@@ -53,7 +53,7 @@ class PaymentRefundServiceTest {
 
 	private PaymentRefundRequest request() {
 		return new PaymentRefundRequest(PAYMENT_ID, PAYMENT_CANCEL_ID, PAYMENT_KEY, new BigDecimal("10000"), "사유",
-				IDEMPOTENCY_KEY, null);
+				IDEMPOTENCY_KEY, null, null);
 	}
 
 	@Nested

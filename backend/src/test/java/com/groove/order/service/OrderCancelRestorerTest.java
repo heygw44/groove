@@ -34,6 +34,7 @@ import com.groove.limited.service.LimitedRelease;
 import com.groove.limited.service.LimitedReleaseSynchronizer;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.service.ProductSalesStatsUpdater;
@@ -81,7 +82,8 @@ class OrderCancelRestorerTest {
 		@Test
 		@DisplayName("복구 순서를 지키고 한정반 선점을 커밋 후 해제한다")
 		void restoresResourcesInOrder() {
-			// given
+			// given: 쿠폰은 상품주문이 전부 끝났을 때만 복원된다(D5) - 실제 호출자는 취소 확정 뒤에 restore() 를 부른다
+			OrderFixture.markItemsStatus(order, OrderItemStatus.CANCELED);
 			LimitedRelease release = new LimitedRelease(30L, 1L);
 			given(limitedPurchaseWriter.revertByOrder(order.getId(), NOW)).willReturn(Optional.of(release));
 

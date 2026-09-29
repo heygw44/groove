@@ -138,6 +138,11 @@ public class OrderItem extends BaseTimeEntity {
 		return this.productPrice.multiply(BigDecimal.valueOf(this.quantity));
 	}
 
+	/** 취소·반품 시 환불할 금액. 라인 금액에서 쿠폰 할인 배분 몫을 뺀다(D5). */
+	public BigDecimal getRefundableAmount() {
+		return getLineAmount().subtract(this.discountShare);
+	}
+
 	/** 결제 승인(카드·간편결제 즉시 승인 또는 가상계좌 입금 확인)으로 결제가 끝났음을 반영한다. */
 	void markPaid() {
 		if (isTerminal()) {
@@ -204,7 +209,47 @@ public class OrderItem extends BaseTimeEntity {
 		this.discountShare = discountShare;
 	}
 
-	private boolean isTerminal() {
+	/** 환불 결과를 기다리는 동안(즉시 취소 포함) 또는 관리자 승인을 기다리는 동안 진행 중 클레임을 표시한다. */
+	public void markClaimRequested(OrderItemClaimStatus claimStatus) {
+		this.claimStatus = claimStatus;
+	}
+
+	/** 반품 수거가 시작됐음을 표시한다. */
+	public void markCollecting() {
+		this.claimStatus = OrderItemClaimStatus.COLLECTING;
+	}
+
+	/** 취소 클레임이 승인·완료돼 상품주문이 취소로 확정된다. */
+	public void completeCancelClaim(LocalDateTime now) {
+		this.status = OrderItemStatus.CANCELED;
+		this.claimStatus = OrderItemClaimStatus.CANCEL_DONE;
+		this.canceledAt = now;
+	}
+
+	/** 반품 클레임이 완료돼 상품주문이 반품으로 확정된다. */
+	public void completeReturnClaim(LocalDateTime now) {
+		this.status = OrderItemStatus.RETURNED;
+		this.claimStatus = OrderItemClaimStatus.RETURN_DONE;
+		this.canceledAt = now;
+	}
+
+	/** 클레임이 거부되거나(관리자, 토스 거절) 철회 없이 종결돼 이행 상태는 그대로 두고 파생 표시만 남긴다. */
+	public void markClaimRejected(OrderItemClaimStatus rejectStatus) {
+		this.claimStatus = rejectStatus;
+	}
+
+	/** 클레임을 철회해 진행 중 표시를 지운다. */
+	public void clearClaim() {
+		this.claimStatus = null;
+	}
+
+	public boolean isClaimInProgress() {
+		return this.claimStatus == OrderItemClaimStatus.CANCEL_REQUEST
+				|| this.claimStatus == OrderItemClaimStatus.RETURN_REQUEST
+				|| this.claimStatus == OrderItemClaimStatus.COLLECTING;
+	}
+
+	public boolean isTerminal() {
 		return this.status == OrderItemStatus.CANCELED
 				|| this.status == OrderItemStatus.CANCELED_BY_NOPAYMENT
 				|| this.status == OrderItemStatus.PURCHASE_CONFIRMED
