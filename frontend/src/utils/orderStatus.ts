@@ -3,11 +3,7 @@ import type { OrderStatus, OrderStatusGroup } from '@/types/order';
 import type { PaymentStatus } from '@/types/payment';
 import { PAYMENT_STATUS_BADGE, PAYMENT_STATUS_LABEL } from '@/utils/paymentStatus';
 
-export const ORDER_STATUSES: readonly OrderStatus[] = [
-  'PENDING',
-  'PAID',
-  'CANCELED',
-];
+export const ORDER_STATUSES: readonly OrderStatus[] = ['PENDING', 'PAID', 'CANCELED'];
 
 const ORDER_STATUS_SET = new Set<string>(ORDER_STATUSES);
 
@@ -24,8 +20,15 @@ export const ORDER_STATUS_BADGE: Record<OrderStatus, BadgeVariant> = {
   CANCELED: 'danger',
 };
 
-/** 주문 상세 타임라인에 쓰는 결제 흐름 단계. 배송 이행은 상품주문 단위 상태가 담당한다. */
-export const ORDER_STATUS_STEPS = ['PENDING', 'PAID'] as const;
+// 구매자 입력 사유가 'constructor' 같은 프로토타입 키와 겹쳐도 안전하도록 Map 으로 둔다.
+const SYSTEM_CANCEL_REASON_LABEL = new Map<string, string>([
+  ['EXPIRED', '입금 기한 만료'],
+  ['SUPERSEDED', '다른 결제로 대체'],
+]);
+
+/** 시스템이 남긴 취소 사유 코드는 문구로 바꾸고, 구매자가 입력한 사유는 그대로 돌려준다. */
+export const formatCancelReason = (reason: string): string =>
+  SYSTEM_CANCEL_REASON_LABEL.get(reason) ?? reason;
 
 const CANCELABLE_STATUSES = new Set<OrderStatus>(['PENDING', 'PAID']);
 

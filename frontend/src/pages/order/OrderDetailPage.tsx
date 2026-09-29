@@ -10,7 +10,6 @@ import { useToast } from '@/components/common/toastContext';
 import { OrderCancelDialog } from '@/components/order/OrderCancelDialog';
 import { OrderItemCard } from '@/components/order/OrderItemCard';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
-import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
 import { PaymentInfoCard } from '@/components/order/PaymentInfoCard';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
 import { VirtualAccountNotice } from '@/components/order/VirtualAccountNotice';
@@ -20,7 +19,7 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import type { RefundAccount } from '@/types/order';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
 import { formatServerDate, formatServerDateTime } from '@/utils/formatDate';
-import { isCancelableStatus } from '@/utils/orderStatus';
+import { formatCancelReason, isCancelableStatus } from '@/utils/orderStatus';
 import {
   CANCEL_REQUESTED_MESSAGES,
   getOrderCancelSuccessMessage,
@@ -127,10 +126,6 @@ export default function OrderDetailPage() {
         )}
       </div>
 
-      <div className="mt-6">
-        <OrderStatusTimeline status={order.status} />
-      </div>
-
       {isWaitingForDeposit && order.payment?.virtualAccount && (
         <div className="mt-6">
           <VirtualAccountNotice
@@ -143,7 +138,9 @@ export default function OrderDetailPage() {
       {order.status === 'CANCELED' && order.canceledAt && (
         <div className="mt-6 rounded-lg border border-line bg-surface-muted px-5 py-4 text-sm text-content-muted">
           <p>{formatServerDateTime(order.canceledAt)} 취소</p>
-          {order.cancelReason && <p className="mt-1">사유: {order.cancelReason}</p>}
+          {order.cancelReason && (
+            <p className="mt-1">사유: {formatCancelReason(order.cancelReason)}</p>
+          )}
         </div>
       )}
 
