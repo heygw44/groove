@@ -2,22 +2,16 @@ package com.groove.order.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.groove.auth.LoginMember;
-import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
 import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchRequest;
-import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.service.AdminOrderService;
-import com.groove.order.service.AdminOrderStatusService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,7 +25,6 @@ import lombok.RequiredArgsConstructor;
 public class AdminOrderController {
 
 	private final AdminOrderService adminOrderService;
-	private final AdminOrderStatusService adminOrderStatusService;
 
 	@Operation(summary = "관리자 주문 목록 조회")
 	@GetMapping
@@ -44,12 +37,5 @@ public class AdminOrderController {
 	@GetMapping("/{id}")
 	public ApiResponse<AdminOrderDetailResponse> getDetail(@PathVariable Long id) {
 		return ApiResponse.ok(adminOrderService.getDetail(id));
-	}
-
-	@Operation(summary = "주문 상태 전이")
-	@PatchMapping("/{id}/status")
-	public ApiResponse<AdminOrderDetailResponse> changeStatus(@AuthMember LoginMember admin, @PathVariable Long id,
-			@Valid @RequestBody AdminOrderStatusChangeRequest request) {
-		return ApiResponse.ok(adminOrderStatusService.changeStatus(admin.id(), id, request));
 	}
 }

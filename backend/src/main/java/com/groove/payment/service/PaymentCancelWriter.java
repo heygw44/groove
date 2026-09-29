@@ -75,7 +75,7 @@ public class PaymentCancelWriter {
 		if (paymentCancelRepository.existsByPaymentIdAndStatus(payment.getId(), PaymentCancelStatus.REQUESTED)) {
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_IN_PROGRESS);
 		}
-		order.requestCancel(reason, memberId == null);
+		order.requestCancel(reason);
 		BigDecimal cancelAmount = payment.remainingAmount();
 		payment.requestCancel();
 		CancelRequest request = toRequest(order, payment, previousOrderStatus, false, refundAccount);

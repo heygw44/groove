@@ -118,7 +118,7 @@ describe('OrderDetailPage', () => {
   it('상품주문 availableActions 에 WRITE_REVIEW 가 있으면 리뷰 쓰기 링크를 보여준다', () => {
     // given
     const order = buildOrder({
-      status: 'DELIVERED',
+      status: 'PAID',
       items: [
         {
           productId: 1,

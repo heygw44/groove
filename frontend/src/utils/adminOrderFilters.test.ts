@@ -140,7 +140,7 @@ describe('serializeAdminOrderFilters()', () => {
 
   it('직렬화한 값을 다시 파싱하면 원래 필터로 돌아온다', () => {
     // given
-    const value = filters({ status: 'SHIPPED', keyword: 'ORD-1', page: 4 });
+    const value = filters({ status: 'PAID', keyword: 'ORD-1', page: 4 });
 
     // when
     const result = parseAdminOrderFilters(serializeAdminOrderFilters(value));

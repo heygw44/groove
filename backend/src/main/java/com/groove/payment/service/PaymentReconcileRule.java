@@ -76,7 +76,7 @@ public final class PaymentReconcileRule {
 
 	private static PaymentReconcileDecision decideCancelRequested(OrderStatus orderStatus,
 			PaymentLookupStatus lookupStatus) {
-		if (orderStatus != OrderStatus.PAID && orderStatus != OrderStatus.PREPARING) {
+		if (orderStatus != OrderStatus.PAID) {
 			return PaymentReconcileDecision.MANUAL_REVIEW;
 		}
 		if (lookupStatus == PaymentLookupStatus.CANCELED) {

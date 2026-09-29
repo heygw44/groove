@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import type { OrderStatus } from '@/types/order';
 import {
-  ADMIN_ORDER_TRANSITIONS,
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
   ORDER_STATUSES,
@@ -26,35 +25,13 @@ describe('isCancelableStatus()', () => {
   it.each<[OrderStatus, boolean]>([
     ['PENDING', true],
     ['PAID', true],
-    ['PREPARING', false],
-    ['SHIPPED', false],
-    ['DELIVERED', false],
     ['CANCELED', false],
-    ['REFUNDED', false],
   ])('%s 상태는 취소 가능 여부가 %s 이다', (status, expected) => {
     // given & when
     const result = isCancelableStatus(status);
 
     // then
     expect(result).toBe(expected);
-  });
-});
-
-describe('ADMIN_ORDER_TRANSITIONS', () => {
-  it.each<[OrderStatus, OrderStatus[]]>([
-    ['PENDING', []],
-    ['PAID', ['PREPARING', 'CANCELED']],
-    ['PREPARING', ['SHIPPED', 'CANCELED']],
-    ['SHIPPED', ['DELIVERED']],
-    ['DELIVERED', []],
-    ['CANCELED', []],
-    ['REFUNDED', []],
-  ])('%s 상태에서 전이 가능한 상태는 %s 이다', (status, expected) => {
-    // given & when
-    const result = ADMIN_ORDER_TRANSITIONS[status];
-
-    // then
-    expect(result).toEqual(expected);
   });
 });
 
