@@ -99,6 +99,12 @@ public final class OrderFixture {
 		return order;
 	}
 
+	/** 첫 번째 상품주문의 발송처리 시각을 직접 심는다. 자동 배송완료 스케줄러 경계 테스트에 쓴다. */
+	public static Order markFirstItemShippedAt(Order order, LocalDateTime shippedAt) {
+		ReflectionTestUtils.setField(order.getItems().get(0), "shippedAt", shippedAt);
+		return order;
+	}
+
 	public static Order withExpiresAt(Order order, LocalDateTime expiresAt) {
 		ReflectionTestUtils.setField(order, "expiresAt", expiresAt);
 		return order;

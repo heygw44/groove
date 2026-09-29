@@ -61,6 +61,7 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.OrderStatusGroup;
 import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderCreateService;
+import com.groove.order.service.OrderItemConfirmService;
 import com.groove.order.service.OrderService;
 import com.groove.order.service.OrderShippingAddressService;
 
@@ -92,6 +93,9 @@ class OrderControllerTest {
 
 	@MockitoBean
 	OrderShippingAddressService orderShippingAddressService;
+
+	@MockitoBean
+	OrderItemConfirmService orderItemConfirmService;
 
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
@@ -486,6 +490,47 @@ class OrderControllerTest {
 			mockMvc.perform(post(BASE_URL + "/1/cancel").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+		}
+	}
+
+	@Nested
+	@DisplayName("POST /api/v1/orders/{orderId}/items/{itemId}/confirm")
+	class ConfirmPurchase {
+
+		@Test
+		@DisplayName("본인 주문이면 200 과 구매확정된 주문 상세를 반환한다")
+		void confirmsForOwner() throws Exception {
+			// given
+			given(orderItemConfirmService.confirm(1L, 1L, 620L)).willReturn(sampleDetailResponse(OrderStatus.PAID));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/1/items/620/confirm").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")));
+			verify(orderItemConfirmService).confirm(1L, 1L, 620L);
+		}
+
+		@Test
+		@DisplayName("구매확정할 수 없는 상태면 400 ORDER_CLAIM_NOT_ALLOWED 를 반환한다")
+		void returnsBadRequestWhenNotAllowed() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED))
+					.given(orderItemConfirmService).confirm(1L, 1L, 620L);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/1/items/620/confirm").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("ORDER_CLAIM_NOT_ALLOWED")));
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/1/items/620/confirm"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(orderItemConfirmService, never()).confirm(any(), any(), any());
 		}
 	}
 

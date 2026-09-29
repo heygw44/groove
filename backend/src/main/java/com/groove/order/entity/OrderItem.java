@@ -249,6 +249,57 @@ public class OrderItem extends BaseTimeEntity {
 				|| this.claimStatus == OrderItemClaimStatus.COLLECTING;
 	}
 
+	/**
+	 * 관리자 발주확인(PAID → PREPARING). 일괄 처리에서 대상이 아닌 항목은 건너뛰도록 대상이 아니면 false 를
+	 * 반환한다(기존 {@link #moveToPreparing}은 호환 shim 전용이라 원본 상태를 따지지 않는다).
+	 */
+	public boolean confirmPreparing(LocalDateTime now) {
+		if (this.status != OrderItemStatus.PAID) {
+			return false;
+		}
+		this.status = OrderItemStatus.PREPARING;
+		this.preparedAt = now;
+		return true;
+	}
+
+	/** 관리자 발송처리(PAID·PREPARING → SHIPPING). 진행 중 클레임이 있거나 대상 상태가 아니면 false. */
+	public boolean startShipping(CourierCode courierCode, String trackingNumber, LocalDateTime now) {
+		if (OrderItemClaimStatus.isInProgress(this.claimStatus)) {
+			return false;
+		}
+		if (this.status != OrderItemStatus.PAID && this.status != OrderItemStatus.PREPARING) {
+			return false;
+		}
+		this.status = OrderItemStatus.SHIPPING;
+		this.shippedAt = now;
+		this.courierCode = courierCode;
+		this.trackingNumber = trackingNumber;
+		return true;
+	}
+
+	/** 배송완료(SHIPPING → DELIVERED), 관리자 또는 자동 스케줄러 공용. */
+	public boolean completeDelivery(LocalDateTime now) {
+		if (this.status != OrderItemStatus.SHIPPING) {
+			return false;
+		}
+		this.status = OrderItemStatus.DELIVERED;
+		this.deliveredAt = now;
+		return true;
+	}
+
+	/** 구매확정(SHIPPING·DELIVERED → PURCHASE_CONFIRMED), 구매자 또는 자동 스케줄러 공용. */
+	public boolean confirmPurchase(LocalDateTime now) {
+		if (OrderItemClaimStatus.isInProgress(this.claimStatus)) {
+			return false;
+		}
+		if (this.status != OrderItemStatus.SHIPPING && this.status != OrderItemStatus.DELIVERED) {
+			return false;
+		}
+		this.status = OrderItemStatus.PURCHASE_CONFIRMED;
+		this.confirmedAt = now;
+		return true;
+	}
+
 	public boolean isTerminal() {
 		return this.status == OrderItemStatus.CANCELED
 				|| this.status == OrderItemStatus.CANCELED_BY_NOPAYMENT

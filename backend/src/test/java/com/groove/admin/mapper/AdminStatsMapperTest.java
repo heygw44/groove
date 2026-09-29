@@ -34,6 +34,8 @@ import com.groove.limited.entity.LimitedDropStat;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentCancel;
 import com.groove.product.entity.Artist;
@@ -608,6 +610,57 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result.pendingOrderCount()).isEqualTo(countBefore);
+		}
+
+		@Test
+		@DisplayName("상품주문 상태·클레임 상태별 처리 대기 건수를 늘린다")
+		void increasesProcessingCountsByOrderItemStatus() {
+			// given: 공유 DB 라 절대 개수 대신 주문 추가 전후의 증분으로 단언한다
+			LocalDateTime todayStart = LocalDateTime.of(2033, 5, 10, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2033, 5, 11, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Status Product", new BigDecimal("20000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			AdminStatsSummaryResponse before = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			Order paidOrder = OrderFixture.create(member, "20330510-ASMSUM010");
+			paidOrder.addItem(product, 1);
+			paidOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(paidOrder, OrderItemStatus.PAID);
+			em.persist(paidOrder);
+
+			Order depositWaitingOrder = OrderFixture.create(member, "20330510-ASMSUM011");
+			depositWaitingOrder.addItem(product, 1);
+			depositWaitingOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(depositWaitingOrder, OrderItemStatus.PAYMENT_WAITING);
+			em.persist(depositWaitingOrder);
+
+			Order cancelRequestOrder = OrderFixture.create(member, "20330510-ASMSUM012");
+			cancelRequestOrder.addItem(product, 1);
+			cancelRequestOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(cancelRequestOrder, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(cancelRequestOrder, OrderItemClaimStatus.CANCEL_REQUEST);
+			em.persist(cancelRequestOrder);
+
+			Order returnRequestOrder = OrderFixture.create(member, "20330510-ASMSUM013");
+			returnRequestOrder.addItem(product, 1);
+			returnRequestOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(returnRequestOrder, OrderItemStatus.DELIVERED);
+			OrderFixture.markFirstItemClaimStatus(returnRequestOrder, OrderItemClaimStatus.RETURN_REQUEST);
+			em.persist(returnRequestOrder);
+
+			em.flush();
+			em.clear();
+
+			// when: 새 카운트 4개는 날짜 창과 무관하므로, MyBatis 세션 로컬 캐시가 같은 파라미터의 재호출을 캐시된
+			// 값으로 돌려주지 않도록 tomorrowStart 를 1분 밀어 다른 파라미터로 다시 조회한다.
+			AdminStatsSummaryResponse after = adminStatsMapper.findSummary(todayStart, tomorrowStart.plusMinutes(1));
+
+			// then
+			assertThat(after.newOrderCount()).isEqualTo(before.newOrderCount() + 1);
+			assertThat(after.depositWaitingCount()).isEqualTo(before.depositWaitingCount() + 1);
+			assertThat(after.cancelRequestCount()).isEqualTo(before.cancelRequestCount() + 1);
+			assertThat(after.returnRequestCount()).isEqualTo(before.returnRequestCount() + 1);
 		}
 
 		@Test
