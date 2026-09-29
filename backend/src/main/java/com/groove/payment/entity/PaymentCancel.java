@@ -76,19 +76,34 @@ public class PaymentCancel extends BaseTimeEntity {
 	@Column(name = "done_at")
 	private LocalDateTime doneAt;
 
+	/**
+	 * 이 취소 건이 상품 단위 취소·반품 클레임(order_claim) 승인으로 시작됐으면 그 id 를 담는다. 전액취소 등
+	 * 클레임 없이 시작된 취소는 null 이다. 결과불명으로 남은 건을 대사({@code PaymentCancelRetrier})가 나중에
+	 * 확정할 때 이 id 로 대상 클레임·상품주문을 찾아 마무리한다 - order 엔티티를 직접 참조하지 않고 대리키만
+	 * 갖는 이유는 payment 패키지가 order.entity.OrderClaim 에 의존하지 않게 하기 위해서다.
+	 */
+	@Column(name = "order_claim_id")
+	private Long orderClaimId;
+
 	private PaymentCancel(Payment payment, String idempotencyKey, BigDecimal cancelAmount, String reason,
-			LocalDateTime requestedAt) {
+			LocalDateTime requestedAt, Long orderClaimId) {
 		this.payment = payment;
 		this.idempotencyKey = idempotencyKey;
 		this.cancelAmount = cancelAmount;
 		this.reason = truncate(reason);
 		this.status = PaymentCancelStatus.REQUESTED;
 		this.requestedAt = requestedAt;
+		this.orderClaimId = orderClaimId;
 	}
 
 	public static PaymentCancel request(Payment payment, String idempotencyKey, BigDecimal cancelAmount,
 			String reason, LocalDateTime requestedAt) {
-		return new PaymentCancel(payment, idempotencyKey, cancelAmount, reason, requestedAt);
+		return new PaymentCancel(payment, idempotencyKey, cancelAmount, reason, requestedAt, null);
+	}
+
+	public static PaymentCancel requestForClaim(Payment payment, String idempotencyKey, BigDecimal cancelAmount,
+			String reason, LocalDateTime requestedAt, Long orderClaimId) {
+		return new PaymentCancel(payment, idempotencyKey, cancelAmount, reason, requestedAt, orderClaimId);
 	}
 
 	public void complete(String transactionKey, LocalDateTime doneTime) {

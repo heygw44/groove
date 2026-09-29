@@ -39,6 +39,17 @@ public class PaymentRefundWriter {
 	@Transactional
 	public PaymentRefundRequest requestRefund(Long paymentId, BigDecimal cancelAmount, String reason,
 			RefundAccountInfo refundAccount) {
+		return requestRefund(paymentId, cancelAmount, reason, refundAccount, null);
+	}
+
+	/**
+	 * 취소 클레임 승인이 호출하는 경로. {@code orderClaimId} 를 payment_cancel 에 같이 남겨, 결과불명으로
+	 * REQUESTED 에 남은 건을 대사({@link PaymentCancelRetrier})가 나중에 확정할 때 어느 클레임을 마무리할지
+	 * 찾을 수 있게 한다.
+	 */
+	@Transactional
+	public PaymentRefundRequest requestRefund(Long paymentId, BigDecimal cancelAmount, String reason,
+			RefundAccountInfo refundAccount, Long orderClaimId) {
 		Payment payment = paymentRepository.findByIdForUpdate(paymentId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 		if (payment.getStatus() != PaymentStatus.DONE && payment.getStatus() != PaymentStatus.PARTIAL_CANCELED) {
@@ -50,6 +61,9 @@ public class PaymentRefundWriter {
 		if (paymentCancelRepository.existsByPaymentIdAndStatus(paymentId, PaymentCancelStatus.REQUESTED)) {
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_IN_PROGRESS);
 		}
+		if (payment.isVirtualAccount() && refundAccount == null) {
+			throw new BusinessException(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+		}
 		if (cancelAmount == null || cancelAmount.signum() <= 0
 				|| cancelAmount.compareTo(payment.remainingAmount()) > 0) {
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE);
@@ -59,10 +73,11 @@ public class PaymentRefundWriter {
 		String idempotencyKey = IDEMPOTENCY_KEY_PREFIX + payment.getPaymentKey() + "-" + sequence;
 		LocalDateTime requestedAt = LocalDateTime.now(clock);
 		PaymentCancel paymentCancel = paymentCancelRepository.save(
-				PaymentCancel.request(payment, idempotencyKey, cancelAmount, reason, requestedAt));
+				PaymentCancel.requestForClaim(payment, idempotencyKey, cancelAmount, reason, requestedAt,
+						orderClaimId));
 
 		return new PaymentRefundRequest(paymentId, paymentCancel.getId(), payment.getPaymentKey(), cancelAmount,
-				reason, idempotencyKey, refundAccount);
+				reason, idempotencyKey, refundAccount, orderClaimId);
 	}
 
 	@Transactional

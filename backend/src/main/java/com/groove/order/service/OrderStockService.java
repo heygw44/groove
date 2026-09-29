@@ -40,7 +40,7 @@ public class OrderStockService {
 
 	@Transactional
 	public void deduct(Order order) {
-		Map<Long, Stock> stocksByProductId = lockStocks(order);
+		Map<Long, Stock> stocksByProductId = lockStocks(order.getItems());
 		for (OrderItem item : sortedItems(order)) {
 			stocksByProductId.get(item.getProduct().getId()).decrease(item.getQuantity());
 		}
@@ -57,9 +57,22 @@ public class OrderStockService {
 
 	@Transactional
 	public void restore(Order order) {
-		Map<Long, Stock> stocksByProductId = lockStocks(order);
+		restore(order.getItems(), order.getOrderNumber());
+	}
+
+	/** 상품 단위 취소·반품 클레임이 완료된 상품주문만 복원한다(order_item 단위 오버로드). */
+	@Transactional
+	public void restore(List<OrderItem> items) {
+		if (items.isEmpty()) {
+			return;
+		}
+		restore(items, items.get(0).getOrder().getOrderNumber());
+	}
+
+	private void restore(List<OrderItem> items, String orderNumber) {
+		Map<Long, Stock> stocksByProductId = lockStocks(items);
 		Map<Long, Integer> quantitiesBeforeRestore = new LinkedHashMap<>();
-		for (OrderItem item : sortedItems(order)) {
+		for (OrderItem item : sortedItems(items)) {
 			Stock stock = stocksByProductId.get(item.getProduct().getId());
 			quantitiesBeforeRestore.put(item.getProduct().getId(), stock.getQuantity());
 			stock.increase(item.getQuantity());
@@ -68,10 +81,10 @@ public class OrderStockService {
 		// 이력 INSERT 가 stock 행에 FK 공유 락을 잡아 UPDATE 와 데드락이 나므로 재고 UPDATE 를 먼저 flush 한다.
 		flushStockUpdates();
 
-		for (OrderItem item : sortedItems(order)) {
+		for (OrderItem item : sortedItems(items)) {
 			Stock stock = stocksByProductId.get(item.getProduct().getId());
 			stockHistoryRepository.save(StockHistory.of(stock, StockChangeType.CANCEL, item.getQuantity(),
-					STOCK_CANCEL_REASON_PREFIX + order.getOrderNumber()));
+					STOCK_CANCEL_REASON_PREFIX + orderNumber));
 		}
 
 		// 이 경로는 비관적 락으로 재고를 직접 조작해 StockService.adjust() 의 재입고 이벤트 발행을 타지 않으므로 여기서 발행한다.
@@ -84,7 +97,11 @@ public class OrderStockService {
 	}
 
 	private List<OrderItem> sortedItems(Order order) {
-		return order.getItems().stream()
+		return sortedItems(order.getItems());
+	}
+
+	private List<OrderItem> sortedItems(List<OrderItem> items) {
+		return items.stream()
 				.sorted(Comparator.comparing(item -> item.getProduct().getId()))
 				.toList();
 	}
@@ -104,8 +121,8 @@ public class OrderStockService {
 		return new BusinessException(ErrorCode.STOCK_CONFLICT);
 	}
 
-	private Map<Long, Stock> lockStocks(Order order) {
-		List<Long> productIds = order.getItems().stream()
+	private Map<Long, Stock> lockStocks(List<OrderItem> items) {
+		List<Long> productIds = items.stream()
 				.map(item -> item.getProduct().getId())
 				.distinct()
 				.sorted()

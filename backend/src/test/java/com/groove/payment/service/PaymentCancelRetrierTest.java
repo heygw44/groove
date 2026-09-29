@@ -3,6 +3,7 @@ package com.groove.payment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -31,6 +32,7 @@ import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.order.entity.Order;
+import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
@@ -70,6 +72,9 @@ class PaymentCancelRetrierTest {
 	@Mock
 	private AlertNotifier alertNotifier;
 
+	@Mock
+	private OrderClaimFinalizeService orderClaimFinalizeService;
+
 	private PaymentCancelRetrier retrier;
 	private Clock clock;
 
@@ -79,7 +84,7 @@ class PaymentCancelRetrierTest {
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 				Duration.ofMinutes(2), 50, 10, Duration.ofMinutes(1));
 		retrier = new PaymentCancelRetrier(refundWriter, paymentRepository, reconcileLogRepository, paymentClient,
-				properties, clock, alertNotifier);
+				properties, clock, alertNotifier, orderClaimFinalizeService);
 	}
 
 	@Nested
@@ -103,6 +108,40 @@ class PaymentCancelRetrierTest {
 			verify(refundWriter).completeRefund(PAYMENT_ID, PAYMENT_CANCEL_ID, CANCEL_AMOUNT, "txn-retry-1",
 					canceledAt);
 			verifyNoInteractions(paymentRepository, reconcileLogRepository, alertNotifier);
+		}
+
+		@Test
+		@DisplayName("클레임 승인으로 시작된 취소가 재시도로 완료되면 클레임도 함께 마무리한다")
+		void finalizesClaimWhenRetrySucceeds() {
+			// given
+			Long claimId = 700L;
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), claimId);
+			LocalDateTime canceledAt = NOW.minusMinutes(1);
+			given(paymentClient.cancel(PaymentCancelCommand.of(PAYMENT_KEY, "부분 반품", CANCEL_AMOUNT, IDEMPOTENCY_KEY,
+					null))).willReturn(new PaymentCancelResult(PAYMENT_KEY, "PARTIAL_CANCELED", canceledAt,
+							"txn-retry-1", BigDecimal.ZERO));
+
+			// when
+			retrier.retry(candidate);
+
+			// then
+			verify(orderClaimFinalizeService).applyRefundDone(claimId, canceledAt);
+		}
+
+		@Test
+		@DisplayName("클레임 승인으로 시작된 취소를 토스가 거절하면 클레임을 되돌린다")
+		void revertsClaimWhenTossRejectsExplicitly() {
+			// given
+			Long claimId = 700L;
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), claimId);
+			given(paymentClient.cancel(any(PaymentCancelCommand.class)))
+					.willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED));
+
+			// when
+			retrier.retry(candidate);
+
+			// then
+			verify(orderClaimFinalizeService).applyRefundFailed(claimId);
 		}
 
 		@Test
@@ -266,7 +305,8 @@ class PaymentCancelRetrierTest {
 			PaymentReconcileProperties longGraceProperties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 					Duration.ofMinutes(2), 50, 1, Duration.ofDays(30));
 			PaymentCancelRetrier longGraceRetrier = new PaymentCancelRetrier(refundWriter, paymentRepository,
-					reconcileLogRepository, paymentClient, longGraceProperties, clock, alertNotifier);
+					reconcileLogRepository, paymentClient, longGraceProperties, clock, alertNotifier,
+					orderClaimFinalizeService);
 			PaymentCancelRetryCandidate candidate = candidate(NOW.minusDays(15));
 			Payment payment = paymentWith(new BigDecimal("30000"), BigDecimal.ZERO);
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
@@ -281,11 +321,137 @@ class PaymentCancelRetrierTest {
 			verify(paymentClient, never()).cancel(any(PaymentCancelCommand.class));
 			verify(paymentClient).lookup(TOSS_ORDER_ID);
 		}
+
+		@Test
+		@DisplayName("재시도 성공 후 반영이 실패하면 다음 주기로 넘기고 클레임은 건드리지 않는다")
+		void keepsGoingWhenCompletionAfterRetryFails() {
+			// given
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), 700L);
+			LocalDateTime canceledAt = NOW.minusMinutes(1);
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willReturn(
+					new PaymentCancelResult(PAYMENT_KEY, "PARTIAL_CANCELED", canceledAt, "txn-retry-1",
+							BigDecimal.ZERO));
+			willThrow(new IllegalStateException("반영 실패")).given(refundWriter).completeRefund(PAYMENT_ID,
+					PAYMENT_CANCEL_ID, CANCEL_AMOUNT, "txn-retry-1", canceledAt);
+
+			// when
+			retrier.retry(candidate);
+
+			// then
+			verifyNoInteractions(orderClaimFinalizeService);
+		}
+
+		@Test
+		@DisplayName("거절 기록 자체가 실패해도 예외를 전파하지 않는다")
+		void doesNotPropagateWhenFailRefundRecordingFails() {
+			// given
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), 700L);
+			given(paymentClient.cancel(any(PaymentCancelCommand.class)))
+					.willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED));
+			willThrow(new IllegalStateException("기록 실패")).given(refundWriter).failRefund(PAYMENT_CANCEL_ID);
+
+			// when
+			retrier.retry(candidate);
+
+			// then
+			verifyNoInteractions(orderClaimFinalizeService);
+		}
+
+		@Test
+		@DisplayName("확인 조회 자체가 실패하면 아무 것도 반영하지 않는다")
+		void doesNothingWhenLookupCommunicationFails() {
+			// given
+			PaymentCancelRetryCandidate candidate = candidate(NOW.minusMinutes(11));
+			given(paymentClient.lookup(TOSS_ORDER_ID)).willThrow(new RuntimeException("Read timed out"));
+
+			// when
+			retrier.retry(candidate);
+
+			// then
+			verifyNoInteractions(refundWriter, alertNotifier);
+			verify(reconcileLogRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("미반영 확정 기록이 실패해도 예외를 전파하지 않는다")
+		void doesNotPropagateWhenFailNotAppliedRecordingFails() {
+			// given
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(11), 700L);
+			Payment payment = paymentWith(new BigDecimal("30000"), new BigDecimal("5000"));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, PAYMENT_KEY, "카드", null, null, null, new BigDecimal("25000"), null));
+			willThrow(new IllegalStateException("기록 실패")).given(refundWriter).failRefund(PAYMENT_CANCEL_ID);
+
+			// when
+			retrier.retry(candidate);
+
+			// then
+			verifyNoInteractions(orderClaimFinalizeService);
+		}
+
+		@Test
+		@DisplayName("확인 조회로 완료 반영이 실패해도 예외를 전파하지 않는다")
+		void doesNotPropagateWhenCompleteFromLookupFails() {
+			// given
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(11), 700L);
+			Payment payment = paymentWith(new BigDecimal("30000"), new BigDecimal("5000"));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			LocalDateTime canceledAt = NOW.minusMinutes(1);
+			given(paymentClient.lookup(TOSS_ORDER_ID)).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.PARTIAL_CANCELED, PAYMENT_KEY, "카드", null, null, canceledAt,
+					new BigDecimal("15000"), "txn-verify-1"));
+			willThrow(new IllegalStateException("반영 실패")).given(refundWriter).completeRefund(PAYMENT_ID,
+					PAYMENT_CANCEL_ID, CANCEL_AMOUNT, "txn-verify-1", canceledAt);
+
+			// when
+			retrier.retry(candidate);
+
+			// then
+			verifyNoInteractions(orderClaimFinalizeService);
+		}
+
+		@Test
+		@DisplayName("대사 확정 후 클레임 마무리 자체가 실패해도 예외를 전파하지 않는다")
+		void doesNotPropagateWhenFinalizeDoneFails() {
+			// given
+			Long claimId = 700L;
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), claimId);
+			LocalDateTime canceledAt = NOW.minusMinutes(1);
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willReturn(
+					new PaymentCancelResult(PAYMENT_KEY, "PARTIAL_CANCELED", canceledAt, "txn-retry-1",
+							BigDecimal.ZERO));
+			willThrow(new IllegalStateException("마무리 실패")).given(orderClaimFinalizeService)
+					.applyRefundDone(claimId, canceledAt);
+
+			// when & then
+			org.assertj.core.api.Assertions.assertThatCode(() -> retrier.retry(candidate)).doesNotThrowAnyException();
+		}
+
+		@Test
+		@DisplayName("클레임 거절 되돌리기 자체가 실패해도 예외를 전파하지 않는다")
+		void doesNotPropagateWhenFinalizeFailedFails() {
+			// given
+			Long claimId = 700L;
+			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), claimId);
+			given(paymentClient.cancel(any(PaymentCancelCommand.class)))
+					.willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED));
+			willThrow(new IllegalStateException("되돌리기 실패")).given(orderClaimFinalizeService)
+					.applyRefundFailed(claimId);
+
+			// when & then
+			org.assertj.core.api.Assertions.assertThatCode(() -> retrier.retry(candidate)).doesNotThrowAnyException();
+		}
 	}
 
 	private PaymentCancelRetryCandidate candidate(LocalDateTime requestedAt) {
 		return new PaymentCancelRetryCandidate(PAYMENT_CANCEL_ID, PAYMENT_ID, PAYMENT_KEY, TOSS_ORDER_ID,
-				CANCEL_AMOUNT, IDEMPOTENCY_KEY, "부분 반품", requestedAt);
+				CANCEL_AMOUNT, IDEMPOTENCY_KEY, "부분 반품", requestedAt, null);
+	}
+
+	private PaymentCancelRetryCandidate candidateWithClaim(LocalDateTime requestedAt, Long orderClaimId) {
+		return new PaymentCancelRetryCandidate(PAYMENT_CANCEL_ID, PAYMENT_ID, PAYMENT_KEY, TOSS_ORDER_ID,
+				CANCEL_AMOUNT, IDEMPOTENCY_KEY, "부분 반품", requestedAt, orderClaimId);
 	}
 
 	private Payment paymentWith(BigDecimal amount, BigDecimal canceledAmount) {

@@ -32,7 +32,7 @@ public interface PaymentCancelRepository extends JpaRepository<PaymentCancel, Lo
 	 */
 	@Query("""
 			select new com.groove.payment.dto.PaymentCancelRetryCandidate(pc.id, p.id, p.paymentKey, p.tossOrderId,
-					pc.cancelAmount, pc.idempotencyKey, pc.reason, pc.requestedAt)
+					pc.cancelAmount, pc.idempotencyKey, pc.reason, pc.requestedAt, pc.orderClaimId)
 			from PaymentCancel pc join pc.payment p
 			where pc.status = com.groove.payment.entity.PaymentCancelStatus.REQUESTED
 			and p.status in (com.groove.payment.entity.PaymentStatus.DONE,

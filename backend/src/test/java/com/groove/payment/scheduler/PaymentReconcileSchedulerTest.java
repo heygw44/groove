@@ -354,7 +354,7 @@ class PaymentReconcileSchedulerTest {
 			stubLockToRunTask();
 			given(reconcileService.findCandidates(now)).willReturn(List.of());
 			PaymentCancelRetryCandidate candidate = new PaymentCancelRetryCandidate(1L, 10L, "tviva-refund", "toss-1",
-					BigDecimal.TEN, "cancel-tviva-refund-1", "부분 반품", now.minusMinutes(2));
+					BigDecimal.TEN, "cancel-tviva-refund-1", "부분 반품", now.minusMinutes(2), null);
 			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
 					.willReturn(List.of(candidate));
 
@@ -372,9 +372,9 @@ class PaymentReconcileSchedulerTest {
 			stubLockToRunTask();
 			given(reconcileService.findCandidates(now)).willReturn(List.of());
 			PaymentCancelRetryCandidate first = new PaymentCancelRetryCandidate(1L, 10L, "tviva-refund-1", "toss-1",
-					BigDecimal.TEN, "cancel-tviva-refund-1-1", "부분 반품", now.minusMinutes(2));
+					BigDecimal.TEN, "cancel-tviva-refund-1-1", "부분 반품", now.minusMinutes(2), null);
 			PaymentCancelRetryCandidate second = new PaymentCancelRetryCandidate(2L, 20L, "tviva-refund-2", "toss-2",
-					BigDecimal.TEN, "cancel-tviva-refund-2-1", "부분 반품", now.minusMinutes(2));
+					BigDecimal.TEN, "cancel-tviva-refund-2-1", "부분 반품", now.minusMinutes(2), null);
 			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
 					.willReturn(List.of(first, second));
 			willThrow(new IllegalStateException("boom")).given(paymentCancelRetrier).retry(first);

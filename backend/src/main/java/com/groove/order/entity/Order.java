@@ -233,6 +233,19 @@ public class Order extends BaseTimeEntity {
 		this.cancelReason = null;
 	}
 
+	/**
+	 * 상품 단위 취소·반품 클레임으로 주문에 속한 상품주문이 전부 취소·반품·미입금취소로 끝났을 때 주문 자체도
+	 * 취소로 확정한다(D5). 이미 취소된 주문이면 아무 것도 하지 않는다(멱등) - 기존 전액취소 경로는 이 호출 전에
+	 * 이미 {@link #completeCancel}/{@link #cancel} 등으로 CANCELED 를 채워 뒀다.
+	 */
+	public void markCanceledByItemClaims(LocalDateTime now) {
+		if (this.status == OrderStatus.CANCELED) {
+			return;
+		}
+		this.status = OrderStatus.CANCELED;
+		this.canceledAt = now;
+	}
+
 	/** 관리자 상태 전이(PATCH /admin/orders/{id}/status)용. 허용되지 않는 전이는 예외를 던진다. */
 	public void changeStatus(OrderStatus next) {
 		if (!this.status.canTransitionTo(next)) {
