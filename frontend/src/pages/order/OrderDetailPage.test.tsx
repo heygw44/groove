@@ -105,7 +105,7 @@ afterEach(() => {
 });
 
 describe('OrderDetailPage', () => {
-  it('주문 상품 카드에 재구매 액션을 보여준다', () => {
+  it('진행 중 상품에는 재구매 액션을 보여주지 않는다', () => {
     // given
     mockOrder(buildOrder());
     mockCancelMutation(buildOrder());
@@ -117,8 +117,8 @@ describe('OrderDetailPage', () => {
     expect(screen.getByText('레코드 판')).toBeInTheDocument();
     expect(screen.getByText('ORD-1-01')).toBeInTheDocument();
     expect(screen.getByText('결제 금액 10,000원')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '장바구니 담기' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '바로 구매하기' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '장바구니 담기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '바로 구매하기' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '리뷰 쓰기' })).not.toBeInTheDocument();
   });
 
