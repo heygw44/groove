@@ -37,10 +37,11 @@ import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
 import com.groove.order.dto.AdminOrderDetailResponse;
+import com.groove.order.dto.AdminOrderItemResponse;
 import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
-import com.groove.order.dto.OrderItemResponse;
 import com.groove.order.dto.ShippingAddressResponse;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.service.AdminOrderService;
 import com.groove.order.service.AdminOrderStatusService;
@@ -77,8 +78,9 @@ class AdminOrderControllerTest {
 	}
 
 	private AdminOrderDetailResponse sampleDetailResponse(OrderStatus status) {
-		OrderItemResponse item = new OrderItemResponse(100L, "그루브 앨범", new BigDecimal("30000"), 1,
-				new BigDecimal("30000"), "https://cdn.groove.com/groove-album-0.jpg");
+		AdminOrderItemResponse item = new AdminOrderItemResponse(100L, "그루브 앨범", new BigDecimal("30000"), 1,
+				new BigDecimal("30000"), "https://cdn.groove.com/groove-album-0.jpg", "20260903-TESTAB12-01",
+				OrderItemStatus.PAID, null);
 		ShippingAddressResponse shippingAddress = new ShippingAddressResponse("김그루브", "010-1234-5678", "06236",
 				"서울시 강남구 테헤란로 1", "101동 1001호");
 		return new AdminOrderDetailResponse(1L, "20260903-TESTAB12", 1L, "buyer@groove.com", status,

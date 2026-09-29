@@ -1,5 +1,6 @@
 package com.groove.order.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -20,6 +21,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -46,9 +48,17 @@ import com.groove.member.entity.MemberRole;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderCreateResponse;
 import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderItemResponse;
+import com.groove.order.dto.OrderListItemResponse;
+import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderShippingAddressRequest;
 import com.groove.order.dto.OrderSummaryResponse;
+import com.groove.order.entity.CourierCode;
+import com.groove.order.entity.OrderItemAction;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderStatusGroup;
 import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderCreateService;
 import com.groove.order.service.OrderService;
@@ -352,6 +362,55 @@ class OrderControllerTest {
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 			verify(orderService, never()).getMyOrders(any(), any());
 		}
+
+		@Test
+		@DisplayName("statusGroup 이 유효하지 않으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenStatusGroupInvalid() throws Exception {
+			// when & then: @ModelAttribute 바인딩 실패는 MethodArgumentNotValidException 으로 올라온다
+			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, bearer())
+							.param("statusGroup", "NOT_A_GROUP"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(orderService, never()).getMyOrders(any(), any());
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 유효하면 서비스에 그대로 전달한다")
+		void passesStatusGroupToService() throws Exception {
+			// given
+			given(orderService.getMyOrders(eq(1L), any())).willReturn(PageResponse.of(List.of(), 0, 20, 0));
+
+			// when & then
+			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, bearer())
+							.param("statusGroup", "CANCEL_RETURN"))
+					.andExpect(status().isOk());
+			ArgumentCaptor<OrderSearchRequest> captor = ArgumentCaptor.forClass(OrderSearchRequest.class);
+			verify(orderService).getMyOrders(eq(1L), captor.capture());
+			assertThat(captor.getValue().statusGroup()).isEqualTo(OrderStatusGroup.CANCEL_RETURN);
+		}
+
+		@Test
+		@DisplayName("주문 상품 행에 상품주문 상태·클레임·결제 금액·다음 동작을 함께 반환한다")
+		void returnsItemFieldsForProductOrder() throws Exception {
+			// given
+			OrderListItemResponse item = new OrderListItemResponse(501L, "Kind of Blue", 1,
+					new BigDecimal("75600"), "https://cdn.groove.com/kind-of-blue-0.jpg", "20260902-K7Q2M9XZ-01",
+					OrderItemStatus.PAID, null, new BigDecimal("75600"), null, null, List.of(OrderItemAction.CANCEL));
+			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
+					new BigDecimal("90000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, List.of(item), null);
+			given(orderService.getMyOrders(eq(1L), any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
+
+			// when & then
+			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.content[0].items[0].productOrderNumber",
+							is("20260902-K7Q2M9XZ-01")))
+					.andExpect(jsonPath("$.data.content[0].items[0].status", is("PAID")))
+					.andExpect(jsonPath("$.data.content[0].items[0].claimStatus").doesNotExist())
+					.andExpect(jsonPath("$.data.content[0].items[0].paidAmount", is(75600)))
+					.andExpect(jsonPath("$.data.content[0].items[0].trackingNumber").doesNotExist())
+					.andExpect(jsonPath("$.data.content[0].items[0].availableActions[0]", is("CANCEL")));
+		}
 	}
 
 	@Nested
@@ -383,6 +442,32 @@ class OrderControllerTest {
 			mockMvc.perform(get(BASE_URL + "/999").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.error.code", is("ORDER_NOT_FOUND")));
+		}
+
+		@Test
+		@DisplayName("주문 상품 행에 상품주문 상태·클레임·결제 금액·다음 동작을 함께 반환한다")
+		void returnsItemFieldsForProductOrder() throws Exception {
+			// given
+			OrderItemResponse item = new OrderItemResponse(620L, "Head Hunters", new BigDecimal("6000"), 1,
+					new BigDecimal("6000"), null, "20260902-K7Q2M9XZ-02", OrderItemStatus.SHIPPING,
+					OrderItemClaimStatus.CANCEL_REQUEST, new BigDecimal("6000"), CourierCode.CJ, "123456789012", null,
+					List.of(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK));
+			OrderDetailResponse detail = new OrderDetailResponse(1L, "20260903-TESTAB12", OrderStatus.PAID,
+					new BigDecimal("6000"), BigDecimal.ZERO, new BigDecimal("6000"), null, List.of(item), null, null,
+					null, null, null, null, null);
+			given(orderService.getDetail(eq(1L), eq(1L))).willReturn(detail);
+
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/1").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.items[0].productOrderNumber", is("20260902-K7Q2M9XZ-02")))
+					.andExpect(jsonPath("$.data.items[0].status", is("SHIPPING")))
+					.andExpect(jsonPath("$.data.items[0].claimStatus", is("CANCEL_REQUEST")))
+					.andExpect(jsonPath("$.data.items[0].paidAmount", is(6000)))
+					.andExpect(jsonPath("$.data.items[0].courierCode", is("CJ")))
+					.andExpect(jsonPath("$.data.items[0].trackingNumber", is("123456789012")))
+					.andExpect(jsonPath("$.data.items[0].availableActions",
+							is(List.of("WITHDRAW_CLAIM", "TRACK"))));
 		}
 	}
 

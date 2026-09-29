@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
 import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
@@ -83,6 +84,18 @@ public final class OrderFixture {
 	 */
 	public static Order markItemsStatus(Order order, OrderItemStatus status) {
 		order.getItems().forEach(item -> ReflectionTestUtils.setField(item, "status", status));
+		return order;
+	}
+
+	/** 첫 번째 상품주문에만 진행 중이거나 끝난 클레임 상태를 심는다. 클레임 워크플로 API 가 아직 없어 직접 설정한다. */
+	public static Order markFirstItemClaimStatus(Order order, OrderItemClaimStatus claimStatus) {
+		ReflectionTestUtils.setField(order.getItems().get(0), "claimStatus", claimStatus);
+		return order;
+	}
+
+	/** 첫 번째 상품주문의 배송완료 시각을 직접 심는다. 반품 기한(D7) 경계 테스트에 쓴다. */
+	public static Order markFirstItemDeliveredAt(Order order, LocalDateTime deliveredAt) {
+		ReflectionTestUtils.setField(order.getItems().get(0), "deliveredAt", deliveredAt);
 		return order;
 	}
 
