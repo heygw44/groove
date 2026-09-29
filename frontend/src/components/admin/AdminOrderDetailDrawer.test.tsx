@@ -104,4 +104,20 @@ describe('AdminOrderDetailDrawer', () => {
     expect(screen.queryByText('취소 처리 중')).not.toBeInTheDocument();
     expect(screen.queryByText('대사 대기')).not.toBeInTheDocument();
   });
+
+  it('시스템 취소 사유 코드는 문구로 바꿔 보여준다', async () => {
+    // given
+    const detail = buildDetail({
+      status: 'CANCELED',
+      canceledAt: '2026-09-13T01:00:00',
+      cancelReason: 'EXPIRED',
+    });
+
+    // when
+    renderDrawer(detail);
+
+    // then
+    expect(await screen.findByText(/입금 기한 만료/)).toBeInTheDocument();
+    expect(screen.queryByText(/EXPIRED/)).not.toBeInTheDocument();
+  });
 });
