@@ -26,17 +26,9 @@ public record OrderDetailResponse(
 		OrderPaymentResponse payment
 ) {
 
-	public static OrderDetailResponse from(Order order) {
-		return from(order, null, null, Map.of());
-	}
-
-	public static OrderDetailResponse from(Order order, Long limitedDropId) {
-		return from(order, limitedDropId, null, Map.of());
-	}
-
 	public static OrderDetailResponse from(Order order, Long limitedDropId, OrderPaymentResponse payment,
-			Map<Long, String> thumbnailsByProductId) {
-		List<OrderItemResponse> items = OrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId);
+			Map<Long, String> thumbnailsByProductId, LocalDateTime now) {
+		List<OrderItemResponse> items = OrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId, now);
 		return new OrderDetailResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
 				order.getTotalAmount(), order.getDiscountAmount(), order.getFinalAmount(), order.getCouponName(),
 				items, ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(),

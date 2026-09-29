@@ -126,10 +126,11 @@ public class OrderService {
 		if (summaries.isEmpty()) {
 			return summaries;
 		}
+		LocalDateTime now = LocalDateTime.now(clock);
 		List<Long> orderIds = summaries.stream().map(OrderSummaryResponse::id).toList();
 		Map<Long, List<OrderListItemResponse>> itemsByOrderId = orderQueryMapper.findItemsByOrderIds(orderIds).stream()
 				.collect(Collectors.groupingBy(OrderListItemRow::orderId, LinkedHashMap::new,
-						Collectors.mapping(OrderListItemRow::toResponse, Collectors.toList())));
+						Collectors.mapping(row -> row.toResponse(now), Collectors.toList())));
 		return summaries.stream()
 				.map(summary -> summary.withItems(itemsByOrderId.getOrDefault(summary.id(), List.of())))
 				.toList();
@@ -157,7 +158,8 @@ public class OrderService {
 		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
 				.map(purchase -> purchase.getDrop().getId())
 				.orElse(null);
-		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId), resolveThumbnails(order));
+		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId), resolveThumbnails(order),
+				LocalDateTime.now(clock));
 	}
 
 	/** 주문 상품 썸네일(상품 sort_order = 0 이미지)을 한 번에 조회한다. */

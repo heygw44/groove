@@ -1,13 +1,13 @@
 package com.groove.order.dto;
 
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderStatusGroup;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 
 public record OrderSearchRequest(
-		OrderStatus status,
+		OrderStatusGroup statusGroup,
 		@PositiveOrZero Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
@@ -18,6 +18,6 @@ public record OrderSearchRequest(
 	public OrderSearchCondition toCondition(Long memberId) {
 		int resolvedPage = page == null ? DEFAULT_PAGE : page;
 		int resolvedSize = size == null ? DEFAULT_SIZE : size;
-		return new OrderSearchCondition(memberId, status, resolvedPage, resolvedSize);
+		return new OrderSearchCondition(memberId, statusGroup, resolvedPage, resolvedSize);
 	}
 }

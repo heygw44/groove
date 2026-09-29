@@ -66,6 +66,7 @@ import com.groove.order.dto.OrderListItemRow;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
@@ -539,9 +540,11 @@ class OrderServiceTest {
 			OrderSummaryResponse second = new OrderSummaryResponse(2L, "20260903-TESTAB13", OrderStatus.PENDING,
 					new BigDecimal("45000"), BigDecimal.ZERO, null, "A Love Supreme", 1, null, null);
 			OrderListItemRow firstItem = new OrderListItemRow(1L, PRODUCT_ID, "Kind of Blue", 1,
-					new BigDecimal("30000"), null);
+					new BigDecimal("30000"), null, "20260903-TESTAB12-01", OrderItemStatus.PAID, null,
+					new BigDecimal("30000"), null, null, null);
 			OrderListItemRow secondItem = new OrderListItemRow(2L, 200L, "A Love Supreme", 1,
-					new BigDecimal("45000"), "https://cdn.groove.com/love-supreme-0.jpg");
+					new BigDecimal("45000"), "https://cdn.groove.com/love-supreme-0.jpg", "20260903-TESTAB13-01",
+					OrderItemStatus.PAID, null, new BigDecimal("45000"), null, null, null);
 			given(orderQueryMapper.countMyOrders(any())).willReturn(2L);
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(first, second));
 			given(orderQueryMapper.findItemsByOrderIds(List.of(1L, 2L))).willReturn(List.of(firstItem, secondItem));
