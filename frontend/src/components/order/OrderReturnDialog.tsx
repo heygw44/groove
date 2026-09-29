@@ -46,7 +46,7 @@ export function OrderReturnDialog({
             onClick={() => onConfirm(reason.trim() || undefined)}
             loading={pending}
           >
-            반품 요청
+            반품요청
           </Button>
         </>
       }

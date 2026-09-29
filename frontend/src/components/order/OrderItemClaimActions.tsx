@@ -15,7 +15,7 @@ import {
 import type { OrderItem, RefundAccount } from '@/types/order';
 import type { OrderPayment } from '@/types/payment';
 import { getErrorMessage } from '@/utils/apiError';
-import { getOrderCancelSuccessMessage } from '@/utils/paymentStatus';
+import { getOrderCancelSuccessMessage, isCancellationPending } from '@/utils/paymentStatus';
 
 type OpenDialog = 'cancel' | 'return' | 'withdraw' | 'confirm' | null;
 
@@ -42,22 +42,22 @@ const getCancelDialogProps = ({
       pending,
       title: '주문을 취소하시겠습니까?',
       description: '입금 전 주문은 주문 전체가 취소됩니다.',
-      confirmLabel: '상품 취소',
+      confirmLabel: '주문취소',
     };
   }
   if (isImmediateCancel) {
     return {
       pending,
-      title: '상품을 취소하시겠습니까?',
+      title: '주문을 취소하시겠습니까?',
       description: '취소하면 되돌릴 수 없습니다. 이 상품의 결제 금액만 환불됩니다.',
-      confirmLabel: '상품 취소',
+      confirmLabel: '주문취소',
     };
   }
   return {
     pending,
     title: '취소를 요청하시겠습니까?',
     description: '배송 준비 중인 상품은 확인 후 취소됩니다. 요청은 수거 전까지 철회할 수 있습니다.',
-    confirmLabel: '취소 요청',
+    confirmLabel: '취소요청',
   };
 };
 
@@ -79,6 +79,8 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
   // 입금 전 가상계좌는 부분 취소가 안 돼 주문 전체를 취소한다.
   const isAwaitingDeposit = item.status === 'PAYMENT_WAITING';
   const canCancel = isImmediateCancel || availableActions.includes('CANCEL_REQUEST');
+  // 앞선 결제 취소의 결과를 확인하는 동안에는 서버가 새 취소를 거절하므로 미리 막는다.
+  const cancellationPending = isCancellationPending(payment?.status);
   const canReturn = availableActions.includes('RETURN_REQUEST');
   const canWithdraw = availableActions.includes('WITHDRAW_CLAIM') && claimId !== undefined;
   const canConfirm = availableActions.includes('CONFIRM');
@@ -118,7 +120,7 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
       return;
     }
     const successMessage = isImmediateCancel
-      ? '상품을 취소했습니다.'
+      ? '주문을 취소했습니다.'
       : '취소 요청이 접수됐습니다. 승인되면 취소됩니다.';
     cancelMutation.mutate(
       { orderId, itemId: item.id, reason, refundAccount },
@@ -147,13 +149,18 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
   return (
     <>
       {canCancel && (
-        <Button variant="secondary" size="sm" onClick={() => setOpenDialog('cancel')}>
-          {isImmediateCancel ? '상품 취소' : '취소 요청'}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setOpenDialog('cancel')}
+          disabled={cancellationPending}
+        >
+          {isImmediateCancel ? '주문취소' : '취소요청'}
         </Button>
       )}
       {canReturn && (
         <Button variant="secondary" size="sm" onClick={() => setOpenDialog('return')}>
-          반품 요청
+          반품요청
         </Button>
       )}
       {canWithdraw && (

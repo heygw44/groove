@@ -22,7 +22,7 @@ export const ORDER_ITEM_STATUS_LABEL: Record<OrderItemStatus, string> = {
   SHIPPING: '배송중',
   DELIVERED: '배송완료',
   PURCHASE_CONFIRMED: '구매확정',
-  CANCELED: '취소',
+  CANCELED: '취소완료',
   RETURNED: '반품완료',
   CANCELED_BY_NOPAYMENT: '미입금취소',
 };

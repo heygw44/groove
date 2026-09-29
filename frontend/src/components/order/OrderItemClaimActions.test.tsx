@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cancelOrder, cancelOrderItem } from '@/api/order';
 import { ToastProvider } from '@/components/common/Toast';
 import { OrderItemClaimActions } from '@/components/order/OrderItemClaimActions';
-import type { OrderItem } from '@/types/order';
+import type { OrderDetail, OrderItem } from '@/types/order';
+import type { OrderPayment } from '@/types/payment';
 
 vi.mock('@/api/order', () => ({
   cancelOrder: vi.fn().mockResolvedValue({}),
@@ -34,12 +35,12 @@ const baseItem: OrderItem = {
   availableActions: ['CANCEL'],
 };
 
-const renderActions = (item: OrderItem) => {
+const renderActions = (item: OrderItem, payment?: OrderPayment) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <OrderItemClaimActions orderId={1} item={item} />
+        <OrderItemClaimActions orderId={1} item={item} payment={payment} />
       </ToastProvider>
     </QueryClientProvider>,
   );
@@ -52,10 +53,10 @@ describe('OrderItemClaimActions', () => {
     renderActions({ ...baseItem, status: 'PAYMENT_WAITING' });
 
     // when
-    await user.click(screen.getByRole('button', { name: '상품 취소' }));
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
     const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
     expect(within(dialog).getByText('입금 전 주문은 주문 전체가 취소됩니다.')).toBeInTheDocument();
-    await user.click(within(dialog).getByRole('button', { name: '상품 취소' }));
+    await user.click(within(dialog).getByRole('button', { name: '주문취소' }));
 
     // then
     await waitFor(() => expect(cancelOrder).toHaveBeenCalledWith(1, undefined));
@@ -68,12 +69,57 @@ describe('OrderItemClaimActions', () => {
     renderActions(baseItem);
 
     // when
-    await user.click(screen.getByRole('button', { name: '상품 취소' }));
-    const dialog = screen.getByRole('dialog', { name: '상품을 취소하시겠습니까?' });
-    await user.click(within(dialog).getByRole('button', { name: '상품 취소' }));
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
+    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
+    await user.click(within(dialog).getByRole('button', { name: '주문취소' }));
 
     // then
     await waitFor(() => expect(cancelOrderItem).toHaveBeenCalledWith(1, 11, undefined));
     expect(cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('입금대기가 아닌 즉시 취소 버튼 이름은 주문취소다', () => {
+    // given & when
+    renderActions(baseItem);
+
+    // then
+    expect(screen.getByRole('button', { name: '주문취소' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '상품 취소' })).not.toBeInTheDocument();
+  });
+
+  it('주문 취소 응답이 CANCEL_REQUESTED 면 접수 안내 토스트를 보여준다', async () => {
+    // given
+    const user = userEvent.setup();
+    vi.mocked(cancelOrder).mockResolvedValueOnce({
+      payment: { status: 'CANCEL_REQUESTED' },
+    } as OrderDetail);
+    renderActions({ ...baseItem, status: 'PAYMENT_WAITING' });
+
+    // when
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
+    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
+    await user.click(within(dialog).getByRole('button', { name: '주문취소' }));
+
+    // then
+    expect(
+      await screen.findByText('취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
+  });
+
+  it('결제 취소 결과를 확인하는 중이면 주문취소 버튼을 비활성화한다', () => {
+    // given & when
+    renderActions(baseItem, {
+      paymentId: 1,
+      method: '카드',
+      status: 'CANCEL_REQUESTED',
+      amount: 10000,
+      approvedAt: '2026-09-13T00:01:00',
+      easyPayProvider: null,
+      virtualAccount: null,
+    });
+
+    // then
+    expect(screen.getByRole('button', { name: '주문취소' })).toBeDisabled();
   });
 });
