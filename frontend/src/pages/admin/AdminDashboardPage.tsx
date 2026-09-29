@@ -109,12 +109,12 @@ export default function AdminDashboardPage() {
               to="/admin/orders?statusGroup=PAID"
             />
             <StatCard
-              label="취소 요청"
+              label="취소요청"
               value={`${summaryQuery.data.cancelRequestCount}건`}
               to="/admin/order-claims?type=CANCEL&status=REQUESTED"
             />
             <StatCard
-              label="반품 요청"
+              label="반품요청"
               value={`${summaryQuery.data.returnRequestCount}건`}
               to="/admin/order-claims?type=RETURN"
             />

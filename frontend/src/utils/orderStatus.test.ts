@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OrderStatus } from '@/types/order';
 import {
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
   ORDER_STATUSES,
   formatCancelReason,
   getOrderDisplayStatus,
-  isCancelableStatus,
   isOrderStatus,
 } from '@/utils/orderStatus';
 import { PAYMENT_STATUS_BADGE, PAYMENT_STATUS_LABEL } from '@/utils/paymentStatus';
@@ -19,20 +17,6 @@ describe('ORDER_STATUS_LABEL', () => {
 
     // then
     expect(label).toBeTruthy();
-  });
-});
-
-describe('isCancelableStatus()', () => {
-  it.each<[OrderStatus, boolean]>([
-    ['PENDING', true],
-    ['PAID', true],
-    ['CANCELED', false],
-  ])('%s 상태는 취소 가능 여부가 %s 이다', (status, expected) => {
-    // given & when
-    const result = isCancelableStatus(status);
-
-    // then
-    expect(result).toBe(expected);
   });
 });
 

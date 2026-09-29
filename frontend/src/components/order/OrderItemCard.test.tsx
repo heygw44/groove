@@ -159,21 +159,21 @@ describe('OrderItemCard', () => {
     renderCard({ ...baseItem, status: 'PREPARING', availableActions: [] });
 
     // then
-    ['상품 취소', '취소 요청', '반품 요청', '요청 철회', '구매확정'].forEach((name) => {
+    ['주문취소', '취소요청', '반품요청', '요청 철회', '구매확정'].forEach((name) => {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     });
   });
 
-  it('CANCEL 이면 상품 취소를 확정할 때 사유와 함께 API 를 호출한다', async () => {
+  it('CANCEL 이면 주문취소를 확정할 때 사유와 함께 API 를 호출한다', async () => {
     // given
     const user = userEvent.setup();
     renderCard({ ...baseItem, availableActions: ['CANCEL'] });
 
     // when
-    await user.click(screen.getByRole('button', { name: '상품 취소' }));
-    const dialog = screen.getByRole('dialog', { name: '상품을 취소하시겠습니까?' });
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
+    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
     await user.type(within(dialog).getByLabelText('취소 사유 (선택)'), '단순 변심');
-    await user.click(within(dialog).getByRole('button', { name: '상품 취소' }));
+    await user.click(within(dialog).getByRole('button', { name: '주문취소' }));
 
     // then
     await waitFor(() =>
@@ -201,9 +201,9 @@ describe('OrderItemCard', () => {
     renderCard({ ...baseItem, availableActions: ['CANCEL'] }, payment);
 
     // when
-    await user.click(screen.getByRole('button', { name: '상품 취소' }));
-    const dialog = screen.getByRole('dialog', { name: '상품을 취소하시겠습니까?' });
-    await user.click(within(dialog).getByRole('button', { name: '상품 취소' }));
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
+    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
+    await user.click(within(dialog).getByRole('button', { name: '주문취소' }));
 
     // then
     expect(within(dialog).getByText('환불계좌 정보를 모두 입력해주세요.')).toBeInTheDocument();
@@ -216,9 +216,9 @@ describe('OrderItemCard', () => {
     renderCard({ ...baseItem, status: 'PREPARING', availableActions: ['CANCEL_REQUEST'] });
 
     // when
-    await user.click(screen.getByRole('button', { name: '취소 요청' }));
+    await user.click(screen.getByRole('button', { name: '취소요청' }));
     const dialog = screen.getByRole('dialog', { name: '취소를 요청하시겠습니까?' });
-    await user.click(within(dialog).getByRole('button', { name: '취소 요청' }));
+    await user.click(within(dialog).getByRole('button', { name: '취소요청' }));
 
     // then
     await waitFor(() => expect(cancelOrderItem).toHaveBeenCalledWith(1, 11, undefined));
@@ -230,10 +230,10 @@ describe('OrderItemCard', () => {
     renderCard({ ...baseItem, status: 'DELIVERED', availableActions: ['RETURN_REQUEST'] });
 
     // when
-    await user.click(screen.getByRole('button', { name: '반품 요청' }));
+    await user.click(screen.getByRole('button', { name: '반품요청' }));
     const dialog = screen.getByRole('dialog', { name: '반품을 요청하시겠습니까?' });
     await user.type(within(dialog).getByLabelText('반품 사유 (선택)'), '파손');
-    await user.click(within(dialog).getByRole('button', { name: '반품 요청' }));
+    await user.click(within(dialog).getByRole('button', { name: '반품요청' }));
 
     // then
     await waitFor(() => expect(returnOrderItem).toHaveBeenCalledWith(1, 11, { reason: '파손' }));

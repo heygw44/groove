@@ -30,10 +30,6 @@ const SYSTEM_CANCEL_REASON_LABEL = new Map<string, string>([
 export const formatCancelReason = (reason: string): string =>
   SYSTEM_CANCEL_REASON_LABEL.get(reason) ?? reason;
 
-const CANCELABLE_STATUSES = new Set<OrderStatus>(['PENDING', 'PAID']);
-
-export const isCancelableStatus = (status: OrderStatus): boolean => CANCELABLE_STATUSES.has(status);
-
 export const isOrderStatus = (value: unknown): value is OrderStatus =>
   typeof value === 'string' && ORDER_STATUS_SET.has(value);
 

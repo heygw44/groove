@@ -1,16 +1,14 @@
-import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ToastProvider } from '@/components/common/Toast';
-import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
 import OrderDetailPage from '@/pages/order/OrderDetailPage';
 import type { OrderDetail } from '@/types/order';
 
 vi.mock('@/hooks/mutations/useOrderMutations', () => ({
-  useCancelOrder: vi.fn(),
+  useCancelOrder: () => ({ mutate: vi.fn(), isPending: false }),
   useCancelOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
   useReturnOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
   useWithdrawOrderClaim: () => ({ mutate: vi.fn(), isPending: false }),
@@ -67,8 +65,6 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
   ...overrides,
 });
 
-type CancelOrderMutation = ReturnType<typeof useCancelOrder>;
-
 const mockOrder = (order: OrderDetail) => {
   vi.mocked(useOrder).mockReturnValue({
     data: order,
@@ -77,16 +73,6 @@ const mockOrder = (order: OrderDetail) => {
     error: null,
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof useOrder>);
-};
-
-const mockCancelMutation = (response: OrderDetail) => {
-  const mutate = ((
-    _variables: { orderId: number; reason?: string },
-    options?: { onSuccess?: (data: OrderDetail) => void },
-  ) => {
-    options?.onSuccess?.(response);
-  }) as CancelOrderMutation['mutate'];
-  vi.mocked(useCancelOrder).mockReturnValue({ mutate, isPending: false } as CancelOrderMutation);
 };
 
 const renderPage = () =>
@@ -108,7 +94,6 @@ describe('OrderDetailPage', () => {
   it('진행 중 상품에는 재구매 액션을 보여주지 않는다', () => {
     // given
     mockOrder(buildOrder());
-    mockCancelMutation(buildOrder());
 
     // when
     renderPage();
@@ -143,7 +128,6 @@ describe('OrderDetailPage', () => {
       ],
     });
     mockOrder(order);
-    mockCancelMutation(order);
 
     // when
     renderPage();
@@ -173,7 +157,6 @@ describe('OrderDetailPage', () => {
       },
     });
     mockOrder(order);
-    mockCancelMutation(order);
 
     // when
     renderPage();
@@ -183,7 +166,7 @@ describe('OrderDetailPage', () => {
     expect(screen.getAllByText('입금대기').length).toBeGreaterThan(0);
   });
 
-  it('결제 취소 처리 중이면 상태를 표시하고 주문 취소를 비활성화한다', () => {
+  it('결제 취소 처리 중이면 안내를 보여주고 주문 단위 취소 버튼은 없다', () => {
     // given
     const order = buildOrder({
       payment: {
@@ -197,48 +180,16 @@ describe('OrderDetailPage', () => {
       },
     });
     mockOrder(order);
-    mockCancelMutation(order);
 
     // when
     renderPage();
 
     // then
     expect(screen.getByText('취소 처리 중')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '주문 취소' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '주문 취소' })).not.toBeInTheDocument();
     expect(
       screen.getByText('취소 결과를 확인하고 있어 다시 취소할 수 없습니다.'),
     ).toBeInTheDocument();
-  });
-
-  it('취소 성공 응답이 CANCEL_REQUESTED 면 접수 안내 토스트를 보여준다', async () => {
-    // given
-    const user = userEvent.setup();
-    const order = buildOrder();
-    const response = buildOrder({
-      payment: {
-        paymentId: 1,
-        method: '카드',
-        status: 'CANCEL_REQUESTED',
-        amount: 10000,
-        approvedAt: '2026-09-13T00:01:00',
-        easyPayProvider: null,
-        virtualAccount: null,
-      },
-    });
-    mockOrder(order);
-    mockCancelMutation(response);
-
-    // when
-    renderPage();
-    await user.click(screen.getByRole('button', { name: '주문 취소' }));
-    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
-    await user.click(within(dialog).getByRole('button', { name: '주문 취소' }));
-
-    // then
-    expect(
-      screen.getByText('취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
   });
 
   it('취소된 주문은 취소 사유를 보여준다', () => {
@@ -249,7 +200,6 @@ describe('OrderDetailPage', () => {
       cancelReason: 'EXPIRED',
     });
     mockOrder(order);
-    mockCancelMutation(order);
 
     // when
     renderPage();
