@@ -197,7 +197,8 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 					.andReturn();
 			long orderId = objectMapper.readTree(createResult.getResponse().getContentAsString())
 					.path("data").path("orderId").asLong();
-			Order order = orderRepository.findById(orderId).orElseThrow();
+			// markPaid() 는 상품주문(items)도 같이 옮기므로 findWithItemsById 로 지연 로딩 없이 가져온다
+			Order order = orderRepository.findWithItemsById(orderId).orElseThrow();
 			order.markPaid();
 			order.place(LocalDateTime.now());
 			orderRepository.save(order);

@@ -144,6 +144,7 @@ public class PaymentConfirmWriter {
 				virtualAccount.accountNumber(), virtualAccount.customerName(), virtualAccount.dueDate(),
 				VirtualAccountSecretHasher.hash(virtualAccount.secret()));
 		order.extendExpiry(virtualAccount.dueDate());
+		order.awaitDeposit();
 		orderPlacementService.place(order, LocalDateTime.now(clock));
 
 		try {

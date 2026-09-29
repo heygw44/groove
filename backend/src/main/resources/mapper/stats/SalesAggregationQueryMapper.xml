@@ -62,7 +62,7 @@
 		FROM order_item oi
 		JOIN orders o ON o.id = oi.order_id
 		JOIN payment p ON p.order_id = o.id
-		WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+		WHERE oi.status IN ('PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED')
 		AND p.approved_at &gt;= #{saleDate} AND p.approved_at &lt; #{saleDate} + INTERVAL 1 DAY
 		GROUP BY oi.product_id
 		ORDER BY oi.product_id ASC

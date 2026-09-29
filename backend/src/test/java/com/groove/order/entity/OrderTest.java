@@ -218,6 +218,19 @@ class OrderTest {
 		}
 
 		@Test
+		@DisplayName("상품주문도 PAID 로 같이 바뀐다")
+		void changesItemStatusToPaidToo() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+
+			// when
+			order.markPaid();
+
+			// then
+			assertThat(order.getItems().get(0).getStatus()).isEqualTo(OrderItemStatus.PAID);
+		}
+
+		@Test
 		@DisplayName("이미 PAID 면 ORDER_ALREADY_PAID 예외를 던진다")
 		void throwsAlreadyPaidWhenPaid() {
 			// given
@@ -249,6 +262,39 @@ class OrderTest {
 	}
 
 	@Nested
+	@DisplayName("awaitDeposit()")
+	class AwaitDeposit {
+
+		@Test
+		@DisplayName("PENDING 이면 상품주문이 PAYMENT_WAITING 으로 바뀌고 주문 상태는 그대로다")
+		void movesItemsToPaymentWaitingWhenPending() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+
+			// when
+			order.awaitDeposit();
+
+			// then
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+			assertThat(order.getItems().get(0).getStatus()).isEqualTo(OrderItemStatus.PAYMENT_WAITING);
+		}
+
+		@Test
+		@DisplayName("PENDING 이 아니면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsWhenNotPending() {
+			// given
+			Order order = OrderFixture.create(member);
+			order.markPaid();
+
+			// when & then
+			assertThatThrownBy(order::awaitDeposit)
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+	}
+
+	@Nested
 	@DisplayName("cancel()")
 	class Cancel {
 
@@ -265,6 +311,21 @@ class OrderTest {
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
 			assertThat(order.getCanceledAt()).isNotNull();
 			assertThat(order.getCancelReason()).isEqualTo("고객 변심");
+		}
+
+		@Test
+		@DisplayName("상품주문도 CANCELED 로 같이 바뀐다")
+		void changesItemStatusToCanceledToo() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+
+			// when
+			order.cancel("고객 변심");
+
+			// then
+			OrderItem item = order.getItems().get(0);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.CANCELED);
+			assertThat(item.getCanceledAt()).isNotNull();
 		}
 
 		@ParameterizedTest
@@ -381,6 +442,24 @@ class OrderTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
 		}
+
+		@Test
+		@DisplayName("상품주문도 CANCELED 로 같이 바뀐다")
+		void changesItemStatusToCanceledToo() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			order.markPaid();
+			order.requestCancel("고객 변심", false);
+			LocalDateTime canceledAt = LocalDateTime.of(2026, 9, 13, 10, 30);
+
+			// when
+			order.completeCancel(canceledAt);
+
+			// then
+			OrderItem item = order.getItems().get(0);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.CANCELED);
+			assertThat(item.getCanceledAt()).isEqualTo(canceledAt);
+		}
 	}
 
 	@Nested
@@ -455,6 +534,74 @@ class OrderTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
 		}
+
+		@Test
+		@DisplayName("PREPARING 으로 전이하면 상품주문도 PREPARING 으로 바뀐다")
+		void movesItemToPreparing() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.PAID);
+
+			// when
+			order.changeStatus(OrderStatus.PREPARING);
+
+			// then
+			OrderItem item = order.getItems().get(0);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PREPARING);
+			assertThat(item.getPreparedAt()).isNotNull();
+		}
+
+		@Test
+		@DisplayName("SHIPPED 로 전이하면 상품주문은 SHIPPING 으로 바뀐다")
+		void movesItemToShipping() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			ReflectionTestUtils.setField(order, "status", OrderStatus.PREPARING);
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.PREPARING);
+
+			// when
+			order.changeStatus(OrderStatus.SHIPPED);
+
+			// then
+			OrderItem item = order.getItems().get(0);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.SHIPPING);
+			assertThat(item.getShippedAt()).isNotNull();
+		}
+
+		@Test
+		@DisplayName("DELIVERED 로 전이하면 상품주문도 DELIVERED 로 바뀐다")
+		void movesItemToDelivered() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			ReflectionTestUtils.setField(order, "status", OrderStatus.SHIPPED);
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.SHIPPING);
+
+			// when
+			order.changeStatus(OrderStatus.DELIVERED);
+
+			// then
+			OrderItem item = order.getItems().get(0);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.DELIVERED);
+			assertThat(item.getDeliveredAt()).isNotNull();
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
+		@DisplayName("CANCELED 로 전이하면 상품주문도 CANCELED 로 바뀐다")
+		void movesItemToCanceled(OrderStatus from) {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			ReflectionTestUtils.setField(order, "status", from);
+			ReflectionTestUtils.setField(order.getItems().get(0), "status",
+					from == OrderStatus.PAID ? OrderItemStatus.PAID : OrderItemStatus.PREPARING);
+
+			// when
+			order.changeStatus(OrderStatus.CANCELED);
+
+			// then
+			assertThat(order.getItems().get(0).getStatus()).isEqualTo(OrderItemStatus.CANCELED);
+		}
 	}
 
 	@Nested
@@ -504,6 +651,37 @@ class OrderTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
 		}
+
+		@Test
+		@DisplayName("상품주문이 PAYMENT_PENDING 이면 CANCELED 로 바뀐다(10분 만료)")
+		void movesPaymentPendingItemToCanceled() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			LocalDateTime now = LocalDateTime.now();
+
+			// when
+			order.expire(now);
+
+			// then
+			assertThat(order.getItems().get(0).getStatus()).isEqualTo(OrderItemStatus.CANCELED);
+		}
+
+		@Test
+		@DisplayName("상품주문이 PAYMENT_WAITING 이면 CANCELED_BY_NOPAYMENT 로 바뀐다(가상계좌 입금기한 만료)")
+		void movesPaymentWaitingItemToCanceledByNoPayment() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.PAYMENT_WAITING);
+			LocalDateTime now = LocalDateTime.now();
+
+			// when
+			order.expire(now);
+
+			// then
+			OrderItem item = order.getItems().get(0);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.CANCELED_BY_NOPAYMENT);
+			assertThat(item.getCanceledAt()).isEqualTo(now);
+		}
 	}
 
 	@Nested
@@ -538,6 +716,20 @@ class OrderTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+		}
+
+		@Test
+		@DisplayName("상품주문도 CANCELED 로 같이 바뀐다")
+		void changesItemStatusToCanceledToo() {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			LocalDateTime now = LocalDateTime.now();
+
+			// when
+			order.supersede(now);
+
+			// then
+			assertThat(order.getItems().get(0).getStatus()).isEqualTo(OrderItemStatus.CANCELED);
 		}
 	}
 

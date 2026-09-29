@@ -28,6 +28,7 @@ import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.dto.AdminProductSummaryResponse;
@@ -461,6 +462,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			// when
 			Order managedOrder = orderRepository.findById(order.getId()).orElseThrow();
 			ReflectionTestUtils.setField(managedOrder, "status", OrderStatus.CANCELED);
+			setItemStatus(managedOrder, OrderItemStatus.CANCELED);
 			productRepository.refreshSoldQuantities(List.of(product.getId()));
 			entityManager.clear();
 			Product afterCancel = productRepository.findById(product.getId()).orElseThrow();
@@ -522,7 +524,23 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			Order order = OrderFixture.create(buyer, "20260908-SQ" + System.nanoTime() % 100000);
 			order.addItem(product, quantity);
 			ReflectionTestUtils.setField(order, "status", status);
+			setItemStatus(order, toItemStatus(status));
 			return orderRepository.save(order);
+		}
+
+		private OrderItemStatus toItemStatus(OrderStatus status) {
+			return switch (status) {
+				case PAID -> OrderItemStatus.PAID;
+				case PREPARING -> OrderItemStatus.PREPARING;
+				case SHIPPED -> OrderItemStatus.SHIPPING;
+				case DELIVERED -> OrderItemStatus.DELIVERED;
+				case CANCELED, REFUNDED -> OrderItemStatus.CANCELED;
+				default -> OrderItemStatus.PAYMENT_PENDING;
+			};
+		}
+
+		private void setItemStatus(Order order, OrderItemStatus status) {
+			order.getItems().forEach(item -> ReflectionTestUtils.setField(item, "status", status));
 		}
 	}
 

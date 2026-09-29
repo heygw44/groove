@@ -21,6 +21,7 @@ import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.repository.PaymentRepository;
@@ -87,6 +88,7 @@ class SalesReconcileIntegrationTest extends IntegrationTestSupport {
 		Order order = OrderFixture.create(member, "SR" + UUID.randomUUID().toString().substring(0, 10));
 		order.addItem(product, 2);
 		OrderFixture.markPaid(order);
+		OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
 		order = orderRepository.saveAndFlush(order);
 
 		Payment payment = PaymentFixture.approvedAt(order, "sr-key-" + order.getId(), SALE_DATE.atTime(10, 0));

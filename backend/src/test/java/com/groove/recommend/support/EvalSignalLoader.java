@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.recommend.entity.Decade;
 import com.groove.recommend.entity.MemberTasteDecade;
@@ -68,8 +68,8 @@ public class EvalSignalLoader {
 		Long memberId = member.getId();
 		TasteSignal taste = loadTasteSignal(memberId);
 		List<Long> wishedIds = wishlistRepository.findProductIdsByMemberId(memberId).stream().sorted().toList();
-		List<Long> purchasedIds = orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(memberId,
-				OrderStatus.PAID_OR_LATER);
+		List<Long> purchasedIds = orderItemRepository.findProductIdsByMemberIdAndStatusIn(memberId,
+				OrderItemStatus.SOLD);
 		List<Long> recentIds = recentViewService.findRecentProductIds(memberId);
 		return new EvalSignals(memberId, taste, wishedIds, purchasedIds, recentIds);
 	}

@@ -16,7 +16,7 @@ import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.entity.Order;
-import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.AlbumRepository;
@@ -45,11 +45,11 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 	private AlbumRepository albumRepository;
 
 	@Nested
-	@DisplayName("existsByOrderMemberIdAndProductIdAndOrderStatus()")
-	class ExistsByOrderMemberIdAndProductIdAndOrderStatus {
+	@DisplayName("existsByOrderMemberIdAndProductIdAndStatusIn()")
+	class ExistsByOrderMemberIdAndProductIdAndStatusIn {
 
 		@Test
-		@DisplayName("DELIVERED 주문에 포함된 상품이면 true 를 반환한다")
+		@DisplayName("DELIVERED 상품주문이면 true 를 반환한다")
 		void returnsTrueWhenDelivered() {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-item-repo-delivered@groove.com"));
@@ -57,12 +57,14 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			Product createdProduct = ProductFixture.create(artist);
 			albumRepository.save(createdProduct.getAlbum());
 			Product product = productRepository.save(createdProduct);
-			Order order = OrderFixture.markDelivered(OrderFixture.createWithItem(member, product, 1));
+			Order order = OrderFixture.createWithItem(member, product, 1);
+			OrderFixture.markDelivered(order);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.DELIVERED);
 			orderRepository.saveAndFlush(order);
 
 			// when
-			boolean exists = orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(member.getId(),
-					product.getId(), OrderStatus.DELIVERED);
+			boolean exists = orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(member.getId(),
+					product.getId(), OrderItemStatus.REVIEWABLE);
 
 			// then
 			assertThat(exists).isTrue();
@@ -82,8 +84,8 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			orderRepository.saveAndFlush(order);
 
 			// when
-			boolean exists = orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(member.getId(),
-					product.getId(), OrderStatus.DELIVERED);
+			boolean exists = orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(member.getId(),
+					product.getId(), OrderItemStatus.REVIEWABLE);
 
 			// then
 			assertThat(exists).isFalse();
@@ -101,12 +103,14 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			Product otherProduct = ProductFixture.create(artist, "다른 상품");
 			albumRepository.save(otherProduct.getAlbum());
 			otherProduct = productRepository.save(otherProduct);
-			Order order = OrderFixture.markDelivered(OrderFixture.createWithItem(member, deliveredProduct, 1));
+			Order order = OrderFixture.createWithItem(member, deliveredProduct, 1);
+			OrderFixture.markDelivered(order);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.DELIVERED);
 			orderRepository.saveAndFlush(order);
 
 			// when
-			boolean exists = orderItemRepository.existsByOrderMemberIdAndProductIdAndOrderStatus(member.getId(),
-					otherProduct.getId(), OrderStatus.DELIVERED);
+			boolean exists = orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(member.getId(),
+					otherProduct.getId(), OrderItemStatus.REVIEWABLE);
 
 			// then
 			assertThat(exists).isFalse();
@@ -114,12 +118,12 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 	}
 
 	@Nested
-	@DisplayName("findProductIdsByMemberIdAndOrderStatusIn()")
-	class FindProductIdsByMemberIdAndOrderStatusIn {
+	@DisplayName("findProductIdsByMemberIdAndStatusIn()")
+	class FindProductIdsByMemberIdAndStatusIn {
 
 		@Test
-		@DisplayName("PAID·DELIVERED 주문에 담긴 상품 id 를 반환한다")
-		void returnsProductIdsForPaidOrLaterOrders() {
+		@DisplayName("PAID·DELIVERED 상품주문에 담긴 상품 id 를 반환한다")
+		void returnsProductIdsForSoldItems() {
 			// given
 			Member member = memberRepository.save(MemberFixture.create("order-item-repo-status@groove.com"));
 			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-status"));
@@ -136,13 +140,15 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			Order paidOrder = OrderFixture.createWithItems(member, List.of(paidProduct));
 			paidOrder.markPaid();
 			orderRepository.saveAndFlush(paidOrder);
-			orderRepository.saveAndFlush(
-					OrderFixture.markDelivered(OrderFixture.createWithItems(member, List.of(deliveredProduct))));
+			Order deliveredOrder = OrderFixture.createWithItems(member, List.of(deliveredProduct));
+			OrderFixture.markDelivered(deliveredOrder);
+			OrderFixture.markItemsStatus(deliveredOrder, OrderItemStatus.DELIVERED);
+			orderRepository.saveAndFlush(deliveredOrder);
 			orderRepository.saveAndFlush(OrderFixture.createWithItems(member, List.of(pendingProduct)));
 
 			// when
-			List<Long> result = orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(member.getId(),
-					OrderStatus.PAID_OR_LATER);
+			List<Long> result = orderItemRepository.findProductIdsByMemberIdAndStatusIn(member.getId(),
+					OrderItemStatus.SOLD);
 
 			// then
 			assertThat(result).containsExactlyInAnyOrder(paidProduct.getId(), deliveredProduct.getId());
@@ -158,13 +164,17 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			albumRepository.save(createdProduct.getAlbum());
 			Product product = productRepository.save(createdProduct);
 
-			orderRepository.saveAndFlush(OrderFixture.markPaid(OrderFixture.createWithItems(member, List.of(product))));
-			orderRepository.saveAndFlush(
-					OrderFixture.markDelivered(OrderFixture.createWithItems(member, List.of(product))));
+			Order paidOrder = OrderFixture.createWithItems(member, List.of(product));
+			paidOrder.markPaid();
+			orderRepository.saveAndFlush(paidOrder);
+			Order deliveredOrder = OrderFixture.createWithItems(member, List.of(product));
+			OrderFixture.markDelivered(deliveredOrder);
+			OrderFixture.markItemsStatus(deliveredOrder, OrderItemStatus.DELIVERED);
+			orderRepository.saveAndFlush(deliveredOrder);
 
 			// when
-			List<Long> result = orderItemRepository.findProductIdsByMemberIdAndOrderStatusIn(member.getId(),
-					OrderStatus.PAID_OR_LATER);
+			List<Long> result = orderItemRepository.findProductIdsByMemberIdAndStatusIn(member.getId(),
+					OrderItemStatus.SOLD);
 
 			// then
 			assertThat(result).containsExactly(product.getId());
