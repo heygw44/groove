@@ -33,10 +33,13 @@ import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.config.PaymentReconcileProperties;
+import com.groove.payment.dto.PaymentCancelRetryCandidate;
 import com.groove.payment.dto.PaymentCompensationCandidate;
 import com.groove.payment.dto.PaymentReconcileCandidate;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
+import com.groove.payment.service.PaymentCancelRetrier;
 import com.groove.payment.service.PaymentCompensationRetrier;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentReconcileLock;
@@ -65,6 +68,12 @@ class PaymentReconcileSchedulerTest {
 	private PaymentCompensationRetrier compensationRetrier;
 
 	@Mock
+	private PaymentCancelRepository paymentCancelRepository;
+
+	@Mock
+	private PaymentCancelRetrier paymentCancelRetrier;
+
+	@Mock
 	private ShutdownSignal shutdownSignal;
 
 	@Mock
@@ -80,10 +89,10 @@ class PaymentReconcileSchedulerTest {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		PaymentReconcileProperties reconcileProperties = new PaymentReconcileProperties(Duration.ofSeconds(60),
-				Duration.ofMinutes(2), 50, 10);
+				Duration.ofMinutes(2), 50, 10, Duration.ofMinutes(1));
 		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator,
-				compensationRepository, compensationRetrier, reconcileProperties, shutdownSignal, clock,
-				alertNotifier);
+				compensationRepository, compensationRetrier, paymentCancelRepository, paymentCancelRetrier,
+				reconcileProperties, shutdownSignal, clock, alertNotifier);
 	}
 
 	@Nested
@@ -180,7 +189,7 @@ class PaymentReconcileSchedulerTest {
 			given(paymentClient.lookup("toss-1")).willReturn(lookup);
 			given(reconcileService.apply(candidate, lookup))
 					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
-			PaymentCancelResult cancelResult = new PaymentCancelResult("tviva-key", "CANCELED", now);
+			PaymentCancelResult cancelResult = PaymentCancelResult.of("tviva-key", "CANCELED", now);
 			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willReturn(cancelResult);
 
 			// when
@@ -331,6 +340,50 @@ class PaymentReconcileSchedulerTest {
 
 			// then: 예외를 던지지 않고 나머지 후보도 처리한다.
 			verify(compensationRetrier).retry(second);
+		}
+	}
+
+	@Nested
+	@DisplayName("reconcile() 의 부분취소 재시도 회수")
+	class ReconcileRefundRetries {
+
+		@Test
+		@DisplayName("후보마다 재시도를 시도한다")
+		void retriesEachCandidate() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCancelRetryCandidate candidate = new PaymentCancelRetryCandidate(1L, 10L, "tviva-refund", "toss-1",
+					BigDecimal.TEN, "cancel-tviva-refund-1", "부분 반품", now.minusMinutes(2));
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
+					.willReturn(List.of(candidate));
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(paymentCancelRetrier).retry(candidate);
+		}
+
+		@Test
+		@DisplayName("한 건 회수 처리가 예외를 던져도 대사 자체는 끝까지 진행된다")
+		void doesNotPropagateWhenRetrierThrows() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			PaymentCancelRetryCandidate first = new PaymentCancelRetryCandidate(1L, 10L, "tviva-refund-1", "toss-1",
+					BigDecimal.TEN, "cancel-tviva-refund-1-1", "부분 반품", now.minusMinutes(2));
+			PaymentCancelRetryCandidate second = new PaymentCancelRetryCandidate(2L, 20L, "tviva-refund-2", "toss-2",
+					BigDecimal.TEN, "cancel-tviva-refund-2-1", "부분 반품", now.minusMinutes(2));
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
+					.willReturn(List.of(first, second));
+			willThrow(new IllegalStateException("boom")).given(paymentCancelRetrier).retry(first);
+
+			// when
+			scheduler.reconcile();
+
+			// then: 예외를 던지지 않고 나머지 후보도 처리한다.
+			verify(paymentCancelRetrier).retry(second);
 		}
 	}
 

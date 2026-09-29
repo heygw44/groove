@@ -44,6 +44,7 @@ import org.springframework.web.client.RestClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
@@ -116,6 +117,26 @@ class TossPaymentClientTest {
 				"cancels": [
 					{ "cancelReason": "부분 취소", "canceledAt": "2026-09-02T11:00:00+09:00" },
 					{ "cancelReason": "고객 변심", "canceledAt": "2026-09-02T11:32:04+09:00" }
+				]
+			}
+			""";
+
+	private static final String CANCEL_RESPONSE_PARTIAL = """
+			{
+				"paymentKey": "tviva20260902abcdef",
+				"orderId": "20260902-K7Q2M9XZ",
+				"status": "PARTIAL_CANCELED",
+				"method": "카드",
+				"totalAmount": 75600,
+				"balanceAmount": 65600,
+				"approvedAt": "2026-09-02T10:01:12+09:00",
+				"cancels": [
+					{
+						"transactionKey": "toss-cancel-txn-1",
+						"cancelAmount": 10000,
+						"canceledAt": "2026-09-02T11:32:04+09:00",
+						"cancelStatus": "DONE"
+					}
 				]
 			}
 			""";
@@ -562,6 +583,60 @@ class TossPaymentClientTest {
 
 			// when & then
 			assertThatThrownBy(() -> tossPaymentClient.cancel(PAYMENT_KEY, "고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
+		}
+
+		@Test
+		@DisplayName("부분취소면 지정한 멱등키와 cancelAmount 를 보내고 잔액·거래키를 매핑한다")
+		void sendsPartialCancelWithGivenIdempotencyKeyAndMapsBalanceAndTransactionKey() {
+			// given
+			String idempotencyKey = "cancel-" + PAYMENT_KEY + "-2";
+			server.expect(requestTo(BASE_URL + "/v1/payments/" + PAYMENT_KEY + "/cancel"))
+					.andExpect(header("Idempotency-Key", idempotencyKey))
+					.andExpect(jsonPath("$.cancelAmount").value(10000))
+					.andRespond(withSuccess(CANCEL_RESPONSE_PARTIAL, MediaType.APPLICATION_JSON));
+			PaymentCancelCommand command = PaymentCancelCommand.of(PAYMENT_KEY, "고객 변심", new BigDecimal("10000"),
+					idempotencyKey, null);
+
+			// when
+			PaymentCancelResult result = tossPaymentClient.cancel(command);
+
+			// then
+			assertThat(result.status()).isEqualTo("PARTIAL_CANCELED");
+			assertThat(result.balanceAmount()).isEqualByComparingTo("65600");
+			assertThat(result.transactionKey()).isEqualTo("toss-cancel-txn-1");
+			assertThat(result.canceledAt()).isEqualTo(LocalDateTime.of(2026, 9, 2, 11, 32, 4));
+		}
+
+		@Test
+		@DisplayName("전액취소는 cancelAmount 필드를 보내지 않는다")
+		void omitsCancelAmountFieldForFullCancel() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/" + PAYMENT_KEY + "/cancel"))
+					.andExpect(jsonPath("$.cancelAmount").doesNotExist())
+					.andRespond(withSuccess(CANCEL_RESPONSE, MediaType.APPLICATION_JSON));
+
+			// when
+			tossPaymentClient.cancel(PAYMENT_KEY, "고객 변심");
+
+			// then: MockRestServiceServer 의 jsonPath 기대가 검증을 대신한다
+		}
+
+		@Test
+		@DisplayName("부분취소 중 이미 취소된 결제 응답을 받으면 어느 건이 반영됐는지 알 수 없어 결과 불명 예외를 던진다")
+		void throwsResultUnknownWhenPartialCancelHitsAlreadyCanceled() {
+			// given
+			String idempotencyKey = "cancel-" + PAYMENT_KEY + "-2";
+			server.expect(requestTo(BASE_URL + "/v1/payments/" + PAYMENT_KEY + "/cancel"))
+					.andRespond(withBadRequest().body(tossError("ALREADY_CANCELED_PAYMENT", "이미 취소된 결제입니다."))
+							.contentType(MediaType.APPLICATION_JSON));
+			PaymentCancelCommand command = PaymentCancelCommand.of(PAYMENT_KEY, "고객 변심", new BigDecimal("10000"),
+					idempotencyKey, null);
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.cancel(command))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);

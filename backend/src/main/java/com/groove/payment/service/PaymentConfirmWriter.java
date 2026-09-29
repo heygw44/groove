@@ -20,7 +20,9 @@ import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.service.ProductSalesStatsUpdater;
 
@@ -34,8 +36,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PaymentConfirmWriter {
 
+	private static final String COMPENSATION_IDEMPOTENCY_PREFIX = "cancel-";
+
 	private final OrderRepository orderRepository;
 	private final PaymentRepository paymentRepository;
+	private final PaymentCancelRepository paymentCancelRepository;
 	private final ProductSalesStatsUpdater productSalesStatsUpdater;
 	private final OrderPlacementService orderPlacementService;
 	private final Clock clock;
@@ -175,11 +180,24 @@ public class PaymentConfirmWriter {
 		payment.markUnknown(reason);
 	}
 
+	/**
+	 * 승인 직후 발견한 무효 주문의 보상 취소 반영. compensate() 는 CANCEL_REQUESTED 단계 없이 바로 CANCELED 로
+	 * 가므로, 요청·완료를 한 번에 기록한 DONE 상태 payment_cancel 행을 이 자리에서 함께 남긴다 - 환불 통계가
+	 * payment_cancel 하나만 보면 되게 하기 위해서다.
+	 */
 	@Transactional
 	public void markCompensated(Long paymentId, String paymentKey, LocalDateTime approvedAt, LocalDateTime canceledAt,
-			String reason) {
+			String reason, String transactionKey) {
 		Payment payment = paymentRepository.findById(paymentId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		if (payment.getStatus() == PaymentStatus.CANCELED) {
+			return;
+		}
+		BigDecimal cancelAmount = payment.remainingAmount();
 		payment.compensate(paymentKey, approvedAt, canceledAt, reason);
+		String idempotencyKey = COMPENSATION_IDEMPOTENCY_PREFIX + payment.getPaymentKey();
+		PaymentCancel paymentCancel = PaymentCancel.request(payment, idempotencyKey, cancelAmount, reason, canceledAt);
+		paymentCancel.complete(transactionKey, canceledAt);
+		paymentCancelRepository.save(paymentCancel);
 	}
 }

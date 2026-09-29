@@ -16,7 +16,9 @@ import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentTransaction;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancelStatus;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -42,6 +44,7 @@ public class PaymentSettlementService {
 	private static final String PARTIAL_CANCELED_TOSS_STATUS = "PARTIAL_CANCELED";
 
 	private final PaymentRepository paymentRepository;
+	private final PaymentCancelRepository paymentCancelRepository;
 	private final PaymentClient paymentClient;
 	private final PaymentLateResultApplier lateResultApplier;
 	private final AlertNotifier alertNotifier;
@@ -92,11 +95,39 @@ public class PaymentSettlementService {
 		}
 		Payment payment = found.get();
 		if (matches(payment.getStatus(), transaction.status())) {
+			if (payment.getStatus() == PaymentStatus.PARTIAL_CANCELED) {
+				reconcilePartialCancelAmount(payment, tossOrderId, counters);
+				return;
+			}
 			counters.matched++;
 			return;
 		}
 		PaymentLookupResult lookup = paymentClient.lookup(tossOrderId);
 		applyLateOrRecheck(payment, tossOrderId, lookup, counters);
+	}
+
+	/**
+	 * 상태 문자열만으로는 여러 번의 부분취소 중 어디까지 반영됐는지 알 수 없어, 상태가 일치해도 조회로 금액까지
+	 * 맞춰본다. 진행 중인 부분취소(payment_cancel REQUESTED)가 있으면 PaymentCancelRetrier 가 처리할 몫이라
+	 * 불일치로 세지 않는다.
+	 */
+	private void reconcilePartialCancelAmount(Payment payment, String tossOrderId, Counters counters) {
+		if (paymentCancelRepository.existsByPaymentIdAndStatus(payment.getId(), PaymentCancelStatus.REQUESTED)) {
+			counters.matched++;
+			return;
+		}
+		PaymentLookupResult lookup = paymentClient.lookup(tossOrderId);
+		if (PaymentReconcileRule.partialCancelBalanceMatches(payment.getAmount(), payment.getCanceledAmount(),
+				lookup.balanceAmount())) {
+			counters.matched++;
+			return;
+		}
+		log.error("결제 거래 대조 불일치(부분취소 금액): paymentId={}, orderId={}, canceledAmount={}, tossBalance={}",
+				payment.getId(), tossOrderId, payment.getCanceledAmount(), lookup.balanceAmount());
+		alertNotifier.notify(Alert.critical("payment.settlement-mismatch",
+				"거래 대조 불일치(부분취소 금액): paymentId=" + payment.getId() + ", orderId=" + tossOrderId,
+				"paymentId=" + payment.getId()));
+		counters.mismatched++;
 	}
 
 	private void reconcileMissingFromToss(Payment payment, Counters counters) {
@@ -138,6 +169,7 @@ public class PaymentSettlementService {
 		return switch (dbStatus) {
 			case DONE -> "DONE".equals(tossStatus);
 			case CANCELED -> CANCELED_TOSS_STATUS.equals(tossStatus);
+			case PARTIAL_CANCELED -> PARTIAL_CANCELED_TOSS_STATUS.equals(tossStatus);
 			case FAILED -> "ABORTED".equals(tossStatus) || "EXPIRED".equals(tossStatus);
 			case READY, UNKNOWN, CANCEL_REQUESTED, WAITING_FOR_DEPOSIT -> false;
 		};

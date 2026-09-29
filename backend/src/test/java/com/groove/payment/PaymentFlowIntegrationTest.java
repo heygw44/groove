@@ -2,6 +2,7 @@ package com.groove.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -30,8 +31,10 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -90,16 +93,24 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.dto.PaymentCancelRequest;
 import com.groove.payment.dto.PaymentConfirmRequest;
+import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
+import com.groove.payment.entity.PaymentCancelStatus;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.payment.scheduler.PaymentReconcileScheduler;
+import com.groove.payment.service.PaymentRefundResult;
+import com.groove.payment.service.PaymentRefundService;
+import com.groove.payment.service.PaymentRefundStatus;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.AlbumRepository;
@@ -184,6 +195,12 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	PaymentRefundService paymentRefundService;
+
+	@Autowired
+	PaymentCancelRepository paymentCancelRepository;
 
 	@MockitoBean
 	PaymentClient paymentClient;
@@ -337,7 +354,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			given(paymentClient.cancel(eq(paymentKey), any(), any())).willAnswer(invocation -> {
 				tossCallStarted.countDown();
 				releaseTossCall.await(10, TimeUnit.SECONDS);
-				return new PaymentCancelResult(paymentKey, "CANCELED", canceledAt);
+				return PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt);
 			});
 
 			CompletableFuture<Void> cancelRequest = CompletableFuture.runAsync(() -> {
@@ -548,7 +565,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(eq(paymentKey), any(), any())).willAnswer(invocation -> {
 				jdbcTemplate.update("update orders set status = 'DELIVERED' where id = ?", orderInfo.orderId());
-				return new PaymentCancelResult(paymentKey, "CANCELED", canceledAt);
+				return PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt);
 			});
 
 			// when: T2 의 주문 상태 검증을 결정적으로 실패시킨다
@@ -628,7 +645,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			given(paymentClient.cancel(eq(paymentKey), any(), any()))
-					.willReturn(new PaymentCancelResult(paymentKey, "CANCELED",
+					.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED",
 							LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS)));
 
 			// when
@@ -667,6 +684,143 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.error.code", is("PAYMENT_INVALID_STATUS")));
+			verify(paymentClient, never()).cancel(any(), any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("PaymentRefundService.refund() 부분취소")
+	class Refund {
+
+		@Test
+		@DisplayName("같은 결제에 부분취소를 두 번 요청하면 서로 다른 멱등키로 두 건의 DONE payment_cancel 행이 남는다")
+		void appliesTwoPartialCancelsWithDifferentIdempotencyKeys() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			BigDecimal firstAmount = new BigDecimal("10000");
+			BigDecimal secondAmount = new BigDecimal("15000");
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willAnswer(invocation -> {
+				PaymentCancelCommand command = invocation.getArgument(0);
+				LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+				return new PaymentCancelResult(paymentKey, "PARTIAL_CANCELED", canceledAt,
+						"txn-" + command.idempotencyKey(), null);
+			});
+
+			// when
+			PaymentRefundResult firstResult = paymentRefundService.refund(paymentId, firstAmount, "부분 반품 1", null);
+			PaymentRefundResult secondResult = paymentRefundService.refund(paymentId, secondAmount, "부분 반품 2", null);
+
+			// then
+			assertThat(firstResult.status()).isEqualTo(PaymentRefundStatus.DONE);
+			assertThat(secondResult.status()).isEqualTo(PaymentRefundStatus.DONE);
+
+			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo(firstAmount.add(secondAmount));
+
+			List<PaymentCancel> paymentCancels = paymentCancelRepository.findByPaymentIdOrderByIdAsc(paymentId);
+			assertThat(paymentCancels).hasSize(2);
+			assertThat(paymentCancels).extracting(PaymentCancel::getIdempotencyKey)
+					.containsExactly("cancel-" + paymentKey + "-1", "cancel-" + paymentKey + "-2");
+			assertThat(paymentCancels).extracting(PaymentCancel::getStatus)
+					.containsExactly(PaymentCancelStatus.DONE, PaymentCancelStatus.DONE);
+			assertThat(paymentCancels).extracting(PaymentCancel::getCancelAmount)
+					.usingElementComparator(BigDecimal::compareTo)
+					.containsExactly(firstAmount, secondAmount);
+
+			ArgumentCaptor<PaymentCancelCommand> captor = ArgumentCaptor.forClass(PaymentCancelCommand.class);
+			verify(paymentClient, times(2)).cancel(captor.capture());
+			assertThat(captor.getAllValues()).extracting(PaymentCancelCommand::idempotencyKey)
+					.containsExactly("cancel-" + paymentKey + "-1", "cancel-" + paymentKey + "-2");
+		}
+
+		@Test
+		@DisplayName("남은 금액을 초과해 요청하면 예외를 던지고 토스를 호출하지 않는다")
+		void throwsWhenExceedsRemainingAmount() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			BigDecimal tooMuch = orderInfo.finalAmount().add(BigDecimal.ONE);
+
+			// when & then
+			assertThatThrownBy(() -> paymentRefundService.refund(paymentId, tooMuch, "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE);
+			verify(paymentClient, never()).cancel(any(PaymentCancelCommand.class));
+		}
+
+		@Test
+		@DisplayName("부분취소 결과가 불명이면 결제는 DONE 으로 남고 대사 후보에 잡히지 않는다")
+		void keepsPaymentDoneAndOutOfReconcileTargetsWhenResultIsUnknown() throws Exception {
+			// given: 이전엔 이 경로가 payment.status 를 CANCEL_REQUESTED 로 옮겨, 결과불명일 때 대사
+			// 스케줄러가 legacy 전액취소 키로 잘못 재시도하는 결함이 있었다
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "TOSS 통신 실패"))
+					.given(paymentClient).cancel(any(PaymentCancelCommand.class));
+
+			// when & then
+			assertThatThrownBy(() -> paymentRefundService.refund(paymentId, new BigDecimal("10000"), "부분 반품", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
+
+			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+
+			List<PaymentCancel> paymentCancels = paymentCancelRepository.findByPaymentIdOrderByIdAsc(paymentId);
+			assertThat(paymentCancels).hasSize(1);
+			assertThat(paymentCancels.get(0).getStatus()).isEqualTo(PaymentCancelStatus.REQUESTED);
+
+			List<PaymentReconcileCandidate> candidates = paymentRepository.findReconcileCandidates(
+					PaymentStatus.SCHEDULED_RECONCILE_TARGETS, LocalDateTime.now(clock).plusDays(1),
+					Integer.MAX_VALUE, Limit.of(1000));
+			assertThat(candidates).extracting(PaymentReconcileCandidate::paymentId).doesNotContain(paymentId);
+		}
+
+		@Test
+		@DisplayName("부분취소가 진행 중이면 같은 결제의 전액취소 요청은 거절된다")
+		void rejectsFullCancelWhilePartialCancelInProgress() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
+			paymentCancelRepository.save(PaymentCancel.request(payment, "cancel-" + paymentKey + "-1",
+					new BigDecimal("10000"), "부분 반품", LocalDateTime.now(clock)));
+
+			// when & then
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
+					.andExpect(status().isConflict())
+					.andExpect(jsonPath("$.error.code", is("PAYMENT_CANCEL_IN_PROGRESS")));
 			verify(paymentClient, never()).cancel(any(), any(), any());
 		}
 	}
@@ -919,7 +1073,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 	private void stubCancelSuccess(String paymentKey) {
 		LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 		given(paymentClient.cancel(eq(paymentKey), any(), any()))
-				.willReturn(new PaymentCancelResult(paymentKey, "CANCELED", canceledAt));
+				.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt));
 	}
 
 	private ResultActions confirm(String accessToken, String paymentKey, OrderInfo orderInfo) throws Exception {

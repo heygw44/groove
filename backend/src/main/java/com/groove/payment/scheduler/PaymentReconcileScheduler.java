@@ -17,10 +17,13 @@ import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.config.PaymentReconcileProperties;
+import com.groove.payment.dto.PaymentCancelRetryCandidate;
 import com.groove.payment.dto.PaymentCompensationCandidate;
 import com.groove.payment.dto.PaymentReconcileCandidate;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
+import com.groove.payment.service.PaymentCancelRetrier;
 import com.groove.payment.service.PaymentCompensationRetrier;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentReconcileLock;
@@ -45,6 +48,8 @@ public class PaymentReconcileScheduler {
 	private final PaymentCompensator compensator;
 	private final PaymentCompensationRepository compensationRepository;
 	private final PaymentCompensationRetrier compensationRetrier;
+	private final PaymentCancelRepository paymentCancelRepository;
+	private final PaymentCancelRetrier paymentCancelRetrier;
 	private final PaymentReconcileProperties reconcileProperties;
 	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
@@ -96,6 +101,7 @@ public class PaymentReconcileScheduler {
 		log.info("결제 대사 완료 candidates={} processed={} compensated={} failed={}", candidates.size(), processed,
 				compensated, failed);
 		reconcileCompensations(now);
+		reconcileRefundRetries(now);
 	}
 
 	/** 기존 대사 후보 처리가 끝난 뒤, 같은 named lock 안에서 payment_compensation 대기 큐를 회수한다. */
@@ -119,6 +125,30 @@ public class PaymentReconcileScheduler {
 		}
 		if (processed > 0) {
 			log.info("결제 보상 대기 회수 완료 candidates={} processed={}", candidates.size(), processed);
+		}
+	}
+
+	/** payment_compensation 회수 다음, 같은 named lock 안에서 결과불명 부분취소(payment_cancel)를 회수한다. */
+	private void reconcileRefundRetries(LocalDateTime now) {
+		LocalDateTime retryBefore = now.minus(reconcileProperties.refundRetryGrace());
+		List<PaymentCancelRetryCandidate> candidates = paymentCancelRepository.findRetryCandidates(retryBefore,
+				Limit.of(reconcileProperties.batchSize()));
+		int processed = 0;
+		for (PaymentCancelRetryCandidate candidate : candidates) {
+			if (shutdownSignal.isShuttingDown()) {
+				log.info("셧다운 신호로 부분취소 재시도 회수 중단 processed={} remaining={}", processed,
+						candidates.size() - processed);
+				break;
+			}
+			try {
+				paymentCancelRetrier.retry(candidate);
+			} catch (RuntimeException ex) {
+				log.error("부분취소 재시도 회수 처리 실패 paymentCancelId={}", candidate.paymentCancelId(), ex);
+			}
+			processed++;
+		}
+		if (processed > 0) {
+			log.info("부분취소 재시도 회수 완료 candidates={} processed={}", candidates.size(), processed);
 		}
 	}
 

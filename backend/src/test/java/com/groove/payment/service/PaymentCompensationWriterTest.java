@@ -63,7 +63,7 @@ class PaymentCompensationWriterTest {
 		Member member = MemberFixture.create();
 		order = OrderFixture.create(member);
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
-				Duration.ofMinutes(2), 50, 10);
+				Duration.ofMinutes(2), 50, 10, Duration.ofMinutes(1));
 		writer = new PaymentCompensationWriter(repository, orderRepository, properties, alertNotifier);
 	}
 

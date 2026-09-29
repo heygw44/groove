@@ -84,8 +84,11 @@ public class PaymentReconcileService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		Payment payment = paymentRepository.findById(candidate.paymentId())
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		boolean partialCancelDriftCandidate = PaymentReconcileRule.isPartialCancelDriftCandidate(payment.getStatus(),
+				lookup.status());
 		boolean eligible = payment.getStatus().isReconcileTarget()
-				|| (allowFailed && payment.getStatus() == PaymentStatus.FAILED);
+				|| (allowFailed && payment.getStatus() == PaymentStatus.FAILED)
+				|| partialCancelDriftCandidate;
 		if (!eligible) {
 			return PaymentReconcileOutcome.alreadyResolved();
 		}
@@ -93,7 +96,7 @@ public class PaymentReconcileService {
 		PaymentStatus beforeStatus = payment.getStatus();
 		String tossStatus = lookup.status().name();
 		PaymentReconcileDecision decision = PaymentReconcileRule.decide(payment.getStatus(), order.getStatus(),
-				payment.getAmount(), lookup);
+				payment.getAmount(), payment.getCanceledAmount(), lookup);
 		return switch (decision) {
 			case APPROVE -> {
 				writer.approve(candidate.orderId(), candidate.paymentId(), lookup.paymentKey(),
@@ -115,9 +118,12 @@ public class PaymentReconcileService {
 				yield PaymentReconcileOutcome.applied();
 			}
 			case SKIP -> {
-				if (payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT) {
-					// 입금기한이 남아있는 정상 대기 상태다. 대사 상한을 적용하면 며칠씩 걸리는 입금 대기가
-					// 몇 번 폴링만에 FAILED 로 잘못 수렴한다 - 만료 처리는 OrderExpirationService 가 맡는다.
+				if (partialCancelDriftCandidate || payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT) {
+					// 부분취소 잔액 대사는 이미 확정된 결제(DONE/PARTIAL_CANCELED)를 건드리는 것이라 재시도
+					// 상한(recordMiss)을 태우지 않는다 - 상한을 넘기면 이 결제가 fail() 로 되돌아갈 수 있다.
+					// 입금기한이 남아있는 정상 대기 상태도 마찬가지로 상한 없이 SKIPPED 만 남긴다 - 대사
+					// 상한을 적용하면 며칠씩 걸리는 입금 대기가 몇 번 폴링만에 FAILED 로 잘못 수렴한다(만료
+					// 처리는 OrderExpirationService 가 맡는다).
 					writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.SKIPPED, detail);
 				} else {
 					recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.SKIPPED, detail);
@@ -131,14 +137,21 @@ public class PaymentReconcileService {
 						"대사 결과 수동 확인 필요: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId()
 								+ ", tossStatus=" + tossStatus,
 						"paymentId=" + candidate.paymentId()));
-				recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
+				if (partialCancelDriftCandidate) {
+					// 자동으로 금액을 맞추지 않는다 - 상한(recordMiss)을 태우면 이미 확정된 결제가 fail() 로
+					// 되돌아갈 수 있어, 로그만 남기고 payment.status·reconcile_attempts 는 건드리지 않는다.
+					writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
+				} else {
+					recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
+				}
 				yield PaymentReconcileOutcome.applied();
 			}
 			// 토스 cancel 은 트랜잭션 밖에서 호출해야 하므로 여기서는 상태를 바꾸지 않는다.
 			case COMPENSATE -> PaymentReconcileOutcome.needsCompensation(lookup.paymentKey(), lookup.approvedAt());
 			case COMPLETE_CANCEL -> {
 				LocalDateTime canceledAt = lookup.canceledAt() != null ? lookup.canceledAt() : LocalDateTime.now(clock);
-				cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt);
+				// 토스 조회(lookup)에는 취소 거래의 transactionKey 가 없어 null 로 남긴다.
+				cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt, null);
 				writeLog(payment, beforeStatus, lookup.status().name(), PaymentReconcileAction.CANCELED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
@@ -159,7 +172,8 @@ public class PaymentReconcileService {
 		PaymentStatus beforeStatus = payment.getStatus();
 		if (result != null) {
 			LocalDateTime canceledAt = result.canceledAt() != null ? result.canceledAt() : LocalDateTime.now(clock);
-			cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt);
+			cancelWriter.completeCancel(candidate.orderId(), candidate.paymentId(), canceledAt,
+					result.transactionKey());
 			writeLog(payment, beforeStatus, "CANCELED", PaymentReconcileAction.CANCELED, null);
 			return;
 		}

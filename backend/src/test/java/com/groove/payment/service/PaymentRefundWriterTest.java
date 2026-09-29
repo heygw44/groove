@@ -1,0 +1,260 @@
+package com.groove.payment.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.MemberFixture;
+import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
+import com.groove.fixture.ProductFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
+import com.groove.member.entity.Member;
+import com.groove.order.entity.Order;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancel;
+import com.groove.payment.entity.PaymentCancelStatus;
+import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
+import com.groove.payment.repository.PaymentRepository;
+import com.groove.product.entity.Artist;
+import com.groove.product.entity.Product;
+
+@ExtendWith(MockitoExtension.class)
+class PaymentRefundWriterTest {
+
+	private static final Long PAYMENT_ID = 20L;
+	private static final BigDecimal PRICE = new BigDecimal("45000");
+	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 29, 12, 0);
+
+	@Mock
+	PaymentRepository paymentRepository;
+
+	@Mock
+	PaymentCancelRepository paymentCancelRepository;
+
+	PaymentRefundWriter writer;
+	Payment payment;
+
+	@BeforeEach
+	void setUp() {
+		Clock clock = Clock.fixed(Instant.parse("2026-09-29T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+		writer = new PaymentRefundWriter(paymentRepository, paymentCancelRepository, clock);
+		Member member = MemberFixture.create();
+		Artist artist = ArtistFixture.create();
+		Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist, "Kind of Blue", PRICE), 2);
+		payment = PaymentFixture.approved(order);
+		ReflectionTestUtils.setField(payment, "id", PAYMENT_ID);
+	}
+
+	/** Mockito 의 save() 스텁이 IDENTITY 채번을 흉내내도록 저장된 엔티티에 id 를 채워 돌려준다. */
+	private PaymentCancel withGeneratedId(InvocationOnMock invocation, Long id) {
+		PaymentCancel saved = invocation.getArgument(0);
+		ReflectionTestUtils.setField(saved, "id", id);
+		return saved;
+	}
+
+	@Nested
+	@DisplayName("requestRefund()")
+	class RequestRefund {
+
+		@Test
+		@DisplayName("첫 부분취소면 결제 상태는 그대로 두고 순번 1인 멱등키로 요청 기록만 REQUESTED 로 남긴다")
+		void requestsFirstPartialCancelWithoutMovingPaymentStatus() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.countByPaymentId(PAYMENT_ID)).willReturn(0L);
+			given(paymentCancelRepository.save(any())).willAnswer(invocation -> withGeneratedId(invocation, 90L));
+			ArgumentCaptor<PaymentCancel> captor = ArgumentCaptor.forClass(PaymentCancel.class);
+
+			// when
+			PaymentRefundRequest result = writer.requestRefund(PAYMENT_ID, new BigDecimal("10000"), "부분 반품", null);
+
+			// then: payment.status 는 CANCEL_REQUESTED 로 옮기지 않는다 - 대사 스케줄러가 이 상태를
+			// legacy 전액취소 재시도 대상으로 집어가는 것을 막기 위해서다
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-1");
+			assertThat(result.cancelAmount()).isEqualByComparingTo("10000");
+			verify(paymentCancelRepository).save(captor.capture());
+			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-1");
+			assertThat(captor.getValue().getStatus()).isEqualTo(PaymentCancelStatus.REQUESTED);
+		}
+
+		@Test
+		@DisplayName("이미 취소 이력이 있으면 다음 순번의 멱등키를 쓴다")
+		void requestsSecondPartialCancelWithNextSequence() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.countByPaymentId(PAYMENT_ID)).willReturn(1L);
+			given(paymentCancelRepository.save(any())).willAnswer(invocation -> withGeneratedId(invocation, 91L));
+
+			// when
+			PaymentRefundRequest result = writer.requestRefund(PAYMENT_ID, new BigDecimal("5000"), "추가 반품", null);
+
+			// then
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-2");
+		}
+
+		@Test
+		@DisplayName("PARTIAL_CANCELED 결제에도 추가 부분취소를 요청할 수 있다")
+		void requestsAdditionalPartialCancelFromPartiallyCanceledPayment() {
+			// given
+			payment.applyPartialCancel(new BigDecimal("10000"), NOW);
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.countByPaymentId(PAYMENT_ID)).willReturn(1L);
+			given(paymentCancelRepository.save(any())).willAnswer(invocation -> withGeneratedId(invocation, 91L));
+
+			// when
+			PaymentRefundRequest result = writer.requestRefund(PAYMENT_ID, new BigDecimal("5000"), "추가 반품", null);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+			assertThat(result.cancelAmount()).isEqualByComparingTo("5000");
+		}
+
+		@Test
+		@DisplayName("같은 결제에 진행 중(REQUESTED)인 취소 건이 있으면 PAYMENT_CANCEL_IN_PROGRESS 예외를 던진다")
+		void throwsWhenAnotherCancelIsInProgress() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(PAYMENT_ID, PaymentCancelStatus.REQUESTED))
+					.willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestRefund(PAYMENT_ID, new BigDecimal("1000"), "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CANCEL_IN_PROGRESS);
+			verify(paymentCancelRepository, never()).save(any());
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "CANCELED", "FAILED", "UNKNOWN",
+			"CANCEL_REQUESTED"})
+		@DisplayName("DONE·PARTIAL_CANCELED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		void throwsWhenNotDoneOrPartiallyCanceled(PaymentStatus status) {
+			// given
+			PaymentFixture.withStatus(payment, status);
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestRefund(PAYMENT_ID, new BigDecimal("1000"), "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+
+		@Test
+		@DisplayName("남은 금액을 초과해 요청하면 예외를 던지고 상태를 바꾸지 않는다")
+		void throwsWhenExceedsRemainingAmount() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+			BigDecimal tooMuch = payment.getAmount().add(BigDecimal.ONE);
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestRefund(PAYMENT_ID, tooMuch, "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("취소 금액이 0 이하면 예외를 던진다")
+		void throwsWhenAmountIsNotPositive() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestRefund(PAYMENT_ID, BigDecimal.ZERO, "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE);
+		}
+
+		@Test
+		@DisplayName("결제가 없으면 PAYMENT_NOT_FOUND 예외를 던진다")
+		void throwsWhenPaymentNotFound() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestRefund(PAYMENT_ID, new BigDecimal("1000"), "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+		}
+	}
+
+	@Nested
+	@DisplayName("completeRefund()")
+	class CompleteRefund {
+
+		@Test
+		@DisplayName("DONE 결제의 취소 누적액을 반영하고 취소 요청 기록을 DONE 으로 남긴다")
+		void appliesCancelAndCompletesRequest() {
+			// given: T1 에서 payment.status 를 바꾸지 않으므로 DONE 그대로다
+			PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-key-1", new BigDecimal("10000"),
+					"사유", NOW);
+			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.findById(90L)).willReturn(Optional.of(paymentCancel));
+
+			// when
+			writer.completeRefund(PAYMENT_ID, 90L, new BigDecimal("10000"), "txn-1", NOW);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo("10000");
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
+			assertThat(paymentCancel.getTossTransactionKey()).isEqualTo("txn-1");
+		}
+	}
+
+	@Nested
+	@DisplayName("failRefund()")
+	class FailRefund {
+
+		@Test
+		@DisplayName("취소 요청 기록을 FAILED 로 남기고 결제 상태는 건드리지 않는다")
+		void failsRequestWithoutTouchingPayment() {
+			// given
+			PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-key-1", new BigDecimal("10000"),
+					"사유", NOW);
+			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
+			given(paymentCancelRepository.findById(90L)).willReturn(Optional.of(paymentCancel));
+
+			// when
+			writer.failRefund(90L);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.FAILED);
+		}
+	}
+}
