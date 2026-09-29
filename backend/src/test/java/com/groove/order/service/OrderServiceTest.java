@@ -70,6 +70,7 @@ import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
+import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.repository.PaymentRepository;
@@ -127,6 +128,9 @@ class OrderServiceTest {
 	@Mock
 	ProductImageRepository productImageRepository;
 
+	@Mock
+	OrderClaimRepository orderClaimRepository;
+
 	OrderService orderService;
 
 	Member member;
@@ -150,7 +154,7 @@ class OrderServiceTest {
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, cartItemRepository, memberCouponRepository, orderStockService,
 				orderDraftReleaser, orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository,
-				productImageRepository, clock);
+				productImageRepository, orderClaimRepository, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);

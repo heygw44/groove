@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ import com.groove.order.dto.OrderItemResponse;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderItemStatus;
+import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.product.entity.Artist;
@@ -58,6 +60,9 @@ class OrderItemClaimServiceTest {
 	OrderItemRepository orderItemRepository;
 
 	@Mock
+	OrderClaimRepository orderClaimRepository;
+
+	@Mock
 	ProductImageRepository productImageRepository;
 
 	OrderItemClaimService service;
@@ -66,7 +71,8 @@ class OrderItemClaimServiceTest {
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
-		service = new OrderItemClaimService(writer, refundHook, orderItemRepository, productImageRepository, clock);
+		service = new OrderItemClaimService(writer, refundHook, orderItemRepository, orderClaimRepository,
+				productImageRepository, clock);
 		Member member = MemberFixture.create();
 		Artist artist = ArtistFixture.withId(1L);
 		Product product = ProductFixture.withId(ProductFixture.create(artist), 200L);
@@ -170,6 +176,37 @@ class OrderItemClaimServiceTest {
 
 			// then
 			assertThat(response.productOrderNumber()).isEqualTo(item.getProductOrderNumber());
+		}
+
+		@Test
+		@DisplayName("응답에 상품주문 id 를 싣고, REQUESTED 클레임이 남아 있으면 claimId 를 채운다")
+		void populatesIdAndClaimId() {
+			// given
+			given(writer.withdraw(MEMBER_ID, CLAIM_ID)).willReturn(ITEM_ID);
+			given(orderItemRepository.findWithProductById(ITEM_ID)).willReturn(Optional.of(item));
+			given(orderClaimRepository.findRequestedClaimIdsByOrderItemId(List.of(ITEM_ID)))
+					.willReturn(Map.of(ITEM_ID, 501L));
+
+			// when
+			OrderItemResponse response = service.withdraw(MEMBER_ID, CLAIM_ID);
+
+			// then
+			assertThat(response.id()).isEqualTo(ITEM_ID);
+			assertThat(response.claimId()).isEqualTo(501L);
+		}
+
+		@Test
+		@DisplayName("REQUESTED 클레임이 없으면 claimId 는 null 이다")
+		void claimIdNullWhenNoRequestedClaim() {
+			// given
+			given(writer.withdraw(MEMBER_ID, CLAIM_ID)).willReturn(ITEM_ID);
+			given(orderItemRepository.findWithProductById(ITEM_ID)).willReturn(Optional.of(item));
+
+			// when
+			OrderItemResponse response = service.withdraw(MEMBER_ID, CLAIM_ID);
+
+			// then
+			assertThat(response.claimId()).isNull();
 		}
 	}
 }

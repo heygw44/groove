@@ -304,7 +304,7 @@ class AdminStatsServiceTest {
 		void callsMapperWithTodayAndTomorrowBoundaries() {
 			// given
 			AdminStatsSummaryResponse response = new AdminStatsSummaryResponse(BigDecimal.ZERO, BigDecimal.ZERO,
-					0, 0, 0, 0, 0, 0, 0);
+					0, 0, 0, 0, 0, 0);
 			given(adminStatsMapper.findSummary(any(), any())).willReturn(response);
 
 			// when

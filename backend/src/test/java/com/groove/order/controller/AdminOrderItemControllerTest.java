@@ -78,7 +78,7 @@ class AdminOrderItemControllerTest {
 		@DisplayName("관리자면 200 과 상품주문 목록을 반환한다")
 		void returnsListForAdmin() throws Exception {
 			// given
-			AdminOrderItemSummaryResponse summary = new AdminOrderItemSummaryResponse(900L,
+			AdminOrderItemSummaryResponse summary = new AdminOrderItemSummaryResponse(900L, 700L,
 					"20260903-TESTAB12-01", "20260903-TESTAB12", "buyer@groove.com", "그루브 앨범", 1,
 					OrderItemStatus.PAID, null, null, null, LocalDateTime.now());
 			given(adminOrderItemService.getList(any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
@@ -87,6 +87,7 @@ class AdminOrderItemControllerTest {
 			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.content[0].productOrderNumber", is("20260903-TESTAB12-01")))
+					.andExpect(jsonPath("$.data.content[0].orderId", is(700)))
 					.andExpect(jsonPath("$.data.totalElements", is(1)));
 		}
 

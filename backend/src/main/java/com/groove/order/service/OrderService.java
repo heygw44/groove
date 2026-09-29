@@ -34,9 +34,11 @@ import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.mapper.OrderQueryMapper;
+import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
@@ -67,6 +69,7 @@ public class OrderService {
 	private final OrderQueryMapper orderQueryMapper;
 	private final PaymentRepository paymentRepository;
 	private final ProductImageRepository productImageRepository;
+	private final OrderClaimRepository orderClaimRepository;
 	private final Clock clock;
 
 	@Transactional
@@ -158,8 +161,10 @@ public class OrderService {
 		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
 				.map(purchase -> purchase.getDrop().getId())
 				.orElse(null);
+		Map<Long, Long> claimIds = orderClaimRepository.findRequestedClaimIdsByOrderItemId(
+				order.getItems().stream().map(OrderItem::getId).toList());
 		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId), resolveThumbnails(order),
-				LocalDateTime.now(clock));
+				claimIds, LocalDateTime.now(clock));
 	}
 
 	/** 주문 상품 썸네일(상품 sort_order = 0 이미지)을 한 번에 조회한다. */
