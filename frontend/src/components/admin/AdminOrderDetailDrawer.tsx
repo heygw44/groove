@@ -11,6 +11,7 @@ import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
 import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
 import { useAdminOrder } from '@/hooks/queries/useAdminOrder';
 import { formatServerDateTime } from '@/utils/formatDate';
+import { formatCancelReason } from '@/utils/orderStatus';
 
 interface AdminOrderDetailDrawerProps {
   orderId?: number;
@@ -65,7 +66,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
             {detail.status === 'CANCELED' && (
               <p className="mt-2 text-sm text-danger">
                 {detail.canceledAt && `${formatServerDateTime(detail.canceledAt)} 취소`}
-                {detail.cancelReason && ` · ${detail.cancelReason}`}
+                {detail.cancelReason && ` · ${formatCancelReason(detail.cancelReason)}`}
               </p>
             )}
           </div>
