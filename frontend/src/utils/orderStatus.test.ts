@@ -5,6 +5,7 @@ import {
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
   ORDER_STATUSES,
+  formatCancelReason,
   getOrderDisplayStatus,
   isCancelableStatus,
   isOrderStatus,
@@ -90,5 +91,26 @@ describe('getOrderDisplayStatus()', () => {
 
     // then
     expect(result).toEqual({ label: ORDER_STATUS_LABEL.PAID, variant: ORDER_STATUS_BADGE.PAID });
+  });
+});
+
+describe('formatCancelReason()', () => {
+  it.each([
+    ['EXPIRED', '입금 기한 만료'],
+    ['SUPERSEDED', '다른 결제로 대체'],
+  ])('시스템 사유 %s 는 %s 로 바꾼다', (reason, label) => {
+    // given & when
+    const result = formatCancelReason(reason);
+
+    // then
+    expect(result).toBe(label);
+  });
+
+  it.each(['단순 변심', 'constructor'])('구매자가 입력한 사유 %s 는 그대로 돌려준다', (reason) => {
+    // given & when
+    const result = formatCancelReason(reason);
+
+    // then
+    expect(result).toBe(reason);
   });
 });

@@ -240,4 +240,21 @@ describe('OrderDetailPage', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
   });
+
+  it('취소된 주문은 취소 사유를 보여준다', () => {
+    // given
+    const order = buildOrder({
+      status: 'CANCELED',
+      canceledAt: '2026-09-14T00:00:00',
+      cancelReason: 'EXPIRED',
+    });
+    mockOrder(order);
+    mockCancelMutation(order);
+
+    // when
+    renderPage();
+
+    // then
+    expect(screen.getByText('사유: 입금 기한 만료')).toBeInTheDocument();
+  });
 });
