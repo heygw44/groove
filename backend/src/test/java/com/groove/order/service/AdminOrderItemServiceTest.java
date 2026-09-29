@@ -47,7 +47,6 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderItemClaimStatus;
 import com.groove.order.entity.OrderItemStatus;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.order.repository.OrderRepository;
@@ -69,9 +68,6 @@ class AdminOrderItemServiceTest {
 	private OrderRepository orderRepository;
 
 	@Mock
-	private OrderStatusAligner orderStatusAligner;
-
-	@Mock
 	private AdminAuditLogService adminAuditLogService;
 
 	private AdminOrderItemService service;
@@ -84,7 +80,7 @@ class AdminOrderItemServiceTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-20T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		service = new AdminOrderItemService(orderQueryMapper, orderItemRepository, orderRepository,
-				orderStatusAligner, adminAuditLogService, clock);
+				adminAuditLogService, clock);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
@@ -115,8 +111,8 @@ class AdminOrderItemServiceTest {
 	class ConfirmPreparing {
 
 		@Test
-		@DisplayName("PAID 상품주문을 PREPARING 으로 바꾸고 주문 상태를 맞추고 감사 로그를 남긴다")
-		void confirmsAndAligns() {
+		@DisplayName("PAID 상품주문을 PREPARING 으로 바꾸고 감사 로그를 남긴다")
+		void confirmsAndRecordsAudit() {
 			// given
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
 			OrderItem item = order.getItems().get(0);
@@ -132,7 +128,6 @@ class AdminOrderItemServiceTest {
 			assertThat(result.processed()).isEqualTo(1);
 			assertThat(result.skipped()).isZero();
 			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PREPARING);
-			verify(orderStatusAligner).alignIfAllItemsMatch(500L, OrderItemStatus.PREPARING, OrderStatus.PREPARING);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
 					eq(AdminAuditTargetType.ORDER), eq(500L), eq("PAID->PREPARING"));
 		}
@@ -155,7 +150,6 @@ class AdminOrderItemServiceTest {
 			assertThat(result.processed()).isZero();
 			assertThat(result.skipped()).isEqualTo(1);
 			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
-			verify(orderStatusAligner, never()).alignIfAllItemsMatch(any(), any(), any());
 		}
 
 		@Test

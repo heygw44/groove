@@ -177,33 +177,6 @@ public class OrderItem extends BaseTimeEntity {
 		this.canceledAt = now;
 	}
 
-	/** 관리자 발주확인. */
-	void moveToPreparing(LocalDateTime now) {
-		if (isTerminal()) {
-			return;
-		}
-		this.status = OrderItemStatus.PREPARING;
-		this.preparedAt = now;
-	}
-
-	/** 관리자 발송처리. */
-	void moveToShipping(LocalDateTime now) {
-		if (isTerminal()) {
-			return;
-		}
-		this.status = OrderItemStatus.SHIPPING;
-		this.shippedAt = now;
-	}
-
-	/** 배송완료(관리자 또는 자동). */
-	void moveToDelivered(LocalDateTime now) {
-		if (isTerminal()) {
-			return;
-		}
-		this.status = OrderItemStatus.DELIVERED;
-		this.deliveredAt = now;
-	}
-
 	/** 쿠폰 할인액을 라인 금액 비율로 나눈 몫을 반영한다. {@link DiscountAllocator} 에서만 호출한다. */
 	void applyDiscountShare(BigDecimal discountShare) {
 		this.discountShare = discountShare;
@@ -251,7 +224,7 @@ public class OrderItem extends BaseTimeEntity {
 
 	/**
 	 * 관리자 발주확인(PAID → PREPARING). 일괄 처리에서 대상이 아닌 항목은 건너뛰도록 대상이 아니면 false 를
-	 * 반환한다(기존 {@link #moveToPreparing}은 호환 shim 전용이라 원본 상태를 따지지 않는다).
+	 * 반환한다.
 	 */
 	public boolean confirmPreparing(LocalDateTime now) {
 		if (this.status != OrderItemStatus.PAID) {

@@ -1,15 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { AdminOrderDetailDrawer } from '@/components/admin/AdminOrderDetailDrawer';
 import { ToastProvider } from '@/components/common/Toast';
 import { adminOrderKeys } from '@/hooks/queries/queryKeys';
 import type { AdminOrderDetail } from '@/types/order';
-
-vi.mock('@/api/admin', () => ({
-  changeAdminOrderStatus: vi.fn(),
-}));
 
 const buildDetail = (overrides: Partial<AdminOrderDetail> = {}): AdminOrderDetail => ({
   id: 1,
@@ -45,10 +41,6 @@ const renderDrawer = (detail: AdminOrderDetail) => {
   );
 };
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
-
 describe('AdminOrderDetailDrawer', () => {
   it('paymentStatus 가 대사 대기 상태면 결제 상태 배지를 함께 보여준다', async () => {
     // given
@@ -64,7 +56,7 @@ describe('AdminOrderDetailDrawer', () => {
 
   it('paymentStatus 가 DONE 이면 결제 상태 배지를 그리지 않는다', async () => {
     // given: 주문 상태 라벨과 겹치지 않는 상태로 확인한다(둘 다 '결제완료').
-    const detail = buildDetail({ status: 'PREPARING', paymentStatus: 'DONE' });
+    const detail = buildDetail({ status: 'CANCELED', paymentStatus: 'DONE' });
 
     // when
     renderDrawer(detail);
@@ -76,7 +68,7 @@ describe('AdminOrderDetailDrawer', () => {
 
   it('paymentStatus 가 없으면 결제 상태 배지를 그리지 않는다', async () => {
     // given
-    const detail = buildDetail({ status: 'PREPARING' });
+    const detail = buildDetail({ status: 'CANCELED' });
 
     // when
     renderDrawer(detail);
@@ -87,7 +79,7 @@ describe('AdminOrderDetailDrawer', () => {
     expect(screen.queryByText('결제완료')).not.toBeInTheDocument();
   });
 
-  it('paymentStatus 가 CANCEL_REQUESTED 면 상태 전이를 비활성화하고 이유를 보여준다', async () => {
+  it('paymentStatus 가 CANCEL_REQUESTED 면 취소 처리 중 배지를 보여준다', async () => {
     // given
     const detail = buildDetail({ paymentStatus: 'CANCEL_REQUESTED' });
 
@@ -96,10 +88,5 @@ describe('AdminOrderDetailDrawer', () => {
 
     // then
     expect(await screen.findByText('취소 처리 중')).toBeInTheDocument();
-    expect(screen.getByLabelText('변경할 상태')).toBeDisabled();
-    expect(screen.getByRole('button', { name: '변경' })).toBeDisabled();
-    expect(
-      screen.getByText('취소 결과를 확인하고 있어 주문 상태를 변경할 수 없습니다.'),
-    ).toBeInTheDocument();
   });
 });

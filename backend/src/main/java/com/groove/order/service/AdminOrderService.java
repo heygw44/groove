@@ -7,19 +7,14 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.groove.admin.entity.AdminAuditAction;
-import com.groove.admin.entity.AdminAuditTargetType;
-import com.groove.admin.service.AdminAuditLogService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSearchRequest;
-import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.entity.Order;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
@@ -30,7 +25,7 @@ import com.groove.product.repository.ProductImageRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** 관리자 주문 목록 조회·상태 전이. */
+/** 관리자 주문 목록·상세 조회. */
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -38,7 +33,6 @@ public class AdminOrderService {
 
 	private final OrderRepository orderRepository;
 	private final OrderQueryMapper orderQueryMapper;
-	private final AdminAuditLogService adminAuditLogService;
 	private final PaymentRepository paymentRepository;
 	private final ProductImageRepository productImageRepository;
 
@@ -56,27 +50,6 @@ public class AdminOrderService {
 		Order order = orderRepository.findWithItemsAndMemberById(orderId)
 				.filter(Order::isPlaced)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId), resolveThumbnails(order));
-	}
-
-	@Transactional
-	public AdminOrderDetailResponse changeStatus(Long adminId, Long orderId, AdminOrderStatusChangeRequest request) {
-		if (request.status() == OrderStatus.CANCELED) {
-			throw new IllegalStateException("CANCELED transition must use AdminOrderStatusService");
-		}
-		// 만료 스케줄러와 같은 주문을 동시에 취소하면 재고가 두 번 복구되므로 주문 행을 먼저 잠근다.
-		orderRepository.findByIdForUpdate(orderId).orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		Order order = orderRepository.findWithItemsAndMemberById(orderId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-		if (resolvePaymentStatus(orderId) == PaymentStatus.CANCEL_REQUESTED) {
-			throw new BusinessException(ErrorCode.ORDER_CANCEL_IN_PROGRESS);
-		}
-		OrderStatus previous = order.getStatus();
-		OrderStatus next = request.status();
-		order.changeStatus(next);
-
-		adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
-				orderId, previous.name() + "->" + next.name());
 		return AdminOrderDetailResponse.from(order, resolvePaymentStatus(orderId), resolveThumbnails(order));
 	}
 

@@ -9,7 +9,6 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderItemStatus;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.order.repository.OrderRepository;
 
@@ -25,7 +24,6 @@ public class OrderAutoDeliverService {
 
 	private final OrderItemRepository orderItemRepository;
 	private final OrderRepository orderRepository;
-	private final OrderStatusAligner orderStatusAligner;
 
 	@Transactional
 	public boolean deliver(Long itemId, LocalDateTime cutoff, LocalDateTime now) {
@@ -40,10 +38,6 @@ public class OrderAutoDeliverService {
 				|| item.getShippedAt().isAfter(cutoff)) {
 			return false;
 		}
-		if (!item.completeDelivery(now)) {
-			return false;
-		}
-		orderStatusAligner.alignIfAllItemsMatch(orderId, OrderItemStatus.DELIVERED, OrderStatus.DELIVERED);
-		return true;
+		return item.completeDelivery(now);
 	}
 }

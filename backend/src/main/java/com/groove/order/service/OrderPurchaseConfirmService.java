@@ -16,8 +16,8 @@ import com.groove.order.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 상품주문 한 건을 자동 구매확정(DELIVERED → PURCHASE_CONFIRMED) 처리한다. Order.status 에는
- * PURCHASE_CONFIRMED 에 대응하는 값이 없어 {@link OrderStatusAligner} 는 쓰지 않는다.
+ * 상품주문 한 건을 자동 구매확정(DELIVERED → PURCHASE_CONFIRMED) 처리한다. Order.status 는 결제 생애주기라
+ * 여기서 바꾸지 않는다.
  */
 @Service
 @RequiredArgsConstructor

@@ -12,7 +12,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,10 +47,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.groove.admin.entity.AdminAuditAction;
-import com.groove.admin.entity.AdminAuditLog;
-import com.groove.admin.entity.AdminAuditTargetType;
-import com.groove.admin.repository.AdminAuditLogRepository;
 import com.groove.auth.dto.LoginRequest;
 import com.groove.auth.dto.SignupRequest;
 import com.groove.auth.jwt.JwtProvider;
@@ -89,7 +84,9 @@ import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
 import com.groove.order.dto.AdminOrderClaimCompleteRequest;
 import com.groove.order.dto.AdminOrderClaimRejectRequest;
-import com.groove.order.dto.AdminOrderStatusChangeRequest;
+import com.groove.order.dto.AdminOrderItemConfirmRequest;
+import com.groove.order.dto.AdminOrderItemDeliverRequest;
+import com.groove.order.dto.AdminOrderItemShipRequest;
 import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.dto.OrderReturnRequest;
@@ -196,9 +193,6 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	JwtProvider jwtProvider;
-
-	@Autowired
-	AdminAuditLogRepository adminAuditLogRepository;
 
 	@Autowired
 	PlatformTransactionManager transactionManager;
@@ -586,7 +580,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					orderInfo.finalAmount());
 			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
 			given(paymentClient.cancel(eq(paymentKey), any(), any())).willAnswer(invocation -> {
-				jdbcTemplate.update("update orders set status = 'DELIVERED' where id = ?", orderInfo.orderId());
+				jdbcTemplate.update("update orders set status = 'CANCELED' where id = ?", orderInfo.orderId());
 				return PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt);
 			});
 
@@ -961,8 +955,8 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			String paymentKey = uniquePaymentKey();
 			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
 			String adminToken = adminToken();
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
 			Long itemId = onlyItemId(orderInfo.orderId());
+			confirmItem(adminToken, itemId);
 
 			// when: 구매자가 취소를 요청한다
 			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", orderInfo.orderId(), itemId)
@@ -1000,8 +994,8 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			String paymentKey = uniquePaymentKey();
 			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
 			String adminToken = adminToken();
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
 			Long itemId = onlyItemId(orderInfo.orderId());
+			confirmItem(adminToken, itemId);
 			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", orderInfo.orderId(), itemId)
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -1036,10 +1030,8 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			String paymentKey = uniquePaymentKey();
 			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
 			String adminToken = adminToken();
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.SHIPPED).andExpect(status().isOk());
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.DELIVERED).andExpect(status().isOk());
 			Long itemId = onlyItemId(orderInfo.orderId());
+			deliverItem(adminToken, itemId);
 			int stockBeforeReturn = stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity();
 
 			// when: 반품을 요청한다
@@ -1083,10 +1075,8 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			String paymentKey = uniquePaymentKey();
 			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
 			String adminToken = adminToken();
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.SHIPPED).andExpect(status().isOk());
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.DELIVERED).andExpect(status().isOk());
 			Long itemId = onlyItemId(orderInfo.orderId());
+			deliverItem(adminToken, itemId);
 			setDeliveredAt(itemId, LocalDateTime.now(clock).minusDays(8));
 
 			// when & then
@@ -1110,8 +1100,8 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			String paymentKey = uniquePaymentKey();
 			confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(), orderInfo.finalAmount());
 			String adminToken = adminToken();
-			changeAdminOrderStatus(adminToken, orderInfo.orderId(), OrderStatus.PREPARING).andExpect(status().isOk());
 			Long itemId = onlyItemId(orderInfo.orderId());
+			confirmItem(adminToken, itemId);
 			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/cancel", orderInfo.orderId(), itemId)
 							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
 							.contentType(MediaType.APPLICATION_JSON)
@@ -1180,6 +1170,27 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 		private Long onlyItemId(Long orderId) {
 			Order order = orderRepository.findWithItemsById(orderId).orElseThrow();
 			return order.getItems().get(0).getId();
+		}
+
+		private void confirmItem(String adminToken, Long itemId) throws Exception {
+			performAdminItemAction(adminToken, "confirm", new AdminOrderItemConfirmRequest(List.of(itemId)));
+		}
+
+		/** 발주확인 → 발송처리 → 배송완료를 상품주문 일괄 처리 API 로 차례로 거쳐 배송완료까지 옮긴다. */
+		private void deliverItem(String adminToken, Long itemId) throws Exception {
+			confirmItem(adminToken, itemId);
+			performAdminItemAction(adminToken, "ship", new AdminOrderItemShipRequest(
+					List.of(new AdminOrderItemShipRequest.ShipItem(itemId, "CJ", "1234567890"))));
+			performAdminItemAction(adminToken, "deliver", new AdminOrderItemDeliverRequest(List.of(itemId)));
+		}
+
+		private void performAdminItemAction(String adminToken, String action, Object request) throws Exception {
+			mockMvc.perform(post("/api/v1/admin/order-items/" + action)
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.processed", is(1)));
 		}
 
 		private OrderClaim onlyClaimFor(Long itemId) {
@@ -1294,128 +1305,6 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 		}
 	}
 
-	@Nested
-	@DisplayName("PATCH /api/v1/admin/orders/{id}/status (관리자 취소)")
-	class AdminCancel {
-
-		@Test
-		@DisplayName("관리자가 결제 완료 주문을 취소하면 결제도 취소되고 감사 로그 두 건이 IP 와 함께 남는다")
-		void cancelsPaymentAndRecordsAuditLogsWhenAdminCancelsPaidOrder() throws Exception {
-			// given
-			Member member = signup();
-			String accessToken = login(member.getEmail());
-			Address address = addressRepository.save(AddressFixture.create(member));
-			Product product = seedProduct(5);
-			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
-			String paymentKey = uniquePaymentKey();
-			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
-					orderInfo.finalAmount());
-			stubCancelSuccess(paymentKey);
-			Member admin = memberRepository.save(
-					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
-			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
-
-			// when
-			mockMvc.perform(patch("/api/v1/admin/orders/{id}/status", orderInfo.orderId())
-							.header(HttpHeaders.AUTHORIZATION, adminToken)
-							.header("X-Forwarded-For", "203.0.113.7")
-							.contentType(MediaType.APPLICATION_JSON)
-							.content(objectMapper.writeValueAsString(
-									new AdminOrderStatusChangeRequest(OrderStatus.CANCELED))))
-					.andExpect(status().isOk())
-					.andExpect(jsonPath("$.data.status", is("CANCELED")));
-
-			// then
-			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
-					.isEqualTo(PaymentStatus.CANCELED);
-			verify(paymentClient).cancel(eq(paymentKey), any(), any());
-			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
-			assertThat(logs).extracting(AdminAuditLog::getAction)
-					.containsExactly(AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditAction.PAYMENT_CANCEL);
-			assertThat(logs).extracting(AdminAuditLog::getIpAddress).containsOnly("203.0.113.7");
-			assertThat(logs.get(1).getTargetType()).isEqualTo(AdminAuditTargetType.PAYMENT);
-			assertThat(logs.get(1).getTargetId()).isEqualTo(paymentId);
-		}
-
-		@Test
-		@DisplayName("토스 취소 결과를 알 수 없으면 CANCEL_REQUESTED 감사 로그 두 건을 남긴다")
-		void recordsInProgressAuditLogsWhenTossResultIsUnknown() throws Exception {
-			// given
-			Member member = signup();
-			String accessToken = login(member.getEmail());
-			Address address = addressRepository.save(AddressFixture.create(member));
-			Product product = seedProduct(5);
-			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
-			String paymentKey = uniquePaymentKey();
-			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
-					orderInfo.finalAmount());
-			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(paymentKey), any(), any());
-			Member admin = memberRepository.save(
-					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
-			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
-
-			// when
-			mockMvc.perform(patch("/api/v1/admin/orders/{id}/status", orderInfo.orderId())
-						.header(HttpHeaders.AUTHORIZATION, adminToken)
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(objectMapper.writeValueAsString(
-								new AdminOrderStatusChangeRequest(OrderStatus.CANCELED))))
-					.andExpect(status().isOk())
-					.andExpect(jsonPath("$.data.paymentStatus", is("CANCEL_REQUESTED")));
-
-			// then
-			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
-			assertThat(logs).extracting(AdminAuditLog::getDetail)
-					.containsExactly("PAID->CANCEL_REQUESTED", "DONE->CANCEL_REQUESTED");
-			assertThat(logs.get(1).getTargetId()).isEqualTo(paymentId);
-		}
-
-		@Test
-		@DisplayName("CANCEL_REQUESTED 중이면 PAID 와 PREPARING 주문의 다음 배송 상태 전이를 거절한다")
-		void rejectsShippingTransitionsWhileCancelRequested() throws Exception {
-			// given: PAID 주문
-			Member member = signup();
-			String accessToken = login(member.getEmail());
-			Address address = addressRepository.save(AddressFixture.create(member));
-			Product firstProduct = seedProduct(5);
-			OrderInfo paidOrder = createOrder(accessToken, firstProduct.getId(), 1, address.getId());
-			String firstPaymentKey = uniquePaymentKey();
-			long firstPaymentId = confirmAndGetPaymentId(accessToken, firstPaymentKey, paidOrder.orderNumber(),
-					paidOrder.finalAmount());
-			Member admin = memberRepository.save(
-					Member.create("payment-admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
-			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
-			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(firstPaymentKey), any(), any());
-			requestPaymentCancel(accessToken, firstPaymentId);
-
-			// when & then: PAID -> PREPARING
-			changeAdminOrderStatus(adminToken, paidOrder.orderId(), OrderStatus.PREPARING)
-					.andExpect(status().isConflict())
-					.andExpect(jsonPath("$.error.code", is("ORDER_CANCEL_IN_PROGRESS")));
-
-			// given: PREPARING 주문
-			reset(paymentClient);
-			Product secondProduct = seedProduct(5);
-			OrderInfo preparingOrder = createOrder(accessToken, secondProduct.getId(), 1, address.getId());
-			String secondPaymentKey = uniquePaymentKey();
-			confirmAndGetPaymentId(accessToken, secondPaymentKey, preparingOrder.orderNumber(),
-					preparingOrder.finalAmount());
-			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.PREPARING)
-					.andExpect(status().isOk());
-			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(secondPaymentKey), any(), any());
-			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.CANCELED)
-					.andExpect(status().isOk());
-
-			// when & then: PREPARING -> SHIPPED
-			changeAdminOrderStatus(adminToken, preparingOrder.orderId(), OrderStatus.SHIPPED)
-					.andExpect(status().isConflict())
-					.andExpect(jsonPath("$.error.code", is("ORDER_CANCEL_IN_PROGRESS")));
-		}
-	}
-
 	private record OrderInfo(Long orderId, String orderNumber, BigDecimal finalAmount) {
 	}
 
@@ -1489,22 +1378,6 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(
 						confirmRequest(paymentKey, orderInfo.orderNumber(), amount))));
-	}
-
-	private void requestPaymentCancel(String accessToken, long paymentId) throws Exception {
-		mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
-					.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-					.contentType(MediaType.APPLICATION_JSON)
-					.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
-				.andExpect(status().isOk());
-	}
-
-	private ResultActions changeAdminOrderStatus(String adminToken, Long orderId, OrderStatus status)
-			throws Exception {
-		return mockMvc.perform(patch("/api/v1/admin/orders/{id}/status", orderId)
-				.header(HttpHeaders.AUTHORIZATION, adminToken)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(new AdminOrderStatusChangeRequest(status))));
 	}
 
 	private PaymentConfirmRequest confirmRequest(String paymentKey, String orderNumber, long amount) {

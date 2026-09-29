@@ -70,14 +70,11 @@ public class OrderCancelRestorer {
 	 * 상태라 이 판단에서 제외한다 - 한 주문에 구매확정된 상품과 방금 취소된 상품이 섞여 있을 수 있다.
 	 */
 	private void finalizeOrderIfAllItemsCancelTerminal(Order order) {
-		boolean allCancelTerminal = order.getItems().stream()
-				.allMatch(item -> OrderItemStatus.CANCEL_TERMINAL.contains(item.getStatus()));
-		if (!allCancelTerminal) {
+		if (!order.refreshAggregate(LocalDateTime.now(clock))) {
 			return;
 		}
 		if (order.getMemberCoupon() != null && order.getMemberCoupon().isUsed()) {
 			order.getMemberCoupon().restore();
 		}
-		order.markCanceledByItemClaims(LocalDateTime.now(clock));
 	}
 }

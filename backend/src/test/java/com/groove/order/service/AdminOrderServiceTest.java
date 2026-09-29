@@ -3,7 +3,6 @@ package com.groove.order.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,9 +21,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import com.groove.admin.entity.AdminAuditAction;
-import com.groove.admin.entity.AdminAuditTargetType;
-import com.groove.admin.service.AdminAuditLogService;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
@@ -36,7 +32,6 @@ import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.AdminOrderDetailResponse;
 import com.groove.order.dto.AdminOrderSearchRequest;
-import com.groove.order.dto.AdminOrderStatusChangeRequest;
 import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
@@ -51,7 +46,6 @@ import com.groove.product.repository.ProductImageRepository;
 @ExtendWith(MockitoExtension.class)
 class AdminOrderServiceTest {
 
-	private static final Long ADMIN_ID = 1L;
 	private static final Long ORDER_ID = 500L;
 
 	@Mock
@@ -59,9 +53,6 @@ class AdminOrderServiceTest {
 
 	@Mock
 	OrderQueryMapper orderQueryMapper;
-
-	@Mock
-	AdminAuditLogService adminAuditLogService;
 
 	@Mock
 	PaymentRepository paymentRepository;
@@ -75,8 +66,7 @@ class AdminOrderServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new AdminOrderService(orderRepository, orderQueryMapper, adminAuditLogService, paymentRepository,
-				productImageRepository);
+		service = new AdminOrderService(orderRepository, orderQueryMapper, paymentRepository, productImageRepository);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
@@ -151,57 +141,6 @@ class AdminOrderServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
-		}
-	}
-
-	@Nested
-	@DisplayName("changeStatus()")
-	class ChangeStatus {
-
-		@Test
-		@DisplayName("허용된 전이면 상태를 바꾸고 감사 로그를 남긴다")
-		void changesStatusAndRecordsAuditLog() {
-			// given
-			Order order = orderWithStatus(OrderStatus.PAID);
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
-
-			// when
-			AdminOrderDetailResponse response = service.changeStatus(ADMIN_ID, ORDER_ID,
-					new AdminOrderStatusChangeRequest(OrderStatus.PREPARING));
-
-			// then
-			assertThat(response.status()).isEqualTo(OrderStatus.PREPARING);
-			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("PAID->PREPARING"));
-		}
-
-		@Test
-		@DisplayName("CANCELED 전이는 진입 서비스 사용을 강제한다")
-		void rejectsCanceledTransition() {
-			// when & then
-			assertThatThrownBy(() -> service.changeStatus(ADMIN_ID, ORDER_ID,
-					new AdminOrderStatusChangeRequest(OrderStatus.CANCELED)))
-					.isInstanceOf(IllegalStateException.class);
-			verify(orderRepository, never()).findByIdForUpdate(any());
-		}
-
-		@Test
-		@DisplayName("취소 요청 중이면 다음 배송 상태 전이를 거절한다")
-		void rejectsTransitionWhileCancelRequested() {
-			// given
-			Order order = orderWithStatus(OrderStatus.PAID);
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(orderRepository.findWithItemsAndMemberById(ORDER_ID)).willReturn(Optional.of(order));
-			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(
-					PaymentFixture.withStatus(PaymentFixture.approved(order), PaymentStatus.CANCEL_REQUESTED)));
-
-			// when & then
-			assertThatThrownBy(() -> service.changeStatus(ADMIN_ID, ORDER_ID,
-					new AdminOrderStatusChangeRequest(OrderStatus.PREPARING)))
-					.isInstanceOf(BusinessException.class)
-					.extracting("errorCode")
-					.isEqualTo(ErrorCode.ORDER_CANCEL_IN_PROGRESS);
 		}
 	}
 

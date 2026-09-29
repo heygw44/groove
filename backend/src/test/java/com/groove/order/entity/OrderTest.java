@@ -10,7 +10,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -246,8 +245,8 @@ class OrderTest {
 
 		@ParameterizedTest
 		@EnumSource(value = OrderStatus.class,
-				names = {"PREPARING", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"})
-		@DisplayName("PENDING·PAID 가 아니면 ORDER_INVALID_STATUS 예외를 던진다")
+				names = {"CANCELED"})
+		@DisplayName("CANCELED 면 ORDER_INVALID_STATUS 예외를 던진다")
 		void throwsInvalidStatusForOtherStatuses(OrderStatus status) {
 			// given
 			Order order = OrderFixture.create(member);
@@ -330,7 +329,7 @@ class OrderTest {
 
 		@ParameterizedTest
 		@EnumSource(value = OrderStatus.class,
-				names = {"PAID", "PREPARING", "SHIPPED", "DELIVERED", "CANCELED", "REFUNDED"})
+				names = {"PAID", "CANCELED"})
 		@DisplayName("취소 불가 상태면 ORDER_CANNOT_CANCEL 예외를 던진다")
 		void throwsCannotCancelForNonCancelableStatuses(OrderStatus status) {
 			// given
@@ -350,13 +349,13 @@ class OrderTest {
 	class RequestCancel {
 
 		@Test
-		@DisplayName("회원 취소면 PAID 상태에서 사유만 기록한다")
-		void recordsReasonWithoutChangingStatusForMember() {
+		@DisplayName("PAID 상태면 상태는 그대로 두고 사유만 기록한다")
+		void recordsReasonWithoutChangingStatusWhenPaid() {
 			// given
 			Order order = OrderFixture.markPaid(OrderFixture.create(member));
 
 			// when
-			order.requestCancel("고객 변심", false);
+			order.requestCancel("고객 변심");
 
 			// then
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
@@ -365,45 +364,18 @@ class OrderTest {
 		}
 
 		@ParameterizedTest
-		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
-		@DisplayName("관리자 취소면 취소 가능한 상태에서 관리자 사유만 기록한다")
-		void recordsAdminReasonWithoutChangingStatus(OrderStatus status) {
+		@EnumSource(value = OrderStatus.class, names = {"PENDING", "CANCELED"})
+		@DisplayName("PAID 상태가 아니면 ORDER_CANNOT_CANCEL 예외를 던진다")
+		void throwsWhenNotPaid(OrderStatus status) {
 			// given
 			Order order = OrderFixture.create(member);
 			ReflectionTestUtils.setField(order, "status", status);
 
-			// when
-			order.requestCancel(null, true);
-
-			// then
-			assertThat(order.getStatus()).isEqualTo(status);
-			assertThat(order.getCancelReason()).isEqualTo("관리자 취소");
-		}
-
-		@Test
-		@DisplayName("회원 취소가 PAID 상태가 아니면 ORDER_CANNOT_CANCEL 예외를 던진다")
-		void throwsWhenMemberOrderIsNotPaid() {
-			// given
-			Order order = OrderFixture.create(member);
-
 			// when & then
-			assertThatThrownBy(() -> order.requestCancel("고객 변심", false))
+			assertThatThrownBy(() -> order.requestCancel("고객 변심"))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
-		}
-
-		@Test
-		@DisplayName("관리자 취소가 허용되지 않은 상태면 ORDER_INVALID_STATUS_TRANSITION 예외를 던진다")
-		void throwsWhenAdminTransitionIsNotAllowed() {
-			// given
-			Order order = OrderFixture.markDelivered(OrderFixture.create(member));
-
-			// when & then
-			assertThatThrownBy(() -> order.requestCancel(null, true))
-					.isInstanceOf(BusinessException.class)
-					.extracting("errorCode")
-					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
 		}
 	}
 
@@ -411,14 +383,12 @@ class OrderTest {
 	@DisplayName("completeCancel()")
 	class CompleteCancel {
 
-		@ParameterizedTest
-		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
-		@DisplayName("PAID 또는 PREPARING 이면 CANCELED 로 바뀌고 취소 시각을 기록한다")
-		void completesCancelForPaidOrderStatuses(OrderStatus status) {
+		@Test
+		@DisplayName("PAID 면 CANCELED 로 바뀌고 취소 시각을 기록한다")
+		void completesCancelWhenPaid() {
 			// given
-			Order order = OrderFixture.create(member);
-			ReflectionTestUtils.setField(order, "status", status);
-			order.requestCancel("고객 변심", status == OrderStatus.PREPARING);
+			Order order = OrderFixture.markPaid(OrderFixture.create(member));
+			order.requestCancel("고객 변심");
 			LocalDateTime canceledAt = LocalDateTime.of(2026, 9, 13, 10, 30);
 
 			// when
@@ -430,11 +400,13 @@ class OrderTest {
 			assertThat(order.getCancelReason()).isNotNull();
 		}
 
-		@Test
-		@DisplayName("PAID 또는 PREPARING 이 아니면 ORDER_INVALID_STATUS 예외를 던진다")
-		void throwsForInvalidStatus() {
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class, names = {"PENDING", "CANCELED"})
+		@DisplayName("PAID 가 아니면 ORDER_INVALID_STATUS 예외를 던진다")
+		void throwsForInvalidStatus(OrderStatus status) {
 			// given
 			Order order = OrderFixture.create(member);
+			ReflectionTestUtils.setField(order, "status", status);
 
 			// when & then
 			assertThatThrownBy(() -> order.completeCancel(LocalDateTime.of(2026, 9, 13, 10, 30)))
@@ -449,7 +421,7 @@ class OrderTest {
 			// given
 			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
 			order.markPaid();
-			order.requestCancel("고객 변심", false);
+			order.requestCancel("고객 변심");
 			LocalDateTime canceledAt = LocalDateTime.of(2026, 9, 13, 10, 30);
 
 			// when
@@ -471,136 +443,13 @@ class OrderTest {
 		void clearsCancelReason() {
 			// given
 			Order order = OrderFixture.markPaid(OrderFixture.create(member));
-			order.requestCancel("고객 변심", false);
+			order.requestCancel("고객 변심");
 
 			// when
 			order.withdrawCancelRequest();
 
 			// then
 			assertThat(order.getCancelReason()).isNull();
-		}
-	}
-
-	@Nested
-	@DisplayName("changeStatus()")
-	class ChangeStatus {
-
-		@ParameterizedTest
-		@CsvSource({
-			"PAID, PREPARING",
-			"PREPARING, SHIPPED",
-			"SHIPPED, DELIVERED"
-		})
-		@DisplayName("허용된 전이면 상태가 바뀐다")
-		void changesStatusForAllowedTransition(OrderStatus from, OrderStatus to) {
-			// given
-			Order order = OrderFixture.create(member);
-			ReflectionTestUtils.setField(order, "status", from);
-
-			// when
-			order.changeStatus(to);
-
-			// then
-			assertThat(order.getStatus()).isEqualTo(to);
-		}
-
-		@ParameterizedTest
-		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
-		@DisplayName("CANCELED 로 전이하면 취소 시각과 사유가 기록된다")
-		void recordsCanceledAtAndReasonWhenTransitioningToCanceled(OrderStatus from) {
-			// given
-			Order order = OrderFixture.create(member);
-			ReflectionTestUtils.setField(order, "status", from);
-
-			// when
-			order.changeStatus(OrderStatus.CANCELED);
-
-			// then
-			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
-			assertThat(order.getCanceledAt()).isNotNull();
-			assertThat(order.getCancelReason()).isEqualTo("관리자 취소");
-		}
-
-		@Test
-		@DisplayName("허용되지 않은 전이면 ORDER_INVALID_STATUS_TRANSITION 예외를 던진다")
-		void throwsWhenTransitionNotAllowed() {
-			// given
-			Order order = OrderFixture.create(member);
-			ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
-
-			// when & then
-			assertThatThrownBy(() -> order.changeStatus(OrderStatus.SHIPPED))
-					.isInstanceOf(BusinessException.class)
-					.extracting("errorCode")
-					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
-		}
-
-		@Test
-		@DisplayName("PREPARING 으로 전이하면 상품주문도 PREPARING 으로 바뀐다")
-		void movesItemToPreparing() {
-			// given
-			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
-			ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
-			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.PAID);
-
-			// when
-			order.changeStatus(OrderStatus.PREPARING);
-
-			// then
-			OrderItem item = order.getItems().get(0);
-			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PREPARING);
-			assertThat(item.getPreparedAt()).isNotNull();
-		}
-
-		@Test
-		@DisplayName("SHIPPED 로 전이하면 상품주문은 SHIPPING 으로 바뀐다")
-		void movesItemToShipping() {
-			// given
-			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
-			ReflectionTestUtils.setField(order, "status", OrderStatus.PREPARING);
-			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.PREPARING);
-
-			// when
-			order.changeStatus(OrderStatus.SHIPPED);
-
-			// then
-			OrderItem item = order.getItems().get(0);
-			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.SHIPPING);
-			assertThat(item.getShippedAt()).isNotNull();
-		}
-
-		@Test
-		@DisplayName("DELIVERED 로 전이하면 상품주문도 DELIVERED 로 바뀐다")
-		void movesItemToDelivered() {
-			// given
-			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
-			ReflectionTestUtils.setField(order, "status", OrderStatus.SHIPPED);
-			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.SHIPPING);
-
-			// when
-			order.changeStatus(OrderStatus.DELIVERED);
-
-			// then
-			OrderItem item = order.getItems().get(0);
-			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.DELIVERED);
-			assertThat(item.getDeliveredAt()).isNotNull();
-		}
-
-		@ParameterizedTest
-		@EnumSource(value = OrderStatus.class, names = {"PAID", "PREPARING"})
-		@DisplayName("CANCELED 로 전이하면 상품주문도 CANCELED 로 바뀐다")
-		void movesItemToCanceled(OrderStatus from) {
-			// given
-			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
-			ReflectionTestUtils.setField(order, "status", from);
-			ReflectionTestUtils.setField(order.getItems().get(0), "status",
-					from == OrderStatus.PAID ? OrderItemStatus.PAID : OrderItemStatus.PREPARING);
-
-			// when
-			order.changeStatus(OrderStatus.CANCELED);
-
-			// then
-			assertThat(order.getItems().get(0).getStatus()).isEqualTo(OrderItemStatus.CANCELED);
 		}
 	}
 
@@ -885,35 +734,69 @@ class OrderTest {
 	}
 
 	@Nested
-	@DisplayName("alignStatusWithItems()")
-	class AlignStatusWithItems {
+	@DisplayName("refreshAggregate()")
+	class RefreshAggregate {
 
-		@Test
-		@DisplayName("허용되는 전이면 상태를 바꾼다")
-		void changesStatusWhenTransitionAllowed() {
-			// given
+		private Order paidOrderWithTwoItems() {
 			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
-			ReflectionTestUtils.setField(order, "status", OrderStatus.PAID);
-
-			// when
-			order.alignStatusWithItems(OrderStatus.PREPARING);
-
-			// then
-			assertThat(order.getStatus()).isEqualTo(OrderStatus.PREPARING);
+			order.addItem(ProductFixture.create(artist), 1);
+			order.markPaid();
+			return order;
 		}
 
 		@Test
-		@DisplayName("허용되지 않는 전이면 조용히 무시한다")
-		void ignoresDisallowedTransition() {
+		@DisplayName("모든 상품주문이 취소 종결 상태면 주문을 CANCELED 로 바꾸고 true 를 반환한다")
+		void cancelsOrderWhenAllItemsCancelTerminal() {
 			// given
-			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
-			ReflectionTestUtils.setField(order, "status", OrderStatus.PENDING);
+			Order order = paidOrderWithTwoItems();
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.CANCELED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "status", OrderItemStatus.RETURNED);
+			LocalDateTime now = LocalDateTime.of(2026, 9, 29, 10, 0);
 
 			// when
-			order.alignStatusWithItems(OrderStatus.DELIVERED);
+			boolean result = order.refreshAggregate(now);
 
 			// then
-			assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+			assertThat(result).isTrue();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isEqualTo(now);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderItemStatus.class, names = {"PREPARING", "PURCHASE_CONFIRMED"})
+		@DisplayName("취소 종결되지 않은 상품주문이 남아 있으면 아무것도 바꾸지 않고 false 를 반환한다")
+		void keepsOrderWhenSomeItemNotCancelTerminal(OrderItemStatus remaining) {
+			// given
+			Order order = paidOrderWithTwoItems();
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.CANCELED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "status", remaining);
+
+			// when
+			boolean result = order.refreshAggregate(LocalDateTime.of(2026, 9, 29, 10, 0));
+
+			// then
+			assertThat(result).isFalse();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(order.getCanceledAt()).isNull();
+		}
+
+		@Test
+		@DisplayName("이미 CANCELED 인 주문이면 true 를 반환하고 취소 시각을 덮어쓰지 않는다")
+		void keepsCanceledAtWhenAlreadyCanceled() {
+			// given
+			Order order = paidOrderWithTwoItems();
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.CANCELED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "status", OrderItemStatus.RETURNED);
+			LocalDateTime firstCanceledAt = LocalDateTime.of(2026, 9, 29, 10, 0);
+			order.refreshAggregate(firstCanceledAt);
+
+			// when
+			boolean result = order.refreshAggregate(firstCanceledAt.plusHours(1));
+
+			// then
+			assertThat(result).isTrue();
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(order.getCanceledAt()).isEqualTo(firstCanceledAt);
 		}
 	}
 }

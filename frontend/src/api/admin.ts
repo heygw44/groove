@@ -36,7 +36,6 @@ import type {
 import type {
   AdminOrderDetail,
   AdminOrderListParams,
-  AdminOrderStatusChangeRequest,
   AdminOrderSummary,
 } from '@/types/order';
 import type {
@@ -88,9 +87,6 @@ export const getAdminOrders = (params: AdminOrderListParams) =>
 
 export const getAdminOrder = (orderId: number) =>
   unwrap(client.get<ApiResponse<AdminOrderDetail>>(`/admin/orders/${orderId}`));
-
-export const changeAdminOrderStatus = (orderId: number, payload: AdminOrderStatusChangeRequest) =>
-  unwrap(client.patch<ApiResponse<AdminOrderDetail>>(`/admin/orders/${orderId}/status`, payload));
 
 export const getAdminCoupons = (params: AdminCouponListParams) =>
   unwrap(

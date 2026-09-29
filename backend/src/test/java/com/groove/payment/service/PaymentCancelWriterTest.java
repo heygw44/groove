@@ -140,7 +140,7 @@ class PaymentCancelWriterTest {
 		@DisplayName("이미 CANCEL_REQUESTED 면 상태를 바꾸지 않고 중복 요청으로 반환한다")
 		void returnsDuplicateWhenAlreadyRequested() {
 			// given
-			order.requestCancel("기존 사유", false);
+			order.requestCancel("기존 사유");
 			payment.requestCancel();
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
@@ -212,20 +212,6 @@ class PaymentCancelWriterTest {
 		}
 
 		@Test
-		@DisplayName("관리자 취소면 회원 소유 확인 없이 관리자 사유를 기록한다")
-		void requestsAdminCancelWithoutMemberOwnershipCheck() {
-			// given
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
-
-			// when
-			CancelRequest result = writer.requestCancel(ORDER_ID, null, null);
-
-			// then
-			assertThat(result.tossReason()).isEqualTo("관리자 취소");
-		}
-
-		@Test
 		@DisplayName("가상계좌로 결제됐는데 환불계좌가 없으면 PAYMENT_REFUND_ACCOUNT_REQUIRED 예외를 던지고 상태를 바꾸지 않는다")
 		void rejectsVirtualAccountCancelWithoutRefundAccount() {
 			// given
@@ -277,7 +263,7 @@ class PaymentCancelWriterTest {
 		@DisplayName("주문 락 뒤 주문 복구와 결제 취소를 완료하고 취소 요청 기록을 DONE 으로 남긴다")
 		void completesOrderAndPaymentCancel() {
 			// given
-			order.requestCancel("고객 변심", false);
+			order.requestCancel("고객 변심");
 			payment.requestCancel();
 			PaymentCancel paymentCancel = requestedPaymentCancel();
 			LimitedRelease release = new LimitedRelease(30L, MEMBER_ID);
@@ -343,7 +329,7 @@ class PaymentCancelWriterTest {
 		@DisplayName("CANCEL_REQUESTED 면 결제를 DONE 으로 되돌리고 주문 사유를 지우고 취소 요청 기록을 FAILED 로 남긴다")
 		void revertsPaymentAndOrderRequest() {
 			// given
-			order.requestCancel("고객 변심", false);
+			order.requestCancel("고객 변심");
 			payment.requestCancel();
 			PaymentCancel paymentCancel = requestedPaymentCancel();
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));

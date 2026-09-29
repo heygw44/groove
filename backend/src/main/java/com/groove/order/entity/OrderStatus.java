@@ -5,19 +5,5 @@ public enum OrderStatus {
 
 	PENDING,
 	PAID,
-	PREPARING,
-	SHIPPED,
-	DELIVERED,
-	CANCELED,
-	REFUNDED;
-
-	/** 관리자 상태 전이(PATCH /admin/orders/{id}/status)에서 허용되는 전이만 true. */
-	public boolean canTransitionTo(OrderStatus next) {
-		return switch (this) {
-			case PAID -> next == PREPARING || next == CANCELED;
-			case PREPARING -> next == SHIPPED || next == CANCELED;
-			case SHIPPED -> next == DELIVERED;
-			default -> false;
-		};
-	}
+	CANCELED
 }

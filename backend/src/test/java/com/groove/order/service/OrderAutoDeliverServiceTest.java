@@ -2,7 +2,6 @@ package com.groove.order.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,9 +43,6 @@ class OrderAutoDeliverServiceTest {
 	@Mock
 	private OrderRepository orderRepository;
 
-	@Mock
-	private OrderStatusAligner orderStatusAligner;
-
 	private OrderAutoDeliverService service;
 
 	private Member member;
@@ -54,7 +50,7 @@ class OrderAutoDeliverServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new OrderAutoDeliverService(orderItemRepository, orderRepository, orderStatusAligner);
+		service = new OrderAutoDeliverService(orderItemRepository, orderRepository);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
@@ -83,7 +79,6 @@ class OrderAutoDeliverServiceTest {
 			// then
 			assertThat(result).isTrue();
 			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.DELIVERED);
-			verify(orderStatusAligner).alignIfAllItemsMatch(eq(ORDER_ID), any(), any());
 		}
 
 		@Test
@@ -117,7 +112,7 @@ class OrderAutoDeliverServiceTest {
 
 			// then
 			assertThat(result).isFalse();
-			verify(orderStatusAligner, never()).alignIfAllItemsMatch(any(), any(), any());
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.DELIVERED);
 		}
 
 		@Test

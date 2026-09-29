@@ -60,8 +60,6 @@ public class Order extends BaseTimeEntity {
 	public static final String EXPIRED_CANCEL_REASON = "EXPIRED";
 	public static final String SUPERSEDED_CANCEL_REASON = "SUPERSEDED";
 
-	private static final String ADMIN_CANCEL_REASON = "관리자 취소";
-
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -206,14 +204,7 @@ public class Order extends BaseTimeEntity {
 		this.items.forEach(item -> item.cancel(now));
 	}
 
-	public void requestCancel(String reason, boolean byAdmin) {
-		if (byAdmin) {
-			if (!this.status.canTransitionTo(OrderStatus.CANCELED)) {
-				throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
-			}
-			this.cancelReason = ADMIN_CANCEL_REASON;
-			return;
-		}
+	public void requestCancel(String reason) {
 		if (this.status != OrderStatus.PAID) {
 			throw new BusinessException(ErrorCode.ORDER_CANNOT_CANCEL);
 		}
@@ -221,7 +212,7 @@ public class Order extends BaseTimeEntity {
 	}
 
 	public void completeCancel(LocalDateTime now) {
-		if (this.status != OrderStatus.PAID && this.status != OrderStatus.PREPARING) {
+		if (this.status != OrderStatus.PAID) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
 		}
 		this.status = OrderStatus.CANCELED;
@@ -234,49 +225,22 @@ public class Order extends BaseTimeEntity {
 	}
 
 	/**
-	 * 상품 단위 취소·반품 클레임으로 주문에 속한 상품주문이 전부 취소·반품·미입금취소로 끝났을 때 주문 자체도
-	 * 취소로 확정한다(D5). 이미 취소된 주문이면 아무 것도 하지 않는다(멱등) - 기존 전액취소 경로는 이 호출 전에
-	 * 이미 {@link #completeCancel}/{@link #cancel} 등으로 CANCELED 를 채워 뒀다.
+	 * 주문 상태는 결제 생애주기(PENDING/PAID/CANCELED)이고, 상품주문 상태에서 파생되는 부분은 여기서만 갱신한다.
+	 * 모든 상품주문이 {@link OrderItemStatus#CANCEL_TERMINAL}(취소·반품·미입금취소)로 끝났으면 주문을 CANCELED 로
+	 * 확정하고 true 를 반환한다. 이미 CANCELED 면 canceledAt 을 건드리지 않고 true 를 반환한다(멱등).
+	 * 그 밖에는 아무 것도 바꾸지 않고 false 를 반환한다.
 	 */
-	public void markCanceledByItemClaims(LocalDateTime now) {
-		if (this.status == OrderStatus.CANCELED) {
-			return;
+	public boolean refreshAggregate(LocalDateTime now) {
+		boolean allCancelTerminal = this.items.stream()
+				.allMatch(item -> OrderItemStatus.CANCEL_TERMINAL.contains(item.getStatus()));
+		if (!allCancelTerminal) {
+			return false;
 		}
-		this.status = OrderStatus.CANCELED;
-		this.canceledAt = now;
-	}
-
-	/** 관리자 상태 전이(PATCH /admin/orders/{id}/status)용. 허용되지 않는 전이는 예외를 던진다. */
-	public void changeStatus(OrderStatus next) {
-		if (!this.status.canTransitionTo(next)) {
-			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
+		if (this.status != OrderStatus.CANCELED) {
+			this.status = OrderStatus.CANCELED;
+			this.canceledAt = now;
 		}
-		this.status = next;
-		LocalDateTime now = LocalDateTime.now();
-		switch (next) {
-			case PREPARING -> this.items.forEach(item -> item.moveToPreparing(now));
-			case SHIPPED -> this.items.forEach(item -> item.moveToShipping(now));
-			case DELIVERED -> this.items.forEach(item -> item.moveToDelivered(now));
-			case CANCELED -> {
-				this.canceledAt = now;
-				this.cancelReason = ADMIN_CANCEL_REASON;
-				this.items.forEach(item -> item.cancel(now));
-			}
-			default -> {
-			}
-		}
-	}
-
-	/**
-	 * 상품주문 일괄 처리(발주확인·발송처리·배송완료) 뒤, 주문 안 모든 상품주문이 같은 단계에 이르렀을 때만
-	 * Order.status 도 맞춘다. 상품 상태는 이미 개별 전이로 바뀐 뒤라 여기서는 건드리지 않고, 허용되지 않는
-	 * 전이면 조용히 무시한다 - 호출부가 "모두 같은 단계"를 먼저 확인하고 부르는 임시 동기화용이라 예외를
-	 * 던지지 않는다. Order.status 가 PENDING/PAID/CANCELED 로 좁아지면 없앤다.
-	 */
-	public void alignStatusWithItems(OrderStatus next) {
-		if (this.status.canTransitionTo(next)) {
-			this.status = next;
-		}
+		return true;
 	}
 
 	/** 가상계좌 발급 시 입금기한으로 만료를 늘린다. PENDING 이 아니거나 기존 기한보다 이르면 무시한다. */

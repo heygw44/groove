@@ -161,13 +161,12 @@ class PaymentReconcileRuleTest {
 		@ParameterizedTest
 		@CsvSource({
 			"CANCELED, PAID, COMPLETE_CANCEL",
-			"CANCELED, PREPARING, COMPLETE_CANCEL",
 			"DONE, PAID, RETRY_CANCEL",
-			"DONE, PREPARING, RETRY_CANCEL",
 			"PARTIAL_CANCELED, PAID, MANUAL_REVIEW",
 			"NOT_FOUND, PAID, MANUAL_REVIEW",
 			"CANCELED, PENDING, MANUAL_REVIEW",
-			"DONE, CANCELED, MANUAL_REVIEW"
+			"DONE, CANCELED, MANUAL_REVIEW",
+			"CANCELED, CANCELED, MANUAL_REVIEW"
 		})
 		@DisplayName("CANCEL_REQUESTED 는 토스·주문 상태 표에 따라 취소 완료·재시도·수동 확인을 결정한다")
 		void decidesCancelRequested(PaymentLookupStatus lookupStatus, OrderStatus orderStatus,

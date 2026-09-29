@@ -26,8 +26,6 @@ import com.groove.order.dto.AdminOrderItemShipRequest;
 import com.groove.order.dto.AdminOrderItemSummaryResponse;
 import com.groove.order.entity.CourierCode;
 import com.groove.order.entity.OrderItem;
-import com.groove.order.entity.OrderItemStatus;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.order.repository.OrderRepository;
@@ -47,7 +45,6 @@ public class AdminOrderItemService {
 	private final OrderQueryMapper orderQueryMapper;
 	private final OrderItemRepository orderItemRepository;
 	private final OrderRepository orderRepository;
-	private final OrderStatusAligner orderStatusAligner;
 	private final AdminAuditLogService adminAuditLogService;
 	private final Clock clock;
 
@@ -76,7 +73,7 @@ public class AdminOrderItemService {
 				changedOrderIds.add(item.getOrder().getId());
 			}
 		}
-		syncAndAudit(adminId, changedOrderIds, OrderItemStatus.PREPARING, OrderStatus.PREPARING, "PAID->PREPARING");
+		auditOrders(adminId, changedOrderIds, "PAID->PREPARING");
 		return toResult(processed, orderItemIds.size());
 	}
 
@@ -104,8 +101,7 @@ public class AdminOrderItemService {
 				changedOrderIds.add(item.getOrder().getId());
 			}
 		}
-		syncAndAudit(adminId, changedOrderIds, OrderItemStatus.SHIPPING, OrderStatus.SHIPPED,
-				"PAID/PREPARING->SHIPPING");
+		auditOrders(adminId, changedOrderIds, "PAID/PREPARING->SHIPPING");
 		return toResult(processed, orderItemIds.size());
 	}
 
@@ -124,8 +120,7 @@ public class AdminOrderItemService {
 				changedOrderIds.add(item.getOrder().getId());
 			}
 		}
-		syncAndAudit(adminId, changedOrderIds, OrderItemStatus.DELIVERED, OrderStatus.DELIVERED,
-				"SHIPPING->DELIVERED");
+		auditOrders(adminId, changedOrderIds, "SHIPPING->DELIVERED");
 		return toResult(processed, orderItemIds.size());
 	}
 
@@ -137,10 +132,8 @@ public class AdminOrderItemService {
 						.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND)));
 	}
 
-	private void syncAndAudit(Long adminId, Set<Long> changedOrderIds, OrderItemStatus targetItemStatus,
-			OrderStatus targetOrderStatus, String detail) {
+	private void auditOrders(Long adminId, Set<Long> changedOrderIds, String detail) {
 		for (Long orderId : changedOrderIds) {
-			orderStatusAligner.alignIfAllItemsMatch(orderId, targetItemStatus, targetOrderStatus);
 			adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
 					orderId, detail);
 		}

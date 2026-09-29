@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -50,14 +51,15 @@ import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.dto.AdminOrderStatusChangeRequest;
+import com.groove.order.dto.AdminOrderItemCancelRequest;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
-import com.groove.order.service.AdminOrderStatusService;
+import com.groove.order.service.AdminOrderClaimService;
 import com.groove.order.service.OrderCancelService;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.repository.PaymentRepository;
@@ -110,7 +112,7 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 	private OrderCancelService orderCancelService;
 
 	@Autowired
-	private AdminOrderStatusService adminOrderStatusService;
+	private AdminOrderClaimService adminOrderClaimService;
 
 	@Autowired
 	private StringRedisTemplate redisTemplate;
@@ -440,32 +442,36 @@ class LimitedPurchaseConcurrencyIntegrationTest extends IntegrationTestSupport {
 	}
 
 	@Nested
-	@DisplayName("changeStatus()")
-	class ChangeStatus {
+	@DisplayName("cancelItemBySale()")
+	class CancelItemBySale {
 
 		@Test
-		@DisplayName("관리자가 주문을 취소하면 선점이 되돌아가 같은 회원이 재구매할 수 있다")
-		void allowsRepurchaseAfterAdminCancel() {
+		@DisplayName("관리자가 상품주문을 판매취소하면 선점이 되돌아가 같은 회원이 재구매할 수 있다")
+		void allowsRepurchaseAfterAdminSaleCancel() {
 			// given
 			int totalQuantity = 5;
 			prepareOpenDrop(totalQuantity);
 			Buyer buyer = createBuyers(1).get(0);
 			LimitedPurchaseResponse purchaseResponse = limitedPurchaseService.purchase(dropId, buyer.memberId(),
 					buyer.addressId());
-			Order order = orderRepository.findById(purchaseResponse.orderId()).orElseThrow();
-			OrderFixture.markPaid(order);
+			// markPaid() 는 상품주문(items)도 같이 옮기므로 findWithItemsById 로 지연 로딩 없이 가져온다
+			Order order = orderRepository.findWithItemsById(purchaseResponse.orderId()).orElseThrow();
+			order.markPaid();
 			order.place(LocalDateTime.now(clock));
 			orderRepository.saveAndFlush(order);
+			Long itemId = order.getItems().get(0).getId();
 			Payment payment = paymentRepository.save(PaymentFixture.approved(order, "toss-" + UUID.randomUUID()));
-			given(paymentClient.cancel(any(), any(), any()))
-					.willReturn(PaymentCancelResult.of(payment.getPaymentKey(), "CANCELED",
-							LocalDateTime.now(clock)));
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willAnswer(invocation -> {
+				PaymentCancelCommand command = invocation.getArgument(0);
+				return new PaymentCancelResult(payment.getPaymentKey(), "CANCELED", LocalDateTime.now(clock),
+						"txn-" + command.idempotencyKey(), BigDecimal.ZERO);
+			});
 			Member admin = memberRepository.save(MemberFixture.createAdmin("admin-" + UUID.randomUUID()
 					+ "@groove.com"));
 
 			// when
-			adminOrderStatusService.changeStatus(admin.getId(), order.getId(),
-					new AdminOrderStatusChangeRequest(OrderStatus.CANCELED));
+			adminOrderClaimService.cancelItemBySale(admin.getId(), itemId,
+					new AdminOrderItemCancelRequest("재고 확인 불가"));
 
 			// then
 			Order reloadedOrder = orderRepository.findById(order.getId()).orElseThrow();

@@ -1,7 +1,6 @@
 import type { OrderPayment, PaymentStatus } from '@/types/payment';
 
-export type OrderStatus =
-  'PENDING' | 'PAID' | 'PREPARING' | 'SHIPPED' | 'DELIVERED' | 'CANCELED' | 'REFUNDED';
+export type OrderStatus = 'PENDING' | 'PAID' | 'CANCELED';
 
 /** 상품주문(order_item) 단위 이행 상태. PAYMENT_PENDING 은 결제 전 내부 상태라 화면에 노출하지 않는다. */
 export type OrderItemStatus =
@@ -212,8 +211,4 @@ export interface AdminOrderListParams {
   to?: string;
   page?: number;
   size?: number;
-}
-
-export interface AdminOrderStatusChangeRequest {
-  status: OrderStatus;
 }

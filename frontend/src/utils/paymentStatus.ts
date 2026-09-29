@@ -35,7 +35,6 @@ const RECONCILE_PENDING_STATUSES = new Set<PaymentStatus>(['UNKNOWN', 'CANCEL_RE
 
 export const CANCEL_REQUESTED_MESSAGES = {
   memberReason: '취소 결과를 확인하고 있어 다시 취소할 수 없습니다.',
-  adminReason: '취소 결과를 확인하고 있어 주문 상태를 변경할 수 없습니다.',
   success: '취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.',
 } as const;
 
