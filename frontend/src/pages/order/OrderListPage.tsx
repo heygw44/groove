@@ -7,7 +7,7 @@ import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { OrderCard, OrderCardSkeleton } from '@/components/order/OrderCard';
 import { OrderStatusTabs } from '@/components/order/OrderStatusTabs';
 import { useOrders } from '@/hooks/queries/useOrders';
-import type { OrderStatus } from '@/types/order';
+import type { OrderStatusGroup } from '@/types/order';
 import {
   parseOrderListFilters,
   serializeOrderListFilters,
@@ -24,9 +24,9 @@ export default function OrderListPage() {
     toOrderListParams(filters),
   );
 
-  const updateStatus = (status?: OrderStatus) => {
+  const updateStatusGroup = (statusGroup?: OrderStatusGroup) => {
     // 상태 탭을 바꾸면 이전 페이지 번호는 의미가 없으니 첫 페이지로 되돌린다.
-    setSearchParams(serializeOrderListFilters({ status, page: 0 }));
+    setSearchParams(serializeOrderListFilters({ statusGroup, page: 0 }));
   };
 
   const updatePage = (page: number) => {
@@ -38,7 +38,7 @@ export default function OrderListPage() {
       <h2 className="text-xl font-bold">주문 내역</h2>
 
       <div className="mt-5">
-        <OrderStatusTabs value={filters.status} onChange={updateStatus} />
+        <OrderStatusTabs value={filters.statusGroup} onChange={updateStatusGroup} />
       </div>
 
       <p className="mt-4 text-sm text-content-muted">

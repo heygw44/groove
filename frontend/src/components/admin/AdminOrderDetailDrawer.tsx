@@ -89,6 +89,9 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
       price: item.price,
       quantity: item.quantity,
       lineAmount: item.lineAmount,
+      productOrderNumber: item.productOrderNumber,
+      status: item.status,
+      claimStatus: item.claimStatus,
     })) ?? [];
 
   return (

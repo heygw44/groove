@@ -1,3 +1,5 @@
+import { OrderItemStatusBadge } from '@/components/order/OrderItemStatusBadge';
+import type { OrderItemClaimStatus, OrderItemStatus } from '@/types/order';
 import { formatPrice } from '@/utils/formatPrice';
 
 export interface OrderSummaryItem {
@@ -8,6 +10,10 @@ export interface OrderSummaryItem {
   price: number;
   quantity: number;
   lineAmount: number;
+  /** 주문서 초안 등 결제 전 화면은 아직 없는 값이라 옵셔널로 둔다. */
+  productOrderNumber?: string;
+  status?: OrderItemStatus;
+  claimStatus?: OrderItemClaimStatus;
 }
 
 interface OrderItemSummaryListProps {
@@ -47,7 +53,17 @@ export function OrderItemSummaryList({ items }: OrderItemSummaryListProps) {
           <OrderItemThumbnail url={item.thumbnailUrl} />
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-content">{item.title}</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="truncate text-sm font-medium text-content">{item.title}</p>
+              {item.status && (
+                <OrderItemStatusBadge status={item.status} claimStatus={item.claimStatus} />
+              )}
+            </div>
+            {item.productOrderNumber && (
+              <p className="mt-0.5 font-mono text-xs text-content-muted">
+                {item.productOrderNumber}
+              </p>
+            )}
             {item.artistName && (
               <p className="mt-0.5 text-xs text-content-muted">{item.artistName}</p>
             )}

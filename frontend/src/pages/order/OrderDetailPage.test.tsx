@@ -36,6 +36,10 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
       quantity: 1,
       lineAmount: 10000,
       thumbnailUrl: null,
+      productOrderNumber: 'ORD-1-01',
+      status: 'PAID',
+      paidAmount: 10000,
+      availableActions: [],
     },
   ],
   shippingAddress: {
@@ -111,10 +115,27 @@ describe('OrderDetailPage', () => {
     expect(screen.queryByRole('link', { name: '리뷰 쓰기' })).not.toBeInTheDocument();
   });
 
-  it('배송완료(DELIVERED) 주문이면 상품 카드에 리뷰 쓰기 링크를 보여준다', () => {
+  it('상품주문 availableActions 에 WRITE_REVIEW 가 있으면 리뷰 쓰기 링크를 보여준다', () => {
     // given
-    mockOrder(buildOrder({ status: 'DELIVERED' }));
-    mockCancelMutation(buildOrder({ status: 'DELIVERED' }));
+    const order = buildOrder({
+      status: 'DELIVERED',
+      items: [
+        {
+          productId: 1,
+          productName: '레코드 판',
+          price: 10000,
+          quantity: 1,
+          lineAmount: 10000,
+          thumbnailUrl: null,
+          productOrderNumber: 'ORD-1-01',
+          status: 'DELIVERED',
+          paidAmount: 10000,
+          availableActions: ['WRITE_REVIEW'],
+        },
+      ],
+    });
+    mockOrder(order);
+    mockCancelMutation(order);
 
     // when
     renderPage();

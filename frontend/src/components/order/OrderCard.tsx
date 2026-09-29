@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 
 import { Skeleton } from '@/components/common/Skeleton';
 import { OrderItemRow } from '@/components/order/OrderItemRow';
-import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import type { OrderSummary } from '@/types/order';
 import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
@@ -24,7 +23,6 @@ export function OrderCard({ order }: OrderCardProps) {
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm text-content-muted">{formatServerDate(order.createdAt)}</span>
           <span className="truncate font-mono text-xs text-content-muted">{order.orderNumber}</span>
-          <OrderStatusBadge status={order.status} />
         </div>
         <Link
           to={`/orders/${order.id}`}

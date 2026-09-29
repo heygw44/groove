@@ -151,12 +151,7 @@ export default function OrderDetailPage() {
         <h2 className="mb-3 text-base font-bold">주문 상품</h2>
         <div className="flex flex-col gap-3">
           {order.items.map((item, index) => (
-            <OrderItemCard
-              key={`${item.productId}-${index}`}
-              item={item}
-              orderStatus={order.status}
-              paymentStatus={order.payment?.status}
-            />
+            <OrderItemCard key={`${item.productId}-${index}`} item={item} />
           ))}
         </div>
       </section>
