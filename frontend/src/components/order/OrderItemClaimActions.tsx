@@ -6,6 +6,7 @@ import { useToast } from '@/components/common/toastContext';
 import { OrderCancelDialog } from '@/components/order/OrderCancelDialog';
 import { OrderReturnDialog } from '@/components/order/OrderReturnDialog';
 import {
+  useCancelOrder,
   useCancelOrderItem,
   useConfirmOrderItem,
   useReturnOrderItem,
@@ -14,6 +15,7 @@ import {
 import type { OrderItem, RefundAccount } from '@/types/order';
 import type { OrderPayment } from '@/types/payment';
 import { getErrorMessage } from '@/utils/apiError';
+import { getOrderCancelSuccessMessage } from '@/utils/paymentStatus';
 
 type OpenDialog = 'cancel' | 'return' | 'withdraw' | 'confirm' | null;
 
@@ -24,6 +26,41 @@ interface OrderItemClaimActionsProps {
   payment?: OrderPayment;
 }
 
+interface CancelDialogTextParams {
+  isAwaitingDeposit: boolean;
+  isImmediateCancel: boolean;
+  pending: boolean;
+}
+
+const getCancelDialogProps = ({
+  isAwaitingDeposit,
+  isImmediateCancel,
+  pending,
+}: CancelDialogTextParams) => {
+  if (isAwaitingDeposit) {
+    return {
+      pending,
+      title: '주문을 취소하시겠습니까?',
+      description: '입금 전 주문은 주문 전체가 취소됩니다.',
+      confirmLabel: '상품 취소',
+    };
+  }
+  if (isImmediateCancel) {
+    return {
+      pending,
+      title: '상품을 취소하시겠습니까?',
+      description: '취소하면 되돌릴 수 없습니다. 이 상품의 결제 금액만 환불됩니다.',
+      confirmLabel: '상품 취소',
+    };
+  }
+  return {
+    pending,
+    title: '취소를 요청하시겠습니까?',
+    description: '배송 준비 중인 상품은 확인 후 취소됩니다. 요청은 수거 전까지 철회할 수 있습니다.',
+    confirmLabel: '취소 요청',
+  };
+};
+
 /**
  * 상품주문 하나의 취소·취소 요청·반품 요청·요청 철회·구매확정 버튼과 확인 다이얼로그.
  * 어떤 버튼을 보일지는 서버가 내려준 `availableActions` 만 따른다.
@@ -32,18 +69,27 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
   const { showToast } = useToast();
   const [openDialog, setOpenDialog] = useState<OpenDialog>(null);
   const cancelMutation = useCancelOrderItem();
+  const cancelOrderMutation = useCancelOrder();
   const returnMutation = useReturnOrderItem();
   const withdrawMutation = useWithdrawOrderClaim();
   const confirmMutation = useConfirmOrderItem();
 
   const { availableActions, claimId } = item;
   const isImmediateCancel = availableActions.includes('CANCEL');
+  // 입금 전 가상계좌는 부분 취소가 안 돼 주문 전체를 취소한다.
+  const isAwaitingDeposit = item.status === 'PAYMENT_WAITING';
   const canCancel = isImmediateCancel || availableActions.includes('CANCEL_REQUEST');
   const canReturn = availableActions.includes('RETURN_REQUEST');
   const canWithdraw = availableActions.includes('WITHDRAW_CLAIM') && claimId !== undefined;
   const canConfirm = availableActions.includes('CONFIRM');
 
   const closeDialog = () => setOpenDialog(null);
+
+  const cancelDialogProps = getCancelDialogProps({
+    isAwaitingDeposit,
+    isImmediateCancel,
+    pending: isAwaitingDeposit ? cancelOrderMutation.isPending : cancelMutation.isPending,
+  });
 
   const callbacks = (successMessage: string) => ({
     onSuccess: () => {
@@ -56,6 +102,21 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
   });
 
   const handleCancel = (reason?: string, refundAccount?: RefundAccount) => {
+    if (isAwaitingDeposit) {
+      cancelOrderMutation.mutate(
+        { orderId, reason, refundAccount },
+        {
+          onSuccess: (response) => {
+            showToast('success', getOrderCancelSuccessMessage(response.payment?.status));
+            closeDialog();
+          },
+          onError: (error: unknown) => {
+            showToast('error', getErrorMessage(error));
+          },
+        },
+      );
+      return;
+    }
     const successMessage = isImmediateCancel
       ? '상품을 취소했습니다.'
       : '취소 요청이 접수됐습니다. 승인되면 취소됩니다.';
@@ -110,15 +171,8 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
         open={openDialog === 'cancel'}
         onClose={closeDialog}
         onConfirm={handleCancel}
-        pending={cancelMutation.isPending}
         payment={payment}
-        title={isImmediateCancel ? '상품을 취소하시겠습니까?' : '취소를 요청하시겠습니까?'}
-        description={
-          isImmediateCancel
-            ? '취소하면 되돌릴 수 없습니다. 이 상품의 결제 금액만 환불됩니다.'
-            : '배송 준비 중인 상품은 확인 후 취소됩니다. 요청은 수거 전까지 철회할 수 있습니다.'
-        }
-        confirmLabel={isImmediateCancel ? '상품 취소' : '취소 요청'}
+        {...cancelDialogProps}
       />
       <OrderReturnDialog
         open={openDialog === 'return'}
