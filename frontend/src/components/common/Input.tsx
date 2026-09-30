@@ -1,5 +1,7 @@
 import { forwardRef, type InputHTMLAttributes } from 'react';
 
+import { cn } from '@/utils/cn';
+
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   invalid?: boolean;
 }
@@ -19,7 +21,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     <input
       ref={ref}
       aria-invalid={invalid || undefined}
-      className={`${base} ${stateClass} ${className}`}
+      className={cn(base, stateClass, className)}
       {...rest}
     />
   );

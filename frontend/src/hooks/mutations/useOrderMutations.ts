@@ -58,6 +58,9 @@ export const useCancelOrder = () => {
       cancelOrder(orderId, reason || refundAccount ? { reason, refundAccount } : undefined),
     onSuccess: (data, { orderId }) => {
       queryClient.setQueryData(orderKeys.detail(orderId), data);
+    },
+    // 실패해도 서버 상태가 바뀌었을 수 있어 끝나면 항상 무효화한다.
+    onSettled: () => {
       // 취소로 재고가 복구되므로 목록과 장바구니 캐시도 함께 무효화한다.
       queryClient.invalidateQueries({ queryKey: orderKeys.all });
       queryClient.invalidateQueries({ queryKey: cartKeys.all });
@@ -94,7 +97,7 @@ export const useCancelOrderItem = () => {
         itemId,
         reason || refundAccount ? { reason, refundAccount } : undefined,
       ),
-    onSuccess: () => {
+    onSettled: () => {
       invalidateOrders();
       // 즉시 취소되면 재고·쿠폰이 되돌아온다.
       queryClient.invalidateQueries({ queryKey: cartKeys.all });
@@ -120,7 +123,7 @@ export const useReturnOrderItem = () => {
         itemId,
         reason || refundAccount ? { reason, refundAccount } : undefined,
       ),
-    onSuccess: invalidateOrders,
+    onSettled: () => invalidateOrders(),
   });
 };
 
@@ -129,7 +132,7 @@ export const useWithdrawOrderClaim = () => {
 
   return useMutation({
     mutationFn: (claimId: number) => withdrawOrderClaim(claimId),
-    onSuccess: invalidateOrders,
+    onSettled: () => invalidateOrders(),
   });
 };
 
@@ -148,8 +151,8 @@ export const useConfirmOrderItem = () => {
       confirmOrderItem(orderId, itemId),
     onSuccess: (data, { orderId, productId }) => {
       queryClient.setQueryData(orderKeys.detail(orderId), data);
-      invalidateOrders();
       queryClient.invalidateQueries({ queryKey: reviewKeys.eligibility(productId) });
     },
+    onSettled: () => invalidateOrders(),
   });
 };

@@ -19,7 +19,11 @@ const buildItem = (overrides: Partial<AdminOrderItemSummary> = {}): AdminOrderIt
   ...overrides,
 });
 
-const renderTable = (item: AdminOrderItemSummary, onCancel = vi.fn()) => {
+const renderTable = (
+  item: AdminOrderItemSummary,
+  onCancel = vi.fn(),
+  selectionDisabled = false,
+) => {
   render(
     <AdminOrderItemTable
       items={[item]}
@@ -28,6 +32,7 @@ const renderTable = (item: AdminOrderItemSummary, onCancel = vi.fn()) => {
       onToggleAll={vi.fn()}
       onCancel={onCancel}
       onOpenOrder={vi.fn()}
+      selectionDisabled={selectionDisabled}
     />,
   );
   return onCancel;
@@ -65,5 +70,34 @@ describe('AdminOrderItemTable', () => {
     // then
     expect(screen.queryByRole('button', { name: /판매취소/ })).not.toBeInTheDocument();
     expect(screen.queryByText('구매자 환불계좌 필요')).not.toBeInTheDocument();
+  });
+
+  it('상품주문번호 아래에 주문번호 버튼이 함께 보인다', () => {
+    // given & when
+    renderTable(buildItem());
+
+    // then
+    expect(screen.getByText('ORD-1-01')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '주문 ORD-1 상세 보기' })).toHaveTextContent('ORD-1');
+    expect(screen.queryByRole('columnheader', { name: '주문번호' })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: '상품주문번호 / 주문번호' }),
+    ).toBeInTheDocument();
+  });
+
+  it('긴 이메일은 잘리지만 title 로 전체를 볼 수 있다', () => {
+    // given & when
+    renderTable(buildItem({ memberEmail: 'very-long-address@groove.com' }));
+
+    // then
+    expect(screen.getByTitle('very-long-address@groove.com')).toBeInTheDocument();
+  });
+
+  it('selectionDisabled 이면 전체 선택 체크박스가 비활성화된다', () => {
+    // given & when
+    renderTable(buildItem(), vi.fn(), true);
+
+    // then
+    expect(screen.getByRole('checkbox', { name: '현재 페이지 전체 선택' })).toBeDisabled();
   });
 });

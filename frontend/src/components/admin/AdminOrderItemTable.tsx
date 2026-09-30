@@ -12,13 +12,13 @@ interface AdminOrderItemTableProps {
   onToggleAll: (checked: boolean) => void;
   onCancel: (item: AdminOrderItemSummary) => void;
   onOpenOrder: (orderId: number) => void;
+  selectionDisabled?: boolean;
 }
 
 const REFUND_ACCOUNT_REQUIRED_NOTICE = '구매자 환불계좌가 필요합니다';
 
 const HEADERS = [
-  '상품주문번호',
-  '주문번호',
+  '상품주문번호 / 주문번호',
   '회원',
   '상품',
   '수량',
@@ -35,24 +35,26 @@ export function AdminOrderItemTable({
   onToggleAll,
   onCancel,
   onOpenOrder,
+  selectionDisabled = false,
 }: AdminOrderItemTableProps) {
   const isAllSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1080px] w-full text-left text-sm">
+      <table className="min-w-[900px] w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs text-content-muted">
-            <th scope="col" className="w-8 py-2 pr-3">
+            <th scope="col" className="w-8 py-2 pr-3 whitespace-nowrap">
               <input
                 type="checkbox"
                 aria-label="현재 페이지 전체 선택"
                 checked={isAllSelected}
+                disabled={selectionDisabled}
                 onChange={(event) => onToggleAll(event.target.checked)}
               />
             </th>
             {HEADERS.map((header) => (
-              <th key={header} scope="col" className="py-2 pr-3 font-medium">
+              <th key={header} scope="col" className="py-2 pr-3 font-medium whitespace-nowrap">
                 {header}
               </th>
             ))}
@@ -73,12 +75,12 @@ export function AdminOrderItemTable({
                   onChange={() => onToggle(item.id)}
                 />
               </td>
-              <td className="py-2.5 pr-3 font-medium">{item.productOrderNumber}</td>
-              <td className="py-2.5 pr-3">
+              <td className="py-2.5 pr-3 whitespace-nowrap">
+                <div className="font-medium">{item.productOrderNumber}</div>
                 <button
                   type="button"
                   aria-label={`주문 ${item.orderNumber} 상세 보기`}
-                  className="text-content-muted underline-offset-2 hover:text-content hover:underline"
+                  className="text-xs text-content-muted underline-offset-2 hover:text-content hover:underline"
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenOrder(item.orderId);
@@ -87,13 +89,20 @@ export function AdminOrderItemTable({
                   {item.orderNumber}
                 </button>
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">{item.memberEmail}</td>
-              <td className="py-2.5 pr-3">{item.productName}</td>
-              <td className="py-2.5 pr-3 tabular-nums">{item.quantity}개</td>
+              <td
+                className="max-w-44 truncate py-2.5 pr-3 text-content-muted"
+                title={item.memberEmail}
+              >
+                {item.memberEmail}
+              </td>
               <td className="py-2.5 pr-3">
+                <span className="line-clamp-2">{item.productName}</span>
+              </td>
+              <td className="py-2.5 pr-3 whitespace-nowrap tabular-nums">{item.quantity}개</td>
+              <td className="py-2.5 pr-3 whitespace-nowrap">
                 <OrderItemStatusBadge status={item.status} claimStatus={item.claimStatus} />
               </td>
-              <td className="py-2.5 pr-3 text-content-muted">
+              <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
                 {item.courierCode && item.trackingNumber
                   ? `${COURIERS[item.courierCode].name} ${item.trackingNumber}`
                   : '-'}

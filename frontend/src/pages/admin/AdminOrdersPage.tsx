@@ -19,6 +19,7 @@ import {
   useDeliverAdminOrderItems,
 } from '@/hooks/mutations/useAdminOrderMutations';
 import { useAdminOrderItems } from '@/hooks/queries/useAdminOrderItems';
+import { useFallbackPageRedirect } from '@/hooks/useFallbackPageRedirect';
 import type { AdminOrderItemBulkResult, AdminOrderItemSummary } from '@/types/adminOrder';
 import { canConfirmItem, canDeliverItem, canShipItem } from '@/utils/adminOrderActions';
 import {
@@ -28,6 +29,7 @@ import {
   type AdminOrderFilters,
 } from '@/utils/adminOrderFilters';
 import { getErrorMessage } from '@/utils/apiError';
+import { getFallbackPage } from '@/utils/pagination';
 
 interface BulkResult {
   label: string;
@@ -54,6 +56,14 @@ export default function AdminOrdersPage() {
   const cancelMutation = useCancelAdminOrderItem();
 
   const items = data?.content ?? [];
+  const fallbackPage =
+    data && !isPlaceholderData
+      ? getFallbackPage(filters.page, data.content.length, data.totalPages)
+      : undefined;
+  const isMovingToFallbackPage = fallbackPage !== undefined;
+
+  useFallbackPageRedirect(fallbackPage);
+
   const selectedItems = items.filter((item) => selectedIds.includes(item.id));
   const confirmable = selectedItems.filter(canConfirmItem);
   const shippable = selectedItems.filter(canShipItem);
@@ -74,8 +84,12 @@ export default function AdminOrdersPage() {
       prev.includes(id) ? prev.filter((selectedId) => selectedId !== id) : [...prev, id],
     );
 
-  const toggleAll = (checked: boolean) =>
+  const toggleAll = (checked: boolean) => {
+    if (isPlaceholderData) {
+      return;
+    }
     setSelectedIds(checked ? items.map((item) => item.id) : []);
+  };
 
   const openCancel = (target: AdminOrderItemSummary) => {
     cancelMutation.reset();
@@ -170,13 +184,13 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
-      {isPending && <TableSkeleton columns={9} />}
+      {(isPending || isMovingToFallbackPage) && <TableSkeleton columns={9} />}
 
-      {!isPending && isError && (
+      {!isPending && !isMovingToFallbackPage && isError && (
         <QueryErrorState error={error} onRetry={refetch} title="상품주문을 불러오지 못했습니다" />
       )}
 
-      {!isPending && !isError && data && items.length === 0 && (
+      {!isPending && !isMovingToFallbackPage && !isError && data && items.length === 0 && (
         <EmptyState title="조건에 맞는 상품주문이 없습니다" />
       )}
 
@@ -189,6 +203,7 @@ export default function AdminOrdersPage() {
             onToggleAll={toggleAll}
             onCancel={openCancel}
             onOpenOrder={setDetailOrderId}
+            selectionDisabled={isPlaceholderData}
           />
 
           <div className="mt-6">

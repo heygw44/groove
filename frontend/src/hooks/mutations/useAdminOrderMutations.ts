@@ -25,7 +25,10 @@ import type {
   AdminOrderItemShipRequest,
 } from '@/types/adminOrder';
 
-/** 상품주문·주문 상세·클레임·대시보드 카운트가 모두 같은 상태에서 파생되므로 함께 무효화한다. */
+/**
+ * 상품주문·주문 상세·클레임·대시보드 카운트가 모두 같은 상태에서 파생되므로 함께 무효화한다.
+ * 실패해도 서버 상태가 바뀌었을 수 있어(예: 환불 실패 시 클레임 거부) 끝나면 항상 무효화한다.
+ */
 const useInvalidateAdminOrders = () => {
   const queryClient = useQueryClient();
   return () =>
@@ -42,7 +45,7 @@ export const useConfirmAdminOrderItems = () => {
 
   return useMutation({
     mutationFn: (payload: AdminOrderItemConfirmRequest) => confirmAdminOrderItems(payload),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };
 
@@ -51,7 +54,7 @@ export const useShipAdminOrderItems = () => {
 
   return useMutation({
     mutationFn: (payload: AdminOrderItemShipRequest) => shipAdminOrderItems(payload),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };
 
@@ -60,7 +63,7 @@ export const useDeliverAdminOrderItems = () => {
 
   return useMutation({
     mutationFn: (payload: AdminOrderItemDeliverRequest) => deliverAdminOrderItems(payload),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };
 
@@ -70,7 +73,7 @@ export const useCancelAdminOrderItem = () => {
   return useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: AdminOrderItemCancelRequest }) =>
       cancelAdminOrderItem(id, payload),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };
 
@@ -79,7 +82,7 @@ export const useApproveAdminOrderClaim = () => {
 
   return useMutation({
     mutationFn: (claimId: number) => approveAdminOrderClaim(claimId),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };
 
@@ -94,7 +97,7 @@ export const useRejectAdminOrderClaim = () => {
       claimId: number;
       payload: AdminOrderClaimRejectRequest;
     }) => rejectAdminOrderClaim(claimId, payload),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };
 
@@ -103,7 +106,7 @@ export const useCollectAdminOrderClaim = () => {
 
   return useMutation({
     mutationFn: (claimId: number) => collectAdminOrderClaim(claimId),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };
 
@@ -118,6 +121,6 @@ export const useCompleteAdminOrderClaim = () => {
       claimId: number;
       payload: AdminOrderClaimCompleteRequest;
     }) => completeAdminOrderClaim(claimId, payload),
-    onSuccess: () => invalidate(),
+    onSettled: () => invalidate(),
   });
 };

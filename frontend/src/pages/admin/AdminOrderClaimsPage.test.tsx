@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ToastProvider } from '@/components/common/Toast';
@@ -66,13 +66,30 @@ const mockClaims = (content: AdminOrderClaimSummary[]) => {
   } as unknown as ReturnType<typeof useAdminOrderClaims>);
 };
 
+const mockEmptyPage = (page: number, totalPages: number) => {
+  vi.mocked(useAdminOrderClaims).mockReturnValue({
+    data: { content: [], page, size: 20, totalElements: 0, totalPages },
+    isPending: false,
+    isError: false,
+    error: null,
+    isPlaceholderData: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useAdminOrderClaims>);
+};
+
 const mutationStub = <T,>() => ({ mutate: vi.fn(), isPending: false }) as unknown as T;
+
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
+};
 
 const renderPage = (url = '/admin/order-claims') =>
   render(
     <MemoryRouter initialEntries={[url]}>
       <ToastProvider>
         <AdminOrderClaimsPage />
+        <LocationProbe />
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -281,5 +298,17 @@ describe('AdminOrderClaimsPage', () => {
       // then
       expect(screen.getByText('처리 대기 중인 취소요청이 없습니다')).toBeInTheDocument();
     });
+  });
+
+  it('page=1 결과가 비고 totalPages 가 1 이면 page 파라미터 없는 URL 로 이동한다', () => {
+    // given
+    mockEmptyPage(1, 1);
+
+    // when
+    renderPage('/admin/order-claims?type=CANCEL&page=1');
+
+    // then
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/order-claims?type=CANCEL');
+    expect(screen.getByTestId('location')).not.toHaveTextContent('page=');
   });
 });
