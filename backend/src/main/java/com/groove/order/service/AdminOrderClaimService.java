@@ -12,6 +12,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.order.dto.AdminOrderClaimCompleteRequest;
+import com.groove.order.dto.AdminOrderClaimCountResponse;
 import com.groove.order.dto.AdminOrderClaimRejectRequest;
 import com.groove.order.dto.AdminOrderClaimSearchRequest;
 import com.groove.order.dto.AdminOrderClaimSummaryResponse;
@@ -47,6 +48,11 @@ public class AdminOrderClaimService {
 		return PageResponse.from(orderClaimRepository
 				.search(request.type(), request.status(), request.toPageable())
 				.map(AdminOrderClaimSummaryResponse::from));
+	}
+
+	@Transactional(readOnly = true)
+	public AdminOrderClaimCountResponse getCounts() {
+		return AdminOrderClaimCountResponse.from(orderClaimRepository.countByTypeAndStatus());
 	}
 
 	/** {@code CANCEL} 클레임 승인(REQUESTED → DONE). 즉시 취소와 같은 환불 경로를 탄다. */
