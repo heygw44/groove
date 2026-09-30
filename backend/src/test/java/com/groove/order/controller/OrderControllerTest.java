@@ -399,7 +399,8 @@ class OrderControllerTest {
 			// given
 			OrderListItemResponse item = new OrderListItemResponse(501L, "Kind of Blue", 1,
 					new BigDecimal("75600"), "https://cdn.groove.com/kind-of-blue-0.jpg", "20260902-K7Q2M9XZ-01",
-					OrderItemStatus.PAID, null, new BigDecimal("75600"), null, null, List.of(OrderItemAction.CANCEL));
+					OrderItemStatus.PAID, null, new BigDecimal("75600"), null, null, List.of(OrderItemAction.CANCEL),
+					false);
 			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
 					new BigDecimal("90000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, List.of(item), null);
 			given(orderService.getMyOrders(eq(1L), any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
@@ -455,7 +456,7 @@ class OrderControllerTest {
 			OrderItemResponse item = new OrderItemResponse(7L, 620L, "Head Hunters", new BigDecimal("6000"), 1,
 					new BigDecimal("6000"), null, "20260902-K7Q2M9XZ-02", OrderItemStatus.SHIPPING,
 					OrderItemClaimStatus.CANCEL_REQUEST, new BigDecimal("6000"), CourierCode.CJ, "123456789012", null,
-					List.of(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK), 900L);
+					List.of(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK), 900L, false);
 			OrderDetailResponse detail = new OrderDetailResponse(1L, "20260903-TESTAB12", OrderStatus.PAID,
 					new BigDecimal("6000"), BigDecimal.ZERO, new BigDecimal("6000"), null, List.of(item), null, null,
 					null, null, null, null, null);

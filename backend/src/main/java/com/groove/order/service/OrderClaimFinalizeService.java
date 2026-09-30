@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.global.common.BusinessException;
@@ -32,6 +33,24 @@ public class OrderClaimFinalizeService {
 	private final OrderRepository orderRepository;
 	private final OrderCancelRestorer restorer;
 	private final Clock clock;
+
+	/**
+	 * 환불 요청 기록(payment_cancel INSERT) 직전에 주문을 잠그고 클레임이 아직 진행 중인지 다시 확인한다. 같은
+	 * 트랜잭션에서 이 클레임의 환불 행까지 확인해야, 동시에 들어온 승인이나 승인과 철회·거부가 주문 락 하나로
+	 * 직렬화된다. 호출자 트랜잭션은 READ COMMITTED 여야 락을 잡은 뒤 읽는 클레임·환불 행이 최신이다.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void lockRefundableClaim(Long orderClaimId) {
+		Long orderId = orderClaimRepository.findOrderIdById(orderClaimId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND));
+		orderRepository.findByIdForUpdate(orderId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		OrderClaim claim = orderClaimRepository.findById(orderClaimId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND));
+		if (!claim.isInProgress()) {
+			throw new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
+		}
+	}
 
 	/**
 	 * 토스 부분취소가 확정됐을 때 클레임을 종결하고 상품주문을 취소·반품으로 확정한다. 이미 종결된 클레임이면

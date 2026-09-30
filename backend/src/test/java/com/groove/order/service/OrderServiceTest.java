@@ -133,6 +133,9 @@ class OrderServiceTest {
 	@Mock
 	OrderClaimRepository orderClaimRepository;
 
+	@Mock
+	OrderClaimRefundReader orderClaimRefundReader;
+
 	OrderService orderService;
 
 	Member member;
@@ -156,7 +159,7 @@ class OrderServiceTest {
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, cartItemRepository, memberCouponRepository, orderStockService,
 				orderDraftReleaser, orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository,
-				productImageRepository, orderClaimRepository, clock);
+				productImageRepository, orderClaimRepository, orderClaimRefundReader, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -547,10 +550,10 @@ class OrderServiceTest {
 					new BigDecimal("45000"), BigDecimal.ZERO, null, "A Love Supreme", 1, null, null);
 			OrderListItemRow firstItem = new OrderListItemRow(1L, PRODUCT_ID, "Kind of Blue", 1,
 					new BigDecimal("30000"), null, "20260903-TESTAB12-01", OrderItemStatus.PAID, null,
-					new BigDecimal("30000"), null, null, null);
+					new BigDecimal("30000"), null, null, null, false);
 			OrderListItemRow secondItem = new OrderListItemRow(2L, 200L, "A Love Supreme", 1,
 					new BigDecimal("45000"), "https://cdn.groove.com/love-supreme-0.jpg", "20260903-TESTAB13-01",
-					OrderItemStatus.PAID, null, new BigDecimal("45000"), null, null, null);
+					OrderItemStatus.PAID, null, new BigDecimal("45000"), null, null, null, false);
 			given(orderQueryMapper.countMyOrders(any())).willReturn(2L);
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(first, second));
 			given(orderQueryMapper.findItemsByOrderIds(List.of(1L, 2L), null))

@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -12,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +40,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentCancel;
 import com.groove.payment.entity.PaymentCancelStatus;
@@ -58,13 +63,16 @@ class PaymentRefundWriterTest {
 	@Mock
 	PaymentCancelRepository paymentCancelRepository;
 
+	@Mock
+	OrderClaimFinalizeService orderClaimFinalizeService;
+
 	PaymentRefundWriter writer;
 	Payment payment;
 
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-29T03:00:00Z"), ZoneId.of("Asia/Seoul"));
-		writer = new PaymentRefundWriter(paymentRepository, paymentCancelRepository, clock);
+		writer = new PaymentRefundWriter(paymentRepository, paymentCancelRepository, orderClaimFinalizeService, clock);
 		Member member = MemberFixture.create();
 		Artist artist = ArtistFixture.create();
 		Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist, "Kind of Blue", PRICE), 2);
@@ -198,6 +206,73 @@ class PaymentRefundWriterTest {
 		}
 
 		@Test
+		@DisplayName("클레임 환불이면 결제 락보다 먼저 클레임을 잠그고 orderClaimId 를 기록한다")
+		void locksClaimBeforePaymentAndRecordsClaimId() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.save(any())).willAnswer(invocation -> withGeneratedId(invocation, 90L));
+			ArgumentCaptor<PaymentCancel> captor = ArgumentCaptor.forClass(PaymentCancel.class);
+
+			// when
+			PaymentRefundRequest result = writer.requestRefund(PAYMENT_ID, new BigDecimal("10000"), "사유", null,
+					500L);
+
+			// then
+			InOrder inOrder = inOrder(orderClaimFinalizeService, paymentRepository);
+			inOrder.verify(orderClaimFinalizeService).lockRefundableClaim(500L);
+			inOrder.verify(paymentRepository).findByIdForUpdate(PAYMENT_ID);
+			verify(paymentCancelRepository).save(captor.capture());
+			assertThat(captor.getValue().getOrderClaimId()).isEqualTo(500L);
+			assertThat(result.orderClaimId()).isEqualTo(500L);
+		}
+
+		@Test
+		@DisplayName("같은 클레임으로 REQUESTED 나 DONE 환불 행이 있으면 ORDER_CLAIM_REFUND_IN_PROGRESS 예외를 던진다")
+		void throwsWhenClaimAlreadyHasRefund() {
+			// given
+			given(paymentCancelRepository.existsByOrderClaimIdAndStatusIn(500L,
+					List.of(PaymentCancelStatus.REQUESTED, PaymentCancelStatus.DONE))).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestRefund(PAYMENT_ID, new BigDecimal("1000"), "사유", null, 500L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_REFUND_IN_PROGRESS);
+			verify(paymentRepository, never()).findByIdForUpdate(any());
+			verify(paymentCancelRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("클레임 락에서 진행 중이 아니라고 판정하면 그 예외를 그대로 던지고 결제를 잠그지 않는다")
+		void propagatesClaimLockFailure() {
+			// given
+			willThrow(new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED))
+					.given(orderClaimFinalizeService).lockRefundableClaim(500L);
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestRefund(PAYMENT_ID, new BigDecimal("1000"), "사유", null, 500L))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
+			verify(paymentRepository, never()).findByIdForUpdate(any());
+		}
+
+		@Test
+		@DisplayName("클레임이 없는 환불이면 클레임 락과 클레임 환불 행 조회를 건너뛴다")
+		void skipsClaimGuardWithoutClaimId() {
+			// given
+			given(paymentRepository.findByIdForUpdate(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.save(any())).willAnswer(invocation -> withGeneratedId(invocation, 90L));
+
+			// when
+			writer.requestRefund(PAYMENT_ID, new BigDecimal("1000"), "사유", null);
+
+			// then
+			verify(orderClaimFinalizeService, never()).lockRefundableClaim(any());
+			verify(paymentCancelRepository, never()).existsByOrderClaimIdAndStatusIn(any(), any());
+		}
+
+		@Test
 		@DisplayName("결제가 없으면 PAYMENT_NOT_FOUND 예외를 던진다")
 		void throwsWhenPaymentNotFound() {
 			// given
@@ -233,6 +308,43 @@ class PaymentRefundWriterTest {
 			assertThat(payment.getCanceledAmount()).isEqualByComparingTo("10000");
 			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
 			assertThat(paymentCancel.getTossTransactionKey()).isEqualTo("txn-1");
+			verify(orderClaimFinalizeService, never()).applyRefundDone(any(), any());
+		}
+
+		@Test
+		@DisplayName("클레임 환불이면 같은 트랜잭션에서 클레임 마무리를 먼저 호출한 뒤 결제에 반영한다")
+		void finalizesClaimBeforeApplyingPayment() {
+			// given
+			PaymentCancel paymentCancel = PaymentCancel.requestForClaim(payment, "cancel-key-1",
+					new BigDecimal("10000"), "사유", NOW, 500L);
+			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.findById(90L)).willReturn(Optional.of(paymentCancel));
+
+			// when
+			writer.completeRefund(PAYMENT_ID, 90L, new BigDecimal("10000"), "txn-1", NOW);
+
+			// then
+			verify(orderClaimFinalizeService).applyRefundDone(500L, NOW);
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+		}
+
+		@Test
+		@DisplayName("클레임 마무리가 실패하면 예외를 전파하고 취소 건을 REQUESTED 로 남긴다")
+		void keepsRequestedWhenClaimFinalizeFails() {
+			// given
+			PaymentCancel paymentCancel = PaymentCancel.requestForClaim(payment, "cancel-key-1",
+					new BigDecimal("10000"), "사유", NOW, 500L);
+			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
+			given(paymentCancelRepository.findById(90L)).willReturn(Optional.of(paymentCancel));
+			willThrow(new IllegalStateException("boom")).given(orderClaimFinalizeService).applyRefundDone(500L, NOW);
+
+			// when & then
+			assertThatThrownBy(() -> writer.completeRefund(PAYMENT_ID, 90L, new BigDecimal("10000"), "txn-1", NOW))
+					.isInstanceOf(IllegalStateException.class);
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.REQUESTED);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
 		}
 	}
 

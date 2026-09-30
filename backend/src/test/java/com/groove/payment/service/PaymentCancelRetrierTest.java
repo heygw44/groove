@@ -111,8 +111,8 @@ class PaymentCancelRetrierTest {
 		}
 
 		@Test
-		@DisplayName("클레임 승인으로 시작된 취소가 재시도로 완료되면 클레임도 함께 마무리한다")
-		void finalizesClaimWhenRetrySucceeds() {
+		@DisplayName("클레임 승인으로 시작된 취소가 재시도로 완료되면 클레임 마무리는 completeRefund 에 맡기고 직접 호출하지 않는다")
+		void leavesClaimFinalizationToCompleteRefund() {
 			// given
 			Long claimId = 700L;
 			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), claimId);
@@ -125,7 +125,9 @@ class PaymentCancelRetrierTest {
 			retrier.retry(candidate);
 
 			// then
-			verify(orderClaimFinalizeService).applyRefundDone(claimId, canceledAt);
+			verify(refundWriter).completeRefund(PAYMENT_ID, PAYMENT_CANCEL_ID, CANCEL_AMOUNT, "txn-retry-1",
+					canceledAt);
+			verifyNoInteractions(orderClaimFinalizeService);
 		}
 
 		@Test
@@ -409,23 +411,6 @@ class PaymentCancelRetrierTest {
 
 			// then
 			verifyNoInteractions(orderClaimFinalizeService);
-		}
-
-		@Test
-		@DisplayName("대사 확정 후 클레임 마무리 자체가 실패해도 예외를 전파하지 않는다")
-		void doesNotPropagateWhenFinalizeDoneFails() {
-			// given
-			Long claimId = 700L;
-			PaymentCancelRetryCandidate candidate = candidateWithClaim(NOW.minusMinutes(5), claimId);
-			LocalDateTime canceledAt = NOW.minusMinutes(1);
-			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willReturn(
-					new PaymentCancelResult(PAYMENT_KEY, "PARTIAL_CANCELED", canceledAt, "txn-retry-1",
-							BigDecimal.ZERO));
-			willThrow(new IllegalStateException("마무리 실패")).given(orderClaimFinalizeService)
-					.applyRefundDone(claimId, canceledAt);
-
-			// when & then
-			org.assertj.core.api.Assertions.assertThatCode(() -> retrier.retry(candidate)).doesNotThrowAnyException();
 		}
 
 		@Test

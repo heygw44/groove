@@ -6,6 +6,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderItemResponse;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.entity.PaymentStatus;
@@ -145,6 +148,7 @@ class OrderCancelServiceTest {
 					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
 			given(writer.planCancel(MEMBER_ID, ORDER_ID)).willReturn(new OrderCancelPlan(List.of(101L, 102L), false));
 			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+			given(orderItemClaimService.cancel(any(), any(), any(), any())).willReturn(itemResponse(false));
 
 			// when
 			OrderDetailResponse response = service.cancel(MEMBER_ID, ORDER_ID, request);
@@ -165,6 +169,7 @@ class OrderCancelServiceTest {
 					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.PARTIAL_CANCELED));
 			given(writer.planCancel(MEMBER_ID, ORDER_ID)).willReturn(new OrderCancelPlan(List.of(102L), false));
 			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+			given(orderItemClaimService.cancel(any(), any(), any(), any())).willReturn(itemResponse(false));
 
 			// when
 			service.cancel(MEMBER_ID, ORDER_ID, request);
@@ -173,6 +178,28 @@ class OrderCancelServiceTest {
 			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 102L, request);
 			verify(paidOrderCancelHook, never()).cancel(any(), any(), any(), any());
 			verify(writer, never()).cancelUnpaid(any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("한 상품의 환불이 결과를 기다리는 중이면 남은 상품은 취소하지 않고 멈춘다")
+		void stopsAtItemWithRefundInProgress() {
+			// given
+			OrderCancelRequest request = new OrderCancelRequest("고객 변심");
+			given(writer.findTarget(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
+			given(writer.planCancel(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelPlan(List.of(101L, 102L, 103L), false));
+			given(orderItemClaimService.cancel(MEMBER_ID, ORDER_ID, 101L, request)).willReturn(itemResponse(false));
+			given(orderItemClaimService.cancel(MEMBER_ID, ORDER_ID, 102L, request)).willReturn(itemResponse(true));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+
+			// when
+			service.cancel(MEMBER_ID, ORDER_ID, request);
+
+			// then
+			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 101L, request);
+			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 102L, request);
+			verify(orderItemClaimService, never()).cancel(MEMBER_ID, ORDER_ID, 103L, request);
 		}
 
 		@Test
@@ -191,6 +218,12 @@ class OrderCancelServiceTest {
 			assertThat(response.limitedDropId()).isEqualTo(30L);
 			verify(writer, never()).cancelUnpaid(any(), any(), any());
 		}
+	}
+
+	private OrderItemResponse itemResponse(boolean refundInProgress) {
+		return new OrderItemResponse(101L, 1L, "Kind of Blue", BigDecimal.TEN, 1, BigDecimal.TEN, null,
+				"20260913-TESTAB12-01", OrderItemStatus.PAID, null, BigDecimal.TEN, null, null, null, List.of(), null,
+				refundInProgress);
 	}
 
 	private OrderDetailResponse detail(Long limitedDropId) {

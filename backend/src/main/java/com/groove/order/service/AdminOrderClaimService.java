@@ -55,12 +55,12 @@ public class AdminOrderClaimService {
 		return AdminOrderClaimCountResponse.from(orderClaimRepository.countByTypeAndStatus());
 	}
 
-	/** {@code CANCEL} 클레임 승인(REQUESTED → DONE). 즉시 취소와 같은 환불 경로를 탄다. */
+	/**
+	 * {@code CANCEL} 클레임 승인(REQUESTED → DONE). 즉시 취소와 같은 환불 경로를 탄다. 결과불명으로 환불이 결과를
+	 * 기다리는 클레임은 {@code ORDER_CLAIM_REFUND_IN_PROGRESS} 로 막힌다.
+	 */
 	public AdminOrderItemResponse approve(Long adminId, Long claimId) {
-		OrderClaim claim = writer.findClaim(claimId);
-		if (claim.getType() != OrderClaimType.CANCEL || claim.getStatus() != OrderClaimStatus.REQUESTED) {
-			throw new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
-		}
+		OrderClaim claim = writer.lockApprovable(claimId);
 		OrderItem item = claim.getOrderItem();
 		Long orderId = item.getOrder().getId();
 		Long itemId = item.getId();
@@ -111,7 +111,17 @@ public class AdminOrderClaimService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND))
 				.getOrder().getId();
 		OrderClaimRequestResult result = writer.requestAdminCancel(orderId, itemId, reason);
-		refundHook.refund(orderId, result.claimId(), result.refundAmount(), reason, null);
+		try {
+			refundHook.refund(orderId, result.claimId(), result.refundAmount(), reason, null);
+		} catch (RuntimeException ex) {
+			// 환불 요청 기록 전에 실패했으면 방금 만든 판매취소 클레임을 남기지 않는다.
+			try {
+				writer.discardUnstartedClaim(result.claimId());
+			} catch (RuntimeException discardFailure) {
+				ex.addSuppressed(discardFailure);
+			}
+			throw ex;
+		}
 		record(adminId, orderId, "판매취소: itemId=" + itemId);
 		return buildItemResponse(itemId);
 	}

@@ -100,9 +100,7 @@ public class PaymentCancelRetrier {
 					result.transactionKey(), canceledAt);
 		} catch (RuntimeException ex) {
 			log.error("부분취소 재시도는 성공했으나 반영 실패, 다음 주기로 넘김: paymentCancelId={}", candidate.paymentCancelId(), ex);
-			return;
 		}
-		finalizeClaimDone(candidate, canceledAt);
 	}
 
 	private void safeFailRefund(PaymentCancelRetryCandidate candidate) {
@@ -170,24 +168,10 @@ public class PaymentCancelRetrier {
 					lookup.lastCancelTransactionKey(), canceledAt);
 		} catch (RuntimeException ex) {
 			log.error("부분취소 확인 조회로 완료를 반영하지 못함: paymentCancelId={}", candidate.paymentCancelId(), ex);
-			return;
-		}
-		finalizeClaimDone(candidate, canceledAt);
-	}
-
-	/** 클레임 승인으로 시작된 취소만 마무리 대상이다(orderClaimId 가 없으면 전액취소 등 클레임과 무관한 취소). */
-	private void finalizeClaimDone(PaymentCancelRetryCandidate candidate, LocalDateTime canceledAt) {
-		if (candidate.orderClaimId() == null) {
-			return;
-		}
-		try {
-			orderClaimFinalizeService.applyRefundDone(candidate.orderClaimId(), canceledAt);
-		} catch (RuntimeException ex) {
-			log.error("대사 확정 후 클레임 마무리 실패: orderClaimId={}, paymentCancelId={}", candidate.orderClaimId(),
-					candidate.paymentCancelId(), ex);
 		}
 	}
 
+	/** 클레임 승인으로 시작된 취소만 되돌릴 대상이다(orderClaimId 가 없으면 전액취소 등 클레임과 무관한 취소). */
 	private void finalizeClaimFailed(PaymentCancelRetryCandidate candidate) {
 		if (candidate.orderClaimId() == null) {
 			return;

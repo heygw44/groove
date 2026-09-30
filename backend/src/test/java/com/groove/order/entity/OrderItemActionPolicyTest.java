@@ -25,7 +25,7 @@ class OrderItemActionPolicyTest {
 		void returnsCancelForPaymentWaiting() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PAYMENT_WAITING, null,
-					null, false, NOW);
+					null, false, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.CANCEL);
@@ -36,7 +36,7 @@ class OrderItemActionPolicyTest {
 		void returnsCancelForPaid() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PAID, null, null, false,
-					NOW);
+					false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.CANCEL);
@@ -47,7 +47,7 @@ class OrderItemActionPolicyTest {
 		void returnsCancelRequestForPreparing() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PREPARING, null, null,
-					false, NOW);
+					false, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.CANCEL_REQUEST);
@@ -58,7 +58,7 @@ class OrderItemActionPolicyTest {
 		void returnsConfirmForShippingWithoutTracking() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.SHIPPING, null, null,
-					false, NOW);
+					false, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.CONFIRM);
@@ -72,7 +72,7 @@ class OrderItemActionPolicyTest {
 
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED, null,
-					deliveredAt, false, NOW);
+					deliveredAt, false, false, NOW);
 
 			// then: 리뷰는 구매확정(PURCHASE_CONFIRMED) 부터라 DELIVERED 는 WRITE_REVIEW 를 아직 주지 않는다
 			assertThat(actions).containsExactly(OrderItemAction.CONFIRM);
@@ -86,7 +86,7 @@ class OrderItemActionPolicyTest {
 
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED, null,
-					deliveredAt, false, NOW);
+					deliveredAt, false, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.RETURN_REQUEST, OrderItemAction.CONFIRM);
@@ -97,7 +97,7 @@ class OrderItemActionPolicyTest {
 		void returnsWriteReviewForPurchaseConfirmed() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PURCHASE_CONFIRMED, null,
-					null, false, NOW);
+					null, false, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.WRITE_REVIEW);
@@ -108,7 +108,7 @@ class OrderItemActionPolicyTest {
 		@DisplayName("종결·내부 상태면 아무 동작도 반환하지 않는다")
 		void returnsNoActionsForTerminalOrInternalStatuses(OrderItemStatus status) {
 			// when
-			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, false, NOW);
+			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, false, false, NOW);
 
 			// then
 			assertThat(actions).isEmpty();
@@ -127,7 +127,7 @@ class OrderItemActionPolicyTest {
 
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED, null,
-					deliveredAt, false, NOW);
+					deliveredAt, false, false, NOW);
 
 			// then
 			assertThat(actions).contains(OrderItemAction.RETURN_REQUEST);
@@ -141,7 +141,7 @@ class OrderItemActionPolicyTest {
 
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED, null,
-					deliveredAt, false, NOW);
+					deliveredAt, false, false, NOW);
 
 			// then
 			assertThat(actions).doesNotContain(OrderItemAction.RETURN_REQUEST);
@@ -152,7 +152,7 @@ class OrderItemActionPolicyTest {
 		void excludesReturnRequestWhenDeliveredAtIsNull() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED, null, null,
-					false, NOW);
+					false, false, NOW);
 
 			// then
 			assertThat(actions).doesNotContain(OrderItemAction.RETURN_REQUEST);
@@ -169,10 +169,22 @@ class OrderItemActionPolicyTest {
 		void returnsWithdrawClaimOnlyForRequestedClaims(OrderItemClaimStatus claimStatus) {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PREPARING, claimStatus,
-					null, false, NOW);
+					null, false, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.WITHDRAW_CLAIM);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderItemClaimStatus.class, names = {"CANCEL_REQUEST", "RETURN_REQUEST"})
+		@DisplayName("환불이 결과를 기다리는 중이면 WITHDRAW_CLAIM 을 반환하지 않는다")
+		void hidesWithdrawClaimWhenRefundInProgress(OrderItemClaimStatus claimStatus) {
+			// when
+			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PREPARING, claimStatus,
+					null, false, true, NOW);
+
+			// then
+			assertThat(actions).doesNotContain(OrderItemAction.WITHDRAW_CLAIM);
 		}
 
 		@Test
@@ -180,7 +192,7 @@ class OrderItemActionPolicyTest {
 		void returnsNoClaimActionWhileCollecting() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED,
-					OrderItemClaimStatus.COLLECTING, NOW.minusDays(1), false, NOW);
+					OrderItemClaimStatus.COLLECTING, NOW.minusDays(1), false, false, NOW);
 
 			// then: DELIVERED 는 아직 리뷰 작성 자격(PURCHASE_CONFIRMED)이 아니라 그 어떤 액션도 없다
 			assertThat(actions).isEmpty();
@@ -191,7 +203,7 @@ class OrderItemActionPolicyTest {
 		void keepsTrackEvenWhenClaimInProgress() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.SHIPPING,
-					OrderItemClaimStatus.CANCEL_REQUEST, null, true, NOW);
+					OrderItemClaimStatus.CANCEL_REQUEST, null, true, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK);
@@ -202,7 +214,7 @@ class OrderItemActionPolicyTest {
 		void hidesConfirmWhenClaimInProgress() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.SHIPPING,
-					OrderItemClaimStatus.CANCEL_REQUEST, null, false, NOW);
+					OrderItemClaimStatus.CANCEL_REQUEST, null, false, false, NOW);
 
 			// then
 			assertThat(actions).doesNotContain(OrderItemAction.CONFIRM);
@@ -216,7 +228,7 @@ class OrderItemActionPolicyTest {
 
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.DELIVERED,
-					OrderItemClaimStatus.RETURN_REQUEST, deliveredAt, false, NOW);
+					OrderItemClaimStatus.RETURN_REQUEST, deliveredAt, false, false, NOW);
 
 			// then: DELIVERED 는 아직 리뷰 작성 자격(PURCHASE_CONFIRMED)이 아니라 WRITE_REVIEW 는 나오지 않는다
 			assertThat(actions).containsExactly(OrderItemAction.WITHDRAW_CLAIM);
@@ -229,7 +241,7 @@ class OrderItemActionPolicyTest {
 		void treatsTerminalClaimsAsNoActiveClaim(OrderItemClaimStatus claimStatus) {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PREPARING, claimStatus,
-					null, false, NOW);
+					null, false, false, NOW);
 
 			// then
 			assertThat(actions).containsExactly(OrderItemAction.CANCEL_REQUEST);
@@ -245,7 +257,7 @@ class OrderItemActionPolicyTest {
 		@DisplayName("송장이 있고 SHIPPING·DELIVERED 면 TRACK 을 포함한다")
 		void includesTrackWhenTrackingNumberExists(OrderItemStatus status) {
 			// when
-			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, true, NOW);
+			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, true, false, NOW);
 
 			// then
 			assertThat(actions).contains(OrderItemAction.TRACK);
@@ -256,7 +268,7 @@ class OrderItemActionPolicyTest {
 		void excludesTrackWhenNoTrackingNumber() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.SHIPPING, null, null,
-					false, NOW);
+					false, false, NOW);
 
 			// then
 			assertThat(actions).doesNotContain(OrderItemAction.TRACK);
@@ -266,7 +278,7 @@ class OrderItemActionPolicyTest {
 		@DisplayName("송장이 있어도 PAID 처럼 발송 전이면 TRACK 을 반환하지 않는다")
 		void excludesTrackBeforeShipping() {
 			// when
-			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PAID, null, null, true,
+			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PAID, null, null, true, false,
 					NOW);
 
 			// then
@@ -283,7 +295,7 @@ class OrderItemActionPolicyTest {
 		void includesWriteReviewForPurchaseConfirmed() {
 			// when
 			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(OrderItemStatus.PURCHASE_CONFIRMED, null,
-					null, false, NOW);
+					null, false, false, NOW);
 
 			// then
 			assertThat(actions).contains(OrderItemAction.WRITE_REVIEW);
@@ -294,7 +306,7 @@ class OrderItemActionPolicyTest {
 		@DisplayName("SHIPPING·DELIVERED 면 아직 구매확정 전이라 리뷰를 쓸 수 없다")
 		void excludesWriteReviewBeforePurchaseConfirmed(OrderItemStatus status) {
 			// when
-			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, false, NOW);
+			List<OrderItemAction> actions = OrderItemActionPolicy.resolve(status, null, null, false, false, NOW);
 
 			// then
 			assertThat(actions).doesNotContain(OrderItemAction.WRITE_REVIEW);

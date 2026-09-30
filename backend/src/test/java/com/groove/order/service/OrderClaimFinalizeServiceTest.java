@@ -1,9 +1,12 @@
 package com.groove.order.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -18,6 +21,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -26,6 +32,8 @@ import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderClaim;
@@ -75,6 +83,106 @@ class OrderClaimFinalizeServiceTest {
 	private void stubOrderLookup() {
 		given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 		given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+	}
+
+	@Nested
+	@DisplayName("lockRefundableClaim()")
+	class LockRefundableClaim {
+
+		@Test
+		@DisplayName("주문 락을 잡은 뒤 클레임을 다시 읽고 진행 중이면 통과한다")
+		void locksOrderThenReloadsClaim() {
+			// given
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+
+			// when
+			service.lockRefundableClaim(CLAIM_ID);
+
+			// then
+			InOrder inOrder = inOrder(orderRepository, orderClaimRepository);
+			inOrder.verify(orderRepository).findByIdForUpdate(ORDER_ID);
+			inOrder.verify(orderClaimRepository).findById(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("COLLECTING 인 반품 클레임도 진행 중이라 통과한다")
+		void passesForCollectingClaim() {
+			// given
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+
+			// when & then
+			assertThatCode(() -> service.lockRefundableClaim(CLAIM_ID)).doesNotThrowAnyException();
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderClaimStatus.class, names = {"DONE", "REJECTED", "WITHDRAWN"})
+		@DisplayName("이미 종결된 클레임이면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
+		void throwsWhenClaimAlreadyClosed(OrderClaimStatus status) {
+			// given
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			ReflectionTestUtils.setField(claim, "status", status);
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+
+			// when & then
+			assertThatThrownBy(() -> service.lockRefundableClaim(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
+		}
+
+		@Test
+		@DisplayName("클레임이 없으면 COMMON_RESOURCE_NOT_FOUND 예외를 던진다")
+		void throwsWhenClaimMissing() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> service.lockRefundableClaim(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_RESOURCE_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("락 뒤에 클레임이 사라졌으면 COMMON_RESOURCE_NOT_FOUND 예외를 던진다")
+		void throwsWhenClaimDeletedAfterLock() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> service.lockRefundableClaim(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_RESOURCE_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("주문이 없으면 ORDER_NOT_FOUND 예외를 던진다")
+		void throwsWhenOrderMissing() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> service.lockRefundableClaim(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+		}
 	}
 
 	@Nested

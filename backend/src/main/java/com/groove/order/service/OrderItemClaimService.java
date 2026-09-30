@@ -32,6 +32,7 @@ public class OrderItemClaimService {
 	private final OrderClaimRefundHook refundHook;
 	private final OrderItemRepository orderItemRepository;
 	private final OrderClaimRepository orderClaimRepository;
+	private final OrderClaimRefundReader orderClaimRefundReader;
 	private final ProductImageRepository productImageRepository;
 	private final Clock clock;
 
@@ -41,9 +42,27 @@ public class OrderItemClaimService {
 		RefundAccountInfo refundAccount = toRefundAccount(request);
 		OrderClaimRequestResult result = writer.requestCancel(memberId, orderId, itemId, reason, refundAccount);
 		if (result.immediate()) {
-			refundHook.refund(orderId, result.claimId(), result.refundAmount(), reason, refundAccount);
+			refundImmediately(orderId, result, reason, refundAccount);
 		}
 		return buildResponse(itemId);
+	}
+
+	/**
+	 * 환불 요청 기록 전에 실패하면(다른 환불 진행 중·환불계좌 누락 등) 방금 만든 클레임을 되돌린다. 남겨 두면
+	 * 즉시 취소 대상이 관리자 승인 대기 클레임처럼 큐에 걸린다.
+	 */
+	private void refundImmediately(Long orderId, OrderClaimRequestResult result, String reason,
+			RefundAccountInfo refundAccount) {
+		try {
+			refundHook.refund(orderId, result.claimId(), result.refundAmount(), reason, refundAccount);
+		} catch (RuntimeException ex) {
+			try {
+				writer.discardUnstartedClaim(result.claimId());
+			} catch (RuntimeException discardFailure) {
+				ex.addSuppressed(discardFailure);
+			}
+			throw ex;
+		}
 	}
 
 	/** 배송완료 후 7일 이내(D7)인 상품주문에 반품 클레임을 만든다. 환불은 관리자 수거 완료 시점에 일어난다. */
@@ -69,7 +88,9 @@ public class OrderItemClaimService {
 				.map(image -> image.getImageUrl())
 				.orElse(null);
 		Long claimId = orderClaimRepository.findRequestedClaimIdsByOrderItemId(List.of(itemId)).get(itemId);
-		return OrderItemResponse.from(item, thumbnailUrl, claimId, LocalDateTime.now(clock));
+		boolean refundInProgress = orderClaimRefundReader.findPendingRefundOrderItemIds(List.of(itemId))
+				.contains(itemId);
+		return OrderItemResponse.from(item, thumbnailUrl, claimId, refundInProgress, LocalDateTime.now(clock));
 	}
 
 	private RefundAccountInfo toRefundAccount(OrderCancelRequest request) {

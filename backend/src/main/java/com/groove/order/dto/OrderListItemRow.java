@@ -24,14 +24,16 @@ public record OrderListItemRow(
 		BigDecimal paidAmount,
 		CourierCode courierCode,
 		String trackingNumber,
-		LocalDateTime deliveredAt
+		LocalDateTime deliveredAt,
+		boolean refundInProgress
 ) {
 
 	public OrderListItemResponse toResponse(LocalDateTime now) {
 		boolean hasTracking = trackingNumber != null;
 		List<OrderItemAction> availableActions = OrderItemActionPolicy.resolve(status, claimStatus, deliveredAt,
-				hasTracking, now);
+				hasTracking, refundInProgress, now);
 		return new OrderListItemResponse(productId, productName, quantity, lineAmount, thumbnailUrl,
-				productOrderNumber, status, claimStatus, paidAmount, courierCode, trackingNumber, availableActions);
+				productOrderNumber, status, claimStatus, paidAmount, courierCode, trackingNumber, availableActions,
+				refundInProgress);
 	}
 }

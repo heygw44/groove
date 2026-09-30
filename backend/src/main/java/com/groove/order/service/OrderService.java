@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -71,6 +72,7 @@ public class OrderService {
 	private final PaymentRepository paymentRepository;
 	private final ProductImageRepository productImageRepository;
 	private final OrderClaimRepository orderClaimRepository;
+	private final OrderClaimRefundReader orderClaimRefundReader;
 	private final Clock clock;
 
 	@Transactional
@@ -168,10 +170,11 @@ public class OrderService {
 		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
 				.map(purchase -> purchase.getDrop().getId())
 				.orElse(null);
-		Map<Long, Long> claimIds = orderClaimRepository.findRequestedClaimIdsByOrderItemId(
-				order.getItems().stream().map(OrderItem::getId).toList());
+		List<Long> itemIds = order.getItems().stream().map(OrderItem::getId).toList();
+		Map<Long, Long> claimIds = orderClaimRepository.findRequestedClaimIdsByOrderItemId(itemIds);
+		Set<Long> pendingRefundItemIds = orderClaimRefundReader.findPendingRefundOrderItemIds(itemIds);
 		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId), resolveThumbnails(order),
-				claimIds, LocalDateTime.now(clock));
+				claimIds, pendingRefundItemIds, LocalDateTime.now(clock));
 	}
 
 	/** 주문 상품 썸네일(상품 sort_order = 0 이미지)을 한 번에 조회한다. */

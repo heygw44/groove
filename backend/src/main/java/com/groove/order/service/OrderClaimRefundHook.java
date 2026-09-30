@@ -10,7 +10,8 @@ import com.groove.payment.client.dto.RefundAccountInfo;
  *
  * <p>결과불명(토스 응답 timeout 등)이면 클레임을 진행 중 상태로 둔 채 조용히 반환한다 - 이후 대사
  * ({@code PaymentCancelRetrier})가 이어받아 마무리한다. 토스가 명시적으로 거절하면 클레임을 거부 상태로
- * 되돌린 뒤 예외를 다시 던진다.</p>
+ * 되돌린 뒤 예외를 다시 던진다. 요청 기록 전 검증 실패(다른 환불 진행 중, 환불계좌 누락 등)는 클레임을 건드리지
+ * 않고 그대로 던진다.</p>
  */
 public interface OrderClaimRefundHook {
 

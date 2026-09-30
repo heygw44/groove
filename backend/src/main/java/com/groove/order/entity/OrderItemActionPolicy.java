@@ -25,8 +25,12 @@ public final class OrderItemActionPolicy {
 	private OrderItemActionPolicy() {
 	}
 
+	/**
+	 * {@code refundInProgress} 는 클레임 환불이 토스에 나가 결과를 기다리는 중인지다. 이때 철회를 허용하면 환불이
+	 * 확정돼도 되돌릴 클레임이 없어지므로 요청 철회를 내주지 않는다.
+	 */
 	public static List<OrderItemAction> resolve(OrderItemStatus status, OrderItemClaimStatus claimStatus,
-			LocalDateTime deliveredAt, boolean hasTracking, LocalDateTime now) {
+			LocalDateTime deliveredAt, boolean hasTracking, boolean refundInProgress, LocalDateTime now) {
 		boolean claimInProgress = isClaimInProgress(claimStatus);
 		List<OrderItemAction> actions = new ArrayList<>();
 
@@ -39,7 +43,7 @@ public final class OrderItemActionPolicy {
 		if (!claimInProgress && isReturnRequestable(status, deliveredAt, now)) {
 			actions.add(OrderItemAction.RETURN_REQUEST);
 		}
-		if (claimStatus != null && WITHDRAWABLE_CLAIM_STATUSES.contains(claimStatus)) {
+		if (!refundInProgress && claimStatus != null && WITHDRAWABLE_CLAIM_STATUSES.contains(claimStatus)) {
 			actions.add(OrderItemAction.WITHDRAW_CLAIM);
 		}
 		if (hasTracking && isTrackable(status)) {
