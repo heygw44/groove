@@ -332,7 +332,7 @@ class ReviewServiceTest {
 		}
 
 		@Test
-		@DisplayName("배송완료됐지만 구매확정 전이면 PURCHASE_CONFIRM_REQUIRED 를 반환한다")
+		@DisplayName("배송중·배송완료로 구매확정 전이면 PURCHASE_CONFIRM_REQUIRED 를 반환한다")
 		void returnsPurchaseConfirmRequiredWhenAwaitingConfirm() {
 			// given
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));

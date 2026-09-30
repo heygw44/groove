@@ -25,8 +25,11 @@
 		<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
 			#{s}
 		</foreach>
-		<if test="statusGroup.claimBased">
-			OR oi.claim_status IS NOT NULL
+		<if test="!statusGroup.claimStatuses.isEmpty()">
+			OR oi.claim_status IN
+			<foreach item="c" collection="statusGroup.claimStatuses" open="(" separator="," close=")">
+				#{c}
+			</foreach>
 		</if>
 	</sql>
 
@@ -184,20 +187,13 @@
 		</constructor>
 	</resultMap>
 
-	<!-- statusGroup 은 GET /orders 와 같은 그룹(OrderStatusGroup)을 재사용한다. CANCEL_RETURN 은 종결 status 뿐
-		아니라 진행 중 claim_status 도 포함하는 claim 기반 그룹이라 조건을 하나 더 얹는다. -->
+	<!-- statusGroup 은 GET /orders 와 같은 그룹(OrderStatusGroup)을 재사용한다. 거부로 끝난 클레임은 CANCEL_RETURN 에서 제외. -->
 	<sql id="adminOrderItemsWhere">
 		<where>
 			o.placed_at IS NOT NULL
 			<if test="statusGroup != null">
 				AND (
-					oi.status IN
-					<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
-						#{s}
-					</foreach>
-					<if test="statusGroup.claimBased">
-						OR oi.claim_status IS NOT NULL
-					</if>
+					<include refid="itemInStatusGroup"/>
 				)
 			</if>
 			<if test="keyword != null and keyword != ''">
