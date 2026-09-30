@@ -61,11 +61,6 @@ public class OrderCancelService {
 	}
 
 	private RefundAccountInfo toRefundAccount(OrderCancelRequest request) {
-		if (request == null || request.refundAccount() == null) {
-			return null;
-		}
-		OrderCancelRequest.RefundAccount refundAccount = request.refundAccount();
-		return new RefundAccountInfo(refundAccount.bankCode(), refundAccount.accountNumber(),
-				refundAccount.holderName());
+		return OrderCancelRequest.RefundAccount.toInfo(request == null ? null : request.refundAccount());
 	}
 }

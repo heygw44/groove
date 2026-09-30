@@ -33,6 +33,15 @@ public final class PaymentFixture {
 		return payment;
 	}
 
+	/** 입금이 확인돼 DONE 이 된 가상계좌 결제. */
+	public static Payment virtualAccountApproved(Order order, String paymentKey) {
+		Payment payment = Payment.ready(order);
+		payment.issueVirtualAccount(paymentKey, "가상계좌", "088", "9999912345678", "홍길동",
+				APPROVED_AT.plusDays(7), "secret-hash");
+		payment.approve(paymentKey, "가상계좌", APPROVED_AT);
+		return payment;
+	}
+
 	public static Payment canceledAt(Order order, String paymentKey, LocalDateTime approvedAt,
 			LocalDateTime canceledAt) {
 		Payment payment = approvedAt(order, paymentKey, approvedAt);

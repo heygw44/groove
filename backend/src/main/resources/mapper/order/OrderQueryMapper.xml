@@ -180,6 +180,7 @@
 			<arg column="courier_code" javaType="com.groove.order.entity.CourierCode"/>
 			<arg column="tracking_number" javaType="java.lang.String"/>
 			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+			<arg column="virtual_account_payment" javaType="_boolean"/>
 		</constructor>
 	</resultMap>
 
@@ -218,7 +219,9 @@
 		SELECT
 			oi.id, oi.order_id, oi.product_order_number, o.order_number, m.email AS member_email,
 			oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
-			oi.courier_code, oi.tracking_number, oi.created_at
+			oi.courier_code, oi.tracking_number, oi.created_at,
+			EXISTS (SELECT 1 FROM payment p WHERE p.order_id = o.id AND p.va_bank_code IS NOT NULL)
+				AS virtual_account_payment
 		FROM order_item oi
 		JOIN orders o ON o.id = oi.order_id
 		JOIN member m ON m.id = o.member_id

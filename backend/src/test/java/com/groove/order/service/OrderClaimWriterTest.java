@@ -18,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +27,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
@@ -38,6 +40,8 @@ import com.groove.order.entity.OrderItemClaimStatus;
 import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.client.dto.RefundAccountInfo;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 
@@ -57,6 +61,9 @@ class OrderClaimWriterTest {
 	OrderClaimRepository orderClaimRepository;
 
 	@Mock
+	PaymentRepository paymentRepository;
+
+	@Mock
 	OrderClaimRefundReader refundReader;
 
 	OrderClaimWriter writer;
@@ -66,7 +73,8 @@ class OrderClaimWriterTest {
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
-		writer = new OrderClaimWriter(orderRepository, orderClaimRepository, refundReader, clock);
+		writer = new OrderClaimWriter(orderRepository, orderClaimRepository, paymentRepository, refundReader,
+				clock);
 		Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
 		Product product = ProductFixture.withId(ProductFixture.create(artist), 200L);
@@ -79,6 +87,23 @@ class OrderClaimWriterTest {
 		given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
 		given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
 		given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+	}
+
+	private static final RefundAccountInfo ACCOUNT = new RefundAccountInfo("088", "110123456789", "홍길동");
+
+	private void stubVirtualAccountPayment() {
+		given(paymentRepository.findByOrderId(ORDER_ID))
+				.willReturn(Optional.of(PaymentFixture.virtualAccountApproved(order, "toss-va-key")));
+	}
+
+	private void stubCardPayment() {
+		given(paymentRepository.findByOrderId(ORDER_ID))
+				.willReturn(Optional.of(PaymentFixture.approved(order, "toss-card-key")));
+	}
+
+	private void stubLockedOwnedOrder() {
+		given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+		given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID)).willReturn(Optional.of(order));
 	}
 
 	private void stubSave() {
@@ -170,6 +195,89 @@ class OrderClaimWriterTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
 		}
+
+		@Test
+		@DisplayName("가상계좌 결제인데 환불계좌가 없으면 PAYMENT_REFUND_ACCOUNT_REQUIRED 예외를 던지고 클레임을 만들지 않는다")
+		void throwsWhenVirtualAccountWithoutAccount() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			stubLockedOwnedOrder();
+			stubVirtualAccountPayment();
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+			verify(orderClaimRepository, never()).save(any());
+			assertThat(item.getClaimStatus()).isNull();
+		}
+
+		@Test
+		@DisplayName("PREPARING 상품주문도 가상계좌 결제에 환불계좌가 없으면 PAYMENT_REFUND_ACCOUNT_REQUIRED 예외를 던진다")
+		void throwsWhenVirtualAccountWithoutAccountOnPreparing() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PREPARING);
+			stubLockedOwnedOrder();
+			stubVirtualAccountPayment();
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+			verify(orderClaimRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("가상계좌 결제에 환불계좌가 있으면 클레임에 계좌를 담아 저장한다")
+		void savesClaimWithAccountWhenVirtualAccount() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			stubLockedOwnedOrder();
+			stubVirtualAccountPayment();
+			stubSave();
+
+			// when
+			writer.requestCancel(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", ACCOUNT);
+
+			// then
+			ArgumentCaptor<OrderClaim> captor = ArgumentCaptor.forClass(OrderClaim.class);
+			verify(orderClaimRepository).save(captor.capture());
+			assertThat(captor.getValue().getRefundAccount()).isEqualTo(ACCOUNT);
+		}
+
+		@Test
+		@DisplayName("카드 결제면 환불계좌가 없어도 클레임을 만든다")
+		void passesWithoutAccountWhenCardPayment() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			stubLockedOwnedOrder();
+			stubCardPayment();
+			stubSave();
+
+			// when
+			OrderClaimRequestResult result = writer.requestCancel(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null);
+
+			// then
+			assertThat(result.claimId()).isEqualTo(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("결제 행이 없으면 환불계좌가 없어도 클레임을 만든다")
+		void passesWithoutAccountWhenNoPayment() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			stubLockedOwnedOrder();
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.empty());
+			stubSave();
+
+			// when
+			OrderClaimRequestResult result = writer.requestCancel(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null);
+
+			// then
+			assertThat(result.claimId()).isEqualTo(CLAIM_ID);
+		}
 	}
 
 	@Nested
@@ -187,7 +295,7 @@ class OrderClaimWriterTest {
 			stubSave();
 
 			// when
-			OrderClaimRequestResult result = writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사이즈가 안 맞음");
+			OrderClaimRequestResult result = writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사이즈가 안 맞음", null);
 
 			// then
 			assertThat(result.immediate()).isFalse();
@@ -204,7 +312,7 @@ class OrderClaimWriterTest {
 			given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when & then
-			assertThatThrownBy(() -> writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유"))
+			assertThatThrownBy(() -> writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_RETURN_PERIOD_EXPIRED);
@@ -219,10 +327,82 @@ class OrderClaimWriterTest {
 			given(orderRepository.findWithItemsByIdAndMemberId(ORDER_ID, MEMBER_ID)).willReturn(Optional.of(order));
 
 			// when & then
-			assertThatThrownBy(() -> writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유"))
+			assertThatThrownBy(() -> writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
+		}
+
+		@Test
+		@DisplayName("가상계좌 결제인데 환불계좌가 없으면 PAYMENT_REFUND_ACCOUNT_REQUIRED 예외를 던지고 클레임을 만들지 않는다")
+		void throwsWhenVirtualAccountWithoutAccount() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(item, "deliveredAt", NOW.minusDays(1));
+			stubLockedOwnedOrder();
+			stubVirtualAccountPayment();
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+			verify(orderClaimRepository, never()).save(any());
+			assertThat(item.getClaimStatus()).isNull();
+		}
+
+		@Test
+		@DisplayName("가상계좌 결제에 환불계좌가 있으면 반품 클레임에 계좌를 담아 저장한다")
+		void savesClaimWithAccountWhenVirtualAccount() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(item, "deliveredAt", NOW.minusDays(1));
+			stubLockedOwnedOrder();
+			stubVirtualAccountPayment();
+			stubSave();
+
+			// when
+			writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", ACCOUNT);
+
+			// then
+			ArgumentCaptor<OrderClaim> captor = ArgumentCaptor.forClass(OrderClaim.class);
+			verify(orderClaimRepository).save(captor.capture());
+			assertThat(captor.getValue().getRefundAccount()).isEqualTo(ACCOUNT);
+		}
+
+		@Test
+		@DisplayName("카드 결제면 환불계좌가 없어도 반품 클레임을 만든다")
+		void passesWithoutAccountWhenCardPayment() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(item, "deliveredAt", NOW.minusDays(1));
+			stubLockedOwnedOrder();
+			stubCardPayment();
+			stubSave();
+
+			// when
+			writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null);
+
+			// then
+			ArgumentCaptor<OrderClaim> captor = ArgumentCaptor.forClass(OrderClaim.class);
+			verify(orderClaimRepository).save(captor.capture());
+			assertThat(captor.getValue().getRefundAccount()).isNull();
+		}
+
+		@Test
+		@DisplayName("반품 기간이 지났으면 가상계좌 여부보다 ORDER_RETURN_PERIOD_EXPIRED 를 먼저 던진다")
+		void checksPeriodBeforeAccount() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(item, "deliveredAt", NOW.minusDays(8));
+			stubLockedOwnedOrder();
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", null))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_RETURN_PERIOD_EXPIRED);
+			verify(paymentRepository, never()).findByOrderId(any());
 		}
 	}
 
@@ -337,7 +517,7 @@ class OrderClaimWriterTest {
 			// given
 			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.RETURN_REQUEST);
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			stubLockedClaim(claim);
 
@@ -391,7 +571,7 @@ class OrderClaimWriterTest {
 			// given
 			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.RETURN_REQUEST);
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
 			given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
@@ -442,6 +622,41 @@ class OrderClaimWriterTest {
 			// then
 			assertThat(result.immediate()).isTrue();
 		}
+
+		@Test
+		@DisplayName("가상계좌 결제 주문이면 PAYMENT_REFUND_ACCOUNT_REQUIRED 예외를 던지고 클레임을 만들지 않는다")
+		void throwsWhenVirtualAccount() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			stubVirtualAccountPayment();
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestAdminCancel(ORDER_ID, ITEM_ID, "재고 확인 불가"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+			verify(orderClaimRepository, never()).save(any());
+			assertThat(item.getClaimStatus()).isNull();
+		}
+
+		@Test
+		@DisplayName("카드 결제 주문이면 계좌 없이 즉시 취소 클레임을 만든다")
+		void passesWhenCardPayment() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			stubCardPayment();
+			stubSave();
+
+			// when
+			OrderClaimRequestResult result = writer.requestAdminCancel(ORDER_ID, ITEM_ID, "재고 확인 불가");
+
+			// then
+			assertThat(result.immediate()).isTrue();
+		}
 	}
 
 	@Nested
@@ -452,7 +667,7 @@ class OrderClaimWriterTest {
 		@DisplayName("COLLECTING 인 반품 클레임에 재입고 여부를 기록한다")
 		void recordsRestockChoice() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			stubLockedClaim(claim);
@@ -468,7 +683,7 @@ class OrderClaimWriterTest {
 		@DisplayName("환불이 결과를 기다리는 중이면 ORDER_CLAIM_REFUND_IN_PROGRESS 예외를 던지고 선택을 덮어쓰지 않는다")
 		void throwsWhenRefundPending() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			stubLockedClaim(claim);
@@ -509,7 +724,7 @@ class OrderClaimWriterTest {
 		@DisplayName("RETURN 클레임이면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
 		void throwsWhenReturnClaim() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			stubLockedClaim(claim);
 
