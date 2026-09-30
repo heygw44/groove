@@ -237,6 +237,25 @@ class AdminOrderItemServiceTest {
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
 		}
+
+		@Test
+		@DisplayName("같은 id 를 두 번 보내면 한 번으로 세어 skipped 가 0 이다")
+		void countsDuplicateIdsOnce() {
+			// given
+			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
+			OrderItem item = order.getItems().get(0);
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
+			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
+
+			// when
+			AdminOrderItemBulkResultResponse result = service.confirmPreparing(ADMIN_ID,
+					new AdminOrderItemConfirmRequest(List.of(900L, 900L)));
+
+			// then
+			assertThat(result.processed()).isEqualTo(1);
+			assertThat(result.skipped()).isZero();
+		}
 	}
 
 	@Nested
@@ -345,6 +364,25 @@ class AdminOrderItemServiceTest {
 			verify(orderItemRepository, never()).findDistinctOrderIdsByIdIn(any());
 		}
 
+		@Test
+		@DisplayName("같은 id 를 두 번 보내면 한 번으로 세어 skipped 가 0 이다")
+		void countsDuplicateIdsOnce() {
+			// given
+			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
+			OrderItem item = order.getItems().get(0);
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
+			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
+
+			// when
+			AdminOrderItemBulkResultResponse result = service.startShipping(ADMIN_ID,
+					shipRequest(shipItem(900L, "CJ", "123456789012"), shipItem(900L, "CJ", "123456789012")));
+
+			// then
+			assertThat(result.processed()).isEqualTo(1);
+			assertThat(result.skipped()).isZero();
+		}
+
 		private AdminOrderItemShipRequest.ShipItem shipItem(Long orderItemId, String courierCode,
 				String trackingNumber) {
 			return new AdminOrderItemShipRequest.ShipItem(orderItemId, courierCode, trackingNumber);
@@ -395,6 +433,25 @@ class AdminOrderItemServiceTest {
 			// then
 			assertThat(result.processed()).isZero();
 			assertThat(result.skipped()).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("같은 id 를 두 번 보내면 한 번으로 세어 skipped 가 0 이다")
+		void countsDuplicateIdsOnce() {
+			// given
+			Order order = orderWithItem(500L, 900L, OrderItemStatus.SHIPPING);
+			OrderItem item = order.getItems().get(0);
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
+			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
+
+			// when
+			AdminOrderItemBulkResultResponse result = service.completeDelivery(ADMIN_ID,
+					new AdminOrderItemDeliverRequest(List.of(900L, 900L)));
+
+			// then
+			assertThat(result.processed()).isEqualTo(1);
+			assertThat(result.skipped()).isZero();
 		}
 	}
 

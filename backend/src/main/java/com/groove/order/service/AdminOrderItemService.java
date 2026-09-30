@@ -70,7 +70,7 @@ public class AdminOrderItemService {
 
 	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public AdminOrderItemBulkResultResponse confirmPreparing(Long adminId, AdminOrderItemConfirmRequest request) {
-		List<Long> orderItemIds = request.orderItemIds();
+		List<Long> orderItemIds = request.orderItemIds().stream().distinct().toList();
 		Set<Long> cancelRequestedOrderIds = lockOrders(orderItemIds);
 		List<OrderItem> items = orderItemRepository.findAllById(orderItemIds);
 		LocalDateTime now = LocalDateTime.now(clock);
@@ -123,7 +123,7 @@ public class AdminOrderItemService {
 
 	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public AdminOrderItemBulkResultResponse completeDelivery(Long adminId, AdminOrderItemDeliverRequest request) {
-		List<Long> orderItemIds = request.orderItemIds();
+		List<Long> orderItemIds = request.orderItemIds().stream().distinct().toList();
 		lockOrders(orderItemIds);
 		List<OrderItem> items = orderItemRepository.findAllById(orderItemIds);
 		LocalDateTime now = LocalDateTime.now(clock);
