@@ -209,7 +209,7 @@ export function AdminLayout() {
       <h1 className="mb-6 text-2xl font-bold tracking-tight">관리자</h1>
 
       <div className="grid gap-6 md:grid-cols-[196px_minmax(0,1fr)] md:gap-11">
-        <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+        <nav className="-mx-1 flex gap-1 overflow-x-auto p-1 md:mx-0 md:flex-col md:overflow-visible md:p-0">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}

@@ -10,7 +10,7 @@ const TAB_GROUPS: (OrderStatusGroup | undefined)[] = [undefined, ...ORDER_STATUS
 
 export function OrderStatusTabs({ value, onChange }: OrderStatusTabsProps) {
   return (
-    <div role="group" aria-label="주문 상태" className="flex gap-1 overflow-x-auto pb-1">
+    <div role="group" aria-label="주문 상태" className="-mx-1 flex gap-1 overflow-x-auto p-1">
       {TAB_GROUPS.map((statusGroup) => {
         const isSelected = statusGroup === value;
         return (
