@@ -45,7 +45,8 @@ public class OrderCancelRestorer {
 
 	/**
 	 * 취소·반품 클레임이 확정된 상품주문 단위로 복원한다. {@code restock} 이 false 면(반품 완료 시 관리자가
-	 * 재입고를 선택하지 않은 경우) 재고는 그대로 두고 쿠폰·한정반·판매량만 갱신한다. 쿠폰 복원·주문 취소 확정은
+	 * 재입고를 선택하지 않은 경우) 재고와 한정반은 그대로 두고 쿠폰·판매량만 갱신한다. 실물이 돌아오지 않았는데
+	 * 한정반 판매 수를 되돌리면 같은 자리가 다시 팔린다 - 구매 이력도 남겨 1인 1매 제한을 유지한다. 쿠폰 복원·주문 취소 확정은
 	 * 주문에 속한 모든 상품이 끝났을 때만 반영한다(D5) - 호출 전에 대상 상품주문의 상태 전이를 이미 반영해 둬야
 	 * 한다.
 	 */
@@ -55,9 +56,11 @@ public class OrderCancelRestorer {
 			orderStockService.restore(items);
 		}
 		finalizeOrderIfAllItemsCancelTerminal(order);
-		Optional<LimitedRelease> limitedRelease = limitedPurchaseWriter.revertByOrder(order.getId(),
-				LocalDateTime.now(clock));
-		limitedRelease.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
+		Optional<LimitedRelease> limitedRelease = Optional.empty();
+		if (restock) {
+			limitedRelease = limitedPurchaseWriter.revertByOrder(order.getId(), LocalDateTime.now(clock));
+			limitedRelease.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
+		}
 		if (paid) {
 			productSalesStatsUpdater.refreshFor(order);
 		}
