@@ -10,7 +10,7 @@ import type { OrderDetail, OrderItem } from '@/types/order';
 import type { OrderPayment } from '@/types/payment';
 
 vi.mock('@/api/order', () => ({
-  cancelOrder: vi.fn().mockResolvedValue({}),
+  cancelOrder: vi.fn().mockResolvedValue({ items: [] }),
   cancelOrderItem: vi.fn().mockResolvedValue({}),
   returnOrderItem: vi.fn().mockResolvedValue({}),
   withdrawOrderClaim: vi.fn().mockResolvedValue({}),
@@ -33,6 +33,7 @@ const baseItem: OrderItem = {
   status: 'PAID',
   paidAmount: 10000,
   availableActions: ['CANCEL'],
+  refundInProgress: false,
 };
 
 const renderActions = (item: OrderItem, payment?: OrderPayment) => {
@@ -91,8 +92,9 @@ describe('OrderItemClaimActions', () => {
     // given
     const user = userEvent.setup();
     vi.mocked(cancelOrder).mockResolvedValueOnce({
+      items: [],
       payment: { status: 'CANCEL_REQUESTED' },
-    } as OrderDetail);
+    } as unknown as OrderDetail);
     renderActions({ ...baseItem, status: 'PAYMENT_WAITING' });
 
     // when
@@ -121,5 +123,45 @@ describe('OrderItemClaimActions', () => {
 
     // then
     expect(screen.getByRole('button', { name: '주문취소' })).toBeDisabled();
+  });
+
+  it('환불 결과가 미확정인 상품이면 환불 처리 중 안내를 보여준다', () => {
+    // given & when
+    renderActions({ ...baseItem, availableActions: [], refundInProgress: true });
+
+    // then
+    expect(screen.getByText('환불 처리 중')).toBeInTheDocument();
+    expect(screen.getByText(/결제사 환불 결과를 확인하고 있습니다/)).toBeInTheDocument();
+  });
+
+  it('환불이 미확정이 아니면 환불 처리 중 안내를 보이지 않는다', () => {
+    // given & when
+    renderActions(baseItem);
+
+    // then
+    expect(screen.queryByText('환불 처리 중')).not.toBeInTheDocument();
+  });
+
+  it('주문 취소 응답에 환불 미확정 상품이 있으면 나머지 상품 재취소 안내 토스트를 보여준다', async () => {
+    // given
+    const user = userEvent.setup();
+    vi.mocked(cancelOrder).mockResolvedValueOnce({
+      items: [{ ...baseItem, refundInProgress: true }],
+      payment: { status: 'DONE' },
+    } as unknown as OrderDetail);
+    renderActions({ ...baseItem, status: 'PAYMENT_WAITING' });
+
+    // when
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
+    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
+    await user.click(within(dialog).getByRole('button', { name: '주문취소' }));
+
+    // then
+    expect(
+      await screen.findByText(
+        '일부 상품의 환불 결과를 확인하고 있습니다. 확인되면 나머지 상품을 다시 취소해 주세요.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
   });
 });

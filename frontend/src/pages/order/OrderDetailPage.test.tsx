@@ -43,6 +43,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
       status: 'PAID',
       paidAmount: 10000,
       availableActions: [],
+      refundInProgress: false,
     },
   ],
   shippingAddress: {
@@ -124,6 +125,7 @@ describe('OrderDetailPage', () => {
           status: 'DELIVERED',
           paidAmount: 10000,
           availableActions: ['WRITE_REVIEW'],
+          refundInProgress: false,
         },
       ],
     });

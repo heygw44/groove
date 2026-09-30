@@ -60,6 +60,8 @@ export interface OrderItemFulfillment {
   /** 발송 전이면 생략. */
   trackingNumber?: string;
   availableActions: OrderItemAction[];
+  /** 부분 환불이 결제사에 나갔지만 결과가 아직 확정되지 않은 동안 true. */
+  refundInProgress: boolean;
 }
 
 export interface OrderCreateRequest {

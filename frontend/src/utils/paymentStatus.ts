@@ -1,4 +1,5 @@
 import type { BadgeVariant } from '@/components/common/Badge';
+import type { OrderDetail, OrderItem } from '@/types/order';
 import type { OrderPayment, PaymentStatus } from '@/types/payment';
 
 export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
@@ -42,6 +43,8 @@ export const CANCEL_REQUESTED_MESSAGES = {
 } as const;
 
 const ORDER_CANCEL_SUCCESS_MESSAGE = '주문을 취소했습니다.';
+const PARTIAL_REFUND_UNCONFIRMED_MESSAGE =
+  '일부 상품의 환불 결과를 확인하고 있습니다. 확인되면 나머지 상품을 다시 취소해 주세요.';
 
 /** 토스 결과가 DB 에 아직 확정되지 않아 대사 스케줄러가 처리해야 하는 상태인지. */
 export const isReconcilePending = (status: PaymentStatus): boolean =>
@@ -50,8 +53,18 @@ export const isReconcilePending = (status: PaymentStatus): boolean =>
 export const isCancellationPending = (status?: PaymentStatus): boolean =>
   status === 'CANCEL_REQUESTED';
 
-export const getOrderCancelSuccessMessage = (status?: PaymentStatus): string =>
-  isCancellationPending(status) ? CANCEL_REQUESTED_MESSAGES.success : ORDER_CANCEL_SUCCESS_MESSAGE;
+export const hasRefundInProgress = (items: OrderItem[]): boolean =>
+  items.some((item) => item.refundInProgress);
+
+export const getOrderCancelSuccessMessage = (order: OrderDetail): string => {
+  // 일부 상품 환불이 미확정이면 서버가 그 상품을 취소하지 못하고 넘어간다.
+  if (hasRefundInProgress(order.items)) {
+    return PARTIAL_REFUND_UNCONFIRMED_MESSAGE;
+  }
+  return isCancellationPending(order.payment?.status)
+    ? CANCEL_REQUESTED_MESSAGES.success
+    : ORDER_CANCEL_SUCCESS_MESSAGE;
+};
 
 const NO_PAYMENT_LABEL = '결제 전';
 const VIRTUAL_ACCOUNT_LABEL = '무통장입금';

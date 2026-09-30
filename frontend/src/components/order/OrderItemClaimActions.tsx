@@ -109,7 +109,7 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
         { orderId, reason, refundAccount },
         {
           onSuccess: (response) => {
-            showToast('success', getOrderCancelSuccessMessage(response.payment?.status));
+            showToast('success', getOrderCancelSuccessMessage(response));
             closeDialog();
           },
           onError: (error: unknown) => {
@@ -148,6 +148,11 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
 
   return (
     <>
+      {item.refundInProgress && (
+        <p className="text-sm text-content-muted">
+          <span className="font-medium">환불 처리 중</span> 결제사 환불 결과를 확인하고 있습니다.
+        </p>
+      )}
       {canCancel && (
         <Button
           variant="secondary"
