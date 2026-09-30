@@ -211,8 +211,17 @@ public class Order extends BaseTimeEntity {
 		this.cancelReason = reason;
 	}
 
+	/**
+	 * 전액취소 확정. 요청 시점에 상품주문이 전부 PAID 였어도 그 사이 발주확인·발송이 끼어들었으면 확정하지 않는다 -
+	 * 발송된 상품을 취소완료로 바꾸고 재고까지 복원하게 된다. 요청·발송 경로의 가드가 막으므로 방어선이다.
+	 */
 	public void completeCancel(LocalDateTime now) {
 		if (this.status != OrderStatus.PAID) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		boolean fulfillmentStarted = this.items.stream()
+				.anyMatch(item -> item.getStatus() != OrderItemStatus.PAID);
+		if (fulfillmentStarted) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
 		}
 		this.status = OrderStatus.CANCELED;

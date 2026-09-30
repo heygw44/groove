@@ -50,6 +50,8 @@ import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.order.repository.OrderRepository;
+import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 
@@ -68,6 +70,9 @@ class AdminOrderItemServiceTest {
 	private OrderRepository orderRepository;
 
 	@Mock
+	private PaymentRepository paymentRepository;
+
+	@Mock
 	private AdminAuditLogService adminAuditLogService;
 
 	private AdminOrderItemService service;
@@ -80,7 +85,7 @@ class AdminOrderItemServiceTest {
 	void setUp() {
 		clock = Clock.fixed(Instant.parse("2026-09-20T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		service = new AdminOrderItemService(orderQueryMapper, orderItemRepository, orderRepository,
-				adminAuditLogService, clock);
+				paymentRepository, adminAuditLogService, clock);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
@@ -175,6 +180,50 @@ class AdminOrderItemServiceTest {
 		}
 
 		@Test
+		@DisplayName("진행 중인 클레임이 있는 항목은 건너뛴다")
+		void skipsItemWithInProgressClaim() {
+			// given
+			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
+			OrderItem item = order.getItems().get(0);
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
+			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
+
+			// when
+			AdminOrderItemBulkResultResponse result = service.confirmPreparing(ADMIN_ID,
+					new AdminOrderItemConfirmRequest(List.of(900L)));
+
+			// then
+			assertThat(result.processed()).isZero();
+			assertThat(result.skipped()).isEqualTo(1);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PAID);
+		}
+
+		@Test
+		@DisplayName("전액취소가 진행 중인 주문의 항목은 건너뛰고 감사 로그도 남기지 않는다")
+		void skipsItemsOfCancelRequestedOrder() {
+			// given
+			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
+			OrderItem item = order.getItems().get(0);
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
+			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(paymentRepository.findOrderIdsByOrderIdInAndStatus(List.of(500L), PaymentStatus.CANCEL_REQUESTED))
+					.willReturn(List.of(500L));
+			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
+
+			// when
+			AdminOrderItemBulkResultResponse result = service.confirmPreparing(ADMIN_ID,
+					new AdminOrderItemConfirmRequest(List.of(900L)));
+
+			// then
+			assertThat(result.processed()).isZero();
+			assertThat(result.skipped()).isEqualTo(1);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PAID);
+			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
+		}
+
+		@Test
 		@DisplayName("상품주문이 속한 주문을 찾지 못하면 ORDER_NOT_FOUND 예외를 던진다")
 		void throwsWhenOrderNotFound() {
 			// given
@@ -259,6 +308,29 @@ class AdminOrderItemServiceTest {
 			// then
 			assertThat(result.processed()).isZero();
 			assertThat(result.skipped()).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("전액취소가 진행 중인 주문의 항목은 건너뛴다")
+		void skipsItemsOfCancelRequestedOrder() {
+			// given
+			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
+			OrderItem item = order.getItems().get(0);
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
+			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(paymentRepository.findOrderIdsByOrderIdInAndStatus(List.of(500L), PaymentStatus.CANCEL_REQUESTED))
+					.willReturn(List.of(500L));
+			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
+
+			// when
+			AdminOrderItemBulkResultResponse result = service.startShipping(ADMIN_ID,
+					shipRequest(shipItem(900L, "CJ", "123456789012")));
+
+			// then
+			assertThat(result.processed()).isZero();
+			assertThat(result.skipped()).isEqualTo(1);
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PAID);
+			assertThat(item.getTrackingNumber()).isNull();
 		}
 
 		@Test

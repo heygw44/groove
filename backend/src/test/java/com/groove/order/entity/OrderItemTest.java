@@ -261,6 +261,24 @@ class OrderItemTest {
 			assertThat(changed).isFalse();
 			assertThat(item.getStatus()).isEqualTo(status);
 		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderItemClaimStatus.class, names = {"CANCEL_REQUEST", "RETURN_REQUEST", "COLLECTING"})
+		@DisplayName("진행 중인 클레임이 있으면 건드리지 않고 false 를 반환한다")
+		void doesNothingWhenClaimInProgress(OrderItemClaimStatus claimStatus) {
+			// given
+			OrderItem item = createItem();
+			setStatus(item, OrderItemStatus.PAID);
+			ReflectionTestUtils.setField(item, "claimStatus", claimStatus);
+
+			// when
+			boolean changed = item.confirmPreparing(LocalDateTime.now());
+
+			// then
+			assertThat(changed).isFalse();
+			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PAID);
+			assertThat(item.getPreparedAt()).isNull();
+		}
 	}
 
 	@Nested

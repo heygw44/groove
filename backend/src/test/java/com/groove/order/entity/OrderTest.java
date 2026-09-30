@@ -312,6 +312,25 @@ class OrderTest {
 			assertThat(order.getCancelReason()).isEqualTo("고객 변심");
 		}
 
+		@ParameterizedTest
+		@EnumSource(value = OrderItemStatus.class, names = {"PREPARING", "SHIPPING", "DELIVERED"})
+		@DisplayName("상품주문이 PAID 가 아니면 ORDER_INVALID_STATUS 예외를 던지고 아무 것도 바꾸지 않는다")
+		void throwsWhenItemFulfillmentStarted(OrderItemStatus itemStatus) {
+			// given
+			Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist), 1);
+			order.markPaid();
+			order.requestCancel("고객 변심");
+			OrderFixture.markItemsStatus(order, itemStatus);
+
+			// when & then
+			assertThatThrownBy(() -> order.completeCancel(LocalDateTime.of(2026, 9, 13, 10, 30)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+			assertThat(order.getItems().get(0).getStatus()).isEqualTo(itemStatus);
+		}
+
 		@Test
 		@DisplayName("상품주문도 CANCELED 로 같이 바뀐다")
 		void changesItemStatusToCanceledToo() {

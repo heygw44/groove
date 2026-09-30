@@ -1,6 +1,7 @@
 package com.groove.payment.repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,10 @@ import jakarta.persistence.LockModeType;
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
 	Optional<Payment> findByOrderId(Long orderId);
+
+	@Query("select p.order.id from Payment p where p.order.id in :orderIds and p.status = :status")
+	List<Long> findOrderIdsByOrderIdInAndStatus(@Param("orderIds") Collection<Long> orderIds,
+			@Param("status") PaymentStatus status);
 
 	Optional<Payment> findByPaymentKey(String paymentKey);
 

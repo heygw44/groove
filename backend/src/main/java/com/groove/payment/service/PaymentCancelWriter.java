@@ -12,6 +12,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderCancelRestorer;
@@ -69,6 +70,11 @@ public class PaymentCancelWriter {
 		if (payment.getStatus() != PaymentStatus.DONE) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
+		// 전액취소 대상 판정(OrderCancelWriter.planCancel)은 락 없이 이뤄지므로 락을 잡은 뒤 다시 본다. 그 사이
+		// 발주확인·발송이나 상품 클레임이 끼어들었으면 결제 전체를 취소하면 안 된다.
+		if (!isAllPaidWithoutClaim(order)) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
 		if (payment.isVirtualAccount() && refundAccount == null) {
 			throw new BusinessException(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
 		}
@@ -120,6 +126,11 @@ public class PaymentCancelWriter {
 		findPaymentCancel(payment).fail();
 		payment.revertCancelRequest();
 		order.withdrawCancelRequest();
+	}
+
+	private boolean isAllPaidWithoutClaim(Order order) {
+		return order.getItems().stream()
+				.allMatch(item -> item.getStatus() == OrderItemStatus.PAID && item.getClaimStatus() == null);
 	}
 
 	/** 대사 재시도가 처음 요청과 같은 키로 토스를 다시 부르도록 REQUESTED 행의 키를 돌려준다. 행이 없으면 레거시 키. */

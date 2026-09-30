@@ -231,9 +231,12 @@ public class OrderItem extends BaseTimeEntity {
 
 	/**
 	 * 관리자 발주확인(PAID → PREPARING). 일괄 처리에서 대상이 아닌 항목은 건너뛰도록 대상이 아니면 false 를
-	 * 반환한다.
+	 * 반환한다. 진행 중 클레임(결과를 기다리는 즉시취소 환불 포함)이 있으면 배송준비로 넘기지 않는다.
 	 */
 	public boolean confirmPreparing(LocalDateTime now) {
+		if (OrderItemClaimStatus.isInProgress(this.claimStatus)) {
+			return false;
+		}
 		if (this.status != OrderItemStatus.PAID) {
 			return false;
 		}
