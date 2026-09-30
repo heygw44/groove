@@ -20,14 +20,14 @@ public interface PaymentClient {
 	PaymentConfirmResult confirm(String paymentKey, String orderId, BigDecimal amount);
 
 	/**
-	 * 환불계좌가 필요 없는 전액취소(카드 환불, 입금 전 가상계좌 폐쇄 등) 전용. 기존 고정 멱등키를 그대로 쓴다 -
-	 * 대사·보상 재시도가 첫 시도와 같은 키로 다시 불러야 하는 경로들이다.
+	 * 결제 취소 요청 행이 없는 전액취소(보상 취소, 입금 전 가상계좌 폐쇄) 전용. 고정 멱등키를 쓴다 -
+	 * 이 경로들은 재시도가 첫 시도와 같은 키로 다시 불러야 한다.
 	 */
 	default PaymentCancelResult cancel(String paymentKey, String reason) {
 		return cancel(paymentKey, reason, null);
 	}
 
-	/** 입금된 가상계좌를 환불할 때는 refundAccount 를 채워야 한다. 전액취소 전용, 멱등키 고정. */
+	/** 입금된 가상계좌를 환불할 때는 refundAccount 를 채워야 한다. 요청 행이 없는 경로 전용, 멱등키 고정. */
 	default PaymentCancelResult cancel(String paymentKey, String reason, RefundAccountInfo refundAccount) {
 		return cancel(PaymentCancelCommand.fullCancelLegacyKey(paymentKey, reason, refundAccount));
 	}

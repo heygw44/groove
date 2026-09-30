@@ -162,7 +162,8 @@ public class PaymentReconcileService {
 				writeLog(payment, beforeStatus, lookup.status().name(), PaymentReconcileAction.CANCELED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
-			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey());
+			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey(),
+					cancelWriter.requestedIdempotencyKey(payment));
 		};
 	}
 

@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
@@ -34,6 +35,7 @@ class PaymentLateResultApplierTest {
 	private static final Long ORDER_ID = 500L;
 	private static final String TOSS_ORDER_ID = "20260922-ABCDEFGH";
 	private static final String PAYMENT_KEY = "webhook-key";
+	private static final String RETRY_KEY = "cancel-webhook-key-2";
 
 	@Mock
 	private PaymentReconcileService reconcileService;
@@ -101,9 +103,9 @@ class PaymentLateResultApplierTest {
 			// given
 			PaymentLookupResult lookup = doneLookup();
 			given(reconcileService.applyLate(candidate, lookup, "webhook"))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY));
 			PaymentCancelResult cancelResult = PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", lookup.approvedAt());
-			given(paymentClient.cancel(PAYMENT_KEY, "주문 취소 재시도")).willReturn(cancelResult);
+			given(paymentClient.cancel(retryCommand())).willReturn(cancelResult);
 
 			// when
 			applier.apply(candidate, lookup, "webhook");
@@ -118,9 +120,9 @@ class PaymentLateResultApplierTest {
 			// given
 			PaymentLookupResult lookup = doneLookup();
 			given(reconcileService.applyLate(candidate, lookup, "webhook"))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY));
 			BusinessException rejection = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS 거절");
-			given(paymentClient.cancel(PAYMENT_KEY, "주문 취소 재시도")).willThrow(rejection);
+			given(paymentClient.cancel(retryCommand())).willThrow(rejection);
 
 			// when
 			applier.apply(candidate, lookup, "webhook");
@@ -135,8 +137,8 @@ class PaymentLateResultApplierTest {
 			// given
 			PaymentLookupResult lookup = doneLookup();
 			given(reconcileService.applyLate(candidate, lookup, "webhook"))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY));
-			given(paymentClient.cancel(PAYMENT_KEY, "주문 취소 재시도")).willThrow(new RuntimeException("Read timed out"));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY));
+			given(paymentClient.cancel(retryCommand())).willThrow(new RuntimeException("Read timed out"));
 
 			// when
 			applier.apply(candidate, lookup, "webhook");
@@ -146,6 +148,10 @@ class PaymentLateResultApplierTest {
 			verify(reconcileService).recordCancelRetry(eq(candidate), isNull(), captor.capture());
 			assertThat(captor.getValue().getErrorCode()).isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 		}
+	}
+
+	private PaymentCancelCommand retryCommand() {
+		return PaymentCancelCommand.of(PAYMENT_KEY, "주문 취소 재시도", null, RETRY_KEY, null);
 	}
 
 	private PaymentLookupResult doneLookup() {
