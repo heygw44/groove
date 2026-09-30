@@ -8,6 +8,7 @@ import type {
 } from '@/types/adminMember';
 import type {
   AdminOrderClaimCompleteRequest,
+  AdminOrderClaimCounts,
   AdminOrderClaimListParams,
   AdminOrderClaimRejectRequest,
   AdminOrderClaimSummary,
@@ -118,6 +119,9 @@ export const getAdminOrderClaims = (params: AdminOrderClaimListParams) =>
       params,
     }),
   );
+
+export const getAdminOrderClaimCounts = () =>
+  unwrap(client.get<ApiResponse<AdminOrderClaimCounts>>('/admin/order-claims/counts'));
 
 export const approveAdminOrderClaim = (claimId: number) =>
   unwrap(client.post<ApiResponse<AdminOrderItemResult>>(`/admin/order-claims/${claimId}/approve`));

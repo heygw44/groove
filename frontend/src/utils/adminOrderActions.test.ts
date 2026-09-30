@@ -6,7 +6,11 @@ import {
   canConfirmItem,
   canDeliverItem,
   canShipItem,
+  CLAIM_STATUSES_BY_TYPE,
   getClaimActions,
+  getClaimStatusLabel,
+  pickClaimCount,
+  countActionableClaims,
 } from '@/utils/adminOrderActions';
 
 const item = (overrides: Partial<AdminOrderItemSummary>): AdminOrderItemSummary => ({
@@ -36,6 +40,42 @@ describe('getClaimActions()', () => {
   });
 });
 
+describe('getClaimStatusLabel()', () => {
+  it.each([
+    ['CANCEL', 'REQUESTED', '취소요청'],
+    ['CANCEL', 'DONE', '취소완료'],
+    ['CANCEL', 'REJECTED', '취소거부'],
+    ['CANCEL', 'WITHDRAWN', '요청철회'],
+    ['RETURN', 'REQUESTED', '반품요청'],
+    ['RETURN', 'COLLECTING', '수거중'],
+    ['RETURN', 'DONE', '반품완료'],
+    ['RETURN', 'REJECTED', '반품거부'],
+    ['RETURN', 'WITHDRAWN', '요청철회'],
+  ] as const)('%s 클레임의 %s 상태는 %s 로 표기한다', (type, status, expected) => {
+    // when & then
+    expect(getClaimStatusLabel(type, status)).toBe(expected);
+  });
+});
+
+describe('CLAIM_STATUSES_BY_TYPE', () => {
+  it('취소에는 수거중이 없고 반품에는 있다', () => {
+    // when & then
+    expect(CLAIM_STATUSES_BY_TYPE.CANCEL).not.toContain('COLLECTING');
+    expect(CLAIM_STATUSES_BY_TYPE.RETURN).toContain('COLLECTING');
+  });
+});
+
+describe('pickClaimCount()', () => {
+  it('상태에 해당하는 건수 필드를 돌려준다', () => {
+    // given
+    const counts = { requested: 1, collecting: 2, done: 3, rejected: 4, withdrawn: 5, total: 15 };
+
+    // when & then
+    expect(pickClaimCount(counts, 'COLLECTING')).toBe(2);
+    expect(pickClaimCount(counts, 'WITHDRAWN')).toBe(5);
+  });
+});
+
 describe('상품주문 이행 가능 여부', () => {
   it('상태별로 다음 단계 처리만 허용한다', () => {
     // when & then
@@ -61,5 +101,19 @@ describe('상품주문 이행 가능 여부', () => {
   it('끝난 클레임(거부)은 진행 중으로 보지 않는다', () => {
     // when & then
     expect(canConfirmItem(item({ status: 'PAID', claimStatus: 'CANCEL_REJECT' }))).toBe(true);
+  });
+});
+
+describe('countActionableClaims()', () => {
+  const counts = { requested: 2, collecting: 3, done: 4, rejected: 0, withdrawn: 1, total: 10 };
+
+  it('취소는 취소요청 건수만 센다', () => {
+    // when & then
+    expect(countActionableClaims(counts, 'CANCEL')).toBe(2);
+  });
+
+  it('반품은 반품요청과 수거중을 더해 센다', () => {
+    // when & then
+    expect(countActionableClaims(counts, 'RETURN')).toBe(5);
   });
 });
