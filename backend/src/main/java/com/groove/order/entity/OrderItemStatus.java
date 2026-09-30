@@ -23,8 +23,8 @@ public enum OrderItemStatus {
 	/** 리뷰 작성 자격 기준. 배송완료만으로는 쓸 수 없고 구매확정까지 필요하다. */
 	public static final List<OrderItemStatus> REVIEWABLE = List.of(PURCHASE_CONFIRMED);
 
-	/** 리뷰 작성 자격 미달이지만 구매확정만 하면 되는 상태(eligibility 이유 코드 구분용). */
-	public static final List<OrderItemStatus> AWAITING_PURCHASE_CONFIRM = List.of(DELIVERED);
+	/** 리뷰 작성 자격 미달이지만 구매확정만 하면 되는 상태(배송중·배송완료, eligibility 이유 코드 구분용). */
+	public static final List<OrderItemStatus> AWAITING_PURCHASE_CONFIRM = List.of(SHIPPING, DELIVERED);
 
 	/**
 	 * 취소·반품·미입금취소로 끝난 상태(D5). 쿠폰 복원과 주문 취소 확정 판단에 쓴다. 구매확정(PURCHASE_CONFIRMED)은

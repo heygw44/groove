@@ -132,6 +132,11 @@ export function ReviewSection({ productId, averageRating, reviewCount }: ReviewS
   };
 
   const eligibility = eligibilityQuery.data;
+  const ineligibleReason = eligibility?.eligible ? undefined : eligibility?.reason;
+  const purchaseBlockedReason =
+    ineligibleReason === 'PURCHASE_REQUIRED' || ineligibleReason === 'PURCHASE_CONFIRM_REQUIRED'
+      ? ineligibleReason
+      : undefined;
 
   return (
     <section id="reviews" ref={sectionRef} className="mt-12">
@@ -168,13 +173,13 @@ export function ReviewSection({ productId, averageRating, reviewCount }: ReviewS
             </Link>
           )}
 
-          {!eligibility.eligible && eligibility.reason === 'PURCHASE_REQUIRED' && (
+          {purchaseBlockedReason && (
             <div className="flex flex-wrap items-center gap-3">
-              <Button disabled title={REVIEW_INELIGIBLE_MESSAGE.PURCHASE_REQUIRED}>
+              <Button disabled title={REVIEW_INELIGIBLE_MESSAGE[purchaseBlockedReason]}>
                 리뷰 작성
               </Button>
               <span className="text-xs text-content-muted">
-                {REVIEW_INELIGIBLE_MESSAGE.PURCHASE_REQUIRED}
+                {REVIEW_INELIGIBLE_MESSAGE[purchaseBlockedReason]}
               </span>
             </div>
           )}

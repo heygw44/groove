@@ -1,6 +1,7 @@
 export type ReviewSort = 'latest' | 'ratingDesc' | 'ratingAsc';
 
-export type ReviewIneligibleReason = 'LOGIN_REQUIRED' | 'PURCHASE_REQUIRED' | 'ALREADY_REVIEWED';
+export type ReviewIneligibleReason =
+  'LOGIN_REQUIRED' | 'PURCHASE_REQUIRED' | 'PURCHASE_CONFIRM_REQUIRED' | 'ALREADY_REVIEWED';
 
 export interface Review {
   id: number;

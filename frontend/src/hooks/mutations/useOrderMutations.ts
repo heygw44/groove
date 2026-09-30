@@ -9,7 +9,7 @@ import {
   updateOrderShippingAddress,
   withdrawOrderClaim,
 } from '@/api/order';
-import { cartKeys, couponKeys, orderKeys } from '@/hooks/queries/queryKeys';
+import { cartKeys, couponKeys, orderKeys, reviewKeys } from '@/hooks/queries/queryKeys';
 import type { OrderCreateRequest, RefundAccount } from '@/types/order';
 
 interface CreateOrderVariables {
@@ -136,6 +136,7 @@ export const useWithdrawOrderClaim = () => {
 interface ConfirmOrderItemVariables {
   orderId: number;
   itemId: number;
+  productId: number;
 }
 
 export const useConfirmOrderItem = () => {
@@ -145,9 +146,10 @@ export const useConfirmOrderItem = () => {
   return useMutation({
     mutationFn: ({ orderId, itemId }: ConfirmOrderItemVariables) =>
       confirmOrderItem(orderId, itemId),
-    onSuccess: (data, { orderId }) => {
+    onSuccess: (data, { orderId, productId }) => {
       queryClient.setQueryData(orderKeys.detail(orderId), data);
       invalidateOrders();
+      queryClient.invalidateQueries({ queryKey: reviewKeys.eligibility(productId) });
     },
   });
 };

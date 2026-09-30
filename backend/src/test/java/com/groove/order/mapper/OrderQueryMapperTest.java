@@ -198,6 +198,27 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
+		@DisplayName("CANCEL_RETURN 그룹은 거부로 끝난 클레임이 걸린 주문을 제외한다")
+		void excludesOrdersWithRejectedClaimInCancelReturnGroup() {
+			// given
+			Order cancelRejected = persistOrder(owner, "20260903-OQM00061", kindOfBlue, 1);
+			OrderFixture.markItemsStatus(cancelRejected, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(cancelRejected, OrderItemClaimStatus.CANCEL_REJECT);
+			Order returnRejected = persistOrder(owner, "20260903-OQM00062", loveSupreme, 1);
+			OrderFixture.markItemsStatus(returnRejected, OrderItemStatus.PURCHASE_CONFIRMED);
+			OrderFixture.markFirstItemClaimStatus(returnRejected, OrderItemClaimStatus.RETURN_REJECT);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), OrderStatusGroup.CANCEL_RETURN, 0, 20));
+
+			// then
+			assertThat(result).isEmpty();
+		}
+
+		@Test
 		@DisplayName("최신순(placed_at DESC, id DESC)으로 반환한다")
 		void sortsByLatest() {
 			// given
@@ -607,7 +628,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
-		@DisplayName("statusGroup 이 CANCEL_RETURN 이면 취소 상태 행과 클레임이 걸린 행을 함께 반환한다")
+		@DisplayName("statusGroup 이 CANCEL_RETURN 이면 취소 상태 행과 진행 중인 클레임이 걸린 행을 함께 반환한다")
 		void returnsCanceledAndClaimedItemsForCancelReturnGroup() {
 			// given
 			Order order = OrderFixture.create(owner, "20260903-OQM00042");
@@ -630,6 +651,33 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(result).extracting(OrderListItemRow::productOrderNumber)
 					.containsExactly("20260903-OQM00042-01", "20260903-OQM00042-02");
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 CANCEL_RETURN 이면 거부로 끝난 클레임 행은 제외한다")
+		void excludesRejectedClaimItemsForCancelReturnGroup() {
+			// given
+			Order order = OrderFixture.create(owner, "20260903-OQM00063");
+			order.addItem(kindOfBlue, 1);
+			order.addItem(loveSupreme, 1);
+			order.addItem(kindOfBlue, 1);
+			order.place(LocalDateTime.now());
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.CANCELED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			ReflectionTestUtils.setField(order.getItems().get(2), "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(order.getItems().get(2), "claimStatus", OrderItemClaimStatus.RETURN_REJECT);
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()),
+					OrderStatusGroup.CANCEL_RETURN);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::productOrderNumber)
+					.containsExactly("20260903-OQM00063-01", "20260903-OQM00063-02");
 		}
 	}
 
@@ -804,6 +852,30 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			assertThat(result).filteredOn(row -> row.orderId().equals(order.getId()))
 					.hasSize(1)
 					.noneMatch(AdminOrderItemSummaryResponse::virtualAccountPayment);
+		}
+
+		@Test
+		@DisplayName("CANCEL_RETURN 그룹은 거부로 끝난 클레임 행을 제외하고 진행 중 행은 포함한다")
+		void excludesRejectedClaimItemsForCancelReturnGroup() {
+			// given
+			Order rejected = persistOrder(owner, "20260903-OQMVA0004", kindOfBlue, 1);
+			OrderFixture.markItemsStatus(rejected, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(rejected, OrderItemClaimStatus.CANCEL_REJECT);
+			Order requested = persistOrder(owner, "20260903-OQMVA0005", loveSupreme, 1);
+			OrderFixture.markItemsStatus(requested, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(requested, OrderItemClaimStatus.CANCEL_REQUEST);
+			em.flush();
+			em.clear();
+
+			// when
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(
+					new AdminOrderItemSearchCondition(OrderStatusGroup.CANCEL_RETURN, "order-query-", null, null,
+							0, 100));
+
+			// then
+			assertThat(result).extracting(AdminOrderItemSummaryResponse::orderId)
+					.contains(requested.getId())
+					.doesNotContain(rejected.getId());
 		}
 	}
 }

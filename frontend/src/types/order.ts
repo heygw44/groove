@@ -124,7 +124,7 @@ export interface OrderSummary {
   representativeProductName: string;
   itemCount: number;
   thumbnailUrl?: string;
-  /** 주문에 담긴 상품 행 전부. items[0]이 representativeProductName/thumbnailUrl과 같다. */
+  /** 상품 행. 탭(statusGroup)이 걸리면 그 탭에 속한 행만 온다. */
   items: OrderListItem[];
   createdAt: string;
 }

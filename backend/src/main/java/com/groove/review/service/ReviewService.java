@@ -27,7 +27,7 @@ import com.groove.review.repository.ReviewRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** 상품 리뷰 작성/조회/수정/삭제. 배송완료 이상(DELIVERED·PURCHASE_CONFIRMED) 회원만 상품당 1회 작성할 수 있다. */
+/** 상품 리뷰 작성/조회/수정/삭제. 구매확정(PURCHASE_CONFIRMED) 회원만 상품당 1회 작성할 수 있다. */
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -122,7 +122,7 @@ public class ReviewService {
 				OrderItemStatus.REVIEWABLE);
 	}
 
-	/** 배송완료됐지만 아직 구매확정 전이라 리뷰를 쓸 수 없는 상태인지. */
+	/** 배송중·배송완료라 구매확정만 남은 상태인지. */
 	private boolean isAwaitingPurchaseConfirm(Long productId, Long memberId) {
 		return orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(memberId, productId,
 				OrderItemStatus.AWAITING_PURCHASE_CONFIRM);

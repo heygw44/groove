@@ -143,7 +143,10 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
   };
 
   const handleConfirm = () => {
-    confirmMutation.mutate({ orderId, itemId: item.id }, callbacks('구매를 확정했습니다.'));
+    confirmMutation.mutate(
+      { orderId, itemId: item.id, productId: item.productId },
+      callbacks('구매를 확정했습니다.'),
+    );
   };
 
   return (

@@ -14,6 +14,7 @@ export const REVIEW_CONTENT_MAX = 1000;
 
 export const REVIEW_INELIGIBLE_MESSAGE: Record<ReviewIneligibleReason, string> = {
   LOGIN_REQUIRED: '로그인 후 리뷰를 작성할 수 있습니다.',
-  PURCHASE_REQUIRED: '배송 완료된 주문이 있는 상품만 리뷰를 쓸 수 있습니다.',
+  PURCHASE_REQUIRED: '구매확정한 상품만 리뷰를 쓸 수 있습니다.',
+  PURCHASE_CONFIRM_REQUIRED: '구매확정 후 리뷰를 쓸 수 있습니다.',
   ALREADY_REVIEWED: '이미 이 상품에 리뷰를 작성했습니다.',
 };

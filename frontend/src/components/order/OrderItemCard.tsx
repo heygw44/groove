@@ -30,6 +30,23 @@ const ENDED_BY_REFUND_STATUSES: ReadonlyArray<OrderItem['status']> = [
   'RETURNED',
 ];
 
+const CLAIM_ACTIONS: ReadonlyArray<OrderItem['availableActions'][number]> = [
+  'CANCEL',
+  'CANCEL_REQUEST',
+  'RETURN_REQUEST',
+  'CONFIRM',
+];
+
+function getAmountLabel(status: OrderItem['status']) {
+  if (status === 'CANCELED_BY_NOPAYMENT') {
+    return '주문 금액';
+  }
+  if (ENDED_BY_REFUND_STATUSES.includes(status)) {
+    return '환불 금액';
+  }
+  return '결제 금액';
+}
+
 function OrderItemThumbnail({ url }: { url: string | null }) {
   return (
     <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-surface-muted">
@@ -89,6 +106,16 @@ export function OrderItemCard({ orderId, item, payment }: OrderItemCardProps) {
       : undefined;
   const isEndedByRefund = ENDED_BY_REFUND_STATUSES.includes(item.status);
   const canWriteReview = item.availableActions.includes('WRITE_REVIEW');
+  const hasClaimActions = CLAIM_ACTIONS.some((action) => item.availableActions.includes(action));
+  const canWithdrawClaim =
+    item.availableActions.includes('WITHDRAW_CLAIM') && item.claimId !== undefined;
+  const hasFooterContent =
+    isEndedByRefund ||
+    item.refundInProgress ||
+    hasClaimActions ||
+    canWithdrawClaim ||
+    trackingUrl !== undefined ||
+    canWriteReview;
 
   return (
     <div className="rounded-lg border border-line bg-surface px-5 py-4">
@@ -111,44 +138,46 @@ export function OrderItemCard({ orderId, item, payment }: OrderItemCardProps) {
           </p>
           <p className="mt-1 text-sm font-bold text-content">{formatPrice(item.lineAmount)}</p>
           <p className="mt-0.5 text-xs text-content-muted">
-            {isEndedByRefund ? '환불 금액' : '결제 금액'} {formatPrice(item.paidAmount)}
+            {getAmountLabel(item.status)} {formatPrice(item.paidAmount)}
           </p>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-line pt-3">
-        {isEndedByRefund && (
-          <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleAddToCart}
-              loading={addCartItemMutation.isPending}
+      {hasFooterContent && (
+        <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-line pt-3">
+          {isEndedByRefund && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleAddToCart}
+                loading={addCartItemMutation.isPending}
+              >
+                장바구니 담기
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleBuyNow}>
+                바로 구매하기
+              </Button>
+            </>
+          )}
+          <OrderItemClaimActions orderId={orderId} item={item} payment={payment} />
+          {trackingUrl && (
+            <a
+              href={trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${BUTTON_BASE_CLASS} ${BUTTON_VARIANT_CLASS.secondary} ${BUTTON_SIZE_CLASS.sm}`}
             >
-              장바구니 담기
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleBuyNow}>
-              바로 구매하기
-            </Button>
-          </>
-        )}
-        <OrderItemClaimActions orderId={orderId} item={item} payment={payment} />
-        {trackingUrl && (
-          <a
-            href={trackingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`${BUTTON_BASE_CLASS} ${BUTTON_VARIANT_CLASS.secondary} ${BUTTON_SIZE_CLASS.sm}`}
-          >
-            배송조회
-          </a>
-        )}
-        {canWriteReview && (
-          <LinkButton to={`/products/${item.productId}#reviews`} variant="secondary" size="sm">
-            리뷰 쓰기
-          </LinkButton>
-        )}
-      </div>
+              배송조회
+            </a>
+          )}
+          {canWriteReview && (
+            <LinkButton to={`/products/${item.productId}#reviews`} variant="secondary" size="sm">
+              리뷰 쓰기
+            </LinkButton>
+          )}
+        </div>
+      )}
     </div>
   );
 }
