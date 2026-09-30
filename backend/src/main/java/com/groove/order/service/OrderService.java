@@ -36,6 +36,7 @@ import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderSource;
+import com.groove.order.entity.OrderStatusGroup;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderClaimRepository;
@@ -120,18 +121,24 @@ public class OrderService {
 			return PageResponse.of(List.of(), condition.page(), condition.size(), 0);
 		}
 		List<OrderSummaryResponse> content = orderQueryMapper.findMyOrders(condition);
-		List<OrderSummaryResponse> withItems = attachItems(content);
+		List<OrderSummaryResponse> withItems = attachItems(content, condition.statusGroup());
 		return PageResponse.of(withItems, condition.page(), condition.size(), totalElements);
 	}
 
-	/** 페이지의 주문 id 로 상품 행을 한 번에 조회해 붙인다. 페이지가 비어 있으면 이 조회를 건너뛴다. */
-	private List<OrderSummaryResponse> attachItems(List<OrderSummaryResponse> summaries) {
+	/**
+	 * 페이지의 주문 id 로 상품 행을 한 번에 조회해 붙인다. 탭(statusGroup)이 있으면 그 상태의 상품주문만 붙이고,
+	 * 페이지가 비어 있으면 이 조회를 건너뛴다.
+	 */
+	private List<OrderSummaryResponse> attachItems(List<OrderSummaryResponse> summaries,
+			OrderStatusGroup statusGroup) {
 		if (summaries.isEmpty()) {
 			return summaries;
 		}
 		LocalDateTime now = LocalDateTime.now(clock);
 		List<Long> orderIds = summaries.stream().map(OrderSummaryResponse::id).toList();
-		Map<Long, List<OrderListItemResponse>> itemsByOrderId = orderQueryMapper.findItemsByOrderIds(orderIds).stream()
+		List<OrderListItemRow> rows =
+				orderQueryMapper.findItemsByOrderIds(orderIds, statusGroup);
+		Map<Long, List<OrderListItemResponse>> itemsByOrderId = rows.stream()
 				.collect(Collectors.groupingBy(OrderListItemRow::orderId, LinkedHashMap::new,
 						Collectors.mapping(row -> row.toResponse(now), Collectors.toList())));
 		return summaries.stream()

@@ -69,6 +69,7 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderStatusGroup;
 import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
@@ -514,7 +515,7 @@ class OrderServiceTest {
 			assertThat(response.content()).isEmpty();
 			assertThat(response.totalElements()).isZero();
 			verify(orderQueryMapper, never()).findMyOrders(any());
-			verify(orderQueryMapper, never()).findItemsByOrderIds(any());
+			verify(orderQueryMapper, never()).findItemsByOrderIds(any(), any());
 		}
 
 		@Test
@@ -551,7 +552,8 @@ class OrderServiceTest {
 					OrderItemStatus.PAID, null, new BigDecimal("45000"), null, null, null);
 			given(orderQueryMapper.countMyOrders(any())).willReturn(2L);
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(first, second));
-			given(orderQueryMapper.findItemsByOrderIds(List.of(1L, 2L))).willReturn(List.of(firstItem, secondItem));
+			given(orderQueryMapper.findItemsByOrderIds(List.of(1L, 2L), null))
+					.willReturn(List.of(firstItem, secondItem));
 			OrderSearchRequest request = new OrderSearchRequest(null, null, null);
 
 			// when
@@ -562,6 +564,25 @@ class OrderServiceTest {
 					.containsExactly("Kind of Blue");
 			assertThat(response.content().get(1).items()).extracting(OrderListItemResponse::thumbnailUrl)
 					.containsExactly("https://cdn.groove.com/love-supreme-0.jpg");
+		}
+
+		@Test
+		@DisplayName("탭(statusGroup)이 있으면 상품 행 조회에도 같은 statusGroup 을 넘긴다")
+		void passesStatusGroupToItemQuery() {
+			// given
+			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
+					new BigDecimal("30000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, null);
+			given(orderQueryMapper.countMyOrders(any())).willReturn(1L);
+			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(summary));
+			given(orderQueryMapper.findItemsByOrderIds(List.of(1L), OrderStatusGroup.SHIPPING))
+					.willReturn(List.of());
+			OrderSearchRequest request = new OrderSearchRequest(OrderStatusGroup.SHIPPING, null, null);
+
+			// when
+			orderService.getMyOrders(MEMBER_ID, request);
+
+			// then
+			verify(orderQueryMapper).findItemsByOrderIds(List.of(1L), OrderStatusGroup.SHIPPING);
 		}
 	}
 

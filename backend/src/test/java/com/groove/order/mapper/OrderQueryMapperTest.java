@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.coupon.entity.Coupon;
 import com.groove.coupon.entity.MemberCoupon;
@@ -83,6 +84,25 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		order.addItem(product, quantity);
 		em.persist(order);
 		em.flush();
+		return order;
+	}
+
+	/** 상태가 서로 다른 상품주문 4개(PAID, SHIPPING, DELIVERED, CANCELED)를 가진 주문을 만든다. */
+	private Order persistOrderWithMixedItemStatuses(String orderNumber) {
+		Order order = OrderFixture.create(owner, orderNumber);
+		order.addItem(kindOfBlue, 1);
+		order.addItem(loveSupreme, 1);
+		order.addItem(kindOfBlue, 1);
+		order.addItem(loveSupreme, 1);
+		order.place(LocalDateTime.now());
+		List<OrderItemStatus> statuses = List.of(OrderItemStatus.PAID, OrderItemStatus.SHIPPING,
+				OrderItemStatus.DELIVERED, OrderItemStatus.CANCELED);
+		for (int i = 0; i < statuses.size(); i++) {
+			ReflectionTestUtils.setField(order.getItems().get(i), "status", statuses.get(i));
+		}
+		em.persist(order);
+		em.flush();
+		em.clear();
 		return order;
 	}
 
@@ -427,7 +447,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(target.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(target.getId()), null);
 
 			// then
 			assertThat(result).hasSize(2);
@@ -447,7 +467,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
 
 			// then
 			assertThat(result).extracting(OrderListItemRow::productName)
@@ -462,7 +482,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
 
 			// then
 			assertThat(result).extracting(OrderListItemRow::thumbnailUrl)
@@ -477,7 +497,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
 
 			// then
 			assertThat(result).extracting(OrderListItemRow::thumbnailUrl).containsExactly((String) null);
@@ -491,7 +511,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.quantity()).isEqualTo(3);
@@ -509,7 +529,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.productOrderNumber()).isEqualTo("20260903-OQM00035-01");
@@ -525,7 +545,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.paidAmount()).isEqualByComparingTo(result.lineAmount());
@@ -548,11 +568,65 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.paidAmount())
 					.isEqualByComparingTo(result.lineAmount().subtract(new BigDecimal("5000")));
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 없으면 주문의 모든 상품 행을 반환한다")
+		void returnsAllItemsWhenStatusGroupIsNull() {
+			// given
+			Order order = persistOrderWithMixedItemStatuses("20260903-OQM00040");
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::status).containsExactly(OrderItemStatus.PAID,
+					OrderItemStatus.SHIPPING, OrderItemStatus.DELIVERED, OrderItemStatus.CANCELED);
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 SHIPPING 이면 배송중 상품 행만 반환한다")
+		void returnsOnlyShippingItemsForShippingGroup() {
+			// given
+			Order order = persistOrderWithMixedItemStatuses("20260903-OQM00041");
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()),
+					OrderStatusGroup.SHIPPING);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::status).containsExactly(OrderItemStatus.SHIPPING);
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 CANCEL_RETURN 이면 취소 상태 행과 클레임이 걸린 행을 함께 반환한다")
+		void returnsCanceledAndClaimedItemsForCancelReturnGroup() {
+			// given
+			Order order = OrderFixture.create(owner, "20260903-OQM00042");
+			order.addItem(kindOfBlue, 1);
+			order.addItem(loveSupreme, 1);
+			order.addItem(kindOfBlue, 1);
+			order.place(LocalDateTime.now());
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.CANCELED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			ReflectionTestUtils.setField(order.getItems().get(2), "status", OrderItemStatus.DELIVERED);
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()),
+					OrderStatusGroup.CANCEL_RETURN);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::productOrderNumber)
+					.containsExactly("20260903-OQM00042-01", "20260903-OQM00042-02");
 		}
 	}
 
