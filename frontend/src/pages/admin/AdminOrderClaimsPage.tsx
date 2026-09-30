@@ -22,6 +22,7 @@ import {
 } from '@/hooks/mutations/useAdminOrderMutations';
 import { useAdminOrderClaimCounts } from '@/hooks/queries/useAdminOrderClaimCounts';
 import { useAdminOrderClaims } from '@/hooks/queries/useAdminOrderClaims';
+import { useFallbackPageRedirect } from '@/hooks/useFallbackPageRedirect';
 import type { AdminOrderClaimSummary, OrderClaimType } from '@/types/adminOrder';
 import {
   CLAIM_STATUSES_BY_TYPE,
@@ -32,6 +33,7 @@ import {
   type AdminClaimAction,
 } from '@/utils/adminOrderActions';
 import { getErrorMessage } from '@/utils/apiError';
+import { getFallbackPage } from '@/utils/pagination';
 
 const CLAIM_PAGE_SIZE = 20;
 
@@ -86,6 +88,12 @@ export default function AdminOrderClaimsPage() {
     page,
     size: CLAIM_PAGE_SIZE,
   });
+  const fallbackPage =
+    data && !isPlaceholderData
+      ? getFallbackPage(page, data.content.length, data.totalPages)
+      : undefined;
+  const isMovingToFallbackPage = fallbackPage !== undefined;
+
   const { data: counts } = useAdminOrderClaimCounts();
   const typeCounts = counts && pickClaimCounts(counts, type);
 
@@ -110,6 +118,8 @@ export default function AdminOrderClaimsPage() {
     }
     setSearchParams(params);
   };
+
+  useFallbackPageRedirect(fallbackPage);
 
   const closeAction = () => setPendingAction(undefined);
 
@@ -200,13 +210,13 @@ export default function AdminOrderClaimsPage() {
         onChange={(next) => updateSearch({ status: next, page: 0 })}
       />
 
-      {isPending && <TableSkeleton columns={8} />}
+      {(isPending || isMovingToFallbackPage) && <TableSkeleton columns={8} />}
 
-      {!isPending && isError && (
+      {!isPending && !isMovingToFallbackPage && isError && (
         <QueryErrorState error={error} onRetry={refetch} title="클레임을 불러오지 못했습니다" />
       )}
 
-      {!isPending && !isError && data && data.content.length === 0 && (
+      {!isPending && !isMovingToFallbackPage && !isError && data && data.content.length === 0 && (
         <EmptyState title={emptyTitle} />
       )}
 

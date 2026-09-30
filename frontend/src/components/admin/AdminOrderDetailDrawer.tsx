@@ -23,7 +23,7 @@ export function AdminOrderDetailDrawer({ orderId, onClose }: AdminOrderDetailDra
 
   const items: OrderSummaryItem[] =
     detail?.items.map((item) => ({
-      key: item.productId,
+      key: item.productOrderNumber,
       title: item.productName,
       thumbnailUrl: item.thumbnailUrl ?? undefined,
       price: item.price,
