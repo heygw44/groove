@@ -177,11 +177,10 @@ public class OrderClaimWriter {
 	}
 
 	/** 관리자, 반품 수거 시작. */
-	@Transactional
+	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public OrderClaim startCollecting(Long claimId) {
-		OrderClaim claim = findClaim(claimId);
+		OrderClaim claim = lockAndFindClaim(claimId);
 		OrderItem item = claim.getOrderItem();
-		lockOrderOf(item);
 		claim.startCollecting();
 		item.markCollecting();
 		return claim;
@@ -224,12 +223,6 @@ public class OrderClaimWriter {
 			throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
 		}
 		return orderRepository.findWithItemsByIdAndMemberId(orderId, memberId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
-	}
-
-	private void lockOrderOf(OrderItem item) {
-		Long orderId = item.getOrder().getId();
-		orderRepository.findByIdForUpdate(orderId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 	}
 

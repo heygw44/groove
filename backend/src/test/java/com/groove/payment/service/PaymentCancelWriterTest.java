@@ -2,7 +2,9 @@ package com.groove.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
@@ -16,6 +18,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -33,6 +37,8 @@ import com.groove.global.common.ErrorCode;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderCancelRestorer;
@@ -181,6 +187,61 @@ class PaymentCancelWriterTest {
 			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-2");
 			verify(paymentCancelRepository).save(captor.capture());
 			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-2");
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderItemStatus.class, names = {"PREPARING", "SHIPPING", "DELIVERED"})
+		@DisplayName("상품주문이 PAID 가 아니면 ORDER_INVALID_STATUS 예외를 던지고 결제 상태를 바꾸지 않는다")
+		void rejectsWhenItemFulfillmentStarted(OrderItemStatus itemStatus) {
+			// given
+			OrderFixture.markItemsStatus(order, itemStatus);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(order.getCancelReason()).isNull();
+			verify(paymentCancelRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("상품주문에 클레임 표시가 있으면 ORDER_INVALID_STATUS 예외를 던지고 결제 상태를 바꾸지 않는다")
+		void rejectsWhenItemHasClaim() {
+			// given
+			OrderFixture.markFirstItemClaimStatus(order, OrderItemClaimStatus.CANCEL_REQUEST);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			verify(paymentCancelRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("이미 CANCEL_REQUESTED 면 상품주문이 이미 진행됐어도 예외 없이 기존 요청을 반환한다")
+		void returnsExistingRequestEvenIfItemsProgressed() {
+			// given
+			order.requestCancel("기존 사유");
+			payment.requestCancel();
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PREPARING);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+			givenRequestedRow(requestedPaymentCancel("cancel-" + payment.getPaymentKey() + "-3"));
+
+			// when
+			CancelRequest result = writer.requestCancel(ORDER_ID, MEMBER_ID, "새 사유");
+
+			// then
+			assertThat(result.alreadyRequested()).isTrue();
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-3");
 		}
 
 		@Test

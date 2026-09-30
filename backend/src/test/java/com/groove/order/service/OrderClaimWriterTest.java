@@ -393,6 +393,7 @@ class OrderClaimWriterTest {
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.RETURN_REQUEST);
 			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
 			given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
@@ -402,6 +403,23 @@ class OrderClaimWriterTest {
 			// then
 			assertThat(collecting.getStatus()).isEqualTo(OrderClaimStatus.COLLECTING);
 			assertThat(item.getClaimStatus()).isEqualTo(OrderItemClaimStatus.COLLECTING);
+			InOrder inOrder = inOrder(orderRepository, orderClaimRepository);
+			inOrder.verify(orderRepository).findByIdForUpdate(ORDER_ID);
+			inOrder.verify(orderClaimRepository).findWithOrderItemById(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("클레임이 없으면 COMMON_RESOURCE_NOT_FOUND 예외를 던지고 주문을 잠그지 않는다")
+		void throwsWhenClaimMissing() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> writer.startCollecting(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_RESOURCE_NOT_FOUND);
+			verify(orderRepository, never()).findByIdForUpdate(any());
 		}
 	}
 

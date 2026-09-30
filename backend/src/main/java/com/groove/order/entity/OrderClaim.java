@@ -5,6 +5,7 @@ import static lombok.AccessLevel.PROTECTED;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -25,6 +26,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -86,6 +88,12 @@ public class OrderClaim extends BaseTimeEntity {
 
 	@Column(name = "resolved_at")
 	private LocalDateTime resolvedAt;
+
+	/** 락 이전 스냅샷으로 판단한 쓰기가 다른 트랜잭션의 변경을 덮어쓰지 못하게 하는 최종 방어선. 충돌은 409. */
+	@Version
+	@Column(nullable = false)
+	@ColumnDefault("0")
+	private Long version;
 
 	private OrderClaim(OrderItem orderItem, OrderClaimType type, String reason, RefundAccountInfo refundAccount,
 			LocalDateTime requestedAt) {

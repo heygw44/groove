@@ -98,7 +98,7 @@ public class PaymentRefundWriter {
 	 * 함께 커밋한다 - 마무리가 실패하면 취소 건도 REQUESTED 로 남아 대사가 같은 멱등키로 다시 이어받는다. 따로
 	 * 커밋하면 "환불은 DONE 인데 클레임은 진행 중"인 상태가 남고, 재승인이 환불을 한 번 더 내보낸다.
 	 */
-	@Transactional
+	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public void completeRefund(Long paymentId, Long paymentCancelId, BigDecimal cancelAmount, String transactionKey,
 			LocalDateTime canceledAt) {
 		PaymentCancel paymentCancel = findPaymentCancel(paymentCancelId);

@@ -79,6 +79,16 @@ class OrderClaimFinalizeServiceTest {
 		ReflectionTestUtils.setField(item, "id", ITEM_ID);
 	}
 
+	private void stubClaimLookup(OrderClaim claim) {
+		given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+		given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+	}
+
+	private void stubOrderLock() {
+		given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+		given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+	}
+
 	/** 클레임이 REQUESTED·COLLECTING(진행 중)이어서 실제로 주문을 다시 읽는 테스트에서만 스텁한다. */
 	private void stubOrderLookup() {
 		given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
@@ -197,7 +207,7 @@ class OrderClaimFinalizeServiceTest {
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+			stubClaimLookup(claim);
 			stubOrderLookup();
 
 			// when
@@ -220,7 +230,7 @@ class OrderClaimFinalizeServiceTest {
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			ReflectionTestUtils.setField(claim, "restock", true);
-			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+			stubClaimLookup(claim);
 			stubOrderLookup();
 
 			// when
@@ -243,7 +253,7 @@ class OrderClaimFinalizeServiceTest {
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			ReflectionTestUtils.setField(claim, "restock", false);
-			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+			stubClaimLookup(claim);
 			stubOrderLookup();
 
 			// when
@@ -260,7 +270,58 @@ class OrderClaimFinalizeServiceTest {
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.DONE);
-			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+			stubClaimLookup(claim);
+			stubOrderLock();
+
+			// when
+			service.applyRefundDone(CLAIM_ID, NOW);
+
+			// then
+			verify(restorer, never()).restoreItems(any(), any(), eq(true), eq(true));
+		}
+
+		@Test
+		@DisplayName("주문 락을 잡은 뒤에 클레임을 읽는다")
+		void locksOrderBeforeLoadingClaim() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubClaimLookup(claim);
+			stubOrderLookup();
+
+			// when
+			service.applyRefundDone(CLAIM_ID, NOW);
+
+			// then
+			InOrder inOrder = inOrder(orderClaimRepository, orderRepository);
+			inOrder.verify(orderClaimRepository).findOrderIdById(CLAIM_ID);
+			inOrder.verify(orderRepository).findByIdForUpdate(ORDER_ID);
+			inOrder.verify(orderClaimRepository).findById(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("클레임이 없으면 주문을 잠그지 않고 돌아간다")
+		void returnsWhenClaimMissing() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.empty());
+
+			// when
+			service.applyRefundDone(CLAIM_ID, NOW);
+
+			// then
+			verify(orderRepository, never()).findByIdForUpdate(any());
+			verify(orderClaimRepository, never()).findById(any());
+		}
+
+		@Test
+		@DisplayName("락 뒤에 클레임이 사라졌으면 아무 것도 하지 않는다")
+		void returnsWhenClaimDeletedAfterLock() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+			stubOrderLock();
+			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.empty());
 
 			// when
 			service.applyRefundDone(CLAIM_ID, NOW);
@@ -282,7 +343,7 @@ class OrderClaimFinalizeServiceTest {
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+			stubClaimLookup(claim);
 			stubOrderLookup();
 
 			// when
@@ -301,13 +362,64 @@ class OrderClaimFinalizeServiceTest {
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.WITHDRAWN);
-			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.of(claim));
+			stubClaimLookup(claim);
+			stubOrderLock();
 
 			// when
 			service.applyRefundFailed(CLAIM_ID);
 
 			// then
 			assertThat(claim.getStatus()).isEqualTo(OrderClaimStatus.WITHDRAWN);
+		}
+
+		@Test
+		@DisplayName("주문 락을 잡은 뒤에 클레임을 읽는다")
+		void locksOrderBeforeLoadingClaim() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PAID);
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubClaimLookup(claim);
+			stubOrderLookup();
+
+			// when
+			service.applyRefundFailed(CLAIM_ID);
+
+			// then
+			InOrder inOrder = inOrder(orderClaimRepository, orderRepository);
+			inOrder.verify(orderClaimRepository).findOrderIdById(CLAIM_ID);
+			inOrder.verify(orderRepository).findByIdForUpdate(ORDER_ID);
+			inOrder.verify(orderClaimRepository).findById(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("클레임이 없으면 주문을 잠그지 않고 돌아간다")
+		void returnsWhenClaimMissing() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.empty());
+
+			// when
+			service.applyRefundFailed(CLAIM_ID);
+
+			// then
+			verify(orderRepository, never()).findByIdForUpdate(any());
+			verify(orderClaimRepository, never()).findById(any());
+		}
+
+		@Test
+		@DisplayName("락 뒤에 클레임이 사라졌으면 아무 것도 하지 않는다")
+		void returnsWhenClaimDeletedAfterLock() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+			stubOrderLock();
+			given(orderClaimRepository.findById(CLAIM_ID)).willReturn(Optional.empty());
+
+			// when
+			service.applyRefundFailed(CLAIM_ID);
+
+			// then
+			assertThat(item.getClaimStatus()).isNull();
 		}
 	}
 }

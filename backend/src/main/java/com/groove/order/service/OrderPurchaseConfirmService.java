@@ -3,6 +3,7 @@ package com.groove.order.service;
 import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.global.common.BusinessException;
@@ -26,7 +27,7 @@ public class OrderPurchaseConfirmService {
 	private final OrderItemRepository orderItemRepository;
 	private final OrderRepository orderRepository;
 
-	@Transactional
+	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public boolean confirm(Long itemId, LocalDateTime cutoff, LocalDateTime now) {
 		Long orderId = orderItemRepository.findOrderIdById(itemId).orElse(null);
 		if (orderId == null) {
