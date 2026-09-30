@@ -27,6 +27,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -109,6 +110,12 @@ public class OrderItem extends BaseTimeEntity {
 
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
+
+	/** 락 이전 스냅샷으로 판단한 쓰기가 다른 트랜잭션의 변경을 덮어쓰지 못하게 하는 최종 방어선. 충돌은 409. */
+	@Version
+	@Column(nullable = false)
+	@ColumnDefault("0")
+	private Long version;
 
 	@Builder(access = PRIVATE)
 	private OrderItem(Order order, Product product, String productName, BigDecimal productPrice, int quantity,

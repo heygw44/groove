@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,9 @@ import lombok.RequiredArgsConstructor;
  * 부분환불의 최종 결과(성공·실패)를 클레임과 상품주문에 반영한다. 클레임 승인 직후 결과가 바로 확인되는 경우와,
  * 결과불명으로 남았다가 대사({@code PaymentCancelRetrier})가 나중에 확정하는 경우 모두 이 클래스를 거친다 -
  * 클레임 완료 로직이 한 곳에만 있어야 두 경로가 어긋나지 않는다.
+ *
+ * <p>주문 락을 잡기 전에는 주문 id 만 프로젝션으로 읽고, 클레임·상품주문은 락 뒤에 처음 읽는다. READ COMMITTED 인
+ * 이유는 {@code OrderClaimWriter} 와 같다 - 락을 기다리는 동안 커밋된 변경을 봐야 옛 상태로 덮어쓰지 않는다.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -56,14 +60,17 @@ public class OrderClaimFinalizeService {
 	 * 토스 부분취소가 확정됐을 때 클레임을 종결하고 상품주문을 취소·반품으로 확정한다. 이미 종결된 클레임이면
 	 * 아무 것도 하지 않는다(멱등 - 즉시 반영 경로와 대사 경로가 같은 클레임을 두 번 마무리하려 할 수 있다).
 	 */
-	@Transactional
+	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public void applyRefundDone(Long orderClaimId, LocalDateTime canceledAt) {
+		Long orderId = orderClaimRepository.findOrderIdById(orderClaimId).orElse(null);
+		if (orderId == null) {
+			return;
+		}
+		Order order = lockAndLoadOrder(orderId);
 		OrderClaim claim = orderClaimRepository.findById(orderClaimId).orElse(null);
 		if (claim == null || !claim.isInProgress()) {
 			return;
 		}
-		Long orderId = claim.getOrderItem().getOrder().getId();
-		Order order = lockAndLoadOrder(orderId);
 		OrderItem item = findItem(order, claim.getOrderItem().getId());
 		LocalDateTime now = canceledAt != null ? canceledAt : LocalDateTime.now(clock);
 		boolean restock;
@@ -84,14 +91,17 @@ public class OrderClaimFinalizeService {
 	 * 토스가 명시적으로 거절했거나(즉시 반영 경로) 대사가 미반영을 확인했을 때 클레임을 거부로 되돌린다.
 	 * 상품주문의 이행 상태는 그대로 두고 클레임 파생 표시만 남긴다.
 	 */
-	@Transactional
+	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public void applyRefundFailed(Long orderClaimId) {
+		Long orderId = orderClaimRepository.findOrderIdById(orderClaimId).orElse(null);
+		if (orderId == null) {
+			return;
+		}
+		Order order = lockAndLoadOrder(orderId);
 		OrderClaim claim = orderClaimRepository.findById(orderClaimId).orElse(null);
 		if (claim == null || !claim.isInProgress()) {
 			return;
 		}
-		Long orderId = claim.getOrderItem().getOrder().getId();
-		Order order = lockAndLoadOrder(orderId);
 		OrderItem item = findItem(order, claim.getOrderItem().getId());
 		LocalDateTime now = LocalDateTime.now(clock);
 		claim.reject("결제 취소 실패", now);
