@@ -29,6 +29,14 @@ SET oi.status = CASE
         ELSE oi.status
     END;
 
+-- 재설계 전에는 발송·배송완료가 주문의 마지막 상태 변경이라 orders.updated_at 을 그 시각으로 쓴다.
+UPDATE order_item oi
+JOIN orders o ON o.id = oi.order_id
+SET oi.prepared_at = CASE WHEN oi.status = 'PREPARING' THEN o.updated_at ELSE oi.prepared_at END,
+    oi.shipped_at = CASE WHEN oi.status IN ('SHIPPING', 'DELIVERED') THEN o.updated_at ELSE oi.shipped_at END,
+    oi.delivered_at = CASE WHEN oi.status = 'DELIVERED' THEN o.updated_at ELSE oi.delivered_at END
+WHERE oi.status IN ('PREPARING', 'SHIPPING', 'DELIVERED');
+
 -- 가상계좌 발급 후(placed_at 있음) 입금 없이(payment.approved_at 없음) 입금기한이 지나 만료된 주문만
 -- CANCELED_BY_NOPAYMENT 로 바꾼다. 입금 전 구매자가 직접 취소한 주문은 Order.cancel 과 같이 CANCELED 로 둔다.
 UPDATE order_item oi
@@ -129,5 +137,13 @@ SELECT COUNT(*) FROM (
     GROUP BY product_order_number
     HAVING COUNT(*) > 1
 ) invalid_number;
+
+-- 준비중·배송중·배송완료 상품주문에 해당 단계 시각이 비어 있는 건.
+INSERT INTO v26_invariant (violations)
+SELECT COUNT(*)
+FROM order_item
+WHERE (status = 'PREPARING' AND prepared_at IS NULL)
+   OR (status IN ('SHIPPING', 'DELIVERED') AND shipped_at IS NULL)
+   OR (status = 'DELIVERED' AND delivered_at IS NULL);
 
 DROP TEMPORARY TABLE v26_invariant;
