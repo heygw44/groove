@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -32,12 +33,15 @@ import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderClaim;
+import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.config.PaymentReconcileProperties;
 import com.groove.payment.dto.PaymentCancelRetryCandidate;
 import com.groove.payment.entity.Payment;
@@ -75,6 +79,9 @@ class PaymentCancelRetrierTest {
 	@Mock
 	private OrderClaimFinalizeService orderClaimFinalizeService;
 
+	@Mock
+	private OrderClaimRepository orderClaimRepository;
+
 	private PaymentCancelRetrier retrier;
 	private Clock clock;
 
@@ -84,7 +91,8 @@ class PaymentCancelRetrierTest {
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 				Duration.ofMinutes(2), 50, 10, Duration.ofMinutes(1));
 		retrier = new PaymentCancelRetrier(refundWriter, paymentRepository, reconcileLogRepository, paymentClient,
-				properties, clock, alertNotifier, orderClaimFinalizeService);
+				properties, clock, alertNotifier, orderClaimFinalizeService,
+				orderClaimRepository);
 	}
 
 	@Nested
@@ -108,6 +116,63 @@ class PaymentCancelRetrierTest {
 			verify(refundWriter).completeRefund(PAYMENT_ID, PAYMENT_CANCEL_ID, CANCEL_AMOUNT, "txn-retry-1",
 					canceledAt);
 			verifyNoInteractions(paymentRepository, reconcileLogRepository, alertNotifier);
+		}
+
+		@Test
+		@DisplayName("클레임 환불이면 클레임에 저장된 환불계좌를 취소 요청에 싣는다")
+		void sendsClaimRefundAccountWhenClaimExists() {
+			// given
+			Long claimId = 700L;
+			RefundAccountInfo account = new RefundAccountInfo("088", "110123456789", "홍길동");
+			OrderClaim claim = mock(OrderClaim.class);
+			given(claim.getRefundAccount()).willReturn(account);
+			given(orderClaimRepository.findById(claimId)).willReturn(Optional.of(claim));
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willReturn(new PaymentCancelResult(
+					PAYMENT_KEY, "PARTIAL_CANCELED", NOW.minusMinutes(1), "txn-retry-1", BigDecimal.ZERO));
+
+			// when
+			retrier.retry(candidateWithClaim(NOW.minusMinutes(5), claimId));
+
+			// then
+			ArgumentCaptor<PaymentCancelCommand> captor = ArgumentCaptor.forClass(PaymentCancelCommand.class);
+			verify(paymentClient).cancel(captor.capture());
+			assertThat(captor.getValue().refundReceiveAccount()).isEqualTo(account);
+			assertThat(captor.getValue().idempotencyKey()).isEqualTo(IDEMPOTENCY_KEY);
+		}
+
+		@Test
+		@DisplayName("클레임 행이 없으면 환불계좌 없이 취소를 부른다")
+		void sendsNullAccountWhenClaimMissing() {
+			// given
+			Long claimId = 700L;
+			given(orderClaimRepository.findById(claimId)).willReturn(Optional.empty());
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willReturn(new PaymentCancelResult(
+					PAYMENT_KEY, "PARTIAL_CANCELED", NOW.minusMinutes(1), "txn-retry-1", BigDecimal.ZERO));
+
+			// when
+			retrier.retry(candidateWithClaim(NOW.minusMinutes(5), claimId));
+
+			// then
+			ArgumentCaptor<PaymentCancelCommand> captor = ArgumentCaptor.forClass(PaymentCancelCommand.class);
+			verify(paymentClient).cancel(captor.capture());
+			assertThat(captor.getValue().refundReceiveAccount()).isNull();
+		}
+
+		@Test
+		@DisplayName("클레임과 무관한 취소 건이면 클레임을 조회하지 않고 환불계좌 없이 부른다")
+		void sendsNullAccountWithoutClaimLookupWhenNoClaimId() {
+			// given
+			given(paymentClient.cancel(any(PaymentCancelCommand.class))).willReturn(new PaymentCancelResult(
+					PAYMENT_KEY, "PARTIAL_CANCELED", NOW.minusMinutes(1), "txn-retry-1", BigDecimal.ZERO));
+
+			// when
+			retrier.retry(candidate(NOW.minusMinutes(5)));
+
+			// then
+			ArgumentCaptor<PaymentCancelCommand> captor = ArgumentCaptor.forClass(PaymentCancelCommand.class);
+			verify(paymentClient).cancel(captor.capture());
+			assertThat(captor.getValue().refundReceiveAccount()).isNull();
+			verifyNoInteractions(orderClaimRepository);
 		}
 
 		@Test
@@ -308,7 +373,7 @@ class PaymentCancelRetrierTest {
 					Duration.ofMinutes(2), 50, 1, Duration.ofDays(30));
 			PaymentCancelRetrier longGraceRetrier = new PaymentCancelRetrier(refundWriter, paymentRepository,
 					reconcileLogRepository, paymentClient, longGraceProperties, clock, alertNotifier,
-					orderClaimFinalizeService);
+					orderClaimFinalizeService, orderClaimRepository);
 			PaymentCancelRetryCandidate candidate = candidate(NOW.minusDays(15));
 			Payment payment = paymentWith(new BigDecimal("30000"), BigDecimal.ZERO);
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));

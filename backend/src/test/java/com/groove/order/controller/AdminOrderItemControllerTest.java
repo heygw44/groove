@@ -80,7 +80,7 @@ class AdminOrderItemControllerTest {
 			// given
 			AdminOrderItemSummaryResponse summary = new AdminOrderItemSummaryResponse(900L, 700L,
 					"20260903-TESTAB12-01", "20260903-TESTAB12", "buyer@groove.com", "그루브 앨범", 1,
-					OrderItemStatus.PAID, null, null, null, LocalDateTime.now());
+					OrderItemStatus.PAID, null, null, null, LocalDateTime.now(), false);
 			given(adminOrderItemService.getList(any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
 
 			// when & then

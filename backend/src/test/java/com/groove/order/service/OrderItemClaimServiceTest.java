@@ -37,6 +37,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderItemResponse;
+import com.groove.order.dto.OrderReturnRequest;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderItemStatus;
@@ -218,6 +219,35 @@ class OrderItemClaimServiceTest {
 
 			// then
 			verify(refundHook, never()).refund(any(), any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("환불계좌가 있으면 변환해 반품 요청에 전달한다")
+		void convertsRefundAccount() {
+			// given
+			OrderReturnRequest request = new OrderReturnRequest("사유",
+					new OrderCancelRequest.RefundAccount("088", "12345678901234", "홍길동"));
+			RefundAccountInfo expected = new RefundAccountInfo("088", "12345678901234", "홍길동");
+			given(orderItemRepository.findWithProductById(ITEM_ID)).willReturn(Optional.of(item));
+
+			// when
+			service.returnItem(MEMBER_ID, ORDER_ID, ITEM_ID, request);
+
+			// then
+			verify(writer).requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, "사유", expected);
+		}
+
+		@Test
+		@DisplayName("요청 본문이 없으면 사유와 환불계좌 없이 반품을 요청한다")
+		void passesNullsWhenNoBody() {
+			// given
+			given(orderItemRepository.findWithProductById(ITEM_ID)).willReturn(Optional.of(item));
+
+			// when
+			service.returnItem(MEMBER_ID, ORDER_ID, ITEM_ID, null);
+
+			// then
+			verify(writer).requestReturn(MEMBER_ID, ORDER_ID, ITEM_ID, null, null);
 		}
 	}
 

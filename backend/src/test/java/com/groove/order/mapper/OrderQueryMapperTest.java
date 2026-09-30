@@ -20,8 +20,11 @@ import com.groove.fixture.CouponFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
+import com.groove.order.dto.AdminOrderItemSearchCondition;
+import com.groove.order.dto.AdminOrderItemSummaryResponse;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.dto.OrderListItemRow;
@@ -755,6 +758,52 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(count).isEqualTo(result.size());
+		}
+	}
+
+	@Nested
+	@DisplayName("findAdminOrderItems()")
+	class FindAdminOrderItems {
+
+		@Test
+		@DisplayName("가상계좌 결제 주문의 상품주문만 virtualAccountPayment 가 true 다")
+		void flagsVirtualAccountPaymentOnly() {
+			// given
+			Order virtualAccountOrder = persistOrder(owner, "20260903-OQMVA0001", kindOfBlue, 1);
+			Order cardOrder = persistOrder(other, "20260903-OQMVA0002", loveSupreme, 1);
+			em.persist(PaymentFixture.virtualAccountApproved(virtualAccountOrder, "toss-va-oqm-1"));
+			em.persist(PaymentFixture.approved(cardOrder, "toss-card-oqm-1"));
+			em.flush();
+			em.clear();
+
+			// when: 회원 이메일 접두어로 두 주문만 좁힌다
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, "order-query-", null, null, 0, 100));
+
+			// then
+			assertThat(result).filteredOn(row -> row.orderId().equals(virtualAccountOrder.getId()))
+					.hasSize(1)
+					.allMatch(AdminOrderItemSummaryResponse::virtualAccountPayment);
+			assertThat(result).filteredOn(row -> row.orderId().equals(cardOrder.getId()))
+					.hasSize(1)
+					.noneMatch(AdminOrderItemSummaryResponse::virtualAccountPayment);
+		}
+
+		@Test
+		@DisplayName("결제 행이 없는 주문은 virtualAccountPayment 가 false 다")
+		void flagsFalseWhenNoPayment() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQMVA0003", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, "order-query-", null, null, 0, 100));
+
+			// then
+			assertThat(result).filteredOn(row -> row.orderId().equals(order.getId()))
+					.hasSize(1)
+					.noneMatch(AdminOrderItemSummaryResponse::virtualAccountPayment);
 		}
 	}
 }

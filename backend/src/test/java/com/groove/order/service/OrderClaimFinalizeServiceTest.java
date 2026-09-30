@@ -122,7 +122,7 @@ class OrderClaimFinalizeServiceTest {
 		@DisplayName("COLLECTING 인 반품 클레임도 진행 중이라 통과한다")
 		void passesForCollectingClaim() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
@@ -226,7 +226,7 @@ class OrderClaimFinalizeServiceTest {
 			// given
 			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.COLLECTING);
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			ReflectionTestUtils.setField(claim, "restock", true);
@@ -249,7 +249,7 @@ class OrderClaimFinalizeServiceTest {
 			// given
 			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.COLLECTING);
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			ReflectionTestUtils.setField(claim, "restock", false);

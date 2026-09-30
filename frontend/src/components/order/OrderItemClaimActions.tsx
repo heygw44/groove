@@ -128,9 +128,9 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
     );
   };
 
-  const handleReturn = (reason?: string) => {
+  const handleReturn = (reason?: string, refundAccount?: RefundAccount) => {
     returnMutation.mutate(
-      { orderId, itemId: item.id, reason },
+      { orderId, itemId: item.id, reason, refundAccount },
       callbacks('반품 요청이 접수됐습니다.'),
     );
   };
@@ -190,6 +190,7 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
         open={openDialog === 'return'}
         onClose={closeDialog}
         onConfirm={handleReturn}
+        payment={payment}
         pending={returnMutation.isPending}
       />
       <ConfirmDialog

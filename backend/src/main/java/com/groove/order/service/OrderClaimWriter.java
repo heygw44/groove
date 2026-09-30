@@ -20,6 +20,8 @@ import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.RefundAccountInfo;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -38,6 +40,7 @@ public class OrderClaimWriter {
 
 	private final OrderRepository orderRepository;
 	private final OrderClaimRepository orderClaimRepository;
+	private final PaymentRepository paymentRepository;
 	private final OrderClaimRefundReader refundReader;
 	private final Clock clock;
 
@@ -55,6 +58,7 @@ public class OrderClaimWriter {
 		if (status != OrderItemStatus.PAID && status != OrderItemStatus.PREPARING) {
 			throw new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
 		}
+		validateRefundAccount(orderId, refundAccount);
 		LocalDateTime now = LocalDateTime.now(clock);
 		OrderClaim claim = orderClaimRepository.save(OrderClaim.requestCancel(item, reason, refundAccount, now));
 		item.markClaimRequested(OrderItemClaimStatus.CANCEL_REQUEST);
@@ -65,7 +69,8 @@ public class OrderClaimWriter {
 
 	/** 반품 요청. 배송완료 후 {@link OrderItemActionPolicy#RETURN_PERIOD_DAYS}일 이내이고 구매확정 전이어야 한다(D7). */
 	@Transactional
-	public OrderClaimRequestResult requestReturn(Long memberId, Long orderId, Long itemId, String reason) {
+	public OrderClaimRequestResult requestReturn(Long memberId, Long orderId, Long itemId, String reason,
+			RefundAccountInfo refundAccount) {
 		Order order = lockOwnedOrder(orderId, memberId);
 		OrderItem item = findItem(order, itemId);
 		validateNoActiveClaim(item);
@@ -77,7 +82,8 @@ public class OrderClaimWriter {
 				|| now.isAfter(item.getDeliveredAt().plusDays(OrderItemActionPolicy.RETURN_PERIOD_DAYS))) {
 			throw new BusinessException(ErrorCode.ORDER_RETURN_PERIOD_EXPIRED);
 		}
-		OrderClaim claim = orderClaimRepository.save(OrderClaim.requestReturn(item, reason, now));
+		validateRefundAccount(orderId, refundAccount);
+		OrderClaim claim = orderClaimRepository.save(OrderClaim.requestReturn(item, reason, refundAccount, now));
 		item.markClaimRequested(OrderItemClaimStatus.RETURN_REQUEST);
 		return new OrderClaimRequestResult(claim.getId(), item.getId(), order.getId(), item.getRefundableAmount(),
 				false);
@@ -102,7 +108,8 @@ public class OrderClaimWriter {
 
 	/**
 	 * 관리자 판매취소. 구매자 요청 없이 관리자가 직접 즉시 취소를 시작한다({@code PAID}·{@code PREPARING} 모두
-	 * 즉시 대상) - 승인 대기 없이 곧바로 환불을 시도하므로 항상 {@code immediate=true}다.
+	 * 즉시 대상) - 승인 대기 없이 곧바로 환불을 시도하므로 항상 {@code immediate=true}다. 가상계좌 결제는 구매자
+	 * 환불계좌가 있어야 환불되는데 관리자는 그 계좌를 모르므로 클레임을 만들기 전에 거절한다.
 	 */
 	@Transactional
 	public OrderClaimRequestResult requestAdminCancel(Long orderId, Long itemId, String reason) {
@@ -116,6 +123,7 @@ public class OrderClaimWriter {
 		if (status != OrderItemStatus.PAID && status != OrderItemStatus.PREPARING) {
 			throw new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
 		}
+		validateRefundAccount(orderId, null);
 		LocalDateTime now = LocalDateTime.now(clock);
 		OrderClaim claim = orderClaimRepository.save(OrderClaim.requestCancel(item, reason, null, now));
 		item.markClaimRequested(OrderItemClaimStatus.CANCEL_REQUEST);
@@ -190,6 +198,19 @@ public class OrderClaimWriter {
 	public OrderClaim findClaim(Long claimId) {
 		return orderClaimRepository.findWithOrderItemById(claimId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND));
+	}
+
+	/**
+	 * 가상계좌 결제는 토스가 환불계좌를 요구한다. 계좌 없이 클레임을 만들면 승인·수거완료 시점에야 환불이 실패해
+	 * 클레임이 거부로 끝나므로 요청 시점에 받는다.
+	 */
+	private void validateRefundAccount(Long orderId, RefundAccountInfo refundAccount) {
+		boolean virtualAccount = paymentRepository.findByOrderId(orderId)
+				.map(Payment::isVirtualAccount)
+				.orElse(false);
+		if (virtualAccount && refundAccount == null) {
+			throw new BusinessException(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
+		}
 	}
 
 	private void validateNoPendingRefund(OrderClaim claim) {

@@ -68,7 +68,9 @@ public class OrderItemClaimService {
 	/** 배송완료 후 7일 이내(D7)인 상품주문에 반품 클레임을 만든다. 환불은 관리자 수거 완료 시점에 일어난다. */
 	public OrderItemResponse returnItem(Long memberId, Long orderId, Long itemId, OrderReturnRequest request) {
 		String reason = request == null ? null : request.reason();
-		writer.requestReturn(memberId, orderId, itemId, reason);
+		RefundAccountInfo refundAccount = OrderCancelRequest.RefundAccount.toInfo(
+				request == null ? null : request.refundAccount());
+		writer.requestReturn(memberId, orderId, itemId, reason, refundAccount);
 		return buildResponse(itemId);
 	}
 
@@ -94,11 +96,6 @@ public class OrderItemClaimService {
 	}
 
 	private RefundAccountInfo toRefundAccount(OrderCancelRequest request) {
-		if (request == null || request.refundAccount() == null) {
-			return null;
-		}
-		OrderCancelRequest.RefundAccount refundAccount = request.refundAccount();
-		return new RefundAccountInfo(refundAccount.bankCode(), refundAccount.accountNumber(),
-				refundAccount.holderName());
+		return OrderCancelRequest.RefundAccount.toInfo(request == null ? null : request.refundAccount());
 	}
 }

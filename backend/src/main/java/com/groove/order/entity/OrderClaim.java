@@ -110,8 +110,10 @@ public class OrderClaim extends BaseTimeEntity {
 		return new OrderClaim(orderItem, OrderClaimType.CANCEL, reason, refundAccount, now);
 	}
 
-	public static OrderClaim requestReturn(OrderItem orderItem, String reason, LocalDateTime now) {
-		return new OrderClaim(orderItem, OrderClaimType.RETURN, reason, null, now);
+	/** 가상계좌 결제면 수거 완료 시 환불에 쓸 계좌를 요청 시점에 함께 받는다. */
+	public static OrderClaim requestReturn(OrderItem orderItem, String reason, RefundAccountInfo refundAccount,
+			LocalDateTime now) {
+		return new OrderClaim(orderItem, OrderClaimType.RETURN, reason, refundAccount, now);
 	}
 
 	/** 관리자 승인 또는 즉시 취소 가능 구간(PAID)의 자동 승인. CANCEL 클레임 전용. */

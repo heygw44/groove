@@ -2,7 +2,7 @@ import { Button } from '@/components/common/Button';
 import { OrderItemStatusBadge } from '@/components/order/OrderItemStatusBadge';
 import { COURIERS } from '@/constants/couriers';
 import type { AdminOrderItemSummary } from '@/types/adminOrder';
-import { canCancelItem } from '@/utils/adminOrderActions';
+import { canCancelItem, isSaleCancelBlockedByRefundAccount } from '@/utils/adminOrderActions';
 import { formatServerDateTime } from '@/utils/formatDate';
 
 interface AdminOrderItemTableProps {
@@ -13,6 +13,8 @@ interface AdminOrderItemTableProps {
   onCancel: (item: AdminOrderItemSummary) => void;
   onOpenOrder: (orderId: number) => void;
 }
+
+const REFUND_ACCOUNT_REQUIRED_NOTICE = '구매자 환불계좌가 필요합니다';
 
 const HEADERS = [
   '상품주문번호',
@@ -101,14 +103,25 @@ export function AdminOrderItemTable({
               </td>
               <td className="py-2.5 pr-3" onClick={(event) => event.stopPropagation()}>
                 {canCancelItem(item) && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    aria-label={`상품주문 ${item.productOrderNumber} 판매취소`}
-                    onClick={() => onCancel(item)}
-                  >
-                    판매취소
-                  </Button>
+                  <div className="flex flex-col items-start gap-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      aria-label={`상품주문 ${item.productOrderNumber} 판매취소`}
+                      disabled={isSaleCancelBlockedByRefundAccount(item)}
+                      title={
+                        isSaleCancelBlockedByRefundAccount(item)
+                          ? REFUND_ACCOUNT_REQUIRED_NOTICE
+                          : undefined
+                      }
+                      onClick={() => onCancel(item)}
+                    >
+                      판매취소
+                    </Button>
+                    {isSaleCancelBlockedByRefundAccount(item) && (
+                      <span className="text-xs text-content-muted">구매자 환불계좌 필요</span>
+                    )}
+                  </div>
                 )}
               </td>
             </tr>

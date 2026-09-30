@@ -20,6 +20,7 @@ const buildItem = (id: number): AdminOrderItemSummary => ({
   productName: `레코드 ${id}`,
   quantity: 1,
   status: 'PREPARING',
+  virtualAccountPayment: false,
   createdAt: '2026-09-13T00:00:00',
 });
 

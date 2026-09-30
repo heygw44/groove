@@ -1,13 +1,17 @@
 import { useState } from 'react';
 
 import { Button } from '@/components/common/Button';
-import { Input } from '@/components/common/Input';
 import { Modal } from '@/components/common/Modal';
-import { Select } from '@/components/common/Select';
 import { Textarea } from '@/components/common/Textarea';
-import { BANK_OPTIONS } from '@/constants/banks';
+import { RefundAccountFields } from '@/components/order/RefundAccountFields';
 import type { RefundAccount } from '@/types/order';
 import type { OrderPayment } from '@/types/payment';
+import { requiresRefundAccount } from '@/utils/paymentStatus';
+import {
+  EMPTY_REFUND_ACCOUNT,
+  normalizeRefundAccount,
+  REFUND_ACCOUNT_INCOMPLETE_MESSAGE,
+} from '@/utils/refundAccount';
 
 const REASON_MAX_LENGTH = 200;
 
@@ -23,8 +27,6 @@ interface OrderCancelDialogProps {
   /** 확정 버튼 라벨. 상품 단위 취소·취소 요청처럼 문구가 다른 곳에서 바꿔 쓴다. */
   confirmLabel?: string;
 }
-
-const EMPTY_REFUND_ACCOUNT: RefundAccount = { bankCode: '', accountNumber: '', holderName: '' };
 
 export function OrderCancelDialog({
   open,
@@ -50,27 +52,23 @@ export function OrderCancelDialog({
     }
   }
 
-  const isVirtualAccount = Boolean(payment?.virtualAccount);
-  const isPaid = payment?.status === 'DONE';
+  const isPaid = payment?.status === 'DONE' || payment?.status === 'PARTIAL_CANCELED';
   const isWaitingForDeposit = payment?.status === 'WAITING_FOR_DEPOSIT';
-  const requiresRefundAccount = isVirtualAccount && isPaid;
-  const showGenericRefundNotice = isPaid && !isVirtualAccount;
+  const needsRefundAccount = requiresRefundAccount(payment);
+  const showGenericRefundNotice = isPaid && !payment?.virtualAccount;
 
   const handleConfirm = () => {
-    if (requiresRefundAccount) {
-      const { bankCode, accountNumber, holderName } = refundAccount;
-      if (!bankCode || !accountNumber || !holderName.trim()) {
-        setRefundAccountError('환불계좌 정보를 모두 입력해주세요.');
-        return;
-      }
-      onConfirm(reason.trim() || undefined, {
-        bankCode,
-        accountNumber,
-        holderName: holderName.trim(),
-      });
+    const trimmedReason = reason.trim() || undefined;
+    if (!needsRefundAccount) {
+      onConfirm(trimmedReason);
       return;
     }
-    onConfirm(reason.trim() || undefined);
+    const normalized = normalizeRefundAccount(refundAccount);
+    if (!normalized) {
+      setRefundAccountError(REFUND_ACCOUNT_INCOMPLETE_MESSAGE);
+      return;
+    }
+    onConfirm(trimmedReason, normalized);
   };
 
   return (
@@ -102,66 +100,13 @@ export function OrderCancelDialog({
             발급된 입금 계좌를 닫습니다. 아직 입금 전이라 환불할 금액은 없습니다.
           </p>
         )}
-        {requiresRefundAccount && (
-          <div className="mb-4 flex flex-col gap-3">
-            <p className="text-sm text-content-muted">
-              무통장입금은 환불계좌로 직접 환불됩니다. 계좌 정보를 입력해주세요.
-            </p>
-            <div>
-              <label htmlFor="refund-bank" className="mb-1.5 block text-sm text-content-muted">
-                은행
-              </label>
-              <Select
-                id="refund-bank"
-                value={refundAccount.bankCode}
-                onChange={(event) =>
-                  setRefundAccount((prev) => ({ ...prev, bankCode: event.target.value }))
-                }
-              >
-                <option value="">은행 선택</option>
-                {BANK_OPTIONS.map((bank) => (
-                  <option key={bank.code} value={bank.code}>
-                    {bank.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <label
-                htmlFor="refund-account-number"
-                className="mb-1.5 block text-sm text-content-muted"
-              >
-                계좌번호
-              </label>
-              <Input
-                id="refund-account-number"
-                inputMode="numeric"
-                value={refundAccount.accountNumber}
-                onChange={(event) =>
-                  setRefundAccount((prev) => ({
-                    ...prev,
-                    accountNumber: event.target.value.replace(/\D/g, ''),
-                  }))
-                }
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="refund-holder-name"
-                className="mb-1.5 block text-sm text-content-muted"
-              >
-                예금주
-              </label>
-              <Input
-                id="refund-holder-name"
-                value={refundAccount.holderName}
-                onChange={(event) =>
-                  setRefundAccount((prev) => ({ ...prev, holderName: event.target.value }))
-                }
-              />
-            </div>
-            {refundAccountError && <p className="text-sm text-danger">{refundAccountError}</p>}
-          </div>
+        {needsRefundAccount && (
+          <RefundAccountFields
+            idPrefix="cancel-refund"
+            value={refundAccount}
+            onChange={setRefundAccount}
+            error={refundAccountError}
+          />
         )}
         <label htmlFor="order-cancel-reason" className="mb-1.5 block text-sm text-content-muted">
           취소 사유 (선택)

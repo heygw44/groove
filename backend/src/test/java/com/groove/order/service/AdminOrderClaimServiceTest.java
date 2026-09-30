@@ -336,7 +336,7 @@ class AdminOrderClaimServiceTest {
 		@DisplayName("반품 수거 시작을 감사 로그로 남긴다")
 		void startsCollecting() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			given(writer.startCollecting(CLAIM_ID)).willReturn(claim);
 			stubItemResponseLookup();
@@ -358,7 +358,7 @@ class AdminOrderClaimServiceTest {
 		@DisplayName("COLLECTING 인 RETURN 클레임을 완료 처리하면 환불을 시도한다")
 		void completesReturnClaim() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
 			given(writer.chooseRestock(CLAIM_ID, true)).willReturn(claim);
@@ -375,7 +375,7 @@ class AdminOrderClaimServiceTest {
 		@DisplayName("COLLECTING 이 아니면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
 		void throwsWhenNotCollecting() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			given(writer.chooseRestock(CLAIM_ID, true)).willThrow(new BusinessException(
 					ErrorCode.ORDER_CLAIM_NOT_ALLOWED));
@@ -409,7 +409,7 @@ class AdminOrderClaimServiceTest {
 		@DisplayName("RETURN 클레임이어도 COLLECTING 이 아니면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
 		void throwsWhenReturnClaimNotCollecting() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", null, NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			given(writer.chooseRestock(CLAIM_ID, true)).willReturn(claim);
 

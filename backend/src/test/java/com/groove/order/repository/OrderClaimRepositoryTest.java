@@ -83,7 +83,7 @@ class OrderClaimRepositoryTest extends DataJpaTestSupport {
 			List<OrderClaimCountRow> before = orderClaimRepository.countByTypeAndStatus();
 			List<OrderItem> items = saveOrderItems("claim-count", 2);
 			orderClaimRepository.save(OrderClaim.requestCancel(items.get(0), "사유", null, NOW));
-			OrderClaim collecting = OrderClaim.requestReturn(items.get(1), "사유", NOW);
+			OrderClaim collecting = OrderClaim.requestReturn(items.get(1), "사유", null, NOW);
 			collecting.startCollecting();
 			orderClaimRepository.saveAndFlush(collecting);
 
