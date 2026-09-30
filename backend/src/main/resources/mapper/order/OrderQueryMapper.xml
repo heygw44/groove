@@ -19,6 +19,17 @@
 		</constructor>
 	</resultMap>
 
+	<!-- oi = order_item 별칭을 전제로 한다. 주문 필터(myOrdersWhere)와 카드의 상품 행 조회가 같은 조건을 공유한다. -->
+	<sql id="itemInStatusGroup">
+		oi.status IN
+		<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
+			#{s}
+		</foreach>
+		<if test="statusGroup.claimBased">
+			OR oi.claim_status IS NOT NULL
+		</if>
+	</sql>
+
 	<sql id="myOrdersWhere">
 		<where>
 			o.member_id = #{memberId}
@@ -28,13 +39,7 @@
 					SELECT 1 FROM order_item oi
 					WHERE oi.order_id = o.id
 					AND (
-						oi.status IN
-						<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
-							#{s}
-						</foreach>
-						<if test="statusGroup.claimBased">
-							OR oi.claim_status IS NOT NULL
-						</if>
+						<include refid="itemInStatusGroup"/>
 					)
 				)
 			</if>
@@ -99,6 +104,11 @@
 		<foreach item="orderId" collection="orderIds" open="(" separator="," close=")">
 			#{orderId}
 		</foreach>
+		<if test="statusGroup != null">
+			AND (
+				<include refid="itemInStatusGroup"/>
+			)
+		</if>
 		ORDER BY oi.order_id, oi.id
 	</select>
 
