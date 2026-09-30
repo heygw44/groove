@@ -4,6 +4,7 @@ import type { OrderPayment, PaymentStatus } from '@/types/payment';
 export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
   'READY',
   'DONE',
+  'PARTIAL_CANCELED',
   'CANCELED',
   'FAILED',
   'UNKNOWN',
@@ -14,6 +15,7 @@ export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   READY: '승인대기',
   DONE: '결제완료',
+  PARTIAL_CANCELED: '부분취소',
   CANCELED: '결제취소',
   FAILED: '결제실패',
   UNKNOWN: '결과 확인 중',
@@ -24,6 +26,7 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
 export const PAYMENT_STATUS_BADGE: Record<PaymentStatus, BadgeVariant> = {
   READY: 'accent',
   DONE: 'success',
+  PARTIAL_CANCELED: 'accent',
   CANCELED: 'danger',
   FAILED: 'danger',
   UNKNOWN: 'accent',

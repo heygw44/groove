@@ -74,6 +74,7 @@ import com.groove.order.mapper.OrderQueryMapper;
 import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -689,6 +690,26 @@ class OrderServiceTest {
 			assertThat(response.payment()).isNotNull();
 			assertThat(response.payment().method()).isEqualTo(PaymentFixture.METHOD);
 			assertThat(response.payment().approvedAt()).isEqualTo(PaymentFixture.APPROVED_AT);
+		}
+
+		@Test
+		@DisplayName("부분취소된 결제도 payment 를 함께 내려준다")
+		void includesPaymentWhenPartialCanceled() {
+			// given
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 1),
+					606L));
+			order.markPaid();
+			Payment payment = PaymentFixture.partialCanceled(order, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, PaymentFixture.CANCELED_AT, BigDecimal.ONE);
+			given(orderRepository.findWithItemsByIdAndMemberId(606L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(606L)).willReturn(Optional.of(payment));
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 606L);
+
+			// then
+			assertThat(response.payment()).isNotNull();
+			assertThat(response.payment().status()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
 		}
 
 		@Test

@@ -43,6 +43,25 @@ describe('PaymentInfoCard', () => {
     expect(screen.getByText('네이버페이')).toBeInTheDocument();
   });
 
+  it('부분취소된 결제도 결제수단을 보여준다', () => {
+    // given
+    const payment = buildPayment({ status: 'PARTIAL_CANCELED', easyPayProvider: '네이버페이' });
+
+    // when
+    render(
+      <PaymentInfoCard
+        totalAmount={30000}
+        discountAmount={3000}
+        finalAmount={27000}
+        payment={payment}
+      />,
+    );
+
+    // then
+    expect(screen.getByText('네이버페이')).toBeInTheDocument();
+    expect(screen.queryByText('결제 전')).not.toBeInTheDocument();
+  });
+
   it('가상계좌 입금대기면 무통장입금 (입금대기)를 보여준다', () => {
     // given
     const payment = buildPayment({

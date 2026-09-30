@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { OrderPayment, PaymentStatus } from '@/types/payment';
 import {
   PAYMENT_STATUSES,
+  PAYMENT_STATUS_BADGE,
   PAYMENT_STATUS_LABEL,
   getPaymentMethodLabel,
   isReconcilePending,
@@ -29,10 +30,19 @@ describe('PAYMENT_STATUS_LABEL', () => {
   });
 });
 
+describe('PAYMENT_STATUS_LABEL / PAYMENT_STATUS_BADGE PARTIAL_CANCELED', () => {
+  it('PARTIAL_CANCELED 는 부분취소 라벨과 accent 배지를 갖는다', () => {
+    // given & when & then
+    expect(PAYMENT_STATUS_LABEL.PARTIAL_CANCELED).toBe('부분취소');
+    expect(PAYMENT_STATUS_BADGE.PARTIAL_CANCELED).toBe('accent');
+  });
+});
+
 describe('isReconcilePending()', () => {
   it.each<[PaymentStatus, boolean]>([
     ['READY', false],
     ['DONE', false],
+    ['PARTIAL_CANCELED', false],
     ['CANCELED', false],
     ['FAILED', false],
     ['UNKNOWN', true],

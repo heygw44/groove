@@ -48,6 +48,7 @@ import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentCancel;
+import com.groove.payment.entity.PaymentCancelStatus;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
@@ -704,6 +705,29 @@ class PaymentConfirmWriterTest {
 			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + PaymentFixture.PAYMENT_KEY);
 			assertThat(captor.getValue().getCancelAmount()).isEqualByComparingTo(payment.getAmount());
 			assertThat(captor.getValue().getTossTransactionKey()).isEqualTo("txn-1");
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo(payment.getAmount());
+		}
+
+		@Test
+		@DisplayName("같은 멱등키 REQUESTED 행이 이미 있으면 새로 만들지 않고 그 행을 완료한다")
+		void completesExistingRequestedRowInsteadOfInserting() {
+			// given
+			Payment payment = paymentWithId(Payment.ready(order), 42L);
+			given(paymentRepository.findById(42L)).willReturn(Optional.of(payment));
+			LocalDateTime canceledAt = now.plusSeconds(1);
+			PaymentCancel existing = PaymentCancel.request(payment, "cancel-" + PaymentFixture.PAYMENT_KEY,
+					payment.getAmount(), "사유", now);
+			given(paymentCancelRepository.findByIdempotencyKey("cancel-" + PaymentFixture.PAYMENT_KEY))
+					.willReturn(Optional.of(existing));
+
+			// when
+			writer.markCompensated(42L, PaymentFixture.PAYMENT_KEY, PaymentFixture.APPROVED_AT, canceledAt, "사유",
+					"txn-2");
+
+			// then
+			assertThat(existing.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
+			assertThat(existing.getTossTransactionKey()).isEqualTo("txn-2");
+			verify(paymentCancelRepository, never()).save(any());
 		}
 
 		@Test

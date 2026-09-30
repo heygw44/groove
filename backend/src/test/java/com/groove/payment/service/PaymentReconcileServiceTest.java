@@ -30,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
@@ -191,7 +192,7 @@ class PaymentReconcileServiceTest {
 		}
 
 		@Test
-		@DisplayName("토스가 이미 취소된 결제면 SYNC_CANCELED 로 결제를 CANCELED 로 남긴다")
+		@DisplayName("토스가 이미 취소된 결제면 SYNC_CANCELED 로 취소 기록을 남기는 보상 경로에 위임한다")
 		void appliesSyncCanceledDecision() {
 			// given
 			Order order = orderWithStatus(OrderStatus.PENDING);
@@ -200,10 +201,33 @@ class PaymentReconcileServiceTest {
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
 
 			// when
-			service.apply(candidate(), lookupOf(PaymentLookupStatus.CANCELED, AMOUNT));
+			service.apply(candidate(), lookupOf(PaymentLookupStatus.CANCELED, AMOUNT, AMOUNT));
+
+			// then
+			verify(writer).compensateWithCancelRecord(eq(payment), eq(PAYMENT_KEY), any(LocalDateTime.class),
+					any(LocalDateTime.class), any(String.class), eq("txn-recon"));
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.CANCELED);
+		}
+
+		@Test
+		@DisplayName("입금 전 가상계좌가 토스에서 닫혔으면 취소 기록 없이 결제만 CANCELED 로 닫는다")
+		void closesUnpaidVirtualAccountWithoutCancelRecord() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = PaymentFixture.withStatus(readyPayment(order), PaymentStatus.WAITING_FOR_DEPOSIT);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.CANCELED, PAYMENT_KEY, "가상계좌",
+					AMOUNT, null, now, AMOUNT, null);
+
+			// when
+			service.apply(candidate(), lookup);
 
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(payment.getApprovedAt()).isNull();
+			assertThat(payment.getCanceledAt()).isEqualTo(now);
+			verify(writer, never()).compensateWithCancelRecord(any(), any(), any(), any(), any(), any());
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.CANCELED);
 		}
 

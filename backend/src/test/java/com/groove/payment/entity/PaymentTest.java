@@ -493,6 +493,19 @@ class PaymentTest {
 		}
 
 		@Test
+		@DisplayName("CANCELED 로 확정하면 취소 누적액을 결제 금액 전체로 채운다")
+		void fillsCanceledAmountWithFullAmount() {
+			// given
+			Payment payment = Payment.ready(order());
+
+			// when
+			payment.compensate(PAYMENT_KEY, APPROVED_AT, CANCELED_AT, "사유");
+
+			// then
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo(payment.getAmount());
+		}
+
+		@Test
 		@DisplayName("이미 결제 키와 승인 시각이 있으면 덮어쓰지 않는다")
 		void doesNotOverwriteExistingPaymentKeyAndApprovedAt() {
 			// given: 이전 대사 라운드에서 결제 키와 승인 시각까지는 채웠지만 CANCELED 로 확정되지 못한 상태를 흉내낸다.

@@ -1,5 +1,6 @@
 package com.groove.fixture;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import org.springframework.test.util.ReflectionTestUtils;
@@ -37,6 +38,13 @@ public final class PaymentFixture {
 		Payment payment = approvedAt(order, paymentKey, approvedAt);
 		payment.requestCancel();
 		payment.completeCancel(canceledAt);
+		return payment;
+	}
+
+	public static Payment partialCanceled(Order order, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt, BigDecimal cancelAmount) {
+		Payment payment = approvedAt(order, paymentKey, approvedAt);
+		payment.applyPartialCancel(cancelAmount, canceledAt);
 		return payment;
 	}
 

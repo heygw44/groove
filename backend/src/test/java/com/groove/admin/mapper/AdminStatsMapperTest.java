@@ -95,6 +95,17 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		em.persist(paymentCancel);
 	}
 
+	/** 부분취소는 결제를 PARTIAL_CANCELED 로 두고 취소액은 payment_cancel DONE 행으로만 남긴다. */
+	private void persistPartialCanceledPayment(Order order, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt, BigDecimal cancelAmount) {
+		Payment payment = PaymentFixture.partialCanceled(order, paymentKey, approvedAt, canceledAt, cancelAmount);
+		em.persist(payment);
+		PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-" + paymentKey, cancelAmount, null,
+				canceledAt);
+		paymentCancel.complete(null, canceledAt);
+		em.persist(paymentCancel);
+	}
+
 	@Nested
 	@DisplayName("findDailySales()")
 	class FindDailySales {
@@ -578,6 +589,34 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			assertThat(result.todayCancelAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(result.todayOrderCount()).isEqualTo(2);
 			assertThat(result.todayNewMemberCount()).isZero();
+		}
+
+		@Test
+		@DisplayName("부분취소(PARTIAL_CANCELED)된 결제도 승인 금액 전체를 매출로, 부분 환불액을 취소로 집계한다")
+		void countsPartialCanceledPaymentAsSale() {
+			// given
+			LocalDateTime todayStart = LocalDateTime.of(2031, 8, 10, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2031, 8, 11, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Partial", new BigDecimal("100000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			Order order = OrderFixture.create(member, "20310810-ASMSUM020");
+			order.addItem(product, 1);
+			OrderFixture.markPaid(order);
+			em.persist(order);
+			persistPartialCanceledPayment(order, "asm-summary-key-partial", LocalDateTime.of(2031, 8, 10, 9, 0),
+					LocalDateTime.of(2031, 8, 10, 12, 0), new BigDecimal("30000"));
+
+			em.flush();
+			em.clear();
+
+			// when
+			AdminStatsSummaryResponse result = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			// then
+			assertThat(result.todaySalesAmount()).isEqualByComparingTo(new BigDecimal("100000"));
+			assertThat(result.todayCancelAmount()).isEqualByComparingTo(new BigDecimal("30000"));
+			assertThat(result.todayOrderCount()).isEqualTo(1);
 		}
 
 		@Test

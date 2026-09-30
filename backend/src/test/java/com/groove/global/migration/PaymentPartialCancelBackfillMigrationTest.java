@@ -115,6 +115,30 @@ class PaymentPartialCancelBackfillMigrationTest {
 		}
 
 		@Test
+		@DisplayName("취소 진행 중(CANCEL_REQUESTED) 결제는 런타임이 찾는 cancel-{payment_key} REQUESTED 행을 백필한다")
+		void backfillsRequestedPaymentCancelForCancelRequestedPayment() throws Exception {
+			// given
+			LocalDateTime approvedAt = LocalDateTime.of(2026, 9, 1, 10, 0);
+			long orderId = insertOrder("20260901-LEGACY05");
+			long paymentId = insertPayment(orderId, "CANCEL_REQUESTED", "30000", approvedAt, null);
+
+			// when
+			migrateToLatest();
+
+			// then
+			try (Connection connection = connect()) {
+				assertThat(findPaymentCancelCount(connection, paymentId)).isEqualTo(1);
+				PaymentCancelRow row = findPaymentCancelRow(connection, paymentId);
+				assertThat(row.idempotencyKey()).isEqualTo("cancel-toss-key-" + orderId);
+				assertThat(row.cancelAmount()).isEqualByComparingTo("30000");
+				assertThat(row.status()).isEqualTo("REQUESTED");
+				assertThat(row.requestedAt()).isEqualTo(approvedAt);
+				assertThat(row.doneAt()).isNull();
+				assertThat(findCanceledAmount(connection, paymentId)).isEqualByComparingTo("0");
+			}
+		}
+
+		@Test
 		@DisplayName("승인 없이 취소된(입금 전 가상계좌 폐쇄) 결제는 payment_cancel 행이 생기지 않고 canceled_amount 는 0으로 남는다")
 		void doesNotBackfillForCanceledVirtualAccountNeverApproved() throws Exception {
 			// given: 입금 전 가상계좌 폐쇄는 approved_at 이 끝까지 null 이다 - 돈이 오간 적이 없어 환불이 아니다

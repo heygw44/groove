@@ -1,5 +1,12 @@
 export type PaymentStatus =
-  'READY' | 'DONE' | 'CANCELED' | 'FAILED' | 'UNKNOWN' | 'CANCEL_REQUESTED' | 'WAITING_FOR_DEPOSIT';
+  | 'READY'
+  | 'DONE'
+  | 'PARTIAL_CANCELED'
+  | 'CANCELED'
+  | 'FAILED'
+  | 'UNKNOWN'
+  | 'CANCEL_REQUESTED'
+  | 'WAITING_FOR_DEPOSIT';
 
 export interface VirtualAccount {
   bankCode: string;
@@ -28,7 +35,7 @@ export interface PaymentConfirmResponse {
   virtualAccount: VirtualAccount | null;
 }
 
-/** 주문 상세에 포함되는 결제 정보. 승인 이력이 있는 결제(DONE/WAITING_FOR_DEPOSIT/CANCEL_REQUESTED/CANCELED)만 내려온다. */
+/** 주문 상세에 포함되는 결제 정보. 승인 이력이 있는 결제(DONE/PARTIAL_CANCELED/WAITING_FOR_DEPOSIT/CANCEL_REQUESTED/CANCELED)만 내려온다. */
 export interface OrderPayment {
   paymentId: number;
   method: string;

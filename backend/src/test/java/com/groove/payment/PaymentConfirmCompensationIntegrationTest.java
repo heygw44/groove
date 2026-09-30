@@ -152,6 +152,7 @@ class PaymentConfirmCompensationIntegrationTest extends IntegrationTestSupport {
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
 			assertThat(payment.getApprovedAt()).isEqualTo(approvedAt);
 			assertThat(payment.getCanceledAt()).isEqualTo(canceledAt);
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo(payment.getAmount());
 			Order order = orderRepository.findById(orderInfo.orderId()).orElseThrow();
 			assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELED);
 			Stock stock = stockRepository.findByProductId(product.getId()).orElseThrow();
