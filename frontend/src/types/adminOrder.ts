@@ -121,6 +121,20 @@ export interface AdminOrderClaimSummary {
   requestedAt: string;
 }
 
+export interface AdminOrderClaimStatusCounts {
+  requested: number;
+  collecting: number;
+  done: number;
+  rejected: number;
+  withdrawn: number;
+  total: number;
+}
+
+export interface AdminOrderClaimCounts {
+  cancel: AdminOrderClaimStatusCounts;
+  returns: AdminOrderClaimStatusCounts;
+}
+
 export interface AdminOrderClaimListParams {
   type?: OrderClaimType;
   status?: OrderClaimStatus;

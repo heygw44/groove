@@ -1,7 +1,10 @@
 import type {
+  AdminOrderClaimCounts,
+  AdminOrderClaimStatusCounts,
   AdminOrderClaimSummary,
   AdminOrderItemSummary,
   OrderClaimStatus,
+  OrderClaimType,
 } from '@/types/adminOrder';
 import type { OrderItemClaimStatus } from '@/types/order';
 
@@ -43,10 +46,59 @@ export const getClaimActions = (
   return [];
 };
 
-export const CLAIM_STATUS_LABEL: Record<OrderClaimStatus, string> = {
-  REQUESTED: '접수',
-  COLLECTING: '수거중',
-  DONE: '완료',
-  REJECTED: '거부',
-  WITHDRAWN: '철회',
+const CLAIM_STATUS_LABEL: Record<OrderClaimType, Record<OrderClaimStatus, string>> = {
+  CANCEL: {
+    REQUESTED: '취소요청',
+    COLLECTING: '수거중',
+    DONE: '취소완료',
+    REJECTED: '취소거부',
+    WITHDRAWN: '요청철회',
+  },
+  RETURN: {
+    REQUESTED: '반품요청',
+    COLLECTING: '수거중',
+    DONE: '반품완료',
+    REJECTED: '반품거부',
+    WITHDRAWN: '요청철회',
+  },
 };
+
+export const getClaimStatusLabel = (type: OrderClaimType, status: OrderClaimStatus): string =>
+  CLAIM_STATUS_LABEL[type][status];
+
+/** 취소 클레임은 수거 단계를 거치지 않는다. */
+export const CLAIM_STATUSES_BY_TYPE: Record<OrderClaimType, readonly OrderClaimStatus[]> = {
+  CANCEL: ['REQUESTED', 'DONE', 'REJECTED', 'WITHDRAWN'],
+  RETURN: ['REQUESTED', 'COLLECTING', 'DONE', 'REJECTED', 'WITHDRAWN'],
+};
+
+export const CLAIM_TYPE_DESCRIPTION: Record<OrderClaimType, string> = {
+  CANCEL:
+    '배송 준비 중 상품의 취소요청을 승인하면 바로 환불됩니다. 결제완료 상품은 구매자가 즉시 취소해 취소완료로 바로 쌓입니다.',
+  RETURN:
+    '배송완료 후 7일 안에 들어온 반품요청입니다. 수거를 시작하고, 상품이 도착하면 반품완료로 처리해 환불합니다.',
+};
+
+const CLAIM_COUNT_FIELD: Record<OrderClaimStatus, keyof AdminOrderClaimStatusCounts> = {
+  REQUESTED: 'requested',
+  COLLECTING: 'collecting',
+  DONE: 'done',
+  REJECTED: 'rejected',
+  WITHDRAWN: 'withdrawn',
+};
+
+export const pickClaimCounts = (
+  counts: AdminOrderClaimCounts,
+  type: OrderClaimType,
+): AdminOrderClaimStatusCounts => (type === 'CANCEL' ? counts.cancel : counts.returns);
+
+export const pickClaimCount = (
+  counts: AdminOrderClaimStatusCounts,
+  status: OrderClaimStatus,
+): number => counts[CLAIM_COUNT_FIELD[status]];
+
+/** 관리자가 처리해야 하는 건수. 반품은 수거를 시작한 뒤에도 반품완료 처리가 남아 수거중까지 센다. */
+export const countActionableClaims = (
+  counts: AdminOrderClaimStatusCounts,
+  type: OrderClaimType,
+): number => (type === 'RETURN' ? counts.requested + counts.collecting : counts.requested);

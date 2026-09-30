@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { AdminClaimCompleteModal } from '@/components/admin/AdminClaimCompleteModal';
+import {
+  AdminClaimStatusChips,
+  type ClaimStatusFilter,
+} from '@/components/admin/AdminClaimStatusChips';
 import { AdminOrderClaimTable } from '@/components/admin/AdminOrderClaimTable';
 import { AdminReasonModal } from '@/components/admin/AdminReasonModal';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
 import { QueryErrorState } from '@/components/common/QueryErrorState';
-import { Select } from '@/components/common/Select';
 import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useToast } from '@/components/common/toastContext';
 import {
@@ -17,9 +20,17 @@ import {
   useCompleteAdminOrderClaim,
   useRejectAdminOrderClaim,
 } from '@/hooks/mutations/useAdminOrderMutations';
+import { useAdminOrderClaimCounts } from '@/hooks/queries/useAdminOrderClaimCounts';
 import { useAdminOrderClaims } from '@/hooks/queries/useAdminOrderClaims';
-import type { AdminOrderClaimSummary, OrderClaimStatus, OrderClaimType } from '@/types/adminOrder';
-import { CLAIM_STATUS_LABEL, type AdminClaimAction } from '@/utils/adminOrderActions';
+import type { AdminOrderClaimSummary, OrderClaimType } from '@/types/adminOrder';
+import {
+  CLAIM_STATUSES_BY_TYPE,
+  CLAIM_TYPE_DESCRIPTION,
+  getClaimStatusLabel,
+  countActionableClaims,
+  pickClaimCounts,
+  type AdminClaimAction,
+} from '@/utils/adminOrderActions';
 import { getErrorMessage } from '@/utils/apiError';
 
 const CLAIM_PAGE_SIZE = 20;
@@ -29,16 +40,29 @@ const CLAIM_TABS: { type: OrderClaimType; label: string }[] = [
   { type: 'RETURN', label: '반품' },
 ];
 
-const CLAIM_STATUSES = Object.keys(CLAIM_STATUS_LABEL) as OrderClaimStatus[];
+const DEFAULT_STATUS: ClaimStatusFilter = 'REQUESTED';
 
 const isClaimType = (value: string | null): value is OrderClaimType =>
   value === 'CANCEL' || value === 'RETURN';
 
-const isClaimStatus = (value: string | null): value is OrderClaimStatus =>
-  CLAIM_STATUSES.some((status) => status === value);
+/** 파라미터가 없거나 이 유형에 없는 상태면 처리 대기로 돌린다. */
+const parseStatus = (value: string | null, type: OrderClaimType): ClaimStatusFilter => {
+  if (value === 'ALL') {
+    return 'ALL';
+  }
+  return CLAIM_STATUSES_BY_TYPE[type].find((status) => status === value) ?? DEFAULT_STATUS;
+};
 
 const parsePage = (value: string | null): number =>
   value !== null && /^\d+$/.test(value) ? Number(value) : 0;
+
+const getEmptyTitle = (type: OrderClaimType, status: ClaimStatusFilter): string => {
+  if (status === 'ALL') {
+    return '클레임이 없습니다';
+  }
+  const label = getClaimStatusLabel(type, status);
+  return status === 'REQUESTED' ? `처리 대기 중인 ${label}이 없습니다` : `${label} 내역이 없습니다`;
+};
 
 interface PendingAction {
   claim: AdminOrderClaimSummary;
@@ -50,19 +74,20 @@ export default function AdminOrderClaimsPage() {
   const { showToast } = useToast();
 
   const typeParam = searchParams.get('type');
-  const statusParam = searchParams.get('status');
   const type: OrderClaimType = isClaimType(typeParam) ? typeParam : 'CANCEL';
-  const status = isClaimStatus(statusParam) ? statusParam : undefined;
+  const status = parseStatus(searchParams.get('status'), type);
   const page = parsePage(searchParams.get('page'));
 
   const [pendingAction, setPendingAction] = useState<PendingAction>();
 
   const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminOrderClaims({
     type,
-    status,
+    status: status === 'ALL' ? undefined : status,
     page,
     size: CLAIM_PAGE_SIZE,
   });
+  const { data: counts } = useAdminOrderClaimCounts();
+  const typeCounts = counts && pickClaimCounts(counts, type);
 
   const approveMutation = useApproveAdminOrderClaim();
   const collectMutation = useCollectAdminOrderClaim();
@@ -71,13 +96,13 @@ export default function AdminOrderClaimsPage() {
 
   const updateSearch = (next: {
     type?: OrderClaimType;
-    status?: OrderClaimStatus;
+    status?: ClaimStatusFilter;
     page?: number;
   }) => {
     const params = new URLSearchParams();
     params.set('type', next.type ?? type);
-    const nextStatus = 'status' in next ? next.status : status;
-    if (nextStatus !== undefined) {
+    const nextStatus = next.status ?? status;
+    if (nextStatus !== DEFAULT_STATUS) {
       params.set('status', nextStatus);
     }
     if (next.page) {
@@ -122,6 +147,8 @@ export default function AdminOrderClaimsPage() {
       { onSuccess: () => handleDone('클레임을 거부했습니다.'), onError: handleFailed },
     );
 
+  const emptyTitle = getEmptyTitle(type, status);
+
   const claim = pendingAction?.claim;
   const action = pendingAction?.action;
 
@@ -134,45 +161,44 @@ export default function AdminOrderClaimsPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="클레임 종류" className="flex gap-1">
-          {CLAIM_TABS.map((tab) => (
+      <div role="tablist" aria-label="클레임 종류" className="mb-2 flex gap-1">
+        {CLAIM_TABS.map((tab) => {
+          const pendingCount =
+            counts && countActionableClaims(pickClaimCounts(counts, tab.type), tab.type);
+          return (
             <button
               key={tab.type}
               type="button"
               role="tab"
               aria-selected={tab.type === type}
-              onClick={() => updateSearch({ type: tab.type, page: 0 })}
-              className={`h-9 rounded-md px-4 text-sm font-medium ${
+              onClick={() => updateSearch({ type: tab.type, status: DEFAULT_STATUS, page: 0 })}
+              className={`flex h-9 items-center gap-1.5 rounded-md border px-4 text-sm font-medium ${
                 tab.type === type
-                  ? 'bg-content text-surface'
-                  : 'text-content-muted hover:bg-surface-muted'
+                  ? 'border-content bg-content text-surface'
+                  : 'border-line-strong bg-surface text-content-muted hover:bg-surface-muted'
               }`}
             >
               {tab.label}
+              {pendingCount !== undefined && pendingCount > 0 && (
+                <span
+                  aria-label={`처리할 클레임 ${pendingCount}건`}
+                  className="rounded-full bg-accent px-1.5 text-xs leading-5 text-accent-content"
+                >
+                  {pendingCount}
+                </span>
+              )}
             </button>
-          ))}
-        </div>
-
-        <Select
-          aria-label="클레임 상태 필터"
-          value={status ?? ''}
-          onChange={(event) =>
-            updateSearch({
-              status: isClaimStatus(event.target.value) ? event.target.value : undefined,
-              page: 0,
-            })
-          }
-          className="w-32"
-        >
-          <option value="">전체</option>
-          {CLAIM_STATUSES.map((claimStatus) => (
-            <option key={claimStatus} value={claimStatus}>
-              {CLAIM_STATUS_LABEL[claimStatus]}
-            </option>
-          ))}
-        </Select>
+          );
+        })}
       </div>
+      <p className="mb-4 text-sm text-content-muted">{CLAIM_TYPE_DESCRIPTION[type]}</p>
+
+      <AdminClaimStatusChips
+        type={type}
+        value={status}
+        counts={typeCounts}
+        onChange={(next) => updateSearch({ status: next, page: 0 })}
+      />
 
       {isPending && <TableSkeleton columns={8} />}
 
@@ -181,7 +207,7 @@ export default function AdminOrderClaimsPage() {
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (
-        <EmptyState title="조건에 맞는 클레임이 없습니다" />
+        <EmptyState title={emptyTitle} />
       )}
 
       {!isPending && !isError && data && data.content.length > 0 && (

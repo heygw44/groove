@@ -2,8 +2,8 @@ import { Badge, type BadgeVariant } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import type { AdminOrderClaimSummary, OrderClaimStatus } from '@/types/adminOrder';
 import {
-  CLAIM_STATUS_LABEL,
   getClaimActions,
+  getClaimStatusLabel,
   type AdminClaimAction,
 } from '@/utils/adminOrderActions';
 import { formatServerDateTime } from '@/utils/formatDate';
@@ -54,8 +54,8 @@ export function AdminOrderClaimTable({ claims, onAction }: AdminOrderClaimTableP
                 {claim.reason ?? '-'}
               </td>
               <td className="py-2.5 pr-3">
-                <Badge variant={CLAIM_STATUS_BADGE[claim.status]}>
-                  {CLAIM_STATUS_LABEL[claim.status]}
+                <Badge variant={CLAIM_STATUS_BADGE[claim.status]} className="whitespace-nowrap">
+                  {getClaimStatusLabel(claim.type, claim.status)}
                 </Badge>
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">

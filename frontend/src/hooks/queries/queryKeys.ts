@@ -74,6 +74,7 @@ export const adminOrderKeys = {
 export const adminOrderClaimKeys = {
   all: ['adminOrderClaims'] as const,
   list: (params: AdminOrderClaimListParams) => ['adminOrderClaims', params] as const,
+  counts: () => ['adminOrderClaims', 'counts'] as const,
 };
 
 export const reviewKeys = {
