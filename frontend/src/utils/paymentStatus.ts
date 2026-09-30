@@ -66,6 +66,11 @@ export const getOrderCancelSuccessMessage = (order: OrderDetail): string => {
     : ORDER_CANCEL_SUCCESS_MESSAGE;
 };
 
+/** 입금이 끝난 가상계좌 결제는 환불 때 구매자 환불계좌가 필요하다. */
+export const requiresRefundAccount = (payment?: OrderPayment): boolean =>
+  Boolean(payment?.virtualAccount) &&
+  (payment?.status === 'DONE' || payment?.status === 'PARTIAL_CANCELED');
+
 const NO_PAYMENT_LABEL = '결제 전';
 const VIRTUAL_ACCOUNT_LABEL = '무통장입금';
 

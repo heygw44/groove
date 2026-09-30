@@ -107,14 +107,19 @@ interface ReturnOrderItemVariables {
   orderId: number;
   itemId: number;
   reason?: string;
+  refundAccount?: RefundAccount;
 }
 
 export const useReturnOrderItem = () => {
   const invalidateOrders = useInvalidateOrders();
 
   return useMutation({
-    mutationFn: ({ orderId, itemId, reason }: ReturnOrderItemVariables) =>
-      returnOrderItem(orderId, itemId, reason ? { reason } : undefined),
+    mutationFn: ({ orderId, itemId, reason, refundAccount }: ReturnOrderItemVariables) =>
+      returnOrderItem(
+        orderId,
+        itemId,
+        reason || refundAccount ? { reason, refundAccount } : undefined,
+      ),
     onSuccess: invalidateOrders,
   });
 };

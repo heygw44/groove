@@ -169,4 +169,5 @@ export interface OrderCancelRequest {
 
 export interface OrderReturnRequest {
   reason?: string;
+  refundAccount?: RefundAccount;
 }

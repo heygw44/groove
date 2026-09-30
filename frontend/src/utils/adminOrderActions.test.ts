@@ -9,6 +9,7 @@ import {
   CLAIM_STATUSES_BY_TYPE,
   getClaimActions,
   getClaimStatusLabel,
+  isSaleCancelBlockedByRefundAccount,
   pickClaimCount,
   countActionableClaims,
 } from '@/utils/adminOrderActions';
@@ -22,6 +23,7 @@ const item = (overrides: Partial<AdminOrderItemSummary>): AdminOrderItemSummary 
   productName: '레코드',
   quantity: 1,
   status: 'PAID',
+  virtualAccountPayment: false,
   createdAt: '2026-09-13T00:00:00',
   ...overrides,
 });
@@ -115,5 +117,15 @@ describe('countActionableClaims()', () => {
   it('반품은 반품요청과 수거중을 더해 센다', () => {
     // when & then
     expect(countActionableClaims(counts, 'RETURN')).toBe(5);
+  });
+});
+
+describe('isSaleCancelBlockedByRefundAccount()', () => {
+  it.each([
+    [true, true],
+    [false, false],
+  ])('virtualAccountPayment 가 %s 이면 %s 를 반환한다', (virtualAccountPayment, expected) => {
+    // when & then
+    expect(isSaleCancelBlockedByRefundAccount(item({ virtualAccountPayment }))).toBe(expected);
   });
 });

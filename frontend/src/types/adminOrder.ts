@@ -22,6 +22,8 @@ export interface AdminOrderItemSummary {
   claimStatus?: OrderItemClaimStatus;
   courierCode?: CourierCode;
   trackingNumber?: string;
+  /** 가상계좌 결제 주문. 판매취소에 구매자 환불계좌가 필요해 관리자가 직접 취소할 수 없다. */
+  virtualAccountPayment: boolean;
   createdAt: string;
 }
 

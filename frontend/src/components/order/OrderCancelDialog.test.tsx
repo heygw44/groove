@@ -71,6 +71,30 @@ describe('OrderCancelDialog', () => {
     expect(screen.queryByLabelText('은행')).not.toBeInTheDocument();
   });
 
+  it('가상계좌 부분취소(PARTIAL_CANCELED)여도 환불계좌 입력란을 보여준다', () => {
+    // given & when
+    render(
+      <OrderCancelDialog
+        open
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        payment={buildPayment({
+          status: 'PARTIAL_CANCELED',
+          virtualAccount: {
+            bankCode: '020',
+            accountNumber: '110123456789',
+            customerName: '그루브',
+            dueDate: '2026-09-15T00:00:00',
+          },
+        })}
+      />,
+    );
+
+    // then
+    expect(screen.getByLabelText('은행')).toBeInTheDocument();
+    expect(screen.queryByText('결제 금액은 결제 수단으로 환불됩니다.')).not.toBeInTheDocument();
+  });
+
   it('가상계좌 입금완료(DONE)면 환불계좌 입력 없이는 취소를 막는다', async () => {
     // given
     const user = userEvent.setup();

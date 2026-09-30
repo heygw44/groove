@@ -31,6 +31,10 @@ export const canDeliverItem = (item: AdminOrderItemSummary): boolean =>
 export const canCancelItem = (item: AdminOrderItemSummary): boolean =>
   (item.status === 'PAID' || item.status === 'PREPARING') && !hasClaimInProgress(item);
 
+/** 가상계좌 결제는 구매자 환불계좌가 있어야 환불되므로 서버가 관리자 판매취소를 거절한다. */
+export const isSaleCancelBlockedByRefundAccount = (item: AdminOrderItemSummary): boolean =>
+  item.virtualAccountPayment;
+
 export type AdminClaimAction = 'approve' | 'collect' | 'complete' | 'reject';
 
 /** 클레임 종류·상태별로 서버가 허용하는 처리만 돌려준다. */

@@ -7,6 +7,7 @@ import {
   PAYMENT_STATUS_LABEL,
   getPaymentMethodLabel,
   isReconcilePending,
+  requiresRefundAccount,
 } from '@/utils/paymentStatus';
 
 const buildPayment = (overrides: Partial<OrderPayment> = {}): OrderPayment => ({
@@ -108,5 +109,31 @@ describe('getPaymentMethodLabel()', () => {
 
     // when & then
     expect(getPaymentMethodLabel(payment)).toBe('카드');
+  });
+});
+
+describe('requiresRefundAccount()', () => {
+  const virtualAccount = {
+    bankCode: '020',
+    accountNumber: '110123456789',
+    customerName: '그루브',
+    dueDate: '2026-09-15T00:00:00',
+  };
+
+  it.each([
+    ['DONE', true],
+    ['PARTIAL_CANCELED', true],
+    ['WAITING_FOR_DEPOSIT', false],
+    ['CANCELED', false],
+    ['CANCEL_REQUESTED', false],
+  ] as const)('가상계좌 결제가 %s 이면 %s 를 반환한다', (status, expected) => {
+    // when & then
+    expect(requiresRefundAccount(buildPayment({ status, virtualAccount }))).toBe(expected);
+  });
+
+  it('가상계좌가 아니거나 결제 정보가 없으면 false 를 반환한다', () => {
+    // when & then
+    expect(requiresRefundAccount(buildPayment({ status: 'DONE' }))).toBe(false);
+    expect(requiresRefundAccount(undefined)).toBe(false);
   });
 });
