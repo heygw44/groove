@@ -23,4 +23,16 @@ describe('ERROR_MESSAGES', () => {
     // then
     expect(message).toBe(expected);
   });
+
+  it.each([
+    ['PAYMENT_CANCEL_IN_PROGRESS', '이미 진행 중인 취소 요청이 있습니다.'],
+    ['PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE', '취소 금액이 남은 결제 금액을 초과합니다.'],
+    ['REVIEW_PURCHASE_REQUIRED', '구매확정한 상품만 리뷰를 쓸 수 있습니다.'],
+  ])('%s 에 안내를 제공한다', (code, expected) => {
+    // given & when
+    const message = ERROR_MESSAGES[code];
+
+    // then
+    expect(message).toBe(expected);
+  });
 });

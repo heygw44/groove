@@ -114,16 +114,21 @@ describe('OrderItemCard', () => {
     expect(link).toHaveAttribute('href', '/products/1#reviews');
   });
 
-  it.each(['CANCELED', 'CANCELED_BY_NOPAYMENT', 'RETURNED'] as const)(
-    '%s 상품은 환불 금액으로 보여준다',
-    (status) => {
-      // given & when
-      renderCard({ ...baseItem, status, paidAmount: 9000 });
+  it.each(['CANCELED', 'RETURNED'] as const)('%s 상품은 환불 금액으로 보여준다', (status) => {
+    // given & when
+    renderCard({ ...baseItem, status, paidAmount: 9000 });
 
-      // then
-      expect(screen.getByText('환불 금액 9,000원')).toBeInTheDocument();
-    },
-  );
+    // then
+    expect(screen.getByText('환불 금액 9,000원')).toBeInTheDocument();
+  });
+
+  it('CANCELED_BY_NOPAYMENT 상품은 주문 금액으로 보여준다', () => {
+    // given & when
+    renderCard({ ...baseItem, status: 'CANCELED_BY_NOPAYMENT', paidAmount: 9000 });
+
+    // then
+    expect(screen.getByText('주문 금액 9,000원')).toBeInTheDocument();
+  });
 
   it('진행 중 상품은 결제 금액으로 보여준다', () => {
     // given & when
