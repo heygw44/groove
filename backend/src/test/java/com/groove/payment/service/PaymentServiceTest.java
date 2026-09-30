@@ -77,7 +77,7 @@ class PaymentServiceTest {
 
 		@ParameterizedTest
 		@EnumSource(value = PaymentStatus.class, names = {"READY", "FAILED", "CANCELED", "UNKNOWN"})
-		@DisplayName("DONE 또는 CANCEL_REQUESTED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
+		@DisplayName("DONE, PARTIAL_CANCELED, CANCEL_REQUESTED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
 		void throwsWhenPaymentIsNotCancelable(PaymentStatus status) {
 			// given
 			given(paymentRepository.findCancelTarget(PAYMENT_ID, MEMBER_ID))
@@ -91,7 +91,7 @@ class PaymentServiceTest {
 		}
 
 		@ParameterizedTest
-		@EnumSource(value = PaymentStatus.class, names = {"DONE", "CANCEL_REQUESTED"})
+		@EnumSource(value = PaymentStatus.class, names = {"DONE", "CANCEL_REQUESTED", "PARTIAL_CANCELED"})
 		@DisplayName("취소 가능한 결제면 주문 취소에 위임하고 응답을 변환한다")
 		void delegatesToOrderCancelService(PaymentStatus status) {
 			// given

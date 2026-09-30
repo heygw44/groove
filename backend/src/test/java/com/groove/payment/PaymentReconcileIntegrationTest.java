@@ -201,6 +201,34 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 		}
 
 		@Test
+		@DisplayName("READY 결제에 토스가 이미 취소됨이면 DONE 취소 행과 canceled_amount 를 함께 남긴다")
+		void syncsCanceledWithDoneCancelRecord() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			Payment payment = seedPayment(seeded.orderId(), PaymentStatus.READY, oldUpdatedAt());
+			LocalDateTime approvedAt = now().minusMinutes(3).truncatedTo(ChronoUnit.SECONDS);
+			LocalDateTime canceledAt = now().minusMinutes(1).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.CANCELED, "toss-key-sync-canceled", "카드", seeded.finalAmount(), approvedAt,
+					canceledAt, BigDecimal.ZERO, "txn-sync-canceled"));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			Payment reloaded = paymentRepository.findById(payment.getId()).orElseThrow();
+			assertThat(reloaded.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+			assertThat(reloaded.getApprovedAt()).isEqualTo(approvedAt);
+			assertThat(reloaded.getCanceledAmount()).isEqualByComparingTo(reloaded.getAmount());
+			List<PaymentCancel> cancels = paymentCancelRepository.findByPaymentIdOrderByIdAsc(payment.getId());
+			assertThat(cancels).hasSize(1);
+			assertThat(cancels.get(0).getStatus()).isEqualTo(PaymentCancelStatus.DONE);
+			assertThat(cancels.get(0).getCancelAmount()).isEqualByComparingTo(reloaded.getAmount());
+			assertThat(cancels.get(0).getTossTransactionKey()).isEqualTo("txn-sync-canceled");
+			assertThat(lastLogAction(payment.getId())).isEqualTo(PaymentReconcileAction.CANCELED);
+		}
+
+		@Test
 		@DisplayName("토스가 DONE 이지만 금액이 다르면 상태는 그대로 두고 재시도 횟수만 올리며 MANUAL_REVIEW 로 남긴다")
 		void marksManualReviewWhenAmountMismatch() {
 			// given

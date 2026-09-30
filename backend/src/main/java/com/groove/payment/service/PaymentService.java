@@ -25,7 +25,8 @@ public class PaymentService {
 	public PaymentCancelResponse cancel(Long memberId, Long paymentId, PaymentCancelRequest request) {
 		PaymentCancelTarget target = paymentRepository.findCancelTarget(paymentId, memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
-		if (target.status() != PaymentStatus.DONE && target.status() != PaymentStatus.CANCEL_REQUESTED) {
+		if (target.status() != PaymentStatus.DONE && target.status() != PaymentStatus.CANCEL_REQUESTED
+				&& target.status() != PaymentStatus.PARTIAL_CANCELED) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 		return PaymentCancelResponse.from(orderCancelService.cancel(memberId, target.orderId(),

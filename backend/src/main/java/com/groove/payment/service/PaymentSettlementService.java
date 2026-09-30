@@ -38,7 +38,7 @@ public class PaymentSettlementService {
 			PaymentStatus.CANCEL_REQUESTED, PaymentStatus.FAILED, PaymentStatus.WAITING_FOR_DEPOSIT);
 
 	private static final Set<PaymentStatus> MISSING_FROM_TOSS_TARGET_STATUSES = Set.of(PaymentStatus.DONE,
-			PaymentStatus.CANCELED, PaymentStatus.CANCEL_REQUESTED);
+			PaymentStatus.PARTIAL_CANCELED, PaymentStatus.CANCELED, PaymentStatus.CANCEL_REQUESTED);
 
 	private static final String CANCELED_TOSS_STATUS = "CANCELED";
 	private static final String PARTIAL_CANCELED_TOSS_STATUS = "PARTIAL_CANCELED";
@@ -102,6 +102,10 @@ public class PaymentSettlementService {
 			counters.matched++;
 			return;
 		}
+		if (isCancelInProgress(payment, transaction.status())) {
+			counters.matched++;
+			return;
+		}
 		PaymentLookupResult lookup = paymentClient.lookup(tossOrderId);
 		applyLateOrRecheck(payment, tossOrderId, lookup, counters);
 	}
@@ -112,11 +116,30 @@ public class PaymentSettlementService {
 	 * 불일치로 세지 않는다.
 	 */
 	private void reconcilePartialCancelAmount(Payment payment, String tossOrderId, Counters counters) {
-		if (paymentCancelRepository.existsByPaymentIdAndStatus(payment.getId(), PaymentCancelStatus.REQUESTED)) {
+		if (hasRequestedCancel(payment)) {
 			counters.matched++;
 			return;
 		}
 		PaymentLookupResult lookup = paymentClient.lookup(tossOrderId);
+		compareCancelBalance(payment, tossOrderId, lookup, counters);
+	}
+
+	/**
+	 * 토스는 취소 요청을 먼저 반영하고 DB 는 확정 뒤에 따라가므로, 그 사이 상태가 어긋난 것은 불일치가 아니다.
+	 * 진행 중인 취소 행(REQUESTED)이 있을 때만 그렇게 본다.
+	 */
+	private boolean isCancelInProgress(Payment payment, String tossStatus) {
+		boolean dbConfirmed = payment.getStatus() == PaymentStatus.DONE
+				|| payment.getStatus() == PaymentStatus.PARTIAL_CANCELED;
+		return dbConfirmed && isCancelLike(tossStatus) && hasRequestedCancel(payment);
+	}
+
+	private boolean hasRequestedCancel(Payment payment) {
+		return paymentCancelRepository.existsByPaymentIdAndStatus(payment.getId(), PaymentCancelStatus.REQUESTED);
+	}
+
+	private void compareCancelBalance(Payment payment, String tossOrderId, PaymentLookupResult lookup,
+			Counters counters) {
 		if (PaymentReconcileRule.partialCancelBalanceMatches(payment.getAmount(), payment.getCanceledAmount(),
 				lookup.balanceAmount())) {
 			counters.matched++;
@@ -152,6 +175,10 @@ public class PaymentSettlementService {
 			return;
 		}
 		if (matches(payment.getStatus(), lookup.status().name())) {
+			if (payment.getStatus() == PaymentStatus.PARTIAL_CANCELED && !hasRequestedCancel(payment)) {
+				compareCancelBalance(payment, tossOrderId, lookup, counters);
+				return;
+			}
 			counters.matched++;
 			return;
 		}
@@ -164,7 +191,10 @@ public class PaymentSettlementService {
 		counters.mismatched++;
 	}
 
-	/** DB DONE↔토스 DONE, DB CANCELED↔토스 CANCELED, DB FAILED↔토스 ABORTED/EXPIRED 만 일치로 본다. */
+	/**
+	 * DB DONE↔토스 DONE, DB CANCELED↔토스 CANCELED, DB PARTIAL_CANCELED↔토스 PARTIAL_CANCELED, DB FAILED↔토스
+	 * ABORTED/EXPIRED 만 일치로 본다. 진행 중인 취소로 어긋난 경우는 {@link #isCancelInProgress} 가 따로 거른다.
+	 */
 	private boolean matches(PaymentStatus dbStatus, String tossStatus) {
 		return switch (dbStatus) {
 			case DONE -> "DONE".equals(tossStatus);

@@ -21,6 +21,7 @@ import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.dto.PaymentConfirmResponse;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentCancel;
+import com.groove.payment.entity.PaymentCancelStatus;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
@@ -193,9 +194,25 @@ public class PaymentConfirmWriter {
 		if (payment.getStatus() == PaymentStatus.CANCELED) {
 			return;
 		}
+		compensateWithCancelRecord(payment, paymentKey, approvedAt, canceledAt, reason, transactionKey);
+	}
+
+	/**
+	 * 같은 멱등키 행이 이미 있으면(대사·이전 시도가 남긴 REQUESTED 행) 새로 만들지 않고 그 행을 완료한다 -
+	 * payment_cancel.idempotency_key 유니크 충돌을 피한다. 호출자의 트랜잭션 안에서 실행된다.
+	 */
+	void compensateWithCancelRecord(Payment payment, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt, String reason, String transactionKey) {
 		BigDecimal cancelAmount = payment.remainingAmount();
 		payment.compensate(paymentKey, approvedAt, canceledAt, reason);
 		String idempotencyKey = COMPENSATION_IDEMPOTENCY_PREFIX + payment.getPaymentKey();
+		Optional<PaymentCancel> existing = paymentCancelRepository.findByIdempotencyKey(idempotencyKey);
+		if (existing.isPresent()) {
+			if (existing.get().getStatus() == PaymentCancelStatus.REQUESTED) {
+				existing.get().complete(transactionKey, canceledAt);
+			}
+			return;
+		}
 		PaymentCancel paymentCancel = PaymentCancel.request(payment, idempotencyKey, cancelAmount, reason, canceledAt);
 		paymentCancel.complete(transactionKey, canceledAt);
 		paymentCancelRepository.save(paymentCancel);

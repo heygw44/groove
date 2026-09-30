@@ -479,6 +479,93 @@ class PaymentSettlementServiceTest {
 		}
 	}
 
+	@Nested
+	@DisplayName("reconcile() 진행 중 취소 대조")
+	class ReconcileCancelInProgress {
+
+		@ParameterizedTest(name = "토스 {0} 이면 조회·경보 없이 matched 로 센다")
+		@ValueSource(strings = { "PARTIAL_CANCELED", "CANCELED" })
+		@DisplayName("DB DONE 이고 토스가 취소 계열이며 REQUESTED 행이 있으면 진행 중 취소로 보고 matched 로 센다")
+		void countsMatchedWhenCancelInProgress(String tossStatus) {
+			// given
+			String tossOrderId = "20260921-INPROG-" + tossStatus;
+			Payment payment = payment(30L, tossOrderId, PaymentStatus.DONE);
+			given(paymentRepository.findByTossOrderId(tossOrderId)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(30L, PaymentCancelStatus.REQUESTED))
+					.willReturn(true);
+			PaymentTransaction transaction = transaction("txn-inprog-" + tossStatus, tossOrderId, tossStatus,
+					FROM.plusHours(1));
+
+			// when
+			PaymentSettlementReport report = service.reconcile(List.of(transaction), FROM, TO);
+
+			// then
+			assertThat(report.matched()).isEqualTo(1);
+			assertThat(report.mismatched()).isZero();
+			verifyNoInteractions(paymentClient, alertNotifier, lateResultApplier);
+		}
+
+		@Test
+		@DisplayName("DB DONE 이고 토스가 PARTIAL_CANCELED 인데 REQUESTED 행이 없으면 mismatched 로 세고 경보를 보낸다")
+		void countsMismatchedWhenNoRequestedCancelRow() {
+			// given
+			Payment payment = payment(31L, "20260921-NOROW001", PaymentStatus.DONE);
+			given(paymentRepository.findByTossOrderId("20260921-NOROW001")).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(31L, PaymentCancelStatus.REQUESTED))
+					.willReturn(false);
+			PaymentTransaction transaction = transaction("txn-norow", "20260921-NOROW001", "PARTIAL_CANCELED",
+					FROM.plusHours(1));
+			given(paymentClient.lookup("20260921-NOROW001")).willReturn(lookupWithBalance(new BigDecimal("1000")));
+
+			// when
+			PaymentSettlementReport report = service.reconcile(List.of(transaction), FROM, TO);
+
+			// then
+			assertThat(report.mismatched()).isEqualTo(1);
+			verify(alertNotifier).notify(any(Alert.class));
+		}
+
+		@Test
+		@DisplayName("토스 목록에서 빠진 PARTIAL_CANCELED 결제는 재조회하고 잔액이 다르면 경보를 보낸다")
+		void alertsWhenMissingPartialCanceledPaymentBalanceDiffers() {
+			// given
+			Payment payment = partialCanceledPayment(32L, "20260921-MISSPC01", new BigDecimal("30000"),
+					new BigDecimal("10000"));
+			given(paymentRepository.findByApprovedAtGreaterThanEqualAndApprovedAtLessThan(FROM, TO))
+					.willReturn(List.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(32L, PaymentCancelStatus.REQUESTED))
+					.willReturn(false);
+			given(paymentClient.lookup("20260921-MISSPC01")).willReturn(lookupWithBalance(new BigDecimal("15000")));
+
+			// when
+			PaymentSettlementReport report = service.reconcile(List.of(), FROM, TO);
+
+			// then
+			assertThat(report.mismatched()).isEqualTo(1);
+			verify(alertNotifier).notify(any(Alert.class));
+		}
+
+		@Test
+		@DisplayName("토스 목록에서 빠진 PARTIAL_CANCELED 결제도 재조회 잔액이 맞으면 matched 로 센다")
+		void countsMatchedWhenMissingPartialCanceledPaymentBalanceMatches() {
+			// given
+			Payment payment = partialCanceledPayment(33L, "20260921-MISSPC02", new BigDecimal("30000"),
+					new BigDecimal("10000"));
+			given(paymentRepository.findByApprovedAtGreaterThanEqualAndApprovedAtLessThan(FROM, TO))
+					.willReturn(List.of(payment));
+			given(paymentCancelRepository.existsByPaymentIdAndStatus(33L, PaymentCancelStatus.REQUESTED))
+					.willReturn(false);
+			given(paymentClient.lookup("20260921-MISSPC02")).willReturn(lookupWithBalance(new BigDecimal("20000")));
+
+			// when
+			PaymentSettlementReport report = service.reconcile(List.of(), FROM, TO);
+
+			// then
+			assertThat(report.matched()).isEqualTo(1);
+			verifyNoInteractions(alertNotifier);
+		}
+	}
+
 	private Payment payment(Long id, String tossOrderId, PaymentStatus status) {
 		Order order = OrderFixture.withId(OrderFixture.create(MemberFixture.create(), tossOrderId), ORDER_ID);
 		Payment payment = PaymentFixture.withStatus(Payment.ready(order), status);
