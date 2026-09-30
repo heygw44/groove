@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
@@ -367,7 +368,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			CountDownLatch tossCallStarted = new CountDownLatch(1);
 			CountDownLatch releaseTossCall = new CountDownLatch(1);
 			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-			given(paymentClient.cancel(eq(paymentKey), any(), any())).willAnswer(invocation -> {
+			given(paymentClient.cancel(fullCancelOf(paymentKey))).willAnswer(invocation -> {
 				tossCallStarted.countDown();
 				releaseTossCall.await(10, TimeUnit.SECONDS);
 				return PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt);
@@ -441,7 +442,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(histories.get(1).getChangeType()).isEqualTo(StockChangeType.CANCEL);
 			MemberCoupon memberCoupon = memberCouponRepository.findById(orderInfo.memberCouponId()).orElseThrow();
 			assertThat(memberCoupon.isUsed()).isFalse();
-			verify(paymentClient).cancel(eq(paymentKey), eq(reason), any());
+			verify(paymentClient).cancel(fullCancelOf(paymentKey, reason));
 		}
 
 		@Test
@@ -495,7 +496,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS ALREADY_CANCELED_PAYMENT"))
-					.given(paymentClient).cancel(eq(paymentKey), any(), any());
+					.given(paymentClient).cancel(fullCancelOf(paymentKey));
 
 			// when & then
 			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
@@ -532,7 +533,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(paymentKey), any(), any());
+					.given(paymentClient).cancel(fullCancelOf(paymentKey));
 
 			// when
 			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
@@ -579,7 +580,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-			given(paymentClient.cancel(eq(paymentKey), any(), any())).willAnswer(invocation -> {
+			given(paymentClient.cancel(fullCancelOf(paymentKey))).willAnswer(invocation -> {
 				jdbcTemplate.update("update orders set status = 'CANCELED' where id = ?", orderInfo.orderId());
 				return PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt);
 			});
@@ -595,7 +596,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			// then: T1 은 유지되고 토스 취소는 한 번만 호출된다
 			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
 					.isEqualTo(PaymentStatus.CANCEL_REQUESTED);
-			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"), any());
+			verify(paymentClient, times(1)).cancel(fullCancelOf(paymentKey, "고객 변심"));
 
 			// when: 대사가 조회한 CANCELED 결과를 반영할 수 있도록 주문 상태를 원래대로 되돌린다
 			jdbcTemplate.update("update orders set status = 'PAID' where id = ?", orderInfo.orderId());
@@ -612,7 +613,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(orderRepository.findById(orderInfo.orderId()).orElseThrow().getStatus())
 					.isEqualTo(OrderStatus.CANCELED);
 			assertThat(stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity()).isEqualTo(5);
-			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"), any());
+			verify(paymentClient, times(1)).cancel(fullCancelOf(paymentKey, "고객 변심"));
 		}
 
 		@Test
@@ -628,7 +629,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(eq(paymentKey), any(), any());
+					.given(paymentClient).cancel(fullCancelOf(paymentKey));
 			PaymentCancelRequest request = new PaymentCancelRequest("고객 변심");
 
 			// when
@@ -645,7 +646,51 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(jsonPath("$.data.status", is("CANCEL_REQUESTED")));
 
 			// then
-			verify(paymentClient, times(1)).cancel(eq(paymentKey), eq("고객 변심"), any());
+			verify(paymentClient, times(1)).cancel(fullCancelOf(paymentKey, "고객 변심"));
+		}
+
+		@Test
+		@DisplayName("토스가 거절해 되돌린 전액취소를 다시 요청하면 새 멱등키로 토스를 재호출해 취소 행이 FAILED, DONE 으로 남는다")
+		void retriesFullCancelWithNewIdempotencyKeyAfterRejection() throws Exception {
+			// given
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = seedProduct(5);
+			OrderInfo orderInfo = createOrder(accessToken, product.getId(), 1, address.getId());
+			String paymentKey = uniquePaymentKey();
+			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
+					orderInfo.finalAmount());
+			LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+			given(paymentClient.cancel(fullCancelOf(paymentKey)))
+					.willThrow(new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS REJECT"))
+					.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt));
+			PaymentCancelRequest request = new PaymentCancelRequest("고객 변심");
+
+			// when
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("PAYMENT_CANCEL_FAILED")));
+			mockMvc.perform(post("/api/v1/payments/" + paymentId + "/cancel")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+
+			// then
+			ArgumentCaptor<PaymentCancelCommand> captor = ArgumentCaptor.forClass(PaymentCancelCommand.class);
+			verify(paymentClient, times(2)).cancel(captor.capture());
+			assertThat(captor.getAllValues()).extracting(PaymentCancelCommand::idempotencyKey)
+					.containsExactly("cancel-" + paymentKey + "-1", "cancel-" + paymentKey + "-2");
+			assertThat(paymentCancelRepository.findByPaymentIdOrderByIdAsc(paymentId))
+					.extracting(PaymentCancel::getStatus)
+					.containsExactly(PaymentCancelStatus.FAILED, PaymentCancelStatus.DONE);
+			assertThat(paymentRepository.findById(paymentId).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.CANCELED);
 		}
 
 		@Test
@@ -660,7 +705,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			String paymentKey = uniquePaymentKey();
 			long paymentId = confirmAndGetPaymentId(accessToken, paymentKey, orderInfo.orderNumber(),
 					orderInfo.finalAmount());
-			given(paymentClient.cancel(eq(paymentKey), any(), any()))
+			given(paymentClient.cancel(fullCancelOf(paymentKey)))
 					.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED",
 							LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS)));
 
@@ -673,7 +718,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			// then
 			Payment payment = paymentRepository.findById(paymentId).orElseThrow();
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
-			verify(paymentClient).cancel(eq(paymentKey), any(), any());
+			verify(paymentClient).cancel(fullCancelOf(paymentKey));
 		}
 
 		@Test
@@ -700,7 +745,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.error.code", is("PAYMENT_INVALID_STATUS")));
-			verify(paymentClient, never()).cancel(any(), any(), any());
+			verify(paymentClient, never()).cancel(any(PaymentCancelCommand.class));
 		}
 	}
 
@@ -837,7 +882,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 							.content(objectMapper.writeValueAsString(new PaymentCancelRequest("고객 변심"))))
 					.andExpect(status().isConflict())
 					.andExpect(jsonPath("$.error.code", is("PAYMENT_CANCEL_IN_PROGRESS")));
-			verify(paymentClient, never()).cancel(any(), any(), any());
+			verify(paymentClient, never()).cancel(any(PaymentCancelCommand.class));
 		}
 	}
 
@@ -1299,7 +1344,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(setup.dropId()),
 					String.valueOf(member.getId()))).isFalse();
 
-			verify(paymentClient).cancel(eq(paymentKey), eq(reason), any());
+			verify(paymentClient).cancel(fullCancelOf(paymentKey, reason));
 
 			limitedDropRedisService.clear(setup.dropId());
 		}
@@ -1365,9 +1410,19 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 				.willReturn(new PaymentConfirmResult(paymentKey, orderNumber, "카드", amount, approvedAt));
 	}
 
+	private PaymentCancelCommand fullCancelOf(String paymentKey) {
+		return argThat(command -> command != null && paymentKey.equals(command.paymentKey())
+				&& command.isFullCancel());
+	}
+
+	private PaymentCancelCommand fullCancelOf(String paymentKey, String reason) {
+		return argThat(command -> command != null && paymentKey.equals(command.paymentKey())
+				&& command.isFullCancel() && reason.equals(command.reason()));
+	}
+
 	private void stubCancelSuccess(String paymentKey) {
 		LocalDateTime canceledAt = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
-		given(paymentClient.cancel(eq(paymentKey), any(), any()))
+		given(paymentClient.cancel(fullCancelOf(paymentKey)))
 				.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED", canceledAt));
 	}
 

@@ -352,6 +352,7 @@ class PaymentReconcileServiceTest {
 			Payment payment = cancelRequestedPayment(order);
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(cancelWriter.requestedIdempotencyKey(payment)).willReturn("cancel-" + PAYMENT_KEY + "-2");
 
 			// when
 			PaymentReconcileOutcome outcome = service.apply(candidate(), lookupOf(PaymentStatus.CANCEL_REQUESTED,
@@ -360,6 +361,7 @@ class PaymentReconcileServiceTest {
 			// then
 			assertThat(outcome.needsCancelRetry()).isTrue();
 			assertThat(outcome.paymentKey()).isEqualTo(PAYMENT_KEY);
+			assertThat(outcome.idempotencyKey()).isEqualTo("cancel-" + PAYMENT_KEY + "-2");
 			verify(logRepository, never()).save(any());
 		}
 	}

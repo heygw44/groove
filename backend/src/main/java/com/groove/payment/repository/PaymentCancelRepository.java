@@ -21,6 +21,8 @@ public interface PaymentCancelRepository extends JpaRepository<PaymentCancel, Lo
 
 	Optional<PaymentCancel> findByIdempotencyKey(String idempotencyKey);
 
+	Optional<PaymentCancel> findFirstByPaymentIdAndStatusOrderByIdDesc(Long paymentId, PaymentCancelStatus status);
+
 	/** 부분취소·전액취소가 서로 겹쳐 들어오지 않게 두 진입점 모두 이 존재 여부부터 확인한다. */
 	boolean existsByPaymentIdAndStatus(Long paymentId, PaymentCancelStatus status);
 

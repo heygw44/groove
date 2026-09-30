@@ -29,8 +29,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PaymentRefundWriter {
 
-	private static final String IDEMPOTENCY_KEY_PREFIX = "cancel-";
-
 	private final PaymentRepository paymentRepository;
 	private final PaymentCancelRepository paymentCancelRepository;
 	private final Clock clock;
@@ -69,8 +67,8 @@ public class PaymentRefundWriter {
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE);
 		}
 
-		long sequence = paymentCancelRepository.countByPaymentId(paymentId) + 1;
-		String idempotencyKey = IDEMPOTENCY_KEY_PREFIX + payment.getPaymentKey() + "-" + sequence;
+		String idempotencyKey = PaymentCancelIdempotencyKeys.next(payment.getPaymentKey(), paymentId,
+				paymentCancelRepository);
 		LocalDateTime requestedAt = LocalDateTime.now(clock);
 		PaymentCancel paymentCancel = paymentCancelRepository.save(
 				PaymentCancel.requestForClaim(payment, idempotencyKey, cancelAmount, reason, requestedAt,
