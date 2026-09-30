@@ -114,9 +114,10 @@ export default function AdminDashboardPage() {
               to="/admin/order-claims?type=CANCEL&status=REQUESTED"
             />
             <StatCard
-              label="반품요청"
+              label="반품 처리 대기"
               value={`${summaryQuery.data.returnRequestCount}건`}
-              to="/admin/order-claims?type=RETURN"
+              // 수거중까지 합산한 값이라 반품요청 칩이 아닌 전체 상태로 보낸다
+              to="/admin/order-claims?type=RETURN&status=ALL"
             />
           </div>
         )}
