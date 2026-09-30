@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -196,7 +197,7 @@ class AdminOrderClaimServiceTest {
 			// given
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(writer.findClaim(CLAIM_ID)).willReturn(claim);
+			given(writer.lockApprovable(CLAIM_ID)).willReturn(claim);
 			stubItemResponseLookup();
 
 			// when
@@ -210,12 +211,11 @@ class AdminOrderClaimServiceTest {
 		}
 
 		@Test
-		@DisplayName("RETURN 클레임이면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
-		void throwsWhenNotCancelType() {
+		@DisplayName("승인 가능 검사(lockApprovable)가 실패하면 그 예외를 그대로 던지고 환불을 시도하지 않는다")
+		void throwsWhenClaimNotApprovable() {
 			// given
-			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
-			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(writer.findClaim(CLAIM_ID)).willReturn(claim);
+			given(writer.lockApprovable(CLAIM_ID))
+					.willThrow(new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED));
 
 			// when & then
 			assertThatThrownBy(() -> service.approve(ADMIN_ID, CLAIM_ID))
@@ -226,20 +226,19 @@ class AdminOrderClaimServiceTest {
 		}
 
 		@Test
-		@DisplayName("CANCEL 클레임이어도 REQUESTED 가 아니면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
-		void throwsWhenNotRequestedStatus() {
+		@DisplayName("이미 환불이 결과를 기다리는 클레임이면 ORDER_CLAIM_REFUND_IN_PROGRESS 예외를 던지고 환불을 다시 내지 않는다")
+		void throwsWhenRefundAlreadyPending() {
 			// given
-			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
-			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.DONE);
-			given(writer.findClaim(CLAIM_ID)).willReturn(claim);
+			given(writer.lockApprovable(CLAIM_ID))
+					.willThrow(new BusinessException(ErrorCode.ORDER_CLAIM_REFUND_IN_PROGRESS));
 
 			// when & then
 			assertThatThrownBy(() -> service.approve(ADMIN_ID, CLAIM_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
-					.isEqualTo(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
+					.isEqualTo(ErrorCode.ORDER_CLAIM_REFUND_IN_PROGRESS);
 			verify(refundHook, never()).refund(any(), any(), any(), any(), any());
+			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
 		}
 
 		@Test
@@ -248,7 +247,7 @@ class AdminOrderClaimServiceTest {
 			// given
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(writer.findClaim(CLAIM_ID)).willReturn(claim);
+			given(writer.lockApprovable(CLAIM_ID)).willReturn(claim);
 			given(orderItemRepository.findWithProductById(ITEM_ID)).willReturn(Optional.empty());
 
 			// when & then
@@ -264,7 +263,7 @@ class AdminOrderClaimServiceTest {
 			// given
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(writer.findClaim(CLAIM_ID)).willReturn(claim);
+			given(writer.lockApprovable(CLAIM_ID)).willReturn(claim);
 			given(orderItemRepository.findWithProductById(ITEM_ID)).willReturn(Optional.of(item));
 			ProductImage image = ProductImage.of(
 					item.getProduct(), "https://cdn.groove.com/cover.jpg", 0);
@@ -461,6 +460,44 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(refundHook).refund(ORDER_ID, CLAIM_ID, item.getRefundableAmount(), null, null);
+		}
+
+		@Test
+		@DisplayName("환불이 요청 기록 전에 실패하면 방금 만든 판매취소 클레임을 정리하고 예외를 그대로 던진다")
+		void discardsClaimWhenRefundFails() {
+			// given
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_IN_PROGRESS);
+			given(orderItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+			given(writer.requestAdminCancel(ORDER_ID, ITEM_ID, "재고 확인 불가"))
+					.willReturn(new OrderClaimRequestResult(CLAIM_ID, ITEM_ID, ORDER_ID,
+							item.getRefundableAmount(), true));
+			willThrow(failure).given(refundHook).refund(any(), any(), any(), any(), any());
+
+			// when & then
+			assertThatThrownBy(() -> service.cancelItemBySale(ADMIN_ID, ITEM_ID,
+					new AdminOrderItemCancelRequest("재고 확인 불가")))
+					.isSameAs(failure);
+			verify(writer).discardUnstartedClaim(CLAIM_ID);
+			verify(adminAuditLogService, never()).record(any(), any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("정리마저 실패하면 그 예외를 suppressed 로 붙여 원래 예외를 던진다")
+		void addsSuppressedWhenDiscardFails() {
+			// given
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_IN_PROGRESS);
+			IllegalStateException discardFailure = new IllegalStateException("discard");
+			given(orderItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+			given(writer.requestAdminCancel(ORDER_ID, ITEM_ID, null))
+					.willReturn(new OrderClaimRequestResult(CLAIM_ID, ITEM_ID, ORDER_ID,
+							item.getRefundableAmount(), true));
+			willThrow(failure).given(refundHook).refund(any(), any(), any(), any(), any());
+			willThrow(discardFailure).given(writer).discardUnstartedClaim(CLAIM_ID);
+
+			// when & then
+			assertThatThrownBy(() -> service.cancelItemBySale(ADMIN_ID, ITEM_ID, null))
+					.isSameAs(failure)
+					.hasSuppressedException(discardFailure);
 		}
 
 		@Test

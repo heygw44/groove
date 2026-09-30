@@ -1,6 +1,7 @@
 package com.groove.order.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -117,6 +118,55 @@ class OrderCancelRestorerTest {
 
 			// then
 			verify(productSalesStatsUpdater, never()).refreshFor(orderWithoutCoupon);
+		}
+	}
+
+	@Nested
+	@DisplayName("restoreItems()")
+	class RestoreItems {
+
+		@Test
+		@DisplayName("재입고를 선택하면 재고를 복원하고 한정반 선점을 되돌려 커밋 후 해제한다")
+		void restoresStockAndLimitedWhenRestock() {
+			// given
+			LimitedRelease release = new LimitedRelease(30L, 1L);
+			given(limitedPurchaseWriter.revertByOrder(order.getId(), NOW)).willReturn(Optional.of(release));
+
+			// when
+			Optional<LimitedRelease> result = restorer.restoreItems(order, order.getItems(), true, true);
+
+			// then
+			verify(orderStockService).restore(order.getItems());
+			verify(limitedReleaseSynchronizer).releaseAfterCommit(release);
+			verify(productSalesStatsUpdater).refreshFor(order);
+			assertThat(result).contains(release);
+		}
+
+		@Test
+		@DisplayName("재입고를 선택하지 않으면 재고와 한정반 구매 이력을 그대로 두고 판매량만 갱신한다")
+		void keepsStockAndLimitedWhenNoRestock() {
+			// when
+			Optional<LimitedRelease> result = restorer.restoreItems(order, order.getItems(), false, true);
+
+			// then
+			verify(orderStockService, never()).restore(order.getItems());
+			verify(limitedPurchaseWriter, never()).revertByOrder(any(), any());
+			verify(limitedReleaseSynchronizer, never()).releaseAfterCommit(any());
+			verify(productSalesStatsUpdater).refreshFor(order);
+			assertThat(result).isEmpty();
+		}
+
+		@Test
+		@DisplayName("미결제 주문이면 판매량을 재계산하지 않는다")
+		void skipsSalesRefreshForUnpaidOrder() {
+			// given
+			given(limitedPurchaseWriter.revertByOrder(order.getId(), NOW)).willReturn(Optional.empty());
+
+			// when
+			restorer.restoreItems(order, order.getItems(), true, false);
+
+			// then
+			verify(productSalesStatsUpdater, never()).refreshFor(order);
 		}
 	}
 }

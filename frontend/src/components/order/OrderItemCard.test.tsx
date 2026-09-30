@@ -38,6 +38,7 @@ const baseItem: OrderItem = {
   status: 'PAID',
   paidAmount: 10000,
   availableActions: [],
+  refundInProgress: false,
 };
 
 const renderCard = (item: OrderItem, payment?: OrderPayment) => {
@@ -80,6 +81,7 @@ describe('OrderItemCard', () => {
       courierCode: 'CJ',
       trackingNumber: '123456789012',
       availableActions: ['TRACK'],
+      refundInProgress: false,
     };
 
     // when
@@ -101,6 +103,7 @@ describe('OrderItemCard', () => {
       ...baseItem,
       status: 'DELIVERED',
       availableActions: ['WRITE_REVIEW'],
+      refundInProgress: false,
     };
 
     // when
@@ -248,6 +251,7 @@ describe('OrderItemCard', () => {
       claimStatus: 'RETURN_REQUEST',
       claimId: 77,
       availableActions: ['WITHDRAW_CLAIM'],
+      refundInProgress: false,
     });
 
     // when

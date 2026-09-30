@@ -24,6 +24,13 @@ public interface OrderClaimRepository extends JpaRepository<OrderClaim, Long> {
 	@Query("select c from OrderClaim c where c.id = :id and c.orderItem.order.member.id = :memberId")
 	Optional<OrderClaim> findByIdAndMemberId(@Param("id") Long id, @Param("memberId") Long memberId);
 
+	/** 주문 락을 잡기 전에 엔티티를 영속성 컨텍스트에 올리지 않으려고 주문 id 만 읽는다. */
+	@Query("select c.orderItem.order.id from OrderClaim c where c.id = :id")
+	Optional<Long> findOrderIdById(@Param("id") Long id);
+
+	@Query("select c.orderItem.order.id from OrderClaim c where c.id = :id and c.orderItem.order.member.id = :memberId")
+	Optional<Long> findOrderIdByIdAndMemberId(@Param("id") Long id, @Param("memberId") Long memberId);
+
 	@Query("select c from OrderClaim c where c.orderItem.id in :orderItemIds and c.status = :status")
 	List<OrderClaim> findAllByOrderItemIdInAndStatus(@Param("orderItemIds") Collection<Long> orderItemIds,
 			@Param("status") OrderClaimStatus status);

@@ -1,11 +1,10 @@
 package com.groove.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -15,6 +14,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -71,8 +72,8 @@ class OrderClaimRefundServiceTest {
 	class Refund {
 
 		@Test
-		@DisplayName("환불이 DONE 이면 클레임을 마무리한다")
-		void finalizesWhenDone() {
+		@DisplayName("환불이 DONE 이면 클레임 마무리는 환불 기록과 같은 트랜잭션에서 끝났으므로 다시 건드리지 않는다")
+		void doesNotFinalizeAgainWhenDone() {
 			// given
 			given(paymentRefundService.refund(PAYMENT_ID, AMOUNT, "사유", null, CLAIM_ID))
 					.willReturn(new PaymentRefundResult(PaymentRefundStatus.DONE, 90L, AMOUNT));
@@ -81,7 +82,7 @@ class OrderClaimRefundServiceTest {
 			service.refund(ORDER_ID, CLAIM_ID, AMOUNT, "사유", null);
 
 			// then
-			verify(orderClaimFinalizeService).applyRefundDone(CLAIM_ID, null);
+			verifyNoInteractions(orderClaimFinalizeService);
 		}
 
 		@Test
@@ -95,7 +96,7 @@ class OrderClaimRefundServiceTest {
 			service.refund(ORDER_ID, CLAIM_ID, AMOUNT, "사유", null);
 
 			// then
-			verify(orderClaimFinalizeService, never()).applyRefundDone(any(), any());
+			verifyNoInteractions(orderClaimFinalizeService);
 		}
 
 		@Test
@@ -109,7 +110,7 @@ class OrderClaimRefundServiceTest {
 			service.refund(ORDER_ID, CLAIM_ID, AMOUNT, "사유", null);
 
 			// then
-			verify(orderClaimFinalizeService, never()).applyRefundFailed(any());
+			verifyNoInteractions(orderClaimFinalizeService);
 		}
 
 		@Test
@@ -122,6 +123,20 @@ class OrderClaimRefundServiceTest {
 			// when & then
 			assertThatThrownBy(() -> service.refund(ORDER_ID, CLAIM_ID, AMOUNT, "사유", null)).isSameAs(failure);
 			verify(orderClaimFinalizeService).applyRefundFailed(CLAIM_ID);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = ErrorCode.class, names = {"PAYMENT_CANCEL_IN_PROGRESS", "ORDER_CLAIM_REFUND_IN_PROGRESS",
+			"ORDER_CLAIM_NOT_ALLOWED", "PAYMENT_REFUND_ACCOUNT_REQUIRED"})
+		@DisplayName("요청 기록 전 검증 실패는 클레임을 거부로 바꾸지 않고 그대로 던진다")
+		void rethrowsWithoutTouchingClaimWhenPreValidationFails(ErrorCode errorCode) {
+			// given
+			BusinessException failure = new BusinessException(errorCode);
+			willThrow(failure).given(paymentRefundService).refund(PAYMENT_ID, AMOUNT, "사유", null, CLAIM_ID);
+
+			// when & then
+			assertThatThrownBy(() -> service.refund(ORDER_ID, CLAIM_ID, AMOUNT, "사유", null)).isSameAs(failure);
+			verifyNoInteractions(orderClaimFinalizeService);
 		}
 
 		@Test

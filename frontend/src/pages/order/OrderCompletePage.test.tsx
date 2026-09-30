@@ -31,6 +31,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
       status: 'PAID',
       paidAmount: 10000,
       availableActions: [],
+      refundInProgress: false,
     },
   ],
   shippingAddress: {

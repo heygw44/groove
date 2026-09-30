@@ -86,10 +86,12 @@
 			<arg column="courier_code" javaType="com.groove.order.entity.CourierCode"/>
 			<arg column="tracking_number" javaType="java.lang.String"/>
 			<arg column="delivered_at" javaType="java.time.LocalDateTime"/>
+			<arg column="refund_in_progress" javaType="_boolean"/>
 		</constructor>
 	</resultMap>
 
-	<!-- 썸네일은 findMyOrders 와 같은 규약: 상품의 sort_order = 0 이미지. paid_amount = 단가 x 수량 - discount_share. -->
+	<!-- 썸네일은 findMyOrders 와 같은 규약: 상품의 sort_order = 0 이미지. paid_amount = 단가 x 수량 - discount_share.
+		refund_in_progress: 이 상품주문의 클레임 환불이 결제사 결과를 기다리는(REQUESTED) 중인지. -->
 	<select id="findItemsByOrderIds" resultMap="orderListItemRowMap">
 		SELECT
 			oi.order_id, oi.product_id, oi.product_name_snapshot AS product_name, oi.quantity,
@@ -98,7 +100,10 @@
 				WHERE pi.product_id = oi.product_id AND pi.sort_order = 0) AS thumbnail_url,
 			oi.product_order_number, oi.status, oi.claim_status,
 			(oi.price_snapshot * oi.quantity - oi.discount_share) AS paid_amount,
-			oi.courier_code, oi.tracking_number, oi.delivered_at
+			oi.courier_code, oi.tracking_number, oi.delivered_at,
+			EXISTS (SELECT 1 FROM order_claim oc
+				JOIN payment_cancel pc ON pc.order_claim_id = oc.id
+				WHERE oc.order_item_id = oi.id AND pc.status = 'REQUESTED') AS refund_in_progress
 		FROM order_item oi
 		WHERE oi.order_id IN
 		<foreach item="orderId" collection="orderIds" open="(" separator="," close=")">

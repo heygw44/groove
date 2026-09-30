@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 
 import com.groove.order.dto.OrderCancelRequest;
 import com.groove.order.dto.OrderDetailResponse;
+import com.groove.order.dto.OrderItemResponse;
 import com.groove.payment.client.dto.RefundAccountInfo;
 
 import lombok.RequiredArgsConstructor;
@@ -48,8 +49,13 @@ public class OrderCancelService {
 		if (plan.eligibleForFullCancel()) {
 			return paidOrderCancelHook.cancel(orderId, memberId, reason, refundAccount).limitedDropId();
 		}
+		// 한 상품의 환불이 결과불명이면 그 결과가 확정될 때까지 같은 결제에 새 환불을 낼 수 없다. 나머지 상품은
+		// 건드리지 않고 멈추며, 응답의 상품별 refundInProgress 로 어디서 멈췄는지 알린다.
 		for (Long itemId : plan.cancelableItemIds()) {
-			orderItemClaimService.cancel(memberId, orderId, itemId, request);
+			OrderItemResponse canceled = orderItemClaimService.cancel(memberId, orderId, itemId, request);
+			if (canceled.refundInProgress()) {
+				break;
+			}
 		}
 		return null;
 	}

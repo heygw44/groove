@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -52,6 +56,9 @@ class OrderClaimWriterTest {
 	@Mock
 	OrderClaimRepository orderClaimRepository;
 
+	@Mock
+	OrderClaimRefundReader refundReader;
+
 	OrderClaimWriter writer;
 	Order order;
 	OrderItem item;
@@ -59,13 +66,19 @@ class OrderClaimWriterTest {
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
-		writer = new OrderClaimWriter(orderRepository, orderClaimRepository, clock);
+		writer = new OrderClaimWriter(orderRepository, orderClaimRepository, refundReader, clock);
 		Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
 		Product product = ProductFixture.withId(ProductFixture.create(artist), 200L);
 		order = OrderFixture.withId(OrderFixture.createWithItem(member, product, 2), ORDER_ID);
 		item = order.getItems().get(0);
 		ReflectionTestUtils.setField(item, "id", ITEM_ID);
+	}
+
+	private void stubLockedClaim(OrderClaim claim) {
+		given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.of(ORDER_ID));
+		given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
+		given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 	}
 
 	private void stubSave() {
@@ -224,7 +237,9 @@ class OrderClaimWriterTest {
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(orderClaimRepository.findByIdAndMemberId(CLAIM_ID, MEMBER_ID)).willReturn(Optional.of(claim));
+			given(orderClaimRepository.findOrderIdByIdAndMemberId(CLAIM_ID, MEMBER_ID))
+					.willReturn(Optional.of(ORDER_ID));
+			given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 
 			// when
@@ -237,10 +252,53 @@ class OrderClaimWriterTest {
 		}
 
 		@Test
+		@DisplayName("주문 락을 잡은 뒤에 클레임을 읽는다")
+		void locksOrderBeforeReadingClaim() {
+			// given
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			given(orderClaimRepository.findOrderIdByIdAndMemberId(CLAIM_ID, MEMBER_ID))
+					.willReturn(Optional.of(ORDER_ID));
+			given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+
+			// when
+			writer.withdraw(MEMBER_ID, CLAIM_ID);
+
+			// then
+			InOrder inOrder = inOrder(orderRepository, orderClaimRepository);
+			inOrder.verify(orderRepository).findByIdForUpdate(ORDER_ID);
+			inOrder.verify(orderClaimRepository).findWithOrderItemById(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("환불이 결과를 기다리는 중이면 ORDER_CLAIM_REFUND_IN_PROGRESS 예외를 던지고 클레임을 유지한다")
+		void throwsWhenRefundPending() {
+			// given
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			given(orderClaimRepository.findOrderIdByIdAndMemberId(CLAIM_ID, MEMBER_ID))
+					.willReturn(Optional.of(ORDER_ID));
+			given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(refundReader.hasPendingRefund(CLAIM_ID)).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> writer.withdraw(MEMBER_ID, CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_REFUND_IN_PROGRESS);
+			assertThat(claim.getStatus()).isEqualTo(OrderClaimStatus.REQUESTED);
+			assertThat(item.getClaimStatus()).isEqualTo(OrderItemClaimStatus.CANCEL_REQUEST);
+		}
+
+		@Test
 		@DisplayName("본인 클레임이 아니면 COMMON_RESOURCE_NOT_FOUND 예외를 던진다")
 		void throwsWhenNotOwner() {
 			// given
-			given(orderClaimRepository.findByIdAndMemberId(CLAIM_ID, MEMBER_ID)).willReturn(Optional.empty());
+			given(orderClaimRepository.findOrderIdByIdAndMemberId(CLAIM_ID, MEMBER_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> writer.withdraw(MEMBER_ID, CLAIM_ID))
@@ -262,8 +320,7 @@ class OrderClaimWriterTest {
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
 			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
-			given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			stubLockedClaim(claim);
 
 			// when
 			OrderClaim rejected = writer.reject(CLAIM_ID, "이미 발송 완료");
@@ -272,6 +329,55 @@ class OrderClaimWriterTest {
 			assertThat(rejected.getStatus()).isEqualTo(OrderClaimStatus.REJECTED);
 			assertThat(item.getClaimStatus()).isEqualTo(OrderItemClaimStatus.CANCEL_REJECT);
 			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PREPARING);
+		}
+
+		@Test
+		@DisplayName("반품 클레임을 거부하면 RETURN_REJECT 표시를 남긴다")
+		void marksReturnRejectForReturnClaim() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.RETURN_REQUEST);
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubLockedClaim(claim);
+
+			// when
+			writer.reject(CLAIM_ID, "상태 불량");
+
+			// then
+			assertThat(item.getClaimStatus()).isEqualTo(OrderItemClaimStatus.RETURN_REJECT);
+		}
+
+		@Test
+		@DisplayName("환불이 결과를 기다리는 중이면 ORDER_CLAIM_REFUND_IN_PROGRESS 예외를 던지고 클레임을 유지한다")
+		void throwsWhenRefundPending() {
+			// given
+			ReflectionTestUtils.setField(item, "status", OrderItemStatus.PREPARING);
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubLockedClaim(claim);
+			given(refundReader.hasPendingRefund(CLAIM_ID)).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> writer.reject(CLAIM_ID, "사유"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_REFUND_IN_PROGRESS);
+			assertThat(claim.getStatus()).isEqualTo(OrderClaimStatus.REQUESTED);
+		}
+
+		@Test
+		@DisplayName("클레임이 없으면 COMMON_RESOURCE_NOT_FOUND 예외를 던진다")
+		void throwsWhenClaimMissing() {
+			// given
+			given(orderClaimRepository.findOrderIdById(CLAIM_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> writer.reject(CLAIM_ID, "사유"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COMMON_RESOURCE_NOT_FOUND);
 		}
 	}
 
@@ -331,14 +437,160 @@ class OrderClaimWriterTest {
 			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
 			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
 			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
-			given(orderClaimRepository.findWithOrderItemById(CLAIM_ID)).willReturn(Optional.of(claim));
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			stubLockedClaim(claim);
 
 			// when
 			OrderClaim result = writer.chooseRestock(CLAIM_ID, true);
 
 			// then
 			assertThat(result.getRestock()).isTrue();
+		}
+
+		@Test
+		@DisplayName("환불이 결과를 기다리는 중이면 ORDER_CLAIM_REFUND_IN_PROGRESS 예외를 던지고 선택을 덮어쓰지 않는다")
+		void throwsWhenRefundPending() {
+			// given
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(10));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.COLLECTING);
+			stubLockedClaim(claim);
+			given(refundReader.hasPendingRefund(CLAIM_ID)).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> writer.chooseRestock(CLAIM_ID, false))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_REFUND_IN_PROGRESS);
+			assertThat(claim.getRestock()).isNull();
+		}
+	}
+
+	@Nested
+	@DisplayName("lockApprovable()")
+	class LockApprovable {
+
+		@Test
+		@DisplayName("REQUESTED 상태의 CANCEL 클레임이면 주문 락을 잡은 뒤 클레임을 반환한다")
+		void returnsClaimAfterLockingOrder() {
+			// given
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubLockedClaim(claim);
+
+			// when
+			OrderClaim result = writer.lockApprovable(CLAIM_ID);
+
+			// then
+			assertThat(result).isSameAs(claim);
+			InOrder inOrder = inOrder(orderRepository, orderClaimRepository);
+			inOrder.verify(orderRepository).findByIdForUpdate(ORDER_ID);
+			inOrder.verify(orderClaimRepository).findWithOrderItemById(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("RETURN 클레임이면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
+		void throwsWhenReturnClaim() {
+			// given
+			OrderClaim claim = OrderClaim.requestReturn(item, "사유", NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubLockedClaim(claim);
+
+			// when & then
+			assertThatThrownBy(() -> writer.lockApprovable(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
+		}
+
+		@Test
+		@DisplayName("REQUESTED 가 아니면 ORDER_CLAIM_NOT_ALLOWED 예외를 던진다")
+		void throwsWhenNotRequested() {
+			// given
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.REJECTED);
+			stubLockedClaim(claim);
+
+			// when & then
+			assertThatThrownBy(() -> writer.lockApprovable(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_NOT_ALLOWED);
+		}
+
+		@Test
+		@DisplayName("환불이 결과를 기다리는 중이면 ORDER_CLAIM_REFUND_IN_PROGRESS 예외를 던진다")
+		void throwsWhenRefundPending() {
+			// given
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubLockedClaim(claim);
+			given(refundReader.hasPendingRefund(CLAIM_ID)).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> writer.lockApprovable(CLAIM_ID))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_CLAIM_REFUND_IN_PROGRESS);
+		}
+	}
+
+	@Nested
+	@DisplayName("discardUnstartedClaim()")
+	class DiscardUnstartedClaim {
+
+		@Test
+		@DisplayName("환불 행이 없는 REQUESTED 클레임이면 클레임을 지우고 상품주문 표시를 되돌린다")
+		void deletesClaimWhenNoRefundRow() {
+			// given
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubLockedClaim(claim);
+			given(refundReader.hasAnyRefund(CLAIM_ID)).willReturn(false);
+
+			// when
+			writer.discardUnstartedClaim(CLAIM_ID);
+
+			// then
+			verify(orderClaimRepository).delete(claim);
+			assertThat(item.getClaimStatus()).isNull();
+		}
+
+		@Test
+		@DisplayName("이 클레임으로 나간 환불 행이 있으면 아무 것도 하지 않는다")
+		void skipsWhenRefundRowExists() {
+			// given
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			stubLockedClaim(claim);
+			given(refundReader.hasAnyRefund(CLAIM_ID)).willReturn(true);
+
+			// when
+			writer.discardUnstartedClaim(CLAIM_ID);
+
+			// then
+			verify(orderClaimRepository, never()).delete(any(OrderClaim.class));
+			assertThat(item.getClaimStatus()).isEqualTo(OrderItemClaimStatus.CANCEL_REQUEST);
+		}
+
+		@Test
+		@DisplayName("이미 REQUESTED 가 아닌 클레임이면 아무 것도 하지 않는다")
+		void skipsWhenNotRequested() {
+			// given
+			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REJECT);
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			ReflectionTestUtils.setField(claim, "status", OrderClaimStatus.REJECTED);
+			stubLockedClaim(claim);
+
+			// when
+			writer.discardUnstartedClaim(CLAIM_ID);
+
+			// then
+			verify(orderClaimRepository, never()).delete(any(OrderClaim.class));
+			assertThat(item.getClaimStatus()).isEqualTo(OrderItemClaimStatus.CANCEL_REJECT);
 		}
 	}
 }

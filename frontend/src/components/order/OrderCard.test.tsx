@@ -26,6 +26,7 @@ const baseOrder: OrderSummary = {
       status: 'PAID',
       paidAmount: 69600,
       availableActions: ['CANCEL', 'TRACK'],
+      refundInProgress: false,
     },
     {
       productId: 620,
@@ -40,6 +41,7 @@ const baseOrder: OrderSummary = {
       courierCode: 'CJ',
       trackingNumber: '123456789012',
       availableActions: ['WITHDRAW_CLAIM', 'TRACK'],
+      refundInProgress: false,
     },
   ],
   createdAt: '2026-09-02T10:00:00',
