@@ -15,7 +15,7 @@ const TAB_LABEL: Record<MemberCouponStatus, string> = {
 
 export function CouponStatusTabs({ value, onChange }: CouponStatusTabsProps) {
   return (
-    <div role="group" aria-label="쿠폰 상태" className="flex gap-1 overflow-x-auto pb-1">
+    <div role="group" aria-label="쿠폰 상태" className="-mx-1 flex gap-1 overflow-x-auto p-1">
       {TAB_STATUSES.map((status) => {
         const isSelected = status === value;
         return (

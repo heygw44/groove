@@ -41,7 +41,7 @@ export function ProductImageGallery({ images }: ProductImageGalleryProps) {
       </div>
 
       {sorted.length > 1 && (
-        <div className="mt-3 flex gap-2 overflow-x-auto">
+        <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto p-1">
           {sorted.map((image, index) => (
             <button
               key={image.url}
