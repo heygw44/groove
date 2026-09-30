@@ -57,4 +57,9 @@ public interface OrderClaimRepository extends JpaRepository<OrderClaim, Long> {
 			""")
 	Page<OrderClaim> search(@Param("type") OrderClaimType type, @Param("status") OrderClaimStatus status,
 			Pageable pageable);
+
+	/** 유형·상태별 건수를 한 번에 센다. 건이 없는 조합은 행이 없다. */
+	@Query("select c.type as type, c.status as status, count(c) as count from OrderClaim c "
+			+ "group by c.type, c.status")
+	List<OrderClaimCountRow> countByTypeAndStatus();
 }

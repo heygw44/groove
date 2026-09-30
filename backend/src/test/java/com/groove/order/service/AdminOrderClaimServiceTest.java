@@ -35,6 +35,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.AdminOrderClaimCompleteRequest;
+import com.groove.order.dto.AdminOrderClaimCountResponse;
 import com.groove.order.dto.AdminOrderClaimRejectRequest;
 import com.groove.order.dto.AdminOrderClaimSearchRequest;
 import com.groove.order.dto.AdminOrderClaimSummaryResponse;
@@ -47,6 +48,7 @@ import com.groove.order.entity.OrderClaimType;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderItemClaimStatus;
 import com.groove.order.entity.OrderItemStatus;
+import com.groove.order.repository.OrderClaimCountRow;
 import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.entity.Artist;
@@ -100,6 +102,88 @@ class AdminOrderClaimServiceTest {
 	private void stubItemResponseLookup() {
 		given(productImageRepository.findAllByProductIdInAndSortOrder(any(), eq(0))).willReturn(List.of());
 		given(orderItemRepository.findWithProductById(ITEM_ID)).willReturn(Optional.of(item));
+	}
+
+	private static OrderClaimCountRow row(OrderClaimType type, OrderClaimStatus status, long count) {
+		return new OrderClaimCountRow() {
+
+			@Override
+			public OrderClaimType getType() {
+				return type;
+			}
+
+			@Override
+			public OrderClaimStatus getStatus() {
+				return status;
+			}
+
+			@Override
+			public long getCount() {
+				return count;
+			}
+		};
+	}
+
+	@Nested
+	@DisplayName("getCounts()")
+	class GetCounts {
+
+		@Test
+		@DisplayName("행이 없는 상태는 0 으로 채우고 total 은 다섯 상태의 합이다")
+		void fillsMissingStatusesWithZero() {
+			// given
+			given(orderClaimRepository.countByTypeAndStatus()).willReturn(List.of(
+					row(OrderClaimType.CANCEL, OrderClaimStatus.REQUESTED, 3L),
+					row(OrderClaimType.CANCEL, OrderClaimStatus.DONE, 5L),
+					row(OrderClaimType.CANCEL, OrderClaimStatus.WITHDRAWN, 2L)));
+
+			// when
+			AdminOrderClaimCountResponse response = service.getCounts();
+
+			// then
+			assertThat(response.cancel().requested()).isEqualTo(3L);
+			assertThat(response.cancel().collecting()).isZero();
+			assertThat(response.cancel().done()).isEqualTo(5L);
+			assertThat(response.cancel().rejected()).isZero();
+			assertThat(response.cancel().withdrawn()).isEqualTo(2L);
+			assertThat(response.cancel().total()).isEqualTo(10L);
+		}
+
+		@Test
+		@DisplayName("취소와 반품 건수를 섞지 않고 각각 집계한다")
+		void separatesCancelAndReturn() {
+			// given
+			given(orderClaimRepository.countByTypeAndStatus()).willReturn(List.of(
+					row(OrderClaimType.CANCEL, OrderClaimStatus.REQUESTED, 1L),
+					row(OrderClaimType.RETURN, OrderClaimStatus.REQUESTED, 4L),
+					row(OrderClaimType.RETURN, OrderClaimStatus.COLLECTING, 2L),
+					row(OrderClaimType.RETURN, OrderClaimStatus.REJECTED, 1L)));
+
+			// when
+			AdminOrderClaimCountResponse response = service.getCounts();
+
+			// then
+			assertThat(response.cancel().requested()).isEqualTo(1L);
+			assertThat(response.cancel().total()).isEqualTo(1L);
+			assertThat(response.returns().requested()).isEqualTo(4L);
+			assertThat(response.returns().collecting()).isEqualTo(2L);
+			assertThat(response.returns().rejected()).isEqualTo(1L);
+			assertThat(response.returns().total()).isEqualTo(7L);
+		}
+
+		@Test
+		@DisplayName("클레임이 하나도 없으면 모두 0 이다")
+		void returnsAllZeroWhenEmpty() {
+			// given
+			given(orderClaimRepository.countByTypeAndStatus()).willReturn(List.of());
+
+			// when
+			AdminOrderClaimCountResponse response = service.getCounts();
+
+			// then
+			assertThat(response.cancel().total()).isZero();
+			assertThat(response.returns().total()).isZero();
+		}
 	}
 
 	@Nested

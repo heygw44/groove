@@ -13,6 +13,7 @@ import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.global.common.PageResponse;
 import com.groove.order.dto.AdminOrderClaimCompleteRequest;
+import com.groove.order.dto.AdminOrderClaimCountResponse;
 import com.groove.order.dto.AdminOrderClaimRejectRequest;
 import com.groove.order.dto.AdminOrderClaimSearchRequest;
 import com.groove.order.dto.AdminOrderClaimSummaryResponse;
@@ -38,6 +39,12 @@ public class AdminOrderClaimController {
 	public ApiResponse<PageResponse<AdminOrderClaimSummaryResponse>> getList(
 			@Valid @ModelAttribute AdminOrderClaimSearchRequest request) {
 		return ApiResponse.ok(adminOrderClaimService.getList(request));
+	}
+
+	@Operation(summary = "취소·반품 클레임 상태별 건수")
+	@GetMapping("/order-claims/counts")
+	public ApiResponse<AdminOrderClaimCountResponse> getCounts() {
+		return ApiResponse.ok(adminOrderClaimService.getCounts());
 	}
 
 	@Operation(summary = "취소 클레임 승인")
