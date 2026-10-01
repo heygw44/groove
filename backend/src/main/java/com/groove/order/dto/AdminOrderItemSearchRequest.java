@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 
 import org.springframework.format.annotation.DateTimeFormat;
 
+import com.groove.global.common.PageLimits;
 import com.groove.order.entity.OrderStatusGroup;
 
 import jakarta.validation.constraints.AssertTrue;
@@ -18,7 +19,7 @@ public record AdminOrderItemSearchRequest(
 		@Size(max = 100) String keyword,
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

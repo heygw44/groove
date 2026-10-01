@@ -43,6 +43,7 @@ import com.groove.catalog.service.CatalogImportService;
 import com.groove.catalog.service.CatalogLookupService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageLimits;
 import com.groove.global.common.PageResponse;
 import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
@@ -339,6 +340,29 @@ class AdminCatalogControllerTest {
 							.header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.content[0].jobExecutionId", is(88)));
+		}
+
+		@Test
+		@DisplayName("page 가 상한을 넘으면 400 COMMON_VALIDATION_FAILED 를 반환하고 서비스는 호출되지 않는다")
+		void returnsBadRequestWhenPageOverMax() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/catalog/import-jobs")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.param("page", String.valueOf(PageLimits.MAX_PAGE + 1)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(catalogImportJobService, never()).list(anyInt(), anyInt());
+		}
+
+		@Test
+		@DisplayName("size 가 100 을 넘으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenSizeOverMax() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/catalog/import-jobs")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.param("size", "101"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 		}
 
 		@Test

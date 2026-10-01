@@ -4,6 +4,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+import com.groove.global.common.PageLimits;
 import com.groove.order.entity.OrderClaimStatus;
 import com.groove.order.entity.OrderClaimType;
 
@@ -14,7 +15,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 public record AdminOrderClaimSearchRequest(
 		OrderClaimType type,
 		OrderClaimStatus status,
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

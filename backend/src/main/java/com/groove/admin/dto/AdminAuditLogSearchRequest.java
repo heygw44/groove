@@ -7,6 +7,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
+import com.groove.global.common.PageLimits;
 
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
@@ -19,7 +20,7 @@ public record AdminAuditLogSearchRequest(
 		Long adminId,
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

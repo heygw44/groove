@@ -138,6 +138,10 @@ public class GlobalExceptionHandler {
 	}
 
 	private String resolveMessage(FieldError fieldError) {
+		if (fieldError.isBindingFailure()) {
+			// 타입 변환 실패 메시지는 자바 타입명과 입력 원문을 담고 있어 그대로 내보내지 않는다.
+			return "형식이 올바르지 않습니다.";
+		}
 		String message = fieldError.getDefaultMessage();
 		return message == null ? "invalid" : message;
 	}

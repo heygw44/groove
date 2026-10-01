@@ -165,19 +165,6 @@ class NotificationControllerTest {
 		}
 
 		@Test
-		@DisplayName("본인 알림이 아니면 403 NOTIFICATION_FORBIDDEN 을 반환한다")
-		void returnsForbiddenWhenNotOwner() throws Exception {
-			// given
-			willThrow(new BusinessException(ErrorCode.NOTIFICATION_FORBIDDEN))
-					.given(notificationService).markRead(1L, 301L);
-
-			// when & then
-			mockMvc.perform(patch("/api/v1/notifications/301/read").header(HttpHeaders.AUTHORIZATION, bearer()))
-					.andExpect(status().isForbidden())
-					.andExpect(jsonPath("$.error.code", is("NOTIFICATION_FORBIDDEN")));
-		}
-
-		@Test
 		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
 		void returnsUnauthorizedWithoutToken() throws Exception {
 			// when & then
@@ -239,19 +226,6 @@ class NotificationControllerTest {
 			mockMvc.perform(delete("/api/v1/notifications/301").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.error.code", is("NOTIFICATION_NOT_FOUND")));
-		}
-
-		@Test
-		@DisplayName("본인 알림이 아니면 403 NOTIFICATION_FORBIDDEN 을 반환한다")
-		void returnsForbiddenWhenNotOwner() throws Exception {
-			// given
-			willThrow(new BusinessException(ErrorCode.NOTIFICATION_FORBIDDEN))
-					.given(notificationService).delete(1L, 301L);
-
-			// when & then
-			mockMvc.perform(delete("/api/v1/notifications/301").header(HttpHeaders.AUTHORIZATION, bearer()))
-					.andExpect(status().isForbidden())
-					.andExpect(jsonPath("$.error.code", is("NOTIFICATION_FORBIDDEN")));
 		}
 
 		@Test

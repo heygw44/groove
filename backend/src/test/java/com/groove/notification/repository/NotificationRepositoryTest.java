@@ -102,6 +102,25 @@ class NotificationRepositoryTest extends DataJpaTestSupport {
 	}
 
 	@Nested
+	@DisplayName("findByIdAndMemberId()")
+	class FindByIdAndMemberId {
+
+		@Test
+		@DisplayName("소유자가 맞으면 반환하고 다른 회원이면 비어 있다")
+		void returnsOnlyForOwner() {
+			// given
+			Member member = memberRepository.save(MemberFixture.create("notification-repo-owner@groove.com"));
+			Member other = memberRepository.save(MemberFixture.create("notification-repo-owner-other@groove.com"));
+			Product product = createProduct("owner");
+			Notification notification = notificationRepository.save(NotificationFixture.forProduct(member, product));
+
+			// when & then
+			assertThat(notificationRepository.findByIdAndMemberId(notification.getId(), member.getId())).isPresent();
+			assertThat(notificationRepository.findByIdAndMemberId(notification.getId(), other.getId())).isEmpty();
+		}
+	}
+
+	@Nested
 	@DisplayName("countByMemberIdAndReadAtIsNull()")
 	class CountByMemberIdAndReadAtIsNull {
 

@@ -1,13 +1,16 @@
 package com.groove.product.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -32,6 +35,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.groove.auth.jwt.JwtProvider;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.common.PageLimits;
 import com.groove.global.common.PageResponse;
 import com.groove.global.config.JwtProperties;
 import com.groove.global.config.RestAccessDeniedHandler;
@@ -124,6 +128,24 @@ class ProductControllerTest {
 		}
 
 		@Test
+		@DisplayName("page 가 상한을 넘으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenPageOverMax() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/products").param("page", String.valueOf(PageLimits.MAX_PAGE + 1)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
+		@DisplayName("page 가 숫자가 아니면 400 을 반환하고 응답에 자바 타입명을 노출하지 않는다")
+		void doesNotLeakJavaTypeWhenPageNotNumber() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/products").param("page", "abc"))
+					.andExpect(status().isBadRequest())
+					.andExpect(content().string(not(containsString("java.lang"))));
+		}
+
+		@Test
 		@DisplayName("쿼리 파라미터가 ProductSearchRequest 로 바인딩된다")
 		void bindsQueryParametersToRequest() throws Exception {
 			// given
@@ -196,7 +218,7 @@ class ProductControllerTest {
 			// given
 			JwtProvider expiredProvider = new JwtProvider(
 					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14),
-							Duration.ofSeconds(10)));
+							Duration.ofSeconds(10), Duration.ofMinutes(5)));
 			String expiredToken = expiredProvider.createAccessToken(1L, MemberRole.USER);
 			PageResponse<ProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(sampleSummary()), PageRequest.of(0, 20), 1));

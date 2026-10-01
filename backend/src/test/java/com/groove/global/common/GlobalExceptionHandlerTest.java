@@ -65,10 +65,32 @@ class GlobalExceptionHandlerTest {
 					.containsExactly("invalid");
 		}
 
+		@Test
+		@DisplayName("타입 변환 같은 바인딩 실패면 내부 메시지 대신 고정 문구를 반환한다")
+		void returnsFixedMessageWhenBindingFailure() throws NoSuchMethodException {
+			// given
+			String leaked = "Failed to convert property value of type 'java.lang.String' to required type 'int'";
+			MethodArgumentNotValidException exception = validationException(leaked, true);
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleValidation(exception);
+
+			// then
+			assertThat(response.getBody().error().fieldErrors())
+					.extracting("reason")
+					.containsExactly("형식이 올바르지 않습니다.");
+		}
+
 		private MethodArgumentNotValidException validationException(String defaultMessage)
 				throws NoSuchMethodException {
+			return validationException(defaultMessage, false);
+		}
+
+		private MethodArgumentNotValidException validationException(String defaultMessage, boolean bindingFailure)
+				throws NoSuchMethodException {
 			BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "target");
-			bindingResult.addError(new FieldError("target", "email", null, false, null, null, defaultMessage));
+			bindingResult.addError(
+					new FieldError("target", "email", null, bindingFailure, null, null, defaultMessage));
 			MethodParameter methodParameter = new MethodParameter(
 					GlobalExceptionHandlerTest.class.getDeclaredMethod("dummyTarget", String.class), 0);
 			return new MethodArgumentNotValidException(methodParameter, bindingResult);

@@ -44,7 +44,6 @@ import com.groove.product.entity.Product;
 class NotificationServiceTest {
 
 	private static final Long MEMBER_ID = 1L;
-	private static final Long OTHER_MEMBER_ID = 2L;
 	private static final Long NOTIFICATION_ID = 1000L;
 	private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-09-07T09:00:00Z"),
 			ZoneId.of("Asia/Seoul"));
@@ -55,14 +54,12 @@ class NotificationServiceTest {
 	NotificationService notificationService;
 
 	Member member;
-	Member other;
 	Product product;
 
 	@BeforeEach
 	void setUp() {
 		notificationService = new NotificationService(notificationRepository, FIXED_CLOCK);
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
-		other = MemberFixture.withId(MemberFixture.create("other@groove.com"), OTHER_MEMBER_ID);
 		Artist artist = ArtistFixture.withId(1L);
 		product = ProductFixture.withId(ProductFixture.create(artist), 100L);
 	}
@@ -138,7 +135,8 @@ class NotificationServiceTest {
 			// given
 			Notification notification = NotificationFixture.withId(NotificationFixture.forProduct(member, product),
 					NOTIFICATION_ID);
-			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.of(notification));
+			given(notificationRepository.findByIdAndMemberId(NOTIFICATION_ID, MEMBER_ID))
+					.willReturn(Optional.of(notification));
 
 			// when
 			notificationService.markRead(MEMBER_ID, NOTIFICATION_ID);
@@ -151,7 +149,7 @@ class NotificationServiceTest {
 		@DisplayName("알림이 없으면 NOTIFICATION_NOT_FOUND 예외를 던진다")
 		void throwsWhenNotFound() {
 			// given
-			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.empty());
+			given(notificationRepository.findByIdAndMemberId(NOTIFICATION_ID, MEMBER_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> notificationService.markRead(MEMBER_ID, NOTIFICATION_ID))
@@ -161,19 +159,17 @@ class NotificationServiceTest {
 		}
 
 		@Test
-		@DisplayName("본인 알림이 아니면 NOTIFICATION_FORBIDDEN 예외를 던진다")
-		void throwsWhenNotOwner() {
+		@DisplayName("남의 알림은 없는 알림과 같이 NOTIFICATION_NOT_FOUND 예외를 던진다")
+		void throwsNotFoundWhenNotOwner() {
 			// given
-			Notification notification = NotificationFixture.withId(NotificationFixture.forProduct(other, product),
-					NOTIFICATION_ID);
-			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.of(notification));
+			given(notificationRepository.findByIdAndMemberId(NOTIFICATION_ID, MEMBER_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> notificationService.markRead(MEMBER_ID, NOTIFICATION_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
-					.isEqualTo(ErrorCode.NOTIFICATION_FORBIDDEN);
-			assertThat(notification.getReadAt()).isNull();
+					.isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
+			verify(notificationRepository, never()).findById(any());
 		}
 	}
 
@@ -202,7 +198,8 @@ class NotificationServiceTest {
 			// given
 			Notification notification = NotificationFixture.withId(NotificationFixture.forProduct(member, product),
 					NOTIFICATION_ID);
-			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.of(notification));
+			given(notificationRepository.findByIdAndMemberId(NOTIFICATION_ID, MEMBER_ID))
+					.willReturn(Optional.of(notification));
 
 			// when
 			notificationService.delete(MEMBER_ID, NOTIFICATION_ID);
@@ -215,7 +212,7 @@ class NotificationServiceTest {
 		@DisplayName("알림이 없으면 NOTIFICATION_NOT_FOUND 예외를 던진다")
 		void throwsWhenNotFound() {
 			// given
-			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.empty());
+			given(notificationRepository.findByIdAndMemberId(NOTIFICATION_ID, MEMBER_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> notificationService.delete(MEMBER_ID, NOTIFICATION_ID))
@@ -225,18 +222,16 @@ class NotificationServiceTest {
 		}
 
 		@Test
-		@DisplayName("본인 알림이 아니면 NOTIFICATION_FORBIDDEN 예외를 던진다")
-		void throwsWhenNotOwner() {
+		@DisplayName("남의 알림은 없는 알림과 같이 NOTIFICATION_NOT_FOUND 예외를 던진다")
+		void throwsNotFoundWhenNotOwner() {
 			// given
-			Notification notification = NotificationFixture.withId(NotificationFixture.forProduct(other, product),
-					NOTIFICATION_ID);
-			given(notificationRepository.findById(NOTIFICATION_ID)).willReturn(Optional.of(notification));
+			given(notificationRepository.findByIdAndMemberId(NOTIFICATION_ID, MEMBER_ID)).willReturn(Optional.empty());
 
 			// when & then
 			assertThatThrownBy(() -> notificationService.delete(MEMBER_ID, NOTIFICATION_ID))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
-					.isEqualTo(ErrorCode.NOTIFICATION_FORBIDDEN);
+					.isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
 			verify(notificationRepository, never()).delete(any());
 		}
 	}
