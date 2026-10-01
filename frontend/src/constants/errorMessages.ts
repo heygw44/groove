@@ -85,6 +85,11 @@ export const ERROR_MESSAGES: Record<string, string> = {
   AUTH_LOGIN_LOCKED:
     '로그인에 여러 번 실패해 로그인이 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.',
   AUTH_RATE_LIMITED: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
+  MEMBER_PASSWORD_LOCKED:
+    '비밀번호 확인에 여러 번 실패해 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.',
+  COUPON_ISSUE_LOCKED:
+    '쿠폰 코드 입력에 여러 번 실패해 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.',
+  COUPON_ISSUE_RATE_LIMITED: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
   RECOMMEND_PROFILE_NOT_FOUND: '아직 취향 프로필이 없습니다.',
   CATALOG_LOOKUP_FAILED: 'Discogs 조회에 실패했습니다. 잠시 후 다시 시도해주세요.',
   CATALOG_RELEASE_NOT_FOUND: '존재하지 않는 음반입니다.',
