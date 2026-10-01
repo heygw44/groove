@@ -878,4 +878,46 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 					.doesNotContain(rejected.getId());
 		}
 	}
+
+	@Nested
+	@DisplayName("countAdminOrderItems()")
+	class CountAdminOrderItems {
+
+		@Test
+		@DisplayName("keyword 로 회원 이메일을 검색하면 같은 조건의 findAdminOrderItems 결과 개수와 같다")
+		void matchesFindResultSizeWithKeyword() {
+			// given
+			persistOrderWithMixedItemStatuses("20260903-OQMCNT001");
+			persistUnplacedOrder(owner, "20260903-OQMCNT002", kindOfBlue, 1);
+			em.clear();
+			AdminOrderItemSearchCondition condition =
+					new AdminOrderItemSearchCondition(null, "order-query-owner", null, null, 0, 100);
+
+			// when
+			long count = orderQueryMapper.countAdminOrderItems(condition);
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(condition);
+
+			// then
+			assertThat(count).isEqualTo(result.size());
+		}
+
+		@Test
+		@DisplayName("keyword 가 없으면 회원 조인 없이 결제 확정 주문의 상품주문만 센다")
+		void countsPlacedItemsWithoutKeyword() {
+			// given: 공유 DB 에 다른 테스트 데이터가 있을 수 있어 증가분으로 단언한다. 조건을 달리해 세션 캐시를 피한다.
+			LocalDateTime from = LocalDateTime.now().minusDays(1);
+			long before = orderQueryMapper.countAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, null, from, from.plusDays(10), 0, 20));
+			persistOrderWithMixedItemStatuses("20260903-OQMCNT003");
+			persistUnplacedOrder(owner, "20260903-OQMCNT004", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			long after = orderQueryMapper.countAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, null, from, from.plusDays(11), 0, 20));
+
+			// then
+			assertThat(after - before).isEqualTo(4);
+		}
+	}
 }

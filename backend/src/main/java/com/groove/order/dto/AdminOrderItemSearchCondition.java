@@ -17,4 +17,9 @@ public record AdminOrderItemSearchCondition(
 	public int offset() {
 		return page * size;
 	}
+
+	/** 다음 페이지 존재 여부를 알아내기 위해 한 건 더 조회한다. */
+	public int fetchSize() {
+		return size + 1;
+	}
 }

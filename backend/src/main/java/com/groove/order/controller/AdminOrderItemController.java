@@ -10,9 +10,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.groove.auth.LoginMember;
 import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
-import com.groove.global.common.PageResponse;
+import com.groove.global.common.SliceResponse;
 import com.groove.order.dto.AdminOrderItemBulkResultResponse;
 import com.groove.order.dto.AdminOrderItemConfirmRequest;
+import com.groove.order.dto.AdminOrderItemCountResponse;
 import com.groove.order.dto.AdminOrderItemDeliverRequest;
 import com.groove.order.dto.AdminOrderItemSearchRequest;
 import com.groove.order.dto.AdminOrderItemShipRequest;
@@ -34,9 +35,16 @@ public class AdminOrderItemController {
 
 	@Operation(summary = "상품주문 목록 조회")
 	@GetMapping
-	public ApiResponse<PageResponse<AdminOrderItemSummaryResponse>> getList(
+	public ApiResponse<SliceResponse<AdminOrderItemSummaryResponse>> getList(
 			@Valid @ModelAttribute AdminOrderItemSearchRequest request) {
 		return ApiResponse.ok(adminOrderItemService.getList(request));
+	}
+
+	@Operation(summary = "상품주문 건수 조회")
+	@GetMapping("/count")
+	public ApiResponse<AdminOrderItemCountResponse> count(
+			@Valid @ModelAttribute AdminOrderItemSearchRequest request) {
+		return ApiResponse.ok(adminOrderItemService.count(request));
 	}
 
 	@Operation(summary = "상품주문 일괄 발주확인")

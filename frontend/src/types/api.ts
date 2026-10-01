@@ -20,6 +20,14 @@ export interface ApiResponse<T> {
   timestamp: string;
 }
 
+/** 전체 건수를 세지 않는 목록 응답. 건수는 별도 count API 로 받는다. */
+export interface SliceResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  hasNext: boolean;
+}
+
 export interface PageResponse<T> {
   content: T[];
   page: number;

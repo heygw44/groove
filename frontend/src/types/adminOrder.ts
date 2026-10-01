@@ -69,6 +69,12 @@ export interface AdminOrderItemListParams {
   size?: number;
 }
 
+export type AdminOrderItemCountParams = Omit<AdminOrderItemListParams, 'page' | 'size'>;
+
+export interface AdminOrderItemCount {
+  totalElements: number;
+}
+
 /** 일괄 발주확인·발송·배송완료 결과. 상태가 맞지 않거나 진행 중 클레임이 있는 건은 skipped 로 센다. */
 export interface AdminOrderItemBulkResult {
   processed: number;

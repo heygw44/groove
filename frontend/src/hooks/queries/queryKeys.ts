@@ -1,6 +1,10 @@
 import type { AdminAuditLogListParams } from '@/types/adminAuditLog';
 import type { AdminMemberListParams } from '@/types/adminMember';
-import type { AdminOrderClaimListParams, AdminOrderItemListParams } from '@/types/adminOrder';
+import type {
+  AdminOrderClaimListParams,
+  AdminOrderItemCountParams,
+  AdminOrderItemListParams,
+} from '@/types/adminOrder';
 import type {
   LimitedDropStatsListParams,
   PopularProductParams,
@@ -63,7 +67,8 @@ export const orderKeys = {
 
 export const adminOrderItemKeys = {
   all: ['adminOrderItems'] as const,
-  list: (params: AdminOrderItemListParams) => ['adminOrderItems', params] as const,
+  list: (params: AdminOrderItemListParams) => ['adminOrderItems', 'list', params] as const,
+  count: (params: AdminOrderItemCountParams) => ['adminOrderItems', 'count', params] as const,
 };
 
 export const adminOrderKeys = {

@@ -15,6 +15,8 @@ import type {
   AdminOrderDetail,
   AdminOrderItemBulkResult,
   AdminOrderItemCancelRequest,
+  AdminOrderItemCount,
+  AdminOrderItemCountParams,
   AdminOrderItemConfirmRequest,
   AdminOrderItemDeliverRequest,
   AdminOrderItemListParams,
@@ -33,7 +35,7 @@ import type {
   ReconcileLogListParams,
   StatsPeriodParams,
 } from '@/types/adminStats';
-import type { ApiResponse, PageResponse } from '@/types/api';
+import type { ApiResponse, PageResponse, SliceResponse } from '@/types/api';
 import type {
   AdminCouponCreateRequest,
   AdminCouponListParams,
@@ -91,7 +93,14 @@ export const adjustStock = (id: number, payload: StockAdjustRequest) =>
 
 export const getAdminOrderItems = (params: AdminOrderItemListParams) =>
   unwrap(
-    client.get<ApiResponse<PageResponse<AdminOrderItemSummary>>>('/admin/order-items', {
+    client.get<ApiResponse<SliceResponse<AdminOrderItemSummary>>>('/admin/order-items', {
+      params,
+    }),
+  );
+
+export const getAdminOrderItemCount = (params: AdminOrderItemCountParams) =>
+  unwrap(
+    client.get<ApiResponse<AdminOrderItemCount>>('/admin/order-items/count', {
       params,
     }),
   );
