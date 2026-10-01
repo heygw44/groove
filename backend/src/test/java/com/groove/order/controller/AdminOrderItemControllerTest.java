@@ -13,10 +13,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -306,6 +310,124 @@ class AdminOrderItemControllerTest {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
 			verify(adminOrderItemService, never()).completeDelivery(any(), any());
+		}
+	}
+
+	@Nested
+	@DisplayName("일괄 처리 요청 상한")
+	class BulkLimit {
+
+		@ParameterizedTest
+		@ValueSource(strings = {"confirm", "deliver"})
+		@DisplayName("orderItemIds 가 101건이면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenIdsExceedLimit(String action) throws Exception {
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/" + action).header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(idsBody(101)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminOrderItemService, never()).confirmPreparing(any(), any());
+			verify(adminOrderItemService, never()).completeDelivery(any(), any());
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"confirm", "deliver"})
+		@DisplayName("orderItemIds 에 null 원소가 있으면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenIdsContainNull(String action) throws Exception {
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/" + action).header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"orderItemIds\":[1,null]}"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminOrderItemService, never()).confirmPreparing(any(), any());
+			verify(adminOrderItemService, never()).completeDelivery(any(), any());
+		}
+
+		@Test
+		@DisplayName("confirm 은 orderItemIds 가 100건이면 200 을 반환한다")
+		void confirmAcceptsLimitSize() throws Exception {
+			// given
+			given(adminOrderItemService.confirmPreparing(eq(1L), any()))
+					.willReturn(new AdminOrderItemBulkResultResponse(100, 0));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/confirm").header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(idsBody(100)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.processed", is(100)));
+			verify(adminOrderItemService).confirmPreparing(eq(1L), any());
+		}
+
+		@Test
+		@DisplayName("deliver 는 orderItemIds 가 100건이면 200 을 반환한다")
+		void deliverAcceptsLimitSize() throws Exception {
+			// given
+			given(adminOrderItemService.completeDelivery(eq(1L), any()))
+					.willReturn(new AdminOrderItemBulkResultResponse(100, 0));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/deliver").header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(idsBody(100)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.processed", is(100)));
+			verify(adminOrderItemService).completeDelivery(eq(1L), any());
+		}
+
+		@Test
+		@DisplayName("ship 은 items 가 101건이면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void shipReturnsBadRequestWhenItemsExceedLimit() throws Exception {
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/ship").header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(shipBody(101)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminOrderItemService, never()).startShipping(any(), any());
+		}
+
+		@Test
+		@DisplayName("ship 은 items 에 null 원소가 있으면 500 이 아니라 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void shipReturnsBadRequestWhenItemsContainNull() throws Exception {
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/ship").header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"items\":[null]}"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminOrderItemService, never()).startShipping(any(), any());
+		}
+
+		@Test
+		@DisplayName("ship 은 items 가 100건이면 200 을 반환한다")
+		void shipAcceptsLimitSize() throws Exception {
+			// given
+			given(adminOrderItemService.startShipping(eq(1L), any()))
+					.willReturn(new AdminOrderItemBulkResultResponse(100, 0));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/ship").header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(shipBody(100)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.processed", is(100)));
+			verify(adminOrderItemService).startShipping(eq(1L), any());
+		}
+
+		private String idsBody(int size) {
+			String ids = LongStream.rangeClosed(1, size).mapToObj(String::valueOf).collect(Collectors.joining(","));
+			return "{\"orderItemIds\":[" + ids + "]}";
+		}
+
+		private String shipBody(int size) {
+			String items = LongStream.rangeClosed(1, size)
+					.mapToObj(id -> "{\"orderItemId\":" + id
+							+ ",\"courierCode\":\"CJ\",\"trackingNumber\":\"123456789012\"}")
+					.collect(Collectors.joining(","));
+			return "{\"items\":[" + items + "]}";
 		}
 	}
 }

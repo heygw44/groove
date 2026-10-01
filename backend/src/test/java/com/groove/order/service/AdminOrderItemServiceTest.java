@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
@@ -13,7 +14,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -22,9 +22,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -203,7 +201,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -225,7 +223,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PREPARING);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -246,8 +244,7 @@ class AdminOrderItemServiceTest {
 			Order order2 = orderWithItem(100L, 800L, OrderItemStatus.PAID);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(700L, 800L)))
 					.willReturn(List.of(200L, 100L));
-			given(orderRepository.findByIdForUpdate(100L)).willReturn(Optional.of(order2));
-			given(orderRepository.findByIdForUpdate(200L)).willReturn(Optional.of(order1));
+			given(orderRepository.findAllByIdInForUpdate(List.of(100L, 200L))).willReturn(List.of(order2, order1));
 			given(orderItemRepository.findAllById(List.of(700L, 800L)))
 					.willReturn(List.of(order1.getItems().get(0), order2.getItems().get(0)));
 
@@ -255,9 +252,8 @@ class AdminOrderItemServiceTest {
 			service.confirmPreparing(ADMIN_ID, new AdminOrderItemConfirmRequest(List.of(700L, 800L)));
 
 			// then
-			InOrder inOrder = Mockito.inOrder(orderRepository);
-			inOrder.verify(orderRepository).findByIdForUpdate(100L);
-			inOrder.verify(orderRepository).findByIdForUpdate(200L);
+			verify(orderRepository, times(1)).findAllByIdInForUpdate(List.of(100L, 200L));
+			verify(orderRepository, never()).findByIdForUpdate(any());
 		}
 
 		@Test
@@ -268,7 +264,7 @@ class AdminOrderItemServiceTest {
 			OrderItem item = order.getItems().get(0);
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -288,7 +284,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(paymentRepository.findOrderIdsByOrderIdInAndStatus(List.of(500L), PaymentStatus.CANCEL_REQUESTED))
 					.willReturn(List.of(500L));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
@@ -309,7 +305,7 @@ class AdminOrderItemServiceTest {
 		void throwsWhenOrderNotFound() {
 			// given
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.empty());
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of());
 
 			// when & then
 			assertThatThrownBy(() -> service.confirmPreparing(ADMIN_ID,
@@ -320,13 +316,46 @@ class AdminOrderItemServiceTest {
 		}
 
 		@Test
+		@DisplayName("잠근 주문 수가 대상 주문 수보다 적으면 ORDER_NOT_FOUND 예외를 던지고 항목을 조회하지 않는다")
+		void throwsWhenLockedOrderCountIsShort() {
+			// given
+			Order order = orderWithItem(100L, 700L, OrderItemStatus.PAID);
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(700L, 800L)))
+					.willReturn(List.of(200L, 100L));
+			given(orderRepository.findAllByIdInForUpdate(List.of(100L, 200L))).willReturn(List.of(order));
+
+			// when & then
+			assertThatThrownBy(() -> service.confirmPreparing(ADMIN_ID,
+					new AdminOrderItemConfirmRequest(List.of(700L, 800L))))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+			verify(orderItemRepository, never()).findAllById(any());
+		}
+
+		@Test
+		@DisplayName("대상 상품주문이 하나도 없으면 주문을 잠그지 않고 건너뛴다")
+		void doesNotLockWhenNoOrderFound() {
+			// given
+			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of());
+
+			// when
+			AdminOrderItemBulkResultResponse result = service.confirmPreparing(ADMIN_ID,
+					new AdminOrderItemConfirmRequest(List.of(900L)));
+
+			// then
+			assertThat(result.processed()).isZero();
+			verify(orderRepository, never()).findAllByIdInForUpdate(any());
+		}
+
+		@Test
 		@DisplayName("같은 id 를 두 번 보내면 한 번으로 세어 skipped 가 0 이다")
 		void countsDuplicateIdsOnce() {
 			// given
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -350,7 +379,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PREPARING);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -374,8 +403,7 @@ class AdminOrderItemServiceTest {
 			OrderItem item2 = order2.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(700L, 800L)))
 					.willReturn(List.of(100L, 200L));
-			given(orderRepository.findByIdForUpdate(100L)).willReturn(Optional.of(order1));
-			given(orderRepository.findByIdForUpdate(200L)).willReturn(Optional.of(order2));
+			given(orderRepository.findAllByIdInForUpdate(List.of(100L, 200L))).willReturn(List.of(order1, order2));
 			given(orderItemRepository.findAllById(List.of(700L, 800L))).willReturn(List.of(item1, item2));
 
 			// when
@@ -398,7 +426,7 @@ class AdminOrderItemServiceTest {
 			OrderItem item = order.getItems().get(0);
 			ReflectionTestUtils.setField(item, "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -417,7 +445,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(paymentRepository.findOrderIdsByOrderIdInAndStatus(List.of(500L), PaymentStatus.CANCEL_REQUESTED))
 					.willReturn(List.of(500L));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
@@ -452,7 +480,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -485,7 +513,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.SHIPPING);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -504,7 +532,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.PAID);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when
@@ -523,7 +551,7 @@ class AdminOrderItemServiceTest {
 			Order order = orderWithItem(500L, 900L, OrderItemStatus.SHIPPING);
 			OrderItem item = order.getItems().get(0);
 			given(orderItemRepository.findDistinctOrderIdsByIdIn(List.of(900L))).willReturn(List.of(500L));
-			given(orderRepository.findByIdForUpdate(500L)).willReturn(Optional.of(order));
+			given(orderRepository.findAllByIdInForUpdate(List.of(500L))).willReturn(List.of(order));
 			given(orderItemRepository.findAllById(List.of(900L))).willReturn(List.of(item));
 
 			// when

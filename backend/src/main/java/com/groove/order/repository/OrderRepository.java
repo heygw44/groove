@@ -38,6 +38,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 	@Query("select o from Order o where o.id = :id")
 	Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
+	/** id 오름차순으로 잠근다. 여러 주문을 잠그는 다른 경로와 순서를 맞춰야 교착이 생기지 않는다. */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select o from Order o where o.id in :ids order by o.id")
+	List<Order> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select o from Order o where o.orderNumber = :orderNumber")
 	Optional<Order> findByOrderNumberForUpdate(@Param("orderNumber") String orderNumber);
