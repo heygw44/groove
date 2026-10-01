@@ -223,15 +223,18 @@
 		JOIN member m ON m.id = o.member_id
 		<include refid="adminOrderItemsWhere"/>
 		ORDER BY oi.created_at DESC, oi.id DESC
-		LIMIT #{size} OFFSET #{offset}
+		LIMIT #{fetchSize} OFFSET #{offset}
 	</select>
 
+	<!-- member 는 이메일 키워드 검색에만 쓴다. FK 라 조인을 빼도 건수는 같고, 무필터 계획이 회원 스캔에서 주문 인덱스 스캔으로 바뀐다. -->
 	<select id="countAdminOrderItems" parameterType="com.groove.order.dto.AdminOrderItemSearchCondition"
 			resultType="long">
 		SELECT COUNT(*)
 		FROM order_item oi
 		JOIN orders o ON o.id = oi.order_id
-		JOIN member m ON m.id = o.member_id
+		<if test="keyword != null and keyword != ''">
+			JOIN member m ON m.id = o.member_id
+		</if>
 		<include refid="adminOrderItemsWhere"/>
 	</select>
 

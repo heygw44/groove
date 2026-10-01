@@ -18,9 +18,10 @@ import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
-import com.groove.global.common.PageResponse;
+import com.groove.global.common.SliceResponse;
 import com.groove.order.dto.AdminOrderItemBulkResultResponse;
 import com.groove.order.dto.AdminOrderItemConfirmRequest;
+import com.groove.order.dto.AdminOrderItemCountResponse;
 import com.groove.order.dto.AdminOrderItemDeliverRequest;
 import com.groove.order.dto.AdminOrderItemSearchCondition;
 import com.groove.order.dto.AdminOrderItemSearchRequest;
@@ -37,9 +38,12 @@ import com.groove.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 관리자 상품주문 목록 조회와 발주확인·발송처리·배송완료 일괄 처리. 대상이 아닌 상품주문(상태가 다르거나 진행 중
+ * 관리자 상품주문 목록·건수 조회와 발주확인·발송처리·배송완료 일괄 처리. 대상이 아닌 상품주문(상태가 다르거나 진행 중
  * 클레임이 있음)은 예외로 막지 않고 건너뛰어 처리/건너뜀 건수로만 알려준다 - 관리자가 여러 상태가 섞인 상품주문을
  * 한 번에 선택해도 일부만 유효하면 그만큼은 처리되게 하기 위함이다.
+ *
+ * <p>건수는 목록과 따로 조회한다. 목록은 인덱스로 한 페이지만 읽지만 건수는 조건에 맞는 행을 전부 세야 해서
+ * 데이터가 커질수록 느려지므로, 페이지를 넘길 때마다 세지 않고 목록에는 다음 페이지 유무만 싣는다.</p>
  *
  * <p>일괄 처리는 대상 주문을 id 순으로 잠근 뒤 상품주문을 처음 읽는다. READ COMMITTED 인 이유: 락을 기다리는 동안
  * 구매자 취소가 커밋한 클레임 표시를 봐야 한다. REPEATABLE READ 면 락 이전 스냅샷으로 판단해 취소 요청된 상품을
@@ -58,14 +62,14 @@ public class AdminOrderItemService {
 	private final AdminAuditLogService adminAuditLogService;
 	private final Clock clock;
 
-	public PageResponse<AdminOrderItemSummaryResponse> getList(AdminOrderItemSearchRequest request) {
+	public SliceResponse<AdminOrderItemSummaryResponse> getList(AdminOrderItemSearchRequest request) {
 		AdminOrderItemSearchCondition condition = request.toCondition();
-		long totalElements = orderQueryMapper.countAdminOrderItems(condition);
-		if (totalElements == 0) {
-			return PageResponse.of(List.of(), condition.page(), condition.size(), 0);
-		}
-		List<AdminOrderItemSummaryResponse> content = orderQueryMapper.findAdminOrderItems(condition);
-		return PageResponse.of(content, condition.page(), condition.size(), totalElements);
+		List<AdminOrderItemSummaryResponse> fetched = orderQueryMapper.findAdminOrderItems(condition);
+		return SliceResponse.of(fetched, condition.page(), condition.size());
+	}
+
+	public AdminOrderItemCountResponse count(AdminOrderItemSearchRequest request) {
+		return new AdminOrderItemCountResponse(orderQueryMapper.countAdminOrderItems(request.toCondition()));
 	}
 
 	@Transactional(isolation = Isolation.READ_COMMITTED)

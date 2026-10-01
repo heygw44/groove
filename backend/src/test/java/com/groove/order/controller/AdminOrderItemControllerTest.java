@@ -28,7 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.auth.jwt.JwtProvider;
-import com.groove.global.common.PageResponse;
+import com.groove.global.common.SliceResponse;
 import com.groove.global.config.RestAccessDeniedHandler;
 import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
@@ -36,6 +36,7 @@ import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
 import com.groove.order.dto.AdminOrderItemBulkResultResponse;
 import com.groove.order.dto.AdminOrderItemConfirmRequest;
+import com.groove.order.dto.AdminOrderItemCountResponse;
 import com.groove.order.dto.AdminOrderItemDeliverRequest;
 import com.groove.order.dto.AdminOrderItemShipRequest;
 import com.groove.order.dto.AdminOrderItemSummaryResponse;
@@ -81,14 +82,26 @@ class AdminOrderItemControllerTest {
 			AdminOrderItemSummaryResponse summary = new AdminOrderItemSummaryResponse(900L, 700L,
 					"20260903-TESTAB12-01", "20260903-TESTAB12", "buyer@groove.com", "그루브 앨범", 1,
 					OrderItemStatus.PAID, null, null, null, LocalDateTime.now(), false);
-			given(adminOrderItemService.getList(any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
+			given(adminOrderItemService.getList(any())).willReturn(SliceResponse.of(List.of(summary), 0, 20));
 
 			// when & then
 			mockMvc.perform(get(BASE_URL).header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.content[0].productOrderNumber", is("20260903-TESTAB12-01")))
 					.andExpect(jsonPath("$.data.content[0].orderId", is(700)))
-					.andExpect(jsonPath("$.data.totalElements", is(1)));
+					.andExpect(jsonPath("$.data.hasNext", is(false)))
+					.andExpect(jsonPath("$.data.totalElements").doesNotExist());
+		}
+
+		@Test
+		@DisplayName("from 이 to 보다 이후면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenPeriodInverted() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL).param("from", "2026-09-10").param("to", "2026-09-01")
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminOrderItemService, never()).getList(any());
 		}
 
 		@Test
@@ -99,6 +112,44 @@ class AdminOrderItemControllerTest {
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
 			verify(adminOrderItemService, never()).getList(any());
+		}
+	}
+
+	@Nested
+	@DisplayName("GET /api/v1/admin/order-items/count")
+	class Count {
+
+		@Test
+		@DisplayName("관리자면 200 과 totalElements 를 반환한다")
+		void returnsCountForAdmin() throws Exception {
+			// given
+			given(adminOrderItemService.count(any())).willReturn(new AdminOrderItemCountResponse(37L));
+
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/count").header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.totalElements", is(37)));
+		}
+
+		@Test
+		@DisplayName("from 이 to 보다 이후면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenPeriodInverted() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/count").param("from", "2026-09-10").param("to", "2026-09-01")
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminOrderItemService, never()).count(any());
+		}
+
+		@Test
+		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환한다")
+		void returnsForbiddenForUser() throws Exception {
+			// when & then
+			mockMvc.perform(get(BASE_URL + "/count").header(HttpHeaders.AUTHORIZATION, userToken()))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(adminOrderItemService, never()).count(any());
 		}
 	}
 

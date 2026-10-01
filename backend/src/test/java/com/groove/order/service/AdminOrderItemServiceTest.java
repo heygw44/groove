@@ -10,15 +10,18 @@ import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -34,11 +37,13 @@ import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
-import com.groove.global.common.PageResponse;
+import com.groove.global.common.SliceResponse;
 import com.groove.member.entity.Member;
 import com.groove.order.dto.AdminOrderItemBulkResultResponse;
 import com.groove.order.dto.AdminOrderItemConfirmRequest;
+import com.groove.order.dto.AdminOrderItemCountResponse;
 import com.groove.order.dto.AdminOrderItemDeliverRequest;
+import com.groove.order.dto.AdminOrderItemSearchCondition;
 import com.groove.order.dto.AdminOrderItemSearchRequest;
 import com.groove.order.dto.AdminOrderItemShipRequest;
 import com.groove.order.dto.AdminOrderItemSummaryResponse;
@@ -96,18 +101,94 @@ class AdminOrderItemServiceTest {
 	class GetList {
 
 		@Test
-		@DisplayName("조건에 맞는 상품주문이 없으면 빈 페이지를 반환한다")
-		void returnsEmptyPageWhenNoItems() {
+		@DisplayName("건수 쿼리를 호출하지 않고 size + 1 개를 조회한다")
+		void doesNotCountAndFetchesOneExtra() {
 			// given
-			given(orderQueryMapper.countAdminOrderItems(any())).willReturn(0L);
+			given(orderQueryMapper.findAdminOrderItems(any())).willReturn(List.of());
+			AdminOrderItemSearchRequest request = new AdminOrderItemSearchRequest(null, null, null, null, 2, 10);
+
+			// when
+			service.getList(request);
+
+			// then
+			verify(orderQueryMapper, never()).countAdminOrderItems(any());
+			ArgumentCaptor<AdminOrderItemSearchCondition> captor = ArgumentCaptor
+					.forClass(AdminOrderItemSearchCondition.class);
+			verify(orderQueryMapper).findAdminOrderItems(captor.capture());
+			assertThat(captor.getValue().fetchSize()).isEqualTo(11);
+			assertThat(captor.getValue().offset()).isEqualTo(20);
+		}
+
+		@Test
+		@DisplayName("size + 1 개가 조회되면 size 개만 담고 hasNext 가 true 다")
+		void flagsHasNextWhenExtraFetched() {
+			// given
+			given(orderQueryMapper.findAdminOrderItems(any())).willReturn(summaries(3));
+			AdminOrderItemSearchRequest request = new AdminOrderItemSearchRequest(null, null, null, null, 0, 2);
+
+			// when
+			SliceResponse<AdminOrderItemSummaryResponse> response = service.getList(request);
+
+			// then
+			assertThat(response.content()).hasSize(2);
+			assertThat(response.hasNext()).isTrue();
+		}
+
+		@Test
+		@DisplayName("size 이하가 조회되면 전부 담고 hasNext 가 false 다")
+		void noNextWhenWithinSize() {
+			// given
+			given(orderQueryMapper.findAdminOrderItems(any())).willReturn(summaries(2));
+			AdminOrderItemSearchRequest request = new AdminOrderItemSearchRequest(null, null, null, null, 0, 2);
+
+			// when
+			SliceResponse<AdminOrderItemSummaryResponse> response = service.getList(request);
+
+			// then
+			assertThat(response.content()).hasSize(2);
+			assertThat(response.hasNext()).isFalse();
+		}
+
+		@Test
+		@DisplayName("조건에 맞는 상품주문이 없으면 빈 목록을 반환한다")
+		void returnsEmptyWhenNoItems() {
+			// given
+			given(orderQueryMapper.findAdminOrderItems(any())).willReturn(List.of());
 			AdminOrderItemSearchRequest request = new AdminOrderItemSearchRequest(null, null, null, null, null, null);
 
 			// when
-			PageResponse<AdminOrderItemSummaryResponse> response = service.getList(request);
+			SliceResponse<AdminOrderItemSummaryResponse> response = service.getList(request);
 
 			// then
 			assertThat(response.content()).isEmpty();
-			verify(orderQueryMapper, never()).findAdminOrderItems(any());
+			assertThat(response.hasNext()).isFalse();
+		}
+
+		private List<AdminOrderItemSummaryResponse> summaries(int count) {
+			return IntStream.range(0, count)
+					.mapToObj(i -> new AdminOrderItemSummaryResponse(900L + i, 700L, "20260903-TESTAB12-0" + i,
+							"20260903-TESTAB12", "buyer@groove.com", "그루브 앨범", 1, OrderItemStatus.PAID, null, null,
+							null, LocalDateTime.now(), false))
+					.toList();
+		}
+	}
+
+	@Nested
+	@DisplayName("count()")
+	class Count {
+
+		@Test
+		@DisplayName("매퍼가 센 건수를 그대로 반환한다")
+		void returnsMapperCount() {
+			// given
+			given(orderQueryMapper.countAdminOrderItems(any())).willReturn(42L);
+			AdminOrderItemSearchRequest request = new AdminOrderItemSearchRequest(null, null, null, null, null, null);
+
+			// when
+			AdminOrderItemCountResponse response = service.count(request);
+
+			// then
+			assertThat(response.totalElements()).isEqualTo(42L);
 		}
 	}
 
