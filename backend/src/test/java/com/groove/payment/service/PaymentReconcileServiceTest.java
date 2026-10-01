@@ -42,6 +42,7 @@ import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.config.PaymentReconcileProperties;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.entity.Payment;
@@ -353,6 +354,8 @@ class PaymentReconcileServiceTest {
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
 			given(cancelWriter.requestedIdempotencyKey(payment)).willReturn("cancel-" + PAYMENT_KEY + "-2");
+			RefundAccountInfo account = new RefundAccountInfo("088", "12345678901234", "홍길동");
+			given(cancelWriter.requestedRefundAccount(payment)).willReturn(account);
 
 			// when
 			PaymentReconcileOutcome outcome = service.apply(candidate(), lookupOf(PaymentStatus.CANCEL_REQUESTED,
@@ -362,6 +365,7 @@ class PaymentReconcileServiceTest {
 			assertThat(outcome.needsCancelRetry()).isTrue();
 			assertThat(outcome.paymentKey()).isEqualTo(PAYMENT_KEY);
 			assertThat(outcome.idempotencyKey()).isEqualTo("cancel-" + PAYMENT_KEY + "-2");
+			assertThat(outcome.refundAccount()).isEqualTo(account);
 			verify(logRepository, never()).save(any());
 		}
 	}

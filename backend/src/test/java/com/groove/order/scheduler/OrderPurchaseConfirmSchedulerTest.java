@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
@@ -46,13 +47,14 @@ class OrderPurchaseConfirmSchedulerTest {
 	private ShutdownSignal shutdownSignal;
 
 	private OrderPurchaseConfirmScheduler scheduler;
+	private Clock clock;
 
 	private LocalDateTime now;
 	private LocalDateTime cutoff;
 
 	@BeforeEach
 	void setUp() {
-		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:30:00Z"), ZONE);
+		clock = Clock.fixed(Instant.parse("2026-09-04T03:30:00Z"), ZONE);
 		now = LocalDateTime.now(clock);
 		OrderPurchaseConfirmProperties properties = new OrderPurchaseConfirmProperties(8, "0 30 3 * * *", 200);
 		cutoff = now.minusDays(properties.days());
@@ -132,7 +134,7 @@ class OrderPurchaseConfirmSchedulerTest {
 		void stopsProcessingWhenShutdownSignaledMidLoop() {
 			// given
 			stubLockToRunTask();
-			given(shutdownSignal.isShuttingDown()).willReturn(false, false, true);
+			given(shutdownSignal.isShuttingDown()).willReturn(false, false, false, true);
 			given(orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
 					eq(OrderItemStatus.DELIVERED), eq(cutoff), any(), any())).willReturn(List.of(1L, 2L));
 			given(orderPurchaseConfirmService.confirm(1L, cutoff, now)).willReturn(true);
@@ -144,6 +146,87 @@ class OrderPurchaseConfirmSchedulerTest {
 			verify(orderPurchaseConfirmService).confirm(1L, cutoff, now);
 			verify(orderPurchaseConfirmService, never()).confirm(eq(2L), any(), any());
 		}
+
+		@Test
+		@DisplayName("한 바퀴가 배치 크기를 꽉 채우면 다시 조회해 이어서 처리한다")
+		void requeriesWhenBatchIsFull() {
+			// given
+			stubLockToRunTask();
+			OrderPurchaseConfirmScheduler small = schedulerWithBatchSize(2);
+			given(orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
+					eq(OrderItemStatus.DELIVERED), eq(cutoff), any(), any()))
+					.willReturn(List.of(1L, 2L), List.of(3L));
+			given(orderPurchaseConfirmService.confirm(anyLong(), eq(cutoff), eq(now))).willReturn(true);
+
+			// when
+			small.confirmPurchases();
+
+			// then
+			verify(orderItemRepository, times(2))
+					.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(any(), any(), any(), any());
+			verify(orderPurchaseConfirmService).confirm(3L, cutoff, now);
+		}
+
+		@Test
+		@DisplayName("배치 크기보다 적게 조회되면 한 번만 조회하고 끝낸다")
+		void queriesOnceWhenBatchIsPartial() {
+			// given
+			stubLockToRunTask();
+			OrderPurchaseConfirmScheduler small = schedulerWithBatchSize(2);
+			given(orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
+					eq(OrderItemStatus.DELIVERED), eq(cutoff), any(), any())).willReturn(List.of(1L));
+			given(orderPurchaseConfirmService.confirm(1L, cutoff, now)).willReturn(true);
+
+			// when
+			small.confirmPurchases();
+
+			// then
+			verify(orderItemRepository, times(1))
+					.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("한 바퀴에서 하나도 처리하지 못하면 같은 후보를 되풀이하지 않고 멈춘다")
+		void stopsWhenRoundMakesNoProgress() {
+			// given
+			stubLockToRunTask();
+			OrderPurchaseConfirmScheduler small = schedulerWithBatchSize(2);
+			given(orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
+					eq(OrderItemStatus.DELIVERED), eq(cutoff), any(), any())).willReturn(List.of(1L, 2L));
+			given(orderPurchaseConfirmService.confirm(1L, cutoff, now)).willThrow(new RuntimeException("boom"));
+			given(orderPurchaseConfirmService.confirm(2L, cutoff, now)).willReturn(false);
+
+			// when
+			small.confirmPurchases();
+
+			// then
+			verify(orderItemRepository, times(1))
+					.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("계속 가득 찬 배치가 나와도 최대 바퀴 수에서 멈춘다")
+		void stopsAtMaxRounds() {
+			// given
+			stubLockToRunTask();
+			OrderPurchaseConfirmScheduler small = schedulerWithBatchSize(2);
+			given(orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
+					eq(OrderItemStatus.DELIVERED), eq(cutoff), any(), any())).willReturn(List.of(1L, 2L));
+			given(orderPurchaseConfirmService.confirm(anyLong(), eq(cutoff), eq(now))).willReturn(true);
+
+			// when
+			small.confirmPurchases();
+
+			// then
+			verify(orderItemRepository, times(50))
+					.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(any(), any(), any(), any());
+		}
+	}
+
+	private OrderPurchaseConfirmScheduler schedulerWithBatchSize(int batchSize) {
+		return new OrderPurchaseConfirmScheduler(orderItemRepository, orderPurchaseConfirmService,
+				orderPurchaseConfirmLock, new OrderPurchaseConfirmProperties(8, "0 30 3 * * *", batchSize),
+				shutdownSignal, clock);
 	}
 
 	private void stubLockToRunTask() {

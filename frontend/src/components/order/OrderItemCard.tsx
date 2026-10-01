@@ -37,8 +37,12 @@ const CLAIM_ACTIONS: ReadonlyArray<OrderItem['availableActions'][number]> = [
   'CONFIRM',
 ];
 
-function getAmountLabel(status: OrderItem['status']) {
+function getAmountLabel(status: OrderItem['status'], payment?: OrderPayment) {
   if (status === 'CANCELED_BY_NOPAYMENT') {
+    return '주문 금액';
+  }
+  // 입금 전에 취소된 가상계좌는 환불된 돈이 없다.
+  if (status === 'CANCELED' && payment && !payment.approvedAt) {
     return '주문 금액';
   }
   if (ENDED_BY_REFUND_STATUSES.includes(status)) {
@@ -138,7 +142,7 @@ export function OrderItemCard({ orderId, item, payment }: OrderItemCardProps) {
           </p>
           <p className="mt-1 text-sm font-bold text-content">{formatPrice(item.lineAmount)}</p>
           <p className="mt-0.5 text-xs text-content-muted">
-            {getAmountLabel(item.status)} {formatPrice(item.paidAmount)}
+            {getAmountLabel(item.status, payment)} {formatPrice(item.paidAmount)}
           </p>
         </div>
       </div>

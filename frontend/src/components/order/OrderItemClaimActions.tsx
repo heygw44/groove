@@ -15,7 +15,11 @@ import {
 import type { OrderItem, RefundAccount } from '@/types/order';
 import type { OrderPayment } from '@/types/payment';
 import { getErrorMessage } from '@/utils/apiError';
-import { getOrderCancelSuccessMessage, isCancellationPending } from '@/utils/paymentStatus';
+import {
+  getOrderCancelSuccessMessage,
+  getOrderItemCancelSuccessMessage,
+  isCancellationPending,
+} from '@/utils/paymentStatus';
 
 type OpenDialog = 'cancel' | 'return' | 'withdraw' | 'confirm' | null;
 
@@ -93,9 +97,12 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
     pending: isAwaitingDeposit ? cancelOrderMutation.isPending : cancelMutation.isPending,
   });
 
-  const callbacks = (successMessage: string) => ({
-    onSuccess: () => {
-      showToast('success', successMessage);
+  const callbacks = <T,>(getSuccessMessage: string | ((response: T) => string)) => ({
+    onSuccess: (response: T) => {
+      showToast(
+        'success',
+        typeof getSuccessMessage === 'function' ? getSuccessMessage(response) : getSuccessMessage,
+      );
       closeDialog();
     },
     onError: (error: unknown) => {
@@ -119,12 +126,9 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
       );
       return;
     }
-    const successMessage = isImmediateCancel
-      ? '주문을 취소했습니다.'
-      : '취소 요청이 접수됐습니다. 승인되면 취소됩니다.';
     cancelMutation.mutate(
       { orderId, itemId: item.id, reason, refundAccount },
-      callbacks(successMessage),
+      callbacks(getOrderItemCancelSuccessMessage),
     );
   };
 

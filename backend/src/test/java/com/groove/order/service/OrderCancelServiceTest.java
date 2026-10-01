@@ -1,6 +1,7 @@
 package com.groove.order.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -200,6 +201,46 @@ class OrderCancelServiceTest {
 			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 101L, request);
 			verify(orderItemClaimService).cancel(MEMBER_ID, ORDER_ID, 102L, request);
 			verify(orderItemClaimService, never()).cancel(MEMBER_ID, ORDER_ID, 103L, request);
+		}
+
+		@Test
+		@DisplayName("앞선 상품을 취소한 뒤 다음 상품이 실패하면 예외 없이 멈추고 현재 상태를 응답한다")
+		void returnsDetailWhenLaterItemFailsAfterEarlierCanceled() {
+			// given
+			OrderCancelRequest request = new OrderCancelRequest("고객 변심");
+			given(writer.findTarget(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
+			given(writer.planCancel(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelPlan(List.of(101L, 102L, 103L), false));
+			given(orderItemClaimService.cancel(MEMBER_ID, ORDER_ID, 101L, request)).willReturn(itemResponse(false));
+			given(orderItemClaimService.cancel(MEMBER_ID, ORDER_ID, 102L, request))
+					.willThrow(new IllegalStateException("환불 실패"));
+			given(orderService.getDetailAfterAction(MEMBER_ID, ORDER_ID)).willReturn(detail(null));
+
+			// when
+			OrderDetailResponse response = service.cancel(MEMBER_ID, ORDER_ID, request);
+
+			// then
+			assertThat(response).isNotNull();
+			verify(orderItemClaimService, never()).cancel(MEMBER_ID, ORDER_ID, 103L, request);
+		}
+
+		@Test
+		@DisplayName("첫 상품부터 실패하면 예외를 그대로 던진다")
+		void propagatesWhenFirstItemFails() {
+			// given
+			OrderCancelRequest request = new OrderCancelRequest("고객 변심");
+			given(writer.findTarget(MEMBER_ID, ORDER_ID))
+					.willReturn(new OrderCancelTarget(OrderStatus.PAID, PaymentStatus.DONE));
+			given(writer.planCancel(MEMBER_ID, ORDER_ID)).willReturn(new OrderCancelPlan(List.of(101L, 102L), false));
+			given(orderItemClaimService.cancel(MEMBER_ID, ORDER_ID, 101L, request))
+					.willThrow(new IllegalStateException("환불 실패"));
+
+			// when & then
+			assertThatThrownBy(() -> service.cancel(MEMBER_ID, ORDER_ID, request))
+					.isInstanceOf(IllegalStateException.class);
+			verify(orderItemClaimService, never()).cancel(MEMBER_ID, ORDER_ID, 102L, request);
+			verify(orderService, never()).getDetailAfterAction(any(), any());
 		}
 
 		@Test

@@ -8,6 +8,7 @@ import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 
 import lombok.RequiredArgsConstructor;
@@ -37,16 +38,19 @@ public class PaymentLateResultApplier {
 			reconcileService.recordCompensation(candidate, result, detail);
 		}
 		if (outcome.needsCancelRetry()) {
-			retryCancel(candidate, outcome.paymentKey(), outcome.idempotencyKey());
+			retryCancel(candidate, outcome.paymentKey(), outcome.idempotencyKey(),
+					outcome.refundAccount());
 		}
 		return outcome;
 	}
 
-	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey, String idempotencyKey) {
+	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey, String idempotencyKey,
+			RefundAccountInfo refundAccount) {
 		PaymentCancelResult result;
 		try {
 			result = paymentClient.cancel(
-					PaymentCancelCommand.of(paymentKey, RETRY_CANCEL_REASON, null, idempotencyKey, null));
+					PaymentCancelCommand.of(paymentKey, RETRY_CANCEL_REASON, null, idempotencyKey,
+					refundAccount));
 		} catch (BusinessException ex) {
 			reconcileService.recordCancelRetry(candidate, null, ex);
 			return;

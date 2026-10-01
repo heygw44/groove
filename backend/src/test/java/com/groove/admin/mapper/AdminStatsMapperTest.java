@@ -671,6 +671,42 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		}
 
 		@Test
+		@DisplayName("취소요청 중인 PAID 상품주문은 발주확인 대기에서 빼고 취소 요청에만 센다")
+		void excludesCancelRequestedItemFromNewOrderCount() {
+			// given
+			LocalDateTime todayStart = LocalDateTime.of(2033, 6, 10, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2033, 6, 11, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Dup Product", new BigDecimal("20000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			AdminStatsSummaryResponse before = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			Order cancelRequestedPaid = OrderFixture.create(member, "20330610-ASMSUM030");
+			cancelRequestedPaid.addItem(product, 1);
+			cancelRequestedPaid.place(LocalDateTime.of(2033, 6, 10, 9, 0));
+			OrderFixture.markItemsStatus(cancelRequestedPaid, OrderItemStatus.PAID);
+			OrderFixture.markFirstItemClaimStatus(cancelRequestedPaid, OrderItemClaimStatus.CANCEL_REQUEST);
+			em.persist(cancelRequestedPaid);
+
+			Order rejectedPaid = OrderFixture.create(member, "20330610-ASMSUM031");
+			rejectedPaid.addItem(product, 1);
+			rejectedPaid.place(LocalDateTime.of(2033, 6, 10, 9, 0));
+			OrderFixture.markItemsStatus(rejectedPaid, OrderItemStatus.PAID);
+			OrderFixture.markFirstItemClaimStatus(rejectedPaid, OrderItemClaimStatus.CANCEL_REJECT);
+			em.persist(rejectedPaid);
+
+			em.flush();
+			em.clear();
+
+			// when: 세션 로컬 캐시를 피하려 tomorrowStart 를 밀어 다른 파라미터로 다시 조회한다.
+			AdminStatsSummaryResponse after = adminStatsMapper.findSummary(todayStart, tomorrowStart.plusMinutes(1));
+
+			// then: 취소 요청 건은 발주확인 대기에 빠지고, 거부돼 PAID 로 돌아온 건은 그대로 센다.
+			assertThat(after.newOrderCount()).isEqualTo(before.newOrderCount() + 1);
+			assertThat(after.cancelRequestCount()).isEqualTo(before.cancelRequestCount() + 1);
+		}
+
+		@Test
 		@DisplayName("당일 승인된 결제가 없으면 매출과 건수를 0으로 채운 1행을 반환한다")
 		void returnsZeroRowWhenNoPaymentApprovedToday() {
 			// given

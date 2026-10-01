@@ -39,8 +39,12 @@ export type AdminClaimAction = 'approve' | 'collect' | 'complete' | 'reject';
 
 /** 클레임 종류·상태별로 서버가 허용하는 처리만 돌려준다. */
 export const getClaimActions = (
-  claim: Pick<AdminOrderClaimSummary, 'type' | 'status'>,
+  claim: Pick<AdminOrderClaimSummary, 'type' | 'status' | 'refundInProgress'>,
 ): AdminClaimAction[] => {
+  // 환불 결과를 확인하는 동안 서버가 새 처리를 거절한다.
+  if (claim.refundInProgress) {
+    return [];
+  }
   if (claim.status === 'REQUESTED') {
     return claim.type === 'CANCEL' ? ['approve', 'reject'] : ['collect', 'reject'];
   }

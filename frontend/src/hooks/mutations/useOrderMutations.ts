@@ -9,7 +9,13 @@ import {
   updateOrderShippingAddress,
   withdrawOrderClaim,
 } from '@/api/order';
-import { cartKeys, couponKeys, orderKeys, reviewKeys } from '@/hooks/queries/queryKeys';
+import {
+  cartKeys,
+  couponKeys,
+  orderKeys,
+  productKeys,
+  reviewKeys,
+} from '@/hooks/queries/queryKeys';
 import type { OrderCreateRequest, RefundAccount } from '@/types/order';
 
 interface CreateOrderVariables {
@@ -66,6 +72,7 @@ export const useCancelOrder = () => {
       queryClient.invalidateQueries({ queryKey: cartKeys.all });
       // 취소로 쿠폰도 다시 사용 가능 상태가 되므로 함께 무효화한다.
       queryClient.invalidateQueries({ queryKey: couponKeys.all });
+      queryClient.invalidateQueries({ queryKey: productKeys.details });
     },
   });
 };
@@ -102,6 +109,7 @@ export const useCancelOrderItem = () => {
       // 즉시 취소되면 재고·쿠폰이 되돌아온다.
       queryClient.invalidateQueries({ queryKey: cartKeys.all });
       queryClient.invalidateQueries({ queryKey: couponKeys.all });
+      queryClient.invalidateQueries({ queryKey: productKeys.details });
     },
   });
 };
