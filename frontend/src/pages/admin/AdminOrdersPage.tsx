@@ -18,18 +18,21 @@ import {
   useConfirmAdminOrderItems,
   useDeliverAdminOrderItems,
 } from '@/hooks/mutations/useAdminOrderMutations';
+import { useAdminOrderItemCount } from '@/hooks/queries/useAdminOrderItemCount';
 import { useAdminOrderItems } from '@/hooks/queries/useAdminOrderItems';
 import { useFallbackPageRedirect } from '@/hooks/useFallbackPageRedirect';
 import type { AdminOrderItemBulkResult, AdminOrderItemSummary } from '@/types/adminOrder';
 import { canConfirmItem, canDeliverItem, canShipItem } from '@/utils/adminOrderActions';
 import {
+  ADMIN_ORDER_PAGE_SIZE,
   parseAdminOrderFilters,
   serializeAdminOrderFilters,
+  toAdminOrderItemCountParams,
   toAdminOrderItemListParams,
   type AdminOrderFilters,
 } from '@/utils/adminOrderFilters';
 import { getErrorMessage } from '@/utils/apiError';
-import { getFallbackPage } from '@/utils/pagination';
+import { getFallbackPage, toTotalPages } from '@/utils/pagination';
 
 interface BulkResult {
   label: string;
@@ -51,14 +54,20 @@ export default function AdminOrdersPage() {
     toAdminOrderItemListParams(filters),
   );
 
+  const count = useAdminOrderItemCount(toAdminOrderItemCountParams(filters));
+
   const confirmMutation = useConfirmAdminOrderItems();
   const deliverMutation = useDeliverAdminOrderItems();
   const cancelMutation = useCancelAdminOrderItem();
 
   const items = data?.content ?? [];
+  const totalPages = count.data && toTotalPages(count.data.totalElements, ADMIN_ORDER_PAGE_SIZE);
+  const isListSettled = data !== undefined && !isPlaceholderData;
+  // 처리 뒤 무효화 때는 옛 건수가 placeholder 아닌 채로 남는다. 새 건수가 와야 마지막 페이지를 믿는다.
+  const isCountSettled = count.data !== undefined && !count.isPlaceholderData && !count.isFetching;
   const fallbackPage =
-    data && !isPlaceholderData
-      ? getFallbackPage(filters.page, data.content.length, data.totalPages)
+    isListSettled && isCountSettled && totalPages !== undefined
+      ? getFallbackPage(filters.page, data.content.length, totalPages)
       : undefined;
   const isMovingToFallbackPage = fallbackPage !== undefined;
 
@@ -131,13 +140,18 @@ export default function AdminOrdersPage() {
       },
     );
 
+  const countLabel = (() => {
+    if (count.isPending) {
+      return '불러오는 중…';
+    }
+    return count.data ? `상품주문 총 ${count.data.totalElements}건` : '상품주문 총 -건';
+  })();
+
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-[17px] font-bold tracking-tight">주문 관리</h2>
-        <p className="mt-1.5 text-sm text-content-muted">
-          {isPending ? '불러오는 중…' : `상품주문 총 ${data?.totalElements ?? 0}건`}
-        </p>
+        <p className="mt-1.5 text-sm text-content-muted">{countLabel}</p>
       </div>
 
       <div className="mb-4">
@@ -206,9 +220,11 @@ export default function AdminOrdersPage() {
             selectionDisabled={isPlaceholderData}
           />
 
-          <div className="mt-6">
-            <Pagination page={filters.page} totalPages={data.totalPages} onChange={updatePage} />
-          </div>
+          {totalPages !== undefined && (
+            <div className="mt-6">
+              <Pagination page={filters.page} totalPages={totalPages} onChange={updatePage} />
+            </div>
+          )}
         </div>
       )}
 

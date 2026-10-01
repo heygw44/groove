@@ -1,4 +1,4 @@
-import type { AdminOrderItemListParams } from '@/types/adminOrder';
+import type { AdminOrderItemCountParams, AdminOrderItemListParams } from '@/types/adminOrder';
 import type { OrderStatusGroup } from '@/types/order';
 import { isOrderStatusGroup } from '@/utils/orderStatus';
 
@@ -11,7 +11,7 @@ export interface AdminOrderFilters {
 }
 
 const DEFAULT_PAGE = 0;
-const ADMIN_ORDER_PAGE_SIZE = 20;
+export const ADMIN_ORDER_PAGE_SIZE = 20;
 const KEYWORD_MAX_LENGTH = 100;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -86,13 +86,19 @@ export const serializeAdminOrderFilters = (filters: AdminOrderFilters): URLSearc
   return params;
 };
 
-export const toAdminOrderItemListParams = (
+export const toAdminOrderItemCountParams = (
   filters: AdminOrderFilters,
-): AdminOrderItemListParams => ({
+): AdminOrderItemCountParams => ({
   statusGroup: filters.statusGroup,
   keyword: filters.keyword === '' ? undefined : filters.keyword,
   from: filters.from,
   to: filters.to,
+});
+
+export const toAdminOrderItemListParams = (
+  filters: AdminOrderFilters,
+): AdminOrderItemListParams => ({
+  ...toAdminOrderItemCountParams(filters),
   page: filters.page,
   size: ADMIN_ORDER_PAGE_SIZE,
 });

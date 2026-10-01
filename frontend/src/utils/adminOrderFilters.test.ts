@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseAdminOrderFilters,
   serializeAdminOrderFilters,
+  toAdminOrderItemCountParams,
   toAdminOrderItemListParams,
   type AdminOrderFilters,
 } from '@/utils/adminOrderFilters';
@@ -175,6 +176,35 @@ describe('toAdminOrderItemListParams()', () => {
 
     // when
     const params = toAdminOrderItemListParams(value);
+
+    // then
+    expect(params.keyword).toBeUndefined();
+  });
+});
+
+describe('toAdminOrderItemCountParams()', () => {
+  it('page 와 size 없이 필터만 담는다', () => {
+    // given
+    const value = filters({ statusGroup: 'PAID', from: '2026-01-01', page: 3 });
+
+    // when
+    const params = toAdminOrderItemCountParams(value);
+
+    // then
+    expect(params).toEqual({
+      statusGroup: 'PAID',
+      keyword: undefined,
+      from: '2026-01-01',
+      to: undefined,
+    });
+  });
+
+  it('빈 keyword 는 undefined 로 바꾼다', () => {
+    // given
+    const value = filters({ keyword: '' });
+
+    // when
+    const params = toAdminOrderItemCountParams(value);
 
     // then
     expect(params.keyword).toBeUndefined();
