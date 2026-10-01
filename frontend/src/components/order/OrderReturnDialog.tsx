@@ -65,6 +65,7 @@ export function OrderReturnDialog({
     <Modal
       open={open}
       onClose={onClose}
+      dismissible={!pending}
       title="반품을 요청하시겠습니까?"
       description="배송완료 후 7일 이내 상품만 반품할 수 있습니다. 수거가 끝나면 환불됩니다."
       size="sm"

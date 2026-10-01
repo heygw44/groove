@@ -40,6 +40,7 @@ export function AdminReasonModal({
     <Modal
       open
       onClose={onClose}
+      dismissible={!pending}
       title={title}
       description={description}
       size="sm"

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,11 +24,11 @@ const buildItem = (id: number): AdminOrderItemSummary => ({
   createdAt: '2026-09-13T00:00:00',
 });
 
-const renderModal = (items: AdminOrderItemSummary[], onCompleted = vi.fn()) => {
+const renderModal = (items: AdminOrderItemSummary[], onCompleted = vi.fn(), onClose = vi.fn()) => {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <AdminShipModal items={items} onClose={vi.fn()} onCompleted={onCompleted} />
+      <AdminShipModal items={items} onClose={onClose} onCompleted={onCompleted} />
     </QueryClientProvider>,
   );
   return onCompleted;
@@ -70,5 +70,35 @@ describe('AdminShipModal', () => {
       ],
     });
     expect(onCompleted.mock.calls[0][0]).toEqual({ processed: 2, skipped: 0 });
+  });
+
+  it('발송 요청 중에는 ESC 와 닫기 버튼으로 닫히지 않는다', async () => {
+    // given
+    const user = userEvent.setup();
+    vi.mocked(shipAdminOrderItems).mockReturnValue(new Promise(() => {}));
+    const onClose = vi.fn();
+    renderModal([buildItem(1)], vi.fn(), onClose);
+    await user.type(screen.getByLabelText(/ORD-1-01/), '1111');
+
+    // when
+    await user.click(screen.getByRole('button', { name: '발송처리' }));
+    await vi.waitFor(() => expect(shipAdminOrderItems).toHaveBeenCalled());
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    // then
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '닫기' })).toBeDisabled();
+  });
+
+  it('요청 중이 아니면 ESC 로 닫힌다', () => {
+    // given
+    const onClose = vi.fn();
+    renderModal([buildItem(1)], vi.fn(), onClose);
+
+    // when
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    // then
+    expect(onClose).toHaveBeenCalled();
   });
 });

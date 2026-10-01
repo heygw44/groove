@@ -56,4 +56,13 @@ describe('RefundAccountFields', () => {
     expect(onChange).toHaveBeenCalledWith({ ...value, holderName: '김' });
     expect(onChange).toHaveBeenCalledWith({ ...value, bankCode: '39' });
   });
+
+  it('계좌번호는 64자, 예금주는 100자까지만 입력할 수 있다', () => {
+    // given & when
+    render(<RefundAccountFields idPrefix="test" value={EMPTY_REFUND_ACCOUNT} onChange={vi.fn()} />);
+
+    // then
+    expect(screen.getByLabelText('계좌번호')).toHaveAttribute('maxlength', '64');
+    expect(screen.getByLabelText('예금주')).toHaveAttribute('maxlength', '100');
+  });
 });
