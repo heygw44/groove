@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.entity.Payment;
@@ -21,6 +22,7 @@ import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 부분취소를 포함한 결제 환불의 DB 쓰기. 기존 결제 취소 3단계(요청 기록 → 트랜잭션 밖 토스 호출 → 결과 반영)를
@@ -28,10 +30,12 @@ import lombok.RequiredArgsConstructor;
  * 재시도 대상으로 집어가 버려, 결과불명일 때 부분취소 건이 전액으로 잘못 재시도된다. 진행 상태는 오직
  * payment_cancel.status(REQUESTED/DONE/FAILED)로만 추적한다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentRefundWriter {
 
+	private final OrderRepository orderRepository;
 	private final PaymentRepository paymentRepository;
 	private final PaymentCancelRepository paymentCancelRepository;
 	private final OrderClaimFinalizeService orderClaimFinalizeService;
@@ -97,11 +101,27 @@ public class PaymentRefundWriter {
 	 * 토스 반영을 기록한다. 클레임 환불이면 클레임 마무리(상품주문 취소·반품 확정, 재고 복원)를 같은 트랜잭션에서
 	 * 함께 커밋한다 - 마무리가 실패하면 취소 건도 REQUESTED 로 남아 대사가 같은 멱등키로 다시 이어받는다. 따로
 	 * 커밋하면 "환불은 DONE 인데 클레임은 진행 중"인 상태가 남고, 재승인이 환불을 한 번 더 내보낸다.
+	 *
+	 * <p>즉시 반영과 대사가 같은 취소 건을 동시에 확정할 수 있어 주문 락을 먼저 잡고 payment_cancel 을 그 뒤에
+	 * 처음 읽는다. 락 전에 읽어 두면 뒤쪽 트랜잭션이 1차 캐시의 REQUESTED 를 보고 취소액을 한 번 더 더한다.</p>
 	 */
 	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public void completeRefund(Long paymentId, Long paymentCancelId, BigDecimal cancelAmount, String transactionKey,
 			LocalDateTime canceledAt) {
+		Long orderId = paymentRepository.findOrderIdById(paymentId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		orderRepository.findByIdForUpdate(orderId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 		PaymentCancel paymentCancel = findPaymentCancel(paymentCancelId);
+		if (paymentCancel.getStatus() == PaymentCancelStatus.DONE) {
+			log.info("이미 반영된 취소 건이라 건너뜀: paymentCancelId={}", paymentCancelId);
+			return;
+		}
+		if (paymentCancel.getStatus() != PaymentCancelStatus.REQUESTED) {
+			log.error("토스 취소는 성공했으나 취소 건이 {} 로 기록돼 있음, 수동 확인 필요: paymentId={}, paymentCancelId={}",
+					paymentCancel.getStatus(), paymentId, paymentCancelId);
+			return;
+		}
 		if (paymentCancel.getOrderClaimId() != null) {
 			orderClaimFinalizeService.applyRefundDone(paymentCancel.getOrderClaimId(), canceledAt);
 		}

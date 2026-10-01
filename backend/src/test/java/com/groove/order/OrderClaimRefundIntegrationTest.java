@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
@@ -67,6 +69,7 @@ import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.repository.PaymentRepository;
+import com.groove.payment.service.PaymentRefundWriter;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
 import com.groove.product.repository.AlbumRepository;
@@ -81,6 +84,7 @@ import com.groove.support.IntegrationTestSupport;
 class OrderClaimRefundIntegrationTest extends IntegrationTestSupport {
 
 	private static final BigDecimal PRICE = new BigDecimal("30000");
+	private static final long LOCK_HOLD_MILLIS = 1000L;
 
 	@Autowired
 	private MemberRepository memberRepository;
@@ -126,6 +130,12 @@ class OrderClaimRefundIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private AdminOrderClaimService adminOrderClaimService;
+
+	@Autowired
+	private PaymentRefundWriter paymentRefundWriter;
+
+	@Autowired
+	private PlatformTransactionManager transactionManager;
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
@@ -188,6 +198,11 @@ class OrderClaimRefundIntegrationTest extends IntegrationTestSupport {
 	private List<String> refundStatuses(Long claimId) {
 		return jdbcTemplate.queryForList("select status from payment_cancel where order_claim_id = ?",
 				String.class, claimId);
+	}
+
+	private BigDecimal canceledAmountOf(Long paymentId) {
+		return jdbcTemplate.queryForObject("select canceled_amount from payment where id = ?", BigDecimal.class,
+				paymentId);
 	}
 
 	private OrderClaim reloadClaim(Long claimId) {
@@ -437,6 +452,70 @@ class OrderClaimRefundIntegrationTest extends IntegrationTestSupport {
 			} finally {
 				limitedDropRedisService.clear(dropId);
 			}
+		}
+	}
+
+	@Nested
+	@DisplayName("completeRefund()")
+	class CompleteRefund {
+
+		@Test
+		@DisplayName("같은 취소 건을 두 스레드가 동시에 확정해도 취소 누적액은 한 번만 늘어난다")
+		void appliesCancelAmountOnceWhenCompletedConcurrently() throws Exception {
+			// given
+			Member buyer = saveMember("buyer-");
+			SeededOrder seeded = seedPaidOrder(buyer, false, false, false);
+			// 이중 반영이 잔액 초과 예외에 가려지지 않도록 상품 3개 중 1개만 취소한다
+			Long itemId = seeded.itemIds().get(0);
+			stubCancelUnknown();
+			Long claimId = orderItemClaimService.cancel(buyer.getId(), seeded.orderId(), itemId,
+					new OrderCancelRequest("고객 변심")).claimId();
+			assertThat(refundStatuses(claimId)).containsExactly("REQUESTED");
+			Long paymentCancelId = jdbcTemplate.queryForObject(
+					"select id from payment_cancel where order_claim_id = ?", Long.class, claimId);
+			Long paymentId = jdbcTemplate.queryForObject(
+					"select payment_id from payment_cancel where id = ?", Long.class, paymentCancelId);
+			BigDecimal cancelAmount = jdbcTemplate.queryForObject(
+					"select cancel_amount from payment_cancel where id = ?", BigDecimal.class, paymentCancelId);
+			BigDecimal canceledBefore = canceledAmountOf(paymentId);
+			LocalDateTime canceledAt = LocalDateTime.now(clock);
+
+			// when
+			int threads = 2;
+			ExecutorService executorService = Executors.newFixedThreadPool(threads);
+			CountDownLatch readyLatch = new CountDownLatch(threads);
+			CountDownLatch startLatch = new CountDownLatch(1);
+			for (int i = 0; i < threads; i++) {
+				executorService.submit(() -> {
+					try {
+						readyLatch.countDown();
+						startLatch.await();
+						paymentRefundWriter.completeRefund(paymentId, paymentCancelId, cancelAmount, "txn-race",
+								canceledAt);
+					} catch (Throwable ignored) {
+						// 한쪽이 예외로 끝나는 것은 허용한다. 단언은 최종 상태로만 한다
+					}
+				});
+			}
+			// 주문 행을 잡아 두 스레드가 취소 건을 읽은 뒤 주문 락에서 함께 대기하게 만든다
+			new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+				jdbcTemplate.queryForList("select id from orders where id = ? for update", seeded.orderId());
+				try {
+					readyLatch.await();
+					startLatch.countDown();
+					Thread.sleep(LOCK_HOLD_MILLIS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			});
+			executorService.shutdown();
+			boolean finished = executorService.awaitTermination(30, TimeUnit.SECONDS);
+
+			// then
+			assertThat(finished).isTrue();
+			assertThat(canceledAmountOf(paymentId)).isEqualByComparingTo(canceledBefore.add(cancelAmount));
+			assertThat(refundStatuses(claimId)).containsExactly("DONE");
+			assertThat(reloadClaim(claimId).getStatus()).isEqualTo(OrderClaimStatus.DONE);
 		}
 	}
 
