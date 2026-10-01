@@ -122,6 +122,24 @@ describe('OrderItemCard', () => {
     expect(screen.getByText('환불 금액 9,000원')).toBeInTheDocument();
   });
 
+  it('입금 전 가상계좌 결제의 CANCELED 상품은 주문 금액으로 보여준다', () => {
+    // given & when
+    renderCard(
+      { ...baseItem, status: 'CANCELED', paidAmount: 9000 },
+      {
+        paymentId: 1,
+        method: '가상계좌',
+        status: 'CANCELED',
+        amount: 9000,
+        easyPayProvider: null,
+        virtualAccount: null,
+      },
+    );
+
+    // then
+    expect(screen.getByText('주문 금액 9,000원')).toBeInTheDocument();
+  });
+
   it('CANCELED_BY_NOPAYMENT 상품은 주문 금액으로 보여준다', () => {
     // given & when
     renderCard({ ...baseItem, status: 'CANCELED_BY_NOPAYMENT', paidAmount: 9000 });

@@ -38,7 +38,14 @@ describe('getClaimActions()', () => {
     ['RETURN', 'WITHDRAWN', []],
   ] as const)('%s 클레임이 %s 이면 %j 만 허용한다', (type, status, expected) => {
     // when & then
-    expect(getClaimActions({ type, status })).toEqual(expected);
+    expect(getClaimActions({ type, status, refundInProgress: false })).toEqual(expected);
+  });
+
+  it('환불 결과를 확인하는 중이면 어떤 처리도 허용하지 않는다', () => {
+    // when & then
+    expect(
+      getClaimActions({ type: 'CANCEL', status: 'REQUESTED', refundInProgress: true }),
+    ).toEqual([]);
   });
 });
 

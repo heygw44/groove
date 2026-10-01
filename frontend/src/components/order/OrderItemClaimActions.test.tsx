@@ -109,6 +109,34 @@ describe('OrderItemClaimActions', () => {
     expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
   });
 
+  it.each([
+    [
+      { status: 'PAID', claimStatus: 'CANCEL_REQUEST', refundInProgress: true },
+      '취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.',
+    ],
+    [
+      { status: 'PREPARING', claimStatus: 'CANCEL_REQUEST', refundInProgress: false },
+      '취소 요청이 접수됐습니다. 승인되면 취소됩니다.',
+    ],
+  ])('취소 응답이 %j 면 "%s" 토스트를 보여준다', async (response, message) => {
+    // given
+    const user = userEvent.setup();
+    vi.mocked(cancelOrderItem).mockResolvedValueOnce({
+      ...baseItem,
+      ...response,
+    } as unknown as OrderItem);
+    renderActions(baseItem);
+
+    // when
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
+    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
+    await user.click(within(dialog).getByRole('button', { name: '주문취소' }));
+
+    // then
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
+  });
+
   it('결제 취소 결과를 확인하는 중이면 주문취소 버튼을 비활성화한다', () => {
     // given & when
     renderActions(baseItem, {

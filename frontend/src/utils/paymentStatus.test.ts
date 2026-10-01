@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
+import type { OrderDetail, OrderItem } from '@/types/order';
 import type { OrderPayment, PaymentStatus } from '@/types/payment';
 import {
   PAYMENT_STATUSES,
   PAYMENT_STATUS_BADGE,
   PAYMENT_STATUS_LABEL,
+  getAdminClaimApproveMessage,
+  getAdminClaimCompleteMessage,
+  getAdminSaleCancelMessage,
+  getOrderCancelSuccessMessage,
+  getOrderItemCancelSuccessMessage,
   getPaymentMethodLabel,
   isReconcilePending,
   requiresRefundAccount,
@@ -135,5 +141,66 @@ describe('requiresRefundAccount()', () => {
     // when & then
     expect(requiresRefundAccount(buildPayment({ status: 'DONE' }))).toBe(false);
     expect(requiresRefundAccount(undefined)).toBe(false);
+  });
+});
+
+const buildItem = (overrides: Partial<OrderItem> = {}): OrderItem =>
+  ({ status: 'PAID', availableActions: [], refundInProgress: false, ...overrides }) as OrderItem;
+
+describe('getOrderItemCancelSuccessMessage()', () => {
+  it.each([
+    [{ status: 'CANCELED' }, '주문을 취소했습니다.'],
+    [
+      { status: 'PAID', refundInProgress: true },
+      '취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.',
+    ],
+    [{ status: 'PREPARING' }, '취소 요청이 접수됐습니다. 승인되면 취소됩니다.'],
+  ] as const)('%j 응답이면 "%s" 를 돌려준다', (overrides, expected) => {
+    // when & then
+    expect(getOrderItemCancelSuccessMessage(buildItem(overrides))).toBe(expected);
+  });
+});
+
+describe('관리자 클레임 처리 메시지', () => {
+  it('승인은 CANCELED 일 때만 승인 완료로 안내한다', () => {
+    // when & then
+    expect(getAdminClaimApproveMessage({ status: 'CANCELED' })).toBe('취소 클레임을 승인했습니다.');
+    expect(getAdminClaimApproveMessage({ status: 'PREPARING' })).toContain('환불 결과를 확인');
+  });
+
+  it('수거 완료는 RETURNED 일 때만 완료로 안내한다', () => {
+    // when & then
+    expect(getAdminClaimCompleteMessage({ status: 'RETURNED' })).toBe('반품 수거를 완료했습니다.');
+    expect(getAdminClaimCompleteMessage({ status: 'DELIVERED' })).toContain('환불 결과를 확인');
+  });
+
+  it('판매취소는 CANCELED 일 때만 처리 완료로 안내한다', () => {
+    // when & then
+    expect(getAdminSaleCancelMessage({ status: 'CANCELED' }, 'ORD-1-01')).toBe(
+      'ORD-1-01 판매취소 처리했습니다.',
+    );
+    expect(getAdminSaleCancelMessage({ status: 'PAID' }, 'ORD-1-01')).toContain('환불 결과를 확인');
+  });
+});
+
+describe('getOrderCancelSuccessMessage()', () => {
+  it('취소 가능한 상품이 남아 있으면 일부 취소 안내를 돌려준다', () => {
+    // given
+    const order = {
+      items: [buildItem({ status: 'CANCELED' }), buildItem({ availableActions: ['CANCEL'] })],
+    } as OrderDetail;
+
+    // when & then
+    expect(getOrderCancelSuccessMessage(order)).toBe(
+      '일부 상품만 취소됐습니다. 남은 상품을 확인해 주세요.',
+    );
+  });
+
+  it('남은 취소 액션이 없으면 취소 완료로 안내한다', () => {
+    // given
+    const order = { items: [buildItem({ status: 'CANCELED' })] } as OrderDetail;
+
+    // when & then
+    expect(getOrderCancelSuccessMessage(order)).toBe('주문을 취소했습니다.');
   });
 });

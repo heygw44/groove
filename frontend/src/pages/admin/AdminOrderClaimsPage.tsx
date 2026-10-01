@@ -34,6 +34,7 @@ import {
 } from '@/utils/adminOrderActions';
 import { getErrorMessage } from '@/utils/apiError';
 import { getFallbackPage } from '@/utils/pagination';
+import { getAdminClaimApproveMessage, getAdminClaimCompleteMessage } from '@/utils/paymentStatus';
 
 const CLAIM_PAGE_SIZE = 20;
 
@@ -135,7 +136,7 @@ export default function AdminOrderClaimsPage() {
 
   const handleApprove = (claim: AdminOrderClaimSummary) =>
     approveMutation.mutate(claim.claimId, {
-      onSuccess: () => handleDone('취소 클레임을 승인했습니다.'),
+      onSuccess: (result) => handleDone(getAdminClaimApproveMessage(result)),
       onError: handleFailed,
     });
 
@@ -148,7 +149,10 @@ export default function AdminOrderClaimsPage() {
   const handleComplete = (claim: AdminOrderClaimSummary, restock: boolean) =>
     completeMutation.mutate(
       { claimId: claim.claimId, payload: { restock } },
-      { onSuccess: () => handleDone('반품 수거를 완료했습니다.'), onError: handleFailed },
+      {
+        onSuccess: (result) => handleDone(getAdminClaimCompleteMessage(result)),
+        onError: handleFailed,
+      },
     );
 
   const handleReject = (claim: AdminOrderClaimSummary, rejectReason: string) =>

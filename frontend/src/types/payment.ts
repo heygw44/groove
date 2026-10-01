@@ -41,7 +41,8 @@ export interface OrderPayment {
   method: string;
   status: PaymentStatus;
   amount: number;
-  approvedAt: string;
+  /** 입금 전 가상계좌는 승인 시각이 없다. */
+  approvedAt?: string;
   canceledAt?: string;
   easyPayProvider: string | null;
   virtualAccount: VirtualAccount | null;
