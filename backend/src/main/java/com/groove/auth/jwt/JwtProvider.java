@@ -40,7 +40,7 @@ public class JwtProvider {
 
 	public String createAccessToken(Long memberId, MemberRole role) {
 		Date now = new Date();
-		Date expiration = new Date(now.getTime() + jwtProperties.accessTokenExpiry().toMillis());
+		Date expiration = new Date(now.getTime() + jwtProperties.accessTokenExpiry(role).toMillis());
 		return Jwts.builder()
 				.subject(String.valueOf(memberId))
 				.claim(CLAIM_ROLE, role.name())

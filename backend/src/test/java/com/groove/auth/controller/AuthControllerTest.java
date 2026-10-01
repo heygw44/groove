@@ -100,7 +100,9 @@ class AuthControllerTest {
 			"groover@groove.com, short12, 그루버, password",
 			"groover@groove.com, password12345678901234, 그루버, password",
 			"groover@groove.com, password1, 그, nickname",
-			"'', password1, 그루버, email"
+			"'', password1, 그루버, email",
+			"ｇｒｏｏｖｅｒ@groove.com, password1, 그루버, email",
+			"그루버@groove.com, password1, 그루버, email"
 		})
 		void returnsBadRequestWhenFieldInvalid(String email, String password, String nickname,
 				String expectedField) throws Exception {
@@ -114,6 +116,20 @@ class AuthControllerTest {
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
 					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem(expectedField)));
+		}
+
+		@Test
+		@DisplayName("이메일이 100자를 넘으면 400 과 필드 에러를 반환한다")
+		void returnsBadRequestWhenEmailTooLong() throws Exception {
+			// given
+			SignupRequest request = new SignupRequest("a".repeat(95) + "@g.com", "password1", "그루버");
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/signup")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("email")));
 		}
 
 		@Test

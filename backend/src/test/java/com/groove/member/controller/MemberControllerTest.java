@@ -40,6 +40,7 @@ import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.dto.MemberResponse;
 import com.groove.member.dto.MemberUpdateRequest;
+import com.groove.member.dto.MemberWithdrawRequest;
 import com.groove.member.dto.PasswordChangeRequest;
 import com.groove.member.entity.MemberRole;
 import com.groove.member.entity.MemberStatus;
@@ -215,9 +216,50 @@ class MemberControllerTest {
 		@DisplayName("인증된 요청이면 200 을 반환하고 탈퇴를 처리한다")
 		void withdrawsMember() throws Exception {
 			// when & then
-			mockMvc.perform(delete("/api/v1/members/me").header(HttpHeaders.AUTHORIZATION, bearer()))
+			mockMvc.perform(delete("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new MemberWithdrawRequest("password1"))))
 					.andExpect(status().isOk());
-			verify(memberService).withdraw(1L);
+			verify(memberService).withdraw(1L, new MemberWithdrawRequest("password1"));
+		}
+
+		@Test
+		@DisplayName("바디가 없으면 400 을 반환한다")
+		void returnsBadRequestWithoutBody() throws Exception {
+			// when & then
+			mockMvc.perform(delete("/api/v1/members/me").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isBadRequest());
+			verify(memberService, never()).withdraw(any(), any());
+		}
+
+		@Test
+		@DisplayName("비밀번호가 비어 있으면 400 과 필드 에러를 반환한다")
+		void returnsBadRequestWhenPasswordBlank() throws Exception {
+			// when & then
+			mockMvc.perform(delete("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"password\":\"\"}"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("password")));
+			verify(memberService, never()).withdraw(any(), any());
+		}
+
+		@Test
+		@DisplayName("잠겨 있으면 429 MEMBER_PASSWORD_LOCKED 를 반환한다")
+		void returnsTooManyRequestsWhenLocked() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.MEMBER_PASSWORD_LOCKED))
+					.given(memberService).withdraw(eq(1L), any());
+
+			// when & then
+			mockMvc.perform(delete("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, bearer())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new MemberWithdrawRequest("password1"))))
+					.andExpect(status().isTooManyRequests())
+					.andExpect(jsonPath("$.error.code", is("MEMBER_PASSWORD_LOCKED")));
 		}
 
 		@Test
@@ -227,7 +269,7 @@ class MemberControllerTest {
 			mockMvc.perform(delete("/api/v1/members/me"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(memberService, never()).withdraw(any());
+			verify(memberService, never()).withdraw(any(), any());
 		}
 	}
 }

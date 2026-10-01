@@ -10,8 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Duration;
+import java.util.Set;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,16 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	StringRedisTemplate redisTemplate;
+
+	// 잠금 키가 회원 id 라 Redis 가 컨테이너 단위로 공유되는 스위트에서는 DB 가 새로 만들어져 같은 id 가 재사용될 때
+	// 앞 테스트의 실패 카운터가 뒤 테스트의 로그인을 막는다.
+	@AfterEach
+	void clearLoginFailCounters() {
+		Set<String> keys = redisTemplate.keys("login-fail:*");
+		if (keys != null && !keys.isEmpty()) {
+			redisTemplate.delete(keys);
+		}
+	}
 
 	@Nested
 	@DisplayName("로그인 → 재발급 → 로그아웃 흐름")
@@ -161,7 +173,9 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(jsonPath("$.data.status", is("ACTIVE")));
 
 			mockMvc.perform(delete("/api/v1/members/me")
-							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"password\":\"" + password + "\"}"))
 					.andExpect(status().isOk());
 			assertThat(refreshTokenRepository.findCurrent(memberId, sessionId)).isEmpty();
 
@@ -253,7 +267,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			login(email, password);
 			JwtProvider expiredProvider = new JwtProvider(
 					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofMillis(-1000),
-							jwtProperties.refreshTokenGrace()));
+							jwtProperties.refreshTokenGrace(), Duration.ofMinutes(5)));
 			String expiredAccessToken = expiredProvider.createAccessToken(memberId, MemberRole.USER);
 
 			// when & then
@@ -276,7 +290,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
 			String sessionId = sessionIdOf(loginResult.getResponse().getCookie("refreshToken"));
 			JwtProvider expiredProvider = new JwtProvider(
 					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofMillis(-1000),
-							jwtProperties.refreshTokenGrace()));
+							jwtProperties.refreshTokenGrace(), Duration.ofMinutes(5)));
 			// 파싱이 만료로 실패하는 경로라 세션 자체는 실존하지 않는 임의 sessionId 로도 충분하다.
 			String expiredRefreshToken = expiredProvider.createRefreshToken(memberId, UUID.randomUUID().toString());
 

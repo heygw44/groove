@@ -17,11 +17,14 @@ spring:
 jwt:
   secret: test-secret-key-for-jwt-signing-must-be-long-enough-000000
   access-token-expiry: 1m
+  admin-access-token-expiry: 1m
   refresh-token-expiry: 10m
 
 auth:
   cookie:
     secure: false
+  session:
+    admin-idle-timeout: 3m
 
 toss:
   client-key: test_ck_dummy

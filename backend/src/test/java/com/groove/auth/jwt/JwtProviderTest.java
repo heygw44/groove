@@ -3,12 +3,14 @@ package com.groove.auth.jwt;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 
@@ -17,6 +19,10 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.config.JwtProperties;
 import com.groove.member.entity.MemberRole;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+
 class JwtProviderTest {
 
 	private static final String SIGNING_KEY = "test-secret-key-for-jwt-signing-must-be-long-enough-000000";
@@ -24,7 +30,8 @@ class JwtProviderTest {
 	private static final String SESSION_ID = "session-1";
 
 	private final JwtProvider jwtProvider = new JwtProvider(
-			new JwtProperties(SIGNING_KEY, Duration.ofMinutes(30), Duration.ofDays(14), Duration.ofSeconds(10)));
+			new JwtProperties(SIGNING_KEY, Duration.ofMinutes(30), Duration.ofDays(14), Duration.ofSeconds(10),
+					Duration.ofMinutes(5)));
 
 	@Nested
 	@DisplayName("createAccessToken()")
@@ -43,6 +50,25 @@ class JwtProviderTest {
 			// then
 			assertThat(claims.memberId()).isEqualTo(MEMBER_ID);
 			assertThat(claims.role()).isEqualTo(role);
+		}
+
+		@ParameterizedTest
+		@CsvSource({"USER, 1800", "ADMIN, 300"})
+		@DisplayName("만료 시각은 역할별 access token 만료 설정을 따른다")
+		void expiresAccordingToRole(MemberRole role, long expectedSeconds) {
+			// given
+			String token = jwtProvider.createAccessToken(MEMBER_ID, role);
+
+			// when
+			Claims claims = Jwts.parser()
+					.verifyWith(Keys.hmacShaKeyFor(SIGNING_KEY.getBytes(StandardCharsets.UTF_8)))
+					.build()
+					.parseSignedClaims(token)
+					.getPayload();
+
+			// then
+			long lifetimeSeconds = (claims.getExpiration().getTime() - claims.getIssuedAt().getTime()) / 1000;
+			assertThat(lifetimeSeconds).isBetween(expectedSeconds - 1, expectedSeconds + 1);
 		}
 
 		@Test
@@ -86,7 +112,7 @@ class JwtProviderTest {
 			// given
 			JwtProvider expiredProvider = new JwtProvider(
 					new JwtProperties(SIGNING_KEY, Duration.ofMillis(-1000), Duration.ofDays(14),
-							Duration.ofSeconds(10)));
+							Duration.ofSeconds(10), Duration.ofMinutes(5)));
 			String token = expiredProvider.createAccessToken(MEMBER_ID, MemberRole.USER);
 
 			// when & then
@@ -102,7 +128,8 @@ class JwtProviderTest {
 			// given
 			JwtProvider otherProvider = new JwtProvider(
 					new JwtProperties("other-secret-key-for-jwt-signing-must-be-long-enough-0000",
-							Duration.ofMinutes(30), Duration.ofDays(14), Duration.ofSeconds(10)));
+							Duration.ofMinutes(30), Duration.ofDays(14), Duration.ofSeconds(10),
+							Duration.ofMinutes(5)));
 			String token = otherProvider.createAccessToken(MEMBER_ID, MemberRole.USER);
 
 			// when & then

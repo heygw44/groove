@@ -20,10 +20,8 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.config.LoginLockProperties;
 import com.groove.support.IntegrationTestSupport;
 
-/** 이메일 단위 로그인 실패 잠금(Redis)을 검증한다. */
+/** 로그인 실패 잠금(Redis)을 검증한다. */
 class LoginAttemptGuardTest extends IntegrationTestSupport {
-
-	private static final String KEY_PREFIX = "login-fail:";
 
 	@Autowired
 	private LoginAttemptGuard loginAttemptGuard;
@@ -43,42 +41,55 @@ class LoginAttemptGuardTest extends IntegrationTestSupport {
 		void locksOnlyAfterMaxFailures() {
 			// given
 			String email = newEmail();
+			String key = LoginAttemptGuard.lockKey(null, email);
 			int maxFailures = loginLockProperties.maxFailures();
 			for (int i = 0; i < maxFailures - 1; i++) {
-				loginAttemptGuard.recordFailure(email);
+				loginAttemptGuard.recordFailure(key);
 			}
 
 			// when & then
-			assertThatCode(() -> loginAttemptGuard.checkNotLocked(email)).doesNotThrowAnyException();
+			assertThatCode(() -> loginAttemptGuard.checkNotLocked(key)).doesNotThrowAnyException();
 
 			// when
-			loginAttemptGuard.recordFailure(email);
+			loginAttemptGuard.recordFailure(key);
 
 			// then
-			assertThatThrownBy(() -> loginAttemptGuard.checkNotLocked(email))
+			assertThatThrownBy(() -> loginAttemptGuard.checkNotLocked(key))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_LOGIN_LOCKED);
 		}
 
 		@Test
-		@DisplayName("이메일의 대소문자와 앞뒤 공백이 달라도 같은 키로 취급한다")
-		void treatsCaseAndWhitespaceVariantsAsSameKey() {
+		@DisplayName("회원이 없을 때 이메일의 대소문자·앞뒤 공백·전각 표기가 달라도 같은 키로 취급한다")
+		void treatsEmailVariantsAsSameKeyForUnknownMember() {
 			// given
 			String email = newEmail();
+			String key = LoginAttemptGuard.lockKey(null, email);
 			int maxFailures = loginLockProperties.maxFailures();
 			String variant = "  " + email.toUpperCase(Locale.ROOT) + "  ";
+			String fullwidth = email.replace("guard", "ｇｕａｒｄ");
+			String variantKey = LoginAttemptGuard.lockKey(null, variant);
 
 			// when
 			for (int i = 0; i < maxFailures; i++) {
-				loginAttemptGuard.recordFailure(variant);
+				loginAttemptGuard.recordFailure(variantKey);
 			}
 
 			// then
-			assertThatThrownBy(() -> loginAttemptGuard.checkNotLocked(email))
+			assertThat(LoginAttemptGuard.lockKey(null, fullwidth)).isEqualTo(key);
+			assertThatThrownBy(() -> loginAttemptGuard.checkNotLocked(key))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_LOGIN_LOCKED);
+		}
+
+		@Test
+		@DisplayName("회원이 있으면 이메일과 무관하게 회원 id 키를 쓴다")
+		void usesMemberIdKeyWhenMemberExists() {
+			// when & then
+			assertThat(LoginAttemptGuard.lockKey(7L, "a@groove.com")).isEqualTo("login-fail:m:7");
+			assertThat(LoginAttemptGuard.lockKey(7L, "ＡＢ@groove.com")).isEqualTo("login-fail:m:7");
 		}
 
 		@Test
@@ -86,11 +97,12 @@ class LoginAttemptGuardTest extends IntegrationTestSupport {
 		void failsOpenWhenRedisIsDown() {
 			// given
 			String email = newEmail();
+			String key = LoginAttemptGuard.lockKey(null, email);
 			pauseRedis();
 
 			// when & then
 			try {
-				assertThatCode(() -> loginAttemptGuard.checkNotLocked(email)).doesNotThrowAnyException();
+				assertThatCode(() -> loginAttemptGuard.checkNotLocked(key)).doesNotThrowAnyException();
 			} finally {
 				unpauseRedis();
 			}
@@ -106,13 +118,14 @@ class LoginAttemptGuardTest extends IntegrationTestSupport {
 		void setsTtlNearWindow() {
 			// given
 			String email = newEmail();
+			String key = LoginAttemptGuard.lockKey(null, email);
 			Duration window = loginLockProperties.window();
 
 			// when
-			loginAttemptGuard.recordFailure(email);
+			loginAttemptGuard.recordFailure(key);
 
 			// then
-			Long ttlMillis = redisTemplate.getExpire(key(email), TimeUnit.MILLISECONDS);
+			Long ttlMillis = redisTemplate.getExpire(key, TimeUnit.MILLISECONDS);
 			assertThat(ttlMillis).isNotNull();
 			assertThat(ttlMillis).isBetween(window.minusSeconds(5).toMillis(), window.toMillis());
 		}
@@ -122,11 +135,12 @@ class LoginAttemptGuardTest extends IntegrationTestSupport {
 		void failsOpenWhenRedisIsDown() {
 			// given
 			String email = newEmail();
+			String key = LoginAttemptGuard.lockKey(null, email);
 			pauseRedis();
 
 			// when & then
 			try {
-				assertThatCode(() -> loginAttemptGuard.recordFailure(email)).doesNotThrowAnyException();
+				assertThatCode(() -> loginAttemptGuard.recordFailure(key)).doesNotThrowAnyException();
 			} finally {
 				unpauseRedis();
 			}
@@ -142,17 +156,18 @@ class LoginAttemptGuardTest extends IntegrationTestSupport {
 		void clearsCounter() {
 			// given
 			String email = newEmail();
+			String key = LoginAttemptGuard.lockKey(null, email);
 			int maxFailures = loginLockProperties.maxFailures();
 			for (int i = 0; i < maxFailures; i++) {
-				loginAttemptGuard.recordFailure(email);
+				loginAttemptGuard.recordFailure(key);
 			}
 
 			// when
-			loginAttemptGuard.reset(email);
+			loginAttemptGuard.reset(key);
 
 			// then
-			assertThatCode(() -> loginAttemptGuard.checkNotLocked(email)).doesNotThrowAnyException();
-			assertThat(redisTemplate.hasKey(key(email))).isFalse();
+			assertThatCode(() -> loginAttemptGuard.checkNotLocked(key)).doesNotThrowAnyException();
+			assertThat(redisTemplate.hasKey(key)).isFalse();
 		}
 
 		@Test
@@ -160,11 +175,12 @@ class LoginAttemptGuardTest extends IntegrationTestSupport {
 		void failsOpenWhenRedisIsDown() {
 			// given
 			String email = newEmail();
+			String key = LoginAttemptGuard.lockKey(null, email);
 			pauseRedis();
 
 			// when & then
 			try {
-				assertThatCode(() -> loginAttemptGuard.reset(email)).doesNotThrowAnyException();
+				assertThatCode(() -> loginAttemptGuard.reset(key)).doesNotThrowAnyException();
 			} finally {
 				unpauseRedis();
 			}
@@ -175,7 +191,4 @@ class LoginAttemptGuardTest extends IntegrationTestSupport {
 		return "guard-" + UUID.randomUUID() + "@groove.com";
 	}
 
-	private static String key(String email) {
-		return KEY_PREFIX + email.trim().toLowerCase(Locale.ROOT);
-	}
 }
