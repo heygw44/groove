@@ -140,7 +140,7 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 S4 S5 M1 W1 W2 L1 D1 D2 Y1 Y2)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 S4 S5 M1 W1 W2 L1 D1 D2 Y1 Y2)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
@@ -166,8 +166,11 @@ case_desc() {
 	A7) echo "관리자 상품주문 목록 statusGroup=PREPARING (OrderQueryMapper.xml#findAdminOrderItems)" ;;
 	A8) echo "관리자 상품주문 목록 최근 30일 (OrderQueryMapper.xml#findAdminOrderItems)" ;;
 	A9) echo "관리자 상품주문 목록 statusGroup=CANCEL_RETURN, status IN OR claim_status IN (OrderQueryMapper.xml#findAdminOrderItems)" ;;
-	A10) echo "관리자 상품주문 countAdminOrderItems 무필터 (OrderQueryMapper.xml#countAdminOrderItems)" ;;
+	A10) echo "관리자 상품주문 countAdminOrderItems 무필터 (before: member 조인 / after: 키워드 없으면 member 조인 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
 	A11) echo "관리자 상품주문 목록 무필터, OFFSET 2000 (OrderQueryMapper.xml#findAdminOrderItems)" ;;
+	A12) echo "관리자 상품주문 countAdminOrderItems statusGroup=PREPARING (before: member 조인 / after: 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
+	A13) echo "관리자 상품주문 countAdminOrderItems statusGroup=CANCEL_RETURN (before: member 조인 / after: 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
+	A14) echo "관리자 상품주문 countAdminOrderItems 최근 30일 (before: member 조인 / after: 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
 	R1) echo "리뷰 목록 LATEST (ReviewRepository.findByProductId)" ;;
 	R2) echo "리뷰 목록 RATING_DESC (ReviewRepository.findByProductId)" ;;
 	R3) echo "리뷰 개수 (ReviewRepository 파생 count)" ;;
@@ -1176,6 +1179,13 @@ ${sql}
 	printf '%s' "${value:-?}"
 }
 
+# 관리자 상품주문 건수(A10·A12~A14): member 는 키워드 검색에만 필요하다. after 는 키워드가 없을 때 조인을 뺀 형태.
+admin_order_item_count_member_join() {
+	if [ "$1" = before ]; then
+		echo "JOIN member m ON m.id = o.member_id"
+	fi
+}
+
 # 케이스별 SQL. mapper XML/리포지토리에서 그대로 복사하고 파라미터만 리터럴로 치환했다.
 # phase 는 대부분 케이스에서 안 쓰인다(before/after 가 같은 SQL 을 쓰고 인덱스 DDL 만 다름).
 # P5 처럼 쿼리 자체를 재작성하는 케이스만 phase 로 갈라 서로 다른 SQL 을 낸다.
@@ -1641,7 +1651,7 @@ get_case_sql() {
 			SELECT COUNT(*)
 			FROM order_item oi
 			JOIN orders o ON o.id = oi.order_id
-			JOIN member m ON m.id = o.member_id
+			$(admin_order_item_count_member_join "${phase}")
 			WHERE o.placed_at IS NOT NULL
 		SQL
 		;;
@@ -1660,6 +1670,45 @@ get_case_sql() {
 			WHERE o.placed_at IS NOT NULL
 			ORDER BY oi.created_at DESC, oi.id DESC
 			LIMIT 20 OFFSET 2000
+		SQL
+		;;
+	A12)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#countAdminOrderItems, statusGroup=PREPARING
+			SELECT COUNT(*)
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			$(admin_order_item_count_member_join "${phase}")
+			WHERE o.placed_at IS NOT NULL
+			AND (
+				oi.status IN ('PREPARING')
+			)
+		SQL
+		;;
+	A13)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#countAdminOrderItems, statusGroup=CANCEL_RETURN
+			SELECT COUNT(*)
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			$(admin_order_item_count_member_join "${phase}")
+			WHERE o.placed_at IS NOT NULL
+			AND (
+				oi.status IN ('CANCELED', 'RETURNED', 'CANCELED_BY_NOPAYMENT')
+				OR oi.claim_status IN ('CANCEL_REQUEST', 'RETURN_REQUEST', 'COLLECTING', 'CANCEL_DONE', 'RETURN_DONE')
+			)
+		SQL
+		;;
+	A14)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#countAdminOrderItems, 기간 최근 30일(오늘 0시 기준 30일 전 ~ 내일 0시)
+			SELECT COUNT(*)
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			$(admin_order_item_count_member_join "${phase}")
+			WHERE o.placed_at IS NOT NULL
+			AND oi.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+			AND oi.created_at < CURDATE() + INTERVAL 1 DAY
 		SQL
 		;;
 	R1)
