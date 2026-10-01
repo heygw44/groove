@@ -19,9 +19,7 @@ export const getCatalogLookup = (params: CatalogLookupParams) =>
 
 export const getCatalogRelease = (discogsReleaseId: number) =>
   unwrap(
-    client.get<ApiResponse<CatalogReleaseDetail>>(
-      `/admin/catalog/releases/${discogsReleaseId}`,
-    ),
+    client.get<ApiResponse<CatalogReleaseDetail>>(`/admin/catalog/releases/${discogsReleaseId}`),
   );
 
 export const importCatalogRelease = (payload: CatalogImportRequest) =>
@@ -40,9 +38,7 @@ export const getCatalogImportJobs = (params: CatalogImportJobListParams) =>
   );
 
 export const getCatalogImportJob = (jobExecutionId: number) =>
-  unwrap(
-    client.get<ApiResponse<CatalogImportJob>>(`/admin/catalog/import-jobs/${jobExecutionId}`),
-  );
+  unwrap(client.get<ApiResponse<CatalogImportJob>>(`/admin/catalog/import-jobs/${jobExecutionId}`));
 
 export const restartCatalogImportJob = (jobExecutionId: number) =>
   unwrap(

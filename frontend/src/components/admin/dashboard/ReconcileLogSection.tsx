@@ -34,7 +34,9 @@ export function ReconcileLogSection() {
             type="button"
             onClick={() => changeFilter('unresolved')}
             className={`rounded px-3 py-1 ${
-              filter === 'unresolved' ? 'bg-surface font-medium text-content shadow-sm' : 'text-content-muted'
+              filter === 'unresolved'
+                ? 'bg-surface font-medium text-content shadow-sm'
+                : 'text-content-muted'
             }`}
           >
             미해결만
@@ -43,7 +45,9 @@ export function ReconcileLogSection() {
             type="button"
             onClick={() => changeFilter('all')}
             className={`rounded px-3 py-1 ${
-              filter === 'all' ? 'bg-surface font-medium text-content shadow-sm' : 'text-content-muted'
+              filter === 'all'
+                ? 'bg-surface font-medium text-content shadow-sm'
+                : 'text-content-muted'
             }`}
           >
             전체

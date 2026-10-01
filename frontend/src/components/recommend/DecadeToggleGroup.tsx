@@ -8,7 +8,12 @@ interface DecadeToggleGroupProps {
   invalid?: boolean;
 }
 
-export function DecadeToggleGroup({ value, onChange, max, invalid = false }: DecadeToggleGroupProps) {
+export function DecadeToggleGroup({
+  value,
+  onChange,
+  max,
+  invalid = false,
+}: DecadeToggleGroupProps) {
   const reachedMax = value.length >= max;
 
   const toggle = (decade: Decade) => {
@@ -33,9 +38,7 @@ export function DecadeToggleGroup({ value, onChange, max, invalid = false }: Dec
               disabled={isDisabled}
               onClick={() => toggle(decade)}
               className={`h-9 rounded-full px-4 text-sm whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-45 ${
-                isSelected
-                  ? 'bg-content text-surface'
-                  : 'border border-line hover:bg-surface-muted'
+                isSelected ? 'bg-content text-surface' : 'border border-line hover:bg-surface-muted'
               }`}
             >
               {DECADE_LABELS[decade]}

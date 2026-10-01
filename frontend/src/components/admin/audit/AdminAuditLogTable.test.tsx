@@ -5,15 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { AdminAuditLogTable } from '@/components/admin/audit/AdminAuditLogTable';
 import type { AdminAuditLog } from '@/types/adminAuditLog';
 
-const aggregationLog = (): AdminAuditLog =>
-  ({
-    id: 1,
-    adminId: 2,
-    adminNickname: '관리자',
-    action: 'SALES_AGGREGATION_RUN',
-    targetType: 'SALES_AGGREGATION',
-    createdAt: '2026-09-11T10:00:00',
-  });
+const aggregationLog = (): AdminAuditLog => ({
+  id: 1,
+  adminId: 2,
+  adminNickname: '관리자',
+  action: 'SALES_AGGREGATION_RUN',
+  targetType: 'SALES_AGGREGATION',
+  createdAt: '2026-09-11T10:00:00',
+});
 
 describe('AdminAuditLogTable', () => {
   it('집계 실행 로그에 대상 id가 없으면 라벨만 표시하고 링크를 만들지 않는다', () => {

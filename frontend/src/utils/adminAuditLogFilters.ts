@@ -68,9 +68,7 @@ const parsePage = (value: string | null): number => {
   return Number(value);
 };
 
-export const parseAdminAuditLogFilters = (
-  searchParams: URLSearchParams,
-): AdminAuditLogFilters => {
+export const parseAdminAuditLogFilters = (searchParams: URLSearchParams): AdminAuditLogFilters => {
   const from = parseDate(searchParams.get('from'));
   const to = parseDate(searchParams.get('to'));
   const isInvalidRange = from !== undefined && to !== undefined && from > to;

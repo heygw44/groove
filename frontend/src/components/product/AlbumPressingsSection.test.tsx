@@ -17,7 +17,9 @@ const baseAlbum: Omit<AlbumDetail, 'pressings'> = {
 };
 
 // 앨범 상세의 프레싱 목록은 항상 otherPressingCount 0 으로 내려온다(대표 축약이 없는 전체 목록이라서).
-const pressing = (overrides: Partial<ProductSummary> & Pick<ProductSummary, 'id' | 'title'>): ProductSummary => ({
+const pressing = (
+  overrides: Partial<ProductSummary> & Pick<ProductSummary, 'id' | 'title'>,
+): ProductSummary => ({
   artistName: 'Miles Davis',
   price: 30000,
   status: 'ON_SALE',

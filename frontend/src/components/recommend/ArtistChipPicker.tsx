@@ -14,7 +14,13 @@ interface ArtistChipPickerProps {
   id?: string;
 }
 
-export function ArtistChipPicker({ value, onChange, max, invalid = false, id }: ArtistChipPickerProps) {
+export function ArtistChipPicker({
+  value,
+  onChange,
+  max,
+  invalid = false,
+  id,
+}: ArtistChipPickerProps) {
   const [keyword, setKeyword] = useState('');
   const [open, setOpen] = useState(false);
   const debouncedKeyword = useDebouncedValue(keyword, 300);

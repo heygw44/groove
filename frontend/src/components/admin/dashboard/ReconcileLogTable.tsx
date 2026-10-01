@@ -58,7 +58,9 @@ export function ReconcileLogTable({ logs }: ReconcileLogTableProps) {
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
                 {formatSaleDate(log.saleDate)}
               </td>
-              <td className="py-2.5 pr-3 whitespace-nowrap">{RECONCILE_METRIC_LABELS[log.metric]}</td>
+              <td className="py-2.5 pr-3 whitespace-nowrap">
+                {RECONCILE_METRIC_LABELS[log.metric]}
+              </td>
               <td className="py-2.5 pr-3">
                 <Badge variant={log.severity === 'CRITICAL' ? 'danger' : 'accent'}>
                   {RECONCILE_SEVERITY_LABELS[log.severity]}

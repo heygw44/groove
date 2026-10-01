@@ -27,7 +27,9 @@ const parseOrderRef = (searchParams: URLSearchParams): number | undefined => {
 };
 
 /** 토스 성공 리다이렉트 쿼리(paymentKey, orderId, amount)를 파싱한다. 누락·비정상 값이면 null. */
-export function parsePaymentSuccessParams(searchParams: URLSearchParams): PaymentSuccessParams | null {
+export function parsePaymentSuccessParams(
+  searchParams: URLSearchParams,
+): PaymentSuccessParams | null {
   const paymentKey = searchParams.get('paymentKey');
   const orderId = searchParams.get('orderId');
   const amountRaw = searchParams.get('amount');

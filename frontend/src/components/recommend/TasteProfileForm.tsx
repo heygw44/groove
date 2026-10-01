@@ -29,7 +29,11 @@ interface TasteProfileFormProps {
   submitLabel?: string;
 }
 
-export function TasteProfileForm({ profile, onSaved, submitLabel = '저장' }: TasteProfileFormProps) {
+export function TasteProfileForm({
+  profile,
+  onSaved,
+  submitLabel = '저장',
+}: TasteProfileFormProps) {
   const { showToast } = useToast();
   const { data: genres, isPending: isGenresPending } = useGenres();
   const { mutate, isPending } = useUpdateTasteProfile();
@@ -89,7 +93,11 @@ export function TasteProfileForm({ profile, onSaved, submitLabel = '저장' }: T
         />
       </Field>
 
-      <Field htmlFor="taste-artist" label="아티스트" error={getArrayFieldErrorMessage(errors.artists)}>
+      <Field
+        htmlFor="taste-artist"
+        label="아티스트"
+        error={getArrayFieldErrorMessage(errors.artists)}
+      >
         <Controller
           control={control}
           name="artists"

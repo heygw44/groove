@@ -1,6 +1,10 @@
 import { Badge } from '@/components/common/Badge';
 import type { PaymentStatus } from '@/types/payment';
-import { PAYMENT_STATUS_BADGE, PAYMENT_STATUS_LABEL, isReconcilePending } from '@/utils/paymentStatus';
+import {
+  PAYMENT_STATUS_BADGE,
+  PAYMENT_STATUS_LABEL,
+  isReconcilePending,
+} from '@/utils/paymentStatus';
 
 interface PaymentStatusBadgeProps {
   status: PaymentStatus;
