@@ -30,5 +30,11 @@ public record OrderCancelRequest(
 			return new RefundAccountInfo(refundAccount.bankCode(), refundAccount.accountNumber(),
 					refundAccount.holderName());
 		}
+
+		@Override
+		public String toString() {
+			return "RefundAccount[bankCode=" + bankCode + ", accountNumber="
+					+ RefundAccountInfo.maskAccountNumber(accountNumber) + ", holderName=" + holderName + "]";
+		}
 	}
 }

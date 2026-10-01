@@ -1,6 +1,7 @@
 package com.groove.order.dto;
 
 import java.util.List;
+import java.util.Objects;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
@@ -16,7 +17,7 @@ import jakarta.validation.constraints.Size;
  * COMMON_VALIDATION_FAILED 로 통일하려고 문자열로 받아 서비스에서 직접 변환한다.
  */
 public record AdminOrderItemShipRequest(
-		@NotEmpty @Valid List<ShipItem> items
+		@NotEmpty @Size(max = AdminOrderItemBulkLimits.MAX_ITEMS) List<@NotNull @Valid ShipItem> items
 ) {
 
 	@AssertTrue(message = "orderItemId 가 중복되었습니다.")
@@ -24,8 +25,9 @@ public record AdminOrderItemShipRequest(
 		if (items == null) {
 			return true;
 		}
-		long distinctCount = items.stream().map(ShipItem::orderItemId).distinct().count();
-		return distinctCount == items.size();
+		// null 원소는 @NotNull 이 따로 잡는다. 여기서 NPE 가 나면 검증 실패가 아니라 500 이 된다.
+		List<Long> orderItemIds = items.stream().filter(Objects::nonNull).map(ShipItem::orderItemId).toList();
+		return orderItemIds.stream().distinct().count() == orderItemIds.size();
 	}
 
 	public record ShipItem(

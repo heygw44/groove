@@ -153,10 +153,11 @@ public class AdminOrderItemService {
 		List<Long> orderIds = orderItemRepository.findDistinctOrderIdsByIdIn(orderItemIds).stream()
 				.sorted()
 				.toList();
-		orderIds.forEach(orderId -> orderRepository.findByIdForUpdate(orderId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND)));
 		if (orderIds.isEmpty()) {
 			return Set.of();
+		}
+		if (orderRepository.findAllByIdInForUpdate(orderIds).size() != orderIds.size()) {
+			throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
 		}
 		return new HashSet<>(paymentRepository.findOrderIdsByOrderIdInAndStatus(orderIds,
 				PaymentStatus.CANCEL_REQUESTED));
