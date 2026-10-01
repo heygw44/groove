@@ -55,9 +55,13 @@ read_env() {
 
 database=$(read_env MYSQL_DATABASE)
 root_password=$(read_env MYSQL_ROOT_PASSWORD)
+backup_passphrase=$(read_env BACKUP_PASSPHRASE)
 
 [ -n "$database" ] && [ -n "$root_password" ] \
 	|| fail "$ENV_FILE 에 MYSQL_DATABASE/MYSQL_ROOT_PASSWORD 가 없다"
+
+[ -n "$backup_passphrase" ] \
+	|| fail "$ENV_FILE 에 BACKUP_PASSPHRASE 가 없다"
 
 if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
 	fail "mysql 컨테이너가 실행 중이 아니다 ($CONTAINER)"
@@ -65,21 +69,26 @@ fi
 
 # 정리를 덤프보다 앞에 둔다. 덤프 뒤에 지우면 디스크가 이미 찬 상태에서
 # 공간을 못 만들어 정리 자체가 실패할 수 있다.
-find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'groove-*.sql.gz' -o -name 'groove_*.sql.gz' \) \
+# 암호화 이전에 만든 평문(.sql.gz)도 같은 보존 기간으로 지운다.
+find "$BACKUP_DIR" -maxdepth 1 -type f \
+	\( -name 'groove-*.sql.gz' -o -name 'groove_*.sql.gz' -o -name 'groove-*.sql.gz.enc' \) \
 	-mtime "+$RETENTION_DAYS" -delete
-find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.sql.gz.tmp' -mtime +1 -delete
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name '*.sql.gz.tmp' -o -name '*.sql.gz.enc.tmp' \) \
+	-mtime +1 -delete
 
 free_kb=$(df -Pk "$BACKUP_DIR" | awk 'NR==2{print $4}')
 [ "$free_kb" -ge "$MIN_FREE_KB" ] \
 	|| fail "디스크 여유 공간 부족 (${free_kb}KB < ${MIN_FREE_KB}KB)"
 
 TS=$(date '+%Y%m%d-%H%M')
-DEST="$BACKUP_DIR/groove-$TS.sql.gz"
+DEST="$BACKUP_DIR/groove-$TS.sql.gz.enc"
 TMP="$DEST.tmp"
 ERR=$(mktemp)
 trap 'rm -f "$TMP" "$ERR"' EXIT
 
+# 패스프레이즈는 환경변수로만 넘긴다. -pass pass: 로 쓰면 ps 출력에 노출된다.
 export MYSQL_PWD="$root_password"
+export BACKUP_PASSPHRASE="$backup_passphrase"
 set +e
 # -e MYSQL_PWD 는 값 없이 이름만 넘겨 호스트에 이미 export 된 값을 컨테이너로 전달한다.
 # 값을 붙이면(-e MYSQL_PWD=...) 호스트 ps 출력에 비밀번호가 그대로 노출된다.
@@ -87,20 +96,25 @@ set +e
 docker exec -e MYSQL_PWD "$CONTAINER" \
 	mysqldump -uroot --single-transaction --no-tablespaces \
 		--default-character-set=utf8mb4 --databases "$database" \
-	2>"$ERR" | gzip -6 > "$TMP"
+	2>"$ERR" \
+	| gzip -6 \
+	| openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE > "$TMP"
 dump_status=$?
 set -e
 unset MYSQL_PWD
 
 [ "$dump_status" -eq 0 ] || fail "mysqldump 실패: $(head -n 5 "$ERR")"
 
-# 압축 파일을 한 번만 읽어(gzip -dc) 테이블 수와 마지막 줄을 awk 로 동시에 뽑는다.
+# 복호화 후 압축을 푸는 스트림을 한 번만 읽어 테이블 수와 마지막 줄을 awk 로 동시에 뽑는다.
+# 복호화나 압축 해제가 실패하면 pipefail 로 검증 단계에서 바로 FAIL 한다.
 # t3.micro 에서 같은 스트림을 두 번 읽는 CPU 낭비를 피한다.
-verify_output=$(gzip -dc "$TMP" | awk '
+verify_output=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE -in "$TMP" \
+	| gunzip -c | awk '
 	/^CREATE TABLE/ { tables++ }
 	{ last = $0 }
 	END { print tables + 0; print last }
-')
+') || fail "백업 복호화·압축 해제 검증 실패"
+unset BACKUP_PASSPHRASE
 table_count=$(printf '%s\n' "$verify_output" | sed -n '1p')
 last_line=$(printf '%s\n' "$verify_output" | sed -n '2,$p')
 
