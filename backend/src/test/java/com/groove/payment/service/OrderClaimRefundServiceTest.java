@@ -3,10 +3,12 @@ package com.groove.payment.service;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +33,8 @@ import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentCancelStatus;
+import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -47,6 +51,9 @@ class OrderClaimRefundServiceTest {
 	PaymentRepository paymentRepository;
 
 	@Mock
+	PaymentCancelRepository paymentCancelRepository;
+
+	@Mock
 	PaymentRefundService paymentRefundService;
 
 	@Mock
@@ -57,7 +64,8 @@ class OrderClaimRefundServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new OrderClaimRefundService(paymentRepository, paymentRefundService, orderClaimFinalizeService);
+		service = new OrderClaimRefundService(paymentRepository, paymentCancelRepository, paymentRefundService,
+				orderClaimFinalizeService);
 		Member member = MemberFixture.create();
 		Artist artist = ArtistFixture.withId(1L);
 		Product product = ProductFixture.withId(ProductFixture.create(artist), 200L);
@@ -114,15 +122,31 @@ class OrderClaimRefundServiceTest {
 		}
 
 		@Test
-		@DisplayName("토스가 명시적으로 거절하면 클레임을 되돌린 뒤 예외를 다시 던진다")
+		@DisplayName("토스가 명시적으로 거절하고 REQUESTED 환불이 남아 있지 않으면 클레임을 되돌린 뒤 예외를 다시 던진다")
 		void revertsAndRethrowsWhenRejected() {
 			// given
 			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
 			willThrow(failure).given(paymentRefundService).refund(PAYMENT_ID, AMOUNT, "사유", null, CLAIM_ID);
+			given(paymentCancelRepository.existsByOrderClaimIdAndStatusIn(CLAIM_ID,
+					List.of(PaymentCancelStatus.REQUESTED))).willReturn(false);
 
 			// when & then
 			assertThatThrownBy(() -> service.refund(ORDER_ID, CLAIM_ID, AMOUNT, "사유", null)).isSameAs(failure);
 			verify(orderClaimFinalizeService).applyRefundFailed(CLAIM_ID);
+		}
+
+		@Test
+		@DisplayName("토스가 거절했어도 REQUESTED 환불이 남아 있으면 클레임을 되돌리지 않고 예외만 다시 던진다")
+		void keepsClaimWhenRefundStillRequested() {
+			// given
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
+			willThrow(failure).given(paymentRefundService).refund(PAYMENT_ID, AMOUNT, "사유", null, CLAIM_ID);
+			given(paymentCancelRepository.existsByOrderClaimIdAndStatusIn(CLAIM_ID,
+					List.of(PaymentCancelStatus.REQUESTED))).willReturn(true);
+
+			// when & then
+			assertThatThrownBy(() -> service.refund(ORDER_ID, CLAIM_ID, AMOUNT, "사유", null)).isSameAs(failure);
+			verify(orderClaimFinalizeService, never()).applyRefundFailed(CLAIM_ID);
 		}
 
 		@ParameterizedTest

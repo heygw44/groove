@@ -20,6 +20,7 @@ import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 부분환불의 최종 결과(성공·실패)를 클레임과 상품주문에 반영한다. 클레임 승인 직후 결과가 바로 확인되는 경우와,
@@ -29,6 +30,7 @@ import lombok.RequiredArgsConstructor;
  * <p>주문 락을 잡기 전에는 주문 id 만 프로젝션으로 읽고, 클레임·상품주문은 락 뒤에 처음 읽는다. READ COMMITTED 인
  * 이유는 {@code OrderClaimWriter} 와 같다 - 락을 기다리는 동안 커밋된 변경을 봐야 옛 상태로 덮어쓰지 않는다.</p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderClaimFinalizeService {
@@ -57,18 +59,22 @@ public class OrderClaimFinalizeService {
 	}
 
 	/**
-	 * 토스 부분취소가 확정됐을 때 클레임을 종결하고 상품주문을 취소·반품으로 확정한다. 이미 종결된 클레임이면
-	 * 아무 것도 하지 않는다(멱등 - 즉시 반영 경로와 대사 경로가 같은 클레임을 두 번 마무리하려 할 수 있다).
+	 * 토스 부분취소가 확정됐을 때 클레임을 종결하고 상품주문을 취소·반품으로 확정한다. 같은 취소 건의 중복 확정은
+	 * {@code PaymentRefundWriter#completeRefund} 가 막으므로, 여기서 클레임이 이미 종결돼 있으면 환불은 나갔는데
+	 * 클레임은 다르게 닫힌 불일치다. 바꾸지 않고 오류 로그로 남긴다.
 	 */
 	@Transactional(isolation = Isolation.READ_COMMITTED)
 	public void applyRefundDone(Long orderClaimId, LocalDateTime canceledAt) {
 		Long orderId = orderClaimRepository.findOrderIdById(orderClaimId).orElse(null);
 		if (orderId == null) {
+			log.error("환불이 확정됐으나 클레임이 없음, 수동 확인 필요: orderClaimId={}", orderClaimId);
 			return;
 		}
 		Order order = lockAndLoadOrder(orderId);
 		OrderClaim claim = orderClaimRepository.findById(orderClaimId).orElse(null);
 		if (claim == null || !claim.isInProgress()) {
+			log.error("환불이 확정됐으나 클레임이 진행 중이 아님, 수동 확인 필요: orderClaimId={}, status={}", orderClaimId,
+					claim == null ? null : claim.getStatus());
 			return;
 		}
 		OrderItem item = findItem(order, claim.getOrderItem().getId());

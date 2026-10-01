@@ -40,6 +40,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentCancel;
@@ -53,9 +54,13 @@ import com.groove.product.entity.Product;
 @ExtendWith(MockitoExtension.class)
 class PaymentRefundWriterTest {
 
+	private static final Long ORDER_ID = 10L;
 	private static final Long PAYMENT_ID = 20L;
 	private static final BigDecimal PRICE = new BigDecimal("45000");
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 29, 12, 0);
+
+	@Mock
+	OrderRepository orderRepository;
 
 	@Mock
 	PaymentRepository paymentRepository;
@@ -68,16 +73,24 @@ class PaymentRefundWriterTest {
 
 	PaymentRefundWriter writer;
 	Payment payment;
+	Order order;
 
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-29T03:00:00Z"), ZoneId.of("Asia/Seoul"));
-		writer = new PaymentRefundWriter(paymentRepository, paymentCancelRepository, orderClaimFinalizeService, clock);
+		writer = new PaymentRefundWriter(orderRepository, paymentRepository, paymentCancelRepository,
+				orderClaimFinalizeService, clock);
 		Member member = MemberFixture.create();
 		Artist artist = ArtistFixture.create();
-		Order order = OrderFixture.createWithItem(member, ProductFixture.create(artist, "Kind of Blue", PRICE), 2);
+		order = OrderFixture.createWithItem(member, ProductFixture.create(artist, "Kind of Blue", PRICE), 2);
+		ReflectionTestUtils.setField(order, "id", ORDER_ID);
 		payment = PaymentFixture.approved(order);
 		ReflectionTestUtils.setField(payment, "id", PAYMENT_ID);
+	}
+
+	private void stubOrderLock() {
+		given(paymentRepository.findOrderIdById(PAYMENT_ID)).willReturn(Optional.of(ORDER_ID));
+		given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 	}
 
 	/** Mockito 의 save() 스텁이 IDENTITY 채번을 흉내내도록 저장된 엔티티에 id 를 채워 돌려준다. */
@@ -294,6 +307,7 @@ class PaymentRefundWriterTest {
 		@DisplayName("DONE 결제의 취소 누적액을 반영하고 취소 요청 기록을 DONE 으로 남긴다")
 		void appliesCancelAndCompletesRequest() {
 			// given: T1 에서 payment.status 를 바꾸지 않으므로 DONE 그대로다
+			stubOrderLock();
 			PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-key-1", new BigDecimal("10000"),
 					"사유", NOW);
 			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
@@ -315,6 +329,7 @@ class PaymentRefundWriterTest {
 		@DisplayName("클레임 환불이면 같은 트랜잭션에서 클레임 마무리를 먼저 호출한 뒤 결제에 반영한다")
 		void finalizesClaimBeforeApplyingPayment() {
 			// given
+			stubOrderLock();
 			PaymentCancel paymentCancel = PaymentCancel.requestForClaim(payment, "cancel-key-1",
 					new BigDecimal("10000"), "사유", NOW, 500L);
 			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
@@ -334,6 +349,7 @@ class PaymentRefundWriterTest {
 		@DisplayName("클레임 마무리가 실패하면 예외를 전파하고 취소 건을 REQUESTED 로 남긴다")
 		void keepsRequestedWhenClaimFinalizeFails() {
 			// given
+			stubOrderLock();
 			PaymentCancel paymentCancel = PaymentCancel.requestForClaim(payment, "cancel-key-1",
 					new BigDecimal("10000"), "사유", NOW, 500L);
 			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
@@ -345,6 +361,61 @@ class PaymentRefundWriterTest {
 					.isInstanceOf(IllegalStateException.class);
 			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.REQUESTED);
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("이미 DONE 인 취소 건이면 클레임 마무리와 취소 누적액 반영을 하지 않는다")
+		void skipsWhenAlreadyDone() {
+			// given
+			stubOrderLock();
+			PaymentCancel paymentCancel = PaymentCancel.requestForClaim(payment, "cancel-key-1",
+					new BigDecimal("10000"), "사유", NOW, 500L);
+			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
+			paymentCancel.complete("txn-1", NOW);
+			given(paymentCancelRepository.findById(90L)).willReturn(Optional.of(paymentCancel));
+
+			// when
+			writer.completeRefund(PAYMENT_ID, 90L, new BigDecimal("10000"), "txn-2", NOW);
+
+			// then
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo("0");
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(paymentCancel.getTossTransactionKey()).isEqualTo("txn-1");
+			verify(orderClaimFinalizeService, never()).applyRefundDone(any(), any());
+		}
+
+		@Test
+		@DisplayName("FAILED 로 기록된 취소 건이면 반영하지 않고 상태를 그대로 둔다")
+		void skipsWhenAlreadyFailed() {
+			// given
+			stubOrderLock();
+			PaymentCancel paymentCancel = PaymentCancel.requestForClaim(payment, "cancel-key-1",
+					new BigDecimal("10000"), "사유", NOW, 500L);
+			ReflectionTestUtils.setField(paymentCancel, "id", 90L);
+			paymentCancel.fail();
+			given(paymentCancelRepository.findById(90L)).willReturn(Optional.of(paymentCancel));
+
+			// when
+			writer.completeRefund(PAYMENT_ID, 90L, new BigDecimal("10000"), "txn-1", NOW);
+
+			// then
+			assertThat(payment.getCanceledAmount()).isEqualByComparingTo("0");
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.FAILED);
+			verify(orderClaimFinalizeService, never()).applyRefundDone(any(), any());
+		}
+
+		@Test
+		@DisplayName("결제가 없으면 PAYMENT_NOT_FOUND 예외를 던지고 주문을 잠그지 않는다")
+		void throwsWhenPaymentNotFound() {
+			// given
+			given(paymentRepository.findOrderIdById(PAYMENT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> writer.completeRefund(PAYMENT_ID, 90L, new BigDecimal("10000"), "txn-1", NOW))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+			verify(orderRepository, never()).findByIdForUpdate(any());
 		}
 	}
 
