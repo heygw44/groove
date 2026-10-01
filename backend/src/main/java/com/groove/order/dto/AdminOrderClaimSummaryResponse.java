@@ -15,13 +15,14 @@ public record AdminOrderClaimSummaryResponse(
 		String memberEmail,
 		String productName,
 		String reason,
-		LocalDateTime requestedAt
+		LocalDateTime requestedAt,
+		boolean refundInProgress
 ) {
 
-	public static AdminOrderClaimSummaryResponse from(OrderClaim claim) {
+	public static AdminOrderClaimSummaryResponse from(OrderClaim claim, boolean refundInProgress) {
 		return new AdminOrderClaimSummaryResponse(claim.getId(), claim.getType(), claim.getStatus(),
 				claim.getOrderItem().getProductOrderNumber(), claim.getOrderItem().getOrder().getOrderNumber(),
 				claim.getOrderItem().getOrder().getMember().getEmail(), claim.getOrderItem().getProductName(),
-				claim.getReason(), claim.getRequestedAt());
+				claim.getReason(), claim.getRequestedAt(), refundInProgress);
 	}
 }

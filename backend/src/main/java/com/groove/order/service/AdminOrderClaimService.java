@@ -1,7 +1,9 @@
 package com.groove.order.service;
 
 import java.util.List;
+import java.util.Set;
 
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,15 +41,21 @@ public class AdminOrderClaimService {
 	private final OrderClaimRepository orderClaimRepository;
 	private final OrderClaimWriter writer;
 	private final OrderClaimRefundHook refundHook;
+	private final OrderClaimRefundReader orderClaimRefundReader;
 	private final OrderItemRepository orderItemRepository;
 	private final ProductImageRepository productImageRepository;
 	private final AdminAuditLogService adminAuditLogService;
 
 	@Transactional(readOnly = true)
 	public PageResponse<AdminOrderClaimSummaryResponse> getList(AdminOrderClaimSearchRequest request) {
-		return PageResponse.from(orderClaimRepository
-				.search(request.type(), request.status(), request.toPageable())
-				.map(AdminOrderClaimSummaryResponse::from));
+		Page<OrderClaim> claims = orderClaimRepository.search(request.type(), request.status(), request.toPageable());
+		List<Long> itemIds = claims.getContent().stream()
+				.map(claim -> claim.getOrderItem().getId())
+				.toList();
+		// 결과불명으로 환불이 대기 중인 클레임은 큐에서 진행 중 표시를 해야 관리자가 재처리를 시도하지 않는다.
+		Set<Long> pendingRefundItemIds = orderClaimRefundReader.findPendingRefundOrderItemIds(itemIds);
+		return PageResponse.from(claims.map(claim -> AdminOrderClaimSummaryResponse.from(claim,
+				pendingRefundItemIds.contains(claim.getOrderItem().getId()))));
 	}
 
 	@Transactional(readOnly = true)
