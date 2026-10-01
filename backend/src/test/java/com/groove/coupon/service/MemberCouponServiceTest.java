@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -53,13 +54,17 @@ class MemberCouponServiceTest {
 	@Mock
 	MemberRepository memberRepository;
 
+	@Mock
+	CouponIssueGuard couponIssueGuard;
+
 	MemberCouponService memberCouponService;
 
 	Member member;
 
 	@BeforeEach
 	void setUp() {
-		memberCouponService = new MemberCouponService(couponRepository, memberCouponRepository, memberRepository);
+		memberCouponService = new MemberCouponService(couponRepository, memberCouponRepository, memberRepository,
+				couponIssueGuard);
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 	}
 
@@ -86,6 +91,7 @@ class MemberCouponServiceTest {
 			assertThat(response.memberCouponId()).isEqualTo(100L);
 			assertThat(response.couponCode()).isEqualTo(CODE);
 			assertThat(response.couponName()).isEqualTo(coupon.getName());
+			verify(couponIssueGuard, never()).recordFailure(any());
 		}
 
 		@Test
@@ -99,6 +105,23 @@ class MemberCouponServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COUPON_NOT_FOUND);
+			verify(couponIssueGuard).recordFailure(MEMBER_ID);
+		}
+
+		@Test
+		@DisplayName("잠겨 있으면 COUPON_ISSUE_LOCKED 예외를 던지고 쿠폰 조회를 하지 않는다")
+		void throwsWhenLocked() {
+			// given
+			willThrow(new BusinessException(ErrorCode.COUPON_ISSUE_LOCKED))
+					.given(couponIssueGuard).checkNotLocked(MEMBER_ID);
+
+			// when & then
+			assertThatThrownBy(() -> memberCouponService.issue(MEMBER_ID, new CouponIssueRequest(CODE)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.COUPON_ISSUE_LOCKED);
+			verify(couponRepository, never()).findByCodeForUpdate(any());
+			verify(couponIssueGuard, never()).recordFailure(any());
 		}
 
 		@Test

@@ -35,11 +35,17 @@ public class MemberCouponService {
 	private final CouponRepository couponRepository;
 	private final MemberCouponRepository memberCouponRepository;
 	private final MemberRepository memberRepository;
+	private final CouponIssueGuard couponIssueGuard;
 
 	@Transactional
 	public CouponIssueResponse issue(Long memberId, CouponIssueRequest request) {
-		Coupon coupon = couponRepository.findByCodeForUpdate(request.code())
-				.orElseThrow(() -> new BusinessException(ErrorCode.COUPON_NOT_FOUND));
+		// 잠금을 행 락 쿼리보다 먼저 봐서 잠긴 회원이 DB 를 건드리지 못하게 한다.
+		couponIssueGuard.checkNotLocked(memberId);
+		Coupon coupon = couponRepository.findByCodeForUpdate(request.code()).orElse(null);
+		if (coupon == null) {
+			couponIssueGuard.recordFailure(memberId);
+			throw new BusinessException(ErrorCode.COUPON_NOT_FOUND);
+		}
 		Member member = findActiveMember(memberId);
 
 		if (memberCouponRepository.existsByMemberIdAndCouponId(memberId, coupon.getId())) {

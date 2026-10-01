@@ -67,22 +67,24 @@ public class AuthService {
 	}
 
 	public AuthTokens login(LoginRequest request) {
-		loginAttemptGuard.checkNotLocked(request.email());
 		Member member = memberRepository.findByEmail(request.email()).orElse(null);
+		String lockKey = LoginAttemptGuard.lockKey(member != null ? member.getId() : null, request.email());
+		loginAttemptGuard.checkNotLocked(lockKey);
 		String hash = member != null ? member.getPassword() : dummyPasswordHash;
 		boolean matched = passwordEncoder.matches(request.password(), hash);
 		if (member == null || !matched) {
-			loginAttemptGuard.recordFailure(request.email());
+			loginAttemptGuard.recordFailure(lockKey);
 			throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
 		}
 		// 비밀번호가 맞았으니 정지/탈퇴는 로그인 시도 실패로 세지 않는다.
 		member.validateActive();
-		loginAttemptGuard.reset(request.email());
+		loginAttemptGuard.reset(lockKey);
 		String sessionId = UUID.randomUUID().toString();
 		long now = clock.millis();
 		long absExp = now + sessionProperties.absoluteExpiry(member.getRole()).toMillis();
 		AuthTokens tokens = issueTokens(member, sessionId, capMaxAge(absExp - now));
-		refreshTokenRepository.save(member.getId(), sessionId, tokens.refreshToken(), absExp, now);
+		refreshTokenRepository.save(member.getId(), sessionId, tokens.refreshToken(), absExp, now,
+				member.getRole());
 		return tokens;
 	}
 
@@ -103,7 +105,8 @@ public class AuthService {
 		long now = clock.millis();
 		long legacyAbsExp = now + sessionProperties.absoluteExpiry(member.getRole()).toMillis();
 		RefreshRotation rotation =
-				refreshTokenRepository.rotate(memberId, sessionId, refreshToken, newToken, now, legacyAbsExp);
+				refreshTokenRepository.rotate(memberId, sessionId, refreshToken, newToken, now, legacyAbsExp,
+						member.getRole());
 		switch (rotation.result()) {
 			case NOT_FOUND -> throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND);
 			case REUSED -> throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_MISMATCH);
@@ -114,8 +117,8 @@ public class AuthService {
 
 		String accessToken = jwtProvider.createAccessToken(member.getId(), member.getRole());
 		Duration maxAge = capMaxAge(rotation.absoluteExpiresAt() - now);
-		return new AuthTokens(accessToken, rotation.refreshToken(), jwtProperties.accessTokenExpiry().toSeconds(),
-				maxAge);
+		return new AuthTokens(accessToken, rotation.refreshToken(),
+				jwtProperties.accessTokenExpiry(member.getRole()).toSeconds(), maxAge);
 	}
 
 	public void logout(Long memberId, String refreshToken) {
@@ -135,7 +138,8 @@ public class AuthService {
 	private AuthTokens issueTokens(Member member, String sessionId, Duration maxAge) {
 		String accessToken = jwtProvider.createAccessToken(member.getId(), member.getRole());
 		String refreshToken = jwtProvider.createRefreshToken(member.getId(), sessionId);
-		return new AuthTokens(accessToken, refreshToken, jwtProperties.accessTokenExpiry().toSeconds(), maxAge);
+		return new AuthTokens(accessToken, refreshToken, jwtProperties.accessTokenExpiry(member.getRole()).toSeconds(),
+				maxAge);
 	}
 
 	private Duration capMaxAge(long remainingMillis) {

@@ -1,5 +1,6 @@
 package com.groove.order.dto;
 
+import com.groove.global.common.PageLimits;
 import com.groove.order.entity.OrderStatusGroup;
 
 import jakarta.validation.constraints.Max;
@@ -8,7 +9,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 
 public record OrderSearchRequest(
 		OrderStatusGroup statusGroup,
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

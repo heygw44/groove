@@ -4,6 +4,8 @@ import { z } from 'zod';
 export const emailField = z
   .string()
   .min(1, '이메일을 입력해주세요.')
+  .max(100, '이메일은 100자 이하로 입력해주세요.')
+  .regex(/^[\x20-\x7E]*$/, '이메일은 영문, 숫자, 기호만 사용할 수 있습니다.')
   .email('이메일 주소를 정확히 입력해주세요.');
 
 export const passwordField = z

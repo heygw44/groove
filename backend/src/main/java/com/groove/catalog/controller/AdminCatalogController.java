@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -15,6 +14,7 @@ import com.groove.auth.LoginMember;
 import com.groove.auth.resolver.AuthMember;
 import com.groove.catalog.dto.CatalogImportJobRequest;
 import com.groove.catalog.dto.CatalogImportJobResponse;
+import com.groove.catalog.dto.CatalogImportJobSearchRequest;
 import com.groove.catalog.dto.CatalogImportJobStartResponse;
 import com.groove.catalog.dto.CatalogImportRequest;
 import com.groove.catalog.dto.CatalogImportResponse;
@@ -74,8 +74,8 @@ public class AdminCatalogController {
 	@Operation(summary = "카탈로그 적재 작업 목록 조회")
 	@GetMapping("/import-jobs")
 	public ApiResponse<PageResponse<CatalogImportJobResponse>> getImportJobs(
-			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-		return ApiResponse.ok(catalogImportJobService.list(page, size));
+			@Valid @ModelAttribute CatalogImportJobSearchRequest request) {
+		return ApiResponse.ok(catalogImportJobService.list(request.pageOrDefault(), request.sizeOrDefault()));
 	}
 
 	@Operation(summary = "카탈로그 적재 작업 단건 조회")

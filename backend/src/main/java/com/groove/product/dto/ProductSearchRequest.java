@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.groove.global.common.PageLimits;
 import com.groove.product.entity.CatalogNoNormalizer;
 import com.groove.product.entity.EditionType;
 
@@ -25,7 +26,7 @@ public record ProductSearchRequest(
 		@DecimalMin("0") BigDecimal minPrice,
 		@DecimalMin("0") BigDecimal maxPrice,
 		String sort,
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

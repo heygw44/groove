@@ -208,7 +208,7 @@ class LimitedDropControllerTest {
 			// given
 			JwtProvider expiredProvider = new JwtProvider(
 					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14),
-							Duration.ofSeconds(10)));
+							Duration.ofSeconds(10), Duration.ofMinutes(5)));
 			String expiredToken = expiredProvider.createAccessToken(1L, MemberRole.USER);
 			given(limitedDropService.getDetail(eq(1L), isNull())).willReturn(sampleDetail(null));
 

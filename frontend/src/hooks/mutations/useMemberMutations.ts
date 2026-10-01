@@ -34,7 +34,7 @@ export const useChangePassword = () =>
 
 export const useWithdraw = () =>
   useMutation({
-    mutationFn: withdraw,
+    mutationFn: (password: string) => withdraw(password),
     /*
      * 라우터 이동이 아니라 페이지를 새로 연다. 스토어를 비우는 순간 아직
      * /mypage 에 있는 PrivateRoute 가 토큰 없음을 보고 /login?redirect=/mypage

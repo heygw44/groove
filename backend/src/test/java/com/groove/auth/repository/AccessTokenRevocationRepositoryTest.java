@@ -68,8 +68,8 @@ class AccessTokenRevocationRepositoryTest extends IntegrationTestSupport {
 		}
 
 		@Test
-		@DisplayName("TTL 은 accessTokenExpiry 에 1분을 더한 값 이하로 설정된다")
-		void setsExpireWithinAccessTokenExpiryPlusMargin() {
+		@DisplayName("TTL 은 가장 긴 access 만료에 1분을 더한 값 이하로 설정된다")
+		void setsExpireWithinMaxAccessTokenExpiryPlusMargin() {
 			// given
 			accessTokenRevocationRepository.markRevoked(memberId, 1_700_000_000L);
 
@@ -77,7 +77,7 @@ class AccessTokenRevocationRepositoryTest extends IntegrationTestSupport {
 			Long expireSeconds = redisTemplate.getExpire(key, TimeUnit.SECONDS);
 
 			// then
-			long expectedMax = jwtProperties.accessTokenExpiry().toSeconds() + 60;
+			long expectedMax = jwtProperties.maxAccessTokenExpiry().toSeconds() + 60;
 			assertThat(expireSeconds).isPositive();
 			assertThat(expireSeconds).isLessThanOrEqualTo(expectedMax);
 		}

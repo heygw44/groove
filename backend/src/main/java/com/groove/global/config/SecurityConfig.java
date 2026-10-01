@@ -30,7 +30,8 @@ import lombok.RequiredArgsConstructor;
 @Configuration
 @EnableWebSecurity
 @EnableConfigurationProperties({
-	JwtProperties.class, AuthCookieProperties.class, AuthSessionProperties.class, LoginLockProperties.class
+	JwtProperties.class, AuthCookieProperties.class, AuthSessionProperties.class, LoginLockProperties.class,
+	PasswordLockProperties.class, CouponIssueLockProperties.class
 })
 @RequiredArgsConstructor
 public class SecurityConfig {

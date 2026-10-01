@@ -113,7 +113,10 @@ class SessionRevocationIntegrationTest extends IntegrationTestSupport {
 			sleepUntilNextSecond();
 
 			// when
-			mockMvc.perform(delete("/api/v1/members/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+			mockMvc.perform(delete("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"password\":\"" + PASSWORD + "\"}"))
 					.andExpect(status().isOk());
 
 			// then

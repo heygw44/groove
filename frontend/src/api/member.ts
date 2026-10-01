@@ -18,6 +18,6 @@ export const changePassword = async (payload: PasswordChangeRequest) => {
   await client.patch<ApiResponse<void>>('/members/me/password', payload);
 };
 
-export const withdraw = async () => {
-  await client.delete<ApiResponse<void>>('/members/me');
+export const withdraw = async (password: string) => {
+  await client.delete<ApiResponse<void>>('/members/me', { data: { password } });
 };

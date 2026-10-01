@@ -26,7 +26,7 @@ public class AccessTokenRevocationRepository {
 	private final JwtProperties jwtProperties;
 
 	public void markRevoked(Long memberId, long revokedAtEpochSecond) {
-		Duration ttl = jwtProperties.accessTokenExpiry().plus(TTL_MARGIN);
+		Duration ttl = jwtProperties.maxAccessTokenExpiry().plus(TTL_MARGIN);
 		redisTemplate.opsForValue().set(key(memberId), String.valueOf(revokedAtEpochSecond), ttl);
 	}
 

@@ -12,6 +12,7 @@ import com.groove.auth.resolver.AuthMember;
 import com.groove.global.common.ApiResponse;
 import com.groove.member.dto.MemberResponse;
 import com.groove.member.dto.MemberUpdateRequest;
+import com.groove.member.dto.MemberWithdrawRequest;
 import com.groove.member.dto.PasswordChangeRequest;
 import com.groove.member.service.MemberService;
 
@@ -49,10 +50,11 @@ public class MemberController {
 		return ApiResponse.ok();
 	}
 
-	@Operation(summary = "회원 탈퇴")
+	@Operation(summary = "회원 탈퇴", description = "현재 비밀번호를 다시 확인한다. 연속으로 틀리면 잠긴다.")
 	@DeleteMapping
-	public ApiResponse<Void> withdraw(@AuthMember LoginMember loginMember) {
-		memberService.withdraw(loginMember.id());
+	public ApiResponse<Void> withdraw(@AuthMember LoginMember loginMember,
+			@Valid @RequestBody MemberWithdrawRequest request) {
+		memberService.withdraw(loginMember.id(), request);
 		return ApiResponse.ok();
 	}
 }

@@ -1,5 +1,6 @@
 package com.groove.auth.repository;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -10,7 +11,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 
+import com.groove.global.config.AuthSessionProperties;
 import com.groove.global.config.JwtProperties;
+import com.groove.member.entity.MemberRole;
 
 import lombok.RequiredArgsConstructor;
 
@@ -29,27 +32,43 @@ public class RefreshTokenRepository {
 
 	private final StringRedisTemplate redisTemplate;
 	private final JwtProperties jwtProperties;
+	private final AuthSessionProperties sessionProperties;
 	private final RedisScript<Long> refreshSaveScript;
 	private final RedisScript<List> refreshRotateScript;
 
 	public void save(Long memberId, String sessionId, String token, long absExpMillis, long nowMillis) {
-		String ttlMillis = String.valueOf(jwtProperties.refreshTokenExpiry().toMillis());
+		save(memberId, sessionId, token, absExpMillis, nowMillis, MemberRole.USER);
+	}
+
+	public void save(Long memberId, String sessionId, String token, long absExpMillis, long nowMillis,
+			MemberRole role) {
+		String ttlMillis = String.valueOf(sessionTtl(role).toMillis());
 		redisTemplate.execute(refreshSaveScript,
 				List.of(sessionKey(memberId, sessionId), indexKey(memberId)),
 				token, sessionId, ttlMillis, sessionKeyPrefix(memberId),
 				String.valueOf(absExpMillis), String.valueOf(nowMillis));
 	}
 
-	@SuppressWarnings("unchecked")
 	public RefreshRotation rotate(Long memberId, String sessionId, String presented, String newToken,
 			long nowMillis, long legacyAbsExpMillis) {
+		return rotate(memberId, sessionId, presented, newToken, nowMillis, legacyAbsExpMillis, MemberRole.USER);
+	}
+
+	@SuppressWarnings("unchecked")
+	public RefreshRotation rotate(Long memberId, String sessionId, String presented, String newToken,
+			long nowMillis, long legacyAbsExpMillis, MemberRole role) {
 		String graceMillis = String.valueOf(jwtProperties.refreshTokenGrace().toMillis());
-		String ttlMillis = String.valueOf(jwtProperties.refreshTokenExpiry().toMillis());
+		String ttlMillis = String.valueOf(sessionTtl(role).toMillis());
 		List<Object> result = redisTemplate.execute(refreshRotateScript,
 				List.of(sessionKey(memberId, sessionId), indexKey(memberId)),
 				presented, newToken, String.valueOf(nowMillis), graceMillis, ttlMillis, sessionId,
 				String.valueOf(legacyAbsExpMillis));
 		return toRotation(result);
+	}
+
+	/** 관리자는 유휴 만료로 짧게 건다. 저장·회전마다 PEXPIRE 가 다시 걸려 마지막 활동 기준으로 슬라이딩한다. */
+	private Duration sessionTtl(MemberRole role) {
+		return role == MemberRole.ADMIN ? sessionProperties.adminIdleTimeout() : jwtProperties.refreshTokenExpiry();
 	}
 
 	public void delete(Long memberId, String sessionId) {
