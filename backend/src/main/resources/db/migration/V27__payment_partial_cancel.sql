@@ -39,14 +39,6 @@ UPDATE payment
 SET canceled_amount = amount
 WHERE status = 'CANCELED' AND approved_at IS NOT NULL;
 
--- 배포 순간 CANCEL_REQUESTED 인 전액취소는 런타임(PaymentCancelWriter)이 cancel-{payment_key} 로 행을 찾는다.
-INSERT INTO payment_cancel (payment_id, idempotency_key, cancel_amount, status, requested_at, done_at,
-    created_at, updated_at)
-SELECT id, CONCAT('cancel-', payment_key), amount - canceled_amount, 'REQUESTED', updated_at, NULL,
-    NOW(6), NOW(6)
-FROM payment
-WHERE status = 'CANCEL_REQUESTED';
-
 -- 불변식 검증. 위반이 있으면 CHECK 제약이 실패해 마이그레이션 자체가 롤백된다.
 CREATE TEMPORARY TABLE v27_invariant (
     violations bigint NOT NULL,
@@ -63,16 +55,6 @@ SELECT COUNT(*) FROM payment p
 WHERE p.status = 'CANCELED' AND p.approved_at IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 FROM payment_cancel pc WHERE pc.payment_id = p.id AND pc.status = 'DONE'
-  );
-
--- CANCEL_REQUESTED 결제인데 런타임이 찾는 cancel-{payment_key} REQUESTED 행이 없는 건.
-INSERT INTO v27_invariant (violations)
-SELECT COUNT(*) FROM payment p
-WHERE p.status = 'CANCEL_REQUESTED'
-  AND NOT EXISTS (
-      SELECT 1 FROM payment_cancel pc
-      WHERE pc.payment_id = p.id AND pc.status = 'REQUESTED'
-        AND pc.idempotency_key = CONCAT('cancel-', p.payment_key)
   );
 
 DROP TEMPORARY TABLE v27_invariant;

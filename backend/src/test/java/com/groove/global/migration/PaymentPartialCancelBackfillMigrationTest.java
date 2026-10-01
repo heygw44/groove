@@ -18,13 +18,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
  * V27 마이그레이션이 payment.canceled_amount 컬럼과 payment_cancel 테이블을 추가하고, 기존 전액취소(CANCELED)
  * 결제마다 DONE 상태 payment_cancel 행을 1건씩 백필하는지 검증한다. OrderItemStatusBackfillMigrationTest 와
- * 같은 방식으로 V26 까지 적용한 뒤 레거시 데이터를 심고, V27 까지 마저 적용해 결과를 확인한다.
+ * 같은 방식으로 V26 까지 적용한 뒤 레거시 데이터를 심고, V27 까지 마저 적용해 결과를 확인한다. 운영에 이미
+ * 적용된 V27 이후 남은 CANCEL_REQUESTED 결제를 V32 가 보완하는지도 함께 검증한다.
  */
 class PaymentPartialCancelBackfillMigrationTest {
 
@@ -62,6 +65,21 @@ class PaymentPartialCancelBackfillMigrationTest {
 				.dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
 				.load()
 				.migrate();
+	}
+
+	private void migrateToV31() {
+		Flyway.configure()
+				.dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
+				.target("31")
+				.load()
+				.migrate();
+	}
+
+	private void rerunV32() throws Exception {
+		try (Connection connection = connect()) {
+			ScriptUtils.executeSqlScript(connection,
+					new ClassPathResource("db/migration/V32__order_item_stage_and_cancel_request_backfill.sql"));
+		}
 	}
 
 	private Connection connect() throws Exception {
@@ -175,6 +193,63 @@ class PaymentPartialCancelBackfillMigrationTest {
 		}
 	}
 
+	@Nested
+	@DisplayName("migrate() V32")
+	class MigrateV32 {
+
+		@Test
+		@DisplayName("CANCEL_REQUESTED 결제면 남은 금액으로 REQUESTED 행을 한 번만 넣는다")
+		void backfillsRequestedPaymentCancelOnceForCancelRequestedPayment() throws Exception {
+			// given
+			LocalDateTime approvedAt = LocalDateTime.of(2026, 9, 1, 10, 0);
+			long orderId = insertOrder("20260901-LEGACY11");
+			long paymentId = insertPayment(orderId, "CANCEL_REQUESTED", "30000", approvedAt, null);
+			migrateToV31();
+			updateCanceledAmount(paymentId, "10000");
+
+			// when
+			migrateToLatest();
+
+			// then
+			try (Connection connection = connect()) {
+				assertThat(findPaymentCancelCount(connection, paymentId)).isEqualTo(1);
+				PaymentCancelRow row = findPaymentCancelRow(connection, paymentId);
+				assertThat(row.idempotencyKey()).isEqualTo("cancel-toss-key-" + orderId);
+				assertThat(row.status()).isEqualTo("REQUESTED");
+				assertThat(row.cancelAmount()).isEqualByComparingTo("20000");
+			}
+
+			// when
+			rerunV32();
+
+			// then
+			try (Connection connection = connect()) {
+				assertThat(findPaymentCancelCount(connection, paymentId)).isEqualTo(1);
+			}
+		}
+
+		@Test
+		@DisplayName("순번 키 REQUESTED 행이 이미 있으면 레거시 키 행을 넣지 않는다")
+		void doesNotAddLegacyKeyRowWhenSequencedRequestedRowExists() throws Exception {
+			// given
+			LocalDateTime approvedAt = LocalDateTime.of(2026, 9, 1, 10, 0);
+			long orderId = insertOrder("20260901-LEGACY12");
+			long paymentId = insertPayment(orderId, "CANCEL_REQUESTED", "30000", approvedAt, null);
+			migrateToV31();
+			insertPaymentCancel(paymentId, "cancel-toss-key-" + orderId + "-1", "30000", "REQUESTED", approvedAt);
+
+			// when
+			migrateToLatest();
+
+			// then
+			try (Connection connection = connect()) {
+				assertThat(findPaymentCancelCount(connection, paymentId)).isEqualTo(1);
+				PaymentCancelRow row = findPaymentCancelRow(connection, paymentId);
+				assertThat(row.idempotencyKey()).isEqualTo("cancel-toss-key-" + orderId + "-1");
+			}
+		}
+	}
+
 	private record PaymentCancelRow(String idempotencyKey, BigDecimal cancelAmount, String status,
 			LocalDateTime requestedAt, LocalDateTime doneAt) {
 	}
@@ -211,6 +286,31 @@ class PaymentPartialCancelBackfillMigrationTest {
 			ResultSet result = statement.executeQuery();
 			result.next();
 			return result.getBigDecimal(1);
+		}
+	}
+
+	private void updateCanceledAmount(long paymentId, String canceledAmount) throws Exception {
+		try (Connection connection = connect();
+				PreparedStatement statement = connection.prepareStatement(
+						"update payment set canceled_amount = ? where id = ?")) {
+			statement.setBigDecimal(1, new BigDecimal(canceledAmount));
+			statement.setLong(2, paymentId);
+			statement.executeUpdate();
+		}
+	}
+
+	private void insertPaymentCancel(long paymentId, String idempotencyKey, String cancelAmount, String status,
+			LocalDateTime requestedAt) throws Exception {
+		try (Connection connection = connect();
+				PreparedStatement statement = connection.prepareStatement(
+						"insert into payment_cancel (payment_id, idempotency_key, cancel_amount, status, "
+								+ "requested_at, created_at, updated_at) values (?, ?, ?, ?, ?, now(6), now(6))")) {
+			statement.setLong(1, paymentId);
+			statement.setString(2, idempotencyKey);
+			statement.setBigDecimal(3, new BigDecimal(cancelAmount));
+			statement.setString(4, status);
+			statement.setTimestamp(5, Timestamp.valueOf(requestedAt));
+			statement.executeUpdate();
 		}
 	}
 

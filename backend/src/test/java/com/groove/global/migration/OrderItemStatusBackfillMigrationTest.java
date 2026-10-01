@@ -25,13 +25,16 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
  * V26 마이그레이션이 orders.status(결제 생애주기) → order_item.status(상품주문 이행 상태)를 어떻게 매핑하고,
  * 상품주문번호·할인 배분을 어떻게 백필하는지 검증한다. OrderPlacementBackfillMigrationTest 와 같은 방식으로
- * V25 까지 적용한 뒤 레거시 데이터를 심고, V26 까지 마저 적용해 결과를 확인한다.
+ * V25 까지 적용한 뒤 레거시 데이터를 심고, V26 까지 마저 적용해 결과를 확인한다. 운영에 이미 적용된 V26 이
+ * 단계 시각을 채우지 않았으므로 V32 가 이를 보완하는지도 함께 검증한다.
  */
 class OrderItemStatusBackfillMigrationTest {
 
@@ -69,6 +72,21 @@ class OrderItemStatusBackfillMigrationTest {
 				.dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
 				.load()
 				.migrate();
+	}
+
+	private void migrateToV31() {
+		Flyway.configure()
+				.dataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword())
+				.target("31")
+				.load()
+				.migrate();
+	}
+
+	private void rerunV32() throws Exception {
+		try (Connection connection = connect()) {
+			ScriptUtils.executeSqlScript(connection,
+					new ClassPathResource("db/migration/V32__order_item_stage_and_cancel_request_backfill.sql"));
+		}
 	}
 
 	private Connection connect() throws Exception {
@@ -354,6 +372,85 @@ class OrderItemStatusBackfillMigrationTest {
 		}
 	}
 
+	@Nested
+	@DisplayName("migrate() V32")
+	class MigrateV32 {
+
+		@Test
+		@DisplayName("원본 V26 으로 단계 시각이 비어 있으면 V32 가 orders.updated_at 으로 채운다")
+		void backfillsStageTimestampsLeftEmptyByV26() throws Exception {
+			// given
+			LocalDateTime updatedAt = LocalDateTime.of(2026, 9, 13, 14, 30, 5);
+			long shippedOrderId = insertOrder("SHIPPED", LocalDateTime.of(2026, 9, 13, 9, 0),
+					LocalDateTime.of(2026, 9, 13, 9, 0), null, "30000", "0", updatedAt);
+			long shippedItemId = insertOrderItem(shippedOrderId, "30000", 1);
+			long deliveredOrderId = insertOrder("DELIVERED", LocalDateTime.of(2026, 9, 13, 9, 0),
+					LocalDateTime.of(2026, 9, 13, 9, 0), null, "30000", "0", updatedAt);
+			long deliveredItemId = insertOrderItem(deliveredOrderId, "30000", 1);
+			migrateToV31();
+			try (Connection connection = connect()) {
+				assertThat(findItemTimestamp(connection, shippedItemId, "shipped_at")).isNull();
+				assertThat(findItemTimestamp(connection, deliveredItemId, "shipped_at")).isNull();
+				assertThat(findItemTimestamp(connection, deliveredItemId, "delivered_at")).isNull();
+			}
+
+			// when
+			migrateToLatest();
+
+			// then
+			try (Connection connection = connect()) {
+				assertThat(findItemTimestamp(connection, shippedItemId, "shipped_at")).isEqualTo(updatedAt);
+				assertThat(findItemTimestamp(connection, shippedItemId, "delivered_at")).isNull();
+				assertThat(findItemTimestamp(connection, deliveredItemId, "shipped_at")).isEqualTo(updatedAt);
+				assertThat(findItemTimestamp(connection, deliveredItemId, "delivered_at")).isEqualTo(updatedAt);
+			}
+		}
+
+		@Test
+		@DisplayName("단계 시각이 이미 있으면 V32 가 덮어쓰지 않는다")
+		void keepsExistingStageTimestamps() throws Exception {
+			// given
+			LocalDateTime updatedAt = LocalDateTime.of(2026, 9, 14, 14, 30, 5);
+			LocalDateTime existingShippedAt = LocalDateTime.of(2026, 9, 14, 10, 0, 0);
+			long orderId = insertOrder("SHIPPED", LocalDateTime.of(2026, 9, 14, 9, 0),
+					LocalDateTime.of(2026, 9, 14, 9, 0), null, "30000", "0", updatedAt);
+			long itemId = insertOrderItem(orderId, "30000", 1);
+			migrateToV31();
+			updateItemTimestamp(itemId, "shipped_at", existingShippedAt);
+
+			// when
+			migrateToLatest();
+
+			// then
+			try (Connection connection = connect()) {
+				assertThat(findItemTimestamp(connection, itemId, "shipped_at")).isEqualTo(existingShippedAt);
+				assertThat(findItemTimestamp(connection, itemId, "prepared_at")).isNull();
+				assertThat(findItemTimestamp(connection, itemId, "delivered_at")).isNull();
+			}
+		}
+
+		@Test
+		@DisplayName("V32 를 한 번 더 실행하면 단계 시각이 그대로 남는다")
+		void isIdempotentWhenRerun() throws Exception {
+			// given
+			LocalDateTime updatedAt = LocalDateTime.of(2026, 9, 15, 14, 30, 5);
+			long orderId = insertOrder("DELIVERED", LocalDateTime.of(2026, 9, 15, 9, 0),
+					LocalDateTime.of(2026, 9, 15, 9, 0), null, "30000", "0", updatedAt);
+			long itemId = insertOrderItem(orderId, "30000", 1);
+			migrateToLatest();
+
+			// when
+			rerunV32();
+
+			// then
+			try (Connection connection = connect()) {
+				assertThat(findItemTimestamp(connection, itemId, "shipped_at")).isEqualTo(updatedAt);
+				assertThat(findItemTimestamp(connection, itemId, "delivered_at")).isEqualTo(updatedAt);
+				assertThat(findItemTimestamp(connection, itemId, "prepared_at")).isNull();
+			}
+		}
+	}
+
 	private List<String> findItemStatus(long orderId) throws Exception {
 		try (Connection connection = connect();
 				PreparedStatement statement = connection.prepareStatement(
@@ -365,6 +462,16 @@ class OrderItemStatusBackfillMigrationTest {
 				statuses.add(result.getString(1));
 			}
 			return statuses;
+		}
+	}
+
+	private void updateItemTimestamp(long itemId, String column, LocalDateTime value) throws Exception {
+		try (Connection connection = connect();
+				PreparedStatement statement = connection.prepareStatement(
+						"update order_item set " + column + " = ? where id = ?")) {
+			statement.setTimestamp(1, Timestamp.valueOf(value));
+			statement.setLong(2, itemId);
+			statement.executeUpdate();
 		}
 	}
 
