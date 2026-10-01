@@ -32,6 +32,8 @@ public class OrderPurchaseConfirmScheduler {
 			OrderItemClaimStatus.CANCEL_REQUEST, OrderItemClaimStatus.RETURN_REQUEST,
 			OrderItemClaimStatus.COLLECTING);
 
+	private static final int MAX_ROUNDS = 50;
+
 	private final OrderItemRepository orderItemRepository;
 	private final OrderPurchaseConfirmService orderPurchaseConfirmService;
 	private final OrderPurchaseConfirmLock orderPurchaseConfirmLock;
@@ -53,15 +55,37 @@ public class OrderPurchaseConfirmScheduler {
 	private void runConfirmPurchases() {
 		LocalDateTime now = LocalDateTime.now(clock);
 		LocalDateTime cutoff = now.minusDays(properties.days());
-		List<Long> itemIds = orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
-				OrderItemStatus.DELIVERED, cutoff, IN_PROGRESS_CLAIM_STATUSES, Limit.of(properties.batchSize()));
-		if (itemIds.isEmpty()) {
-			return;
+		int candidateTotal = 0;
+		int processedTotal = 0;
+		for (int round = 0; round < MAX_ROUNDS; round++) {
+			if (shutdownSignal.isShuttingDown()) {
+				log.info("셧다운 신호로 자동 구매확정 중단 processed={}", processedTotal);
+				break;
+			}
+			List<Long> itemIds = orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
+					OrderItemStatus.DELIVERED, cutoff, IN_PROGRESS_CLAIM_STATUSES,
+					Limit.of(properties.batchSize()));
+			if (itemIds.isEmpty()) {
+				break;
+			}
+			candidateTotal += itemIds.size();
+			int processed = processRound(itemIds, cutoff, now);
+			processedTotal += processed;
+			// 실패·건너뛴 행은 DELIVERED 로 남아 다음 조회에 먼저 다시 잡힌다. 한 바퀴에서 하나도 처리하지
+			// 못했다면 같은 후보만 되풀이하게 되므로 멈춘다.
+			if (processed == 0 || itemIds.size() < properties.batchSize()) {
+				break;
+			}
 		}
+		if (processedTotal > 0) {
+			log.info("자동 구매확정 처리 완료 candidates={} processed={}", candidateTotal, processedTotal);
+		}
+	}
+
+	private int processRound(List<Long> itemIds, LocalDateTime cutoff, LocalDateTime now) {
 		int processed = 0;
 		for (Long itemId : itemIds) {
 			if (shutdownSignal.isShuttingDown()) {
-				log.info("셧다운 신호로 자동 구매확정 중단 processed={} remaining={}", processed, itemIds.size() - processed);
 				break;
 			}
 			try {
@@ -72,8 +96,6 @@ public class OrderPurchaseConfirmScheduler {
 				log.warn("자동 구매확정 처리 실패 orderItemId={}", itemId, e);
 			}
 		}
-		if (processed > 0) {
-			log.info("자동 구매확정 처리 완료 candidates={} processed={}", itemIds.size(), processed);
-		}
+		return processed;
 	}
 }
