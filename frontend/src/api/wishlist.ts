@@ -13,6 +13,4 @@ export const removeWishlist = async (productId: number) => {
 };
 
 export const changeWishlistAlert = (productId: number, alertEnabled: boolean) =>
-  unwrap(
-    client.patch<ApiResponse<WishlistItem>>(`/wishlist/${productId}/alert`, { alertEnabled }),
-  );
+  unwrap(client.patch<ApiResponse<WishlistItem>>(`/wishlist/${productId}/alert`, { alertEnabled }));

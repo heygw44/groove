@@ -14,9 +14,7 @@ export const getReviews = (productId: number, params: ReviewListParams) =>
   );
 
 export const getReviewEligibility = (productId: number) =>
-  unwrap(
-    client.get<ApiResponse<ReviewEligibility>>(`/products/${productId}/reviews/eligibility`),
-  );
+  unwrap(client.get<ApiResponse<ReviewEligibility>>(`/products/${productId}/reviews/eligibility`));
 
 export const getReviewStats = (productId: number) =>
   unwrap(client.get<ApiResponse<ReviewStats>>(`/products/${productId}/reviews/stats`));

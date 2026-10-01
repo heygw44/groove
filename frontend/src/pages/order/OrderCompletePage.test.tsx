@@ -20,6 +20,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
   finalAmount: 10000,
   items: [
     {
+      id: 11,
       productId: 1,
       productName: '앨범',
       price: 10000,
@@ -30,6 +31,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
       status: 'PAID',
       paidAmount: 10000,
       availableActions: [],
+      refundInProgress: false,
     },
   ],
   shippingAddress: {

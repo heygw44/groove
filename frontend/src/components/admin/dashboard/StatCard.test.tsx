@@ -34,12 +34,15 @@ describe('StatCard', () => {
     // given & when
     render(
       <MemoryRouter>
-        <StatCard label="결제 대기" value="3건" to="/admin/orders?status=PENDING" />
+        <StatCard label="입금 대기" value="3건" to="/admin/orders?statusGroup=PAYMENT_WAITING" />
       </MemoryRouter>,
     );
 
     // then
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/admin/orders?status=PENDING');
+    expect(screen.getByRole('link')).toHaveAttribute(
+      'href',
+      '/admin/orders?statusGroup=PAYMENT_WAITING',
+    );
   });
 
   it('to 가 없으면 링크로 렌더링하지 않는다', () => {

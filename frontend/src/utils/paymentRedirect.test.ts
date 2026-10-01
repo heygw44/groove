@@ -67,20 +67,23 @@ describe('parsePaymentSuccessParams()', () => {
     expect(result).toBeNull();
   });
 
-  it.each(['0', '-1', 'abc', '42000.5'])('amount 가 %s 처럼 양의 정수가 아니면 null 을 반환한다', (amount) => {
-    // given
-    const searchParams = new URLSearchParams({
-      paymentKey: 'pk_123',
-      orderId: '20260905-ABC123',
-      amount,
-    });
+  it.each(['0', '-1', 'abc', '42000.5'])(
+    'amount 가 %s 처럼 양의 정수가 아니면 null 을 반환한다',
+    (amount) => {
+      // given
+      const searchParams = new URLSearchParams({
+        paymentKey: 'pk_123',
+        orderId: '20260905-ABC123',
+        amount,
+      });
 
-    // when
-    const result = parsePaymentSuccessParams(searchParams);
+      // when
+      const result = parsePaymentSuccessParams(searchParams);
 
-    // then
-    expect(result).toBeNull();
-  });
+      // then
+      expect(result).toBeNull();
+    },
+  );
 });
 
 describe('parsePaymentFailParams()', () => {

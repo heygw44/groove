@@ -62,14 +62,13 @@ public final class OrderFixture {
 		return order;
 	}
 
-	public static Order markShipped(Order order) {
-		ReflectionTestUtils.setField(order, "status", OrderStatus.SHIPPED);
-		return order;
-	}
-
+	/**
+	 * 주문 상태는 결제 생애주기(PAID)에 두고 담긴 상품주문을 모두 배송완료(DELIVERED)로 옮긴다. 배송 진행은 상품주문
+	 * 단위(item.status)로만 표현되므로 주문 상태는 PAID 로 남는다.
+	 */
 	public static Order markDelivered(Order order) {
-		ReflectionTestUtils.setField(order, "status", OrderStatus.DELIVERED);
-		return order;
+		markPaid(order);
+		return markItemsStatus(order, OrderItemStatus.DELIVERED);
 	}
 
 	public static Order markPaid(Order order) {
@@ -78,9 +77,9 @@ public final class OrderFixture {
 	}
 
 	/**
-	 * order.status 만 리플렉션으로 직접 바꾸는 markPaid()/markShipped()/markDelivered() 는 상품주문
-	 * 상태(item.status)까지는 옮기지 않는다. "팔렸다" 판정이 item.status 기준인 조회(추천·판매량·리뷰 자격 등)를
-	 * 검증하는 테스트는 이 메서드로 이미 담긴 항목의 상태를 함께 맞춰야 한다.
+	 * 담긴 상품주문의 상태(item.status)만 리플렉션으로 바꾼다. order.status 만 바꾸는 markPaid() 는 상품주문 상태까지
+	 * 옮기지 않으므로, "팔렸다" 판정이 item.status 기준인 조회(추천·판매량·리뷰 자격 등)를 검증하는 테스트는 이
+	 * 메서드로 항목의 상태를 함께 맞춘다.
 	 */
 	public static Order markItemsStatus(Order order, OrderItemStatus status) {
 		order.getItems().forEach(item -> ReflectionTestUtils.setField(item, "status", status));
@@ -96,6 +95,12 @@ public final class OrderFixture {
 	/** 첫 번째 상품주문의 배송완료 시각을 직접 심는다. 반품 기한(D7) 경계 테스트에 쓴다. */
 	public static Order markFirstItemDeliveredAt(Order order, LocalDateTime deliveredAt) {
 		ReflectionTestUtils.setField(order.getItems().get(0), "deliveredAt", deliveredAt);
+		return order;
+	}
+
+	/** 첫 번째 상품주문의 발송처리 시각을 직접 심는다. 자동 배송완료 스케줄러 경계 테스트에 쓴다. */
+	public static Order markFirstItemShippedAt(Order order, LocalDateTime shippedAt) {
+		ReflectionTestUtils.setField(order.getItems().get(0), "shippedAt", shippedAt);
 		return order;
 	}
 

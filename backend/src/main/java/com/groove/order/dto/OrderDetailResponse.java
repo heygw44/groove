@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
@@ -27,8 +28,10 @@ public record OrderDetailResponse(
 ) {
 
 	public static OrderDetailResponse from(Order order, Long limitedDropId, OrderPaymentResponse payment,
-			Map<Long, String> thumbnailsByProductId, LocalDateTime now) {
-		List<OrderItemResponse> items = OrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId, now);
+			Map<Long, String> thumbnailsByProductId, Map<Long, Long> claimIdsByOrderItemId,
+			Set<Long> pendingRefundItemIds, LocalDateTime now) {
+		List<OrderItemResponse> items = OrderItemResponse.listFrom(order.getItems(), thumbnailsByProductId,
+				claimIdsByOrderItemId, pendingRefundItemIds, now);
 		return new OrderDetailResponse(order.getId(), order.getOrderNumber(), order.getStatus(),
 				order.getTotalAmount(), order.getDiscountAmount(), order.getFinalAmount(), order.getCouponName(),
 				items, ShippingAddressResponse.from(order.getShippingAddress()), order.getCreatedAt(),

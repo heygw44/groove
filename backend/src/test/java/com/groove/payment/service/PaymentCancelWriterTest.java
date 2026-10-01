@@ -2,7 +2,9 @@ package com.groove.payment.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
@@ -16,6 +18,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -33,6 +37,8 @@ import com.groove.global.common.ErrorCode;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderCancelRestorer;
@@ -85,7 +91,16 @@ class PaymentCancelWriterTest {
 	}
 
 	private PaymentCancel requestedPaymentCancel() {
-		return PaymentCancel.request(payment, "cancel-" + payment.getPaymentKey(), payment.getAmount(), "고객 변심", NOW);
+		return requestedPaymentCancel("cancel-" + payment.getPaymentKey() + "-1");
+	}
+
+	private PaymentCancel requestedPaymentCancel(String idempotencyKey) {
+		return PaymentCancel.request(payment, idempotencyKey, payment.getAmount(), "고객 변심", NOW);
+	}
+
+	private void givenRequestedRow(PaymentCancel paymentCancel) {
+		given(paymentCancelRepository.findFirstByPaymentIdAndStatusOrderByIdDesc(PAYMENT_ID,
+				PaymentCancelStatus.REQUESTED)).willReturn(Optional.of(paymentCancel));
 	}
 
 	@Nested
@@ -98,6 +113,7 @@ class PaymentCancelWriterTest {
 			// given
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.countByPaymentId(PAYMENT_ID)).willReturn(0L);
 			ArgumentCaptor<PaymentCancel> captor = ArgumentCaptor.forClass(PaymentCancel.class);
 
 			// when
@@ -112,9 +128,9 @@ class PaymentCancelWriterTest {
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
 			assertThat(result.alreadyRequested()).isFalse();
 			assertThat(result.tossReason()).isEqualTo("고객 변심");
-			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey());
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-1");
 			verify(paymentCancelRepository).save(captor.capture());
-			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey());
+			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-1");
 			assertThat(captor.getValue().getCancelAmount()).isEqualByComparingTo(payment.getAmount());
 		}
 
@@ -140,10 +156,11 @@ class PaymentCancelWriterTest {
 		@DisplayName("이미 CANCEL_REQUESTED 면 상태를 바꾸지 않고 중복 요청으로 반환한다")
 		void returnsDuplicateWhenAlreadyRequested() {
 			// given
-			order.requestCancel("기존 사유", false);
+			order.requestCancel("기존 사유");
 			payment.requestCancel();
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+			givenRequestedRow(requestedPaymentCancel("cancel-" + payment.getPaymentKey() + "-3"));
 
 			// when
 			CancelRequest result = writer.requestCancel(ORDER_ID, MEMBER_ID, "새 사유");
@@ -151,6 +168,80 @@ class PaymentCancelWriterTest {
 			// then
 			assertThat(result.alreadyRequested()).isTrue();
 			assertThat(result.tossReason()).isEqualTo("기존 사유");
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-3");
+		}
+
+		@Test
+		@DisplayName("이전 취소 시도가 거절돼 행이 남아 있으면 순번을 이어 새 멱등키로 요청한다")
+		void issuesNextSequenceKeyAfterRejectedAttempt() {
+			// given
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+			given(paymentCancelRepository.countByPaymentId(PAYMENT_ID)).willReturn(1L);
+			ArgumentCaptor<PaymentCancel> captor = ArgumentCaptor.forClass(PaymentCancel.class);
+
+			// when
+			CancelRequest result = writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심");
+
+			// then
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-2");
+			verify(paymentCancelRepository).save(captor.capture());
+			assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-2");
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderItemStatus.class, names = {"PREPARING", "SHIPPING", "DELIVERED"})
+		@DisplayName("상품주문이 PAID 가 아니면 ORDER_INVALID_STATUS 예외를 던지고 결제 상태를 바꾸지 않는다")
+		void rejectsWhenItemFulfillmentStarted(OrderItemStatus itemStatus) {
+			// given
+			OrderFixture.markItemsStatus(order, itemStatus);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			assertThat(order.getCancelReason()).isNull();
+			verify(paymentCancelRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("상품주문에 클레임 표시가 있으면 ORDER_INVALID_STATUS 예외를 던지고 결제 상태를 바꾸지 않는다")
+		void rejectsWhenItemHasClaim() {
+			// given
+			OrderFixture.markFirstItemClaimStatus(order, OrderItemClaimStatus.CANCEL_REQUEST);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+
+			// when & then
+			assertThatThrownBy(() -> writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심"))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.ORDER_INVALID_STATUS);
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			verify(paymentCancelRepository, never()).save(any());
+		}
+
+		@Test
+		@DisplayName("이미 CANCEL_REQUESTED 면 상품주문이 이미 진행됐어도 예외 없이 기존 요청을 반환한다")
+		void returnsExistingRequestEvenIfItemsProgressed() {
+			// given
+			order.requestCancel("기존 사유");
+			payment.requestCancel();
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PREPARING);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
+			givenRequestedRow(requestedPaymentCancel("cancel-" + payment.getPaymentKey() + "-3"));
+
+			// when
+			CancelRequest result = writer.requestCancel(ORDER_ID, MEMBER_ID, "새 사유");
+
+			// then
+			assertThat(result.alreadyRequested()).isTrue();
+			assertThat(result.idempotencyKey()).isEqualTo("cancel-" + payment.getPaymentKey() + "-3");
 		}
 
 		@Test
@@ -212,20 +303,6 @@ class PaymentCancelWriterTest {
 		}
 
 		@Test
-		@DisplayName("관리자 취소면 회원 소유 확인 없이 관리자 사유를 기록한다")
-		void requestsAdminCancelWithoutMemberOwnershipCheck() {
-			// given
-			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
-			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(payment));
-
-			// when
-			CancelRequest result = writer.requestCancel(ORDER_ID, null, null);
-
-			// then
-			assertThat(result.tossReason()).isEqualTo("관리자 취소");
-		}
-
-		@Test
 		@DisplayName("가상계좌로 결제됐는데 환불계좌가 없으면 PAYMENT_REFUND_ACCOUNT_REQUIRED 예외를 던지고 상태를 바꾸지 않는다")
 		void rejectsVirtualAccountCancelWithoutRefundAccount() {
 			// given
@@ -277,7 +354,7 @@ class PaymentCancelWriterTest {
 		@DisplayName("주문 락 뒤 주문 복구와 결제 취소를 완료하고 취소 요청 기록을 DONE 으로 남긴다")
 		void completesOrderAndPaymentCancel() {
 			// given
-			order.requestCancel("고객 변심", false);
+			order.requestCancel("고객 변심");
 			payment.requestCancel();
 			PaymentCancel paymentCancel = requestedPaymentCancel();
 			LimitedRelease release = new LimitedRelease(30L, MEMBER_ID);
@@ -285,8 +362,7 @@ class PaymentCancelWriterTest {
 			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
 			given(restorer.restore(order, true)).willReturn(Optional.of(release));
-			given(paymentCancelRepository.findByIdempotencyKey("cancel-" + payment.getPaymentKey()))
-					.willReturn(Optional.of(paymentCancel));
+			givenRequestedRow(paymentCancel);
 
 			// when
 			Optional<LimitedRelease> result = writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT, "txn-1");
@@ -300,6 +376,42 @@ class PaymentCancelWriterTest {
 			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
 			assertThat(paymentCancel.getTossTransactionKey()).isEqualTo("txn-1");
 			assertThat(result).contains(release);
+		}
+
+		@Test
+		@DisplayName("레거시 키 행(cancel-{paymentKey})만 REQUESTED 로 남아 있어도 그 행을 DONE 으로 남긴다")
+		void completesLegacyKeyRow() {
+			// given
+			order.requestCancel("고객 변심");
+			payment.requestCancel();
+			PaymentCancel legacy = requestedPaymentCancel("cancel-" + payment.getPaymentKey());
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(restorer.restore(order, true)).willReturn(Optional.empty());
+			givenRequestedRow(legacy);
+
+			// when
+			writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT, "txn-1");
+
+			// then
+			assertThat(legacy.getStatus()).isEqualTo(PaymentCancelStatus.DONE);
+		}
+
+		@Test
+		@DisplayName("REQUESTED 행이 없으면 IllegalStateException 을 던진다")
+		void throwsWhenRequestedRowMissing() {
+			// given
+			order.requestCancel("고객 변심");
+			payment.requestCancel();
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(orderRepository.findWithItemsById(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(restorer.restore(order, true)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> writer.completeCancel(ORDER_ID, PAYMENT_ID, TOSS_CANCELED_AT, "txn-1"))
+					.isInstanceOf(IllegalStateException.class);
 		}
 
 		@Test
@@ -343,13 +455,12 @@ class PaymentCancelWriterTest {
 		@DisplayName("CANCEL_REQUESTED 면 결제를 DONE 으로 되돌리고 주문 사유를 지우고 취소 요청 기록을 FAILED 로 남긴다")
 		void revertsPaymentAndOrderRequest() {
 			// given
-			order.requestCancel("고객 변심", false);
+			order.requestCancel("고객 변심");
 			payment.requestCancel();
 			PaymentCancel paymentCancel = requestedPaymentCancel();
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
-			given(paymentCancelRepository.findByIdempotencyKey("cancel-" + payment.getPaymentKey()))
-					.willReturn(Optional.of(paymentCancel));
+			givenRequestedRow(paymentCancel);
 
 			// when
 			writer.revertCancelRequest(ORDER_ID, PAYMENT_ID);
@@ -372,6 +483,34 @@ class PaymentCancelWriterTest {
 
 			// then
 			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+		}
+	}
+
+	@Nested
+	@DisplayName("requestedIdempotencyKey()")
+	class RequestedIdempotencyKey {
+
+		@Test
+		@DisplayName("REQUESTED 행이 있으면 그 행의 멱등키를 돌려준다")
+		void returnsRequestedRowKey() {
+			// given
+			givenRequestedRow(requestedPaymentCancel("cancel-" + payment.getPaymentKey() + "-2"));
+
+			// when
+			String key = writer.requestedIdempotencyKey(payment);
+
+			// then
+			assertThat(key).isEqualTo("cancel-" + payment.getPaymentKey() + "-2");
+		}
+
+		@Test
+		@DisplayName("REQUESTED 행이 없으면 레거시 키 cancel-{paymentKey} 로 폴백한다")
+		void fallsBackToLegacyKeyWhenNoRow() {
+			// when
+			String key = writer.requestedIdempotencyKey(payment);
+
+			// then
+			assertThat(key).isEqualTo("cancel-" + payment.getPaymentKey());
 		}
 	}
 }

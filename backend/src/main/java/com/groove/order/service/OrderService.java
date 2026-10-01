@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -34,9 +35,12 @@ import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSearchRequest;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderSource;
+import com.groove.order.entity.OrderStatusGroup;
 import com.groove.order.entity.ShippingAddress;
 import com.groove.order.mapper.OrderQueryMapper;
+import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
@@ -67,6 +71,8 @@ public class OrderService {
 	private final OrderQueryMapper orderQueryMapper;
 	private final PaymentRepository paymentRepository;
 	private final ProductImageRepository productImageRepository;
+	private final OrderClaimRepository orderClaimRepository;
+	private final OrderClaimRefundReader orderClaimRefundReader;
 	private final Clock clock;
 
 	@Transactional
@@ -117,18 +123,24 @@ public class OrderService {
 			return PageResponse.of(List.of(), condition.page(), condition.size(), 0);
 		}
 		List<OrderSummaryResponse> content = orderQueryMapper.findMyOrders(condition);
-		List<OrderSummaryResponse> withItems = attachItems(content);
+		List<OrderSummaryResponse> withItems = attachItems(content, condition.statusGroup());
 		return PageResponse.of(withItems, condition.page(), condition.size(), totalElements);
 	}
 
-	/** 페이지의 주문 id 로 상품 행을 한 번에 조회해 붙인다. 페이지가 비어 있으면 이 조회를 건너뛴다. */
-	private List<OrderSummaryResponse> attachItems(List<OrderSummaryResponse> summaries) {
+	/**
+	 * 페이지의 주문 id 로 상품 행을 한 번에 조회해 붙인다. 탭(statusGroup)이 있으면 그 상태의 상품주문만 붙이고,
+	 * 페이지가 비어 있으면 이 조회를 건너뛴다.
+	 */
+	private List<OrderSummaryResponse> attachItems(List<OrderSummaryResponse> summaries,
+			OrderStatusGroup statusGroup) {
 		if (summaries.isEmpty()) {
 			return summaries;
 		}
 		LocalDateTime now = LocalDateTime.now(clock);
 		List<Long> orderIds = summaries.stream().map(OrderSummaryResponse::id).toList();
-		Map<Long, List<OrderListItemResponse>> itemsByOrderId = orderQueryMapper.findItemsByOrderIds(orderIds).stream()
+		List<OrderListItemRow> rows =
+				orderQueryMapper.findItemsByOrderIds(orderIds, statusGroup);
+		Map<Long, List<OrderListItemResponse>> itemsByOrderId = rows.stream()
 				.collect(Collectors.groupingBy(OrderListItemRow::orderId, LinkedHashMap::new,
 						Collectors.mapping(row -> row.toResponse(now), Collectors.toList())));
 		return summaries.stream()
@@ -158,8 +170,11 @@ public class OrderService {
 		Long limitedDropId = limitedPurchaseRepository.findByOrderId(orderId)
 				.map(purchase -> purchase.getDrop().getId())
 				.orElse(null);
+		List<Long> itemIds = order.getItems().stream().map(OrderItem::getId).toList();
+		Map<Long, Long> claimIds = orderClaimRepository.findRequestedClaimIdsByOrderItemId(itemIds);
+		Set<Long> pendingRefundItemIds = orderClaimRefundReader.findPendingRefundOrderItemIds(itemIds);
 		return OrderDetailResponse.from(order, limitedDropId, resolvePayment(orderId), resolveThumbnails(order),
-				LocalDateTime.now(clock));
+				claimIds, pendingRefundItemIds, LocalDateTime.now(clock));
 	}
 
 	/** 주문 상품 썸네일(상품 sort_order = 0 이미지)을 한 번에 조회한다. */
@@ -173,10 +188,11 @@ public class OrderService {
 						(first, second) -> first));
 	}
 
-	/** 승인 이력이 있거나 입금대기 중인 결제(DONE/CANCEL_REQUESTED/CANCELED/WAITING_FOR_DEPOSIT)만 상세 응답에 포함한다. */
+	/** 승인 이력이 있거나 입금대기 중인 결제(DONE/PARTIAL_CANCELED/CANCEL_REQUESTED/CANCELED/WAITING_FOR_DEPOSIT)만 상세 응답에 포함한다. */
 	private OrderPaymentResponse resolvePayment(Long orderId) {
 		return paymentRepository.findByOrderId(orderId)
 				.filter(payment -> payment.getStatus() == PaymentStatus.DONE
+						|| payment.getStatus() == PaymentStatus.PARTIAL_CANCELED
 						|| payment.getStatus() == PaymentStatus.CANCEL_REQUESTED
 						|| payment.getStatus() == PaymentStatus.CANCELED
 						|| payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT)

@@ -60,8 +60,6 @@ public class Order extends BaseTimeEntity {
 	public static final String EXPIRED_CANCEL_REASON = "EXPIRED";
 	public static final String SUPERSEDED_CANCEL_REASON = "SUPERSEDED";
 
-	private static final String ADMIN_CANCEL_REASON = "관리자 취소";
-
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -206,22 +204,24 @@ public class Order extends BaseTimeEntity {
 		this.items.forEach(item -> item.cancel(now));
 	}
 
-	public void requestCancel(String reason, boolean byAdmin) {
-		if (byAdmin) {
-			if (!this.status.canTransitionTo(OrderStatus.CANCELED)) {
-				throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
-			}
-			this.cancelReason = ADMIN_CANCEL_REASON;
-			return;
-		}
+	public void requestCancel(String reason) {
 		if (this.status != OrderStatus.PAID) {
 			throw new BusinessException(ErrorCode.ORDER_CANNOT_CANCEL);
 		}
 		this.cancelReason = reason;
 	}
 
+	/**
+	 * 전액취소 확정. 요청 시점에 상품주문이 전부 PAID 였어도 그 사이 발주확인·발송이 끼어들었으면 확정하지 않는다 -
+	 * 발송된 상품을 취소완료로 바꾸고 재고까지 복원하게 된다. 요청·발송 경로의 가드가 막으므로 방어선이다.
+	 */
 	public void completeCancel(LocalDateTime now) {
-		if (this.status != OrderStatus.PAID && this.status != OrderStatus.PREPARING) {
+		if (this.status != OrderStatus.PAID) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
+		}
+		boolean fulfillmentStarted = this.items.stream()
+				.anyMatch(item -> item.getStatus() != OrderItemStatus.PAID);
+		if (fulfillmentStarted) {
 			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
 		}
 		this.status = OrderStatus.CANCELED;
@@ -233,25 +233,23 @@ public class Order extends BaseTimeEntity {
 		this.cancelReason = null;
 	}
 
-	/** 관리자 상태 전이(PATCH /admin/orders/{id}/status)용. 허용되지 않는 전이는 예외를 던진다. */
-	public void changeStatus(OrderStatus next) {
-		if (!this.status.canTransitionTo(next)) {
-			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS_TRANSITION);
+	/**
+	 * 주문 상태는 결제 생애주기(PENDING/PAID/CANCELED)이고, 상품주문 상태에서 파생되는 부분은 여기서만 갱신한다.
+	 * 모든 상품주문이 {@link OrderItemStatus#CANCEL_TERMINAL}(취소·반품·미입금취소)로 끝났으면 주문을 CANCELED 로
+	 * 확정하고 true 를 반환한다. 이미 CANCELED 면 canceledAt 을 건드리지 않고 true 를 반환한다(멱등).
+	 * 그 밖에는 아무 것도 바꾸지 않고 false 를 반환한다.
+	 */
+	public boolean refreshAggregate(LocalDateTime now) {
+		boolean allCancelTerminal = this.items.stream()
+				.allMatch(item -> OrderItemStatus.CANCEL_TERMINAL.contains(item.getStatus()));
+		if (!allCancelTerminal) {
+			return false;
 		}
-		this.status = next;
-		LocalDateTime now = LocalDateTime.now();
-		switch (next) {
-			case PREPARING -> this.items.forEach(item -> item.moveToPreparing(now));
-			case SHIPPED -> this.items.forEach(item -> item.moveToShipping(now));
-			case DELIVERED -> this.items.forEach(item -> item.moveToDelivered(now));
-			case CANCELED -> {
-				this.canceledAt = now;
-				this.cancelReason = ADMIN_CANCEL_REASON;
-				this.items.forEach(item -> item.cancel(now));
-			}
-			default -> {
-			}
+		if (this.status != OrderStatus.CANCELED) {
+			this.status = OrderStatus.CANCELED;
+			this.canceledAt = now;
 		}
+		return true;
 	}
 
 	/** 가상계좌 발급 시 입금기한으로 만료를 늘린다. PENDING 이 아니거나 기존 기한보다 이르면 무시한다. */

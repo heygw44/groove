@@ -5,7 +5,9 @@ import type {
   OrderCreateRequest,
   OrderCreateResponse,
   OrderDetail,
+  OrderItem,
   OrderListParams,
+  OrderReturnRequest,
   OrderSummary,
 } from '@/types/order';
 
@@ -30,3 +32,16 @@ export const getOrder = (orderId: number) =>
 
 export const cancelOrder = (orderId: number, payload?: OrderCancelRequest) =>
   unwrap(client.post<ApiResponse<OrderDetail>>(`/orders/${orderId}/cancel`, payload));
+
+/** 결제완료 상품은 즉시 취소·부분환불, 배송준비 상품은 취소 요청(클레임)만 남긴다. */
+export const cancelOrderItem = (orderId: number, itemId: number, payload?: OrderCancelRequest) =>
+  unwrap(client.post<ApiResponse<OrderItem>>(`/orders/${orderId}/items/${itemId}/cancel`, payload));
+
+export const returnOrderItem = (orderId: number, itemId: number, payload?: OrderReturnRequest) =>
+  unwrap(client.post<ApiResponse<OrderItem>>(`/orders/${orderId}/items/${itemId}/return`, payload));
+
+export const withdrawOrderClaim = (claimId: number) =>
+  unwrap(client.post<ApiResponse<OrderItem>>(`/order-claims/${claimId}/withdraw`));
+
+export const confirmOrderItem = (orderId: number, itemId: number) =>
+  unwrap(client.post<ApiResponse<OrderDetail>>(`/orders/${orderId}/items/${itemId}/confirm`));

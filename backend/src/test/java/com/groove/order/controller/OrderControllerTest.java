@@ -61,6 +61,7 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.entity.OrderStatusGroup;
 import com.groove.order.service.OrderCancelService;
 import com.groove.order.service.OrderCreateService;
+import com.groove.order.service.OrderItemConfirmService;
 import com.groove.order.service.OrderService;
 import com.groove.order.service.OrderShippingAddressService;
 
@@ -92,6 +93,9 @@ class OrderControllerTest {
 
 	@MockitoBean
 	OrderShippingAddressService orderShippingAddressService;
+
+	@MockitoBean
+	OrderItemConfirmService orderItemConfirmService;
 
 	private String bearer() {
 		return "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.USER);
@@ -395,7 +399,8 @@ class OrderControllerTest {
 			// given
 			OrderListItemResponse item = new OrderListItemResponse(501L, "Kind of Blue", 1,
 					new BigDecimal("75600"), "https://cdn.groove.com/kind-of-blue-0.jpg", "20260902-K7Q2M9XZ-01",
-					OrderItemStatus.PAID, null, new BigDecimal("75600"), null, null, List.of(OrderItemAction.CANCEL));
+					OrderItemStatus.PAID, null, new BigDecimal("75600"), null, null, List.of(OrderItemAction.CANCEL),
+					false);
 			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
 					new BigDecimal("90000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, List.of(item), null);
 			given(orderService.getMyOrders(eq(1L), any())).willReturn(PageResponse.of(List.of(summary), 0, 20, 1));
@@ -448,10 +453,10 @@ class OrderControllerTest {
 		@DisplayName("주문 상품 행에 상품주문 상태·클레임·결제 금액·다음 동작을 함께 반환한다")
 		void returnsItemFieldsForProductOrder() throws Exception {
 			// given
-			OrderItemResponse item = new OrderItemResponse(620L, "Head Hunters", new BigDecimal("6000"), 1,
+			OrderItemResponse item = new OrderItemResponse(7L, 620L, "Head Hunters", new BigDecimal("6000"), 1,
 					new BigDecimal("6000"), null, "20260902-K7Q2M9XZ-02", OrderItemStatus.SHIPPING,
 					OrderItemClaimStatus.CANCEL_REQUEST, new BigDecimal("6000"), CourierCode.CJ, "123456789012", null,
-					List.of(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK));
+					List.of(OrderItemAction.WITHDRAW_CLAIM, OrderItemAction.TRACK), 900L, false);
 			OrderDetailResponse detail = new OrderDetailResponse(1L, "20260903-TESTAB12", OrderStatus.PAID,
 					new BigDecimal("6000"), BigDecimal.ZERO, new BigDecimal("6000"), null, List.of(item), null, null,
 					null, null, null, null, null);
@@ -460,6 +465,8 @@ class OrderControllerTest {
 			// when & then
 			mockMvc.perform(get(BASE_URL + "/1").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.items[0].id", is(7)))
+					.andExpect(jsonPath("$.data.items[0].claimId", is(900)))
 					.andExpect(jsonPath("$.data.items[0].productOrderNumber", is("20260902-K7Q2M9XZ-02")))
 					.andExpect(jsonPath("$.data.items[0].status", is("SHIPPING")))
 					.andExpect(jsonPath("$.data.items[0].claimStatus", is("CANCEL_REQUEST")))
@@ -486,6 +493,47 @@ class OrderControllerTest {
 			mockMvc.perform(post(BASE_URL + "/1/cancel").header(HttpHeaders.AUTHORIZATION, bearer()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.status", is("CANCELED")));
+		}
+	}
+
+	@Nested
+	@DisplayName("POST /api/v1/orders/{orderId}/items/{itemId}/confirm")
+	class ConfirmPurchase {
+
+		@Test
+		@DisplayName("본인 주문이면 200 과 구매확정된 주문 상세를 반환한다")
+		void confirmsForOwner() throws Exception {
+			// given
+			given(orderItemConfirmService.confirm(1L, 1L, 620L)).willReturn(sampleDetailResponse(OrderStatus.PAID));
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/1/items/620/confirm").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.orderNumber", is("20260903-TESTAB12")));
+			verify(orderItemConfirmService).confirm(1L, 1L, 620L);
+		}
+
+		@Test
+		@DisplayName("구매확정할 수 없는 상태면 400 ORDER_CLAIM_NOT_ALLOWED 를 반환한다")
+		void returnsBadRequestWhenNotAllowed() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.ORDER_CLAIM_NOT_ALLOWED))
+					.given(orderItemConfirmService).confirm(1L, 1L, 620L);
+
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/1/items/620/confirm").header(HttpHeaders.AUTHORIZATION, bearer()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("ORDER_CLAIM_NOT_ALLOWED")));
+		}
+
+		@Test
+		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
+		void returnsUnauthorizedWithoutToken() throws Exception {
+			// when & then
+			mockMvc.perform(post(BASE_URL + "/1/items/620/confirm"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
+			verify(orderItemConfirmService, never()).confirm(any(), any(), any());
 		}
 	}
 

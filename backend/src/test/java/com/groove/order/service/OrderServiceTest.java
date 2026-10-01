@@ -69,9 +69,12 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
+import com.groove.order.entity.OrderStatusGroup;
 import com.groove.order.mapper.OrderQueryMapper;
+import com.groove.order.repository.OrderClaimRepository;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.entity.Payment;
+import com.groove.payment.entity.PaymentStatus;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -127,6 +130,12 @@ class OrderServiceTest {
 	@Mock
 	ProductImageRepository productImageRepository;
 
+	@Mock
+	OrderClaimRepository orderClaimRepository;
+
+	@Mock
+	OrderClaimRefundReader orderClaimRefundReader;
+
 	OrderService orderService;
 
 	Member member;
@@ -150,7 +159,7 @@ class OrderServiceTest {
 		orderService = new OrderService(memberRepository, addressRepository, productRepository, limitedDropRepository,
 				limitedPurchaseRepository, cartItemRepository, memberCouponRepository, orderStockService,
 				orderDraftReleaser, orderRepository, orderNumberGenerator, orderQueryMapper, paymentRepository,
-				productImageRepository, clock);
+				productImageRepository, orderClaimRepository, orderClaimRefundReader, clock);
 
 		member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 		artist = ArtistFixture.withId(1L);
@@ -510,7 +519,7 @@ class OrderServiceTest {
 			assertThat(response.content()).isEmpty();
 			assertThat(response.totalElements()).isZero();
 			verify(orderQueryMapper, never()).findMyOrders(any());
-			verify(orderQueryMapper, never()).findItemsByOrderIds(any());
+			verify(orderQueryMapper, never()).findItemsByOrderIds(any(), any());
 		}
 
 		@Test
@@ -541,13 +550,14 @@ class OrderServiceTest {
 					new BigDecimal("45000"), BigDecimal.ZERO, null, "A Love Supreme", 1, null, null);
 			OrderListItemRow firstItem = new OrderListItemRow(1L, PRODUCT_ID, "Kind of Blue", 1,
 					new BigDecimal("30000"), null, "20260903-TESTAB12-01", OrderItemStatus.PAID, null,
-					new BigDecimal("30000"), null, null, null);
+					new BigDecimal("30000"), null, null, null, false);
 			OrderListItemRow secondItem = new OrderListItemRow(2L, 200L, "A Love Supreme", 1,
 					new BigDecimal("45000"), "https://cdn.groove.com/love-supreme-0.jpg", "20260903-TESTAB13-01",
-					OrderItemStatus.PAID, null, new BigDecimal("45000"), null, null, null);
+					OrderItemStatus.PAID, null, new BigDecimal("45000"), null, null, null, false);
 			given(orderQueryMapper.countMyOrders(any())).willReturn(2L);
 			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(first, second));
-			given(orderQueryMapper.findItemsByOrderIds(List.of(1L, 2L))).willReturn(List.of(firstItem, secondItem));
+			given(orderQueryMapper.findItemsByOrderIds(List.of(1L, 2L), null))
+					.willReturn(List.of(firstItem, secondItem));
 			OrderSearchRequest request = new OrderSearchRequest(null, null, null);
 
 			// when
@@ -558,6 +568,25 @@ class OrderServiceTest {
 					.containsExactly("Kind of Blue");
 			assertThat(response.content().get(1).items()).extracting(OrderListItemResponse::thumbnailUrl)
 					.containsExactly("https://cdn.groove.com/love-supreme-0.jpg");
+		}
+
+		@Test
+		@DisplayName("탭(statusGroup)이 있으면 상품 행 조회에도 같은 statusGroup 을 넘긴다")
+		void passesStatusGroupToItemQuery() {
+			// given
+			OrderSummaryResponse summary = new OrderSummaryResponse(1L, "20260903-TESTAB12", OrderStatus.PENDING,
+					new BigDecimal("30000"), BigDecimal.ZERO, null, "Kind of Blue", 1, null, null);
+			given(orderQueryMapper.countMyOrders(any())).willReturn(1L);
+			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(summary));
+			given(orderQueryMapper.findItemsByOrderIds(List.of(1L), OrderStatusGroup.SHIPPING))
+					.willReturn(List.of());
+			OrderSearchRequest request = new OrderSearchRequest(OrderStatusGroup.SHIPPING, null, null);
+
+			// when
+			orderService.getMyOrders(MEMBER_ID, request);
+
+			// then
+			verify(orderQueryMapper).findItemsByOrderIds(List.of(1L), OrderStatusGroup.SHIPPING);
 		}
 	}
 
@@ -664,6 +693,26 @@ class OrderServiceTest {
 			assertThat(response.payment()).isNotNull();
 			assertThat(response.payment().method()).isEqualTo(PaymentFixture.METHOD);
 			assertThat(response.payment().approvedAt()).isEqualTo(PaymentFixture.APPROVED_AT);
+		}
+
+		@Test
+		@DisplayName("부분취소된 결제도 payment 를 함께 내려준다")
+		void includesPaymentWhenPartialCanceled() {
+			// given
+			Order order = OrderFixture.place(OrderFixture.withId(OrderFixture.createWithItem(member, product, 1),
+					606L));
+			order.markPaid();
+			Payment payment = PaymentFixture.partialCanceled(order, PaymentFixture.PAYMENT_KEY,
+					PaymentFixture.APPROVED_AT, PaymentFixture.CANCELED_AT, BigDecimal.ONE);
+			given(orderRepository.findWithItemsByIdAndMemberId(606L, MEMBER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findByOrderId(606L)).willReturn(Optional.of(payment));
+
+			// when
+			OrderDetailResponse response = orderService.getDetail(MEMBER_ID, 606L);
+
+			// then
+			assertThat(response.payment()).isNotNull();
+			assertThat(response.payment().status()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
 		}
 
 		@Test

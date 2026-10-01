@@ -10,7 +10,11 @@
 # 그 컬럼에 의존하는 백필/시드 보정도 after 단계에서만 돌려야 한다(자세한 내용은 각 지점의 주석 참고).
 #
 # 사용법:
-#   index-explain.sh [--scale N] [--after-ddl 파일]... [--out 파일] [--keep] [--phase before|after|both]
+#   index-explain.sh [--scale N] [--after-ddl 파일]... [--out 파일] [--keep] [--phase before|after|both] [--repeat N]
+#
+# --repeat N 은 케이스마다 EXPLAIN ANALYZE 를 N번 떠서 요약 표에 중앙값(min~max)을 쓴다. 단발 측정은 캐시 상태에
+# 따라 흔들려 인덱스 유무보다 노이즈가 커질 수 있어서다. 상세 섹션에는 중앙값 회차 하나만 싣는다.
+# --phase before 만 돌리면 --after-ddl 없이도 된다(기본값 파일은 before 단계에서 적용하지 않고 건너뛴다).
 set -euo pipefail
 
 # OrbStack 은 DOCKER_HOST 를 별도로 export 해야 docker CLI 가 데몬을 찾는다.
@@ -34,6 +38,7 @@ AFTER_DDLS=()
 OUT_FILE=""
 KEEP=false
 PHASE="both"
+REPEAT=1
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -57,6 +62,10 @@ while [ $# -gt 0 ]; do
 		PHASE="$2"
 		shift 2
 		;;
+	--repeat)
+		REPEAT="$2"
+		shift 2
+		;;
 	*)
 		echo "알 수 없는 옵션: $1" >&2
 		exit 1
@@ -66,6 +75,11 @@ done
 
 if ! [[ "${SCALE}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
 	echo "--scale 값이 올바르지 않습니다: ${SCALE}" >&2
+	exit 1
+fi
+
+if ! [[ "${REPEAT}" =~ ^[1-9][0-9]*$ ]]; then
+	echo "--repeat 값이 올바르지 않습니다: ${REPEAT}" >&2
 	exit 1
 fi
 
@@ -126,28 +140,37 @@ GENRE_ID_2=""
 BODY_TMP=""
 REPORT_TMP=""
 
-CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 M1 W1 W2 L1 D1 D2 Y1 Y2)
+CASE_IDS=(P1 P2 P3 P4 P5 P6 P7 P8 O1 O2 O3 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 R1 R2 R3 R4 N1 N2 N3 S1 S2 S3 S4 S5 M1 W1 W2 L1 D1 D2 Y1 Y2)
 
 # macOS 기본 /bin/bash 는 3.2 라 연관 배열(declare -A)을 못 쓴다. 케이스 설명/요약은
 # case_desc()/set_summary()/get_summary() 로 대신한다.
 case_desc() {
 	case "$1" in
-	P1) echo "상품 검색 LATEST, 필터 없음 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
-	P2) echo "상품 검색 LATEST, keyword=Pressing 12 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
-	P3) echo "상품 검색 LATEST, 장르 2개+가격대 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
-	P4) echo "상품 검색 PRICE_ASC, 가격대 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
-	P5) echo "상품 검색 POPULAR (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
-	P6) echo "상품 검색 RATING (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
-	P7) echo "상품 검색 countProducts, 무필터 (album_id DISTINCT, ProductSearchMapper.xml countProducts)" ;;
-	P8) echo "상품 검색 PRICE_DESC, 필터 없음 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml searchProducts)" ;;
-	O1) echo "내 주문 목록, status 없음 (OrderQueryMapper.xml findMyOrders)" ;;
-	O2) echo "내 주문 목록, status=DELIVERED (OrderQueryMapper.xml findMyOrders)" ;;
-	O3) echo "내 주문 countMyOrders (OrderQueryMapper.xml countMyOrders)" ;;
-	A1) echo "관리자 주문 목록 무필터 (OrderQueryMapper.xml findAdminOrders)" ;;
-	A2) echo "관리자 주문 목록 status=PAID (OrderQueryMapper.xml findAdminOrders)" ;;
-	A3) echo "관리자 주문 목록 최근 30일 (OrderQueryMapper.xml findAdminOrders)" ;;
-	A4) echo "관리자 주문 목록 키워드 perf12 (OrderQueryMapper.xml findAdminOrders)" ;;
-	A5) echo "관리자 주문 countAdminOrders 무필터 (OrderQueryMapper.xml countAdminOrders)" ;;
+	P1) echo "상품 검색 LATEST, 필터 없음 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml#searchProducts)" ;;
+	P2) echo "상품 검색 LATEST, keyword=Pressing 12 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml#searchProducts)" ;;
+	P3) echo "상품 검색 LATEST, 장르 2개+가격대 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml#searchProducts)" ;;
+	P4) echo "상품 검색 PRICE_ASC, 가격대 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml#searchProducts)" ;;
+	P5) echo "상품 검색 POPULAR (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml#searchProducts)" ;;
+	P6) echo "상품 검색 RATING (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml#searchProducts)" ;;
+	P7) echo "상품 검색 countProducts, 무필터 (album_id DISTINCT, ProductSearchMapper.xml#countProducts)" ;;
+	P8) echo "상품 검색 PRICE_DESC, 필터 없음 (대표 프레싱 축약 파생 테이블, ProductSearchMapper.xml#searchProducts)" ;;
+	O1) echo "내 주문 목록, statusGroup 없음, 결제 확정(placed_at) 주문만 (OrderQueryMapper.xml#findMyOrders)" ;;
+	O2) echo "내 주문 목록, statusGroup=DELIVERED, order_item EXISTS (OrderQueryMapper.xml#findMyOrders)" ;;
+	O3) echo "내 주문 countMyOrders (OrderQueryMapper.xml#countMyOrders)" ;;
+	A1) echo "관리자 주문 목록 무필터, placed_at DESC (OrderQueryMapper.xml#findAdminOrders)" ;;
+	A2) echo "관리자 주문 목록 status=PAID (OrderQueryMapper.xml#findAdminOrders)" ;;
+	A3) echo "관리자 주문 목록 최근 30일 (OrderQueryMapper.xml#findAdminOrders)" ;;
+	A4) echo "관리자 주문 목록 키워드 perf12 (OrderQueryMapper.xml#findAdminOrders)" ;;
+	A5) echo "관리자 주문 countAdminOrders 무필터 (OrderQueryMapper.xml#countAdminOrders)" ;;
+	A6) echo "관리자 상품주문 목록 무필터, oi.created_at DESC LIMIT 20 (OrderQueryMapper.xml#findAdminOrderItems)" ;;
+	A7) echo "관리자 상품주문 목록 statusGroup=PREPARING (OrderQueryMapper.xml#findAdminOrderItems)" ;;
+	A8) echo "관리자 상품주문 목록 최근 30일 (OrderQueryMapper.xml#findAdminOrderItems)" ;;
+	A9) echo "관리자 상품주문 목록 statusGroup=CANCEL_RETURN, status IN OR claim_status IN (OrderQueryMapper.xml#findAdminOrderItems)" ;;
+	A10) echo "관리자 상품주문 countAdminOrderItems 무필터 (before: member 조인 / after: 키워드 없으면 member 조인 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
+	A11) echo "관리자 상품주문 목록 무필터, OFFSET 2000 (OrderQueryMapper.xml#findAdminOrderItems)" ;;
+	A12) echo "관리자 상품주문 countAdminOrderItems statusGroup=PREPARING (before: member 조인 / after: 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
+	A13) echo "관리자 상품주문 countAdminOrderItems statusGroup=CANCEL_RETURN (before: member 조인 / after: 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
+	A14) echo "관리자 상품주문 countAdminOrderItems 최근 30일 (before: member 조인 / after: 생략, OrderQueryMapper.xml#countAdminOrderItems)" ;;
 	R1) echo "리뷰 목록 LATEST (ReviewRepository.findByProductId)" ;;
 	R2) echo "리뷰 목록 RATING_DESC (ReviewRepository.findByProductId)" ;;
 	R3) echo "리뷰 개수 (ReviewRepository 파생 count)" ;;
@@ -155,15 +178,17 @@ case_desc() {
 	N1) echo "알림 목록 전체 (NotificationRepository.findAllByMemberId)" ;;
 	N2) echo "알림 목록 안읽음만 (NotificationRepository.findAllByMemberIdAndReadAtIsNull)" ;;
 	N3) echo "안읽음 개수 (NotificationRepository.countByMemberIdAndReadAtIsNull)" ;;
-	S1) echo "관리자 통계 일별 매출 최근 30일 (before: payment UNION ALL + DATE() GROUP BY / after: sales_daily 범위 조회, AdminStatsMapper.xml findDailySales)" ;;
-	S2) echo "관리자 통계 오늘 요약 (before: 스칼라 서브쿼리 2개 / after: 파생 테이블 병합, AdminStatsMapper.xml findSummary)" ;;
-	S3) echo "관리자 통계 인기 상품 최근 30일 (before: 4중 조인 GROUP BY / after: sales_daily_product 파생 테이블 LIMIT, AdminStatsMapper.xml findPopularProducts)" ;;
-	M1) echo "회원 상세 활동 요약 (before: memberOrderStats 파생 테이블 / after: 상관 서브쿼리, MemberQueryMapper.xml findActivitySummary)" ;;
+	S1) echo "관리자 통계 일별 매출 최근 30일 (before: payment UNION ALL + DATE() GROUP BY / after: sales_daily 범위 조회, AdminStatsMapper.xml#findDailySales)" ;;
+	S2) echo "관리자 통계 오늘 요약 전체, 매출 파생 테이블 2개 + 스칼라 서브쿼리 5개 (AdminStatsMapper.xml#findSummary)" ;;
+	S3) echo "관리자 통계 인기 상품 최근 30일 (before: 4중 조인 GROUP BY / after: sales_daily_product 파생 테이블 LIMIT, AdminStatsMapper.xml#findPopularProducts)" ;;
+	S4) echo "관리자 통계 클레임 건수 서브쿼리 2개, CANCEL_REQUEST / RETURN_REQUEST,COLLECTING (AdminStatsMapper.xml#findSummary)" ;;
+	S5) echo "관리자 통계 상태 건수 서브쿼리 2개, PAID / PAYMENT_WAITING (AdminStatsMapper.xml#findSummary)" ;;
+	M1) echo "회원 상세 활동 요약 (before: memberOrderStats 파생 테이블 / after: 상관 서브쿼리, MemberQueryMapper.xml#findActivitySummary)" ;;
 	W1) echo "앨범 구독 목록 (AlbumWatchRepository.findAllByMemberId, EntityGraph album)" ;;
 	W2) echo "앨범 구독 개수 (AlbumWatchRepository.findAllByMemberId 페이징 count)" ;;
-	L1) echo "관리자 한정반 드롭 통계 첫 페이지, open_at DESC (before: 상관 서브쿼리 2회+페이징 없음 / after: sold_out_at 컬럼+LIMIT 20, AdminStatsMapper.xml findLimitedDropStats)" ;;
-	D1) echo "Discogs 재검증 우선순위 후보, viewPriority=true (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml findCandidates)" ;;
-	D2) echo "Discogs 재검증 야간 스윕 후보, viewPriority=false (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml findCandidates)" ;;
+	L1) echo "관리자 한정반 드롭 통계 첫 페이지, open_at DESC (before: 상관 서브쿼리 2회+페이징 없음 / after: sold_out_at 컬럼+LIMIT 20, AdminStatsMapper.xml#findLimitedDropStats)" ;;
+	D1) echo "Discogs 재검증 우선순위 후보, viewPriority=true (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml#findCandidates)" ;;
+	D2) echo "Discogs 재검증 야간 스윕 후보, viewPriority=false (before: idx_product_resync 없음 / after: 있음, DiscogsResyncMapper.xml#findCandidates)" ;;
 	Y1) echo "결제 대사 후보 (before: reconcile_attempts 컬럼 없음, status 무인덱스 / after: idx_payment_status_updated + reconcile_attempts, PaymentRepository.findReconcileCandidates)" ;;
 	Y2) echo "만료 후보, 결제 미확정 주문 제외 (before: 제외 없음 / after: LEFT JOIN payment ... IS NULL 추가, OrderRepository 만료 후보)" ;;
 	*) echo "?" ;;
@@ -177,6 +202,15 @@ set_summary() {
 
 get_summary() {
 	local varname="SUMMARY_$1_$2"
+	if [ -n "${!varname+set}" ]; then
+		printf '%s' "${!varname}"
+	else
+		printf '%s' "-"
+	fi
+}
+
+get_rows() {
+	local varname="ROWS_$1"
 	if [ -n "${!varname+set}" ]; then
 		printf '%s' "${!varname}"
 	else
@@ -268,8 +302,8 @@ backfill_sold_quantity() {
 	mysql_perf "
 		update product p
 		join (select oi.product_id, sum(oi.quantity) as q
-		      from order_item oi join orders o on o.id = oi.order_id
-		      where o.status in ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+		      from order_item oi
+		      where oi.status in ('PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED')
 		      group by oi.product_id) s on s.product_id = p.id
 		set p.sold_quantity = s.q;
 	"
@@ -298,13 +332,13 @@ backfill_sales_daily() {
 			select DATE(p.approved_at) as sale_date, COUNT(*) as order_count, SUM(p.amount) as sales_amount,
 				0 as cancel_count, 0 as cancel_amount
 			from payment p
-			where p.status in ('DONE', 'CANCELED') and p.approved_at is not null
+			where p.status in ('DONE', 'CANCELED', 'PARTIAL_CANCELED') and p.approved_at is not null
 			group by DATE(p.approved_at)
 			union all
-			select DATE(p.canceled_at), 0, 0, COUNT(*), SUM(p.amount)
-			from payment p
-			where p.status = 'CANCELED' and p.canceled_at is not null
-			group by DATE(p.canceled_at)
+			select DATE(pc.done_at), 0, 0, COUNT(*), SUM(pc.cancel_amount)
+			from payment_cancel pc
+			where pc.status = 'DONE' and pc.done_at is not null
+			group by DATE(pc.done_at)
 		) d
 		group by d.sale_date;
 	"
@@ -316,7 +350,8 @@ backfill_sales_daily() {
 		from order_item oi
 		join orders o on o.id = oi.order_id
 		join payment p on p.order_id = o.id
-		where o.status in ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED') and p.approved_at is not null
+		where oi.status in ('PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED')
+		and p.approved_at is not null
 		group by DATE(p.approved_at), oi.product_id;
 	"
 }
@@ -337,6 +372,11 @@ backfill_limited_drop_sold_out_at() {
 		set ld.sold_out_at = (select max(lp.created_at) from limited_purchase lp where lp.drop_id = ld.id)
 		where ld.status = 'SOLD_OUT';
 	"
+}
+
+# 주문 id(또는 n)에서 0~99 버킷을 뽑는 SQL 식. orders/order_item/payment 시드가 같은 식을 써서 상태를 맞춘다.
+order_bucket_sql() {
+	echo "((($1) * 19 + (($1) DIV 100) * 31) % 100)"
 }
 
 seed() {
@@ -633,25 +673,28 @@ seed() {
 	"
 	echo "[시드] member_coupon(member_id=${TARGET_MEMBER_ID} 헤비) ${member_coupon_heavy_n}건"
 
+	# 주문 단위 상태 버킷(0~99). 주문 분배(n % 100, n % member_n)와 같은 모듈러를 쓰면 특정 회원/주문에 한 상태만
+	# 몰려서, 19/31 처럼 100 과 서로소인 계수와 n DIV 100 을 섞어 회원·주문 분배와 어긋나게 한다.
+	# 95 이상은 결제 전 주문(placed_at NULL, 상품주문 PAYMENT_PENDING)이다. orders/order_item/payment 가 같은 식을 쓴다.
+	local h_orders h_o_id
+	h_orders=$(order_bucket_sql "t.n")
+	h_o_id=$(order_bucket_sql "o.id")
+
 	mysql_perf "
 		INSERT INTO orders (order_number, member_id, total_amount, discount_amount, final_amount, status,
 			zip_code, phone, recipient_name, address1, address2, member_coupon_id, expires_at, created_at,
-			updated_at)
+			updated_at, placed_at, canceled_at, cancel_reason)
 		SELECT
 			CONCAT('PERF-', t.n),
 			t.mid,
 			15000 + (t.n * 777) % 200000,
 			IF(t.n % 100 < 30, 1000 + (t.n * 137) % 9000, 0),
 			15000 + (t.n * 777) % 200000 - IF(t.n % 100 < 30, 1000 + (t.n * 137) % 9000, 0),
-			-- 회원 쏠림 배정도 n % 100 을 쓰므로 그대로 두면 특정 회원 status 가 한 값에 고정된다
+			-- 결제 생애주기 3값. 입금 대기(74~75)는 placed_at 이 있는 PENDING, 결제 전(95~)은 placed_at NULL 의 PENDING
 			CASE
-				WHEN (t.n + t.n DIV 100) % 100 < 5 THEN 'PENDING'
-				WHEN (t.n + t.n DIV 100) % 100 < 25 THEN 'PAID'
-				WHEN (t.n + t.n DIV 100) % 100 < 40 THEN 'PREPARING'
-				WHEN (t.n + t.n DIV 100) % 100 < 60 THEN 'SHIPPED'
-				WHEN (t.n + t.n DIV 100) % 100 < 90 THEN 'DELIVERED'
-				WHEN (t.n + t.n DIV 100) % 100 < 98 THEN 'CANCELED'
-				ELSE 'REFUNDED'
+				WHEN ${h_orders} >= 95 OR ${h_orders} BETWEEN 74 AND 75 THEN 'PENDING'
+				WHEN ${h_orders} BETWEEN 76 AND 89 THEN 'CANCELED'
+				ELSE 'PAID'
 			END,
 			LPAD(t.n % 100000, 5, '0'),
 			CONCAT('010-0000-', LPAD(t.n % 10000, 4, '0')),
@@ -662,7 +705,10 @@ seed() {
 			IF(t.n % 100 < 30, ((t.mid - 1) % ${member_coupon_n}) + 1, NULL),
 			DATE_ADD(DATE_SUB(NOW(6), INTERVAL (t.n % 730) DAY), INTERVAL 30 MINUTE),
 			DATE_SUB(NOW(6), INTERVAL (t.n % 730) DAY),
-			NOW(6)
+			NOW(6),
+			IF(${h_orders} >= 95, NULL, DATE_SUB(NOW(6), INTERVAL (t.n % 730) DAY)),
+			IF(${h_orders} BETWEEN 76 AND 89, DATE_ADD(DATE_SUB(NOW(6), INTERVAL (t.n % 730) DAY), INTERVAL 1 DAY), NULL),
+			IF(${h_orders} BETWEEN 76 AND 89, IF(${h_orders} >= 87, 'EXPIRED', 'CUSTOMER_REQUEST'), NULL)
 		FROM (
 			SELECT n, CASE WHEN n % 10 < 3 THEN (n % 100) + 1 ELSE (n % ${member_n}) + 1 END AS mid
 			FROM numbers WHERE n <= ${orders_n}
@@ -671,40 +717,160 @@ seed() {
 	echo "[시드] orders ${orders_n}건"
 
 	mysql_perf "
+		-- 상품주문 상태는 소속 주문의 버킷으로 정해 같은 주문의 상품주문이 서로 다른 생애주기에 있는 모순을 피한다.
+		-- 항목 수는 주문당 2~3개(order_item_n / orders_n)이고, 상품주문번호는 {주문번호}-{순번 2자리}라 유니크하다.
+		-- 분포(%): PURCHASE_CONFIRMED 54, DELIVERED 8, SHIPPING 4, PREPARING 4, PAID 4, PAYMENT_WAITING 2,
+		-- CANCELED 11, CANCELED_BY_NOPAYMENT 3, RETURNED 5, PAYMENT_PENDING 5(placed_at NULL 주문)
 		INSERT INTO order_item (order_id, product_id, quantity, price_snapshot, product_name_snapshot,
-			created_at, updated_at)
+			created_at, updated_at, status, claim_status, product_order_number, courier_code, tracking_number,
+			prepared_at, shipped_at, delivered_at, confirmed_at, canceled_at)
 		SELECT
-			(n % ${orders_n}) + 1,
-			((n * 7919) % ${product_n}) + 1,
-			1 + (n % 3),
-			15000 + ((((n * 7919) % ${product_n}) + 1) * 991) % 85000,
-			CONCAT('Perf Pressing ', ((n * 7919) % ${product_n}) + 1),
-			NOW(6),
-			NOW(6)
-		FROM numbers WHERE n <= ${order_item_n};
+			s.order_id, s.product_id, s.quantity, s.price_snapshot, s.product_name_snapshot,
+			s.created_at, s.created_at, s.status,
+			-- 취소/반품 완료는 종결 상태 행에, 거부·진행 중은 그 클레임이 가능한 상태 행에만 붙인다(cq 는 0~9999 균등)
+			CASE
+				WHEN s.status = 'CANCELED' THEN 'CANCEL_DONE'
+				WHEN s.status = 'RETURNED' THEN 'RETURN_DONE'
+				WHEN s.status IN ('PAID', 'PREPARING') AND s.cq < 150 THEN 'CANCEL_REQUEST'
+				WHEN s.status = 'PREPARING' AND s.cq < 2150 THEN 'CANCEL_REJECT'
+				WHEN s.status = 'DELIVERED' AND s.cq < 100 THEN 'RETURN_REQUEST'
+				WHEN s.status = 'DELIVERED' AND s.cq < 200 THEN 'COLLECTING'
+				WHEN s.status = 'PURCHASE_CONFIRMED' AND s.cq < 500 THEN 'RETURN_REJECT'
+				ELSE NULL
+			END,
+			CONCAT(s.order_number, '-', LPAD(s.seq, 2, '0')),
+			IF(s.status IN ('SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED', 'RETURNED'),
+				ELT(1 + (s.order_id % 6), 'CJ', 'HANJIN', 'LOTTE', 'EPOST', 'LOGEN', 'KDEXP'), NULL),
+			IF(s.status IN ('SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED', 'RETURNED'),
+				CONCAT('PERF', LPAD(s.n, 12, '0')), NULL),
+			IF(s.status IN ('PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED', 'RETURNED'),
+				DATE_ADD(s.created_at, INTERVAL 1 HOUR), NULL),
+			IF(s.status IN ('SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED', 'RETURNED'),
+				DATE_ADD(s.created_at, INTERVAL 1 DAY), NULL),
+			IF(s.status IN ('DELIVERED', 'PURCHASE_CONFIRMED', 'RETURNED'), DATE_ADD(s.created_at, INTERVAL 3 DAY), NULL),
+			IF(s.status = 'PURCHASE_CONFIRMED', DATE_ADD(s.created_at, INTERVAL 10 DAY), NULL),
+			IF(s.status IN ('CANCELED', 'CANCELED_BY_NOPAYMENT'), DATE_ADD(s.created_at, INTERVAL 1 DAY), NULL)
+		FROM (
+			SELECT
+				n,
+				o.id AS order_id,
+				o.order_number,
+				o.created_at,
+				(n - 1) DIV ${orders_n} + 1 AS seq,
+				((n * 7919) % ${product_n}) + 1 AS product_id,
+				1 + (n % 3) AS quantity,
+				15000 + ((((n * 7919) % ${product_n}) + 1) * 991) % 85000 AS price_snapshot,
+				CONCAT('Perf Pressing ', ((n * 7919) % ${product_n}) + 1) AS product_name_snapshot,
+				(n * 2749 + (n DIV 101) * 137) % 10000 AS cq,
+				CASE
+					WHEN o.placed_at IS NULL THEN 'PAYMENT_PENDING'
+					WHEN ${h_o_id} < 54 THEN 'PURCHASE_CONFIRMED'
+					WHEN ${h_o_id} < 62 THEN 'DELIVERED'
+					WHEN ${h_o_id} < 66 THEN 'SHIPPING'
+					WHEN ${h_o_id} < 70 THEN 'PREPARING'
+					WHEN ${h_o_id} < 74 THEN 'PAID'
+					WHEN ${h_o_id} < 76 THEN 'PAYMENT_WAITING'
+					WHEN ${h_o_id} < 87 THEN 'CANCELED'
+					WHEN ${h_o_id} < 90 THEN 'CANCELED_BY_NOPAYMENT'
+					ELSE 'RETURNED'
+				END AS status
+			FROM numbers
+			JOIN orders o ON o.id = ((n - 1) % ${orders_n}) + 1
+			WHERE n <= ${order_item_n}
+		) s;
 	"
 	echo "[시드] order_item ${order_item_n}건"
 
+	# 결제 상태는 주문 버킷과 맞춘다: 95~ 결제 전(FAILED), 74~75 입금 대기, 76~86 취소, 87~89 입금 기한 만료,
+	# 90~94 부분취소, 나머지 DONE. 가상계좌는 입금 대기·만료 전부와 DONE 의 일부(n % 14 = 0)로 전체의 약 10%다.
+	local h_pay va_cond
+	h_pay=$(order_bucket_sql "n")
+	va_cond="(${h_pay} BETWEEN 74 AND 75 OR ${h_pay} BETWEEN 87 AND 89 OR (${h_pay} < 74 AND n % 14 = 0))"
+
 	mysql_perf "
 		INSERT INTO payment (order_id, payment_key, toss_order_id, method, amount, status, approved_at,
-			canceled_at, fail_reason, created_at, updated_at)
+			canceled_at, fail_reason, created_at, updated_at, canceled_amount, va_bank_code, va_account_number,
+			va_customer_name, va_due_date)
 		SELECT
 			n,
-			CASE WHEN n % 100 < 98 THEN CONCAT('perf_payment_key_', n) ELSE NULL END,
+			CASE WHEN ${h_pay} >= 95 THEN NULL ELSE CONCAT('perf_payment_key_', n) END,
 			CONCAT('PERF-TOSS-', n),
-			'CARD',
+			IF(${va_cond}, 'VIRTUAL_ACCOUNT', 'CARD'),
 			15000 + (n * 991) % 85000,
-			CASE WHEN n % 100 < 90 THEN 'DONE' WHEN n % 100 < 98 THEN 'CANCELED' ELSE 'FAILED' END,
-			CASE WHEN n % 100 < 98 THEN DATE_SUB(NOW(6), INTERVAL (n % 730) DAY) ELSE NULL END,
-			CASE WHEN n % 100 >= 90 AND n % 100 < 98
-				THEN DATE_ADD(DATE_SUB(NOW(6), INTERVAL (n % 730) DAY), INTERVAL 1 DAY)
+			CASE
+				WHEN ${h_pay} >= 95 THEN 'FAILED'
+				WHEN ${h_pay} BETWEEN 74 AND 75 THEN 'WAITING_FOR_DEPOSIT'
+				WHEN ${h_pay} BETWEEN 76 AND 89 THEN 'CANCELED'
+				WHEN ${h_pay} BETWEEN 90 AND 94 THEN 'PARTIAL_CANCELED'
+				ELSE 'DONE'
+			END,
+			CASE WHEN ${h_pay} >= 95 OR ${h_pay} BETWEEN 74 AND 75 OR ${h_pay} BETWEEN 87 AND 89 THEN NULL
+				ELSE DATE_SUB(NOW(6), INTERVAL (n % 730) DAY) END,
+			CASE WHEN ${h_pay} BETWEEN 76 AND 89
+				THEN LEAST(DATE_ADD(DATE_SUB(NOW(6), INTERVAL (n % 730) DAY), INTERVAL 1 DAY), NOW(6))
 				ELSE NULL END,
-			CASE WHEN n % 100 >= 98 THEN 'PERF_TEST_FAILURE' ELSE NULL END,
+			CASE WHEN ${h_pay} >= 95 THEN 'PERF_TEST_FAILURE' ELSE NULL END,
 			NOW(6),
-			NOW(6)
+			NOW(6),
+			CASE
+				WHEN ${h_pay} BETWEEN 76 AND 86 THEN 15000 + (n * 991) % 85000
+				WHEN ${h_pay} BETWEEN 90 AND 94 THEN FLOOR((15000 + (n * 991) % 85000) / 2)
+				ELSE 0
+			END,
+			IF(${va_cond}, ELT(1 + (n % 5), '88', '20', '04', '11', '03'), NULL),
+			IF(${va_cond}, CONCAT('1002', LPAD(n, 10, '0')), NULL),
+			IF(${va_cond}, CONCAT('Perf Recipient ', n), NULL),
+			IF(${va_cond}, DATE_ADD(DATE_SUB(NOW(6), INTERVAL (n % 730) DAY), INTERVAL 7 DAY), NULL)
 		FROM numbers WHERE n <= ${payment_n};
 	"
 	echo "[시드] payment ${payment_n}건"
+
+	mysql_perf "
+		-- V27 백필과 같은 규칙: 승인된 적 있는 취소·부분취소 결제마다 완료된 취소 건 1행
+		INSERT INTO payment_cancel (payment_id, idempotency_key, cancel_amount, status, reason, requested_at,
+			done_at, created_at, updated_at)
+		SELECT
+			p.id,
+			CONCAT('perf-cancel-', p.id),
+			p.canceled_amount,
+			'DONE',
+			'perf cancel',
+			LEAST(DATE_ADD(p.approved_at, INTERVAL 1 DAY), NOW(6)),
+			LEAST(DATE_ADD(p.approved_at, INTERVAL 1 DAY), NOW(6)),
+			NOW(6),
+			NOW(6)
+		FROM payment p
+		WHERE p.status IN ('CANCELED', 'PARTIAL_CANCELED') AND p.approved_at IS NOT NULL;
+	"
+	echo "[시드] payment_cancel $(mysql_perf "SELECT COUNT(*) FROM payment_cancel;")건"
+
+	mysql_perf "
+		-- 클레임이 걸린 상품주문마다 클레임 1건. 상태는 order_item.claim_status 에서 뒤집어 만든다.
+		INSERT INTO order_claim (order_item_id, type, status, reason, reject_reason, restock, requested_at,
+			resolved_at, created_at, updated_at)
+		SELECT
+			oi.id,
+			IF(oi.claim_status LIKE 'CANCEL%', 'CANCEL', 'RETURN'),
+			CASE oi.claim_status
+				WHEN 'CANCEL_REQUEST' THEN 'REQUESTED'
+				WHEN 'RETURN_REQUEST' THEN 'REQUESTED'
+				WHEN 'COLLECTING' THEN 'COLLECTING'
+				WHEN 'CANCEL_DONE' THEN 'DONE'
+				WHEN 'RETURN_DONE' THEN 'DONE'
+				ELSE 'REJECTED'
+			END,
+			'perf claim',
+			IF(oi.claim_status LIKE '%REJECT', 'perf reject', NULL),
+			IF(oi.claim_status = 'RETURN_DONE', 1, NULL),
+			DATE_ADD(oi.created_at, INTERVAL 2 DAY),
+			IF(oi.claim_status IN ('CANCEL_DONE', 'RETURN_DONE', 'CANCEL_REJECT', 'RETURN_REJECT'),
+				DATE_ADD(oi.created_at, INTERVAL 3 DAY), NULL),
+			DATE_ADD(oi.created_at, INTERVAL 2 DAY),
+			NOW(6)
+		FROM order_item oi
+		WHERE oi.claim_status IS NOT NULL;
+	"
+	echo "[시드] order_claim $(mysql_perf "SELECT COUNT(*) FROM order_claim;")건"
 
 	mysql_perf "
 		INSERT INTO review (rating, title, content, product_id, member_id, created_at, updated_at)
@@ -948,18 +1114,20 @@ analyze_tables() {
 	echo "[통계] ANALYZE TABLE 실행"
 	mysql_perf "ANALYZE TABLE member, artist, label, genre, album, product, product_genre, product_image,
 		orders, order_item, payment, review, notification, wishlist, coupon, member_coupon, album_watch,
-		limited_drop, limited_purchase, limited_drop_stat, product_view_log;" > /dev/null
+		limited_drop, limited_purchase, limited_drop_stat, product_view_log, order_claim, payment_cancel;" > /dev/null
 }
 
 # EXPLAIN ANALYZE 결과 텍스트의 첫 줄에서 접근 방식과 마지막 actual time 값을 뽑는다.
 # 파싱이 실패해도(형식이 바뀌는 등) 스크립트가 죽지 않게 항상 값을 채워 반환한다.
 parse_summary() {
-	local text="$1"
+	local text="$1" range="${2:-}"
 	local first_line access time_val flags=""
 	first_line=$(printf '%s\n' "${text}" | head -n 1)
 	access=$(printf '%s' "${first_line}" | grep -oE '^-> [^(]+' | sed -E 's/^-> //; s/ +$//' || true)
-	time_val=$(printf '%s' "${first_line}" | grep -oE 'actual time=[0-9.e+-]+\.\.[0-9.e+-]+' \
-		| sed -E 's/.*\.\.//' || true)
+	time_val=$(first_line_time "${text}")
+	if printf '%s' "${access}" | grep -q 'Rows fetched before execution'; then
+		access="Rows fetched before execution + 서브쿼리 합"
+	fi
 	# 'sort' 로 찾으면 idx_product_image_product 의 sort_order 컬럼에 걸린다. 계획 노드 'Sort:' 만 본다.
 	if printf '%s' "${text}" | grep -q 'Sort:'; then
 		flags="${flags}Sort "
@@ -969,10 +1137,52 @@ parse_summary() {
 	fi
 	[ -z "${access}" ] && access="(파싱 실패)"
 	[ -z "${time_val}" ] && time_val="?"
+	[ -n "${range}" ] && time_val="${time_val}ms [${range}]" || time_val="${time_val}ms"
 	if [ -n "${flags}" ]; then
-		echo "${access} / ${time_val}ms (${flags% })"
+		echo "${access} / ${time_val} (${flags% })"
 	else
-		echo "${access} / ${time_val}ms"
+		echo "${access} / ${time_val}"
+	fi
+}
+
+# 계획 전체의 소요 시간(ms). 못 뽑으면 0 을 돌려줘 정렬은 깨지지 않게 한다.
+# 스칼라 서브쿼리만 있는 SELECT 는 첫 줄이 "Rows fetched before execution"(0.0001ms)이고 실제 비용은 그 아래
+# "Select #N" 밑에 달린다. 이때는 그 서브쿼리 루트들의 시간을 합한다.
+first_line_time() {
+	local value
+	if printf '%s\n' "$1" | head -n 1 | grep -q 'Rows fetched before execution'; then
+		value=$(printf '%s\n' "$1" | awk '
+			/^    -> / && match($0, /actual time=[0-9.e+-]+\.\.[0-9.e+-]+/) {
+				t = substr($0, RSTART, RLENGTH)
+				sub(/.*\.\./, "", t)
+				sum += t
+			}
+			END { printf "%.3f", sum }')
+	else
+		value=$(printf '%s\n' "$1" | head -n 1 | grep -oE 'actual time=[0-9.e+-]+\.\.[0-9.e+-]+' \
+			| sed -E 's/.*\.\.//' || true)
+	fi
+	printf '%s' "${value:-0}"
+}
+
+# 결과 행 수. 컬럼명이 겹치는 SELECT 는 파생 테이블로 감쌀 수 없어(중복 컬럼) EXPLAIN ANALYZE 첫 줄의 rows= 로 대신한다.
+count_result_rows() {
+	local sql="$1" analyze="$2" value
+	if value=$(mysql_perf "SELECT COUNT(*) FROM (
+${sql}
+) t" 2>/dev/null); then
+		printf '%s' "${value}"
+		return 0
+	fi
+	value=$(printf '%s\n' "${analyze}" | head -n 1 | grep -oE 'actual time=[^)]*rows=[0-9]+' \
+		| sed -E 's/.*rows=//' || true)
+	printf '%s' "${value:-?}"
+}
+
+# 관리자 상품주문 건수(A10·A12~A14): member 는 키워드 검색에만 필요하다. after 는 키워드가 없을 때 조인을 뺀 형태.
+admin_order_item_count_member_join() {
+	if [ "$1" = before ]; then
+		echo "JOIN member m ON m.id = o.member_id"
 	fi
 }
 
@@ -984,7 +1194,7 @@ get_case_sql() {
 	case "${id}" in
 	P1)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=LATEST, 필터 없음, memberId=NULL
+			-- ProductSearchMapper.xml#searchProducts, sort=LATEST, 필터 없음, memberId=NULL
 			-- (대표 프레싱 축약: 파생 테이블 + ROW_NUMBER() OVER (PARTITION BY album_id))
 			SELECT
 				t.id, t.title, t.artist_name, t.label_name, t.price,
@@ -1018,7 +1228,7 @@ get_case_sql() {
 		;;
 	P2)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=LATEST, keyword='Pressing 12'
+			-- ProductSearchMapper.xml#searchProducts, sort=LATEST, keyword='Pressing 12'
 			SELECT
 				t.id, t.title, t.artist_name, t.label_name, t.price,
 				t.color_variant, t.pressing_info, t.status,
@@ -1052,7 +1262,7 @@ get_case_sql() {
 		;;
 	P3)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=LATEST, genreIds=(${GENRE_ID_1},${GENRE_ID_2}),
+			-- ProductSearchMapper.xml#searchProducts, sort=LATEST, genreIds=(${GENRE_ID_1},${GENRE_ID_2}),
 			-- price 30000~60000
 			SELECT
 				t.id, t.title, t.artist_name, t.label_name, t.price,
@@ -1092,7 +1302,7 @@ get_case_sql() {
 		;;
 	P4)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=PRICE_ASC, price 30000~60000
+			-- ProductSearchMapper.xml#searchProducts, sort=PRICE_ASC, price 30000~60000
 			SELECT
 				t.id, t.title, t.artist_name, t.label_name, t.price,
 				t.color_variant, t.pressing_info, t.status,
@@ -1126,7 +1336,7 @@ get_case_sql() {
 		;;
 	P5)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=POPULAR, 필터 없음 (product.sold_quantity 비정규화 컬럼)
+			-- ProductSearchMapper.xml#searchProducts, sort=POPULAR, 필터 없음 (product.sold_quantity 비정규화 컬럼)
 			SELECT
 				t.id, t.title, t.artist_name, t.label_name, t.price,
 				t.color_variant, t.pressing_info, t.status,
@@ -1160,7 +1370,7 @@ get_case_sql() {
 		;;
 	P6)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=RATING, 필터 없음
+			-- ProductSearchMapper.xml#searchProducts, sort=RATING, 필터 없음
 			SELECT
 				t.id, t.title, t.artist_name, t.label_name, t.price,
 				t.color_variant, t.pressing_info, t.status,
@@ -1194,7 +1404,7 @@ get_case_sql() {
 		;;
 	P7)
 		cat <<-SQL
-			-- ProductSearchMapper.xml countProducts, 무필터 (albumId 필터가 없으면 COUNT(DISTINCT album_id))
+			-- ProductSearchMapper.xml#countProducts, 무필터 (albumId 필터가 없으면 COUNT(DISTINCT album_id))
 			SELECT COUNT(DISTINCT p.album_id)
 			FROM product p
 			JOIN artist a ON a.id = p.artist_id
@@ -1204,7 +1414,7 @@ get_case_sql() {
 		;;
 	P8)
 		cat <<-SQL
-			-- ProductSearchMapper.xml searchProducts, sort=PRICE_DESC, 필터 없음
+			-- ProductSearchMapper.xml#searchProducts, sort=PRICE_DESC, 필터 없음
 			SELECT
 				t.id, t.title, t.artist_name, t.label_name, t.price,
 				t.color_variant, t.pressing_info, t.status,
@@ -1237,10 +1447,9 @@ get_case_sql() {
 		;;
 	O1)
 		cat <<-SQL
-			-- OrderQueryMapper.xml findMyOrders, member_id=${TARGET_MEMBER_ID}, status 없음
+			-- OrderQueryMapper.xml#findMyOrders, member_id=${TARGET_MEMBER_ID}, statusGroup 없음
 			SELECT
-				o.id, o.order_number, o.status, o.final_amount, o.discount_amount, c.name AS coupon_name,
-				o.created_at,
+				o.id, o.order_number, o.status, o.final_amount, o.discount_amount, c.name AS coupon_name, o.created_at,
 				(SELECT oi.product_name_snapshot FROM order_item oi
 					WHERE oi.order_id = o.id ORDER BY oi.id LIMIT 1) AS representative_product_name,
 				(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count,
@@ -1252,16 +1461,16 @@ get_case_sql() {
 			LEFT JOIN member_coupon mc ON mc.id = o.member_coupon_id
 			LEFT JOIN coupon c ON c.id = mc.coupon_id
 			WHERE o.member_id = ${TARGET_MEMBER_ID}
-			ORDER BY o.created_at DESC, o.id DESC
+			AND o.placed_at IS NOT NULL
+			ORDER BY o.placed_at DESC, o.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	O2)
 		cat <<-SQL
-			-- OrderQueryMapper.xml findMyOrders, member_id=${TARGET_MEMBER_ID}, status=DELIVERED
+			-- OrderQueryMapper.xml#findMyOrders, member_id=${TARGET_MEMBER_ID}, statusGroup=DELIVERED
 			SELECT
-				o.id, o.order_number, o.status, o.final_amount, o.discount_amount, c.name AS coupon_name,
-				o.created_at,
+				o.id, o.order_number, o.status, o.final_amount, o.discount_amount, c.name AS coupon_name, o.created_at,
 				(SELECT oi.product_name_snapshot FROM order_item oi
 					WHERE oi.order_id = o.id ORDER BY oi.id LIMIT 1) AS representative_product_name,
 				(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count,
@@ -1273,77 +1482,233 @@ get_case_sql() {
 			LEFT JOIN member_coupon mc ON mc.id = o.member_coupon_id
 			LEFT JOIN coupon c ON c.id = mc.coupon_id
 			WHERE o.member_id = ${TARGET_MEMBER_ID}
-			AND o.status = 'DELIVERED'
-			ORDER BY o.created_at DESC, o.id DESC
+			AND o.placed_at IS NOT NULL
+			AND EXISTS (
+				SELECT 1 FROM order_item oi
+				WHERE oi.order_id = o.id
+				AND (
+					oi.status IN ('DELIVERED')
+				)
+			)
+			ORDER BY o.placed_at DESC, o.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	O3)
 		cat <<-SQL
-			-- OrderQueryMapper.xml countMyOrders, member_id=${TARGET_MEMBER_ID}
+			-- OrderQueryMapper.xml#countMyOrders, member_id=${TARGET_MEMBER_ID}
 			SELECT COUNT(*)
 			FROM orders o
 			WHERE o.member_id = ${TARGET_MEMBER_ID}
+			AND o.placed_at IS NOT NULL
 		SQL
 		;;
 	A1)
 		cat <<-SQL
-			-- OrderQueryMapper.xml findAdminOrders, 무필터
+			-- OrderQueryMapper.xml#findAdminOrders, 무필터
 			SELECT
 				o.id, o.order_number, m.email AS member_email, o.status, o.final_amount, o.created_at,
 				(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count
 			FROM orders o
 			JOIN member m ON m.id = o.member_id
-			ORDER BY o.created_at DESC, o.id DESC
+			WHERE o.placed_at IS NOT NULL
+			ORDER BY o.placed_at DESC, o.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	A2)
 		cat <<-SQL
-			-- OrderQueryMapper.xml findAdminOrders, status=PAID
+			-- OrderQueryMapper.xml#findAdminOrders, status=PAID
 			SELECT
 				o.id, o.order_number, m.email AS member_email, o.status, o.final_amount, o.created_at,
 				(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count
 			FROM orders o
 			JOIN member m ON m.id = o.member_id
-			WHERE o.status = 'PAID'
-			ORDER BY o.created_at DESC, o.id DESC
+			WHERE o.placed_at IS NOT NULL
+			AND o.status = 'PAID'
+			ORDER BY o.placed_at DESC, o.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	A3)
 		cat <<-SQL
-			-- OrderQueryMapper.xml findAdminOrders, created_at 최근 30일
+			-- OrderQueryMapper.xml#findAdminOrders, created_at 최근 30일(오늘 0시 기준 30일 전 ~ 내일 0시)
 			SELECT
 				o.id, o.order_number, m.email AS member_email, o.status, o.final_amount, o.created_at,
 				(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count
 			FROM orders o
 			JOIN member m ON m.id = o.member_id
-			WHERE o.created_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY)
-			AND o.created_at < NOW(6)
-			ORDER BY o.created_at DESC, o.id DESC
+			WHERE o.placed_at IS NOT NULL
+			AND o.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+			AND o.created_at < CURDATE() + INTERVAL 1 DAY
+			ORDER BY o.placed_at DESC, o.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	A4)
 		cat <<-SQL
-			-- OrderQueryMapper.xml findAdminOrders, keyword='perf12'
+			-- OrderQueryMapper.xml#findAdminOrders, keyword='perf12'
 			SELECT
 				o.id, o.order_number, m.email AS member_email, o.status, o.final_amount, o.created_at,
 				(SELECT COUNT(*) FROM order_item oi WHERE oi.order_id = o.id) AS item_count
 			FROM orders o
 			JOIN member m ON m.id = o.member_id
-			WHERE (m.email LIKE '%perf12%' OR o.order_number LIKE '%perf12%')
-			ORDER BY o.created_at DESC, o.id DESC
+			WHERE o.placed_at IS NOT NULL
+			AND (m.email LIKE '%perf12%' OR o.order_number LIKE '%perf12%')
+			ORDER BY o.placed_at DESC, o.id DESC
 			LIMIT 20 OFFSET 0
 		SQL
 		;;
 	A5)
 		cat <<-SQL
-			-- OrderQueryMapper.xml countAdminOrders, 무필터
+			-- OrderQueryMapper.xml#countAdminOrders, 무필터
 			SELECT COUNT(*)
 			FROM orders o
 			JOIN member m ON m.id = o.member_id
+			WHERE o.placed_at IS NOT NULL
+		SQL
+		;;
+	A6)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#findAdminOrderItems, statusGroup/keyword/기간 없음
+			SELECT
+				oi.id, oi.order_id, oi.product_order_number, o.order_number, m.email AS member_email,
+				oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
+				oi.courier_code, oi.tracking_number, oi.created_at,
+				EXISTS (SELECT 1 FROM payment p WHERE p.order_id = o.id AND p.va_bank_code IS NOT NULL)
+					AS virtual_account_payment
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			JOIN member m ON m.id = o.member_id
+			WHERE o.placed_at IS NOT NULL
+			ORDER BY oi.created_at DESC, oi.id DESC
+			LIMIT 20 OFFSET 0
+		SQL
+		;;
+	A7)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#findAdminOrderItems, statusGroup=PREPARING
+			SELECT
+				oi.id, oi.order_id, oi.product_order_number, o.order_number, m.email AS member_email,
+				oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
+				oi.courier_code, oi.tracking_number, oi.created_at,
+				EXISTS (SELECT 1 FROM payment p WHERE p.order_id = o.id AND p.va_bank_code IS NOT NULL)
+					AS virtual_account_payment
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			JOIN member m ON m.id = o.member_id
+			WHERE o.placed_at IS NOT NULL
+			AND (
+				oi.status IN ('PREPARING')
+			)
+			ORDER BY oi.created_at DESC, oi.id DESC
+			LIMIT 20 OFFSET 0
+		SQL
+		;;
+	A8)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#findAdminOrderItems, 기간 최근 30일(오늘 0시 기준 30일 전 ~ 내일 0시)
+			SELECT
+				oi.id, oi.order_id, oi.product_order_number, o.order_number, m.email AS member_email,
+				oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
+				oi.courier_code, oi.tracking_number, oi.created_at,
+				EXISTS (SELECT 1 FROM payment p WHERE p.order_id = o.id AND p.va_bank_code IS NOT NULL)
+					AS virtual_account_payment
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			JOIN member m ON m.id = o.member_id
+			WHERE o.placed_at IS NOT NULL
+			AND oi.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+			AND oi.created_at < CURDATE() + INTERVAL 1 DAY
+			ORDER BY oi.created_at DESC, oi.id DESC
+			LIMIT 20 OFFSET 0
+		SQL
+		;;
+	A9)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#findAdminOrderItems, statusGroup=CANCEL_RETURN
+			SELECT
+				oi.id, oi.order_id, oi.product_order_number, o.order_number, m.email AS member_email,
+				oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
+				oi.courier_code, oi.tracking_number, oi.created_at,
+				EXISTS (SELECT 1 FROM payment p WHERE p.order_id = o.id AND p.va_bank_code IS NOT NULL)
+					AS virtual_account_payment
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			JOIN member m ON m.id = o.member_id
+			WHERE o.placed_at IS NOT NULL
+			AND (
+				oi.status IN ('CANCELED', 'RETURNED', 'CANCELED_BY_NOPAYMENT')
+				OR oi.claim_status IN ('CANCEL_REQUEST', 'RETURN_REQUEST', 'COLLECTING', 'CANCEL_DONE', 'RETURN_DONE')
+			)
+			ORDER BY oi.created_at DESC, oi.id DESC
+			LIMIT 20 OFFSET 0
+		SQL
+		;;
+	A10)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#countAdminOrderItems, 무필터
+			SELECT COUNT(*)
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			$(admin_order_item_count_member_join "${phase}")
+			WHERE o.placed_at IS NOT NULL
+		SQL
+		;;
+	A11)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#findAdminOrderItems, 무필터, page=100 (OFFSET 2000)
+			SELECT
+				oi.id, oi.order_id, oi.product_order_number, o.order_number, m.email AS member_email,
+				oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
+				oi.courier_code, oi.tracking_number, oi.created_at,
+				EXISTS (SELECT 1 FROM payment p WHERE p.order_id = o.id AND p.va_bank_code IS NOT NULL)
+					AS virtual_account_payment
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			JOIN member m ON m.id = o.member_id
+			WHERE o.placed_at IS NOT NULL
+			ORDER BY oi.created_at DESC, oi.id DESC
+			LIMIT 20 OFFSET 2000
+		SQL
+		;;
+	A12)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#countAdminOrderItems, statusGroup=PREPARING
+			SELECT COUNT(*)
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			$(admin_order_item_count_member_join "${phase}")
+			WHERE o.placed_at IS NOT NULL
+			AND (
+				oi.status IN ('PREPARING')
+			)
+		SQL
+		;;
+	A13)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#countAdminOrderItems, statusGroup=CANCEL_RETURN
+			SELECT COUNT(*)
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			$(admin_order_item_count_member_join "${phase}")
+			WHERE o.placed_at IS NOT NULL
+			AND (
+				oi.status IN ('CANCELED', 'RETURNED', 'CANCELED_BY_NOPAYMENT')
+				OR oi.claim_status IN ('CANCEL_REQUEST', 'RETURN_REQUEST', 'COLLECTING', 'CANCEL_DONE', 'RETURN_DONE')
+			)
+		SQL
+		;;
+	A14)
+		cat <<-SQL
+			-- OrderQueryMapper.xml#countAdminOrderItems, 기간 최근 30일(오늘 0시 기준 30일 전 ~ 내일 0시)
+			SELECT COUNT(*)
+			FROM order_item oi
+			JOIN orders o ON o.id = oi.order_id
+			$(admin_order_item_count_member_join "${phase}")
+			WHERE o.placed_at IS NOT NULL
+			AND oi.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+			AND oi.created_at < CURDATE() + INTERVAL 1 DAY
 		SQL
 		;;
 	R1)
@@ -1417,7 +1782,7 @@ get_case_sql() {
 	S1)
 		if [ "${phase}" = before ]; then
 			cat <<-SQL
-				-- AdminStatsMapper.xml findDailySales, 최근 30일 (before: payment UNION ALL + DATE() GROUP BY)
+				-- AdminStatsMapper.xml#findDailySales, 최근 30일 (before: payment UNION ALL + DATE() GROUP BY)
 				SELECT d.sale_date, SUM(d.order_count) AS order_count, SUM(d.sales_amount) AS sales_amount,
 					SUM(d.cancel_amount) AS cancel_amount
 				FROM (
@@ -1436,7 +1801,7 @@ get_case_sql() {
 			SQL
 		else
 			cat <<-SQL
-				-- AdminStatsMapper.xml findDailySales, 최근 30일 (after: sales_daily 를 sale_date 범위로 읽는다)
+				-- AdminStatsMapper.xml#findDailySales, 최근 30일 (after: sales_daily 를 sale_date 범위로 읽는다)
 				SELECT s.sale_date, s.order_count, s.sales_amount, s.cancel_amount
 				FROM sales_daily s
 				WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND s.sale_date <= CURDATE()
@@ -1445,54 +1810,41 @@ get_case_sql() {
 		fi
 		;;
 	S2)
-		if [ "${phase}" = before ]; then
-			cat <<-SQL
-				-- AdminStatsMapper.xml findSummary, 오늘 (before: 스칼라 서브쿼리 2개)
-				SELECT
-					COALESCE((SELECT SUM(p.amount) FROM payment p
-						WHERE p.status IN ('DONE', 'CANCELED')
-						AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY), 0)
-						AS today_sales_amount,
-					(SELECT COUNT(*) FROM payment p
-						WHERE p.status IN ('DONE', 'CANCELED')
-						AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY)
-						AS today_order_count,
-					(SELECT COUNT(*) FROM member m
-						WHERE m.created_at >= CURDATE() AND m.created_at < CURDATE() + INTERVAL 1 DAY)
-						AS today_new_member_count,
-					(SELECT COUNT(*) FROM orders o WHERE o.status = 'PENDING') AS pending_order_count
-			SQL
-		else
-			cat <<-SQL
-				-- AdminStatsMapper.xml findSummary, 오늘 (after: 파생 테이블 병합)
-				SELECT
-					COALESCE(t.sales_amount, 0) AS today_sales_amount,
-					COALESCE(c.cancel_amount, 0) AS today_cancel_amount,
-					COALESCE(t.order_count, 0) AS today_order_count,
-					(SELECT COUNT(*) FROM member m
-						WHERE m.created_at >= CURDATE() AND m.created_at < CURDATE() + INTERVAL 1 DAY)
-						AS today_new_member_count,
-					(SELECT COUNT(*) FROM orders o WHERE o.status = 'PENDING') AS pending_order_count
-				FROM (
-					SELECT SUM(p.amount) AS sales_amount, COUNT(*) AS order_count
-					FROM payment p
-					WHERE p.status IN ('DONE', 'CANCELED')
-					AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY
-				) t,
-				-- 승인일과 취소일이 다를 수 있어 취소는 취소일 기준으로 따로 센다.
-				(
-					SELECT SUM(p.amount) AS cancel_amount
-					FROM payment p
-					WHERE p.status = 'CANCELED'
-					AND p.canceled_at >= CURDATE() AND p.canceled_at < CURDATE() + INTERVAL 1 DAY
-				) c
-			SQL
-		fi
+		cat <<-SQL
+			-- AdminStatsMapper.xml#findSummary, todayStart=오늘 0시, tomorrowStart=내일 0시
+			SELECT
+				COALESCE(t.sales_amount, 0) AS today_sales_amount,
+				COALESCE(c.cancel_amount, 0) AS today_cancel_amount,
+				COALESCE(t.order_count, 0) AS today_order_count,
+				(SELECT COUNT(*) FROM member m
+					WHERE m.created_at >= CURDATE() AND m.created_at < CURDATE() + INTERVAL 1 DAY) AS today_new_member_count,
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.status = 'PAID' AND o.placed_at IS NOT NULL) AS new_order_count,
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.status = 'PAYMENT_WAITING' AND o.placed_at IS NOT NULL) AS deposit_waiting_count,
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.claim_status = 'CANCEL_REQUEST' AND o.placed_at IS NOT NULL) AS cancel_request_count,
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.claim_status IN ('RETURN_REQUEST', 'COLLECTING') AND o.placed_at IS NOT NULL)
+					AS return_request_count
+			FROM (
+				SELECT SUM(p.amount) AS sales_amount, COUNT(*) AS order_count
+				FROM payment p
+				WHERE p.status IN ('DONE', 'CANCELED', 'PARTIAL_CANCELED')
+				AND p.approved_at >= CURDATE() AND p.approved_at < CURDATE() + INTERVAL 1 DAY
+			) t,
+			(
+				SELECT SUM(pc.cancel_amount) AS cancel_amount
+				FROM payment_cancel pc
+				WHERE pc.status = 'DONE'
+				AND pc.done_at >= CURDATE() AND pc.done_at < CURDATE() + INTERVAL 1 DAY
+			) c
+		SQL
 		;;
 	S3)
 		if [ "${phase}" = before ]; then
 			cat <<-SQL
-				-- AdminStatsMapper.xml findPopularProducts, 최근 30일 (before: 4중 조인 GROUP BY)
+				-- AdminStatsMapper.xml#findPopularProducts, 최근 30일 (before: 4중 조인 GROUP BY)
 				SELECT
 					pr.id, pr.title, a.name AS artist_name,
 					SUM(oi.quantity) AS sold_quantity,
@@ -1503,7 +1855,7 @@ get_case_sql() {
 				JOIN payment p ON p.order_id = o.id
 				JOIN product pr ON pr.id = oi.product_id
 				JOIN artist a ON a.id = pr.artist_id
-				WHERE o.status IN ('PAID', 'PREPARING', 'SHIPPED', 'DELIVERED')
+				WHERE oi.status IN ('PAID', 'PREPARING', 'SHIPPING', 'DELIVERED', 'PURCHASE_CONFIRMED')
 				AND p.approved_at >= DATE_SUB(NOW(6), INTERVAL 30 DAY) AND p.approved_at < NOW(6)
 				GROUP BY pr.id, pr.title, a.name
 				ORDER BY sold_quantity DESC, sales_amount DESC, pr.id DESC
@@ -1511,7 +1863,7 @@ get_case_sql() {
 			SQL
 		else
 			cat <<-SQL
-				-- AdminStatsMapper.xml findPopularProducts, 최근 30일
+				-- AdminStatsMapper.xml#findPopularProducts, 최근 30일
 				-- (after: sales_daily_product 를 상품 단위로 합산한 파생 테이블에서 정렬·LIMIT 을 먼저 끝내고
 				-- product/artist 는 그 결과에만 조인한다)
 				SELECT pr.id, pr.title, a.name AS artist_name, t.sold_quantity, t.sales_amount, t.order_count
@@ -1530,10 +1882,31 @@ get_case_sql() {
 			SQL
 		fi
 		;;
+	S4)
+		cat <<-SQL
+			-- AdminStatsMapper.xml#findSummary 의 claim_status 건수 서브쿼리 2개만 떼어냄
+			SELECT
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.claim_status = 'CANCEL_REQUEST' AND o.placed_at IS NOT NULL) AS cancel_request_count,
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.claim_status IN ('RETURN_REQUEST', 'COLLECTING') AND o.placed_at IS NOT NULL)
+					AS return_request_count
+		SQL
+		;;
+	S5)
+		cat <<-SQL
+			-- AdminStatsMapper.xml#findSummary 의 status 건수 서브쿼리 2개만 떼어냄
+			SELECT
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.status = 'PAID' AND o.placed_at IS NOT NULL) AS new_order_count,
+				(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
+					WHERE oi.status = 'PAYMENT_WAITING' AND o.placed_at IS NOT NULL) AS deposit_waiting_count
+		SQL
+		;;
 	M1)
 		if [ "${phase}" = before ]; then
 			cat <<-SQL
-				-- MemberQueryMapper.xml findActivitySummary, member_id=${TARGET_MEMBER_ID}
+				-- MemberQueryMapper.xml#findActivitySummary, member_id=${TARGET_MEMBER_ID}
 				-- (before: memberOrderStats 파생 테이블, 전 회원 GROUP BY 후 한 행만 남긴다)
 				SELECT
 					COALESCE(o.order_count, 0) AS order_count,
@@ -1564,16 +1937,16 @@ get_case_sql() {
 			SQL
 		else
 			cat <<-SQL
-				-- MemberQueryMapper.xml findActivitySummary, member_id=${TARGET_MEMBER_ID}
+				-- MemberQueryMapper.xml#findActivitySummary, member_id=${TARGET_MEMBER_ID}
 				-- (after: 상관 서브쿼리, 회원 조건이 안쪽으로 들어간다)
 				SELECT
 					(SELECT COUNT(*) FROM orders o
 						WHERE o.member_id = m.id
 						AND o.status NOT IN ('PENDING', 'CANCELED')) AS order_count,
-					COALESCE((SELECT SUM(p.amount) FROM payment p
+					COALESCE((SELECT SUM(p.amount - p.canceled_amount) FROM payment p
 						JOIN orders o2 ON o2.id = p.order_id
 						WHERE o2.member_id = m.id
-						AND p.status = 'DONE'), 0) AS total_payment_amount,
+						AND p.status IN ('DONE', 'PARTIAL_CANCELED')), 0) AS total_payment_amount,
 					(SELECT COUNT(*) FROM member_coupon mc2
 						JOIN coupon c ON c.id = mc2.coupon_id
 						WHERE mc2.member_id = m.id
@@ -1603,7 +1976,7 @@ get_case_sql() {
 	L1)
 		if [ "${phase}" = before ]; then
 			cat <<-SQL
-				-- AdminStatsMapper.xml findLimitedDropStats (before: 상관 서브쿼리 2회, 페이징 없음)
+				-- AdminStatsMapper.xml#findLimitedDropStats (before: 상관 서브쿼리 2회, 페이징 없음)
 				SELECT
 					ld.id, pr.title, ld.status, ld.total_quantity, ld.sold_count,
 					ROUND(ld.sold_count * 100 / ld.total_quantity, 1) AS sell_rate,
@@ -1623,7 +1996,7 @@ get_case_sql() {
 			SQL
 		else
 			cat <<-SQL
-				-- AdminStatsMapper.xml findLimitedDropStats (after: sold_out_at 비정규화 컬럼 + LIMIT 20 OFFSET 0)
+				-- AdminStatsMapper.xml#findLimitedDropStats (after: sold_out_at 비정규화 컬럼 + LIMIT 20 OFFSET 0)
 				SELECT
 					ld.id, pr.title, ld.status, ld.total_quantity, ld.sold_count,
 					ROUND(ld.sold_count * 100 / ld.total_quantity, 1) AS sell_rate,
@@ -1640,7 +2013,7 @@ get_case_sql() {
 		;;
 	D1)
 		cat <<-SQL
-			-- DiscogsResyncMapper.xml findCandidates, viewPriority=true, visibleOnly=true, limit=150
+			-- DiscogsResyncMapper.xml#findCandidates, viewPriority=true, visibleOnly=true, limit=150
 			-- (5분 x maxCallsPerRun=150 = 우선순위 재검증 회당 예산, application.yml groove.catalog.resync)
 			SELECT p.id, p.discogs_release_id
 			FROM product p
@@ -1659,7 +2032,7 @@ get_case_sql() {
 		;;
 	D2)
 		cat <<-SQL
-			-- DiscogsResyncMapper.xml findCandidates, viewPriority=false, visibleOnly=false, limit=150
+			-- DiscogsResyncMapper.xml#findCandidates, viewPriority=false, visibleOnly=false, limit=150
 			-- (야간 스윕. HIDDEN 포함, discogs_synced_at 오름차순이라 다음 실행 맨 앞에 자동으로 이어붙는다)
 			SELECT p.id, p.discogs_release_id
 			FROM product p
@@ -1675,7 +2048,7 @@ get_case_sql() {
 				-- PaymentRepository.findReconcileCandidates, V21 이전(reconcile_attempts 컬럼 없음)
 				SELECT p.id, p.order_id, p.toss_order_id
 				FROM payment p
-				WHERE p.status IN ('READY', 'UNKNOWN')
+				WHERE p.status IN ('READY', 'UNKNOWN', 'CANCEL_REQUESTED')
 				AND p.updated_at < NOW(6) - INTERVAL 2 MINUTE
 				ORDER BY p.updated_at, p.id
 				LIMIT 50
@@ -1685,7 +2058,7 @@ get_case_sql() {
 				-- PaymentRepository.findReconcileCandidates, V21 이후(idx_payment_status_updated + reconcile_attempts)
 				SELECT p.id, p.order_id, p.toss_order_id
 				FROM payment p
-				WHERE p.status IN ('READY', 'UNKNOWN')
+				WHERE p.status IN ('READY', 'UNKNOWN', 'CANCEL_REQUESTED')
 				AND p.updated_at < NOW(6) - INTERVAL 2 MINUTE
 				AND p.reconcile_attempts < 10
 				ORDER BY p.updated_at, p.id
@@ -1724,7 +2097,8 @@ get_case_sql() {
 
 run_case() {
 	local phase="$1" id="$2"
-	local sql tree analyze summary i
+	local sql tree analyze summary i range sorted median_idx
+	local texts=() times=()
 	sql="$(get_case_sql "${id}" "${phase}")"
 
 	for i in 1 2 3; do
@@ -1732,12 +2106,33 @@ run_case() {
 	done
 
 	tree=$(mysql_perf "EXPLAIN FORMAT=TREE ${sql}")
-	analyze=$(mysql_perf "EXPLAIN ANALYZE ${sql}")
-	summary=$(parse_summary "${analyze}")
+	for i in $(seq 1 "${REPEAT}"); do
+		analyze=$(mysql_perf "EXPLAIN ANALYZE ${sql}")
+		texts+=("${analyze}")
+		times+=("$(first_line_time "${analyze}")")
+	done
+
+	# 시간 오름차순으로 세워 가운데 회차(짝수면 아래쪽)를 대표로 삼는다.
+	sorted=$(for i in $(seq 0 $((REPEAT - 1))); do echo "${times[$i]} $i"; done | sort -g)
+	median_idx=$(printf '%s\n' "${sorted}" | sed -n "$(( (REPEAT - 1) / 2 + 1 ))p" | awk '{print $2}')
+	analyze="${texts[$median_idx]}"
+	range=""
+	if [ "${REPEAT}" -gt 1 ]; then
+		range="$(printf '%s\n' "${sorted}" | head -n 1 | awk '{print $1}')~$(printf '%s\n' "${sorted}" | tail -n 1 | awk '{print $1}'), n=${REPEAT}"
+	fi
+	summary=$(parse_summary "${analyze}" "${range}")
 	set_summary "${phase}" "${id}" "${summary}"
 
+	if [ "${phase}" = before ] || [ "${RUN_BEFORE}" != true ]; then
+		printf -v "ROWS_${id}" '%s' "$(count_result_rows "${sql}" "${analyze}")"
+	fi
+
 	{
-		echo "#### ${id} / ${phase}"
+		if [ "${REPEAT}" -gt 1 ]; then
+			echo "#### ${id} / ${phase} (중앙값 회차, ${REPEAT}회 중)"
+		else
+			echo "#### ${id} / ${phase}"
+		fi
 		echo
 		echo '```sql'
 		echo "${sql}"
@@ -1761,6 +2156,7 @@ report() {
 	echo
 	echo "- 생성 시각: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 	echo "- scale: ${SCALE}"
+	echo "- repeat: ${REPEAT} (요약 표 시간은 중앙값, 대괄호는 min~max)"
 	if [ "${RUN_AFTER}" = true ]; then
 		echo "- after-ddl: ${AFTER_DDLS[*]}"
 	else
@@ -1769,11 +2165,11 @@ report() {
 	echo
 	echo "## 요약"
 	echo
-	echo "| 케이스 | 설명 | before 접근/시간 | after 접근/시간 |"
-	echo "|---|---|---|---|"
+	echo "| 케이스 | 설명 | 행 수 | before 접근/시간 | after 접근/시간 |"
+	echo "|---|---|---|---|---|"
 	local id
 	for id in "${CASE_IDS[@]}"; do
-		echo "| ${id} | $(case_desc "${id}") | $(get_summary before "${id}") | $(get_summary after "${id}") |"
+		echo "| ${id} | $(case_desc "${id}") | $(get_rows "${id}") | $(get_summary before "${id}") | $(get_summary after "${id}") |"
 	done
 	echo
 	echo "## 케이스 상세"

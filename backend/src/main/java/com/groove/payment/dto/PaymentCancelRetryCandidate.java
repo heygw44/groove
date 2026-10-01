@@ -12,6 +12,7 @@ public record PaymentCancelRetryCandidate(
 		BigDecimal cancelAmount,
 		String idempotencyKey,
 		String reason,
-		LocalDateTime requestedAt
+		LocalDateTime requestedAt,
+		Long orderClaimId
 ) {
 }

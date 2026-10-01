@@ -27,6 +27,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -110,6 +111,12 @@ public class OrderItem extends BaseTimeEntity {
 	@Column(name = "canceled_at")
 	private LocalDateTime canceledAt;
 
+	/** 락 이전 스냅샷으로 판단한 쓰기가 다른 트랜잭션의 변경을 덮어쓰지 못하게 하는 최종 방어선. 충돌은 409. */
+	@Version
+	@Column(nullable = false)
+	@ColumnDefault("0")
+	private Long version;
+
 	@Builder(access = PRIVATE)
 	private OrderItem(Order order, Product product, String productName, BigDecimal productPrice, int quantity,
 			String productOrderNumber) {
@@ -136,6 +143,11 @@ public class OrderItem extends BaseTimeEntity {
 
 	public BigDecimal getLineAmount() {
 		return this.productPrice.multiply(BigDecimal.valueOf(this.quantity));
+	}
+
+	/** 취소·반품 시 환불할 금액. 라인 금액에서 쿠폰 할인 배분 몫을 뺀다(D5). */
+	public BigDecimal getRefundableAmount() {
+		return getLineAmount().subtract(this.discountShare);
 	}
 
 	/** 결제 승인(카드·간편결제 즉시 승인 또는 가상계좌 입금 확인)으로 결제가 끝났음을 반영한다. */
@@ -172,39 +184,106 @@ public class OrderItem extends BaseTimeEntity {
 		this.canceledAt = now;
 	}
 
-	/** 관리자 발주확인. */
-	void moveToPreparing(LocalDateTime now) {
-		if (isTerminal()) {
-			return;
-		}
-		this.status = OrderItemStatus.PREPARING;
-		this.preparedAt = now;
-	}
-
-	/** 관리자 발송처리. */
-	void moveToShipping(LocalDateTime now) {
-		if (isTerminal()) {
-			return;
-		}
-		this.status = OrderItemStatus.SHIPPING;
-		this.shippedAt = now;
-	}
-
-	/** 배송완료(관리자 또는 자동). */
-	void moveToDelivered(LocalDateTime now) {
-		if (isTerminal()) {
-			return;
-		}
-		this.status = OrderItemStatus.DELIVERED;
-		this.deliveredAt = now;
-	}
-
 	/** 쿠폰 할인액을 라인 금액 비율로 나눈 몫을 반영한다. {@link DiscountAllocator} 에서만 호출한다. */
 	void applyDiscountShare(BigDecimal discountShare) {
 		this.discountShare = discountShare;
 	}
 
-	private boolean isTerminal() {
+	/** 환불 결과를 기다리는 동안(즉시 취소 포함) 또는 관리자 승인을 기다리는 동안 진행 중 클레임을 표시한다. */
+	public void markClaimRequested(OrderItemClaimStatus claimStatus) {
+		this.claimStatus = claimStatus;
+	}
+
+	/** 반품 수거가 시작됐음을 표시한다. */
+	public void markCollecting() {
+		this.claimStatus = OrderItemClaimStatus.COLLECTING;
+	}
+
+	/** 취소 클레임이 승인·완료돼 상품주문이 취소로 확정된다. */
+	public void completeCancelClaim(LocalDateTime now) {
+		this.status = OrderItemStatus.CANCELED;
+		this.claimStatus = OrderItemClaimStatus.CANCEL_DONE;
+		this.canceledAt = now;
+	}
+
+	/** 반품 클레임이 완료돼 상품주문이 반품으로 확정된다. */
+	public void completeReturnClaim(LocalDateTime now) {
+		this.status = OrderItemStatus.RETURNED;
+		this.claimStatus = OrderItemClaimStatus.RETURN_DONE;
+		this.canceledAt = now;
+	}
+
+	/** 클레임이 거부되거나(관리자, 토스 거절) 철회 없이 종결돼 이행 상태는 그대로 두고 파생 표시만 남긴다. */
+	public void markClaimRejected(OrderItemClaimStatus rejectStatus) {
+		this.claimStatus = rejectStatus;
+	}
+
+	/** 클레임을 철회해 진행 중 표시를 지운다. */
+	public void clearClaim() {
+		this.claimStatus = null;
+	}
+
+	public boolean isClaimInProgress() {
+		return this.claimStatus == OrderItemClaimStatus.CANCEL_REQUEST
+				|| this.claimStatus == OrderItemClaimStatus.RETURN_REQUEST
+				|| this.claimStatus == OrderItemClaimStatus.COLLECTING;
+	}
+
+	/**
+	 * 관리자 발주확인(PAID → PREPARING). 일괄 처리에서 대상이 아닌 항목은 건너뛰도록 대상이 아니면 false 를
+	 * 반환한다. 진행 중 클레임(결과를 기다리는 즉시취소 환불 포함)이 있으면 배송준비로 넘기지 않는다.
+	 */
+	public boolean confirmPreparing(LocalDateTime now) {
+		if (OrderItemClaimStatus.isInProgress(this.claimStatus)) {
+			return false;
+		}
+		if (this.status != OrderItemStatus.PAID) {
+			return false;
+		}
+		this.status = OrderItemStatus.PREPARING;
+		this.preparedAt = now;
+		return true;
+	}
+
+	/** 관리자 발송처리(PAID·PREPARING → SHIPPING). 진행 중 클레임이 있거나 대상 상태가 아니면 false. */
+	public boolean startShipping(CourierCode courierCode, String trackingNumber, LocalDateTime now) {
+		if (OrderItemClaimStatus.isInProgress(this.claimStatus)) {
+			return false;
+		}
+		if (this.status != OrderItemStatus.PAID && this.status != OrderItemStatus.PREPARING) {
+			return false;
+		}
+		this.status = OrderItemStatus.SHIPPING;
+		this.shippedAt = now;
+		this.courierCode = courierCode;
+		this.trackingNumber = trackingNumber;
+		return true;
+	}
+
+	/** 배송완료(SHIPPING → DELIVERED), 관리자 또는 자동 스케줄러 공용. */
+	public boolean completeDelivery(LocalDateTime now) {
+		if (this.status != OrderItemStatus.SHIPPING) {
+			return false;
+		}
+		this.status = OrderItemStatus.DELIVERED;
+		this.deliveredAt = now;
+		return true;
+	}
+
+	/** 구매확정(SHIPPING·DELIVERED → PURCHASE_CONFIRMED), 구매자 또는 자동 스케줄러 공용. */
+	public boolean confirmPurchase(LocalDateTime now) {
+		if (OrderItemClaimStatus.isInProgress(this.claimStatus)) {
+			return false;
+		}
+		if (this.status != OrderItemStatus.SHIPPING && this.status != OrderItemStatus.DELIVERED) {
+			return false;
+		}
+		this.status = OrderItemStatus.PURCHASE_CONFIRMED;
+		this.confirmedAt = now;
+		return true;
+	}
+
+	public boolean isTerminal() {
 		return this.status == OrderItemStatus.CANCELED
 				|| this.status == OrderItemStatus.CANCELED_BY_NOPAYMENT
 				|| this.status == OrderItemStatus.PURCHASE_CONFIRMED

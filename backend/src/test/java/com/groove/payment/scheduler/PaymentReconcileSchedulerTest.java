@@ -29,6 +29,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
@@ -48,6 +49,8 @@ import com.groove.payment.service.PaymentReconcileService;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentReconcileSchedulerTest {
+
+	private static final String RETRY_KEY = "cancel-tviva-key-2";
 
 	@Mock
 	private PaymentReconcileService reconcileService;
@@ -188,15 +191,15 @@ class PaymentReconcileSchedulerTest {
 					BigDecimal.ZERO, now.minusMinutes(5), null);
 			given(paymentClient.lookup("toss-1")).willReturn(lookup);
 			given(reconcileService.apply(candidate, lookup))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key", RETRY_KEY));
 			PaymentCancelResult cancelResult = PaymentCancelResult.of("tviva-key", "CANCELED", now);
-			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willReturn(cancelResult);
+			given(paymentClient.cancel(retryCommand())).willReturn(cancelResult);
 
 			// when
 			scheduler.reconcile();
 
 			// then
-			verify(paymentClient).cancel("tviva-key", "주문 취소 재시도");
+			verify(paymentClient).cancel(retryCommand());
 			verify(reconcileService).recordCancelRetry(candidate, cancelResult, null);
 		}
 
@@ -211,9 +214,9 @@ class PaymentReconcileSchedulerTest {
 					BigDecimal.ZERO, now.minusMinutes(5), null);
 			given(paymentClient.lookup("toss-1")).willReturn(lookup);
 			given(reconcileService.apply(candidate, lookup))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key", RETRY_KEY));
 			BusinessException rejection = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
-			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willThrow(rejection);
+			given(paymentClient.cancel(retryCommand())).willThrow(rejection);
 
 			// when
 			scheduler.reconcile();
@@ -233,9 +236,9 @@ class PaymentReconcileSchedulerTest {
 					BigDecimal.ZERO, now.minusMinutes(5), null);
 			given(paymentClient.lookup("toss-1")).willReturn(lookup);
 			given(reconcileService.apply(candidate, lookup))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key"));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry("tviva-key", RETRY_KEY));
 			RuntimeException timeout = new RuntimeException("Read timed out");
-			given(paymentClient.cancel("tviva-key", "주문 취소 재시도")).willThrow(timeout);
+			given(paymentClient.cancel(retryCommand())).willThrow(timeout);
 
 			// when
 			scheduler.reconcile();
@@ -354,7 +357,7 @@ class PaymentReconcileSchedulerTest {
 			stubLockToRunTask();
 			given(reconcileService.findCandidates(now)).willReturn(List.of());
 			PaymentCancelRetryCandidate candidate = new PaymentCancelRetryCandidate(1L, 10L, "tviva-refund", "toss-1",
-					BigDecimal.TEN, "cancel-tviva-refund-1", "부분 반품", now.minusMinutes(2));
+					BigDecimal.TEN, "cancel-tviva-refund-1", "부분 반품", now.minusMinutes(2), null);
 			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
 					.willReturn(List.of(candidate));
 
@@ -372,9 +375,9 @@ class PaymentReconcileSchedulerTest {
 			stubLockToRunTask();
 			given(reconcileService.findCandidates(now)).willReturn(List.of());
 			PaymentCancelRetryCandidate first = new PaymentCancelRetryCandidate(1L, 10L, "tviva-refund-1", "toss-1",
-					BigDecimal.TEN, "cancel-tviva-refund-1-1", "부분 반품", now.minusMinutes(2));
+					BigDecimal.TEN, "cancel-tviva-refund-1-1", "부분 반품", now.minusMinutes(2), null);
 			PaymentCancelRetryCandidate second = new PaymentCancelRetryCandidate(2L, 20L, "tviva-refund-2", "toss-2",
-					BigDecimal.TEN, "cancel-tviva-refund-2-1", "부분 반품", now.minusMinutes(2));
+					BigDecimal.TEN, "cancel-tviva-refund-2-1", "부분 반품", now.minusMinutes(2), null);
 			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
 					.willReturn(List.of(first, second));
 			willThrow(new IllegalStateException("boom")).given(paymentCancelRetrier).retry(first);
@@ -385,6 +388,10 @@ class PaymentReconcileSchedulerTest {
 			// then: 예외를 던지지 않고 나머지 후보도 처리한다.
 			verify(paymentCancelRetrier).retry(second);
 		}
+	}
+
+	private PaymentCancelCommand retryCommand() {
+		return PaymentCancelCommand.of("tviva-key", "주문 취소 재시도", null, RETRY_KEY, null);
 	}
 
 	private void stubLockToRunTask() {

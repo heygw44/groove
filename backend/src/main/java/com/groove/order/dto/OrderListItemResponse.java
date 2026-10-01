@@ -21,6 +21,7 @@ public record OrderListItemResponse(
 		BigDecimal paidAmount,
 		CourierCode courierCode,
 		String trackingNumber,
-		List<OrderItemAction> availableActions
+		List<OrderItemAction> availableActions,
+		boolean refundInProgress
 ) {
 }

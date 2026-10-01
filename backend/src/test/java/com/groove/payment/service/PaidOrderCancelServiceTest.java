@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -30,6 +31,7 @@ import com.groove.order.entity.OrderStatus;
 import com.groove.order.service.PaidOrderCancelResult;
 import com.groove.order.service.PaidOrderCancelStatus;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +41,7 @@ class PaidOrderCancelServiceTest {
 	private static final Long MEMBER_ID = 1L;
 	private static final Long PAYMENT_ID = 20L;
 	private static final String PAYMENT_KEY = "tviva-cancel-key";
+	private static final String IDEMPOTENCY_KEY = "cancel-" + PAYMENT_KEY + "-2";
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 13, 12, 0);
 
 	@Mock
@@ -71,7 +74,7 @@ class PaidOrderCancelServiceTest {
 			// then
 			assertThat(result.status()).isEqualTo(PaidOrderCancelStatus.IN_PROGRESS);
 			assertThat(result.alreadyRequested()).isTrue();
-			verify(paymentClient, never()).cancel(any(), any(), any());
+			verify(paymentClient, never()).cancel(any(PaymentCancelCommand.class));
 		}
 
 		@Test
@@ -79,7 +82,7 @@ class PaidOrderCancelServiceTest {
 		void completesCancel() {
 			// given
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
-			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
+			given(paymentClient.cancel(cancelCommand()))
 					.willReturn(PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", NOW));
 			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW, null))
 					.willReturn(Optional.of(new LimitedRelease(30L, MEMBER_ID)));
@@ -93,12 +96,31 @@ class PaidOrderCancelServiceTest {
 		}
 
 		@Test
+		@DisplayName("토스 취소는 요청 행에 발급된 멱등키를 그대로 실어 전액취소로 호출한다")
+		void callsTossWithRequestIdempotencyKey() {
+			// given
+			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
+			given(paymentClient.cancel(any(PaymentCancelCommand.class)))
+					.willReturn(PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", NOW));
+			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW, null)).willReturn(Optional.empty());
+			ArgumentCaptor<PaymentCancelCommand> captor = ArgumentCaptor.forClass(PaymentCancelCommand.class);
+
+			// when
+			service.cancel(ORDER_ID, MEMBER_ID, "고객 변심");
+
+			// then
+			verify(paymentClient).cancel(captor.capture());
+			assertThat(captor.getValue().idempotencyKey()).isEqualTo(IDEMPOTENCY_KEY);
+			assertThat(captor.getValue().isFullCancel()).isTrue();
+		}
+
+		@Test
 		@DisplayName("토스 결과를 알 수 없으면 CANCEL_REQUESTED 를 유지한다")
 		void keepsRequestWhenTossResultIsUnknown() {
 			// given
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
 			willThrow(new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN))
-					.given(paymentClient).cancel(PAYMENT_KEY, "고객 변심", null);
+					.given(paymentClient).cancel(cancelCommand());
 
 			// when
 			PaidOrderCancelResult result = service.cancel(ORDER_ID, MEMBER_ID, "고객 변심");
@@ -114,7 +136,7 @@ class PaidOrderCancelServiceTest {
 			// given
 			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
-			willThrow(failure).given(paymentClient).cancel(PAYMENT_KEY, "고객 변심", null);
+			willThrow(failure).given(paymentClient).cancel(cancelCommand());
 
 			// when & then
 			assertThatThrownBy(() -> service.cancel(ORDER_ID, MEMBER_ID, "고객 변심")).isSameAs(failure);
@@ -126,7 +148,7 @@ class PaidOrderCancelServiceTest {
 		void keepsRequestWhenCompletionFails() {
 			// given
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
-			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
+			given(paymentClient.cancel(cancelCommand()))
 					.willReturn(PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", NOW));
 			willThrow(new IllegalStateException("T2 failed"))
 					.given(writer).completeCancel(ORDER_ID, PAYMENT_ID, NOW, null);
@@ -143,7 +165,7 @@ class PaidOrderCancelServiceTest {
 		void usesCurrentTimeWhenCanceledAtMissing() {
 			// given
 			given(writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", null)).willReturn(request(false));
-			given(paymentClient.cancel(PAYMENT_KEY, "고객 변심", null))
+			given(paymentClient.cancel(cancelCommand()))
 					.willReturn(PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", null));
 			given(writer.completeCancel(ORDER_ID, PAYMENT_ID, NOW, null)).willReturn(Optional.empty());
 
@@ -156,7 +178,11 @@ class PaidOrderCancelServiceTest {
 	}
 
 	private CancelRequest request(boolean alreadyRequested) {
-		return new CancelRequest(ORDER_ID, PAYMENT_ID, PAYMENT_KEY, "고객 변심", "cancel-" + PAYMENT_KEY,
+		return new CancelRequest(ORDER_ID, PAYMENT_ID, PAYMENT_KEY, "고객 변심", IDEMPOTENCY_KEY,
 				OrderStatus.PAID, alreadyRequested, null);
+	}
+
+	private PaymentCancelCommand cancelCommand() {
+		return PaymentCancelCommand.of(PAYMENT_KEY, "고객 변심", null, IDEMPOTENCY_KEY, null);
 	}
 }

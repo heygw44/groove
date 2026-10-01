@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { Suspense } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Suspense, useRef } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { AdminIdleGuard } from '@/components/admin/AdminIdleGuard';
 import { PageContainer } from '@/components/common/PageContainer';
 import { RouteFallback } from '@/components/common/RouteFallback';
+import { useScrollActiveNavItem } from '@/hooks/useScrollActiveNavItem';
 
 interface AdminNavItem {
   to: string;
@@ -98,6 +99,26 @@ const NAV_ITEMS: AdminNavItem[] = [
     ),
   },
   {
+    to: '/admin/order-claims',
+    label: '취소·반품',
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M8 5 4 9l4 4" />
+        <path d="M4 9h8a4 4 0 0 1 0 8H9" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/members',
     label: '회원',
     icon: (
@@ -183,13 +204,21 @@ const NAV_ITEMS: AdminNavItem[] = [
 ];
 
 export function AdminLayout() {
+  const navRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+
+  useScrollActiveNavItem(navRef, pathname);
+
   return (
     <PageContainer size="xl">
       <AdminIdleGuard />
       <h1 className="mb-6 text-2xl font-bold tracking-tight">관리자</h1>
 
       <div className="grid gap-6 md:grid-cols-[196px_minmax(0,1fr)] md:gap-11">
-        <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+        <nav
+          ref={navRef}
+          className="-mx-1 flex gap-1 overflow-x-auto p-1 md:mx-0 md:flex-col md:overflow-visible md:p-0"
+        >
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}

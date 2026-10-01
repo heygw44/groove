@@ -113,7 +113,14 @@ public class PaymentReconcileService {
 			case SYNC_CANCELED -> {
 				LocalDateTime canceledAt = lookup.canceledAt() != null ? lookup.canceledAt()
 						: LocalDateTime.now(clock);
-				payment.compensate(lookup.paymentKey(), lookup.approvedAt(), canceledAt, "대사: 토스에서 이미 취소됨");
+				String reason = "대사: 토스에서 이미 취소됨";
+				if (payment.getStatus() == PaymentStatus.WAITING_FOR_DEPOSIT && lookup.approvedAt() == null) {
+					// 입금 전 가상계좌 폐쇄는 돈이 오간 적이 없어 취소 기록을 남기지 않는다.
+					payment.cancelVirtualAccount(reason, canceledAt);
+				} else {
+					writer.compensateWithCancelRecord(payment, lookup.paymentKey(), lookup.approvedAt(), canceledAt,
+							reason, lookup.lastCancelTransactionKey());
+				}
 				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.CANCELED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
@@ -155,7 +162,8 @@ public class PaymentReconcileService {
 				writeLog(payment, beforeStatus, lookup.status().name(), PaymentReconcileAction.CANCELED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
-			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey());
+			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey(),
+					cancelWriter.requestedIdempotencyKey(payment));
 		};
 	}
 

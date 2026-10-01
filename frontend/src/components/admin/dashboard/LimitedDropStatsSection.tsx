@@ -23,7 +23,11 @@ export function LimitedDropStatsSection() {
       {isPending && <TableSkeleton columns={8} />}
 
       {!isPending && isError && (
-        <QueryErrorState error={error} onRetry={refetch} title="한정반 현황을 불러오지 못했습니다" />
+        <QueryErrorState
+          error={error}
+          onRetry={refetch}
+          title="한정반 현황을 불러오지 못했습니다"
+        />
       )}
 
       {!isPending && !isError && data && (

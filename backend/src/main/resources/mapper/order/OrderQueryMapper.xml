@@ -19,6 +19,20 @@
 		</constructor>
 	</resultMap>
 
+	<!-- oi = order_item 별칭을 전제로 한다. 주문 필터(myOrdersWhere)와 카드의 상품 행 조회가 같은 조건을 공유한다. -->
+	<sql id="itemInStatusGroup">
+		oi.status IN
+		<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
+			#{s}
+		</foreach>
+		<if test="!statusGroup.claimStatuses.isEmpty()">
+			OR oi.claim_status IN
+			<foreach item="c" collection="statusGroup.claimStatuses" open="(" separator="," close=")">
+				#{c}
+			</foreach>
+		</if>
+	</sql>
+
 	<sql id="myOrdersWhere">
 		<where>
 			o.member_id = #{memberId}
@@ -28,13 +42,7 @@
 					SELECT 1 FROM order_item oi
 					WHERE oi.order_id = o.id
 					AND (
-						oi.status IN
-						<foreach item="s" collection="statusGroup.statuses" open="(" separator="," close=")">
-							#{s}
-						</foreach>
-						<if test="statusGroup.claimBased">
-							OR oi.claim_status IS NOT NULL
-						</if>
+						<include refid="itemInStatusGroup"/>
 					)
 				)
 			</if>
@@ -81,10 +89,12 @@
 			<arg column="courier_code" javaType="com.groove.order.entity.CourierCode"/>
 			<arg column="tracking_number" javaType="java.lang.String"/>
 			<arg column="delivered_at" javaType="java.time.LocalDateTime"/>
+			<arg column="refund_in_progress" javaType="_boolean"/>
 		</constructor>
 	</resultMap>
 
-	<!-- 썸네일은 findMyOrders 와 같은 규약: 상품의 sort_order = 0 이미지. paid_amount = 단가 x 수량 - discount_share. -->
+	<!-- 썸네일은 findMyOrders 와 같은 규약: 상품의 sort_order = 0 이미지. paid_amount = 단가 x 수량 - discount_share.
+		refund_in_progress: 이 상품주문의 클레임 환불이 결제사 결과를 기다리는(REQUESTED) 중인지. -->
 	<select id="findItemsByOrderIds" resultMap="orderListItemRowMap">
 		SELECT
 			oi.order_id, oi.product_id, oi.product_name_snapshot AS product_name, oi.quantity,
@@ -93,12 +103,20 @@
 				WHERE pi.product_id = oi.product_id AND pi.sort_order = 0) AS thumbnail_url,
 			oi.product_order_number, oi.status, oi.claim_status,
 			(oi.price_snapshot * oi.quantity - oi.discount_share) AS paid_amount,
-			oi.courier_code, oi.tracking_number, oi.delivered_at
+			oi.courier_code, oi.tracking_number, oi.delivered_at,
+			EXISTS (SELECT 1 FROM order_claim oc
+				JOIN payment_cancel pc ON pc.order_claim_id = oc.id
+				WHERE oc.order_item_id = oi.id AND pc.status = 'REQUESTED') AS refund_in_progress
 		FROM order_item oi
 		WHERE oi.order_id IN
 		<foreach item="orderId" collection="orderIds" open="(" separator="," close=")">
 			#{orderId}
 		</foreach>
+		<if test="statusGroup != null">
+			AND (
+				<include refid="itemInStatusGroup"/>
+			)
+		</if>
 		ORDER BY oi.order_id, oi.id
 	</select>
 
@@ -149,6 +167,75 @@
 		FROM orders o
 		JOIN member m ON m.id = o.member_id
 		<include refid="adminOrdersWhere"/>
+	</select>
+
+	<resultMap id="adminOrderItemSummaryMap" type="com.groove.order.dto.AdminOrderItemSummaryResponse">
+		<constructor>
+			<arg column="id" javaType="java.lang.Long"/>
+			<arg column="order_id" javaType="java.lang.Long"/>
+			<arg column="product_order_number" javaType="java.lang.String"/>
+			<arg column="order_number" javaType="java.lang.String"/>
+			<arg column="member_email" javaType="java.lang.String"/>
+			<arg column="product_name" javaType="java.lang.String"/>
+			<arg column="quantity" javaType="_int"/>
+			<arg column="status" javaType="com.groove.order.entity.OrderItemStatus"/>
+			<arg column="claim_status" javaType="com.groove.order.entity.OrderItemClaimStatus"/>
+			<arg column="courier_code" javaType="com.groove.order.entity.CourierCode"/>
+			<arg column="tracking_number" javaType="java.lang.String"/>
+			<arg column="created_at" javaType="java.time.LocalDateTime"/>
+			<arg column="virtual_account_payment" javaType="_boolean"/>
+		</constructor>
+	</resultMap>
+
+	<!-- statusGroup 은 GET /orders 와 같은 그룹(OrderStatusGroup)을 재사용한다. 거부로 끝난 클레임은 CANCEL_RETURN 에서 제외. -->
+	<sql id="adminOrderItemsWhere">
+		<where>
+			o.placed_at IS NOT NULL
+			<if test="statusGroup != null">
+				AND (
+					<include refid="itemInStatusGroup"/>
+				)
+			</if>
+			<if test="keyword != null and keyword != ''">
+				AND (m.email LIKE CONCAT('%', #{keyword}, '%')
+					OR o.order_number LIKE CONCAT('%', #{keyword}, '%')
+					OR oi.product_order_number LIKE CONCAT('%', #{keyword}, '%'))
+			</if>
+			<if test="fromAt != null">
+				AND oi.created_at &gt;= #{fromAt}
+			</if>
+			<if test="toExclusiveAt != null">
+				AND oi.created_at &lt; #{toExclusiveAt}
+			</if>
+		</where>
+	</sql>
+
+	<select id="findAdminOrderItems" parameterType="com.groove.order.dto.AdminOrderItemSearchCondition"
+			resultMap="adminOrderItemSummaryMap">
+		SELECT
+			oi.id, oi.order_id, oi.product_order_number, o.order_number, m.email AS member_email,
+			oi.product_name_snapshot AS product_name, oi.quantity, oi.status, oi.claim_status,
+			oi.courier_code, oi.tracking_number, oi.created_at,
+			EXISTS (SELECT 1 FROM payment p WHERE p.order_id = o.id AND p.va_bank_code IS NOT NULL)
+				AS virtual_account_payment
+		FROM order_item oi
+		JOIN orders o ON o.id = oi.order_id
+		JOIN member m ON m.id = o.member_id
+		<include refid="adminOrderItemsWhere"/>
+		ORDER BY oi.created_at DESC, oi.id DESC
+		LIMIT #{fetchSize} OFFSET #{offset}
+	</select>
+
+	<!-- member 는 이메일 키워드 검색에만 쓴다. FK 라 조인을 빼도 건수는 같고, 무필터 계획이 회원 스캔에서 주문 인덱스 스캔으로 바뀐다. -->
+	<select id="countAdminOrderItems" parameterType="com.groove.order.dto.AdminOrderItemSearchCondition"
+			resultType="long">
+		SELECT COUNT(*)
+		FROM order_item oi
+		JOIN orders o ON o.id = oi.order_id
+		<if test="keyword != null and keyword != ''">
+			JOIN member m ON m.id = o.member_id
+		</if>
+		<include refid="adminOrderItemsWhere"/>
 	</select>
 
 </mapper>

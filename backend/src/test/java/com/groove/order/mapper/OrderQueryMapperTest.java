@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.coupon.entity.Coupon;
 import com.groove.coupon.entity.MemberCoupon;
@@ -19,8 +20,11 @@ import com.groove.fixture.CouponFixture;
 import com.groove.fixture.MemberCouponFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
+import com.groove.fixture.PaymentFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
+import com.groove.order.dto.AdminOrderItemSearchCondition;
+import com.groove.order.dto.AdminOrderItemSummaryResponse;
 import com.groove.order.dto.AdminOrderSearchCondition;
 import com.groove.order.dto.AdminOrderSummaryResponse;
 import com.groove.order.dto.OrderListItemRow;
@@ -83,6 +87,25 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 		order.addItem(product, quantity);
 		em.persist(order);
 		em.flush();
+		return order;
+	}
+
+	/** 상태가 서로 다른 상품주문 4개(PAID, SHIPPING, DELIVERED, CANCELED)를 가진 주문을 만든다. */
+	private Order persistOrderWithMixedItemStatuses(String orderNumber) {
+		Order order = OrderFixture.create(owner, orderNumber);
+		order.addItem(kindOfBlue, 1);
+		order.addItem(loveSupreme, 1);
+		order.addItem(kindOfBlue, 1);
+		order.addItem(loveSupreme, 1);
+		order.place(LocalDateTime.now());
+		List<OrderItemStatus> statuses = List.of(OrderItemStatus.PAID, OrderItemStatus.SHIPPING,
+				OrderItemStatus.DELIVERED, OrderItemStatus.CANCELED);
+		for (int i = 0; i < statuses.size(); i++) {
+			ReflectionTestUtils.setField(order.getItems().get(i), "status", statuses.get(i));
+		}
+		em.persist(order);
+		em.flush();
+		em.clear();
 		return order;
 	}
 
@@ -172,6 +195,27 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result).extracting(OrderSummaryResponse::id).containsExactly(preparingOrder.getId());
+		}
+
+		@Test
+		@DisplayName("CANCEL_RETURN 그룹은 거부로 끝난 클레임이 걸린 주문을 제외한다")
+		void excludesOrdersWithRejectedClaimInCancelReturnGroup() {
+			// given
+			Order cancelRejected = persistOrder(owner, "20260903-OQM00061", kindOfBlue, 1);
+			OrderFixture.markItemsStatus(cancelRejected, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(cancelRejected, OrderItemClaimStatus.CANCEL_REJECT);
+			Order returnRejected = persistOrder(owner, "20260903-OQM00062", loveSupreme, 1);
+			OrderFixture.markItemsStatus(returnRejected, OrderItemStatus.PURCHASE_CONFIRMED);
+			OrderFixture.markFirstItemClaimStatus(returnRejected, OrderItemClaimStatus.RETURN_REJECT);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderSummaryResponse> result = orderQueryMapper.findMyOrders(
+					condition(owner.getId(), OrderStatusGroup.CANCEL_RETURN, 0, 20));
+
+			// then
+			assertThat(result).isEmpty();
 		}
 
 		@Test
@@ -427,7 +471,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(target.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(target.getId()), null);
 
 			// then
 			assertThat(result).hasSize(2);
@@ -447,7 +491,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
 
 			// then
 			assertThat(result).extracting(OrderListItemRow::productName)
@@ -462,7 +506,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
 
 			// then
 			assertThat(result).extracting(OrderListItemRow::thumbnailUrl)
@@ -477,7 +521,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()));
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
 
 			// then
 			assertThat(result).extracting(OrderListItemRow::thumbnailUrl).containsExactly((String) null);
@@ -491,7 +535,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.quantity()).isEqualTo(3);
@@ -509,7 +553,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.productOrderNumber()).isEqualTo("20260903-OQM00035-01");
@@ -525,7 +569,7 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.paidAmount()).isEqualByComparingTo(result.lineAmount());
@@ -548,11 +592,92 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId())).get(0);
+			OrderListItemRow result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null).get(0);
 
 			// then
 			assertThat(result.paidAmount())
 					.isEqualByComparingTo(result.lineAmount().subtract(new BigDecimal("5000")));
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 없으면 주문의 모든 상품 행을 반환한다")
+		void returnsAllItemsWhenStatusGroupIsNull() {
+			// given
+			Order order = persistOrderWithMixedItemStatuses("20260903-OQM00040");
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()), null);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::status).containsExactly(OrderItemStatus.PAID,
+					OrderItemStatus.SHIPPING, OrderItemStatus.DELIVERED, OrderItemStatus.CANCELED);
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 SHIPPING 이면 배송중 상품 행만 반환한다")
+		void returnsOnlyShippingItemsForShippingGroup() {
+			// given
+			Order order = persistOrderWithMixedItemStatuses("20260903-OQM00041");
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()),
+					OrderStatusGroup.SHIPPING);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::status).containsExactly(OrderItemStatus.SHIPPING);
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 CANCEL_RETURN 이면 취소 상태 행과 진행 중인 클레임이 걸린 행을 함께 반환한다")
+		void returnsCanceledAndClaimedItemsForCancelReturnGroup() {
+			// given
+			Order order = OrderFixture.create(owner, "20260903-OQM00042");
+			order.addItem(kindOfBlue, 1);
+			order.addItem(loveSupreme, 1);
+			order.addItem(kindOfBlue, 1);
+			order.place(LocalDateTime.now());
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.CANCELED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			ReflectionTestUtils.setField(order.getItems().get(2), "status", OrderItemStatus.DELIVERED);
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()),
+					OrderStatusGroup.CANCEL_RETURN);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::productOrderNumber)
+					.containsExactly("20260903-OQM00042-01", "20260903-OQM00042-02");
+		}
+
+		@Test
+		@DisplayName("statusGroup 이 CANCEL_RETURN 이면 거부로 끝난 클레임 행은 제외한다")
+		void excludesRejectedClaimItemsForCancelReturnGroup() {
+			// given
+			Order order = OrderFixture.create(owner, "20260903-OQM00063");
+			order.addItem(kindOfBlue, 1);
+			order.addItem(loveSupreme, 1);
+			order.addItem(kindOfBlue, 1);
+			order.place(LocalDateTime.now());
+			ReflectionTestUtils.setField(order.getItems().get(0), "status", OrderItemStatus.CANCELED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(order.getItems().get(1), "claimStatus", OrderItemClaimStatus.CANCEL_REQUEST);
+			ReflectionTestUtils.setField(order.getItems().get(2), "status", OrderItemStatus.DELIVERED);
+			ReflectionTestUtils.setField(order.getItems().get(2), "claimStatus", OrderItemClaimStatus.RETURN_REJECT);
+			em.persist(order);
+			em.flush();
+			em.clear();
+
+			// when
+			List<OrderListItemRow> result = orderQueryMapper.findItemsByOrderIds(List.of(order.getId()),
+					OrderStatusGroup.CANCEL_RETURN);
+
+			// then
+			assertThat(result).extracting(OrderListItemRow::productOrderNumber)
+					.containsExactly("20260903-OQM00063-01", "20260903-OQM00063-02");
 		}
 	}
 
@@ -681,6 +806,118 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(count).isEqualTo(result.size());
+		}
+	}
+
+	@Nested
+	@DisplayName("findAdminOrderItems()")
+	class FindAdminOrderItems {
+
+		@Test
+		@DisplayName("가상계좌 결제 주문의 상품주문만 virtualAccountPayment 가 true 다")
+		void flagsVirtualAccountPaymentOnly() {
+			// given
+			Order virtualAccountOrder = persistOrder(owner, "20260903-OQMVA0001", kindOfBlue, 1);
+			Order cardOrder = persistOrder(other, "20260903-OQMVA0002", loveSupreme, 1);
+			em.persist(PaymentFixture.virtualAccountApproved(virtualAccountOrder, "toss-va-oqm-1"));
+			em.persist(PaymentFixture.approved(cardOrder, "toss-card-oqm-1"));
+			em.flush();
+			em.clear();
+
+			// when: 회원 이메일 접두어로 두 주문만 좁힌다
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, "order-query-", null, null, 0, 100));
+
+			// then
+			assertThat(result).filteredOn(row -> row.orderId().equals(virtualAccountOrder.getId()))
+					.hasSize(1)
+					.allMatch(AdminOrderItemSummaryResponse::virtualAccountPayment);
+			assertThat(result).filteredOn(row -> row.orderId().equals(cardOrder.getId()))
+					.hasSize(1)
+					.noneMatch(AdminOrderItemSummaryResponse::virtualAccountPayment);
+		}
+
+		@Test
+		@DisplayName("결제 행이 없는 주문은 virtualAccountPayment 가 false 다")
+		void flagsFalseWhenNoPayment() {
+			// given
+			Order order = persistOrder(owner, "20260903-OQMVA0003", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, "order-query-", null, null, 0, 100));
+
+			// then
+			assertThat(result).filteredOn(row -> row.orderId().equals(order.getId()))
+					.hasSize(1)
+					.noneMatch(AdminOrderItemSummaryResponse::virtualAccountPayment);
+		}
+
+		@Test
+		@DisplayName("CANCEL_RETURN 그룹은 거부로 끝난 클레임 행을 제외하고 진행 중 행은 포함한다")
+		void excludesRejectedClaimItemsForCancelReturnGroup() {
+			// given
+			Order rejected = persistOrder(owner, "20260903-OQMVA0004", kindOfBlue, 1);
+			OrderFixture.markItemsStatus(rejected, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(rejected, OrderItemClaimStatus.CANCEL_REJECT);
+			Order requested = persistOrder(owner, "20260903-OQMVA0005", loveSupreme, 1);
+			OrderFixture.markItemsStatus(requested, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(requested, OrderItemClaimStatus.CANCEL_REQUEST);
+			em.flush();
+			em.clear();
+
+			// when
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(
+					new AdminOrderItemSearchCondition(OrderStatusGroup.CANCEL_RETURN, "order-query-", null, null,
+							0, 100));
+
+			// then
+			assertThat(result).extracting(AdminOrderItemSummaryResponse::orderId)
+					.contains(requested.getId())
+					.doesNotContain(rejected.getId());
+		}
+	}
+
+	@Nested
+	@DisplayName("countAdminOrderItems()")
+	class CountAdminOrderItems {
+
+		@Test
+		@DisplayName("keyword 로 회원 이메일을 검색하면 같은 조건의 findAdminOrderItems 결과 개수와 같다")
+		void matchesFindResultSizeWithKeyword() {
+			// given
+			persistOrderWithMixedItemStatuses("20260903-OQMCNT001");
+			persistUnplacedOrder(owner, "20260903-OQMCNT002", kindOfBlue, 1);
+			em.clear();
+			AdminOrderItemSearchCondition condition =
+					new AdminOrderItemSearchCondition(null, "order-query-owner", null, null, 0, 100);
+
+			// when
+			long count = orderQueryMapper.countAdminOrderItems(condition);
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(condition);
+
+			// then
+			assertThat(count).isEqualTo(result.size());
+		}
+
+		@Test
+		@DisplayName("keyword 가 없으면 회원 조인 없이 결제 확정 주문의 상품주문만 센다")
+		void countsPlacedItemsWithoutKeyword() {
+			// given: 공유 DB 에 다른 테스트 데이터가 있을 수 있어 증가분으로 단언한다. 조건을 달리해 세션 캐시를 피한다.
+			LocalDateTime from = LocalDateTime.now().minusDays(1);
+			long before = orderQueryMapper.countAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, null, from, from.plusDays(10), 0, 20));
+			persistOrderWithMixedItemStatuses("20260903-OQMCNT003");
+			persistUnplacedOrder(owner, "20260903-OQMCNT004", kindOfBlue, 1);
+			em.clear();
+
+			// when
+			long after = orderQueryMapper.countAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, null, from, from.plusDays(11), 0, 20));
+
+			// then
+			assertThat(after - before).isEqualTo(4);
 		}
 	}
 }

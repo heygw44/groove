@@ -123,10 +123,7 @@ export const useChangeWishlistAlert = () => {
   return useMutation({
     mutationFn: ({ productId, alertEnabled }: ChangeWishlistAlertVariables) =>
       changeWishlistAlert(productId, alertEnabled),
-    onMutate: async ({
-      productId,
-      alertEnabled,
-    }): Promise<ChangeWishlistAlertContext> => {
+    onMutate: async ({ productId, alertEnabled }): Promise<ChangeWishlistAlertContext> => {
       await queryClient.cancelQueries({ queryKey: productKeys.detail(productId) });
       await queryClient.cancelQueries({ queryKey: wishlistKeys.all });
 

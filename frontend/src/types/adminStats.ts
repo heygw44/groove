@@ -5,7 +5,14 @@ export interface AdminStatsSummary {
   todayCancelAmount: number;
   todayOrderCount: number;
   todayNewMemberCount: number;
-  pendingOrderCount: number;
+  /** 결제완료(PAID) 상품주문 수 = 발주확인 대기. */
+  newOrderCount: number;
+  /** 입금 대기(PAYMENT_WAITING) 상품주문 수. */
+  depositWaitingCount: number;
+  /** 취소 요청(CANCEL_REQUEST) 상태 상품주문 수. */
+  cancelRequestCount: number;
+  /** 반품 요청·수거중(RETURN_REQUEST, COLLECTING) 상품주문 수. */
+  returnRequestCount: number;
 }
 
 export interface DailySales {

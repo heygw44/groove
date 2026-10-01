@@ -1,0 +1,25 @@
+package com.groove.order.dto;
+
+import java.time.LocalDateTime;
+
+import com.groove.order.entity.OrderStatusGroup;
+
+/** {@link com.groove.order.mapper.OrderQueryMapper} 의 관리자 상품주문 목록 조회 조건. */
+public record AdminOrderItemSearchCondition(
+		OrderStatusGroup statusGroup,
+		String keyword,
+		LocalDateTime fromAt,
+		LocalDateTime toExclusiveAt,
+		int page,
+		int size
+) {
+
+	public int offset() {
+		return page * size;
+	}
+
+	/** 다음 페이지 존재 여부를 알아내기 위해 한 건 더 조회한다. */
+	public int fetchSize() {
+		return size + 1;
+	}
+}

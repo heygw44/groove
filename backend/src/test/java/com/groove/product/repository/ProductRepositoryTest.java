@@ -429,12 +429,12 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			Product createdProduct = ProductFixture.create(artist, "Sold Qty Status Product");
 			albumRepository.save(createdProduct.getAlbum());
 			Product product = productRepository.save(createdProduct);
-			saveOrder(product, 3, OrderStatus.PAID);
-			saveOrder(product, 2, OrderStatus.PREPARING);
-			saveOrder(product, 1, OrderStatus.SHIPPED);
-			saveOrder(product, 4, OrderStatus.DELIVERED);
-			saveOrder(product, 100, OrderStatus.PENDING);
-			saveOrder(product, 100, OrderStatus.CANCELED);
+			saveOrder(product, 3, OrderItemStatus.PAID);
+			saveOrder(product, 2, OrderItemStatus.PREPARING);
+			saveOrder(product, 1, OrderItemStatus.SHIPPING);
+			saveOrder(product, 4, OrderItemStatus.DELIVERED);
+			saveOrder(product, 100, OrderItemStatus.PAYMENT_PENDING);
+			saveOrder(product, 100, OrderItemStatus.CANCELED);
 
 			// when
 			productRepository.refreshSoldQuantities(List.of(product.getId()));
@@ -453,7 +453,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			Product createdProduct = ProductFixture.create(artist, "Sold Qty Reset Product");
 			albumRepository.save(createdProduct.getAlbum());
 			Product product = productRepository.save(createdProduct);
-			Order order = saveOrder(product, 5, OrderStatus.PAID);
+			Order order = saveOrder(product, 5, OrderItemStatus.PAID);
 			productRepository.refreshSoldQuantities(List.of(product.getId()));
 			entityManager.clear();
 			Product afterFirstOrder = productRepository.findById(product.getId()).orElseThrow();
@@ -479,7 +479,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			Product createdProduct = ProductFixture.create(artist, "Sold Qty Idempotent Product");
 			albumRepository.save(createdProduct.getAlbum());
 			Product product = productRepository.save(createdProduct);
-			saveOrder(product, 7, OrderStatus.PAID);
+			saveOrder(product, 7, OrderItemStatus.PAID);
 
 			// when
 			productRepository.refreshSoldQuantities(List.of(product.getId()));
@@ -505,8 +505,8 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			Product createdSecond = ProductFixture.create(artist, "Sold Qty Batch Product B");
 			albumRepository.save(createdSecond.getAlbum());
 			Product second = productRepository.save(createdSecond);
-			saveOrder(first, 6, OrderStatus.PAID);
-			saveOrder(second, 9, OrderStatus.PAID);
+			saveOrder(first, 6, OrderItemStatus.PAID);
+			saveOrder(second, 9, OrderItemStatus.PAID);
 
 			// when
 			productRepository.refreshSoldQuantities(List.of(first.getId(), second.getId()));
@@ -519,23 +519,20 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			assertThat(refreshedSecond.getSoldQuantity()).isEqualTo(9L);
 		}
 
-		private Order saveOrder(Product product, int quantity, OrderStatus status) {
+		private Order saveOrder(Product product, int quantity, OrderItemStatus itemStatus) {
 			Member buyer = memberRepository.save(MemberFixture.create("sold-qty-" + System.nanoTime() + "@x.com"));
 			Order order = OrderFixture.create(buyer, "20260908-SQ" + System.nanoTime() % 100000);
 			order.addItem(product, quantity);
-			ReflectionTestUtils.setField(order, "status", status);
-			setItemStatus(order, toItemStatus(status));
+			ReflectionTestUtils.setField(order, "status", toOrderStatus(itemStatus));
+			setItemStatus(order, itemStatus);
 			return orderRepository.save(order);
 		}
 
-		private OrderItemStatus toItemStatus(OrderStatus status) {
-			return switch (status) {
-				case PAID -> OrderItemStatus.PAID;
-				case PREPARING -> OrderItemStatus.PREPARING;
-				case SHIPPED -> OrderItemStatus.SHIPPING;
-				case DELIVERED -> OrderItemStatus.DELIVERED;
-				case CANCELED, REFUNDED -> OrderItemStatus.CANCELED;
-				default -> OrderItemStatus.PAYMENT_PENDING;
+		private OrderStatus toOrderStatus(OrderItemStatus itemStatus) {
+			return switch (itemStatus) {
+				case PAYMENT_PENDING, PAYMENT_WAITING -> OrderStatus.PENDING;
+				case CANCELED, CANCELED_BY_NOPAYMENT, RETURNED -> OrderStatus.CANCELED;
+				default -> OrderStatus.PAID;
 			};
 		}
 

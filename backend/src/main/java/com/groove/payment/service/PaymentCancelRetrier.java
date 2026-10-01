@@ -11,10 +11,14 @@ import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.order.entity.OrderClaim;
+import com.groove.order.repository.OrderClaimRepository;
+import com.groove.order.service.OrderClaimFinalizeService;
 import com.groove.payment.client.PaymentClient;
 import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.config.PaymentReconcileProperties;
 import com.groove.payment.dto.PaymentCancelRetryCandidate;
 import com.groove.payment.entity.Payment;
@@ -31,9 +35,8 @@ import lombok.extern.slf4j.Slf4j;
  * (PaymentReconcileScheduler)가 결제 대사 named lock 안에서 매 주기 이 클래스를 호출한다.
  *
  * <p>재시도는 {@link PaymentRefundWriter}의 T1이 남긴 idempotencyKey 를 그대로 재사용한다 - 토스는 API 키·
- * URL·메서드가 같으면 본문과 무관하게 첫 응답을 그대로 재생하므로 환불계좌 등 부가 정보를 다시 채우지 않아도
- * 안전하다(다만 첫 시도가 토스에 닿기 전에 통신 자체가 끊겼던 가상계좌 환불은 이 재시도가 refundAccount 없이
- * 나가 새 요청으로 처리될 수 있다 - 드문 경우라 지금은 감수한다).</p>
+ * URL·메서드가 같으면 본문과 무관하게 첫 응답을 그대로 재생한다. 첫 시도가 토스에 닿기 전에 통신이 끊겼으면
+ * 재시도가 새 요청으로 처리되므로, 클레임 환불이면 클레임에 저장된 환불계좌를 다시 싣는다(가상계좌 환불).</p>
  *
  * <p>payment_cancel 에는 재시도 횟수 컬럼을 두지 않고 requestedAt 로부터 지난 시간으로 판단한다
  * ({@link PaymentReconcileProperties#refundVerifyAfter()}) - 그 안쪽은 같은 키로 재호출하고, 지나면 재호출
@@ -63,6 +66,8 @@ public class PaymentCancelRetrier {
 	private final PaymentReconcileProperties properties;
 	private final Clock clock;
 	private final AlertNotifier alertNotifier;
+	private final OrderClaimFinalizeService orderClaimFinalizeService;
+	private final OrderClaimRepository orderClaimRepository;
 
 	public void retry(PaymentCancelRetryCandidate candidate) {
 		LocalDateTime now = LocalDateTime.now(clock);
@@ -76,7 +81,7 @@ public class PaymentCancelRetrier {
 
 	private void retryCancelCall(PaymentCancelRetryCandidate candidate) {
 		PaymentCancelCommand command = PaymentCancelCommand.of(candidate.paymentKey(), candidate.reason(),
-				candidate.cancelAmount(), candidate.idempotencyKey(), null);
+				candidate.cancelAmount(), candidate.idempotencyKey(), findRefundAccount(candidate));
 		PaymentCancelResult result;
 		try {
 			result = paymentClient.cancel(command);
@@ -101,12 +106,24 @@ public class PaymentCancelRetrier {
 		}
 	}
 
+	/** 클레임이 완료·거부되면 계좌를 지우지만, 재시도 후보는 아직 REQUESTED 라 클레임도 진행 중이다. */
+	private RefundAccountInfo findRefundAccount(PaymentCancelRetryCandidate candidate) {
+		if (candidate.orderClaimId() == null) {
+			return null;
+		}
+		return orderClaimRepository.findById(candidate.orderClaimId())
+				.map(OrderClaim::getRefundAccount)
+				.orElse(null);
+	}
+
 	private void safeFailRefund(PaymentCancelRetryCandidate candidate) {
 		try {
 			refundWriter.failRefund(candidate.paymentCancelId());
 		} catch (RuntimeException ex) {
 			log.error("부분취소 거절 기록 실패: paymentCancelId={}", candidate.paymentCancelId(), ex);
+			return;
 		}
+		finalizeClaimFailed(candidate);
 	}
 
 	private void verifyByLookup(PaymentCancelRetryCandidate candidate) {
@@ -152,7 +169,9 @@ public class PaymentCancelRetrier {
 			refundWriter.failRefund(candidate.paymentCancelId());
 		} catch (RuntimeException ex) {
 			log.error("부분취소 미반영 확정 실패: paymentCancelId={}", candidate.paymentCancelId(), ex);
+			return;
 		}
+		finalizeClaimFailed(candidate);
 	}
 
 	private void completeFromLookup(PaymentCancelRetryCandidate candidate, PaymentLookupResult lookup) {
@@ -162,6 +181,19 @@ public class PaymentCancelRetrier {
 					lookup.lastCancelTransactionKey(), canceledAt);
 		} catch (RuntimeException ex) {
 			log.error("부분취소 확인 조회로 완료를 반영하지 못함: paymentCancelId={}", candidate.paymentCancelId(), ex);
+		}
+	}
+
+	/** 클레임 승인으로 시작된 취소만 되돌릴 대상이다(orderClaimId 가 없으면 전액취소 등 클레임과 무관한 취소). */
+	private void finalizeClaimFailed(PaymentCancelRetryCandidate candidate) {
+		if (candidate.orderClaimId() == null) {
+			return;
+		}
+		try {
+			orderClaimFinalizeService.applyRefundFailed(candidate.orderClaimId());
+		} catch (RuntimeException ex) {
+			log.error("대사 거절 후 클레임 되돌리기 실패: orderClaimId={}, paymentCancelId={}", candidate.orderClaimId(),
+					candidate.paymentCancelId(), ex);
 		}
 	}
 

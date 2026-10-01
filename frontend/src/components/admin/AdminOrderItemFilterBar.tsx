@@ -4,22 +4,22 @@ import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import type { OrderStatus } from '@/types/order';
+import type { OrderStatusGroup } from '@/types/order';
 import type { AdminOrderFilters } from '@/utils/adminOrderFilters';
-import { ORDER_STATUSES, ORDER_STATUS_LABEL } from '@/utils/orderStatus';
+import { ORDER_STATUS_GROUPS, ORDER_STATUS_GROUP_LABEL } from '@/utils/orderStatus';
 
-interface AdminOrderFilterBarProps {
+interface AdminOrderItemFilterBarProps {
   filters: AdminOrderFilters;
   onChange: (next: Partial<AdminOrderFilters>, options?: { replace?: boolean }) => void;
 }
 
 const hasActiveFilter = (filters: AdminOrderFilters): boolean =>
-  filters.status !== undefined ||
+  filters.statusGroup !== undefined ||
   filters.keyword !== '' ||
   filters.from !== undefined ||
   filters.to !== undefined;
 
-export function AdminOrderFilterBar({ filters, onChange }: AdminOrderFilterBarProps) {
+export function AdminOrderItemFilterBar({ filters, onChange }: AdminOrderItemFilterBarProps) {
   const [keyword, setKeyword] = useState(filters.keyword);
   const debouncedKeyword = useDebouncedValue(keyword, 300);
 
@@ -45,23 +45,25 @@ export function AdminOrderFilterBar({ filters, onChange }: AdminOrderFilterBarPr
 
   const handleReset = () => {
     setKeyword('');
-    onChange({ status: undefined, keyword: '', from: undefined, to: undefined });
+    onChange({ statusGroup: undefined, keyword: '', from: undefined, to: undefined });
   };
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select
         aria-label="상태 필터"
-        value={filters.status ?? ''}
+        value={filters.statusGroup ?? ''}
         onChange={(event) =>
-          onChange({ status: (event.target.value || undefined) as OrderStatus | undefined })
+          onChange({
+            statusGroup: (event.target.value || undefined) as OrderStatusGroup | undefined,
+          })
         }
         className="w-32"
       >
         <option value="">전체</option>
-        {ORDER_STATUSES.map((status) => (
-          <option key={status} value={status}>
-            {ORDER_STATUS_LABEL[status]}
+        {ORDER_STATUS_GROUPS.map((group) => (
+          <option key={group} value={group}>
+            {ORDER_STATUS_GROUP_LABEL[group]}
           </option>
         ))}
       </Select>
@@ -85,10 +87,10 @@ export function AdminOrderFilterBar({ filters, onChange }: AdminOrderFilterBarPr
       />
 
       <Input
-        placeholder="주문번호 또는 회원 이메일"
+        placeholder="주문번호·상품주문번호·회원 이메일"
         value={keyword}
         onChange={(event) => setKeyword(event.target.value)}
-        className="w-56"
+        className="w-72"
       />
 
       {hasActiveFilter(filters) && (

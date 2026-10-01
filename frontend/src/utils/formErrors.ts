@@ -26,7 +26,11 @@ export const getArrayFieldErrorMessage = (fieldError: unknown): string | undefin
       continue;
     }
     for (const value of Object.values(item)) {
-      if (value && typeof value === 'object' && typeof (value as { message?: unknown }).message === 'string') {
+      if (
+        value &&
+        typeof value === 'object' &&
+        typeof (value as { message?: unknown }).message === 'string'
+      ) {
         return (value as { message: string }).message;
       }
     }

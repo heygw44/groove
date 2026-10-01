@@ -84,6 +84,17 @@ class SalesAggregationQueryMapperTest extends MybatisTestSupport {
 		em.persist(paymentCancel);
 	}
 
+	/** 부분취소는 결제를 PARTIAL_CANCELED 로 두고 취소액은 payment_cancel DONE 행으로만 남긴다. */
+	private void persistPartialCanceledPayment(Order order, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt, BigDecimal cancelAmount) {
+		Payment payment = PaymentFixture.partialCanceled(order, paymentKey, approvedAt, canceledAt, cancelAmount);
+		em.persist(payment);
+		PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-" + paymentKey, cancelAmount, null,
+				canceledAt);
+		paymentCancel.complete(null, canceledAt);
+		em.persist(paymentCancel);
+	}
+
 	@Nested
 	@DisplayName("findDailySalesOf()")
 	class FindDailySalesOf {
@@ -115,6 +126,32 @@ class SalesAggregationQueryMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(result.orderCount()).isEqualTo(2);
 			assertThat(result.salesAmount()).isEqualByComparingTo(new BigDecimal("60000"));
+			assertThat(result.cancelCount()).isEqualTo(1);
+			assertThat(result.cancelAmount()).isEqualByComparingTo(new BigDecimal("30000"));
+		}
+
+		@Test
+		@DisplayName("부분취소(PARTIAL_CANCELED)된 결제도 승인 금액 전체를 매출로, 부분 환불액을 취소로 집계한다")
+		void countsPartialCanceledPaymentAsSale() {
+			// given
+			LocalDate saleDate = LocalDate.of(2031, 7, 12);
+			Product product = persistProduct("SAM Daily Partial", new BigDecimal("100000"));
+			Order order = OrderFixture.create(member, "20310712-SAM00004");
+			order.addItem(product, 1);
+			OrderFixture.markPaid(order);
+			em.persist(order);
+			persistPartialCanceledPayment(order, "sam-daily-key-4", LocalDateTime.of(2031, 7, 12, 10, 0),
+					LocalDateTime.of(2031, 7, 12, 12, 0), new BigDecimal("30000"));
+
+			em.flush();
+			em.clear();
+
+			// when
+			DailySalesAggregateRow result = salesAggregationQueryMapper.findDailySalesOf(saleDate);
+
+			// then
+			assertThat(result.orderCount()).isEqualTo(1);
+			assertThat(result.salesAmount()).isEqualByComparingTo(new BigDecimal("100000"));
 			assertThat(result.cancelCount()).isEqualTo(1);
 			assertThat(result.cancelAmount()).isEqualByComparingTo(new BigDecimal("30000"));
 		}

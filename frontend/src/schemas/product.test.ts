@@ -244,7 +244,13 @@ describe('toCreatePayload()', () => {
 
   it('프레싱 필드가 비어 있으면 키를 undefined 로 남긴다', () => {
     // given
-    const values = formValues({ country: '', pressingYear: '', catalogNo: '', barcode: '', editionType: '' });
+    const values = formValues({
+      country: '',
+      pressingYear: '',
+      catalogNo: '',
+      barcode: '',
+      editionType: '',
+    });
 
     // when
     const payload = toCreatePayload(values);

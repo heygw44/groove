@@ -1,31 +1,22 @@
 import axios from 'axios';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
-import { Button } from '@/components/common/Button';
 import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/toastContext';
-import { OrderCancelDialog } from '@/components/order/OrderCancelDialog';
 import { OrderItemCard } from '@/components/order/OrderItemCard';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
-import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
 import { PaymentInfoCard } from '@/components/order/PaymentInfoCard';
 import { ShippingAddressCard } from '@/components/order/ShippingAddressCard';
 import { VirtualAccountNotice } from '@/components/order/VirtualAccountNotice';
-import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
 import NotFoundPage from '@/pages/NotFoundPage';
-import type { RefundAccount } from '@/types/order';
-import { getErrorCode, getErrorMessage } from '@/utils/apiError';
+import { getErrorCode } from '@/utils/apiError';
 import { formatServerDate, formatServerDateTime } from '@/utils/formatDate';
-import { isCancelableStatus } from '@/utils/orderStatus';
-import {
-  CANCEL_REQUESTED_MESSAGES,
-  getOrderCancelSuccessMessage,
-  isCancellationPending,
-} from '@/utils/paymentStatus';
+import { formatCancelReason } from '@/utils/orderStatus';
+import { CANCEL_REQUESTED_MESSAGES, isCancellationPending } from '@/utils/paymentStatus';
 
 const NOT_FOUND_CODES = new Set(['ORDER_NOT_FOUND']);
 
@@ -38,8 +29,6 @@ export default function OrderDetailPage() {
 
   const { showToast } = useToast();
   const { data: order, isPending, isError, error, refetch } = useOrder(id);
-  const cancelOrderMutation = useCancelOrder();
-  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!order) {
@@ -83,21 +72,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  const handleCancel = (reason?: string, refundAccount?: RefundAccount) => {
-    cancelOrderMutation.mutate(
-      { orderId: order.id, reason, refundAccount },
-      {
-        onSuccess: (response) => {
-          showToast('success', getOrderCancelSuccessMessage(response.payment?.status));
-          setIsCancelDialogOpen(false);
-        },
-        onError: (error) => {
-          showToast('error', getErrorMessage(error));
-        },
-      },
-    );
-  };
-
   const cancellationPending = isCancellationPending(order.payment?.status);
   const isWaitingForDeposit = order.payment?.status === 'WAITING_FOR_DEPOSIT';
 
@@ -127,10 +101,6 @@ export default function OrderDetailPage() {
         )}
       </div>
 
-      <div className="mt-6">
-        <OrderStatusTimeline status={order.status} />
-      </div>
-
       {isWaitingForDeposit && order.payment?.virtualAccount && (
         <div className="mt-6">
           <VirtualAccountNotice
@@ -143,15 +113,17 @@ export default function OrderDetailPage() {
       {order.status === 'CANCELED' && order.canceledAt && (
         <div className="mt-6 rounded-lg border border-line bg-surface-muted px-5 py-4 text-sm text-content-muted">
           <p>{formatServerDateTime(order.canceledAt)} 취소</p>
-          {order.cancelReason && <p className="mt-1">사유: {order.cancelReason}</p>}
+          {order.cancelReason && (
+            <p className="mt-1">사유: {formatCancelReason(order.cancelReason)}</p>
+          )}
         </div>
       )}
 
       <section className="mt-8">
         <h2 className="mb-3 text-base font-bold">주문 상품</h2>
         <div className="flex flex-col gap-3">
-          {order.items.map((item, index) => (
-            <OrderItemCard key={`${item.productId}-${index}`} item={item} />
+          {order.items.map((item) => (
+            <OrderItemCard key={item.id} orderId={order.id} item={item} payment={order.payment} />
           ))}
         </div>
       </section>
@@ -169,28 +141,11 @@ export default function OrderDetailPage() {
         payment={order.payment}
       />
 
-      {isCancelableStatus(order.status) && (
-        <div className="mt-6 flex flex-col items-end gap-2">
-          <Button
-            variant="danger"
-            onClick={() => setIsCancelDialogOpen(true)}
-            disabled={cancellationPending}
-          >
-            주문 취소
-          </Button>
-          {cancellationPending && (
-            <p className="text-sm text-content-muted">{CANCEL_REQUESTED_MESSAGES.memberReason}</p>
-          )}
-        </div>
+      {cancellationPending && (
+        <p className="mt-6 text-right text-sm text-content-muted">
+          {CANCEL_REQUESTED_MESSAGES.memberReason}
+        </p>
       )}
-
-      <OrderCancelDialog
-        open={isCancelDialogOpen}
-        onClose={() => setIsCancelDialogOpen(false)}
-        onConfirm={handleCancel}
-        pending={cancelOrderMutation.isPending}
-        payment={order.payment}
-      />
     </div>
   );
 }

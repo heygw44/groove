@@ -12,6 +12,7 @@ import com.groove.order.service.PaidOrderCancelHook;
 import com.groove.order.service.PaidOrderCancelResult;
 import com.groove.order.service.PaidOrderCancelStatus;
 import com.groove.payment.client.PaymentClient;
+import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.RefundAccountInfo;
 
@@ -36,7 +37,8 @@ public class PaidOrderCancelService implements PaidOrderCancelHook {
 
 		PaymentCancelResult tossResult;
 		try {
-			tossResult = paymentClient.cancel(request.paymentKey(), request.tossReason(), request.refundAccount());
+			tossResult = paymentClient.cancel(PaymentCancelCommand.of(request.paymentKey(), request.tossReason(), null,
+					request.idempotencyKey(), request.refundAccount()));
 		} catch (BusinessException ex) {
 			if (ex.getErrorCode() == ErrorCode.PAYMENT_RESULT_UNKNOWN) {
 				log.warn("토스 취소 결과 불명: orderId={}, paymentId={}", orderId, request.paymentId());

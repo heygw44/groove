@@ -1,7 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { cancelOrder, createOrder, updateOrderShippingAddress } from '@/api/order';
-import { cartKeys, couponKeys, orderKeys } from '@/hooks/queries/queryKeys';
+import {
+  cancelOrder,
+  cancelOrderItem,
+  confirmOrderItem,
+  createOrder,
+  returnOrderItem,
+  updateOrderShippingAddress,
+  withdrawOrderClaim,
+} from '@/api/order';
+import { cartKeys, couponKeys, orderKeys, reviewKeys } from '@/hooks/queries/queryKeys';
 import type { OrderCreateRequest, RefundAccount } from '@/types/order';
 
 interface CreateOrderVariables {
@@ -50,11 +58,101 @@ export const useCancelOrder = () => {
       cancelOrder(orderId, reason || refundAccount ? { reason, refundAccount } : undefined),
     onSuccess: (data, { orderId }) => {
       queryClient.setQueryData(orderKeys.detail(orderId), data);
+    },
+    // 실패해도 서버 상태가 바뀌었을 수 있어 끝나면 항상 무효화한다.
+    onSettled: () => {
       // 취소로 재고가 복구되므로 목록과 장바구니 캐시도 함께 무효화한다.
       queryClient.invalidateQueries({ queryKey: orderKeys.all });
       queryClient.invalidateQueries({ queryKey: cartKeys.all });
       // 취소로 쿠폰도 다시 사용 가능 상태가 되므로 함께 무효화한다.
       queryClient.invalidateQueries({ queryKey: couponKeys.all });
     },
+  });
+};
+
+interface CancelOrderItemVariables {
+  orderId: number;
+  itemId: number;
+  reason?: string;
+  refundAccount?: RefundAccount;
+}
+
+/** 상품주문 상태가 바뀌면 상세(availableActions 포함)와 목록을 모두 다시 받는다. */
+const useInvalidateOrders = () => {
+  const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries({ queryKey: orderKeys.all });
+    queryClient.invalidateQueries({ queryKey: orderKeys.detailAll });
+  };
+};
+
+export const useCancelOrderItem = () => {
+  const queryClient = useQueryClient();
+  const invalidateOrders = useInvalidateOrders();
+
+  return useMutation({
+    mutationFn: ({ orderId, itemId, reason, refundAccount }: CancelOrderItemVariables) =>
+      cancelOrderItem(
+        orderId,
+        itemId,
+        reason || refundAccount ? { reason, refundAccount } : undefined,
+      ),
+    onSettled: () => {
+      invalidateOrders();
+      // 즉시 취소되면 재고·쿠폰이 되돌아온다.
+      queryClient.invalidateQueries({ queryKey: cartKeys.all });
+      queryClient.invalidateQueries({ queryKey: couponKeys.all });
+    },
+  });
+};
+
+interface ReturnOrderItemVariables {
+  orderId: number;
+  itemId: number;
+  reason?: string;
+  refundAccount?: RefundAccount;
+}
+
+export const useReturnOrderItem = () => {
+  const invalidateOrders = useInvalidateOrders();
+
+  return useMutation({
+    mutationFn: ({ orderId, itemId, reason, refundAccount }: ReturnOrderItemVariables) =>
+      returnOrderItem(
+        orderId,
+        itemId,
+        reason || refundAccount ? { reason, refundAccount } : undefined,
+      ),
+    onSettled: () => invalidateOrders(),
+  });
+};
+
+export const useWithdrawOrderClaim = () => {
+  const invalidateOrders = useInvalidateOrders();
+
+  return useMutation({
+    mutationFn: (claimId: number) => withdrawOrderClaim(claimId),
+    onSettled: () => invalidateOrders(),
+  });
+};
+
+interface ConfirmOrderItemVariables {
+  orderId: number;
+  itemId: number;
+  productId: number;
+}
+
+export const useConfirmOrderItem = () => {
+  const queryClient = useQueryClient();
+  const invalidateOrders = useInvalidateOrders();
+
+  return useMutation({
+    mutationFn: ({ orderId, itemId }: ConfirmOrderItemVariables) =>
+      confirmOrderItem(orderId, itemId),
+    onSuccess: (data, { orderId, productId }) => {
+      queryClient.setQueryData(orderKeys.detail(orderId), data);
+      queryClient.invalidateQueries({ queryKey: reviewKeys.eligibility(productId) });
+    },
+    onSettled: () => invalidateOrders(),
   });
 };

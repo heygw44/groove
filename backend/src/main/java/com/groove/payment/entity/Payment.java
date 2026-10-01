@@ -171,7 +171,7 @@ public class Payment extends BaseTimeEntity {
 
 	/**
 	 * 입금 전 가상계좌를 닫을 때 쓴다(사용자 취소·입금기한 만료). 한 번도 승인된 적이 없어 approvedAt 은
-	 * 비워 둔다 - 매출 집계는 DONE/CANCELED 의 approved_at 으로 날짜를 잡으므로, 비워두면 애초에 매출로
+	 * 비워 둔다 - 매출 집계는 DONE/CANCELED/PARTIAL_CANCELED 의 approved_at 으로 날짜를 잡으므로, 비워두면 애초에 매출로
 	 * 잡히지 않았던 결제가 취소 집계에도 섞이지 않는다.
 	 */
 	public void cancelVirtualAccount(String reason, LocalDateTime canceledTime) {
@@ -263,8 +263,9 @@ public class Payment extends BaseTimeEntity {
 
 	/**
 	 * 토스가 승인한 결제를 뒤늦게 취소로 수렴시킨다(승인 후 주문 무효, 대사 결과 토스에서 이미 취소됨 등).
-	 * approvedAt 을 채우는 이유: 매출 집계는 DONE/CANCELED 의 approved_at 을 매출로, CANCELED 의
-	 * canceled_at 을 취소로 센다. approvedAt 을 비우면 취소 금액만 늘어 순매출이 실제보다 줄어든다.
+	 * approvedAt 을 채우는 이유: 매출 집계는 DONE/CANCELED/PARTIAL_CANCELED 의 approved_at 을 매출로,
+	 * CANCELED 의 canceled_at 을 취소로 센다. approvedAt 을 비우면 취소 금액만 늘어 순매출이 실제보다 줄어든다.
+	 * canceledAmount 도 전액으로 채운다 - 전액취소 경로(completeCancel)와 같은 결과여야 잔액 계산이 어긋나지 않는다.
 	 */
 	public void compensate(String key, LocalDateTime approvedTime, LocalDateTime canceledTime, String reason) {
 		if (this.status == PaymentStatus.CANCELED) {
@@ -279,6 +280,7 @@ public class Payment extends BaseTimeEntity {
 		if (this.approvedAt == null) {
 			this.approvedAt = approvedTime != null ? approvedTime : canceledTime;
 		}
+		this.canceledAmount = this.amount;
 		this.canceledAt = canceledTime;
 		this.failReason = truncate(reason);
 		this.status = PaymentStatus.CANCELED;

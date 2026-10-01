@@ -126,6 +126,17 @@ groove:
       # 같은 이메일로 5회 연속 실패하면 15분 잠근다. 실패마다 창을 다시 걸어 마지막 실패로부터 15분이다.
       max-failures: 5
       window: 15m
+  order:
+    # 택배 API 가 없어 발송 뒤 설정 일수가 지나면 배송완료로 자동 처리한다(D7).
+    auto-deliver:
+      days: 5
+      interval: 5m
+      batch-size: 200
+    # 배송완료 뒤 설정 일수가 지나면 자동 구매확정한다(D7). 04:00 DB 백업 뒤, 05:10 결제 정산 전에 돈다.
+    purchase-confirm:
+      days: 8
+      cron: "0 30 4 * * *"
+      batch-size: 200
   payment:
     reconcile:
       interval: 60s

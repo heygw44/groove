@@ -1,8 +1,9 @@
-import type { AdminOrderListParams, OrderStatus } from '@/types/order';
-import { isOrderStatus } from '@/utils/orderStatus';
+import type { AdminOrderItemCountParams, AdminOrderItemListParams } from '@/types/adminOrder';
+import type { OrderStatusGroup } from '@/types/order';
+import { isOrderStatusGroup } from '@/utils/orderStatus';
 
 export interface AdminOrderFilters {
-  status?: OrderStatus;
+  statusGroup?: OrderStatusGroup;
   keyword: string;
   from?: string;
   to?: string;
@@ -10,12 +11,12 @@ export interface AdminOrderFilters {
 }
 
 const DEFAULT_PAGE = 0;
-const ADMIN_ORDER_PAGE_SIZE = 20;
+export const ADMIN_ORDER_PAGE_SIZE = 20;
 const KEYWORD_MAX_LENGTH = 100;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-const parseStatus = (value: string | null): OrderStatus | undefined =>
-  value !== null && isOrderStatus(value) ? value : undefined;
+const parseStatusGroup = (value: string | null): OrderStatusGroup | undefined =>
+  value !== null && isOrderStatusGroup(value) ? value : undefined;
 
 const parseKeyword = (value: string | null): string =>
   (value ?? '').trim().slice(0, KEYWORD_MAX_LENGTH);
@@ -54,7 +55,7 @@ export const parseAdminOrderFilters = (searchParams: URLSearchParams): AdminOrde
   const isInvalidRange = from !== undefined && to !== undefined && from > to;
 
   return {
-    status: parseStatus(searchParams.get('status')),
+    statusGroup: parseStatusGroup(searchParams.get('statusGroup')),
     keyword: parseKeyword(searchParams.get('keyword')),
     from: isInvalidRange ? undefined : from,
     to: isInvalidRange ? undefined : to,
@@ -66,8 +67,8 @@ export const parseAdminOrderFilters = (searchParams: URLSearchParams): AdminOrde
 export const serializeAdminOrderFilters = (filters: AdminOrderFilters): URLSearchParams => {
   const params = new URLSearchParams();
 
-  if (filters.status !== undefined) {
-    params.set('status', filters.status);
+  if (filters.statusGroup !== undefined) {
+    params.set('statusGroup', filters.statusGroup);
   }
   if (filters.keyword !== '') {
     params.set('keyword', filters.keyword);
@@ -85,11 +86,19 @@ export const serializeAdminOrderFilters = (filters: AdminOrderFilters): URLSearc
   return params;
 };
 
-export const toAdminOrderListParams = (filters: AdminOrderFilters): AdminOrderListParams => ({
-  status: filters.status,
+export const toAdminOrderItemCountParams = (
+  filters: AdminOrderFilters,
+): AdminOrderItemCountParams => ({
+  statusGroup: filters.statusGroup,
   keyword: filters.keyword === '' ? undefined : filters.keyword,
   from: filters.from,
   to: filters.to,
+});
+
+export const toAdminOrderItemListParams = (
+  filters: AdminOrderFilters,
+): AdminOrderItemListParams => ({
+  ...toAdminOrderItemCountParams(filters),
   page: filters.page,
   size: ADMIN_ORDER_PAGE_SIZE,
 });

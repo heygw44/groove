@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
@@ -20,7 +21,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.ResultActions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.groove.auth.dto.LoginRequest;
@@ -38,10 +38,11 @@ import com.groove.member.entity.Member;
 import com.groove.member.entity.MemberRole;
 import com.groove.member.repository.AddressRepository;
 import com.groove.member.repository.MemberRepository;
-import com.groove.order.dto.AdminOrderStatusChangeRequest;
+import com.groove.order.dto.AdminOrderItemConfirmRequest;
+import com.groove.order.dto.AdminOrderItemDeliverRequest;
+import com.groove.order.dto.AdminOrderItemShipRequest;
 import com.groove.order.dto.OrderCreateRequest;
 import com.groove.order.entity.Order;
-import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -92,13 +93,14 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 		@Test
 		@DisplayName("전체 흐름을 정상적으로 완료한다")
 		void completesFullReviewFlow() throws Exception {
-			// given: 구매자가 상품을 주문하고 DELIVERED 까지 전이한다
+			// given: 구매자가 상품을 주문하고 DELIVERED 까지 전이한 뒤 구매확정까지 마친다(리뷰는 PURCHASE_CONFIRMED 부터)
 			Member buyer = signup();
 			String buyerToken = login(buyer.getEmail());
 			Address address = addressRepository.save(AddressFixture.create(buyer));
 			Product product = seedProduct(5);
 			long orderId = createOrder(buyerToken, product.getId(), address.getId());
 			deliverOrder(orderId);
+			confirmPurchase(orderId, buyerToken);
 
 			// when & then: 리뷰를 작성하면 201 을 반환한다
 			MvcResult createResult = mockMvc.perform(post("/api/v1/products/{productId}/reviews", product.getId())
@@ -179,22 +181,34 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 		order.markPaid();
 		order.place(LocalDateTime.now());
 		orderRepository.save(order);
+		long itemId = order.getItems().get(0).getId();
 
 		Member admin = memberRepository.save(
 				MemberFixture.createAdmin("review-flow-admin-" + UUID.randomUUID() + "@groove.com"));
 		String adminBearer = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
 
-		changeStatus(orderId, adminBearer, OrderStatus.PREPARING).andExpect(status().isOk());
-		changeStatus(orderId, adminBearer, OrderStatus.SHIPPED).andExpect(status().isOk());
-		changeStatus(orderId, adminBearer, OrderStatus.DELIVERED).andExpect(status().isOk());
+		// 배송 진행은 상품주문 단위라 발주확인 → 발송처리 → 배송완료 일괄 처리 API 로 옮긴다
+		performAdminItemAction(adminBearer, "confirm", new AdminOrderItemConfirmRequest(List.of(itemId)));
+		performAdminItemAction(adminBearer, "ship", new AdminOrderItemShipRequest(
+				List.of(new AdminOrderItemShipRequest.ShipItem(itemId, "CJ", "1234567890"))));
+		performAdminItemAction(adminBearer, "deliver", new AdminOrderItemDeliverRequest(List.of(itemId)));
 	}
 
-	private ResultActions changeStatus(long orderId, String adminBearer, OrderStatus status) throws Exception {
-		AdminOrderStatusChangeRequest request = new AdminOrderStatusChangeRequest(status);
-		return mockMvc.perform(patch("/api/v1/admin/orders/" + orderId + "/status")
-				.header(HttpHeaders.AUTHORIZATION, adminBearer)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(request)));
+	private void confirmPurchase(long orderId, String buyerToken) throws Exception {
+		Order order = orderRepository.findWithItemsById(orderId).orElseThrow();
+		long itemId = order.getItems().get(0).getId();
+		mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/confirm", orderId, itemId)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken))
+				.andExpect(status().isOk());
+	}
+
+	private void performAdminItemAction(String adminBearer, String action, Object request) throws Exception {
+		mockMvc.perform(post("/api/v1/admin/order-items/" + action)
+						.header(HttpHeaders.AUTHORIZATION, adminBearer)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content(objectMapper.writeValueAsString(request)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.processed", is(1)));
 	}
 
 	private Product seedProduct(int stockQuantity) {

@@ -17,8 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 부분취소를 포함한 결제 환불 진입점. 상품 단위 취소·반품 같은 상위 기능이 아직 없어 지금은 이 서비스를 직접
- * 호출하는 API 가 없다 - 이후 클레임 승인이 이 메서드를 호출한다.
+ * 부분취소를 포함한 결제 환불 진입점. 상품 단위 취소·반품 클레임 승인({@code com.groove.order.service.OrderClaimService})이
+ * 이 메서드를 호출한다.
  */
 @Slf4j
 @Service
@@ -31,8 +31,17 @@ public class PaymentRefundService {
 
 	public PaymentRefundResult refund(Long paymentId, BigDecimal amount, String reason,
 			RefundAccountInfo refundAccount) {
-		PaymentRefundRequest request = writer.requestRefund(paymentId, amount, reason, refundAccount);
+		return resolve(writer.requestRefund(paymentId, amount, reason, refundAccount));
+	}
 
+	/** {@code orderClaimId} 가 있으면 이 취소 건이 어느 클레임 승인으로 시작됐는지 payment_cancel 에 같이 남긴다. */
+	public PaymentRefundResult refund(Long paymentId, BigDecimal amount, String reason,
+			RefundAccountInfo refundAccount, Long orderClaimId) {
+		return resolve(writer.requestRefund(paymentId, amount, reason, refundAccount, orderClaimId));
+	}
+
+	private PaymentRefundResult resolve(PaymentRefundRequest request) {
+		Long paymentId = request.paymentId();
 		PaymentCancelCommand command = PaymentCancelCommand.of(request.paymentKey(), request.reason(),
 				request.cancelAmount(), request.idempotencyKey(), request.refundAccount());
 		PaymentCancelResult tossResult;

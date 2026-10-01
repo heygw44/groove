@@ -34,6 +34,8 @@ import com.groove.limited.entity.LimitedDropStat;
 import com.groove.limited.entity.LimitedDropStatus;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemClaimStatus;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentCancel;
 import com.groove.product.entity.Artist;
@@ -89,6 +91,17 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 		em.persist(payment);
 		PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-" + paymentKey, payment.getAmount(),
 				null, canceledAt);
+		paymentCancel.complete(null, canceledAt);
+		em.persist(paymentCancel);
+	}
+
+	/** 부분취소는 결제를 PARTIAL_CANCELED 로 두고 취소액은 payment_cancel DONE 행으로만 남긴다. */
+	private void persistPartialCanceledPayment(Order order, String paymentKey, LocalDateTime approvedAt,
+			LocalDateTime canceledAt, BigDecimal cancelAmount) {
+		Payment payment = PaymentFixture.partialCanceled(order, paymentKey, approvedAt, canceledAt, cancelAmount);
+		em.persist(payment);
+		PaymentCancel paymentCancel = PaymentCancel.request(payment, "cancel-" + paymentKey, cancelAmount, null,
+				canceledAt);
 		paymentCancel.complete(null, canceledAt);
 		em.persist(paymentCancel);
 	}
@@ -549,8 +562,8 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 	class FindSummary {
 
 		@Test
-		@DisplayName("승인 결제·PENDING 주문을 today/tomorrow 경계로 집계한다")
-		void aggregatesTodayApprovalsAndPendingOrders() {
+		@DisplayName("승인 결제를 today/tomorrow 경계로 집계한다")
+		void aggregatesTodayApprovals() {
 			// given
 			LocalDateTime todayStart = LocalDateTime.of(2031, 6, 10, 0, 0);
 			LocalDateTime tomorrowStart = LocalDateTime.of(2031, 6, 11, 0, 0);
@@ -565,12 +578,6 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			persistOrderWithPayment("20310611-ASMSUM003", product, 1, "asm-summary-key-3",
 					LocalDateTime.of(2031, 6, 11, 9, 0));
 
-			// 입금대기(가상계좌 발급) 같은 확정된 PENDING 만 pendingOrderCount 에 잡혀야 한다.
-			Order pendingOrder = OrderFixture.create(member, "20310610-ASMSUM004");
-			pendingOrder.addItem(product, 1);
-			pendingOrder.place(LocalDateTime.of(2031, 6, 10, 9, 30));
-			em.persist(pendingOrder);
-
 			em.flush();
 			em.clear();
 
@@ -582,23 +589,23 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			assertThat(result.todayCancelAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 			assertThat(result.todayOrderCount()).isEqualTo(2);
 			assertThat(result.todayNewMemberCount()).isZero();
-			assertThat(result.pendingOrderCount()).isGreaterThanOrEqualTo(1);
 		}
 
 		@Test
-		@DisplayName("결제 전이라 확정되지 않은 PENDING 주문은 pendingOrderCount 를 늘리지 않는다")
-		void excludesUnplacedPendingOrderFromPendingOrderCount() {
-			// given: 공유 DB 라 절대 개수 대신 주문 추가 전후의 증분으로 단언한다
-			LocalDateTime todayStart = LocalDateTime.of(2031, 7, 10, 0, 0);
-			LocalDateTime tomorrowStart = LocalDateTime.of(2031, 7, 11, 0, 0);
-			Product product = ProductFixture.create(artist, "ASM Summary Unplaced Product", new BigDecimal("25000"));
+		@DisplayName("부분취소(PARTIAL_CANCELED)된 결제도 승인 금액 전체를 매출로, 부분 환불액을 취소로 집계한다")
+		void countsPartialCanceledPaymentAsSale() {
+			// given
+			LocalDateTime todayStart = LocalDateTime.of(2031, 8, 10, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2031, 8, 11, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Partial", new BigDecimal("100000"));
 			em.persist(product.getAlbum());
 			em.persist(product);
-			long countBefore = adminStatsMapper.findSummary(todayStart, tomorrowStart).pendingOrderCount();
-
-			Order unplacedOrder = OrderFixture.create(member, "20310710-ASMSUM007");
-			unplacedOrder.addItem(product, 1);
-			em.persist(unplacedOrder);
+			Order order = OrderFixture.create(member, "20310810-ASMSUM020");
+			order.addItem(product, 1);
+			OrderFixture.markPaid(order);
+			em.persist(order);
+			persistPartialCanceledPayment(order, "asm-summary-key-partial", LocalDateTime.of(2031, 8, 10, 9, 0),
+					LocalDateTime.of(2031, 8, 10, 12, 0), new BigDecimal("30000"));
 
 			em.flush();
 			em.clear();
@@ -607,7 +614,60 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			AdminStatsSummaryResponse result = adminStatsMapper.findSummary(todayStart, tomorrowStart);
 
 			// then
-			assertThat(result.pendingOrderCount()).isEqualTo(countBefore);
+			assertThat(result.todaySalesAmount()).isEqualByComparingTo(new BigDecimal("100000"));
+			assertThat(result.todayCancelAmount()).isEqualByComparingTo(new BigDecimal("30000"));
+			assertThat(result.todayOrderCount()).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("상품주문 상태·클레임 상태별 처리 대기 건수를 늘린다")
+		void increasesProcessingCountsByOrderItemStatus() {
+			// given: 공유 DB 라 절대 개수 대신 주문 추가 전후의 증분으로 단언한다
+			LocalDateTime todayStart = LocalDateTime.of(2033, 5, 10, 0, 0);
+			LocalDateTime tomorrowStart = LocalDateTime.of(2033, 5, 11, 0, 0);
+			Product product = ProductFixture.create(artist, "ASM Summary Status Product", new BigDecimal("20000"));
+			em.persist(product.getAlbum());
+			em.persist(product);
+			AdminStatsSummaryResponse before = adminStatsMapper.findSummary(todayStart, tomorrowStart);
+
+			Order paidOrder = OrderFixture.create(member, "20330510-ASMSUM010");
+			paidOrder.addItem(product, 1);
+			paidOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(paidOrder, OrderItemStatus.PAID);
+			em.persist(paidOrder);
+
+			Order depositWaitingOrder = OrderFixture.create(member, "20330510-ASMSUM011");
+			depositWaitingOrder.addItem(product, 1);
+			depositWaitingOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(depositWaitingOrder, OrderItemStatus.PAYMENT_WAITING);
+			em.persist(depositWaitingOrder);
+
+			Order cancelRequestOrder = OrderFixture.create(member, "20330510-ASMSUM012");
+			cancelRequestOrder.addItem(product, 1);
+			cancelRequestOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(cancelRequestOrder, OrderItemStatus.PREPARING);
+			OrderFixture.markFirstItemClaimStatus(cancelRequestOrder, OrderItemClaimStatus.CANCEL_REQUEST);
+			em.persist(cancelRequestOrder);
+
+			Order returnRequestOrder = OrderFixture.create(member, "20330510-ASMSUM013");
+			returnRequestOrder.addItem(product, 1);
+			returnRequestOrder.place(LocalDateTime.of(2033, 5, 10, 9, 0));
+			OrderFixture.markItemsStatus(returnRequestOrder, OrderItemStatus.DELIVERED);
+			OrderFixture.markFirstItemClaimStatus(returnRequestOrder, OrderItemClaimStatus.RETURN_REQUEST);
+			em.persist(returnRequestOrder);
+
+			em.flush();
+			em.clear();
+
+			// when: 새 카운트 4개는 날짜 창과 무관하므로, MyBatis 세션 로컬 캐시가 같은 파라미터의 재호출을 캐시된
+			// 값으로 돌려주지 않도록 tomorrowStart 를 1분 밀어 다른 파라미터로 다시 조회한다.
+			AdminStatsSummaryResponse after = adminStatsMapper.findSummary(todayStart, tomorrowStart.plusMinutes(1));
+
+			// then
+			assertThat(after.newOrderCount()).isEqualTo(before.newOrderCount() + 1);
+			assertThat(after.depositWaitingCount()).isEqualTo(before.depositWaitingCount() + 1);
+			assertThat(after.cancelRequestCount()).isEqualTo(before.cancelRequestCount() + 1);
+			assertThat(after.returnRequestCount()).isEqualTo(before.returnRequestCount() + 1);
 		}
 
 		@Test

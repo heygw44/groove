@@ -7,6 +7,24 @@ import type {
   AdminMemberSummary,
 } from '@/types/adminMember';
 import type {
+  AdminOrderClaimCompleteRequest,
+  AdminOrderClaimCounts,
+  AdminOrderClaimListParams,
+  AdminOrderClaimRejectRequest,
+  AdminOrderClaimSummary,
+  AdminOrderDetail,
+  AdminOrderItemBulkResult,
+  AdminOrderItemCancelRequest,
+  AdminOrderItemCount,
+  AdminOrderItemCountParams,
+  AdminOrderItemConfirmRequest,
+  AdminOrderItemDeliverRequest,
+  AdminOrderItemListParams,
+  AdminOrderItemResult,
+  AdminOrderItemShipRequest,
+  AdminOrderItemSummary,
+} from '@/types/adminOrder';
+import type {
   AdminStatsSummary,
   DailySalesStats,
   LimitedDropStats,
@@ -17,7 +35,7 @@ import type {
   ReconcileLogListParams,
   StatsPeriodParams,
 } from '@/types/adminStats';
-import type { ApiResponse, PageResponse } from '@/types/api';
+import type { ApiResponse, PageResponse, SliceResponse } from '@/types/api';
 import type {
   AdminCouponCreateRequest,
   AdminCouponListParams,
@@ -33,12 +51,6 @@ import type {
   AdminLimitedDropSummary,
   AdminLimitedDropUpdateRequest,
 } from '@/types/limitedDrop';
-import type {
-  AdminOrderDetail,
-  AdminOrderListParams,
-  AdminOrderStatusChangeRequest,
-  AdminOrderSummary,
-} from '@/types/order';
 import type {
   AdminAlbumListParams,
   AdminAlbumSummary,
@@ -79,9 +91,16 @@ export const restoreAdminProduct = (id: number) =>
 export const adjustStock = (id: number, payload: StockAdjustRequest) =>
   unwrap(client.patch<ApiResponse<StockAdjustResponse>>(`/admin/products/${id}/stock`, payload));
 
-export const getAdminOrders = (params: AdminOrderListParams) =>
+export const getAdminOrderItems = (params: AdminOrderItemListParams) =>
   unwrap(
-    client.get<ApiResponse<PageResponse<AdminOrderSummary>>>('/admin/orders', {
+    client.get<ApiResponse<SliceResponse<AdminOrderItemSummary>>>('/admin/order-items', {
+      params,
+    }),
+  );
+
+export const getAdminOrderItemCount = (params: AdminOrderItemCountParams) =>
+  unwrap(
+    client.get<ApiResponse<AdminOrderItemCount>>('/admin/order-items/count', {
       params,
     }),
   );
@@ -89,8 +108,51 @@ export const getAdminOrders = (params: AdminOrderListParams) =>
 export const getAdminOrder = (orderId: number) =>
   unwrap(client.get<ApiResponse<AdminOrderDetail>>(`/admin/orders/${orderId}`));
 
-export const changeAdminOrderStatus = (orderId: number, payload: AdminOrderStatusChangeRequest) =>
-  unwrap(client.patch<ApiResponse<AdminOrderDetail>>(`/admin/orders/${orderId}/status`, payload));
+export const confirmAdminOrderItems = (payload: AdminOrderItemConfirmRequest) =>
+  unwrap(client.post<ApiResponse<AdminOrderItemBulkResult>>('/admin/order-items/confirm', payload));
+
+export const shipAdminOrderItems = (payload: AdminOrderItemShipRequest) =>
+  unwrap(client.post<ApiResponse<AdminOrderItemBulkResult>>('/admin/order-items/ship', payload));
+
+export const deliverAdminOrderItems = (payload: AdminOrderItemDeliverRequest) =>
+  unwrap(client.post<ApiResponse<AdminOrderItemBulkResult>>('/admin/order-items/deliver', payload));
+
+export const cancelAdminOrderItem = (id: number, payload: AdminOrderItemCancelRequest) =>
+  unwrap(
+    client.post<ApiResponse<AdminOrderItemResult>>(`/admin/order-items/${id}/cancel`, payload),
+  );
+
+export const getAdminOrderClaims = (params: AdminOrderClaimListParams) =>
+  unwrap(
+    client.get<ApiResponse<PageResponse<AdminOrderClaimSummary>>>('/admin/order-claims', {
+      params,
+    }),
+  );
+
+export const getAdminOrderClaimCounts = () =>
+  unwrap(client.get<ApiResponse<AdminOrderClaimCounts>>('/admin/order-claims/counts'));
+
+export const approveAdminOrderClaim = (claimId: number) =>
+  unwrap(client.post<ApiResponse<AdminOrderItemResult>>(`/admin/order-claims/${claimId}/approve`));
+
+export const rejectAdminOrderClaim = (claimId: number, payload: AdminOrderClaimRejectRequest) =>
+  unwrap(
+    client.post<ApiResponse<AdminOrderItemResult>>(
+      `/admin/order-claims/${claimId}/reject`,
+      payload,
+    ),
+  );
+
+export const collectAdminOrderClaim = (claimId: number) =>
+  unwrap(client.post<ApiResponse<AdminOrderItemResult>>(`/admin/order-claims/${claimId}/collect`));
+
+export const completeAdminOrderClaim = (claimId: number, payload: AdminOrderClaimCompleteRequest) =>
+  unwrap(
+    client.post<ApiResponse<AdminOrderItemResult>>(
+      `/admin/order-claims/${claimId}/complete`,
+      payload,
+    ),
+  );
 
 export const getAdminCoupons = (params: AdminCouponListParams) =>
   unwrap(

@@ -85,7 +85,7 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
 		@Test
 		@DisplayName("1건만 성공하고 나머지는 REVIEW_ALREADY_EXISTS 로 실패한다")
 		void onlyOneReviewIsCreated() throws InterruptedException {
-			// given: 구매 검증을 통과시키려면 DELIVERED 주문이 필요해 REST 흐름 없이 바로 심는다.
+			// given: 구매 검증을 통과시키려면 PURCHASE_CONFIRMED 주문이 필요해 REST 흐름 없이 바로 심는다.
 			Artist artist = artistRepository.save(ArtistFixture.create());
 			Product createdProduct = ProductFixture.create(artist);
 			albumRepository.save(createdProduct.getAlbum());
@@ -94,7 +94,7 @@ class ReviewConcurrencyIntegrationTest extends IntegrationTestSupport {
 					MemberFixture.create("reviewer-" + UUID.randomUUID() + "@groove.com"));
 			Order order = OrderFixture.createWithItem(member, product, 1);
 			OrderFixture.markDelivered(order);
-			OrderFixture.markItemsStatus(order, OrderItemStatus.DELIVERED);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.PURCHASE_CONFIRMED);
 			orderRepository.save(order);
 
 			Long productId = product.getId();

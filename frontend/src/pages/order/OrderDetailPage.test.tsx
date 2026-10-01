@@ -1,16 +1,18 @@
-import { render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ToastProvider } from '@/components/common/Toast';
-import { useCancelOrder } from '@/hooks/mutations/useOrderMutations';
 import { useOrder } from '@/hooks/queries/useOrder';
 import OrderDetailPage from '@/pages/order/OrderDetailPage';
 import type { OrderDetail } from '@/types/order';
 
 vi.mock('@/hooks/mutations/useOrderMutations', () => ({
-  useCancelOrder: vi.fn(),
+  useCancelOrder: () => ({ mutate: vi.fn(), isPending: false }),
+  useCancelOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
+  useReturnOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
+  useWithdrawOrderClaim: () => ({ mutate: vi.fn(), isPending: false }),
+  useConfirmOrderItem: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock('@/hooks/queries/useOrder', () => ({
@@ -30,6 +32,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
   finalAmount: 10000,
   items: [
     {
+      id: 11,
       productId: 1,
       productName: '레코드 판',
       price: 10000,
@@ -40,6 +43,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
       status: 'PAID',
       paidAmount: 10000,
       availableActions: [],
+      refundInProgress: false,
     },
   ],
   shippingAddress: {
@@ -62,8 +66,6 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
   ...overrides,
 });
 
-type CancelOrderMutation = ReturnType<typeof useCancelOrder>;
-
 const mockOrder = (order: OrderDetail) => {
   vi.mocked(useOrder).mockReturnValue({
     data: order,
@@ -72,16 +74,6 @@ const mockOrder = (order: OrderDetail) => {
     error: null,
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof useOrder>);
-};
-
-const mockCancelMutation = (response: OrderDetail) => {
-  const mutate = ((
-    _variables: { orderId: number; reason?: string },
-    options?: { onSuccess?: (data: OrderDetail) => void },
-  ) => {
-    options?.onSuccess?.(response);
-  }) as CancelOrderMutation['mutate'];
-  vi.mocked(useCancelOrder).mockReturnValue({ mutate, isPending: false } as CancelOrderMutation);
 };
 
 const renderPage = () =>
@@ -100,27 +92,29 @@ afterEach(() => {
 });
 
 describe('OrderDetailPage', () => {
-  it('주문 상품 카드에 재구매 액션을 보여준다', () => {
+  it('진행 중 상품에는 재구매 액션을 보여주지 않는다', () => {
     // given
     mockOrder(buildOrder());
-    mockCancelMutation(buildOrder());
 
     // when
     renderPage();
 
     // then
     expect(screen.getByText('레코드 판')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '장바구니 담기' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '바로 구매하기' })).toBeInTheDocument();
+    expect(screen.getByText('ORD-1-01')).toBeInTheDocument();
+    expect(screen.getByText('결제 금액 10,000원')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '장바구니 담기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '바로 구매하기' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '리뷰 쓰기' })).not.toBeInTheDocument();
   });
 
   it('상품주문 availableActions 에 WRITE_REVIEW 가 있으면 리뷰 쓰기 링크를 보여준다', () => {
     // given
     const order = buildOrder({
-      status: 'DELIVERED',
+      status: 'PAID',
       items: [
         {
+          id: 11,
           productId: 1,
           productName: '레코드 판',
           price: 10000,
@@ -131,11 +125,11 @@ describe('OrderDetailPage', () => {
           status: 'DELIVERED',
           paidAmount: 10000,
           availableActions: ['WRITE_REVIEW'],
+          refundInProgress: false,
         },
       ],
     });
     mockOrder(order);
-    mockCancelMutation(order);
 
     // when
     renderPage();
@@ -165,7 +159,6 @@ describe('OrderDetailPage', () => {
       },
     });
     mockOrder(order);
-    mockCancelMutation(order);
 
     // when
     renderPage();
@@ -175,7 +168,7 @@ describe('OrderDetailPage', () => {
     expect(screen.getAllByText('입금대기').length).toBeGreaterThan(0);
   });
 
-  it('결제 취소 처리 중이면 상태를 표시하고 주문 취소를 비활성화한다', () => {
+  it('결제 취소 처리 중이면 안내를 보여주고 주문 단위 취소 버튼은 없다', () => {
     // given
     const order = buildOrder({
       payment: {
@@ -189,47 +182,31 @@ describe('OrderDetailPage', () => {
       },
     });
     mockOrder(order);
-    mockCancelMutation(order);
 
     // when
     renderPage();
 
     // then
     expect(screen.getByText('취소 처리 중')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '주문 취소' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '주문 취소' })).not.toBeInTheDocument();
     expect(
       screen.getByText('취소 결과를 확인하고 있어 다시 취소할 수 없습니다.'),
     ).toBeInTheDocument();
   });
 
-  it('취소 성공 응답이 CANCEL_REQUESTED 면 접수 안내 토스트를 보여준다', async () => {
+  it('취소된 주문은 취소 사유를 보여준다', () => {
     // given
-    const user = userEvent.setup();
-    const order = buildOrder();
-    const response = buildOrder({
-      payment: {
-        paymentId: 1,
-        method: '카드',
-        status: 'CANCEL_REQUESTED',
-        amount: 10000,
-        approvedAt: '2026-09-13T00:01:00',
-        easyPayProvider: null,
-        virtualAccount: null,
-      },
+    const order = buildOrder({
+      status: 'CANCELED',
+      canceledAt: '2026-09-14T00:00:00',
+      cancelReason: 'EXPIRED',
     });
     mockOrder(order);
-    mockCancelMutation(response);
 
     // when
     renderPage();
-    await user.click(screen.getByRole('button', { name: '주문 취소' }));
-    const dialog = screen.getByRole('dialog', { name: '주문을 취소하시겠습니까?' });
-    await user.click(within(dialog).getByRole('button', { name: '주문 취소' }));
 
     // then
-    expect(
-      screen.getByText('취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
+    expect(screen.getByText('사유: 입금 기한 만료')).toBeInTheDocument();
   });
 });

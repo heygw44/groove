@@ -1,15 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { AdminOrderDetailDrawer } from '@/components/admin/AdminOrderDetailDrawer';
 import { ToastProvider } from '@/components/common/Toast';
 import { adminOrderKeys } from '@/hooks/queries/queryKeys';
-import type { AdminOrderDetail } from '@/types/order';
-
-vi.mock('@/api/admin', () => ({
-  changeAdminOrderStatus: vi.fn(),
-}));
+import type { AdminOrderDetail } from '@/types/adminOrder';
 
 const buildDetail = (overrides: Partial<AdminOrderDetail> = {}): AdminOrderDetail => ({
   id: 1,
@@ -20,7 +16,19 @@ const buildDetail = (overrides: Partial<AdminOrderDetail> = {}): AdminOrderDetai
   totalAmount: 10000,
   discountAmount: 0,
   finalAmount: 10000,
-  items: [],
+  items: [
+    {
+      productId: 7,
+      productName: '레코드 A',
+      price: 10000,
+      quantity: 1,
+      lineAmount: 10000,
+      thumbnailUrl: null,
+      productOrderNumber: 'ORD-1-01',
+      status: 'SHIPPING',
+      claimStatus: 'RETURN_REQUEST',
+    },
+  ],
   shippingAddress: {
     recipientName: '김그루브',
     phone: '010-0000-0000',
@@ -45,12 +53,23 @@ const renderDrawer = (detail: AdminOrderDetail) => {
   );
 };
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
-
 describe('AdminOrderDetailDrawer', () => {
-  it('paymentStatus 가 대사 대기 상태면 결제 상태 배지를 함께 보여준다', async () => {
+  it('주문번호·회원·배송지와 상품주문 번호를 보여준다', async () => {
+    // given
+    const detail = buildDetail();
+
+    // when
+    renderDrawer(detail);
+
+    // then
+    expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
+    expect(screen.getByText('ORD-1')).toBeInTheDocument();
+    expect(screen.getByText('ORD-1-01')).toBeInTheDocument();
+    expect(screen.getByText('레코드 A')).toBeInTheDocument();
+    expect(screen.getByText(/김그루브/)).toBeInTheDocument();
+  });
+
+  it('paymentStatus 가 대사 대기 상태면 결제 상태 배지와 대사 대기 안내를 보여준다', async () => {
     // given
     const detail = buildDetail({ paymentStatus: 'UNKNOWN' });
 
@@ -62,32 +81,7 @@ describe('AdminOrderDetailDrawer', () => {
     expect(screen.getByText('대사 대기')).toBeInTheDocument();
   });
 
-  it('paymentStatus 가 DONE 이면 결제 상태 배지를 그리지 않는다', async () => {
-    // given: 주문 상태 라벨과 겹치지 않는 상태로 확인한다(둘 다 '결제완료').
-    const detail = buildDetail({ status: 'PREPARING', paymentStatus: 'DONE' });
-
-    // when
-    renderDrawer(detail);
-
-    // then
-    expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
-    expect(screen.queryByText('결제완료')).not.toBeInTheDocument();
-  });
-
-  it('paymentStatus 가 없으면 결제 상태 배지를 그리지 않는다', async () => {
-    // given
-    const detail = buildDetail({ status: 'PREPARING' });
-
-    // when
-    renderDrawer(detail);
-
-    // then
-    expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
-    expect(screen.queryByText('승인대기')).not.toBeInTheDocument();
-    expect(screen.queryByText('결제완료')).not.toBeInTheDocument();
-  });
-
-  it('paymentStatus 가 CANCEL_REQUESTED 면 상태 전이를 비활성화하고 이유를 보여준다', async () => {
+  it('paymentStatus 가 CANCEL_REQUESTED 면 취소 처리 중 배지를 보여준다', async () => {
     // given
     const detail = buildDetail({ paymentStatus: 'CANCEL_REQUESTED' });
 
@@ -96,10 +90,34 @@ describe('AdminOrderDetailDrawer', () => {
 
     // then
     expect(await screen.findByText('취소 처리 중')).toBeInTheDocument();
-    expect(screen.getByLabelText('변경할 상태')).toBeDisabled();
-    expect(screen.getByRole('button', { name: '변경' })).toBeDisabled();
-    expect(
-      screen.getByText('취소 결과를 확인하고 있어 주문 상태를 변경할 수 없습니다.'),
-    ).toBeInTheDocument();
+  });
+
+  it('paymentStatus 가 없으면 결제 상태 배지를 그리지 않는다', async () => {
+    // given
+    const detail = buildDetail({ status: 'CANCELED' });
+
+    // when
+    renderDrawer(detail);
+
+    // then
+    expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
+    expect(screen.queryByText('취소 처리 중')).not.toBeInTheDocument();
+    expect(screen.queryByText('대사 대기')).not.toBeInTheDocument();
+  });
+
+  it('시스템 취소 사유 코드는 문구로 바꿔 보여준다', async () => {
+    // given
+    const detail = buildDetail({
+      status: 'CANCELED',
+      canceledAt: '2026-09-13T01:00:00',
+      cancelReason: 'EXPIRED',
+    });
+
+    // when
+    renderDrawer(detail);
+
+    // then
+    expect(await screen.findByText(/입금 기한 만료/)).toBeInTheDocument();
+    expect(screen.queryByText(/EXPIRED/)).not.toBeInTheDocument();
   });
 });

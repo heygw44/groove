@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { OrderPayment, PaymentStatus } from '@/types/payment';
 import {
   PAYMENT_STATUSES,
+  PAYMENT_STATUS_BADGE,
   PAYMENT_STATUS_LABEL,
   getPaymentMethodLabel,
   isReconcilePending,
+  requiresRefundAccount,
 } from '@/utils/paymentStatus';
 
 const buildPayment = (overrides: Partial<OrderPayment> = {}): OrderPayment => ({
@@ -29,10 +31,19 @@ describe('PAYMENT_STATUS_LABEL', () => {
   });
 });
 
+describe('PAYMENT_STATUS_LABEL / PAYMENT_STATUS_BADGE PARTIAL_CANCELED', () => {
+  it('PARTIAL_CANCELED 는 부분취소 라벨과 accent 배지를 갖는다', () => {
+    // given & when & then
+    expect(PAYMENT_STATUS_LABEL.PARTIAL_CANCELED).toBe('부분취소');
+    expect(PAYMENT_STATUS_BADGE.PARTIAL_CANCELED).toBe('accent');
+  });
+});
+
 describe('isReconcilePending()', () => {
   it.each<[PaymentStatus, boolean]>([
     ['READY', false],
     ['DONE', false],
+    ['PARTIAL_CANCELED', false],
     ['CANCELED', false],
     ['FAILED', false],
     ['UNKNOWN', true],
@@ -98,5 +109,31 @@ describe('getPaymentMethodLabel()', () => {
 
     // when & then
     expect(getPaymentMethodLabel(payment)).toBe('카드');
+  });
+});
+
+describe('requiresRefundAccount()', () => {
+  const virtualAccount = {
+    bankCode: '020',
+    accountNumber: '110123456789',
+    customerName: '그루브',
+    dueDate: '2026-09-15T00:00:00',
+  };
+
+  it.each([
+    ['DONE', true],
+    ['PARTIAL_CANCELED', true],
+    ['WAITING_FOR_DEPOSIT', false],
+    ['CANCELED', false],
+    ['CANCEL_REQUESTED', false],
+  ] as const)('가상계좌 결제가 %s 이면 %s 를 반환한다', (status, expected) => {
+    // when & then
+    expect(requiresRefundAccount(buildPayment({ status, virtualAccount }))).toBe(expected);
+  });
+
+  it('가상계좌가 아니거나 결제 정보가 없으면 false 를 반환한다', () => {
+    // when & then
+    expect(requiresRefundAccount(buildPayment({ status: 'DONE' }))).toBe(false);
+    expect(requiresRefundAccount(undefined)).toBe(false);
   });
 });

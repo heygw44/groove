@@ -87,11 +87,13 @@ public enum ErrorCode {
 	ORDER_CANNOT_CANCEL(HttpStatus.BAD_REQUEST, "취소할 수 없는 주문 상태입니다."),
 	ORDER_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "주문 금액이 일치하지 않습니다."),
 	ORDER_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 주문 상태입니다."),
-	ORDER_INVALID_STATUS_TRANSITION(HttpStatus.BAD_REQUEST, "허용되지 않는 주문 상태 전이입니다."),
-	ORDER_CANCEL_IN_PROGRESS(HttpStatus.CONFLICT, "취소가 진행 중인 주문입니다."),
 	ORDER_EXPIRED(HttpStatus.CONFLICT, "결제 기한이 지난 주문입니다."),
 	ORDER_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "같은 주문 요청을 처리하고 있습니다. 잠시 후 주문 내역을 확인해주세요."),
 	IDEMPOTENCY_KEY_REUSED(HttpStatus.UNPROCESSABLE_ENTITY, "이미 접수된 주문이 있습니다. 주문 내역을 확인해주세요."),
+	ORDER_CLAIM_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "취소·반품을 요청할 수 없는 상품주문 상태입니다."),
+	ORDER_CLAIM_IN_PROGRESS(HttpStatus.CONFLICT, "이미 처리 중인 취소·반품 요청이 있습니다."),
+	ORDER_CLAIM_REFUND_IN_PROGRESS(HttpStatus.CONFLICT, "환불을 처리하고 있는 요청입니다. 잠시 후 다시 확인해주세요."),
+	ORDER_RETURN_PERIOD_EXPIRED(HttpStatus.BAD_REQUEST, "반품 가능 기한이 지났습니다."),
 
 	// ===== PAYMENT =====
 	PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),

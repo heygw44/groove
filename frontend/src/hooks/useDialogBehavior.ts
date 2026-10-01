@@ -4,6 +4,8 @@ interface UseDialogBehaviorOptions {
   open: boolean;
   onClose: () => void;
   panelRef: RefObject<HTMLDivElement>;
+  /** false 면 ESC 로 닫지 않는다(처리 요청 중). */
+  dismissible?: boolean;
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -44,7 +46,12 @@ function trapTab(event: KeyboardEvent, panel: HTMLElement) {
 }
 
 /** Modal/Drawer 가 공유하는 ESC 닫기 · body 스크롤 잠금 · 초기 포커스 · Tab 트랩 · 트리거 포커스 복원. */
-export function useDialogBehavior({ open, onClose, panelRef }: UseDialogBehaviorOptions) {
+export function useDialogBehavior({
+  open,
+  onClose,
+  panelRef,
+  dismissible = true,
+}: UseDialogBehaviorOptions) {
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   // onClose 가 매 렌더 재생성돼도 복원 대상은 열릴 때 딱 한 번만 기억해야 하므로 별도 effect 로 둔다.
@@ -72,7 +79,9 @@ export function useDialogBehavior({ open, onClose, panelRef }: UseDialogBehavior
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        if (dismissible) {
+          onClose();
+        }
         return;
       }
       if (event.key === 'Tab' && panelRef.current) {
@@ -86,5 +95,5 @@ export function useDialogBehavior({ open, onClose, panelRef }: UseDialogBehavior
       document.body.style.overflow = overflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [open, onClose, panelRef]);
+  }, [open, onClose, panelRef, dismissible]);
 }

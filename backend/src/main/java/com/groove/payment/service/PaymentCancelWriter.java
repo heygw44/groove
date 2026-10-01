@@ -12,6 +12,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.limited.service.LimitedRelease;
 import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.service.OrderCancelRestorer;
@@ -26,16 +27,17 @@ import com.groove.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 결제 있는 주문의 전액취소 3단계 쓰기. 취소마다 새 idempotencyKey 를 쓰는 {@link PaymentRefundWriter} 와 달리
- * 이 경로는 고정 멱등키({@code cancel-{paymentKey}})를 그대로 쓰지만, 환불 기록은 같은 payment_cancel 행으로
- * 남긴다 - 통계가 이 테이블 하나만 보면 되게 하기 위해서다.
+ * 결제 있는 주문의 전액취소 3단계 쓰기. {@link PaymentRefundWriter} 와 같은 순번 방식으로 요청마다 새 멱등키를
+ * 발급하고, 환불 기록도 같은 payment_cancel 행으로 남긴다 - 통계가 이 테이블 하나만 보면 되게 하기 위해서다.
+ * 결과 확정·되돌림은 이 결제의 REQUESTED 행으로 찾는다. 레거시 키({@code cancel-{paymentKey}})는 이 방식 도입 전에
+ * 요청된 행의 재시도 폴백으로만 남는다.
  */
 @Service
 @RequiredArgsConstructor
 public class PaymentCancelWriter {
 
 	private static final String DEFAULT_CANCEL_REASON = "주문 취소";
-	private static final String LEGACY_IDEMPOTENCY_PREFIX = "cancel-";
+	private static final String LEGACY_IDEMPOTENCY_PREFIX = PaymentCancelIdempotencyKeys.PREFIX;
 
 	private final OrderRepository orderRepository;
 	private final PaymentRepository paymentRepository;
@@ -62,10 +64,16 @@ public class PaymentCancelWriter {
 		Payment payment = foundPayment.get();
 		OrderStatus previousOrderStatus = order.getStatus();
 		if (payment.getStatus() == PaymentStatus.CANCEL_REQUESTED) {
-			return toRequest(order, payment, previousOrderStatus, true, refundAccount);
+			return toRequest(order, payment, previousOrderStatus, true, refundAccount,
+					requestedIdempotencyKey(payment));
 		}
 		if (payment.getStatus() != PaymentStatus.DONE) {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
+		}
+		// 전액취소 대상 판정(OrderCancelWriter.planCancel)은 락 없이 이뤄지므로 락을 잡은 뒤 다시 본다. 그 사이
+		// 발주확인·발송이나 상품 클레임이 끼어들었으면 결제 전체를 취소하면 안 된다.
+		if (!isAllPaidWithoutClaim(order)) {
+			throw new BusinessException(ErrorCode.ORDER_INVALID_STATUS);
 		}
 		if (payment.isVirtualAccount() && refundAccount == null) {
 			throw new BusinessException(ErrorCode.PAYMENT_REFUND_ACCOUNT_REQUIRED);
@@ -75,10 +83,12 @@ public class PaymentCancelWriter {
 		if (paymentCancelRepository.existsByPaymentIdAndStatus(payment.getId(), PaymentCancelStatus.REQUESTED)) {
 			throw new BusinessException(ErrorCode.PAYMENT_CANCEL_IN_PROGRESS);
 		}
-		order.requestCancel(reason, memberId == null);
+		order.requestCancel(reason);
 		BigDecimal cancelAmount = payment.remainingAmount();
 		payment.requestCancel();
-		CancelRequest request = toRequest(order, payment, previousOrderStatus, false, refundAccount);
+		String idempotencyKey = PaymentCancelIdempotencyKeys.next(payment.getPaymentKey(), payment.getId(),
+				paymentCancelRepository);
+		CancelRequest request = toRequest(order, payment, previousOrderStatus, false, refundAccount, idempotencyKey);
 		paymentCancelRepository.save(PaymentCancel.request(payment, request.idempotencyKey(), cancelAmount,
 				request.tossReason(), LocalDateTime.now(clock)));
 		return request;
@@ -118,9 +128,22 @@ public class PaymentCancelWriter {
 		order.withdrawCancelRequest();
 	}
 
+	private boolean isAllPaidWithoutClaim(Order order) {
+		return order.getItems().stream()
+				.allMatch(item -> item.getStatus() == OrderItemStatus.PAID && item.getClaimStatus() == null);
+	}
+
+	/** 대사 재시도가 처음 요청과 같은 키로 토스를 다시 부르도록 REQUESTED 행의 키를 돌려준다. 행이 없으면 레거시 키. */
+	String requestedIdempotencyKey(Payment payment) {
+		return paymentCancelRepository
+				.findFirstByPaymentIdAndStatusOrderByIdDesc(payment.getId(), PaymentCancelStatus.REQUESTED)
+				.map(PaymentCancel::getIdempotencyKey)
+				.orElse(LEGACY_IDEMPOTENCY_PREFIX + payment.getPaymentKey());
+	}
+
 	private PaymentCancel findPaymentCancel(Payment payment) {
-		String idempotencyKey = LEGACY_IDEMPOTENCY_PREFIX + payment.getPaymentKey();
-		return paymentCancelRepository.findByIdempotencyKey(idempotencyKey)
+		return paymentCancelRepository
+				.findFirstByPaymentIdAndStatusOrderByIdDesc(payment.getId(), PaymentCancelStatus.REQUESTED)
 				.orElseThrow(() -> new IllegalStateException("취소 요청 기록을 찾을 수 없습니다: paymentId=" + payment.getId()));
 	}
 
@@ -134,10 +157,9 @@ public class PaymentCancelWriter {
 	}
 
 	private CancelRequest toRequest(Order order, Payment payment, OrderStatus previousOrderStatus,
-			boolean alreadyRequested, RefundAccountInfo refundAccount) {
+			boolean alreadyRequested, RefundAccountInfo refundAccount, String idempotencyKey) {
 		String cancelReason = order.getCancelReason();
 		String tossReason = cancelReason == null || cancelReason.isBlank() ? DEFAULT_CANCEL_REASON : cancelReason;
-		String idempotencyKey = LEGACY_IDEMPOTENCY_PREFIX + payment.getPaymentKey();
 		return new CancelRequest(order.getId(), payment.getId(), payment.getPaymentKey(), tossReason, idempotencyKey,
 				previousOrderStatus, alreadyRequested, refundAccount);
 	}

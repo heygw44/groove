@@ -12,6 +12,7 @@ public record PaymentRefundRequest(
 		BigDecimal cancelAmount,
 		String reason,
 		String idempotencyKey,
-		RefundAccountInfo refundAccount
+		RefundAccountInfo refundAccount,
+		Long orderClaimId
 ) {
 }

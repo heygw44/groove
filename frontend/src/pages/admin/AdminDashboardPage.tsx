@@ -100,8 +100,24 @@ export default function AdminDashboardPage() {
             <StatCard label="오늘 신규 회원" value={`${summaryQuery.data.todayNewMemberCount}명`} />
             <StatCard
               label="입금 대기"
-              value={`${summaryQuery.data.pendingOrderCount}건`}
-              to="/admin/orders?status=PENDING"
+              value={`${summaryQuery.data.depositWaitingCount}건`}
+              to="/admin/orders?statusGroup=PAYMENT_WAITING"
+            />
+            <StatCard
+              label="발주확인 대기"
+              value={`${summaryQuery.data.newOrderCount}건`}
+              to="/admin/orders?statusGroup=PAID"
+            />
+            <StatCard
+              label="취소요청"
+              value={`${summaryQuery.data.cancelRequestCount}건`}
+              to="/admin/order-claims?type=CANCEL&status=REQUESTED"
+            />
+            <StatCard
+              label="반품 처리 대기"
+              value={`${summaryQuery.data.returnRequestCount}건`}
+              // 수거중까지 합산한 값이라 반품요청 칩이 아닌 전체 상태로 보낸다
+              to="/admin/order-claims?type=RETURN&status=ALL"
             />
           </div>
         )}

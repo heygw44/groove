@@ -215,7 +215,14 @@ export interface AdminProductCreateRequest {
 export type AdminProductUpdateRequest = Partial<
   Omit<
     AdminProductCreateRequest,
-    'initialStock' | 'labelId' | 'albumId' | 'newAlbum' | 'country' | 'pressingYear' | 'catalogNo' | 'barcode'
+    | 'initialStock'
+    | 'labelId'
+    | 'albumId'
+    | 'newAlbum'
+    | 'country'
+    | 'pressingYear'
+    | 'catalogNo'
+    | 'barcode'
   >
 > & {
   labelId?: number | null;

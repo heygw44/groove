@@ -320,6 +320,8 @@ class ReviewServiceTest {
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
 					OrderItemStatus.REVIEWABLE)).willReturn(false);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.AWAITING_PURCHASE_CONFIRM)).willReturn(false);
 
 			// when
 			ReviewEligibilityResponse response = reviewService.checkEligibility(PRODUCT_ID, MEMBER_ID);
@@ -327,6 +329,24 @@ class ReviewServiceTest {
 			// then
 			assertThat(response.eligible()).isFalse();
 			assertThat(response.reason()).isEqualTo(ReviewIneligibleReason.PURCHASE_REQUIRED);
+		}
+
+		@Test
+		@DisplayName("배송중·배송완료로 구매확정 전이면 PURCHASE_CONFIRM_REQUIRED 를 반환한다")
+		void returnsPurchaseConfirmRequiredWhenAwaitingConfirm() {
+			// given
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.REVIEWABLE)).willReturn(false);
+			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.AWAITING_PURCHASE_CONFIRM)).willReturn(true);
+
+			// when
+			ReviewEligibilityResponse response = reviewService.checkEligibility(PRODUCT_ID, MEMBER_ID);
+
+			// then
+			assertThat(response.eligible()).isFalse();
+			assertThat(response.reason()).isEqualTo(ReviewIneligibleReason.PURCHASE_CONFIRM_REQUIRED);
 		}
 
 		@Test

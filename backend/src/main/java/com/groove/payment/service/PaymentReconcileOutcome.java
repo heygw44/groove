@@ -7,10 +7,11 @@ public record PaymentReconcileOutcome(
 		boolean needsCompensation,
 		boolean needsCancelRetry,
 		String paymentKey,
-		LocalDateTime approvedAt
+		LocalDateTime approvedAt,
+		String idempotencyKey
 ) {
 
-	private static final PaymentReconcileOutcome APPLIED = new PaymentReconcileOutcome(false, false, null, null);
+	private static final PaymentReconcileOutcome APPLIED = new PaymentReconcileOutcome(false, false, null, null, null);
 
 	public static PaymentReconcileOutcome alreadyResolved() {
 		return APPLIED;
@@ -21,10 +22,10 @@ public record PaymentReconcileOutcome(
 	}
 
 	public static PaymentReconcileOutcome needsCompensation(String paymentKey, LocalDateTime approvedAt) {
-		return new PaymentReconcileOutcome(true, false, paymentKey, approvedAt);
+		return new PaymentReconcileOutcome(true, false, paymentKey, approvedAt, null);
 	}
 
-	public static PaymentReconcileOutcome needsCancelRetry(String paymentKey) {
-		return new PaymentReconcileOutcome(false, true, paymentKey, null);
+	public static PaymentReconcileOutcome needsCancelRetry(String paymentKey, String idempotencyKey) {
+		return new PaymentReconcileOutcome(false, true, paymentKey, null, idempotencyKey);
 	}
 }
