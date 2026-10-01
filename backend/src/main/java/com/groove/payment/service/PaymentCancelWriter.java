@@ -90,7 +90,7 @@ public class PaymentCancelWriter {
 				paymentCancelRepository);
 		CancelRequest request = toRequest(order, payment, previousOrderStatus, false, refundAccount, idempotencyKey);
 		paymentCancelRepository.save(PaymentCancel.request(payment, request.idempotencyKey(), cancelAmount,
-				request.tossReason(), LocalDateTime.now(clock)));
+				request.tossReason(), LocalDateTime.now(clock), refundAccount));
 		return request;
 	}
 
@@ -139,6 +139,14 @@ public class PaymentCancelWriter {
 				.findFirstByPaymentIdAndStatusOrderByIdDesc(payment.getId(), PaymentCancelStatus.REQUESTED)
 				.map(PaymentCancel::getIdempotencyKey)
 				.orElse(LEGACY_IDEMPOTENCY_PREFIX + payment.getPaymentKey());
+	}
+
+	/** 대사 재시도가 가상계좌 환불계좌를 다시 보내도록 REQUESTED 행의 계좌를 돌려준다. 행이 없거나 계좌가 없으면 null. */
+	RefundAccountInfo requestedRefundAccount(Payment payment) {
+		return paymentCancelRepository
+				.findFirstByPaymentIdAndStatusOrderByIdDesc(payment.getId(), PaymentCancelStatus.REQUESTED)
+				.map(PaymentCancel::getRefundAccount)
+				.orElse(null);
 	}
 
 	private PaymentCancel findPaymentCancel(Payment payment) {

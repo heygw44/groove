@@ -327,12 +327,15 @@ class PaymentCancelWriterTest {
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findByOrderId(ORDER_ID)).willReturn(Optional.of(virtualAccountPayment));
 			RefundAccountInfo refundAccount = new RefundAccountInfo("088", "12345678901234", "홍길동");
+			ArgumentCaptor<PaymentCancel> captor = ArgumentCaptor.forClass(PaymentCancel.class);
 
 			// when
 			CancelRequest result = writer.requestCancel(ORDER_ID, MEMBER_ID, "고객 변심", refundAccount);
 
 			// then
 			assertThat(result.refundAccount()).isEqualTo(refundAccount);
+			verify(paymentCancelRepository).save(captor.capture());
+			assertThat(captor.getValue().getRefundAccount()).isEqualTo(refundAccount);
 			assertThat(virtualAccountPayment.getStatus()).isEqualTo(PaymentStatus.CANCEL_REQUESTED);
 		}
 
@@ -511,6 +514,49 @@ class PaymentCancelWriterTest {
 
 			// then
 			assertThat(key).isEqualTo("cancel-" + payment.getPaymentKey());
+		}
+	}
+
+	@Nested
+	@DisplayName("requestedRefundAccount()")
+	class RequestedRefundAccount {
+
+		@Test
+		@DisplayName("REQUESTED 행에 보관된 환불계좌를 돌려준다")
+		void returnsStoredRefundAccount() {
+			// given
+			RefundAccountInfo account = new RefundAccountInfo("088", "12345678901234", "홍길동");
+			givenRequestedRow(PaymentCancel.request(payment, "cancel-" + payment.getPaymentKey() + "-1",
+					payment.getAmount(), "고객 변심", NOW, account));
+
+			// when
+			RefundAccountInfo result = writer.requestedRefundAccount(payment);
+
+			// then
+			assertThat(result).isEqualTo(account);
+		}
+
+		@Test
+		@DisplayName("행이 없거나 계좌가 없으면 null 을 돌려준다")
+		void returnsNullWhenNoRowOrNoAccount() {
+			// given
+			givenRequestedRow(requestedPaymentCancel());
+
+			// when
+			RefundAccountInfo withoutAccount = writer.requestedRefundAccount(payment);
+
+			// then
+			assertThat(withoutAccount).isNull();
+		}
+
+		@Test
+		@DisplayName("REQUESTED 행 자체가 없으면 null 을 돌려준다")
+		void returnsNullWhenNoRow() {
+			// when
+			RefundAccountInfo result = writer.requestedRefundAccount(payment);
+
+			// then
+			assertThat(result).isNull();
 		}
 	}
 }

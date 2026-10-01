@@ -163,7 +163,7 @@ public class PaymentReconcileService {
 				yield PaymentReconcileOutcome.applied();
 			}
 			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey(),
-					cancelWriter.requestedIdempotencyKey(payment));
+					cancelWriter.requestedIdempotencyKey(payment), cancelWriter.requestedRefundAccount(payment));
 		};
 	}
 
