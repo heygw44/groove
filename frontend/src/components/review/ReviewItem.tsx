@@ -14,7 +14,13 @@ interface ReviewItemProps {
   editForm?: ReactNode;
 }
 
-export function ReviewItem({ review, onEdit, onDelete, editing = false, editForm }: ReviewItemProps) {
+export function ReviewItem({
+  review,
+  onEdit,
+  onDelete,
+  editing = false,
+  editForm,
+}: ReviewItemProps) {
   const isEdited = review.updatedAt !== review.createdAt;
 
   return (
@@ -39,7 +45,12 @@ export function ReviewItem({ review, onEdit, onDelete, editing = false, editForm
             <Button variant="ghost" size="sm" onClick={onEdit}>
               수정
             </Button>
-            <Button variant="ghost" size="sm" className="text-danger hover:text-danger" onClick={onDelete}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:text-danger"
+              onClick={onDelete}
+            >
               삭제
             </Button>
           </div>

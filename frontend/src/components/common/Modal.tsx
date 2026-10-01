@@ -13,6 +13,11 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg';
   /** 'bottom' 은 모바일에서 화면 아래에서 올라오는 시트로 보이고, sm 이상에서는 center 와 같다. */
   placement?: 'center' | 'bottom';
+  /**
+   * false 면 ESC·배경 클릭·닫기 버튼으로 닫히지 않는다. 처리 요청 중에 닫히면 성공 콜백이 사라지거나
+   * 다음에 연 모달을 앞 요청의 콜백이 닫는다.
+   */
+  dismissible?: boolean;
 }
 
 const SIZE_CLASS = {
@@ -30,12 +35,13 @@ export function Modal({
   footer,
   size = 'md',
   placement = 'center',
+  dismissible = true,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
 
-  useDialogBehavior({ open, onClose, panelRef });
+  useDialogBehavior({ open, onClose, panelRef, dismissible });
 
   if (!open) {
     return null;
@@ -48,7 +54,7 @@ export function Modal({
       }`}
       onMouseDown={(event) => {
         /* 패널 안에서 시작한 드래그가 바깥에서 끝나도 닫히지 않게 target 을 본다. */
-        if (event.target === event.currentTarget) {
+        if (dismissible && event.target === event.currentTarget) {
           onClose();
         }
       }}
@@ -80,8 +86,9 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
+            disabled={!dismissible}
             aria-label="닫기"
-            className="-mr-1 shrink-0 rounded-md p-1 text-content-subtle hover:bg-surface-muted hover:text-content"
+            className="-mr-1 shrink-0 rounded-md p-1 text-content-subtle hover:bg-surface-muted hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg
               width="18"

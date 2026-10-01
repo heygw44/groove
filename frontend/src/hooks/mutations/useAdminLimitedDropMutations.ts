@@ -7,7 +7,10 @@ import {
   updateAdminLimitedDrop,
 } from '@/api/admin';
 import { adminLimitedDropKeys, limitedDropKeys } from '@/hooks/queries/queryKeys';
-import type { AdminLimitedDropCreateRequest, AdminLimitedDropUpdateRequest } from '@/types/limitedDrop';
+import type {
+  AdminLimitedDropCreateRequest,
+  AdminLimitedDropUpdateRequest,
+} from '@/types/limitedDrop';
 
 const useInvalidateLimitedDrops = () => {
   const queryClient = useQueryClient();

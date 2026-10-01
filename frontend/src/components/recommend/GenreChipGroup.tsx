@@ -8,13 +8,17 @@ interface GenreChipGroupProps {
   invalid?: boolean;
 }
 
-export function GenreChipGroup({ value, onChange, genres, max, invalid = false }: GenreChipGroupProps) {
+export function GenreChipGroup({
+  value,
+  onChange,
+  genres,
+  max,
+  invalid = false,
+}: GenreChipGroupProps) {
   const reachedMax = value.length >= max;
 
   const toggle = (genreId: number) => {
-    onChange(
-      value.includes(genreId) ? value.filter((id) => id !== genreId) : [...value, genreId],
-    );
+    onChange(value.includes(genreId) ? value.filter((id) => id !== genreId) : [...value, genreId]);
   };
 
   return (
@@ -35,9 +39,7 @@ export function GenreChipGroup({ value, onChange, genres, max, invalid = false }
               disabled={isDisabled}
               onClick={() => toggle(genre.id)}
               className={`h-9 rounded-full px-4 text-sm whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-45 ${
-                isSelected
-                  ? 'bg-content text-surface'
-                  : 'border border-line hover:bg-surface-muted'
+                isSelected ? 'bg-content text-surface' : 'border border-line hover:bg-surface-muted'
               }`}
             >
               {genre.name}

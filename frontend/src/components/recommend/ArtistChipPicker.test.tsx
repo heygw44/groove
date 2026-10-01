@@ -37,7 +37,9 @@ describe('ArtistChipPicker', () => {
     await user.type(screen.getByRole('combobox'), 'Tobin');
 
     // then
-    expect(await screen.findByRole('button', { name: 'Amon Tobin' }, { timeout: 2000 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Amon Tobin' }, { timeout: 2000 }),
+    ).toBeInTheDocument();
   });
 
   it('검색 결과를 고르면 칩으로 보여주고 onChange 를 호출한다', async () => {
@@ -65,7 +67,9 @@ describe('ArtistChipPicker', () => {
     await user.click(screen.getByRole('combobox'));
 
     // then
-    expect(await screen.findByRole('button', { name: '아이유' }, { timeout: 2000 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: '아이유' }, { timeout: 2000 }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Amon Tobin' })).not.toBeInTheDocument();
   });
 

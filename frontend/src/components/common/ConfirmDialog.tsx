@@ -26,6 +26,7 @@ export function ConfirmDialog({
     <Modal
       open={open}
       onClose={onClose}
+      dismissible={!pending}
       title={title}
       description={description}
       size="sm"

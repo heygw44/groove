@@ -75,6 +75,7 @@ export function OrderCancelDialog({
     <Modal
       open={open}
       onClose={onClose}
+      dismissible={!pending}
       title={title}
       description={description}
       size="sm"

@@ -3,6 +3,10 @@ import { Select } from '@/components/common/Select';
 import { BANK_OPTIONS } from '@/constants/banks';
 import type { RefundAccount } from '@/types/order';
 
+/** 서버 검증(OrderCancelRequest.RefundAccount @Size)과 같은 값. */
+const ACCOUNT_NUMBER_MAX_LENGTH = 64;
+const HOLDER_NAME_MAX_LENGTH = 100;
+
 interface RefundAccountFieldsProps {
   value: RefundAccount;
   onChange: (value: RefundAccount) => void;
@@ -49,6 +53,7 @@ export function RefundAccountFields({
         <Input
           id={`${idPrefix}-account-number`}
           inputMode="numeric"
+          maxLength={ACCOUNT_NUMBER_MAX_LENGTH}
           value={value.accountNumber}
           onChange={(event) =>
             onChange({ ...value, accountNumber: event.target.value.replace(/\D/g, '') })
@@ -64,6 +69,7 @@ export function RefundAccountFields({
         </label>
         <Input
           id={`${idPrefix}-holder-name`}
+          maxLength={HOLDER_NAME_MAX_LENGTH}
           value={value.holderName}
           onChange={(event) => onChange({ ...value, holderName: event.target.value })}
         />

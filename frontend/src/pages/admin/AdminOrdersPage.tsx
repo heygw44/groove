@@ -11,6 +11,7 @@ import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
 import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { SlicePagination } from '@/components/common/SlicePagination';
 import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useToast } from '@/components/common/toastContext';
 import {
@@ -140,18 +141,33 @@ export default function AdminOrdersPage() {
       },
     );
 
-  const countLabel = (() => {
-    if (count.isPending) {
+  const countSummary = (() => {
+    // 필터를 바꾼 직후의 placeholder 는 이전 필터 기준 건수라 보여주지 않는다.
+    if (count.isPending || count.isPlaceholderData) {
       return '불러오는 중…';
     }
-    return count.data ? `상품주문 총 ${count.data.totalElements}건` : '상품주문 총 -건';
+    if (count.isError) {
+      return (
+        <>
+          상품주문 건수를 불러오지 못했습니다.{' '}
+          <button
+            type="button"
+            className="font-medium text-content underline underline-offset-2"
+            onClick={() => count.refetch()}
+          >
+            다시 시도
+          </button>
+        </>
+      );
+    }
+    return `상품주문 총 ${count.data.totalElements}건`;
   })();
 
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-[17px] font-bold tracking-tight">주문 관리</h2>
-        <p className="mt-1.5 text-sm text-content-muted">{countLabel}</p>
+        <p className="mt-1.5 text-sm text-content-muted">{countSummary}</p>
       </div>
 
       <div className="mb-4">
@@ -220,11 +236,18 @@ export default function AdminOrdersPage() {
             selectionDisabled={isPlaceholderData}
           />
 
-          {totalPages !== undefined && (
-            <div className="mt-6">
+          <div className="mt-6">
+            {totalPages !== undefined ? (
               <Pagination page={filters.page} totalPages={totalPages} onChange={updatePage} />
-            </div>
-          )}
+            ) : (
+              <SlicePagination
+                page={filters.page}
+                hasNext={data.hasNext}
+                onChange={updatePage}
+                disabled={isPlaceholderData}
+              />
+            )}
+          </div>
         </div>
       )}
 

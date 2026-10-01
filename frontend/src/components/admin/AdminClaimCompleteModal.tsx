@@ -26,6 +26,7 @@ export function AdminClaimCompleteModal({
     <Modal
       open
       onClose={onClose}
+      dismissible={!pending}
       title="반품 수거 완료"
       description={`${productOrderNumber} 수거를 완료하고 환불합니다.`}
       size="sm"

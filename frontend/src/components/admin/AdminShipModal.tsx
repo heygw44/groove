@@ -46,6 +46,7 @@ export function AdminShipModal({ items, onClose, onCompleted }: AdminShipModalPr
     <Modal
       open
       onClose={onClose}
+      dismissible={!shipMutation.isPending}
       title="발송처리"
       description={`선택한 ${items.length}건에 택배사와 송장번호를 입력하세요.`}
       footer={

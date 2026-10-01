@@ -262,9 +262,7 @@ export function ProductFilterPanel({
               aria-label="제작 연도 종료"
             />
           </div>
-          {pressingYearError && (
-            <p className="mt-1.5 text-xs text-danger">{pressingYearError}</p>
-          )}
+          {pressingYearError && <p className="mt-1.5 text-xs text-danger">{pressingYearError}</p>}
           <Button
             variant="secondary"
             size="sm"

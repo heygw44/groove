@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Modal } from '@/components/common/Modal';
 
@@ -66,5 +66,36 @@ describe('Modal', () => {
 
     // then
     expect(bodyButton).toHaveFocus();
+  });
+
+  describe('dismissible', () => {
+    it('기본값이면 ESC·배경 mousedown·닫기 버튼으로 onClose 가 호출된다', () => {
+      // given
+      const onClose = vi.fn();
+      render(<Modal open onClose={onClose} title="제목" />);
+
+      // when
+      fireEvent.keyDown(document, { key: 'Escape' });
+      fireEvent.mouseDown(screen.getByRole('dialog').parentElement as HTMLElement);
+      fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+
+      // then
+      expect(onClose).toHaveBeenCalledTimes(3);
+    });
+
+    it('false 면 ESC·배경 mousedown·닫기 버튼으로 닫히지 않고 닫기 버튼은 비활성이다', () => {
+      // given
+      const onClose = vi.fn();
+      render(<Modal open onClose={onClose} title="제목" dismissible={false} />);
+
+      // when
+      fireEvent.keyDown(document, { key: 'Escape' });
+      fireEvent.mouseDown(screen.getByRole('dialog').parentElement as HTMLElement);
+      fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+
+      // then
+      expect(screen.getByRole('button', { name: '닫기' })).toBeDisabled();
+      expect(onClose).not.toHaveBeenCalled();
+    });
   });
 });
