@@ -49,7 +49,9 @@ import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.dto.PaymentConfirmRequest;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentStatus;
+import com.groove.payment.entity.PaymentWebhookEvent;
 import com.groove.payment.repository.PaymentRepository;
+import com.groove.payment.repository.PaymentWebhookEventRepository;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentConfirmService;
 import com.groove.payment.service.PaymentWebhookService;
@@ -90,6 +92,9 @@ class PaymentWebhookIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private PaymentRepository paymentRepository;
+
+	@Autowired
+	private PaymentWebhookEventRepository paymentWebhookEventRepository;
 
 	@Autowired
 	private OrderService orderService;
@@ -295,6 +300,52 @@ class PaymentWebhookIntegrationTest extends IntegrationTestSupport {
 			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
 					.isEqualTo(OrderStatus.PENDING);
 		}
+
+		@Test
+		@DisplayName("createdAt 에 오프셋이 없으면 Asia/Seoul 로 해석해 저장하고 재조회 결과대로 처리한다")
+		void storesOffsetlessCreatedAtAsSeoulTime() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			Payment payment = seedFailedPayment(seeded.orderId());
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, "webhook-key-7", "카드", seeded.finalAmount(), now(), null));
+
+			// when
+			paymentWebhookService.handle(webhookBody("webhook-key-7", seeded.orderNumber(), "DONE",
+					"PAYMENT_STATUS_CHANGED", "2022-01-01T00:00:00.000000"));
+
+			// then
+			assertThat(paymentWebhookEventRepository.findByPaymentKeyAndTossStatusAndEventCreatedAt("webhook-key-7",
+					"DONE", LocalDateTime.of(2022, 1, 1, 0, 0))).isPresent();
+			assertThat(paymentRepository.findById(payment.getId()).orElseThrow().getStatus())
+					.isEqualTo(PaymentStatus.DONE);
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.PAID);
+		}
+
+		@Test
+		@DisplayName("오프셋 없는 같은 이벤트가 두 번 오면 마이크로초까지 같은 시각으로 저장해 두 번째는 저장하지 않는다")
+		void ignoresDuplicateOffsetlessEvent() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			seedFailedPayment(seeded.orderId());
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, "webhook-key-8", "카드", seeded.finalAmount(), now(), null));
+			String body = webhookBody("webhook-key-8", seeded.orderNumber(), "DONE", "PAYMENT_STATUS_CHANGED",
+					"2022-01-01T00:00:00.123456");
+
+			// when
+			paymentWebhookService.handle(body);
+			paymentWebhookService.handle(body);
+
+			// then
+			Long count = jdbcTemplate.queryForObject(
+					"select count(*) from payment_webhook_event where payment_key = ?", Long.class,
+					"webhook-key-8");
+			assertThat(count).isEqualTo(1L);
+			assertThat(paymentWebhookEventRepository.findByPaymentKeyAndTossStatusAndEventCreatedAt("webhook-key-8",
+					"DONE", LocalDateTime.of(2022, 1, 1, 0, 0, 0, 123_456_000))).isPresent();
+		}
 	}
 
 	@Nested
@@ -332,7 +383,8 @@ class PaymentWebhookIntegrationTest extends IntegrationTestSupport {
 					PaymentLookupStatus.DONE, paymentKey, "가상계좌", seeded.finalAmount(), now(), null));
 
 			// when
-			paymentWebhookService.handle(depositCallbackBody(depositToken, seeded.orderNumber(), "txn-1", "DONE"));
+			paymentWebhookService.handle(depositCallbackBody(depositToken, seeded.orderNumber(), "txn-1", "DONE",
+					"2026-09-22T10:00:00+09:00"));
 
 			// then
 			assertThat(paymentRepository.findById(issued.getId()).orElseThrow().getStatus())
@@ -359,18 +411,51 @@ class PaymentWebhookIntegrationTest extends IntegrationTestSupport {
 
 			// when
 			paymentWebhookService.handle(depositCallbackBody("va-wrong-secret", seeded.orderNumber(), "txn-2",
-					"DONE"));
+					"DONE", "2026-09-22T10:00:00+09:00"));
 
 			// then
 			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
 					.isEqualTo(OrderStatus.PENDING);
 		}
+
+		@Test
+		@DisplayName("입금 웹훅 createdAt 에 오프셋이 없어도 Asia/Seoul 로 해석해 저장하고 PAID 로 확정한다")
+		void appliesDepositWebhookWithOffsetlessCreatedAt() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			String paymentKey = "tviva-va-" + UUID.randomUUID();
+			String transactionKey = "txn-" + UUID.randomUUID();
+			String depositToken = "va-offsetless-token";
+			LocalDateTime dueDate = now().plusHours(24).truncatedTo(ChronoUnit.SECONDS);
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동", dueDate,
+					depositToken);
+			given(paymentClient.confirm(eq(paymentKey), eq(seeded.orderNumber()), eq(seeded.finalAmount())))
+					.willReturn(new PaymentConfirmResult(paymentKey, seeded.orderNumber(), "가상계좌",
+							seeded.finalAmount(), null, PaymentLookupStatus.WAITING_FOR_DEPOSIT, null,
+							virtualAccount));
+			paymentConfirmService.confirm(seeded.memberId(),
+					new PaymentConfirmRequest(paymentKey, seeded.orderNumber(), seeded.finalAmount().longValueExact()));
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.DONE, paymentKey, "가상계좌", seeded.finalAmount(), now(), null));
+
+			// when
+			paymentWebhookService.handle(depositCallbackBody(depositToken, seeded.orderNumber(), transactionKey,
+					"DONE", "2022-01-01T00:00:00"));
+
+			// then
+			PaymentWebhookEvent event = paymentWebhookEventRepository.findByPaymentKeyAndTossStatusAndEventCreatedAt(
+					transactionKey, "DONE", LocalDateTime.of(2022, 1, 1, 0, 0)).orElseThrow();
+			assertThat(event.getEventType()).isEqualTo("DEPOSIT_CALLBACK");
+			assertThat(orderRepository.findById(seeded.orderId()).orElseThrow().getStatus())
+					.isEqualTo(OrderStatus.PAID);
+		}
 	}
 
-	private String depositCallbackBody(String secret, String tossOrderId, String transactionKey, String status) {
-		return ("{ \"createdAt\": \"2026-09-22T10:00:00+09:00\", \"secret\": \"%s\", \"status\": \"%s\", "
+	private String depositCallbackBody(String secret, String tossOrderId, String transactionKey, String status,
+			String createdAt) {
+		return ("{ \"createdAt\": \"%s\", \"secret\": \"%s\", \"status\": \"%s\", "
 				+ "\"transactionKey\": \"%s\", \"orderId\": \"%s\" }")
-				.formatted(secret, status, transactionKey, tossOrderId);
+				.formatted(createdAt, secret, status, transactionKey, tossOrderId);
 	}
 
 	private LocalDateTime now() {

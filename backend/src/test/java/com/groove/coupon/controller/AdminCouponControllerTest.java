@@ -208,6 +208,24 @@ class AdminCouponControllerTest {
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
 					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("discountValue")));
 		}
+
+		@Test
+		@DisplayName("할인 값과 최대 할인 한도에 원 미만 소수가 있으면 400 과 필드 에러를 반환한다")
+		void returnsBadRequestWhenAmountsHaveFraction() throws Exception {
+			// given
+			CouponCreateRequest request = new CouponCreateRequest("FRACTION1", "소수 쿠폰", DiscountType.FIXED,
+					new BigDecimal("1000.5"), null, new BigDecimal("5000.5"), null, LocalDateTime.now().plusDays(7));
+
+			// when & then
+			mockMvc.perform(post("/api/v1/admin/coupons")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("discountValue")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("maxDiscountAmount")));
+		}
 	}
 
 	@Nested
@@ -326,6 +344,23 @@ class AdminCouponControllerTest {
 							.content(objectMapper.writeValueAsString(request)))
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
+		@DisplayName("할인 값과 최대 할인 한도에 원 미만 소수가 있으면 400 을 반환한다")
+		void returnsBadRequestWhenAmountsHaveFraction() throws Exception {
+			// given
+			CouponUpdateRequest request = new CouponUpdateRequest(null, DiscountType.FIXED, new BigDecimal("1000.5"),
+					null, JsonNullable.of(new BigDecimal("5000.5")), JsonNullable.undefined(), null, null);
+
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/coupons/{id}", COUPON_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(request)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("discountValue")));
 		}
 
 		@Test

@@ -170,16 +170,17 @@ class CouponTest {
 		}
 
 		@Test
-		@DisplayName("정률 계산 결과는 소수점 둘째 자리 아래를 버림한다")
-		void truncatesRateDiscountToScale2() {
+		@DisplayName("정률 계산 결과는 원 단위 미만을 버림한다")
+		void floorsRateDiscountToWholeWon() {
 			// given
-			Coupon coupon = CouponFixture.rate("RATE33", BigDecimal.valueOf(33), null);
+			Coupon coupon = CouponFixture.rate("RATE7", BigDecimal.valueOf(7), null);
 
 			// when
-			BigDecimal discount = coupon.calculateDiscount(BigDecimal.valueOf(100));
+			BigDecimal discount = coupon.calculateDiscount(BigDecimal.valueOf(25950));
 
 			// then
-			assertThat(discount).isEqualByComparingTo(BigDecimal.valueOf(33));
+			assertThat(discount).isEqualByComparingTo(BigDecimal.valueOf(1816));
+			assertThat(discount.scale()).isZero();
 		}
 
 		@Test

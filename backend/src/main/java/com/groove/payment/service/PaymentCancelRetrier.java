@@ -52,8 +52,11 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class PaymentCancelRetrier {
 
-	/** 부분취소 재시도 확인 로그의 표식. 실제 토스 상태 문자열과 겹치지 않아 dedup 조건으로 쓸 수 있다. */
-	static final String MANUAL_REVIEW_MARKER = "PARTIAL_CANCEL_RETRY_MANUAL_REVIEW";
+	/**
+	 * 부분취소 재시도 확인 로그의 표식. 실제 토스 상태 문자열과 겹치지 않아 dedup 조건으로 쓸 수 있다.
+	 * payment_reconcile_log.toss_status(VARCHAR(30))에 그대로 저장되므로 30자를 넘기면 안 된다.
+	 */
+	public static final String MANUAL_REVIEW_MARKER = "PARTIAL_CANCEL_MANUAL_REVIEW";
 
 	/** 토스 멱등키 유효기간(15일)보다 하루 여유를 두고 재호출을 끊는다 - 설정을 아무리 늘려도 이 시점부터는
 	 * 조회로만 확인한다. */

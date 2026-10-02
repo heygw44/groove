@@ -76,6 +76,7 @@ import com.groove.payment.repository.PaymentReconcileLogRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.payment.scheduler.PaymentReconcileScheduler;
 import com.groove.payment.service.LimitedVirtualAccountCloser;
+import com.groove.payment.service.PaymentCancelRetrier;
 import com.groove.payment.service.PaymentCancelWriter;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentRefundRequest;
@@ -569,6 +570,49 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 			// PAYMENT_CANCEL_IN_PROGRESS 가드가 풀려 같은 결제에 새 부분취소를 요청해도 더 이상 막히지 않는다.
 			assertThatCode(() -> paymentRefundWriter.requestRefund(savedPayment.getId(), BigDecimal.ONE, "새 부분 반품",
 					null)).doesNotThrowAnyException();
+		}
+
+		@Test
+		@DisplayName("재시도 상한을 넘기고 잔액이 드리프트면 MANUAL_REVIEW 표식을 DB 에 남기고 다음 주기엔 다시 조회하지 않는다")
+		void marksManualReviewForDriftedPartialCancelAndSkipsLookupOnNextRun() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			Order order = orderRepository.findById(seeded.orderId()).orElseThrow();
+			String paymentKey = "refund-recon-drift-" + UUID.randomUUID();
+			Payment payment = Payment.ready(order);
+			payment.approve(paymentKey, "카드", now().minusMinutes(20));
+			Payment savedPayment = paymentRepository.saveAndFlush(payment);
+			BigDecimal cancelAmount = seeded.finalAmount().subtract(BigDecimal.ONE);
+			PaymentRefundRequest refundRequest = paymentRefundWriter.requestRefund(savedPayment.getId(), cancelAmount,
+					"부분 반품", null);
+			jdbcTemplate.update("update payment_cancel set requested_at = ? where id = ?",
+					Timestamp.valueOf(now().minusMinutes(11)), refundRequest.paymentCancelId());
+			// 잔액 0 은 취소 전 잔액(결제 금액)도, 이번 취소 반영 후 잔액(1원)도 아니다 - 다른 경로 취소가 섞인
+			// 드리프트라 판단할 수 없어 수동 확인 표식만 남겨야 한다.
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.CANCELED, paymentKey, "카드", null, null, null, BigDecimal.ZERO, null));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then: 표식 행이 실제로 INSERT 됐는지 MySQL 에서 직접 확인한다.
+			Integer markerRows = jdbcTemplate.queryForObject(
+					"select count(*) from payment_reconcile_log"
+							+ " where payment_id = ? and toss_status = ? and action = ?",
+					Integer.class, savedPayment.getId(), PaymentCancelRetrier.MANUAL_REVIEW_MARKER,
+					PaymentReconcileAction.MANUAL_REVIEW.name());
+			assertThat(markerRows).isEqualTo(1);
+			PaymentCancel paymentCancel = paymentCancelRepository.findById(refundRequest.paymentCancelId())
+					.orElseThrow();
+			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.REQUESTED);
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			verify(paymentClient, times(1)).lookup(eq(seeded.orderNumber()));
+			assertThat(paymentReconcileLogRepository.existsByPaymentIdAndTossStatus(savedPayment.getId(),
+					PaymentCancelRetrier.MANUAL_REVIEW_MARKER)).isTrue();
 		}
 	}
 

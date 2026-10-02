@@ -253,7 +253,7 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(createRequest)))
 					.andExpect(status().isCreated())
-					.andExpect(jsonPath("$.data.discountAmount", is(5000.0)))
+					.andExpect(jsonPath("$.data.discountAmount", is(5000)))
 					.andExpect(jsonPath("$.data.finalAmount", is(40000.0)))
 					.andExpect(jsonPath("$.data.couponName", is("가을맞이 5천원 할인")))
 					.andReturn();
@@ -290,7 +290,7 @@ class OrderFlowIntegrationTest extends IntegrationTestSupport {
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(createRequest)))
 					.andExpect(status().isCreated())
-					.andExpect(jsonPath("$.data.discountAmount", is(5000.0)));
+					.andExpect(jsonPath("$.data.discountAmount", is(5000)));
 		}
 	}
 
