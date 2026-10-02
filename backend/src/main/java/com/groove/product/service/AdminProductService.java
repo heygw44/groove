@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
@@ -226,8 +227,11 @@ public class AdminProductService {
 		return AdminProductResponse.from(product, stock.getQuantity());
 	}
 
-	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Long albumId, Pageable pageable) {
-		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, albumId, pageable);
+	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Long albumId, String keyword,
+			Pageable pageable) {
+		String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, albumId,
+				normalizedKeyword, pageable);
 		return PageResponse.from(page);
 	}
 

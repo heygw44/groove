@@ -146,6 +146,7 @@ describe('OrderItemClaimActions', () => {
       amount: 10000,
       approvedAt: '2026-09-13T00:01:00',
       easyPayProvider: null,
+      canceledAmount: 0,
       virtualAccount: null,
     });
 

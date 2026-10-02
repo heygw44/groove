@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { Drawer } from '@/components/common/Drawer';
@@ -14,9 +13,10 @@ import { useAdminMember } from '@/hooks/queries/useAdminMembers';
 import { useAuthStore } from '@/store/authStore';
 import type { AdminMemberChangeableStatus } from '@/types/adminMember';
 import { getErrorMessage } from '@/utils/apiError';
-import { formatServerDate, formatServerDateTime } from '@/utils/formatDate';
+import { formatServerDate } from '@/utils/formatDate';
 import { formatPrice } from '@/utils/formatPrice';
 
+import { AdminMemberRecentOrderItem } from './AdminMemberRecentOrderItem';
 import { MemberStatusBadge } from './MemberStatusBadge';
 import { MemberStatusChangeDialog } from './MemberStatusChangeDialog';
 
@@ -115,6 +115,8 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
             </div>
           </div>
 
+          <p className="-mt-3 text-xs text-content-muted">취소된 주문 제외, 환불액 차감</p>
+
           <div>
             <p className="mb-2 text-sm font-bold">최근 주문</p>
             {detail.recentOrders.length === 0 ? (
@@ -122,28 +124,7 @@ export function AdminMemberDetailDrawer({ memberId, onClose }: AdminMemberDetail
             ) : (
               <ul className="flex flex-col gap-2">
                 {detail.recentOrders.map((order) => (
-                  <li
-                    key={order.id}
-                    className="flex items-center justify-between rounded-md border border-line px-3 py-2 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <Link
-                        to={`/admin/orders?keyword=${order.orderNumber}`}
-                        className="font-mono text-xs text-content hover:text-accent-hover"
-                      >
-                        {order.orderNumber}
-                      </Link>
-                      <p className="truncate text-content-muted">
-                        {order.representativeProductName}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="font-medium">{formatPrice(order.finalAmount)}</p>
-                      <p className="text-xs text-content-muted">
-                        {formatServerDateTime(order.createdAt)}
-                      </p>
-                    </div>
-                  </li>
+                  <AdminMemberRecentOrderItem key={order.id} order={order} />
                 ))}
               </ul>
             )}

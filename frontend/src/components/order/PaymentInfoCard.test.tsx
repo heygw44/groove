@@ -11,6 +11,7 @@ const buildPayment = (overrides: Partial<OrderPayment> = {}): OrderPayment => ({
   amount: 27000,
   approvedAt: '2026-09-13T00:01:00',
   easyPayProvider: null,
+  canceledAmount: 0,
   virtualAccount: null,
   ...overrides,
 });
@@ -125,5 +126,45 @@ describe('PaymentInfoCard', () => {
 
     // then
     expect(screen.getByText('취소 처리 중')).toBeInTheDocument();
+  });
+
+  it('부분취소 금액이 있으면 환불금액과 남은 결제금액을 보여준다', () => {
+    // given
+    const payment = buildPayment({ status: 'PARTIAL_CANCELED', canceledAmount: 10000 });
+
+    // when
+    render(
+      <PaymentInfoCard
+        totalAmount={30000}
+        discountAmount={3000}
+        finalAmount={27000}
+        payment={payment}
+      />,
+    );
+
+    // then
+    expect(screen.getByText('환불금액')).toBeInTheDocument();
+    expect(screen.getByText('-10,000원')).toBeInTheDocument();
+    expect(screen.getByText('남은 결제금액')).toBeInTheDocument();
+    expect(screen.getByText('17,000원')).toBeInTheDocument();
+  });
+
+  it('부분취소 금액이 0이면 환불금액 줄을 보여주지 않는다', () => {
+    // given
+    const payment = buildPayment({ canceledAmount: 0 });
+
+    // when
+    render(
+      <PaymentInfoCard
+        totalAmount={30000}
+        discountAmount={3000}
+        finalAmount={27000}
+        payment={payment}
+      />,
+    );
+
+    // then
+    expect(screen.queryByText('환불금액')).not.toBeInTheDocument();
+    expect(screen.queryByText('남은 결제금액')).not.toBeInTheDocument();
   });
 });

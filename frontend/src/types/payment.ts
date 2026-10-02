@@ -41,6 +41,8 @@ export interface OrderPayment {
   method: string;
   status: PaymentStatus;
   amount: number;
+  /** 부분취소로 환불된 누적 금액. 없으면 0. */
+  canceledAmount: number;
   /** 입금 전 가상계좌는 승인 시각이 없다. */
   approvedAt?: string;
   canceledAt?: string;

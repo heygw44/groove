@@ -968,16 +968,16 @@ class AdminProductServiceTest {
 			AdminProductSummaryResponse summary = new AdminProductSummaryResponse(PRODUCT_ID, "Kind of Blue",
 					"Miles Davis", null, new BigDecimal("45000.00"), ProductStatus.ON_SALE, null, 10, null);
 			Page<AdminProductSummaryResponse> page = new PageImpl<>(List.of(summary), pageable, 1);
-			given(productRepository.findAdminSummaries(eq(ProductStatus.ON_SALE), eq(albumId), eq(pageable)))
+			given(productRepository.findAdminSummaries(eq(ProductStatus.ON_SALE), eq(albumId), isNull(), eq(pageable)))
 					.willReturn(page);
 
 			// when
 			PageResponse<AdminProductSummaryResponse> result = adminProductService.getList(ProductStatus.ON_SALE,
-					albumId, pageable);
+					albumId, null, pageable);
 
 			// then
 			assertThat(result.content()).containsExactly(summary);
-			verify(productRepository).findAdminSummaries(ProductStatus.ON_SALE, albumId, pageable);
+			verify(productRepository).findAdminSummaries(ProductStatus.ON_SALE, albumId, null, pageable);
 		}
 
 		@Test
@@ -985,14 +985,44 @@ class AdminProductServiceTest {
 		void passesNullAlbumIdWhenAbsent() {
 			// given
 			Pageable pageable = PageRequest.of(0, 20);
-			given(productRepository.findAdminSummaries(isNull(), isNull(), eq(pageable)))
+			given(productRepository.findAdminSummaries(isNull(), isNull(), isNull(), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			adminProductService.getList(null, null, pageable);
+			adminProductService.getList(null, null, null, pageable);
 
 			// then
-			verify(productRepository).findAdminSummaries(null, null, pageable);
+			verify(productRepository).findAdminSummaries(null, null, null, pageable);
+		}
+
+		@Test
+		@DisplayName("keyword 앞뒤 공백을 제거해 리포지토리에 전달한다")
+		void trimsKeyword() {
+			// given
+			Pageable pageable = PageRequest.of(0, 20);
+			given(productRepository.findAdminSummaries(isNull(), isNull(), eq("miles"), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			// when
+			adminProductService.getList(null, null, "  miles ", pageable);
+
+			// then
+			verify(productRepository).findAdminSummaries(null, null, "miles", pageable);
+		}
+
+		@Test
+		@DisplayName("keyword 가 공백뿐이면 null 로 리포지토리에 전달한다")
+		void passesNullWhenKeywordBlank() {
+			// given
+			Pageable pageable = PageRequest.of(0, 20);
+			given(productRepository.findAdminSummaries(isNull(), isNull(), isNull(), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			// when
+			adminProductService.getList(null, null, "   ", pageable);
+
+			// then
+			verify(productRepository).findAdminSummaries(null, null, null, pageable);
 		}
 	}
 }

@@ -132,6 +132,7 @@ describe('OrderItemCard', () => {
         status: 'CANCELED',
         amount: 9000,
         easyPayProvider: null,
+        canceledAmount: 0,
         virtualAccount: null,
       },
     );
@@ -217,6 +218,7 @@ describe('OrderItemCard', () => {
       amount: 10000,
       approvedAt: '2026-09-13T00:01:00',
       easyPayProvider: null,
+      canceledAmount: 0,
       virtualAccount: {
         bankCode: '020',
         accountNumber: '110123456789',

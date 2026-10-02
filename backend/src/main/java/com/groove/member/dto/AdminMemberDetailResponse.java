@@ -7,7 +7,6 @@ import java.util.List;
 import com.groove.member.entity.Member;
 import com.groove.member.entity.MemberRole;
 import com.groove.member.entity.MemberStatus;
-import com.groove.order.dto.OrderSummaryResponse;
 
 public record AdminMemberDetailResponse(
 		Long id,
@@ -19,11 +18,11 @@ public record AdminMemberDetailResponse(
 		long orderCount,
 		BigDecimal totalPaymentAmount,
 		long usableCouponCount,
-		List<OrderSummaryResponse> recentOrders
+		List<AdminMemberRecentOrderResponse> recentOrders
 ) {
 
 	public static AdminMemberDetailResponse of(Member member, AdminMemberActivitySummary activitySummary,
-			List<OrderSummaryResponse> recentOrders) {
+			List<AdminMemberRecentOrderResponse> recentOrders) {
 		return new AdminMemberDetailResponse(
 				member.getId(),
 				member.getEmail(),
