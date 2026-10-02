@@ -29,13 +29,18 @@ public class OrderCancelRestorer {
 	private final ProductSalesStatsUpdater productSalesStatsUpdater;
 	private final Clock clock;
 
-	/** 취소된 주문의 재고·쿠폰·한정반 선점을 되돌린다. 결제된 주문이면 판매량도 다시 계산한다. */
+	/**
+	 * 취소된 주문의 재고·쿠폰·한정반 선점을 되돌린다. 결제된 주문이면 판매량도 다시 계산한다.
+	 *
+	 * <p>락 순서는 한정반 드롭 → 재고로 고정한다. 구매({@link LimitedPurchaseWriter#write})가 드롭 행을 잠근 뒤
+	 * 재고를 차감하므로, 복원이 재고를 먼저 잠그면 같은 드롭의 동시 구매와 서로의 락을 기다리는 데드락이 난다.</p>
+	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public Optional<LimitedRelease> restore(Order order, boolean paid) {
-		orderStockService.restore(order);
-		finalizeOrderIfAllItemsCancelTerminal(order);
 		Optional<LimitedRelease> limitedRelease = limitedPurchaseWriter.revertByOrder(order.getId(),
 				LocalDateTime.now(clock));
+		orderStockService.restore(order);
+		finalizeOrderIfAllItemsCancelTerminal(order);
 		limitedRelease.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
 		if (paid) {
 			productSalesStatsUpdater.refreshFor(order);
@@ -48,19 +53,17 @@ public class OrderCancelRestorer {
 	 * 재입고를 선택하지 않은 경우) 재고와 한정반은 그대로 두고 쿠폰·판매량만 갱신한다. 실물이 돌아오지 않았는데
 	 * 한정반 판매 수를 되돌리면 같은 자리가 다시 팔린다 - 구매 이력도 남겨 1인 1매 제한을 유지한다. 쿠폰 복원·주문 취소 확정은
 	 * 주문에 속한 모든 상품이 끝났을 때만 반영한다(D5) - 호출 전에 대상 상품주문의 상태 전이를 이미 반영해 둬야
-	 * 한다.
+	 * 한다. 락 순서는 {@link #restore} 와 같이 한정반 드롭 → 재고다.
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public Optional<LimitedRelease> restoreItems(Order order, List<OrderItem> items, boolean restock, boolean paid) {
-		if (restock) {
-			orderStockService.restore(items);
-		}
-		finalizeOrderIfAllItemsCancelTerminal(order);
 		Optional<LimitedRelease> limitedRelease = Optional.empty();
 		if (restock) {
 			limitedRelease = limitedPurchaseWriter.revertByOrder(order.getId(), LocalDateTime.now(clock));
-			limitedRelease.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
+			orderStockService.restore(items);
 		}
+		finalizeOrderIfAllItemsCancelTerminal(order);
+		limitedRelease.ifPresent(limitedReleaseSynchronizer::releaseAfterCommit);
 		if (paid) {
 			productSalesStatsUpdater.refreshFor(order);
 		}

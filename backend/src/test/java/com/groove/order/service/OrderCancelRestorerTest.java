@@ -81,7 +81,7 @@ class OrderCancelRestorerTest {
 	class Restore {
 
 		@Test
-		@DisplayName("복구 순서를 지키고 한정반 선점을 커밋 후 해제한다")
+		@DisplayName("한정반 드롭을 재고보다 먼저 되돌리고 한정반 선점을 커밋 후 해제한다")
 		void restoresResourcesInOrder() {
 			// given: 쿠폰은 상품주문이 전부 끝났을 때만 복원된다(D5) - 실제 호출자는 취소 확정 뒤에 restore() 를 부른다
 			OrderFixture.markItemsStatus(order, OrderItemStatus.CANCELED);
@@ -94,8 +94,8 @@ class OrderCancelRestorerTest {
 			// then
 			InOrder inOrder = Mockito.inOrder(orderStockService, limitedPurchaseWriter, limitedReleaseSynchronizer,
 					productSalesStatsUpdater);
-			inOrder.verify(orderStockService).restore(order);
 			inOrder.verify(limitedPurchaseWriter).revertByOrder(order.getId(), NOW);
+			inOrder.verify(orderStockService).restore(order);
 			inOrder.verify(limitedReleaseSynchronizer).releaseAfterCommit(release);
 			inOrder.verify(productSalesStatsUpdater).refreshFor(order);
 			assertThat(memberCoupon.isUsed()).isFalse();
@@ -126,8 +126,8 @@ class OrderCancelRestorerTest {
 	class RestoreItems {
 
 		@Test
-		@DisplayName("재입고를 선택하면 재고를 복원하고 한정반 선점을 되돌려 커밋 후 해제한다")
-		void restoresStockAndLimitedWhenRestock() {
+		@DisplayName("재입고를 선택하면 한정반 드롭을 재고보다 먼저 되돌리고 한정반 선점을 커밋 후 해제한다")
+		void restoresLimitedBeforeStockWhenRestock() {
 			// given
 			LimitedRelease release = new LimitedRelease(30L, 1L);
 			given(limitedPurchaseWriter.revertByOrder(order.getId(), NOW)).willReturn(Optional.of(release));
@@ -136,9 +136,12 @@ class OrderCancelRestorerTest {
 			Optional<LimitedRelease> result = restorer.restoreItems(order, order.getItems(), true, true);
 
 			// then
-			verify(orderStockService).restore(order.getItems());
-			verify(limitedReleaseSynchronizer).releaseAfterCommit(release);
-			verify(productSalesStatsUpdater).refreshFor(order);
+			InOrder inOrder = Mockito.inOrder(orderStockService, limitedPurchaseWriter, limitedReleaseSynchronizer,
+					productSalesStatsUpdater);
+			inOrder.verify(limitedPurchaseWriter).revertByOrder(order.getId(), NOW);
+			inOrder.verify(orderStockService).restore(order.getItems());
+			inOrder.verify(limitedReleaseSynchronizer).releaseAfterCommit(release);
+			inOrder.verify(productSalesStatsUpdater).refreshFor(order);
 			assertThat(result).contains(release);
 		}
 
