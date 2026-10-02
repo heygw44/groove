@@ -8,12 +8,15 @@ import org.hibernate.Hibernate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
+import com.groove.global.util.LikeEscaper;
 import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
 import com.groove.support.DataJpaTestSupport;
@@ -49,6 +52,28 @@ class AlbumRepositoryTest extends DataJpaTestSupport {
 			// then
 			List<Long> ids = page.getContent().stream().map(Album::getId).toList();
 			assertThat(ids).contains(saved.getId());
+		}
+
+		@ParameterizedTest
+		@CsvSource({
+			"50% Wild-ALB-6, 50% Wild-ALB-6, 50 Wild-ALB-6",
+			"Snake_Eyes-ALB-7, Snake_Eyes-ALB-7, SnakeXEyes-ALB-7"
+		})
+		@DisplayName("keyword 의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalTitle, String lookalikeTitle) {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create("Wildcard Artist-ALB"));
+			Album literal = albumRepository.save(AlbumFixture.create(artist, literalTitle));
+			Album lookalike = albumRepository.save(AlbumFixture.create(artist, lookalikeTitle));
+			flushAndClear();
+
+			// when
+			Page<Album> page = albumRepository.searchByKeyword(LikeEscaper.escape(keyword), PageRequest.of(0, 100));
+
+			// then
+			assertThat(page.getContent()).extracting(Album::getId)
+					.contains(literal.getId())
+					.doesNotContain(lookalike.getId());
 		}
 
 		@Test

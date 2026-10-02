@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
@@ -47,6 +48,19 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
 		List<ApiResponse.FieldErrorBody> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
 				.map(fe -> new ApiResponse.FieldErrorBody(fe.getField(), resolveMessage(fe)))
+				.toList();
+		ErrorCode code = ErrorCode.COMMON_VALIDATION_FAILED;
+		return ResponseEntity.status(code.getStatus())
+				.body(ApiResponse.error(code.name(), code.getMessage(), fieldErrors));
+	}
+
+	@ExceptionHandler(HandlerMethodValidationException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMethodValidation(HandlerMethodValidationException ex) {
+		List<ApiResponse.FieldErrorBody> fieldErrors = ex.getParameterValidationResults().stream()
+				.flatMap(result -> result.getResolvableErrors().stream()
+						.map(error -> new ApiResponse.FieldErrorBody(
+								result.getMethodParameter().getParameterName(),
+								error.getDefaultMessage() == null ? "invalid" : error.getDefaultMessage())))
 				.toList();
 		ErrorCode code = ErrorCode.COMMON_VALIDATION_FAILED;
 		return ResponseEntity.status(code.getStatus())

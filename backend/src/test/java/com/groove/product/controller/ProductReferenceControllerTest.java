@@ -1,5 +1,6 @@
 package com.groove.product.controller;
 
+import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -101,6 +102,26 @@ class ProductReferenceControllerTest {
 
 			// then
 			verify(productReferenceService).searchArtists(eq("miles"));
+		}
+
+		@Test
+		@DisplayName("keyword 가 100자이면 200 을 반환한다")
+		void acceptsKeywordOfMaxLength() throws Exception {
+			// given
+			given(productReferenceService.searchArtists(any())).willReturn(List.of());
+
+			// when & then
+			mockMvc.perform(get("/api/v1/artists").param("keyword", "a".repeat(100)))
+					.andExpect(status().isOk());
+		}
+
+		@Test
+		@DisplayName("keyword 가 100자를 초과하면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenKeywordTooLong() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/artists").param("keyword", "a".repeat(101)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 		}
 	}
 

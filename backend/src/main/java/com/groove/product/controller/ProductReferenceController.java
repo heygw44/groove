@@ -17,6 +17,7 @@ import com.groove.product.service.ProductReferenceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 
 @Tag(name = "Product Reference", description = "필터용 기준 데이터")
@@ -44,7 +45,8 @@ public class ProductReferenceController {
 	@Operation(summary = "아티스트 검색")
 	@SecurityRequirements
 	@GetMapping("/artists")
-	public ApiResponse<List<ArtistResponse>> searchArtists(@RequestParam(required = false) String keyword) {
+	public ApiResponse<List<ArtistResponse>> searchArtists(
+			@RequestParam(required = false) @Size(max = 100) String keyword) {
 		return ApiResponse.ok(productReferenceService.searchArtists(keyword));
 	}
 

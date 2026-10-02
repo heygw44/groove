@@ -107,7 +107,8 @@
 					AND p.barcode = #{barcode}
 				</when>
 				<when test="keyword != null and keyword != ''">
-					AND (p.title LIKE CONCAT('%', #{keyword}, '%') OR a.name LIKE CONCAT('%', #{keyword}, '%')
+					<bind name="likeKeyword" value="@com.groove.global.util.LikeEscaper@escape(keyword)"/>
+					AND (p.title LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!' OR a.name LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!'
 					<if test="catalogNoNormalized != null">
 						OR p.catalog_no_normalized = #{catalogNoNormalized}
 					</if>
@@ -211,6 +212,7 @@
 	</select>
 
 	<select id="suggestProducts" resultMap="suggestionItemMap">
+		<bind name="likeKeyword" value="@com.groove.global.util.LikeEscaper@escape(keyword)"/>
 		SELECT t.id, t.title, t.artistName,
 			(SELECT MIN(pi.image_url) FROM product_image pi
 				WHERE pi.product_id = t.id AND pi.sort_order = 0) AS thumbnailUrl
@@ -219,21 +221,21 @@
 				ROW_NUMBER() OVER (
 					PARTITION BY p.album_id
 					ORDER BY (p.status = 'SOLD_OUT'),
-						CASE WHEN p.title LIKE CONCAT(#{keyword}, '%') THEN 0
-							WHEN a.name LIKE CONCAT(#{keyword}, '%') THEN 1
+						CASE WHEN p.title LIKE CONCAT(#{likeKeyword}, '%') ESCAPE '!' THEN 0
+							WHEN a.name LIKE CONCAT(#{likeKeyword}, '%') ESCAPE '!' THEN 1
 							ELSE 2 END,
 						p.review_count DESC, p.id DESC
 				) AS rn
 			FROM product p
 			JOIN artist a ON a.id = p.artist_id
 			WHERE p.status &lt;&gt; 'HIDDEN'
-			AND (p.title LIKE CONCAT('%', #{keyword}, '%')
-				OR a.name LIKE CONCAT('%', #{keyword}, '%'))
+			AND (p.title LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!'
+				OR a.name LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!')
 		) t
 		WHERE t.rn = 1
 		ORDER BY
-			CASE WHEN t.title LIKE CONCAT(#{keyword}, '%') THEN 0
-				WHEN t.artistName LIKE CONCAT(#{keyword}, '%') THEN 1
+			CASE WHEN t.title LIKE CONCAT(#{likeKeyword}, '%') ESCAPE '!' THEN 0
+				WHEN t.artistName LIKE CONCAT(#{likeKeyword}, '%') ESCAPE '!' THEN 1
 				ELSE 2 END,
 			t.review_count DESC, t.id DESC
 		LIMIT #{limit}

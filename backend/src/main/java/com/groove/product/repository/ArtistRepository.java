@@ -17,8 +17,8 @@ public interface ArtistRepository extends JpaRepository<Artist, Long> {
 	@Query("""
 			SELECT a FROM Artist a
 			WHERE :keyword IS NULL
-				OR LOWER(a.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
-				OR LOWER(a.nameEn) LIKE LOWER(CONCAT('%', :keyword, '%'))
+				OR LOWER(a.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
+				OR LOWER(a.nameEn) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
 			ORDER BY a.name ASC
 			""")
 	List<Artist> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
