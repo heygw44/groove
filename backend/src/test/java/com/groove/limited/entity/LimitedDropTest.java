@@ -58,7 +58,8 @@ class LimitedDropTest {
 			"-1, 1",
 			"10, 0",
 			"10, -1",
-			"10, 11"
+			"10, 2",
+			"10, 5"
 		})
 		@DisplayName("수량 조합이 올바르지 않으면 COMMON_INVALID_INPUT 예외를 던진다")
 		void throwsWhenQuantityInvalid(int totalQuantity, int perMemberLimit) {
@@ -513,11 +514,11 @@ class LimitedDropTest {
 			LocalDateTime newCloseAt = LocalDateTime.now().plusDays(4);
 
 			// when
-			drop.reschedule(200, 3, newOpenAt, newCloseAt);
+			drop.reschedule(200, 1, newOpenAt, newCloseAt);
 
 			// then
 			assertThat(drop.getTotalQuantity()).isEqualTo(200);
-			assertThat(drop.getPerMemberLimit()).isEqualTo(3);
+			assertThat(drop.getPerMemberLimit()).isEqualTo(1);
 			assertThat(drop.getOpenAt()).isEqualTo(newOpenAt);
 			assertThat(drop.getCloseAt()).isEqualTo(newCloseAt);
 		}
@@ -530,7 +531,7 @@ class LimitedDropTest {
 			LimitedDrop drop = LimitedDropFixture.withStatus(LimitedDropFixture.scheduled(product), status);
 
 			// when & then
-			assertThatThrownBy(() -> drop.reschedule(200, 3, LocalDateTime.now().plusDays(3),
+			assertThatThrownBy(() -> drop.reschedule(200, 1, LocalDateTime.now().plusDays(3),
 					LocalDateTime.now().plusDays(4)))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
@@ -546,20 +547,21 @@ class LimitedDropTest {
 			LocalDateTime closeAt = LocalDateTime.now().plusDays(3);
 
 			// when & then
-			assertThatThrownBy(() -> drop.reschedule(200, 3, openAt, closeAt))
+			assertThatThrownBy(() -> drop.reschedule(200, 1, openAt, closeAt))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.COMMON_INVALID_INPUT);
 		}
 
-		@Test
-		@DisplayName("회원당 구매 제한이 총 수량을 초과하면 COMMON_INVALID_INPUT 예외를 던진다")
-		void throwsWhenPerMemberLimitExceedsTotalQuantity() {
+		@ParameterizedTest
+		@CsvSource({"0", "2", "5"})
+		@DisplayName("회원당 구매 제한이 1이 아니면 COMMON_INVALID_INPUT 예외를 던진다")
+		void throwsWhenPerMemberLimitNotOne(int perMemberLimit) {
 			// given
 			LimitedDrop drop = LimitedDropFixture.scheduled(product);
 
 			// when & then
-			assertThatThrownBy(() -> drop.reschedule(5, 6, LocalDateTime.now().plusDays(3),
+			assertThatThrownBy(() -> drop.reschedule(100, perMemberLimit, LocalDateTime.now().plusDays(3),
 					LocalDateTime.now().plusDays(4)))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")

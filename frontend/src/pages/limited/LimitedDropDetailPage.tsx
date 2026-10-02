@@ -166,7 +166,7 @@ export default function LimitedDropDetailPage() {
       <dl className="mt-6 flex flex-col gap-2 text-sm">
         <div className="flex gap-2">
           <dt className="w-28 shrink-0 text-content-muted">1인 구매 한도</dt>
-          <dd className="m-0">{drop.perMemberLimit}개</dd>
+          <dd className="m-0">1인 1매</dd>
         </div>
         <div className="flex gap-2">
           <dt className="w-24 shrink-0 text-content-muted">오픈</dt>

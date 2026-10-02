@@ -191,16 +191,11 @@ export function AdminLimitedDropFormModal({ open, onClose, drop }: AdminLimitedD
         <Field
           htmlFor="limited-drop-per-member-limit"
           label="1인 구매 한도"
-          required
-          help="1~5 사이"
-          error={errors.perMemberLimit?.message}
+          help="한정 판매는 1인 1매로 고정됩니다."
         >
-          <Input
-            id="limited-drop-per-member-limit"
-            inputMode="numeric"
-            invalid={Boolean(errors.perMemberLimit)}
-            {...register('perMemberLimit')}
-          />
+          <output id="limited-drop-per-member-limit" className="text-sm text-content">
+            1인 1매 (고정)
+          </output>
         </Field>
 
         <Field

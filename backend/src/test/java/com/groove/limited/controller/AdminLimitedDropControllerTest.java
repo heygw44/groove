@@ -20,6 +20,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -81,7 +83,7 @@ class AdminLimitedDropControllerTest {
 	}
 
 	private LimitedDropCreateRequest sampleCreateRequest() {
-		return new LimitedDropCreateRequest(PRODUCT_ID, 100, 2, LocalDateTime.now().plusDays(1),
+		return new LimitedDropCreateRequest(PRODUCT_ID, 100, 1, LocalDateTime.now().plusDays(1),
 				LocalDateTime.now().plusDays(2));
 	}
 
@@ -142,11 +144,12 @@ class AdminLimitedDropControllerTest {
 			verify(adminLimitedDropService, never()).create(any(), any());
 		}
 
-		@Test
-		@DisplayName("회원당 구매 제한이 6이면 400과 필드 에러를 반환한다")
-		void returnsBadRequestWhenPerMemberLimitExceedsMax() throws Exception {
+		@ParameterizedTest
+		@ValueSource(ints = {0, 2, 5})
+		@DisplayName("회원당 구매 제한이 1이 아니면 400과 필드 에러를 반환한다")
+		void returnsBadRequestWhenPerMemberLimitNotOne(int perMemberLimit) throws Exception {
 			// given
-			LimitedDropCreateRequest request = new LimitedDropCreateRequest(PRODUCT_ID, 100, 6,
+			LimitedDropCreateRequest request = new LimitedDropCreateRequest(PRODUCT_ID, 100, perMemberLimit,
 					LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 
 			// when & then
@@ -163,7 +166,7 @@ class AdminLimitedDropControllerTest {
 		@DisplayName("마감 시각이 오픈 시각보다 이전이면 400과 필드 에러를 반환한다")
 		void returnsBadRequestWhenCloseAtBeforeOpenAt() throws Exception {
 			// given
-			LimitedDropCreateRequest request = new LimitedDropCreateRequest(PRODUCT_ID, 100, 2,
+			LimitedDropCreateRequest request = new LimitedDropCreateRequest(PRODUCT_ID, 100, 1,
 					LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(1));
 
 			// when & then
@@ -180,7 +183,7 @@ class AdminLimitedDropControllerTest {
 		@DisplayName("오픈 시각이 과거면 400과 필드 에러를 반환한다")
 		void returnsBadRequestWhenOpenAtInPast() throws Exception {
 			// given
-			LimitedDropCreateRequest request = new LimitedDropCreateRequest(PRODUCT_ID, 100, 2,
+			LimitedDropCreateRequest request = new LimitedDropCreateRequest(PRODUCT_ID, 100, 1,
 					LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(1));
 
 			// when & then
@@ -325,6 +328,36 @@ class AdminLimitedDropControllerTest {
 					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 			verify(adminLimitedDropService, never()).update(any(), any(), any());
+		}
+
+		@ParameterizedTest
+		@ValueSource(ints = {0, 2, 5})
+		@DisplayName("회원당 구매 제한이 1이 아니면 400과 필드 에러를 반환하고 서비스는 호출되지 않는다")
+		void returnsBadRequestWhenPerMemberLimitNotOne(int perMemberLimit) throws Exception {
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/limited-drops/{id}", DROP_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"perMemberLimit\":" + perMemberLimit + "}"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("perMemberLimit")));
+			verify(adminLimitedDropService, never()).update(any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("회원당 구매 제한이 1이면 200을 반환한다")
+		void acceptsPerMemberLimitOne() throws Exception {
+			// given
+			given(adminLimitedDropService.update(eq(1L), eq(DROP_ID), any()))
+					.willReturn(sampleResponse(LimitedDropStatus.SCHEDULED));
+
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/limited-drops/{id}", DROP_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"perMemberLimit\":1}"))
+					.andExpect(status().isOk());
 		}
 	}
 

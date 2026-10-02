@@ -81,7 +81,7 @@ class LimitedDropReadFlowIntegrationTest extends IntegrationTestSupport {
 			// given
 			String adminToken = adminToken();
 			Long productId = createProductWithStock(100);
-			LimitedDropCreateRequest createRequest = new LimitedDropCreateRequest(productId, 100, 2,
+			LimitedDropCreateRequest createRequest = new LimitedDropCreateRequest(productId, 100, 1,
 					LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 
 			MvcResult createResult = mockMvc.perform(post("/api/v1/admin/limited-drops")

@@ -114,7 +114,6 @@ export interface AdminLimitedDropDetail {
 export interface AdminLimitedDropCreateRequest {
   productId: number;
   totalQuantity: number;
-  perMemberLimit?: number;
   openAt: string;
   closeAt: string;
 }

@@ -44,6 +44,9 @@ import lombok.NoArgsConstructor;
 		})
 public class LimitedDrop extends BaseTimeEntity {
 
+	/** 구매는 1인 1매(Redis 구매자 Set + uk_limited_purchase)로 강제되므로 회원당 한도는 1로 고정한다. */
+	private static final int PER_MEMBER_LIMIT = 1;
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -92,7 +95,7 @@ public class LimitedDrop extends BaseTimeEntity {
 
 	public static LimitedDrop schedule(Product product, int totalQuantity, Integer perMemberLimit,
 			LocalDateTime openAt, LocalDateTime closeAt) {
-		int resolvedPerMemberLimit = perMemberLimit == null ? 1 : perMemberLimit;
+		int resolvedPerMemberLimit = perMemberLimit == null ? PER_MEMBER_LIMIT : perMemberLimit;
 		validateSchedule(totalQuantity, resolvedPerMemberLimit, openAt, closeAt);
 
 		return LimitedDrop.builder()
@@ -199,7 +202,7 @@ public class LimitedDrop extends BaseTimeEntity {
 		if (totalQuantity <= 0) {
 			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
 		}
-		if (perMemberLimit <= 0 || perMemberLimit > totalQuantity) {
+		if (perMemberLimit != PER_MEMBER_LIMIT) {
 			throw new BusinessException(ErrorCode.COMMON_INVALID_INPUT);
 		}
 		if (openAt == null || closeAt == null || !openAt.isBefore(closeAt)) {

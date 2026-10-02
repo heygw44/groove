@@ -126,7 +126,7 @@ class LimitedRedisFallbackIntegrationTest extends IntegrationTestSupport {
 		Product product = productRepository.save(createdProduct);
 		stockRepository.saveAndFlush(StockFixture.create(product, totalQuantity));
 
-		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, totalQuantity);
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, 1);
 		drop.open();
 		LocalDateTime now = LocalDateTime.now(clock);
 		LimitedDropFixture.withOpenAt(drop, now.minusHours(1));

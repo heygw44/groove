@@ -33,13 +33,12 @@ class LimitedPurchaseTest {
 		@CsvSource({
 			"0, false",
 			"1, true",
-			"2, true",
-			"3, false"
+			"2, false"
 		})
-		@DisplayName("수량이 1 이상 회원당 한도 이하면 생성되고 아니면 LIMITED_LIMIT_EXCEEDED 예외를 던진다")
+		@DisplayName("수량이 1이면 생성되고 아니면 LIMITED_LIMIT_EXCEEDED 예외를 던진다")
 		void validatesQuantityBoundary(int quantity, boolean shouldPass) {
 			// given
-			LimitedDrop drop = LimitedDropFixture.scheduled(product, 100, 2);
+			LimitedDrop drop = LimitedDropFixture.scheduled(product, 100, 1);
 
 			// when & then
 			if (shouldPass) {
@@ -57,7 +56,7 @@ class LimitedPurchaseTest {
 		@DisplayName("생성한 구매 이력은 전달한 드롭·회원을 그대로 참조한다")
 		void referencesGivenDropAndMember() {
 			// given
-			LimitedDrop drop = LimitedDropFixture.scheduled(product, 100, 2);
+			LimitedDrop drop = LimitedDropFixture.scheduled(product, 100, 1);
 
 			// when
 			LimitedPurchase purchase = LimitedPurchase.create(drop, member, null, 1);

@@ -95,7 +95,7 @@ class AdminLimitedDropFlowIntegrationTest extends IntegrationTestSupport {
 					Member.create("admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
 			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
 			Long productId = createProductWithStock(10);
-			LimitedDropCreateRequest createRequest = new LimitedDropCreateRequest(productId, 100, 2,
+			LimitedDropCreateRequest createRequest = new LimitedDropCreateRequest(productId, 100, 1,
 					LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 
 			// when
@@ -172,7 +172,7 @@ class AdminLimitedDropFlowIntegrationTest extends IntegrationTestSupport {
 					Member.create("admin-" + UUID.randomUUID() + "@groove.com", "encoded", "관리자"));
 			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
 			Long productId = createProductWithStock(10);
-			LimitedDropCreateRequest request = new LimitedDropCreateRequest(productId, 100, 2,
+			LimitedDropCreateRequest request = new LimitedDropCreateRequest(productId, 100, 1,
 					LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 
 			mockMvc.perform(post("/api/v1/admin/limited-drops")
@@ -198,7 +198,7 @@ class AdminLimitedDropFlowIntegrationTest extends IntegrationTestSupport {
 					Member.create("user-" + UUID.randomUUID() + "@groove.com", "encoded", "회원"));
 			String userToken = "Bearer " + jwtProvider.createAccessToken(user.getId(), MemberRole.USER);
 			Long productId = createProductWithStock(10);
-			LimitedDropCreateRequest request = new LimitedDropCreateRequest(productId, 100, 2,
+			LimitedDropCreateRequest request = new LimitedDropCreateRequest(productId, 100, 1,
 					LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 
 			// when & then

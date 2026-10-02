@@ -17,8 +17,8 @@ public record LimitedDropCreateRequest(
 		@Min(value = 1, message = "총 수량은 1 이상이어야 합니다.")
 		Integer totalQuantity,
 
-		@Min(value = 1, message = "회원당 구매 제한은 1 이상이어야 합니다.")
-		@Max(value = 5, message = "회원당 구매 제한은 5 이하여야 합니다.")
+		@Min(value = 1, message = "회원당 구매 제한은 1이어야 합니다.")
+		@Max(value = 1, message = "회원당 구매 제한은 1이어야 합니다.")
 		Integer perMemberLimit,
 
 		@NotNull(message = "오픈 시각은 필수입니다.")

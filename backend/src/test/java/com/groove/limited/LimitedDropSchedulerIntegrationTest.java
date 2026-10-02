@@ -126,7 +126,7 @@ class LimitedDropSchedulerIntegrationTest extends IntegrationTestSupport {
 			Product product = createProduct();
 			stockRepository.saveAndFlush(StockFixture.create(product, 10));
 			LocalDateTime now = LocalDateTime.now(clock);
-			LimitedDrop drop = LimitedDropFixture.scheduled(product, 10, 2);
+			LimitedDrop drop = LimitedDropFixture.scheduled(product, 10, 1);
 			LimitedDropFixture.withOpenAt(drop, now.minusMinutes(1));
 			LimitedDropFixture.withCloseAt(drop, now.plusHours(1));
 			LimitedDrop saved = limitedDropRepository.saveAndFlush(drop);
