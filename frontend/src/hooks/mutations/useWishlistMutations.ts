@@ -78,8 +78,19 @@ export const useToggleWishlist = () => {
     },
     onError: (error, { productId }, context) => {
       const code = getErrorCode(error);
-      // 이미 담겼거나 이미 빠져 있다는 뜻이라 서버 상태가 곧 우리가 낙관적으로 반영한 값이다.
-      if (code === 'WISHLIST_ALREADY_EXISTS' || code === 'WISHLIST_NOT_FOUND') {
+      // 이미 담겨 있다면 하트는 그대로 두되, 기존 행의 알림 값은 알 수 없으니 되돌려 놓고 다시 받는다.
+      if (code === 'WISHLIST_ALREADY_EXISTS') {
+        if (context?.hadDetail) {
+          queryClient.setQueryData<ProductDetail>(
+            productKeys.detail(productId),
+            (old) => old && { ...old, alertEnabled: context.previousDetail?.alertEnabled },
+          );
+        }
+        queryClient.invalidateQueries({ queryKey: productKeys.detail(productId) });
+        return;
+      }
+      // 이미 빠져 있다는 뜻이라 서버 상태가 곧 우리가 낙관적으로 반영한 값이다.
+      if (code === 'WISHLIST_NOT_FOUND') {
         return;
       }
       if (!context) {
@@ -150,16 +161,19 @@ export const useChangeWishlistAlert = () => {
 
       return { hadDetail, previousDetail, previousLists };
     },
-    onError: (_error, { productId }, context) => {
-      if (!context) {
-        return;
+    onError: (error, { productId }, context) => {
+      if (context) {
+        if (context.hadDetail) {
+          queryClient.setQueryData(productKeys.detail(productId), context.previousDetail);
+        }
+        context.previousLists.forEach(([key, data]) => {
+          queryClient.setQueryData(key, data);
+        });
       }
-      if (context.hadDetail) {
-        queryClient.setQueryData(productKeys.detail(productId), context.previousDetail);
+      // 위시 행이 이미 사라졌다면 상세의 wishlisted 도 틀리므로 서버 값을 다시 받는다.
+      if (getErrorCode(error) === 'WISHLIST_NOT_FOUND') {
+        queryClient.invalidateQueries({ queryKey: productKeys.detail(productId) });
       }
-      context.previousLists.forEach(([key, data]) => {
-        queryClient.setQueryData(key, data);
-      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: wishlistKeys.all });

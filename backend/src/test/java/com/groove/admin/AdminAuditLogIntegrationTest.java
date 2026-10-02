@@ -241,7 +241,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 
 			// when
 			adminAuditLogService.record(admin.getId(), AdminAuditAction.SALES_AGGREGATION_RUN,
-					AdminAuditTargetType.SALES_AGGREGATION, null, "from=2032-01-01,to=2032-01-01");
+					AdminAuditTargetType.SALES_AGGREGATION, null, "기간: 2032-01-01 ~ 2032-01-01");
 
 			// then
 			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());

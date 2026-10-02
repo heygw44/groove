@@ -1,12 +1,14 @@
 package com.groove.admin.dto;
 
+import com.groove.global.common.PageLimits;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 
 /** GET /admin/stats/limited-drops 페이징 조건. 정렬은 open_at DESC, id DESC 로 고정한다. */
 public record LimitedDropStatsRequest(
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

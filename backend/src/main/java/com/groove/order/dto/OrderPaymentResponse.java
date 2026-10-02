@@ -11,6 +11,7 @@ public record OrderPaymentResponse(
 		String method,
 		PaymentStatus status,
 		BigDecimal amount,
+		BigDecimal canceledAmount,
 		LocalDateTime approvedAt,
 		LocalDateTime canceledAt,
 		String easyPayProvider,
@@ -19,13 +20,14 @@ public record OrderPaymentResponse(
 
 	public OrderPaymentResponse(Long paymentId, String method, PaymentStatus status, BigDecimal amount,
 			LocalDateTime approvedAt, LocalDateTime canceledAt) {
-		this(paymentId, method, status, amount, approvedAt, canceledAt, null, null);
+		this(paymentId, method, status, amount, BigDecimal.ZERO, approvedAt, canceledAt, null,
+				null);
 	}
 
 	public static OrderPaymentResponse from(Payment payment) {
 		return new OrderPaymentResponse(payment.getId(), payment.getMethod(), payment.getStatus(),
-				payment.getAmount(), payment.getApprovedAt(), payment.getCanceledAt(), payment.getEasyPayProvider(),
-				VirtualAccountResponse.from(payment));
+				payment.getAmount(), payment.getCanceledAmount(), payment.getApprovedAt(), payment.getCanceledAt(),
+				payment.getEasyPayProvider(), VirtualAccountResponse.from(payment));
 	}
 
 	/** 가상계좌 결제가 아니면 null 이다. secret 은 절대 담지 않는다. */

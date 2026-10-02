@@ -6,6 +6,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.groove.global.util.LikeEscaper;
 import com.groove.product.dto.ArtistResponse;
 import com.groove.product.dto.ProductSuggestionResponse;
 import com.groove.product.mapper.ProductSearchMapper;
@@ -30,7 +31,7 @@ public class ProductSuggestService {
 		List<ProductSuggestionResponse.Item> products = productSearchMapper.suggestProducts(normalizedKeyword,
 				PRODUCT_LIMIT);
 		List<ArtistResponse> artists = artistRepository
-				.searchByKeyword(normalizedKeyword, PageRequest.of(0, ARTIST_LIMIT)).stream()
+				.searchByKeyword(LikeEscaper.escape(normalizedKeyword), PageRequest.of(0, ARTIST_LIMIT)).stream()
 				.map(ArtistResponse::from)
 				.toList();
 		return new ProductSuggestionResponse(products, artists);

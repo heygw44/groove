@@ -319,7 +319,7 @@ class AdminProductServiceTest {
 			assertThat(response.title()).isEqualTo(product.getTitle());
 			assertThat(response.images()).isEmpty();
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_UPDATE,
-					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "");
+					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "변경: 없음");
 		}
 
 		@Test
@@ -379,7 +379,7 @@ class AdminProductServiceTest {
 			// then
 			assertThat(response.label()).isNull();
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_UPDATE,
-					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "label");
+					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "변경: 레이블");
 			verify(labelRepository, never()).findById(any());
 		}
 
@@ -554,7 +554,7 @@ class AdminProductServiceTest {
 			assertThat(response.artist().name()).isEqualTo("John Coltrane");
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("artist");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 아티스트");
 		}
 
 		@Test
@@ -613,7 +613,7 @@ class AdminProductServiceTest {
 			assertThat(response.country()).isEqualTo("JP");
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("country");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 제작 국가");
 		}
 
 		@Test
@@ -634,7 +634,7 @@ class AdminProductServiceTest {
 			assertThat(response.country()).isNull();
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("country");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 제작 국가");
 		}
 
 		@Test
@@ -655,7 +655,7 @@ class AdminProductServiceTest {
 			assertThat(response.pressingYear()).isEqualTo(1999);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("pressingYear");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 제작 연도");
 		}
 
 		@Test
@@ -676,7 +676,7 @@ class AdminProductServiceTest {
 			assertThat(response.pressingYear()).isNull();
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("pressingYear");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 제작 연도");
 		}
 
 		@Test
@@ -697,7 +697,7 @@ class AdminProductServiceTest {
 			assertThat(response.catalogNo()).isEqualTo("MPS 8163");
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("catalogNo");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 카탈로그 번호");
 		}
 
 		@Test
@@ -718,7 +718,7 @@ class AdminProductServiceTest {
 			assertThat(response.catalogNo()).isNull();
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("catalogNo");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 카탈로그 번호");
 		}
 
 		@Test
@@ -739,7 +739,7 @@ class AdminProductServiceTest {
 			assertThat(response.barcode()).isEqualTo("999990123456");
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("barcode");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 바코드");
 		}
 
 		@Test
@@ -760,7 +760,7 @@ class AdminProductServiceTest {
 			assertThat(response.barcode()).isNull();
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.PRODUCT_UPDATE),
 					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("barcode");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 바코드");
 		}
 
 		private ProductUpdateRequest priceUpdateRequest(BigDecimal price) {
@@ -884,7 +884,7 @@ class AdminProductServiceTest {
 			// then
 			assertThat(response.status()).isEqualTo(ProductStatus.ON_SALE);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_RESTORE,
-					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "ON_SALE");
+					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "복구: 판매중");
 			verify(eventPublisher).publishEvent(any(ProductCatalogChangedEvent.class));
 		}
 
@@ -905,7 +905,7 @@ class AdminProductServiceTest {
 			// then
 			assertThat(response.status()).isEqualTo(ProductStatus.SOLD_OUT);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.PRODUCT_RESTORE,
-					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "SOLD_OUT");
+					AdminAuditTargetType.PRODUCT, PRODUCT_ID, "복구: 품절");
 		}
 
 		@Test
@@ -968,16 +968,16 @@ class AdminProductServiceTest {
 			AdminProductSummaryResponse summary = new AdminProductSummaryResponse(PRODUCT_ID, "Kind of Blue",
 					"Miles Davis", null, new BigDecimal("45000.00"), ProductStatus.ON_SALE, null, 10, null);
 			Page<AdminProductSummaryResponse> page = new PageImpl<>(List.of(summary), pageable, 1);
-			given(productRepository.findAdminSummaries(eq(ProductStatus.ON_SALE), eq(albumId), eq(pageable)))
+			given(productRepository.findAdminSummaries(eq(ProductStatus.ON_SALE), eq(albumId), isNull(), eq(pageable)))
 					.willReturn(page);
 
 			// when
 			PageResponse<AdminProductSummaryResponse> result = adminProductService.getList(ProductStatus.ON_SALE,
-					albumId, pageable);
+					albumId, null, pageable);
 
 			// then
 			assertThat(result.content()).containsExactly(summary);
-			verify(productRepository).findAdminSummaries(ProductStatus.ON_SALE, albumId, pageable);
+			verify(productRepository).findAdminSummaries(ProductStatus.ON_SALE, albumId, null, pageable);
 		}
 
 		@Test
@@ -985,14 +985,44 @@ class AdminProductServiceTest {
 		void passesNullAlbumIdWhenAbsent() {
 			// given
 			Pageable pageable = PageRequest.of(0, 20);
-			given(productRepository.findAdminSummaries(isNull(), isNull(), eq(pageable)))
+			given(productRepository.findAdminSummaries(isNull(), isNull(), isNull(), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			adminProductService.getList(null, null, pageable);
+			adminProductService.getList(null, null, null, pageable);
 
 			// then
-			verify(productRepository).findAdminSummaries(null, null, pageable);
+			verify(productRepository).findAdminSummaries(null, null, null, pageable);
+		}
+
+		@Test
+		@DisplayName("keyword 앞뒤 공백을 제거해 리포지토리에 전달한다")
+		void trimsKeyword() {
+			// given
+			Pageable pageable = PageRequest.of(0, 20);
+			given(productRepository.findAdminSummaries(isNull(), isNull(), eq("miles"), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			// when
+			adminProductService.getList(null, null, "  miles ", pageable);
+
+			// then
+			verify(productRepository).findAdminSummaries(null, null, "miles", pageable);
+		}
+
+		@Test
+		@DisplayName("keyword 가 공백뿐이면 null 로 리포지토리에 전달한다")
+		void passesNullWhenKeywordBlank() {
+			// given
+			Pageable pageable = PageRequest.of(0, 20);
+			given(productRepository.findAdminSummaries(isNull(), isNull(), isNull(), eq(pageable)))
+					.willReturn(new PageImpl<>(List.of(), pageable, 0));
+
+			// when
+			adminProductService.getList(null, null, "   ", pageable);
+
+			// then
+			verify(productRepository).findAdminSummaries(null, null, null, pageable);
 		}
 	}
 }

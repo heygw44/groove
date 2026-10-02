@@ -60,7 +60,7 @@ class JwtAuthenticationFilterTest {
 			// given
 			JwtProvider expiredProvider = new JwtProvider(
 					new JwtProperties(jwtProperties.secret(), Duration.ofMillis(-1000), Duration.ofDays(14),
-							Duration.ofSeconds(10)));
+							Duration.ofSeconds(10), Duration.ofMinutes(5)));
 			String token = expiredProvider.createAccessToken(1L, MemberRole.USER);
 
 			// when & then
@@ -75,7 +75,7 @@ class JwtAuthenticationFilterTest {
 			// given
 			JwtProvider otherProvider = new JwtProvider(
 					new JwtProperties(OTHER_SIGNING_KEY, Duration.ofMinutes(30), Duration.ofDays(14),
-							Duration.ofSeconds(10)));
+							Duration.ofSeconds(10), Duration.ofMinutes(5)));
 			String token = otherProvider.createAccessToken(1L, MemberRole.USER);
 
 			// when & then

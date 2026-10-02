@@ -11,6 +11,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
@@ -55,6 +56,7 @@ class AuthServiceTest {
 
 	private static final Long MEMBER_ID = 1L;
 	private static final String SESSION_ID = "session-1";
+	private static final String MEMBER_LOCK_KEY = "login-fail:m:1";
 
 	@Mock
 	MemberRepository memberRepository;
@@ -73,9 +75,10 @@ class AuthServiceTest {
 
 	JwtProperties jwtProperties = new JwtProperties(
 			"test-secret-key-for-jwt-signing-must-be-long-enough-000000", Duration.ofMinutes(30), Duration.ofDays(14),
-			Duration.ofSeconds(10));
+			Duration.ofSeconds(10), Duration.ofMinutes(5));
 
-	AuthSessionProperties sessionProperties = new AuthSessionProperties(Duration.ofDays(30), Duration.ofHours(12));
+	AuthSessionProperties sessionProperties = new AuthSessionProperties(Duration.ofDays(30), Duration.ofHours(12),
+			Duration.ofMinutes(20));
 
 	Clock clock = Clock.fixed(Instant.parse("2026-09-15T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
@@ -141,16 +144,17 @@ class AuthServiceTest {
 		@DisplayName("잠겨 있으면 AUTH_LOGIN_LOCKED 예외를 던지고 인증을 시도하지 않는다")
 		void throwsWhenLocked() {
 			// given
-			LoginRequest request = new LoginRequest("groover@groove.com", "password1");
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			LoginRequest request = new LoginRequest(member.getEmail(), "password1");
+			given(memberRepository.findByEmail(request.email())).willReturn(Optional.of(member));
 			willThrow(new BusinessException(ErrorCode.AUTH_LOGIN_LOCKED))
-					.given(loginAttemptGuard).checkNotLocked(request.email());
+					.given(loginAttemptGuard).checkNotLocked(MEMBER_LOCK_KEY);
 
 			// when & then
 			assertThatThrownBy(() -> authService.login(request))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_LOGIN_LOCKED);
-			verify(memberRepository, never()).findByEmail(any());
 			verify(passwordEncoder, never()).matches(any(), any());
 		}
 
@@ -168,7 +172,41 @@ class AuthServiceTest {
 					.isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS);
 			// 존재하지 않는 이메일도 더미 해시로 BCrypt 를 한 번 태워 타이밍으로 이메일 존재 여부가 드러나지 않게 한다.
 			verify(passwordEncoder).matches(eq(request.password()), isNull());
-			verify(loginAttemptGuard).recordFailure(request.email());
+			verify(loginAttemptGuard).recordFailure("login-fail:e:groover@groove.com");
+		}
+
+		@Test
+		@DisplayName("이메일이 존재하지 않으면 전각·대소문자 변형도 NFKC 로 정규화한 같은 키로 센다")
+		void usesNormalizedEmailKeyForUnknownEmailVariants() {
+			// given
+			LoginRequest fullwidth = new LoginRequest(" ＧＲＯＯＶＥＲ@groove.com ", "password1");
+			LoginRequest upper = new LoginRequest("GROOVER@Groove.com", "password1");
+			given(memberRepository.findByEmail(any())).willReturn(Optional.empty());
+
+			// when
+			assertThatThrownBy(() -> authService.login(fullwidth)).isInstanceOf(BusinessException.class);
+			assertThatThrownBy(() -> authService.login(upper)).isInstanceOf(BusinessException.class);
+
+			// then
+			verify(loginAttemptGuard, times(2)).checkNotLocked("login-fail:e:groover@groove.com");
+			verify(loginAttemptGuard, times(2)).recordFailure("login-fail:e:groover@groove.com");
+		}
+
+		@Test
+		@DisplayName("존재하는 회원이면 이메일 표기가 달라도 회원 id 키 하나로 센다")
+		void usesMemberKeyRegardlessOfEmailVariant() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			LoginRequest variant = new LoginRequest("ＧＲＯＯＶＥＲ@groove.com", "wrong-password");
+			given(memberRepository.findByEmail(variant.email())).willReturn(Optional.of(member));
+			given(passwordEncoder.matches(variant.password(), member.getPassword())).willReturn(false);
+
+			// when
+			assertThatThrownBy(() -> authService.login(variant)).isInstanceOf(BusinessException.class);
+
+			// then
+			verify(loginAttemptGuard).checkNotLocked(MEMBER_LOCK_KEY);
+			verify(loginAttemptGuard).recordFailure(MEMBER_LOCK_KEY);
 		}
 
 		@Test
@@ -185,8 +223,9 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS);
-			verify(refreshTokenRepository, never()).save(anyLong(), anyString(), anyString(), anyLong(), anyLong());
-			verify(loginAttemptGuard).recordFailure(request.email());
+			verify(refreshTokenRepository, never())
+					.save(anyLong(), anyString(), anyString(), anyLong(), anyLong(), any());
+			verify(loginAttemptGuard).recordFailure(MEMBER_LOCK_KEY);
 		}
 
 		@Test
@@ -221,7 +260,8 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
-			verify(refreshTokenRepository, never()).save(anyLong(), anyString(), anyString(), anyLong(), anyLong());
+			verify(refreshTokenRepository, never())
+					.save(anyLong(), anyString(), anyString(), anyLong(), anyLong(), any());
 			verify(loginAttemptGuard, never()).recordFailure(any());
 			verify(loginAttemptGuard, never()).reset(any());
 		}
@@ -241,8 +281,9 @@ class AuthServiceTest {
 			AuthTokens tokens = authService.login(request);
 
 			// then
-			verify(refreshTokenRepository).save(eq(MEMBER_ID), anyString(), eq("refresh"), anyLong(), anyLong());
-			verify(loginAttemptGuard).reset(request.email());
+			verify(refreshTokenRepository)
+					.save(eq(MEMBER_ID), anyString(), eq("refresh"), anyLong(), anyLong(), any());
+			verify(loginAttemptGuard).reset(MEMBER_LOCK_KEY);
 			assertThat(tokens.accessToken()).isEqualTo("access");
 			assertThat(tokens.expiresIn()).isEqualTo(1800L);
 		}
@@ -264,7 +305,8 @@ class AuthServiceTest {
 			AuthTokens tokens = authService.login(request);
 
 			// then
-			verify(refreshTokenRepository).save(eq(MEMBER_ID), anyString(), eq("refresh"), eq(expectedAbsExp), eq(now));
+			verify(refreshTokenRepository)
+					.save(eq(MEMBER_ID), anyString(), eq("refresh"), eq(expectedAbsExp), eq(now), any());
 			assertThat(tokens.refreshTokenMaxAge()).isEqualTo(jwtProperties.refreshTokenExpiry());
 		}
 
@@ -285,8 +327,10 @@ class AuthServiceTest {
 			AuthTokens tokens = authService.login(request);
 
 			// then
-			verify(refreshTokenRepository).save(eq(MEMBER_ID), anyString(), eq("refresh"), eq(expectedAbsExp), eq(now));
+			verify(refreshTokenRepository)
+					.save(eq(MEMBER_ID), anyString(), eq("refresh"), eq(expectedAbsExp), eq(now), eq(MemberRole.ADMIN));
 			assertThat(tokens.refreshTokenMaxAge()).isEqualTo(Duration.ofHours(12));
+			assertThat(tokens.expiresIn()).isEqualTo(Duration.ofMinutes(5).toSeconds());
 		}
 	}
 
@@ -317,7 +361,8 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_NOT_FOUND);
-			verify(refreshTokenRepository, never()).rotate(any(), any(), any(), any(), anyLong(), anyLong());
+			verify(refreshTokenRepository, never()).rotate(any(), any(), any(), any(), anyLong(), anyLong(), any(),
+					any());
 		}
 
 		@Test
@@ -333,7 +378,8 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);
-			verify(refreshTokenRepository, never()).rotate(any(), any(), any(), any(), anyLong(), anyLong());
+			verify(refreshTokenRepository, never()).rotate(any(), any(), any(), any(), anyLong(), anyLong(), any(),
+					any());
 		}
 
 		@Test
@@ -349,7 +395,8 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.AUTH_MEMBER_SUSPENDED);
-			verify(refreshTokenRepository, never()).rotate(any(), any(), any(), any(), anyLong(), anyLong());
+			verify(refreshTokenRepository, never()).rotate(any(), any(), any(), any(), anyLong(), anyLong(), any(),
+					any());
 		}
 
 		@Test
@@ -361,7 +408,7 @@ class AuthServiceTest {
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
 			given(refreshTokenRepository.rotate(eq(MEMBER_ID), eq(SESSION_ID), eq("refresh"), eq("new-refresh"),
-					eq(clock.millis()), anyLong()))
+					eq(clock.millis()), anyLong(), any(), any()))
 					.willReturn(new RefreshRotation(RotationResult.NOT_FOUND, null, 0L));
 
 			// when & then
@@ -381,7 +428,7 @@ class AuthServiceTest {
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
 			given(refreshTokenRepository.rotate(eq(MEMBER_ID), eq(SESSION_ID), eq("old-refresh"), eq("new-refresh"),
-					eq(clock.millis()), anyLong()))
+					eq(clock.millis()), anyLong(), any(), any()))
 					.willReturn(new RefreshRotation(RotationResult.REUSED, null, 0L));
 
 			// when & then
@@ -401,7 +448,7 @@ class AuthServiceTest {
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
 			given(refreshTokenRepository.rotate(eq(MEMBER_ID), eq(SESSION_ID), eq("old-refresh"), eq("new-refresh"),
-					eq(clock.millis()), anyLong()))
+					eq(clock.millis()), anyLong(), any(), any()))
 					.willReturn(new RefreshRotation(RotationResult.EXPIRED, null, 0L));
 
 			// when & then
@@ -423,7 +470,7 @@ class AuthServiceTest {
 			long now = clock.millis();
 			long absoluteExpiresAt = now + Duration.ofDays(20).toMillis();
 			given(refreshTokenRepository.rotate(eq(MEMBER_ID), eq(SESSION_ID), eq("old-refresh"), eq("new-refresh"),
-					eq(now), anyLong()))
+					eq(now), anyLong(), any(), any()))
 					.willReturn(new RefreshRotation(RotationResult.ROTATED, "new-refresh", absoluteExpiresAt));
 			given(jwtProvider.createAccessToken(MEMBER_ID, member.getRole())).willReturn("new-access");
 
@@ -434,6 +481,72 @@ class AuthServiceTest {
 			assertThat(tokens.refreshToken()).isEqualTo("new-refresh");
 			assertThat(tokens.accessToken()).isEqualTo("new-access");
 			assertThat(tokens.refreshTokenMaxAge()).isEqualTo(jwtProperties.refreshTokenExpiry());
+		}
+
+		@Test
+		@DisplayName("관리자의 클라이언트 무입력 시간이 유휴 만료 이상이면 세션을 지우고 AUTH_SESSION_IDLE 예외를 던진다")
+		void throwsSessionIdleForAdminWhenClientIdleReachesTimeout() {
+			// given
+			Member admin = MemberFixture.withId(MemberFixture.createAdmin(), MEMBER_ID);
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(admin));
+
+			// when & then
+			assertThatThrownBy(() -> authService.reissue("refresh", Duration.ofMinutes(20)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.AUTH_SESSION_IDLE);
+			verify(refreshTokenRepository).delete(MEMBER_ID, SESSION_ID);
+			verify(refreshTokenRepository, never()).rotate(any(), any(), any(), any(), anyLong(), anyLong(), any(),
+					any());
+		}
+
+		@Test
+		@DisplayName("관리자의 클라이언트 무입력 시간이 유휴 만료 미만이면 그 값을 넘겨 회전한다")
+		void rotatesWithClientIdleForAdminBelowTimeout() {
+			// given
+			Member admin = MemberFixture.withId(MemberFixture.createAdmin(), MEMBER_ID);
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(admin));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
+			long now = clock.millis();
+			Duration clientIdle = Duration.ofMinutes(19);
+			given(refreshTokenRepository.rotate(eq(MEMBER_ID), eq(SESSION_ID), eq("refresh"), eq("new-refresh"),
+					eq(now), anyLong(), eq(MemberRole.ADMIN), eq(clientIdle)))
+					.willReturn(new RefreshRotation(RotationResult.ROTATED, "new-refresh",
+							now + Duration.ofHours(1).toMillis()));
+			given(jwtProvider.createAccessToken(MEMBER_ID, admin.getRole())).willReturn("new-access");
+
+			// when
+			AuthTokens tokens = authService.reissue("refresh", clientIdle);
+
+			// then
+			assertThat(tokens.refreshToken()).isEqualTo("new-refresh");
+			verify(refreshTokenRepository, never()).delete(any(), any());
+		}
+
+		@Test
+		@DisplayName("일반 회원은 클라이언트 무입력 시간이 아무리 커도 정상 회전한다")
+		void rotatesUserRegardlessOfClientIdle() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(jwtProvider.parseRefreshToken("refresh")).willReturn(new RefreshTokenClaims(MEMBER_ID, SESSION_ID));
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(jwtProvider.createRefreshToken(MEMBER_ID, SESSION_ID)).willReturn("new-refresh");
+			long now = clock.millis();
+			Duration clientIdle = Duration.ofDays(1);
+			given(refreshTokenRepository.rotate(eq(MEMBER_ID), eq(SESSION_ID), eq("refresh"), eq("new-refresh"),
+					eq(now), anyLong(), eq(MemberRole.USER), eq(clientIdle)))
+					.willReturn(new RefreshRotation(RotationResult.ROTATED, "new-refresh",
+							now + Duration.ofDays(1).toMillis()));
+			given(jwtProvider.createAccessToken(MEMBER_ID, member.getRole())).willReturn("new-access");
+
+			// when
+			AuthTokens tokens = authService.reissue("refresh", clientIdle);
+
+			// then
+			assertThat(tokens.refreshToken()).isEqualTo("new-refresh");
+			verify(refreshTokenRepository, never()).delete(any(), any());
 		}
 
 		@Test
@@ -448,7 +561,7 @@ class AuthServiceTest {
 			long now = clock.millis();
 			long absoluteExpiresAt = now + Duration.ofDays(1).toMillis();
 			given(refreshTokenRepository.rotate(eq(MEMBER_ID), eq(SESSION_ID), eq("prev-refresh"),
-					eq("attempted-new"), eq(now), anyLong()))
+					eq("attempted-new"), eq(now), anyLong(), any(), any()))
 					.willReturn(new RefreshRotation(RotationResult.GRACE, "current-refresh", absoluteExpiresAt));
 			given(jwtProvider.createAccessToken(MEMBER_ID, member.getRole())).willReturn("new-access");
 

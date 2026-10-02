@@ -8,9 +8,11 @@ import com.groove.order.dto.OrderItemResponse;
 import com.groove.payment.client.dto.RefundAccountInfo;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderCancelService {
 
 	private final OrderCancelWriter writer;
@@ -51,8 +53,21 @@ public class OrderCancelService {
 		}
 		// 한 상품의 환불이 결과불명이면 그 결과가 확정될 때까지 같은 결제에 새 환불을 낼 수 없다. 나머지 상품은
 		// 건드리지 않고 멈추며, 응답의 상품별 refundInProgress 로 어디서 멈췄는지 알린다.
+		boolean anyCanceled = false;
 		for (Long itemId : plan.cancelableItemIds()) {
-			OrderItemResponse canceled = orderItemClaimService.cancel(memberId, orderId, itemId, request);
+			OrderItemResponse canceled;
+			try {
+				canceled = orderItemClaimService.cancel(memberId, orderId, itemId, request);
+			} catch (RuntimeException e) {
+				if (!anyCanceled) {
+					throw e;
+				}
+				// 앞선 상품은 이미 환불됐다. 에러만 돌려주면 실제 상태와 어긋난 화면이 남으므로, 멈추고 현재 상태를
+				// 응답한다. 남은 상품은 상품별 취소로 다시 시도한다.
+				log.warn("주문 일괄 취소 중 일부 상품 실패로 중단 orderId={} orderItemId={}", orderId, itemId, e);
+				break;
+			}
+			anyCanceled = true;
 			if (canceled.refundInProgress()) {
 				break;
 			}

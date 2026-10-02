@@ -93,6 +93,35 @@ class TossPaymentClientTest {
 			}
 			""";
 
+	private static final String EASY_PAY_RESPONSE = """
+			{
+				"paymentKey": "tviva20260902abcdef",
+				"orderId": "20260902-K7Q2M9XZ",
+				"status": "DONE",
+				"method": "간편결제",
+				"totalAmount": 75600,
+				"approvedAt": "2026-09-02T10:01:12+09:00",
+				"easyPay": { "provider": "토스페이", "amount": 75600, "discountAmount": 0 }
+			}
+			""";
+
+	private static final String VIRTUAL_ACCOUNT_RESPONSE_WITHOUT_SECRET = """
+			{
+				"paymentKey": "tviva20260902abcdef",
+				"orderId": "20260902-K7Q2M9XZ",
+				"status": "WAITING_FOR_DEPOSIT",
+				"method": "가상계좌",
+				"totalAmount": 75600,
+				"approvedAt": null,
+				"virtualAccount": {
+					"accountNumber": "X6505636518308",
+					"bankCode": "88",
+					"customerName": "박그루브",
+					"dueDate": "2026-09-03T10:01:12+09:00"
+				}
+			}
+			""";
+
 	private static final String CONFIRM_RESPONSE_WITHOUT_APPROVED_AT = """
 			{
 				"paymentKey": "tviva20260902abcdef",
@@ -286,6 +315,79 @@ class TossPaymentClientTest {
 			assertThat(result.virtualAccount().accountNumber()).isEqualTo("X6505636518308");
 			assertThat(result.virtualAccount().dueDate()).isEqualTo(LocalDateTime.of(2026, 9, 3, 10, 1, 12));
 			assertThat(result.virtualAccount().secret()).isEqualTo("ps_deposit_check_value");
+		}
+
+		@Test
+		@DisplayName("간편결제 승인이면 easyPay 사업자를 매핑한다")
+		void mapsEasyPayProvider() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withSuccess(EASY_PAY_RESPONSE, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentConfirmResult result = tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER,
+					new BigDecimal("75600"));
+
+			// then
+			assertThat(result.method()).isEqualTo("간편결제");
+			assertThat(result.easyPayProvider()).isEqualTo("토스페이");
+		}
+
+		@Test
+		@DisplayName("이미 처리된 승인 요청이 간편결제 DONE 이면 사업자를 유지한다")
+		void keepsEasyPayProviderWhenAbsorbingDone() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withBadRequest().body(ERROR_RESPONSE_ALREADY_PROCESSED)
+							.contentType(MediaType.APPLICATION_JSON));
+			server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_NUMBER))
+					.andRespond(withSuccess(EASY_PAY_RESPONSE, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentConfirmResult result = tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER,
+					new BigDecimal("75600"));
+
+			// then
+			assertThat(result.status()).isEqualTo(PaymentLookupStatus.DONE);
+			assertThat(result.easyPayProvider()).isEqualTo("토스페이");
+			assertThat(result.virtualAccount()).isNull();
+		}
+
+		@Test
+		@DisplayName("이미 처리된 승인 요청이 입금대기이면 가상계좌 정보와 함께 입금대기로 이어 붙인다")
+		void absorbsAlreadyProcessedWaitingForDeposit() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withBadRequest().body(ERROR_RESPONSE_ALREADY_PROCESSED)
+							.contentType(MediaType.APPLICATION_JSON));
+			server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_NUMBER))
+					.andRespond(withSuccess(VIRTUAL_ACCOUNT_CONFIRM_RESPONSE, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentConfirmResult result = tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER,
+					new BigDecimal("75600"));
+
+			// then
+			assertThat(result.status()).isEqualTo(PaymentLookupStatus.WAITING_FOR_DEPOSIT);
+			assertThat(result.virtualAccount().accountNumber()).isEqualTo("X6505636518308");
+			assertThat(result.virtualAccount().secret()).isEqualTo("ps_deposit_check_value");
+		}
+
+		@Test
+		@DisplayName("이미 처리된 승인 요청이 입금대기인데 secret 이 없으면 PAYMENT_RESULT_UNKNOWN 예외를 던진다")
+		void throwsResultUnknownWhenAlreadyProcessedWaitingWithoutSecret() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/confirm"))
+					.andRespond(withBadRequest().body(ERROR_RESPONSE_ALREADY_PROCESSED)
+							.contentType(MediaType.APPLICATION_JSON));
+			server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_NUMBER))
+					.andRespond(withSuccess(VIRTUAL_ACCOUNT_RESPONSE_WITHOUT_SECRET, MediaType.APPLICATION_JSON));
+
+			// when & then
+			assertThatThrownBy(() -> tossPaymentClient.confirm(PAYMENT_KEY, ORDER_NUMBER, new BigDecimal("75600")))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PAYMENT_RESULT_UNKNOWN);
 		}
 
 		@Test
@@ -681,6 +783,38 @@ class TossPaymentClientTest {
 			assertThat(result.totalAmount()).isEqualByComparingTo("75600");
 			assertThat(result.approvedAt()).isEqualTo(LocalDateTime.of(2026, 9, 2, 10, 1, 12));
 			assertThat(result.canceledAt()).isEqualTo(LocalDateTime.of(2026, 9, 2, 11, 32, 4));
+		}
+
+		@Test
+		@DisplayName("간편결제 결제를 조회하면 easyPay 사업자를 매핑한다")
+		void mapsEasyPayProvider() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_NUMBER))
+					.andRespond(withSuccess(EASY_PAY_RESPONSE, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentLookupResult result = tossPaymentClient.lookup(ORDER_NUMBER);
+
+			// then
+			assertThat(result.easyPayProvider()).isEqualTo("토스페이");
+			assertThat(result.virtualAccount()).isNull();
+		}
+
+		@Test
+		@DisplayName("가상계좌 결제를 조회하면 계좌 정보와 secret 을 매핑한다")
+		void mapsVirtualAccountWithSecret() {
+			// given
+			server.expect(requestTo(BASE_URL + "/v1/payments/orders/" + ORDER_NUMBER))
+					.andRespond(withSuccess(VIRTUAL_ACCOUNT_CONFIRM_RESPONSE, MediaType.APPLICATION_JSON));
+
+			// when
+			PaymentLookupResult result = tossPaymentClient.lookup(ORDER_NUMBER);
+
+			// then
+			assertThat(result.status()).isEqualTo(PaymentLookupStatus.WAITING_FOR_DEPOSIT);
+			assertThat(result.virtualAccount().bankCode()).isEqualTo("88");
+			assertThat(result.virtualAccount().dueDate()).isEqualTo(LocalDateTime.of(2026, 9, 3, 10, 1, 12));
+			assertThat(result.virtualAccount().secret()).isEqualTo("ps_deposit_check_value");
 		}
 
 		@Test

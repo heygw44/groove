@@ -391,7 +391,7 @@ class AdminProductControllerTest {
 					"https://cdn.groove.com/0.jpg", 10, null);
 			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(summary), PageRequest.of(0, 20), 1));
-			given(adminProductService.getList(any(), any(), any())).willReturn(pageResponse);
+			given(adminProductService.getList(any(), any(), any(), any())).willReturn(pageResponse);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/products").header(HttpHeaders.AUTHORIZATION, adminToken()))
@@ -405,13 +405,51 @@ class AdminProductControllerTest {
 			// given
 			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-			given(adminProductService.getList(any(), any(), any())).willReturn(pageResponse);
+			given(adminProductService.getList(any(), any(), any(), any())).willReturn(pageResponse);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/products").param("albumId", "5")
 							.header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk());
-			verify(adminProductService).getList(eq(null), eq(5L), any());
+			verify(adminProductService).getList(eq(null), eq(5L), eq(null), any());
+		}
+
+		@Test
+		@DisplayName("keyword 쿼리 파라미터를 서비스에 그대로 전달한다")
+		void passesKeywordToService() throws Exception {
+			// given
+			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
+					new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+			given(adminProductService.getList(any(), any(), any(), any())).willReturn(pageResponse);
+
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products").param("keyword", "miles")
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk());
+			verify(adminProductService).getList(eq(null), eq(null), eq("miles"), any());
+		}
+
+		@Test
+		@DisplayName("keyword 가 100자이면 200 을 반환한다")
+		void acceptsKeywordOfMaxLength() throws Exception {
+			// given
+			given(adminProductService.getList(any(), any(), any(), any())).willReturn(
+					PageResponse.from(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0)));
+
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products").param("keyword", "a".repeat(100))
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk());
+		}
+
+		@Test
+		@DisplayName("keyword 가 100자를 초과하면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenKeywordTooLong() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products").param("keyword", "a".repeat(101))
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 		}
 
 		@Test
@@ -421,7 +459,7 @@ class AdminProductControllerTest {
 			mockMvc.perform(get("/api/v1/admin/products").header(HttpHeaders.AUTHORIZATION, userToken()))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(adminProductService, never()).getList(any(), any(), any());
+			verify(adminProductService, never()).getList(any(), any(), any(), any());
 		}
 
 		@Test
@@ -431,7 +469,7 @@ class AdminProductControllerTest {
 			mockMvc.perform(get("/api/v1/admin/products"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(adminProductService, never()).getList(any(), any(), any());
+			verify(adminProductService, never()).getList(any(), any(), any(), any());
 		}
 	}
 

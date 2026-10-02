@@ -6,6 +6,7 @@ import { useAdminIdleLogout } from '@/hooks/useAdminIdleLogout';
 import { useAuthStore } from '@/store/authStore';
 import type { Member } from '@/types/member';
 import { postAuthMessage, subscribeAuthMessage, type AuthMessage } from '@/utils/authChannel';
+import { resetUserActivityForTest } from '@/utils/userActivity';
 
 vi.mock('@/api/auth', () => ({
   logout: vi.fn(),
@@ -50,6 +51,7 @@ describe('useAdminIdleLogout', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    resetUserActivityForTest();
     mockedLogout.mockResolvedValue(undefined);
 
     receivedMessage = undefined;

@@ -115,6 +115,6 @@ describe('OrderCard', () => {
     renderCard(orderWithoutItems);
 
     // then
-    expect(screen.getByText('Kind of Blue 외 1건')).toBeInTheDocument();
+    expect(screen.getByText('Kind of Blue 외 1개')).toBeInTheDocument();
   });
 });

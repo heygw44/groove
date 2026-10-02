@@ -40,11 +40,8 @@ public class NotificationService {
 
 	@Transactional
 	public void markRead(Long memberId, Long notificationId) {
-		Notification notification = notificationRepository.findById(notificationId)
+		Notification notification = notificationRepository.findByIdAndMemberId(notificationId, memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
-		if (!notification.getMember().getId().equals(memberId)) {
-			throw new BusinessException(ErrorCode.NOTIFICATION_FORBIDDEN);
-		}
 		notification.markRead(LocalDateTime.now(clock));
 	}
 
@@ -55,11 +52,8 @@ public class NotificationService {
 
 	@Transactional
 	public void delete(Long memberId, Long notificationId) {
-		Notification notification = notificationRepository.findById(notificationId)
+		Notification notification = notificationRepository.findByIdAndMemberId(notificationId, memberId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
-		if (!notification.getMember().getId().equals(memberId)) {
-			throw new BusinessException(ErrorCode.NOTIFICATION_FORBIDDEN);
-		}
 		notificationRepository.delete(notification);
 	}
 

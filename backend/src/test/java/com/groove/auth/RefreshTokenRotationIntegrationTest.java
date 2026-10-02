@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.groove.auth.dto.AuthTokens;
@@ -60,6 +61,9 @@ class RefreshTokenRotationIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	MockMvc mockMvc;
+
+	@Autowired
+	JdbcTemplate jdbcTemplate;
 
 	private ExecutorService executorService;
 
@@ -283,6 +287,31 @@ class RefreshTokenRotationIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_SESSION_EXPIRED")))
 					.andExpect(cookie().maxAge("refreshToken", 0));
+		}
+	}
+
+	@Nested
+	@DisplayName("관리자 유휴 만료")
+	class AdminIdleExpiry {
+
+		@Test
+		@DisplayName("클라이언트 무입력 시간이 유휴 만료 이상이면 401 AUTH_SESSION_IDLE 을 반환하고 세션을 지운다")
+		void returnsSessionIdleAndDeletesSession() throws Exception {
+			// given
+			String email = signup();
+			jdbcTemplate.update("UPDATE member SET role = 'ADMIN' WHERE email = ?", email);
+			AuthTokens loginTokens = login(email);
+			Long memberId = jwtProvider.parseAccessToken(loginTokens.accessToken()).memberId();
+			String sessionId = jwtProvider.parseRefreshToken(loginTokens.refreshToken()).sessionId();
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/reissue")
+							.cookie(new Cookie("refreshToken", loginTokens.refreshToken()))
+							.header("X-Client-Idle-Seconds", "1200"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_SESSION_IDLE")))
+					.andExpect(cookie().maxAge("refreshToken", 0));
+			assertThat(redisTemplate.hasKey("refresh:" + memberId + ":" + sessionId)).isFalse();
 		}
 	}
 

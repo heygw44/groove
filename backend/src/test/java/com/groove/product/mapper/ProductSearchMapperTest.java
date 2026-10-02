@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -149,6 +151,15 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		return condition(KEYWORD, null, null, null, null, null, sort, page, size);
 	}
 
+	private Product persistProduct(Artist artist, String title) {
+		Product product = ProductFixture.create(artist, title, new BigDecimal("10000.00"));
+		em.persist(product.getAlbum());
+		em.persist(product);
+		em.flush();
+		em.clear();
+		return product;
+	}
+
 	@Nested
 	@DisplayName("searchProducts()")
 	class SearchProducts {
@@ -191,6 +202,24 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			// then
 			assertThat(result).extracting(ProductSummaryResponse::id)
 					.containsExactlyInAnyOrder(loveSupreme.getId(), cheapRecord.getId());
+		}
+
+		@ParameterizedTest
+		@CsvSource({"SMT 100%, SMT 100% Pure", "SMT Under_S, SMT Under_Score"})
+		@DisplayName("키워드의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalTitle) {
+			// given
+			Product literal = persistProduct(milesDavis, literalTitle);
+			Product lookalike = persistProduct(milesDavis, literalTitle.replace("%", " ").replace("_", "X"));
+			ProductSearchCondition cond = condition(keyword, null, null, null, null, null,
+					ProductSortType.LATEST, 0, 20);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).containsExactly(literal.getId());
+			assertThat(result).extracting(ProductSummaryResponse::id).doesNotContain(lookalike.getId());
 		}
 
 		@Test
@@ -505,6 +534,8 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		private Product highRatedFewReviews;
 		private Product lowRatedManyReviews;
 		private Product noReviews;
+		// nanoTime 나머지는 macOS 에서 마이크로초 단위라 한 테스트 안 주문번호가 겹친다.
+		private final AtomicInteger orderSeq = new AtomicInteger();
 
 		@BeforeEach
 		void setUpRatingProducts() {
@@ -545,7 +576,7 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		private void addPaidOrder(Product product, int quantity) {
 			Member buyer = MemberFixture.create("smtr-buyer-" + System.nanoTime() + "@groove.com");
 			em.persist(buyer);
-			Order order = OrderFixture.create(buyer, "20260905-SMTR" + System.nanoTime() % 100000);
+			Order order = OrderFixture.create(buyer, "20260905-SMTR" + orderSeq.incrementAndGet());
 			order.addItem(em.find(Product.class, product.getId()), quantity);
 			OrderFixture.markPaid(order);
 			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
@@ -993,6 +1024,22 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 			em.persist(hiddenMatch);
 			em.flush();
 			em.clear();
+		}
+
+		@ParameterizedTest
+		@CsvSource({"SGT 100%, SGT 100% Pure", "SGT Under_S, SGT Under_Score"})
+		@DisplayName("키워드의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalTitle) {
+			// given
+			Product literal = persistProduct(milesDavis, literalTitle);
+			Product lookalike = persistProduct(milesDavis, literalTitle.replace("%", " ").replace("_", "X"));
+
+			// when
+			List<ProductSuggestionResponse.Item> result = productSearchMapper.suggestProducts(keyword, 5);
+
+			// then
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id).containsExactly(literal.getId());
+			assertThat(result).extracting(ProductSuggestionResponse.Item::id).doesNotContain(lookalike.getId());
 		}
 
 		@Test

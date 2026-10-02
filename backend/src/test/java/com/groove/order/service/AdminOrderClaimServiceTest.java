@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -76,6 +77,9 @@ class AdminOrderClaimServiceTest {
 	OrderClaimRefundHook refundHook;
 
 	@Mock
+	OrderClaimRefundReader orderClaimRefundReader;
+
+	@Mock
 	OrderItemRepository orderItemRepository;
 
 	@Mock
@@ -89,7 +93,8 @@ class AdminOrderClaimServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new AdminOrderClaimService(orderClaimRepository, writer, refundHook, orderItemRepository,
+		service = new AdminOrderClaimService(orderClaimRepository, writer, refundHook, orderClaimRefundReader,
+				orderItemRepository,
 				productImageRepository, adminAuditLogService);
 		Member member = MemberFixture.create();
 		Artist artist = ArtistFixture.withId(1L);
@@ -206,7 +211,7 @@ class AdminOrderClaimServiceTest {
 			// then
 			verify(refundHook).refund(ORDER_ID, CLAIM_ID, item.getRefundableAmount(), "사유", null);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), any());
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("취소승인: " + item.getProductOrderNumber()));
 			assertThat(response.productOrderNumber()).isEqualTo(item.getProductOrderNumber());
 		}
 
@@ -293,6 +298,7 @@ class AdminOrderClaimServiceTest {
 			Page<OrderClaim> page = new PageImpl<>(List.of(claim));
 			given(orderClaimRepository.search(OrderClaimType.CANCEL, OrderClaimStatus.REQUESTED,
 					request.toPageable())).willReturn(page);
+			given(orderClaimRefundReader.findPendingRefundOrderItemIds(List.of(ITEM_ID))).willReturn(Set.of());
 
 			// when
 			PageResponse<AdminOrderClaimSummaryResponse> result = service.getList(request);
@@ -300,6 +306,26 @@ class AdminOrderClaimServiceTest {
 			// then
 			assertThat(result.content()).hasSize(1);
 			assertThat(result.content().get(0).claimId()).isEqualTo(CLAIM_ID);
+			assertThat(result.content().get(0).refundInProgress()).isFalse();
+		}
+
+		@Test
+		@DisplayName("환불 결과를 기다리는 상품주문의 클레임은 refundInProgress 를 true 로 채운다")
+		void marksRefundInProgressForPendingItem() {
+			// given
+			OrderClaim claim = OrderClaim.requestCancel(item, "사유", null, NOW.minusMinutes(5));
+			ReflectionTestUtils.setField(claim, "id", CLAIM_ID);
+			AdminOrderClaimSearchRequest request = new AdminOrderClaimSearchRequest(null, null, 0, 20);
+			given(orderClaimRepository.search(null, null, request.toPageable()))
+					.willReturn(new PageImpl<>(List.of(claim)));
+			given(orderClaimRefundReader.findPendingRefundOrderItemIds(List.of(ITEM_ID)))
+					.willReturn(Set.of(ITEM_ID));
+
+			// when
+			PageResponse<AdminOrderClaimSummaryResponse> result = service.getList(request);
+
+			// then
+			assertThat(result.content().get(0).refundInProgress()).isTrue();
 		}
 	}
 
@@ -323,7 +349,7 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), any());
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("취소거부: " + item.getProductOrderNumber()));
 			assertThat(response.productOrderNumber()).isEqualTo(item.getProductOrderNumber());
 		}
 	}
@@ -346,7 +372,7 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), any());
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("수거시작: " + item.getProductOrderNumber()));
 		}
 	}
 
@@ -369,6 +395,8 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(refundHook).refund(ORDER_ID, CLAIM_ID, item.getRefundableAmount(), "사유", null);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("반품완료: " + item.getProductOrderNumber()));
 		}
 
 		@Test
@@ -443,6 +471,8 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(refundHook).refund(ORDER_ID, CLAIM_ID, item.getRefundableAmount(), "재고 확인 불가", null);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("판매취소: " + item.getProductOrderNumber()));
 		}
 
 		@Test

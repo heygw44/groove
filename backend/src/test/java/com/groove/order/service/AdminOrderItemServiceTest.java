@@ -213,7 +213,7 @@ class AdminOrderItemServiceTest {
 			assertThat(result.skipped()).isZero();
 			assertThat(item.getStatus()).isEqualTo(OrderItemStatus.PREPARING);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(500L), eq("PAID->PREPARING"));
+					eq(AdminAuditTargetType.ORDER), eq(500L), eq("발주확인: " + item.getProductOrderNumber()));
 		}
 
 		@Test

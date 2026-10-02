@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +52,7 @@ const buildClaim = (overrides: Partial<AdminOrderClaimSummary>): AdminOrderClaim
   productName: '레코드 판',
   reason: '단순 변심',
   requestedAt: '2026-09-13T00:00:00',
+  refundInProgress: false,
   ...overrides,
 });
 
@@ -123,6 +124,41 @@ describe('AdminOrderClaimsPage', () => {
 
     // then
     expect(approve.mutate).toHaveBeenCalledWith(7, expect.any(Object));
+  });
+
+  it.each([
+    ['CANCELED', '취소요청을 승인했습니다.'],
+    ['PAID', '처리를 접수했습니다. 환불 결과를 확인하고 있습니다.'],
+  ] as const)('승인 결과 상태가 %s 면 토스트는 "%s" 다', async (status, message) => {
+    // given
+    const user = userEvent.setup();
+    mockClaims([buildClaim({ claimId: 7 })]);
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'ORD-1-01 승인' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '승인' }));
+
+    // when
+    act(() => {
+      vi.mocked(approve.mutate).mock.calls[0][1]?.onSuccess?.(
+        { status } as never,
+        7,
+        undefined as never,
+        undefined as never,
+      );
+    });
+
+    // then
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
+  it('환불 확인 중인 클레임은 배지를 보이고 처리 버튼을 숨긴다', () => {
+    // given & when
+    mockClaims([buildClaim({ refundInProgress: true })]);
+    renderPage();
+
+    // then
+    expect(screen.getByText('환불 확인 중')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ORD-1-01 승인' })).not.toBeInTheDocument();
   });
 
   it('수거중 반품 클레임은 재입고 여부를 담아 완료 요청한다', async () => {

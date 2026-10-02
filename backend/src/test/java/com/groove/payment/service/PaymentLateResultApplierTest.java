@@ -26,6 +26,7 @@ import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,12 +47,16 @@ class PaymentLateResultApplierTest {
 	@Mock
 	private PaymentClient paymentClient;
 
+	@Mock
+	private LimitedVirtualAccountCloser limitedVirtualAccountCloser;
+
 	private PaymentLateResultApplier applier;
 	private PaymentReconcileCandidate candidate;
 
 	@BeforeEach
 	void setUp() {
-		applier = new PaymentLateResultApplier(reconcileService, compensator, paymentClient);
+		applier = new PaymentLateResultApplier(reconcileService, compensator, paymentClient,
+				limitedVirtualAccountCloser);
 		candidate = new PaymentReconcileCandidate(PAYMENT_ID, ORDER_ID, TOSS_ORDER_ID);
 	}
 
@@ -73,6 +78,22 @@ class PaymentLateResultApplierTest {
 			// then
 			assertThat(outcome.needsCompensation()).isFalse();
 			assertThat(outcome.needsCancelRetry()).isFalse();
+			verifyNoInteractions(compensator, paymentClient, limitedVirtualAccountCloser);
+		}
+
+		@Test
+		@DisplayName("한정반 가상계좌 폐쇄가 필요한 결과면 같은 detail 태그로 폐쇄를 위임한다")
+		void delegatesVirtualAccountCloseWithDetail() {
+			// given
+			PaymentLookupResult lookup = doneLookup();
+			given(reconcileService.applyLate(candidate, lookup, "webhook"))
+					.willReturn(PaymentReconcileOutcome.needsVirtualAccountClose(PAYMENT_KEY));
+
+			// when
+			applier.apply(candidate, lookup, "webhook");
+
+			// then
+			verify(limitedVirtualAccountCloser).close(candidate, PAYMENT_KEY, "webhook");
 			verifyNoInteractions(compensator, paymentClient);
 		}
 
@@ -98,12 +119,33 @@ class PaymentLateResultApplierTest {
 		}
 
 		@Test
+		@DisplayName("취소 재시도 결과에 환불계좌가 있으면 토스 취소 요청에 실어 보낸다")
+		void sendsStoredRefundAccountOnCancelRetry() {
+			// given
+			PaymentLookupResult lookup = doneLookup();
+			RefundAccountInfo account = new RefundAccountInfo("088", "12345678901234", "홍길동");
+			given(reconcileService.applyLate(candidate, lookup, "webhook"))
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY, account));
+			PaymentCancelResult cancelResult = PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", lookup.approvedAt());
+			PaymentCancelCommand command = PaymentCancelCommand.of(PAYMENT_KEY, "주문 취소 재시도", null, RETRY_KEY,
+					account);
+			given(paymentClient.cancel(command)).willReturn(cancelResult);
+
+			// when
+			applier.apply(candidate, lookup, "webhook");
+
+			// then
+			verify(paymentClient).cancel(command);
+			verify(reconcileService).recordCancelRetry(candidate, cancelResult, null);
+		}
+
+		@Test
 		@DisplayName("취소 재시도가 성공하면 결과를 기록한다")
 		void retriesCancelSuccessfully() {
 			// given
 			PaymentLookupResult lookup = doneLookup();
 			given(reconcileService.applyLate(candidate, lookup, "webhook"))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY, null));
 			PaymentCancelResult cancelResult = PaymentCancelResult.of(PAYMENT_KEY, "CANCELED", lookup.approvedAt());
 			given(paymentClient.cancel(retryCommand())).willReturn(cancelResult);
 
@@ -120,7 +162,7 @@ class PaymentLateResultApplierTest {
 			// given
 			PaymentLookupResult lookup = doneLookup();
 			given(reconcileService.applyLate(candidate, lookup, "webhook"))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY, null));
 			BusinessException rejection = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "TOSS 거절");
 			given(paymentClient.cancel(retryCommand())).willThrow(rejection);
 
@@ -137,7 +179,7 @@ class PaymentLateResultApplierTest {
 			// given
 			PaymentLookupResult lookup = doneLookup();
 			given(reconcileService.applyLate(candidate, lookup, "webhook"))
-					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY));
+					.willReturn(PaymentReconcileOutcome.needsCancelRetry(PAYMENT_KEY, RETRY_KEY, null));
 			given(paymentClient.cancel(retryCommand())).willThrow(new RuntimeException("Read timed out"));
 
 			// when

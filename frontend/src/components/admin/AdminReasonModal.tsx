@@ -11,6 +11,8 @@ const REASON_MAX_LENGTH = 200;
 interface AdminReasonModalProps {
   title: string;
   description?: string;
+  /** 대상 상품주문번호. 문장과 분리해 본문에 따로 보여준다. */
+  productOrderNumber?: string;
   label: string;
   submitLabel: string;
   /** true 면 공백만 있는 사유로는 제출할 수 없다(클레임 거부). false 면 비워도 된다(판매취소). */
@@ -25,6 +27,7 @@ interface AdminReasonModalProps {
 export function AdminReasonModal({
   title,
   description,
+  productOrderNumber,
   label,
   submitLabel,
   required,
@@ -61,6 +64,9 @@ export function AdminReasonModal({
       }
     >
       <div className="flex flex-col gap-3">
+        {productOrderNumber && (
+          <p className="text-sm text-content-muted">상품주문번호 {productOrderNumber}</p>
+        )}
         <Field htmlFor="admin-reason" label={label} required={required}>
           <Textarea
             id="admin-reason"

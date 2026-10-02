@@ -15,7 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import com.groove.global.config.AuthSessionProperties;
 import com.groove.global.config.JwtProperties;
+import com.groove.member.entity.MemberRole;
 import com.groove.support.IntegrationTestSupport;
 
 class RefreshTokenRepositoryTest extends IntegrationTestSupport {
@@ -28,6 +30,9 @@ class RefreshTokenRepositoryTest extends IntegrationTestSupport {
 
 	@Autowired
 	JwtProperties jwtProperties;
+
+	@Autowired
+	AuthSessionProperties sessionProperties;
 
 	private long memberId;
 	private String sessionId;
@@ -53,6 +58,25 @@ class RefreshTokenRepositoryTest extends IntegrationTestSupport {
 	@Nested
 	@DisplayName("save()")
 	class Save {
+
+		@Test
+		@DisplayName("관리자 세션의 TTL 은 유휴 만료 시간 이하이고 일반 회원은 refresh 만료를 따른다")
+		void appliesAdminIdleTimeoutAsTtl() {
+			// given
+			String userSessionId = UUID.randomUUID().toString();
+
+			// when
+			refreshTokenRepository.save(memberId, sessionId, "token-a", farFutureAbsExp, now, MemberRole.ADMIN);
+			refreshTokenRepository.save(memberId, userSessionId, "token-b", farFutureAbsExp, now, MemberRole.USER);
+
+			// then
+			Long adminTtl = redisTemplate.getExpire(sessionKey, TimeUnit.MILLISECONDS);
+			Long userTtl = redisTemplate.getExpire("refresh:" + memberId + ":" + userSessionId, TimeUnit.MILLISECONDS);
+			assertThat(adminTtl).isBetween(sessionProperties.adminIdleTimeout().minusSeconds(5).toMillis(),
+					sessionProperties.adminIdleTimeout().toMillis());
+			assertThat(userTtl).isBetween(jwtProperties.refreshTokenExpiry().minusSeconds(5).toMillis(),
+					jwtProperties.refreshTokenExpiry().toMillis());
+		}
 
 		@Test
 		@DisplayName("저장한 토큰은 findCurrent로 조회된다")
@@ -211,6 +235,59 @@ class RefreshTokenRepositoryTest extends IntegrationTestSupport {
 			// then
 			assertThat(rotation.result()).isEqualTo(RotationResult.ROTATED);
 			assertThat(redisTemplate.opsForSet().members(indexKey)).contains(sessionId);
+		}
+
+		@Test
+		@DisplayName("관리자 세션을 회전하면 TTL 이 유휴 만료 시간으로 다시 걸린다")
+		void extendsAdminSessionTtlOnRotate() {
+			// given
+			refreshTokenRepository.save(memberId, sessionId, "token-a", farFutureAbsExp, now, MemberRole.ADMIN);
+			redisTemplate.expire(sessionKey, Duration.ofSeconds(10));
+
+			// when
+			refreshTokenRepository.rotate(memberId, sessionId, "token-a", "token-b", System.currentTimeMillis(),
+					farFutureAbsExp, MemberRole.ADMIN);
+
+			// then
+			Long ttlMillis = redisTemplate.getExpire(sessionKey, TimeUnit.MILLISECONDS);
+			assertThat(ttlMillis).isBetween(sessionProperties.adminIdleTimeout().minusSeconds(5).toMillis(),
+					sessionProperties.adminIdleTimeout().toMillis());
+		}
+
+		@Test
+		@DisplayName("관리자 세션에 클라이언트 무입력 시간을 넘기면 세션 TTL 에서 그만큼 줄이고 인덱스 TTL 은 줄이지 않는다")
+		void shortensAdminSessionTtlByClientIdleButNotIndex() {
+			// given
+			refreshTokenRepository.save(memberId, sessionId, "token-a", farFutureAbsExp, now, MemberRole.ADMIN);
+
+			// when
+			refreshTokenRepository.rotate(memberId, sessionId, "token-a", "token-b", System.currentTimeMillis(),
+					farFutureAbsExp, MemberRole.ADMIN, Duration.ofMinutes(1));
+
+			// then
+			Duration expectedSessionTtl = sessionProperties.adminIdleTimeout().minusMinutes(1);
+			Long sessionTtl = redisTemplate.getExpire(sessionKey, TimeUnit.MILLISECONDS);
+			Long indexTtl = redisTemplate.getExpire(indexKey, TimeUnit.MILLISECONDS);
+			assertThat(sessionTtl).isBetween(expectedSessionTtl.minusSeconds(5).toMillis(),
+					expectedSessionTtl.toMillis());
+			assertThat(indexTtl).isBetween(sessionProperties.adminIdleTimeout().minusSeconds(5).toMillis(),
+					sessionProperties.adminIdleTimeout().toMillis());
+		}
+
+		@Test
+		@DisplayName("일반 회원 세션은 클라이언트 무입력 시간을 무시하고 refresh 만료를 따른다")
+		void ignoresClientIdleForUser() {
+			// given
+			refreshTokenRepository.save(memberId, sessionId, "token-a", farFutureAbsExp, now, MemberRole.USER);
+
+			// when
+			refreshTokenRepository.rotate(memberId, sessionId, "token-a", "token-b", System.currentTimeMillis(),
+					farFutureAbsExp, MemberRole.USER, Duration.ofMinutes(1));
+
+			// then
+			Long sessionTtl = redisTemplate.getExpire(sessionKey, TimeUnit.MILLISECONDS);
+			assertThat(sessionTtl).isBetween(jwtProperties.refreshTokenExpiry().minusSeconds(5).toMillis(),
+					jwtProperties.refreshTokenExpiry().toMillis());
 		}
 
 		@Test

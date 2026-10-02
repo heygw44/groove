@@ -68,9 +68,9 @@
 		</choose>
 	</select>
 
-	<!-- 기간 내 가장 오래된 집계 시각을 보수적으로 표기한다. 기간 내 행이 없으면 MIN 이 NULL 을 낸다. -->
+	<!-- 기간 내 가장 최근 갱신 시각. 기간 내 행이 없으면 MAX 가 NULL 을 낸다. -->
 	<select id="findAggregatedAt" resultType="java.time.LocalDateTime">
-		SELECT MIN(s.aggregated_at)
+		SELECT MAX(s.aggregated_at)
 		FROM sales_daily s
 		WHERE s.sale_date &gt;= #{from} AND s.sale_date &lt;= #{to}
 	</select>
@@ -138,7 +138,8 @@
 			(SELECT COUNT(*) FROM member m
 				WHERE m.created_at &gt;= #{todayStart} AND m.created_at &lt; #{tomorrowStart}) AS today_new_member_count,
 			(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
-				WHERE oi.status = 'PAID' AND o.placed_at IS NOT NULL) AS new_order_count,
+				WHERE oi.status = 'PAID' AND o.placed_at IS NOT NULL
+					AND (oi.claim_status IS NULL OR oi.claim_status &lt;&gt; 'CANCEL_REQUEST')) AS new_order_count,
 			(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id
 				WHERE oi.status = 'PAYMENT_WAITING' AND o.placed_at IS NOT NULL) AS deposit_waiting_count,
 			(SELECT COUNT(*) FROM order_item oi JOIN orders o ON o.id = oi.order_id

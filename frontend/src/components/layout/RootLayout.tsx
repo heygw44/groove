@@ -1,12 +1,16 @@
 import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 
+import { AdminIdleGuard } from '@/components/admin/AdminIdleGuard';
 import { RouteFallback } from '@/components/common/RouteFallback';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
 import { TasteOnboardingModal } from '@/components/recommend/TasteOnboardingModal';
+import { useAuthStore } from '@/store/authStore';
 
 export function RootLayout() {
+  const isAdmin = useAuthStore((state) => state.member?.role === 'ADMIN');
+
   return (
     <div className="flex min-h-screen flex-col">
       <a
@@ -23,6 +27,7 @@ export function RootLayout() {
       </main>
       <Footer />
       <TasteOnboardingModal />
+      {isAdmin && <AdminIdleGuard />}
     </div>
   );
 }

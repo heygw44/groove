@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.groove.coupon.entity.Coupon;
@@ -113,6 +115,31 @@ class MemberQueryMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(result).extracting(AdminMemberSummaryResponse::id).containsExactly(target.getId());
+		}
+
+		@ParameterizedTest
+		@CsvSource({
+			"mqmwc%, mqmwc%a@groove.com, mqmwc a@groove.com",
+			"mqmwc_b, mqmwc_b@groove.com, mqmwcXb@groove.com"
+		})
+		@DisplayName("keyword 의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalEmail, String lookalikeEmail) {
+			// given
+			Member literal = MemberFixture.create(literalEmail);
+			Member lookalike = MemberFixture.create(lookalikeEmail);
+			em.persist(literal);
+			em.persist(lookalike);
+			em.flush();
+			em.clear();
+
+			// when
+			List<AdminMemberSummaryResponse> result = memberQueryMapper.findAdminMembers(
+					condition(keyword, null, null));
+
+			// then
+			assertThat(result).extracting(AdminMemberSummaryResponse::id)
+					.contains(literal.getId())
+					.doesNotContain(lookalike.getId());
 		}
 
 		@Test

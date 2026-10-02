@@ -2,6 +2,7 @@ package com.groove.notification.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +19,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 	Page<Notification> findAllByMemberId(Long memberId, Pageable pageable);
 
 	Page<Notification> findAllByMemberIdAndReadAtIsNull(Long memberId, Pageable pageable);
+
+	/** 남의 알림도 없는 알림과 똑같이 비어 보이도록 소유자 조건까지 한 번에 건다. */
+	Optional<Notification> findByIdAndMemberId(Long id, Long memberId);
 
 	long countByMemberIdAndReadAtIsNull(Long memberId);
 

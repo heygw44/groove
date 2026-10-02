@@ -25,7 +25,7 @@ describe('buildNotificationMessage()', () => {
     const message = buildNotificationMessage(notification);
 
     // then
-    expect(message).toBe('Kind of Blue 재입고됐습니다');
+    expect(message).toBe('Kind of Blue 재입고되었습니다');
   });
 
   it('PRICE_DROP 이면 가격 인하 문구를 만든다', () => {
@@ -47,7 +47,7 @@ describe('buildNotificationMessage()', () => {
     const message = buildNotificationMessage(notification);
 
     // then
-    expect(message).toBe('Nevermind의 새 에디션이 등록됐습니다');
+    expect(message).toBe('Nevermind의 새 에디션이 등록되었습니다');
   });
 });
 

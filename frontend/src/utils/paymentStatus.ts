@@ -1,4 +1,5 @@
 import type { BadgeVariant } from '@/components/common/Badge';
+import type { AdminOrderItemResult } from '@/types/adminOrder';
 import type { OrderDetail, OrderItem } from '@/types/order';
 import type { OrderPayment, PaymentStatus } from '@/types/payment';
 
@@ -35,20 +36,14 @@ export const PAYMENT_STATUS_BADGE: Record<PaymentStatus, BadgeVariant> = {
   WAITING_FOR_DEPOSIT: 'accent',
 };
 
-const RECONCILE_PENDING_STATUSES = new Set<PaymentStatus>(['UNKNOWN', 'CANCEL_REQUESTED']);
-
 export const CANCEL_REQUESTED_MESSAGES = {
-  memberReason: '취소 결과를 확인하고 있어 다시 취소할 수 없습니다.',
-  success: '취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.',
+  memberReason: '환불 결과를 확인하고 있어 지금은 다시 취소할 수 없습니다.',
+  success: '취소요청이 접수되었습니다. 환불까지 시간이 조금 걸릴 수 있습니다.',
 } as const;
 
 const ORDER_CANCEL_SUCCESS_MESSAGE = '주문을 취소했습니다.';
 const PARTIAL_REFUND_UNCONFIRMED_MESSAGE =
-  '일부 상품의 환불 결과를 확인하고 있습니다. 확인되면 나머지 상품을 다시 취소해 주세요.';
-
-/** 토스 결과가 DB 에 아직 확정되지 않아 대사 스케줄러가 처리해야 하는 상태인지. */
-export const isReconcilePending = (status: PaymentStatus): boolean =>
-  RECONCILE_PENDING_STATUSES.has(status);
+  '일부 상품의 환불이 아직 끝나지 않았습니다. 환불이 끝나면 나머지 상품을 다시 취소해주세요.';
 
 export const isCancellationPending = (status?: PaymentStatus): boolean =>
   status === 'CANCEL_REQUESTED';
@@ -56,10 +51,49 @@ export const isCancellationPending = (status?: PaymentStatus): boolean =>
 export const hasRefundInProgress = (items: OrderItem[]): boolean =>
   items.some((item) => item.refundInProgress);
 
+const PARTIAL_CANCELED_MESSAGE = '일부 상품만 취소되었습니다. 남은 상품을 확인해주세요.';
+const ITEM_CANCEL_REQUESTED_MESSAGE = '취소요청이 접수되었습니다. 승인되면 취소됩니다.';
+const ADMIN_REFUND_CONFIRMING_MESSAGE = '처리를 접수했습니다. 환불 결과를 확인하고 있습니다.';
+
+const hasCancelAction = (items: OrderItem[]): boolean =>
+  items.some(
+    (item) =>
+      item.availableActions.includes('CANCEL') || item.availableActions.includes('CANCEL_REQUEST'),
+  );
+
+/** 상품 취소 응답으로 실제 결과를 가린다. 환불 결과 불명·승인 대기로 바뀐 경우를 취소 완료로 안내하지 않는다. */
+export const getOrderItemCancelSuccessMessage = (item: OrderItem): string => {
+  if (item.refundInProgress) {
+    return CANCEL_REQUESTED_MESSAGES.success;
+  }
+  return item.status === 'CANCELED' ? ORDER_CANCEL_SUCCESS_MESSAGE : ITEM_CANCEL_REQUESTED_MESSAGE;
+};
+
+export const getAdminClaimApproveMessage = (
+  result: Pick<AdminOrderItemResult, 'status'>,
+): string =>
+  result.status === 'CANCELED' ? '취소요청을 승인했습니다.' : ADMIN_REFUND_CONFIRMING_MESSAGE;
+
+export const getAdminClaimCompleteMessage = (
+  result: Pick<AdminOrderItemResult, 'status'>,
+): string =>
+  result.status === 'RETURNED' ? '반품 수거를 완료했습니다.' : ADMIN_REFUND_CONFIRMING_MESSAGE;
+
+export const getAdminSaleCancelMessage = (
+  result: Pick<AdminOrderItemResult, 'status'>,
+  productOrderNumber: string,
+): string =>
+  result.status === 'CANCELED'
+    ? `${productOrderNumber} 판매취소 처리했습니다.`
+    : ADMIN_REFUND_CONFIRMING_MESSAGE;
+
 export const getOrderCancelSuccessMessage = (order: OrderDetail): string => {
   // 일부 상품 환불이 미확정이면 서버가 그 상품을 취소하지 못하고 넘어간다.
   if (hasRefundInProgress(order.items)) {
     return PARTIAL_REFUND_UNCONFIRMED_MESSAGE;
+  }
+  if (hasCancelAction(order.items)) {
+    return PARTIAL_CANCELED_MESSAGE;
   }
   return isCancellationPending(order.payment?.status)
     ? CANCEL_REQUESTED_MESSAGES.success

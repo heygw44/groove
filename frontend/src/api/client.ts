@@ -7,6 +7,7 @@ import type { ApiError, ApiResponse } from '@/types/api';
 import { postAuthMessage } from '@/utils/authChannel';
 import { buildLoginUrl, currentPath } from '@/utils/loginUrl';
 import { withReissueLock } from '@/utils/reissueLock';
+import { getIdleSeconds } from '@/utils/userActivity';
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -36,6 +37,17 @@ export const refreshClient = axios.create({
   withCredentials: true,
   timeout: REFRESH_TIMEOUT_MS,
 });
+
+/** 서버가 유휴 판정을 하도록 마지막 사용자 입력 이후 경과 초를 매번 실어 보낸다. */
+export const postReissue = <T>() =>
+  refreshClient.post<ApiResponse<T>>('/auth/reissue', undefined, {
+    headers: { 'X-Client-Idle-Seconds': String(getIdleSeconds(Date.now())) },
+  });
+
+const REISSUE_FAILURE_REASONS: Record<string, LoginReason> = {
+  AUTH_SESSION_EXPIRED: 'expired',
+  AUTH_SESSION_IDLE: 'idle',
+};
 
 const PUBLIC_PATHS = ['/auth/signup', '/auth/login', '/auth/reissue'];
 
@@ -163,9 +175,7 @@ client.interceptors.response.use(
 
     isRefreshing = true;
     try {
-      const { data } = await withReissueLock(() =>
-        refreshClient.post<ApiResponse<{ accessToken: string }>>('/auth/reissue'),
-      );
+      const { data } = await withReissueLock(() => postReissue<{ accessToken: string }>());
       const accessToken = data.data!.accessToken;
       useAuthStore.getState().setAccessToken(accessToken);
       flushPending(accessToken);
@@ -173,8 +183,7 @@ client.interceptors.response.use(
     } catch (reissueError) {
       /* 대기 중이던 요청을 반드시 깨운다. 비우기만 하면 영원히 pending 이다. */
       rejectPending(reissueError);
-      const reason = getErrorCode(reissueError) === 'AUTH_SESSION_EXPIRED' ? 'expired' : undefined;
-      handleSessionExpired(reason);
+      handleSessionExpired(REISSUE_FAILURE_REASONS[getErrorCode(reissueError) ?? '']);
       return Promise.reject(reissueError);
     } finally {
       isRefreshing = false;

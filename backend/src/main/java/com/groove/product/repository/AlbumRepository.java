@@ -23,14 +23,14 @@ public interface AlbumRepository extends JpaRepository<Album, Long> {
 	@Query(value = """
 			SELECT a FROM Album a JOIN FETCH a.artist ar
 			WHERE :keyword IS NULL
-				OR LOWER(a.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-				OR LOWER(ar.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+				OR LOWER(a.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
+				OR LOWER(ar.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
 			""",
 			countQuery = """
 			SELECT COUNT(a) FROM Album a JOIN a.artist ar
 			WHERE :keyword IS NULL
-				OR LOWER(a.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-				OR LOWER(ar.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+				OR LOWER(a.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
+				OR LOWER(ar.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
 			""")
 	Page<Album> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
 }

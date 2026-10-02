@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 
 import { Input } from '@/components/common/Input';
 import { Spinner } from '@/components/common/Spinner';
+import { KEYWORD_INPUT_MAX_LENGTH } from '@/constants/search';
 import { useArtists } from '@/hooks/queries/useReferences';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { Artist } from '@/types/product';
@@ -76,6 +77,7 @@ export function ArtistChipPicker({
           disabled={reachedMax}
           placeholder={reachedMax ? `최대 ${max}명까지 고를 수 있습니다` : '아티스트 검색'}
           value={keyword}
+          maxLength={KEYWORD_INPUT_MAX_LENGTH}
           onChange={(event) => setKeyword(event.target.value)}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}

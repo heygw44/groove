@@ -94,16 +94,19 @@ jobs:
         env:
           PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
           IMAGE_TAG: ${{ github.sha }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: PROD_ENV_FILE,IMAGE_TAG
+          envs: PROD_ENV_FILE,IMAGE_TAG,BACKUP_PASSPHRASE
           script: |
             set -e
             printf '%s\n' "$PROD_ENV_FILE" > /opt/groove/.env
             # 롤백을 한 줄로 만들기 위해 latest 대신 커밋 sha 를 고정한다. 뒤에 온 값이 이긴다.
             printf 'BACKEND_IMAGE_TAG=%s\n' "$IMAGE_TAG" >> /opt/groove/.env
+            # 백업 암호는 PROD_ENV_FILE 과 따로 둔다. 비면 backup.sh 가 FAIL 로 알린다.
+            printf 'BACKUP_PASSPHRASE=%s\n' "$BACKUP_PASSPHRASE" >> /opt/groove/.env
             chmod 600 /opt/groove/.env
             # 직전 프론트 빌드를 롤백본으로 남긴다.
             if [ -d /var/www/groove ]; then
@@ -153,7 +156,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "infra/nginx/nginx.conf,infra/nginx/groove.conf"
+          source: "infra/nginx/nginx.conf,infra/nginx/groove.conf,infra/nginx/groove-security-headers.conf"
           target: "/opt/groove/nginx"
           strip_components: 2
           overwrite: true

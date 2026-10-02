@@ -1,5 +1,6 @@
 package com.groove.member.dto;
 
+import com.groove.global.common.PageLimits;
 import com.groove.member.entity.MemberRole;
 import com.groove.member.entity.MemberStatus;
 
@@ -12,7 +13,7 @@ public record AdminMemberSearchRequest(
 		@Size(max = 100) String keyword,
 		MemberStatus status,
 		MemberRole role,
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

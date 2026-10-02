@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.data.domain.Page;
@@ -33,6 +35,16 @@ import lombok.RequiredArgsConstructor;
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class AdminCouponService {
+
+	private static final Map<String, String> FIELD_LABELS = Map.of(
+			"discountType", "할인 유형",
+			"discountValue", "할인 값",
+			"minOrderAmount", "최소 주문 금액",
+			"maxDiscountAmount", "최대 할인 금액",
+			"name", "이름",
+			"expiresAt", "만료일",
+			"totalQuantity", "발급 수량",
+			"status", "상태");
 
 	private final CouponRepository couponRepository;
 	private final AdminAuditLogService adminAuditLogService;
@@ -92,7 +104,7 @@ public class AdminCouponService {
 		}
 
 		adminAuditLogService.record(adminId, AdminAuditAction.COUPON_UPDATE, AdminAuditTargetType.COUPON, couponId,
-				String.join(",", changedFields));
+				"변경: " + toLabels(changedFields));
 
 		return AdminCouponResponse.from(coupon);
 	}
@@ -110,6 +122,15 @@ public class AdminCouponService {
 	public PageResponse<AdminCouponSummaryResponse> getList(CouponStatus status, Pageable pageable) {
 		Page<AdminCouponSummaryResponse> page = couponRepository.findAdminSummaries(status, pageable);
 		return PageResponse.from(page);
+	}
+
+	private String toLabels(List<String> changedFields) {
+		if (changedFields.isEmpty()) {
+			return "없음";
+		}
+		return changedFields.stream()
+				.map(field -> FIELD_LABELS.getOrDefault(field, field))
+				.collect(Collectors.joining(", "));
 	}
 
 	private <T> T coalesce(T newValue, T currentValue, String fieldName, List<String> changedFields) {

@@ -93,7 +93,7 @@ export default function ProductListPage() {
           {!isPending && !isError && data && data.content.length === 0 && (
             <EmptyState
               title="조건에 맞는 상품이 없습니다"
-              description="필터를 조정해보세요."
+              description="필터를 바꿔 다시 검색해주세요."
               action={
                 <Button variant="secondary" onClick={reset}>
                   필터 초기화

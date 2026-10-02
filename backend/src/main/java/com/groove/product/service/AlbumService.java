@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.global.util.LikeEscaper;
 import com.groove.notification.repository.AlbumWatchRepository;
 import com.groove.product.dto.AdminAlbumSummaryResponse;
 import com.groove.product.dto.AlbumDetailResponse;
@@ -42,7 +43,7 @@ public class AlbumService {
 	}
 
 	public PageResponse<AdminAlbumSummaryResponse> getAdminList(String keyword, Pageable pageable) {
-		String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+		String normalizedKeyword = StringUtils.hasText(keyword) ? LikeEscaper.escape(keyword.trim()) : null;
 		Page<AdminAlbumSummaryResponse> page = albumRepository.searchByKeyword(normalizedKeyword, pageable)
 				.map(AdminAlbumSummaryResponse::from);
 		return PageResponse.from(page);

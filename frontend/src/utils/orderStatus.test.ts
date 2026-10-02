@@ -50,7 +50,7 @@ describe('getOrderDisplayStatus()', () => {
     });
   });
 
-  it('PENDING 이어도 결제 상태가 WAITING_FOR_DEPOSIT 이 아니면 원래 라벨을 유지한다', () => {
+  it('PENDING 이어도 결제상태가 WAITING_FOR_DEPOSIT 이 아니면 원래 라벨을 유지한다', () => {
     // given & when
     const result = getOrderDisplayStatus('PENDING', 'READY');
 
@@ -61,7 +61,7 @@ describe('getOrderDisplayStatus()', () => {
     });
   });
 
-  it('결제 상태가 없어도 원래 주문 상태 라벨을 돌려준다', () => {
+  it('결제상태가 없어도 원래 주문 상태 라벨을 돌려준다', () => {
     // given & when
     const result = getOrderDisplayStatus('PAID');
 
@@ -80,8 +80,8 @@ describe('getOrderDisplayStatus()', () => {
 
 describe('formatCancelReason()', () => {
   it.each([
-    ['EXPIRED', '입금 기한 만료'],
-    ['SUPERSEDED', '다른 결제로 대체'],
+    ['EXPIRED', '입금기한 만료'],
+    ['SUPERSEDED', '다른 결제로 변경'],
   ])('시스템 사유 %s 는 %s 로 바꾼다', (reason, label) => {
     // given & when
     const result = formatCancelReason(reason);

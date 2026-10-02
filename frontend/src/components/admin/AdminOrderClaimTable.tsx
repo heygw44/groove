@@ -57,6 +57,11 @@ export function AdminOrderClaimTable({ claims, onAction }: AdminOrderClaimTableP
                 <Badge variant={CLAIM_STATUS_BADGE[claim.status]} className="whitespace-nowrap">
                   {getClaimStatusLabel(claim.type, claim.status)}
                 </Badge>
+                {claim.refundInProgress && (
+                  <Badge variant="accent" className="ml-1.5 whitespace-nowrap">
+                    환불 확인 중
+                  </Badge>
+                )}
               </td>
               <td className="py-2.5 pr-3 whitespace-nowrap text-content-muted">
                 {formatServerDateTime(claim.requestedAt)}

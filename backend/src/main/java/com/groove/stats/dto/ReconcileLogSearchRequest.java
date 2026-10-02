@@ -4,13 +4,15 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
+import com.groove.global.common.PageLimits;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
 
 /** 대사 로그 목록 조회 조건. 정렬은 최근순(createdAt DESC, id DESC)으로 고정한다. */
 public record ReconcileLogSearchRequest(
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size,
 		Boolean repaired
 ) {

@@ -20,6 +20,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
+import com.groove.payment.client.dto.RefundAccountInfo;
 import com.groove.product.entity.Artist;
 
 class PaymentCancelTest {
@@ -53,6 +54,23 @@ class PaymentCancelTest {
 			assertThat(paymentCancel.getCancelAmount()).isEqualByComparingTo("10000");
 			assertThat(paymentCancel.getReason()).isEqualTo("고객 변심");
 			assertThat(paymentCancel.getRequestedAt()).isEqualTo(APPROVED_AT);
+		}
+
+		@Test
+		@DisplayName("환불계좌를 넘기면 보관하고, 넘기지 않으면 null 이다")
+		void keepsRefundAccountWhenGiven() {
+			// given
+			RefundAccountInfo account = new RefundAccountInfo("088", "12345678901234", "홍길동");
+
+			// when
+			PaymentCancel withAccount = PaymentCancel.request(payment(), "cancel-key-1", new BigDecimal("10000"),
+					"고객 변심", APPROVED_AT, account);
+			PaymentCancel withoutAccount = PaymentCancel.request(payment(), "cancel-key-2", new BigDecimal("10000"),
+					"고객 변심", APPROVED_AT);
+
+			// then
+			assertThat(withAccount.getRefundAccount()).isEqualTo(account);
+			assertThat(withoutAccount.getRefundAccount()).isNull();
 		}
 
 		@Test
@@ -91,6 +109,20 @@ class PaymentCancelTest {
 		}
 
 		@Test
+		@DisplayName("완료되면 보관하던 환불계좌를 지운다")
+		void clearsRefundAccount() {
+			// given
+			PaymentCancel paymentCancel = PaymentCancel.request(payment(), "cancel-key-1", new BigDecimal("10000"),
+					"고객 변심", APPROVED_AT, new RefundAccountInfo("088", "12345678901234", "홍길동"));
+
+			// when
+			paymentCancel.complete("txn-1", CANCELED_AT);
+
+			// then
+			assertThat(paymentCancel.getRefundAccount()).isNull();
+		}
+
+		@Test
 		@DisplayName("REQUESTED 가 아니면 PAYMENT_INVALID_STATUS 예외를 던진다")
 		void throwsInvalidStatusWhenNotRequested() {
 			// given
@@ -122,6 +154,20 @@ class PaymentCancelTest {
 
 			// then
 			assertThat(paymentCancel.getStatus()).isEqualTo(PaymentCancelStatus.FAILED);
+		}
+
+		@Test
+		@DisplayName("실패로 확정되면 보관하던 환불계좌를 지운다")
+		void clearsRefundAccount() {
+			// given
+			PaymentCancel paymentCancel = PaymentCancel.request(payment(), "cancel-key-1", new BigDecimal("10000"),
+					"고객 변심", APPROVED_AT, new RefundAccountInfo("088", "12345678901234", "홍길동"));
+
+			// when
+			paymentCancel.fail();
+
+			// then
+			assertThat(paymentCancel.getRefundAccount()).isNull();
 		}
 
 		@Test

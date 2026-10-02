@@ -87,6 +87,11 @@ tasks.named('test') {
     useJUnitPlatform {
         excludeTags 'precision', 'throughput', 'ablation', 'sweep'
     }
+    // 개발 머신의 실제 시크릿(OS 환경변수)이 test 프로파일 값보다 우선해 결과가 머신마다 달라진다.
+    // 앱 설정이 참조하는 ${ENV} 이름을 모아 포크된 테스트 JVM 환경에서 뺀다. bootRun 은 그대로 상속한다.
+    def appEnvNames = fileTree('src/main/resources') { include 'application*.yml' }.files
+        .collectMany { (it.text =~ /\$\{([A-Z][A-Z0-9_]*)/).collect { m -> m[1] } } as Set
+    environment = environment.findAll { name, value -> !appEnvNames.contains(name) }
     finalizedBy jacocoTestReport
 }
 

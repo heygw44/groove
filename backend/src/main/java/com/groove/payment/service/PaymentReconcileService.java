@@ -12,11 +12,13 @@ import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.config.PaymentReconcileProperties;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.entity.Payment;
@@ -51,6 +53,7 @@ public class PaymentReconcileService {
 	private final PaymentReconcileProperties properties;
 	private final Clock clock;
 	private final AlertNotifier alertNotifier;
+	private final LimitedPurchaseRepository limitedPurchaseRepository;
 
 	public List<PaymentReconcileCandidate> findCandidates(LocalDateTime now) {
 		LocalDateTime before = now.minus(properties.grace());
@@ -101,8 +104,22 @@ public class PaymentReconcileService {
 			case APPROVE -> {
 				writer.approve(candidate.orderId(), candidate.paymentId(), lookup.paymentKey(),
 						new PaymentConfirmResult(lookup.paymentKey(), candidate.tossOrderId(), lookup.method(),
-								lookup.totalAmount(), lookup.approvedAt()));
+								lookup.totalAmount(), lookup.approvedAt(), PaymentLookupStatus.DONE,
+								lookup.easyPayProvider(), null));
 				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.APPROVED, detail);
+				yield PaymentReconcileOutcome.applied();
+			}
+			case ISSUE_VIRTUAL_ACCOUNT -> {
+				if (limitedPurchaseRepository.existsByOrderId(candidate.orderId())) {
+					// 한정반은 가상계좌를 받지 않는다. 토스 cancel 은 트랜잭션 밖에서 불러야 해 여기선 아무것도
+					// 쓰지 않고 LimitedVirtualAccountCloser 에 폐쇄를 넘긴다(결과는 recordLimitedVirtualAccountClose).
+					yield PaymentReconcileOutcome.needsVirtualAccountClose(lookup.paymentKey());
+				}
+				writer.issueVirtualAccount(candidate.orderId(), candidate.paymentId(), lookup.paymentKey(),
+						new PaymentConfirmResult(lookup.paymentKey(), candidate.tossOrderId(), lookup.method(),
+								lookup.totalAmount(), lookup.approvedAt(), PaymentLookupStatus.WAITING_FOR_DEPOSIT,
+								lookup.easyPayProvider(), lookup.virtualAccount()));
+				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.ISSUED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			case FAIL -> {
@@ -137,22 +154,8 @@ public class PaymentReconcileService {
 				}
 				yield PaymentReconcileOutcome.applied();
 			}
-			case MANUAL_REVIEW -> {
-				log.error("대사 결과 수동 확인 필요: paymentId={}, orderId={}, tossStatus={}", candidate.paymentId(),
-						candidate.orderId(), tossStatus);
-				alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
-						"대사 결과 수동 확인 필요: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId()
-								+ ", tossStatus=" + tossStatus,
-						"paymentId=" + candidate.paymentId()));
-				if (partialCancelDriftCandidate) {
-					// 자동으로 금액을 맞추지 않는다 - 상한(recordMiss)을 태우면 이미 확정된 결제가 fail() 로
-					// 되돌아갈 수 있어, 로그만 남기고 payment.status·reconcile_attempts 는 건드리지 않는다.
-					writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
-				} else {
-					recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
-				}
-				yield PaymentReconcileOutcome.applied();
-			}
+			case MANUAL_REVIEW -> manualReview(candidate, payment, beforeStatus, tossStatus, detail,
+					partialCancelDriftCandidate);
 			// 토스 cancel 은 트랜잭션 밖에서 호출해야 하므로 여기서는 상태를 바꾸지 않는다.
 			case COMPENSATE -> PaymentReconcileOutcome.needsCompensation(lookup.paymentKey(), lookup.approvedAt());
 			case COMPLETE_CANCEL -> {
@@ -163,8 +166,93 @@ public class PaymentReconcileService {
 				yield PaymentReconcileOutcome.applied();
 			}
 			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey(),
-					cancelWriter.requestedIdempotencyKey(payment));
+					cancelWriter.requestedIdempotencyKey(payment), cancelWriter.requestedRefundAccount(payment));
 		};
+	}
+
+	private PaymentReconcileOutcome manualReview(PaymentReconcileCandidate candidate, Payment payment,
+			PaymentStatus beforeStatus, String tossStatus, String detail, boolean partialCancelDriftCandidate) {
+		log.error("대사 결과 수동 확인 필요: paymentId={}, orderId={}, tossStatus={}", candidate.paymentId(),
+				candidate.orderId(), tossStatus);
+		alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+				"대사 결과 수동 확인 필요: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId()
+						+ ", tossStatus=" + tossStatus,
+				"paymentId=" + candidate.paymentId()));
+		if (partialCancelDriftCandidate) {
+			// 자동으로 금액을 맞추지 않는다 - 상한(recordMiss)을 태우면 이미 확정된 결제가 fail() 로
+			// 되돌아갈 수 있어, 로그만 남기고 payment.status·reconcile_attempts 는 건드리지 않는다.
+			writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
+		} else {
+			recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
+		}
+		return PaymentReconcileOutcome.applied();
+	}
+
+	/**
+	 * LimitedVirtualAccountCloser 의 토스 cancel 결과를 반영한다. failure 가 null 이면 폐쇄 성공이다. 성공 시 결제를
+	 * FAILED 로 확정만 한다 - 주문은 결제가 unresolved 가 아니게 되면 주문 만료 스케줄러가 만료시키며 재고·한정
+	 * 슬롯을 복구한다(만료 전엔 카드로 재결제 가능, confirm 경로와 동일). 입금된 적이 없어 취소 기록은 남기지 않는다.
+	 * READY/UNKNOWN 결제의 폐쇄 실패는 FAILED 로 수렴시키지 않는다 - 계좌가 열린 채 한정 슬롯이 풀리기 때문이다.
+	 * 대신 결과 불명(PAYMENT_RESULT_UNKNOWN)이든 토스 거절이든 매번 횟수를 센다 - attempts·updated_at 이 갱신돼야
+	 * 후보가 배치 뒤로 밀려 같은 결제가 배치 앞을 계속 차지하지 않는다(head-of-line starvation 방지).
+	 * 상한에 닿으면 상태를 유지한 채 MANUAL_REVIEW 로 사람에게 넘긴다 - 토스는 입금기한이 지나도
+	 * WAITING_FOR_DEPOSIT 을 유지(웹훅 없음)해 자동 수렴이 없다. READY/UNKNOWN 은 대사 대상이라 웹훅·정산 지연 경로는
+	 * 상한 후에도 재시도할 수 있다.
+	 */
+	@Transactional
+	public void recordLimitedVirtualAccountClose(PaymentReconcileCandidate candidate, BusinessException failure,
+			String detail) {
+		orderRepository.findByIdForUpdate(candidate.orderId())
+				.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+		Payment payment = paymentRepository.findById(candidate.paymentId())
+				.orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+		PaymentStatus beforeStatus = payment.getStatus();
+		boolean failed = beforeStatus == PaymentStatus.FAILED;
+		if (!failed && beforeStatus != PaymentStatus.READY && beforeStatus != PaymentStatus.UNKNOWN) {
+			// 토스 호출 사이에 다른 경로가 결제를 정리했다.
+			return;
+		}
+		if (failure == null) {
+			if (!failed) {
+				payment.fail(LimitedVirtualAccountCloser.REASON);
+			}
+			writeLog(payment, beforeStatus, "CANCELED",
+					failed ? PaymentReconcileAction.CANCELED : PaymentReconcileAction.FAILED, detail);
+			return;
+		}
+		String failureDetail = combineDetail(detail, failure.getMessage());
+		if (failed) {
+			alertCloseFailure(candidate, failure);
+			writeLog(payment, beforeStatus, "WAITING_FOR_DEPOSIT", PaymentReconcileAction.MANUAL_REVIEW, failureDetail);
+			return;
+		}
+		// 결과 불명도 횟수를 센다 - 행이 갱신되지 않으면 updated_at 순 후보 조회가 매번 이 결제를 먼저 집어 뒤 후보가 굶는다.
+		payment.recordReconcileMiss();
+		if (payment.getReconcileAttempts() < properties.maxAttempts()) {
+			PaymentReconcileAction action = failure.getErrorCode() == ErrorCode.PAYMENT_RESULT_UNKNOWN
+					? PaymentReconcileAction.SKIPPED
+					: PaymentReconcileAction.MANUAL_REVIEW;
+			alertCloseFailure(candidate, failure);
+			writeLog(payment, beforeStatus, "WAITING_FOR_DEPOSIT", action, failureDetail);
+			return;
+		}
+		// 상한에서도 fail() 하지 않는다 - FAILED 면 주문 만료가 한정 슬롯을 풀어 열린 계좌로 입금이 들어올 수 있다.
+		// 같은 키 알림은 5분 스로틀이라 일반 실패 알림 대신 상한 알림 하나만 보낸다.
+		log.error("한정반 가상계좌 폐쇄 상한 도달, 수동 폐쇄 필요: paymentId={}, orderId={}", candidate.paymentId(),
+				candidate.orderId(), failure);
+		alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+				"한정반 가상계좌 폐쇄 상한 도달, 수동 폐쇄 필요: paymentId=" + candidate.paymentId(),
+				"paymentId=" + candidate.paymentId()));
+		writeLog(payment, beforeStatus, "WAITING_FOR_DEPOSIT", PaymentReconcileAction.MANUAL_REVIEW,
+				"한정반 가상계좌 폐쇄 상한 도달, 수동 폐쇄 필요");
+	}
+
+	private void alertCloseFailure(PaymentReconcileCandidate candidate, BusinessException failure) {
+		log.error("한정반 가상계좌 폐쇄 실패: paymentId={}, orderId={}", candidate.paymentId(), candidate.orderId(),
+				failure);
+		alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+				"한정반 가상계좌 폐쇄 실패: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId(),
+				"paymentId=" + candidate.paymentId()));
 	}
 
 	@Transactional

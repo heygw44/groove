@@ -34,6 +34,7 @@ import {
 } from '@/utils/adminOrderFilters';
 import { getErrorMessage } from '@/utils/apiError';
 import { getFallbackPage, toTotalPages } from '@/utils/pagination';
+import { getAdminSaleCancelMessage } from '@/utils/paymentStatus';
 
 interface BulkResult {
   label: string;
@@ -134,10 +135,11 @@ export default function AdminOrdersPage() {
     cancelMutation.mutate(
       { id: target.id, payload: { reason: reason === '' ? undefined : reason } },
       {
-        onSuccess: () => {
-          showToast('success', `${target.productOrderNumber} 판매취소 처리했습니다.`);
+        onSuccess: (result) => {
+          showToast('success', getAdminSaleCancelMessage(result, target.productOrderNumber));
           setCancelTarget(undefined);
         },
+        onError: (failure) => showToast('error', getErrorMessage(failure)),
       },
     );
 
@@ -264,7 +266,8 @@ export default function AdminOrdersPage() {
       {cancelTarget && (
         <AdminReasonModal
           title="판매취소"
-          description={`${cancelTarget.productOrderNumber} 를 판매취소하고 즉시 환불합니다.`}
+          description="선택한 상품주문을 판매취소하고 즉시 환불합니다."
+          productOrderNumber={cancelTarget.productOrderNumber}
           label="취소 사유(선택)"
           submitLabel="판매취소"
           required={false}

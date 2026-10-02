@@ -131,7 +131,7 @@ class CatalogImportJobServiceTest {
 			assertThat(usedParams.getString(CatalogImportJobConfig.PARAM_DEFAULT_PRICE)).isEqualTo("45000");
 			assertThat(usedParams.getParameter(CatalogImportJobConfig.PARAM_DEFAULT_PRICE).isIdentifying()).isFalse();
 			verify(adminAuditLogService).record(1L, AdminAuditAction.CATALOG_IMPORT_JOB_START,
-					AdminAuditTargetType.CATALOG_IMPORT_JOB, 88L, "discogsMasterId=21247");
+					AdminAuditTargetType.CATALOG_IMPORT_JOB, 88L, "Discogs 마스터 21247");
 		}
 
 		@Test

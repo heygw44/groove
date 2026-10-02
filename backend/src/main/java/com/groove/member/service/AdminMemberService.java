@@ -1,8 +1,11 @@
 package com.groove.member.service;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +19,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.dto.AdminMemberActivitySummary;
 import com.groove.member.dto.AdminMemberDetailResponse;
+import com.groove.member.dto.AdminMemberRecentOrderResponse;
 import com.groove.member.dto.AdminMemberSearchCondition;
 import com.groove.member.dto.AdminMemberSearchRequest;
 import com.groove.member.dto.AdminMemberStatusChangeRequest;
@@ -28,6 +32,8 @@ import com.groove.member.repository.MemberRepository;
 import com.groove.order.dto.OrderSearchCondition;
 import com.groove.order.dto.OrderSummaryResponse;
 import com.groove.order.mapper.OrderQueryMapper;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -38,10 +44,15 @@ import lombok.RequiredArgsConstructor;
 public class AdminMemberService {
 
 	private static final int RECENT_ORDER_LIMIT = 5;
+	private static final Map<MemberStatus, String> STATUS_LABELS = Map.of(
+			MemberStatus.ACTIVE, "활성",
+			MemberStatus.SUSPENDED, "정지",
+			MemberStatus.WITHDRAWN, "탈퇴");
 
 	private final MemberRepository memberRepository;
 	private final MemberQueryMapper memberQueryMapper;
 	private final OrderQueryMapper orderQueryMapper;
+	private final PaymentRepository paymentRepository;
 	private final SessionRevoker sessionRevoker;
 	private final AdminAuditLogService adminAuditLogService;
 	private final Clock clock;
@@ -92,7 +103,7 @@ public class AdminMemberService {
 	}
 
 	private String buildStatusChangeDetail(MemberStatus previous, MemberStatus next, String reason) {
-		String transition = previous.name() + "->" + next.name();
+		String transition = STATUS_LABELS.get(previous) + " → " + STATUS_LABELS.get(next);
 		if (reason == null || reason.isBlank()) {
 			return transition;
 		}
@@ -104,6 +115,19 @@ public class AdminMemberService {
 				memberQueryMapper.findActivitySummary(member.getId(), LocalDateTime.now(clock));
 		List<OrderSummaryResponse> recentOrders = orderQueryMapper.findMyOrders(
 				new OrderSearchCondition(member.getId(), null, 0, RECENT_ORDER_LIMIT));
-		return AdminMemberDetailResponse.of(member, activitySummary, recentOrders);
+		return AdminMemberDetailResponse.of(member, activitySummary, toRecentOrders(recentOrders));
+	}
+
+	private List<AdminMemberRecentOrderResponse> toRecentOrders(List<OrderSummaryResponse> orders) {
+		if (orders.isEmpty()) {
+			return List.of();
+		}
+		Map<Long, BigDecimal> canceledAmounts = paymentRepository
+				.findAllByOrderIdIn(orders.stream().map(OrderSummaryResponse::id).toList()).stream()
+				.collect(Collectors.toMap(payment -> payment.getOrder().getId(), Payment::getCanceledAmount));
+		return orders.stream()
+				.map(order -> AdminMemberRecentOrderResponse.of(order,
+						canceledAmounts.getOrDefault(order.id(), BigDecimal.ZERO)))
+				.toList();
 	}
 }

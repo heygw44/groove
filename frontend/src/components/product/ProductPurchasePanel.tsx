@@ -9,7 +9,7 @@ import { QuantitySelector } from '@/components/product/QuantitySelector';
 import { WishButton } from '@/components/product/WishButton';
 import { PRODUCT_STATUS_META } from '@/constants/product';
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
-import { useChangeWishlistAlert } from '@/hooks/mutations/useWishlistMutations';
+import { useChangeWishlistAlert, useToggleWishlist } from '@/hooks/mutations/useWishlistMutations';
 import { useAuthStore } from '@/store/authStore';
 import type { ProductDetail } from '@/types/product';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
@@ -30,6 +30,9 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
   const isLoggedIn = useAuthStore((s) => Boolean(s.accessToken));
   const addCartItemMutation = useAddCartItem();
   const changeAlertMutation = useChangeWishlistAlert();
+  const toggleWishlistMutation = useToggleWishlist();
+
+  const isRestockAlertRequested = Boolean(product.wishlisted && product.alertEnabled);
 
   const requireLogin = () => {
     if (isLoggedIn) {
@@ -58,6 +61,35 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
       return;
     }
     navigate('/orders/new', { state: { productId: product.id, quantity } });
+  };
+
+  const handleRequestRestockAlert = () => {
+    if (!requireLogin()) {
+      return;
+    }
+    const handlers = {
+      onSuccess: () => showToast('success', '재입고 알림을 신청했습니다.'),
+      onError: (error: unknown) => showToast('error', getErrorMessage(error)),
+    };
+    if (product.wishlisted) {
+      changeAlertMutation.mutate({ productId: product.id, alertEnabled: true }, handlers);
+      return;
+    }
+    // 서버가 위시에 담을 때 알림을 함께 켠다.
+    toggleWishlistMutation.mutate(
+      { productId: product.id, wishlisted: false },
+      {
+        ...handlers,
+        onError: (error) => {
+          // 이미 담긴 행이면 알림만 꺼져 있는 경우라 알림 켜기로 이어간다.
+          if (getErrorCode(error) === 'WISHLIST_ALREADY_EXISTS') {
+            changeAlertMutation.mutate({ productId: product.id, alertEnabled: true }, handlers);
+            return;
+          }
+          handlers.onError(error);
+        },
+      },
+    );
   };
 
   const handleToggleAlert = () => {
@@ -109,9 +141,20 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
       ) : (
         <div className="flex gap-2">
           <span className="flex-1">
-            <Button className="w-full" disabled={isSoldOut} onClick={handleBuyNow}>
-              바로 구매
-            </Button>
+            {isSoldOut ? (
+              <Button
+                className="w-full"
+                disabled={isRestockAlertRequested}
+                loading={changeAlertMutation.isPending || toggleWishlistMutation.isPending}
+                onClick={handleRequestRestockAlert}
+              >
+                {isRestockAlertRequested ? '재입고 알림 신청됨' : '재입고 알림 받기'}
+              </Button>
+            ) : (
+              <Button className="w-full" onClick={handleBuyNow}>
+                바로 구매
+              </Button>
+            )}
           </span>
           <span className="flex-1">
             <Button

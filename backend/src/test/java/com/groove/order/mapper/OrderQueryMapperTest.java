@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -738,6 +740,25 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			assertThat(result).extracting(AdminOrderSummaryResponse::id).doesNotContain(another.getId());
 		}
 
+		@ParameterizedTest
+		@CsvSource({"OQM%W, 20260903-OQM%W01, 20260903-OQM W01", "OQM_W, 20260903-OQM_W02, 20260903-OQMXW02"})
+		@DisplayName("keyword 의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalNumber, String lookalikeNumber) {
+			// given
+			Order literal = persistOrder(owner, literalNumber, kindOfBlue, 1);
+			Order lookalike = persistOrder(owner, lookalikeNumber, kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderSummaryResponse> result = orderQueryMapper.findAdminOrders(
+					adminCondition(null, keyword, null, null));
+
+			// then
+			assertThat(result).extracting(AdminOrderSummaryResponse::id)
+					.contains(literal.getId())
+					.doesNotContain(lookalike.getId());
+		}
+
 		@Test
 		@DisplayName("생성일 범위로 필터링하면 경계값을 포함해 반환한다")
 		void filtersByCreatedAtRangeInclusiveOfBoundaries() {
@@ -876,6 +897,25 @@ class OrderQueryMapperTest extends MybatisTestSupport {
 			assertThat(result).extracting(AdminOrderItemSummaryResponse::orderId)
 					.contains(requested.getId())
 					.doesNotContain(rejected.getId());
+		}
+
+		@ParameterizedTest
+		@CsvSource({"OQM%I, 20260903-OQM%I01, 20260903-OQM I01", "OQM_I, 20260903-OQM_I02, 20260903-OQMXI02"})
+		@DisplayName("keyword 의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalNumber, String lookalikeNumber) {
+			// given
+			Order literal = persistOrder(owner, literalNumber, kindOfBlue, 1);
+			Order lookalike = persistOrder(owner, lookalikeNumber, kindOfBlue, 1);
+			em.clear();
+
+			// when
+			List<AdminOrderItemSummaryResponse> result = orderQueryMapper.findAdminOrderItems(
+					new AdminOrderItemSearchCondition(null, keyword, null, null, 0, 100));
+
+			// then
+			assertThat(result).extracting(AdminOrderItemSummaryResponse::orderId)
+					.contains(literal.getId())
+					.doesNotContain(lookalike.getId());
 		}
 	}
 

@@ -25,4 +25,5 @@ export const TASTE_GENRE_MAX = 5;
 export const TASTE_ARTIST_MAX = 5;
 export const TASTE_DECADE_MAX = 3;
 
-export const TASTE_ONBOARDING_DISMISSED_KEY = 'groove:taste-onboarding-dismissed';
+export const TASTE_ONBOARDING_DISMISSED_KEY = 'groove:taste-onboarding-dismissed-at';
+export const TASTE_ONBOARDING_SNOOZE_DAYS = 7;

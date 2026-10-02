@@ -61,6 +61,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
     amount: 10000,
     approvedAt: '2026-09-13T00:01:00',
     easyPayProvider: null,
+    canceledAmount: 0,
     virtualAccount: null,
   },
   ...overrides,
@@ -102,7 +103,7 @@ describe('OrderDetailPage', () => {
     // then
     expect(screen.getByText('레코드 판')).toBeInTheDocument();
     expect(screen.getByText('ORD-1-01')).toBeInTheDocument();
-    expect(screen.getByText('결제 금액 10,000원')).toBeInTheDocument();
+    expect(screen.getByText('결제금액 10,000원')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '장바구니 담기' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '바로 구매하기' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '리뷰 쓰기' })).not.toBeInTheDocument();
@@ -150,6 +151,7 @@ describe('OrderDetailPage', () => {
         amount: 10000,
         approvedAt: '',
         easyPayProvider: null,
+        canceledAmount: 0,
         virtualAccount: {
           bankCode: '020',
           accountNumber: '110123456789',
@@ -178,6 +180,7 @@ describe('OrderDetailPage', () => {
         amount: 10000,
         approvedAt: '2026-09-13T00:01:00',
         easyPayProvider: null,
+        canceledAmount: 0,
         virtualAccount: null,
       },
     });
@@ -188,9 +191,9 @@ describe('OrderDetailPage', () => {
 
     // then
     expect(screen.getByText('취소 처리 중')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '주문 취소' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '주문취소' })).not.toBeInTheDocument();
     expect(
-      screen.getByText('취소 결과를 확인하고 있어 다시 취소할 수 없습니다.'),
+      screen.getByText('환불 결과를 확인하고 있어 지금은 다시 취소할 수 없습니다.'),
     ).toBeInTheDocument();
   });
 
@@ -207,6 +210,6 @@ describe('OrderDetailPage', () => {
     renderPage();
 
     // then
-    expect(screen.getByText('사유: 입금 기한 만료')).toBeInTheDocument();
+    expect(screen.getByText('사유: 입금기한 만료')).toBeInTheDocument();
   });
 });

@@ -124,7 +124,7 @@ class AdminCouponServiceTest {
 		}
 
 		@Test
-		@DisplayName("변경된 필드만 감사 로그 detail 에 콤마로 이어 남긴다")
+		@DisplayName("변경된 필드만 감사 로그 detail 에 한글 라벨로 이어 남긴다")
 		void recordsChangedFieldsAsAuditDetail() {
 			// given
 			Coupon coupon = CouponFixture.withId(CouponFixture.fixed("UPDATE1000", BigDecimal.valueOf(1000)),
@@ -140,7 +140,7 @@ class AdminCouponServiceTest {
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("name");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 이름");
 		}
 
 		@Test
@@ -216,7 +216,7 @@ class AdminCouponServiceTest {
 			assertThat(response.totalQuantity()).isNull();
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("totalQuantity");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 발급 수량");
 		}
 
 		@Test
@@ -235,7 +235,7 @@ class AdminCouponServiceTest {
 			assertThat(response.totalQuantity()).isEqualTo(100);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEmpty();
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 없음");
 		}
 
 		@Test
@@ -292,7 +292,7 @@ class AdminCouponServiceTest {
 			assertThat(response.discountValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("discountValue");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 할인 값");
 		}
 
 		@Test
@@ -313,7 +313,7 @@ class AdminCouponServiceTest {
 			assertThat(response.minOrderAmount()).isEqualByComparingTo(BigDecimal.valueOf(5000));
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("minOrderAmount");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 최소 주문 금액");
 		}
 
 		@Test
@@ -334,7 +334,7 @@ class AdminCouponServiceTest {
 			assertThat(response.maxDiscountAmount()).isEqualByComparingTo(BigDecimal.valueOf(5000));
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEmpty();
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 없음");
 		}
 
 		@Test
@@ -354,7 +354,7 @@ class AdminCouponServiceTest {
 			assertThat(response.totalQuantity()).isEqualTo(100);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEmpty();
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 없음");
 		}
 
 		@Test
@@ -375,7 +375,7 @@ class AdminCouponServiceTest {
 			assertThat(response.status()).isEqualTo(CouponStatus.ACTIVE);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEmpty();
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 없음");
 		}
 
 		@Test
@@ -396,7 +396,7 @@ class AdminCouponServiceTest {
 			assertThat(response.status()).isEqualTo(CouponStatus.DISABLED);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.COUPON_UPDATE),
 					eq(AdminAuditTargetType.COUPON), eq(COUPON_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("status");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 상태");
 		}
 	}
 

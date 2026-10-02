@@ -11,10 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.groove.order.entity.OrderStatus;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.entity.PaymentStatus;
 
 class PaymentReconcileRuleTest {
@@ -219,6 +221,93 @@ class PaymentReconcileRuleTest {
 			// then
 			assertThat(decision).isEqualTo(PaymentReconcileDecision.MANUAL_REVIEW);
 		}
+
+		@ParameterizedTest
+		@EnumSource(value = PaymentStatus.class, names = {"READY", "UNKNOWN", "FAILED"})
+		@DisplayName("토스가 입금대기이고 금액이 일치하고 주문이 PENDING 이면 가상계좌 발급을 반영한다")
+		void issuesVirtualAccountWhenWaitingForDepositAndOurSideNotYetWaiting(PaymentStatus paymentStatus) {
+			// given
+			PaymentLookupResult lookup = waitingLookup(AMOUNT, virtualAccount("secret"));
+
+			// when
+			PaymentReconcileDecision decision = PaymentReconcileRule.decide(paymentStatus, OrderStatus.PENDING, AMOUNT,
+					BigDecimal.ZERO, lookup);
+
+			// then
+			assertThat(decision).isEqualTo(PaymentReconcileDecision.ISSUE_VIRTUAL_ACCOUNT);
+		}
+
+		@Test
+		@DisplayName("우리 결제가 이미 입금대기이면 SKIP 한다")
+		void skipsWhenOurPaymentAlreadyWaitingForDeposit() {
+			// given
+			PaymentLookupResult lookup = waitingLookup(AMOUNT, virtualAccount("secret"));
+
+			// when
+			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.WAITING_FOR_DEPOSIT,
+					OrderStatus.PENDING, AMOUNT, BigDecimal.ZERO, lookup);
+
+			// then
+			assertThat(decision).isEqualTo(PaymentReconcileDecision.SKIP);
+		}
+
+		@Test
+		@DisplayName("입금대기인데 금액이 다르면 MANUAL_REVIEW 한다")
+		void manualReviewsWhenWaitingForDepositAndAmountMismatch() {
+			// given
+			PaymentLookupResult lookup = waitingLookup(new BigDecimal("99999"), virtualAccount("secret"));
+
+			// when
+			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.UNKNOWN, OrderStatus.PENDING,
+					AMOUNT, BigDecimal.ZERO, lookup);
+
+			// then
+			assertThat(decision).isEqualTo(PaymentReconcileDecision.MANUAL_REVIEW);
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"NULL_VA", "BLANK_SECRET", "NULL_SECRET"})
+		@DisplayName("입금대기인데 가상계좌 정보나 secret 이 없으면 SKIP 한다")
+		void skipsWhenWaitingForDepositWithoutVirtualAccountInfo(String missing) {
+			// given
+			VirtualAccountInfo virtualAccount = switch (missing) {
+				case "NULL_VA" -> null;
+				case "BLANK_SECRET" -> virtualAccount(" ");
+				default -> virtualAccount(null);
+			};
+			PaymentLookupResult lookup = waitingLookup(AMOUNT, virtualAccount);
+
+			// when
+			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.UNKNOWN, OrderStatus.PENDING,
+					AMOUNT, BigDecimal.ZERO, lookup);
+
+			// then
+			assertThat(decision).isEqualTo(PaymentReconcileDecision.SKIP);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderStatus.class, names = "PENDING", mode = EnumSource.Mode.EXCLUDE)
+		@DisplayName("입금대기여도 주문이 PENDING 이 아니면 가상계좌 발급을 반영하지 않는다")
+		void doesNotIssueVirtualAccountWhenOrderNotPending(OrderStatus orderStatus) {
+			// given
+			PaymentLookupResult lookup = waitingLookup(AMOUNT, virtualAccount("secret"));
+
+			// when
+			PaymentReconcileDecision decision = PaymentReconcileRule.decide(PaymentStatus.UNKNOWN, orderStatus, AMOUNT,
+					BigDecimal.ZERO, lookup);
+
+			// then
+			assertThat(decision).isEqualTo(PaymentReconcileDecision.SKIP);
+		}
+	}
+
+	private PaymentLookupResult waitingLookup(BigDecimal totalAmount, VirtualAccountInfo virtualAccount) {
+		return new PaymentLookupResult(PaymentLookupStatus.WAITING_FOR_DEPOSIT, "key", "가상계좌", totalAmount, null,
+				null, null, null, null, virtualAccount);
+	}
+
+	private VirtualAccountInfo virtualAccount(String secret) {
+		return new VirtualAccountInfo("088", "12345678901234", "홍길동", LocalDateTime.of(2026, 9, 14, 10, 0), secret);
 	}
 
 	private PaymentLookupResult doneLookup(BigDecimal totalAmount) {

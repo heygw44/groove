@@ -34,6 +34,7 @@ import {
 } from '@/utils/adminOrderActions';
 import { getErrorMessage } from '@/utils/apiError';
 import { getFallbackPage } from '@/utils/pagination';
+import { getAdminClaimApproveMessage, getAdminClaimCompleteMessage } from '@/utils/paymentStatus';
 
 const CLAIM_PAGE_SIZE = 20;
 
@@ -60,7 +61,7 @@ const parsePage = (value: string | null): number =>
 
 const getEmptyTitle = (type: OrderClaimType, status: ClaimStatusFilter): string => {
   if (status === 'ALL') {
-    return '클레임이 없습니다';
+    return '취소·반품요청이 없습니다';
   }
   const label = getClaimStatusLabel(type, status);
   return status === 'REQUESTED' ? `처리 대기 중인 ${label}이 없습니다` : `${label} 내역이 없습니다`;
@@ -135,7 +136,7 @@ export default function AdminOrderClaimsPage() {
 
   const handleApprove = (claim: AdminOrderClaimSummary) =>
     approveMutation.mutate(claim.claimId, {
-      onSuccess: () => handleDone('취소 클레임을 승인했습니다.'),
+      onSuccess: (result) => handleDone(getAdminClaimApproveMessage(result)),
       onError: handleFailed,
     });
 
@@ -148,13 +149,16 @@ export default function AdminOrderClaimsPage() {
   const handleComplete = (claim: AdminOrderClaimSummary, restock: boolean) =>
     completeMutation.mutate(
       { claimId: claim.claimId, payload: { restock } },
-      { onSuccess: () => handleDone('반품 수거를 완료했습니다.'), onError: handleFailed },
+      {
+        onSuccess: (result) => handleDone(getAdminClaimCompleteMessage(result)),
+        onError: handleFailed,
+      },
     );
 
   const handleReject = (claim: AdminOrderClaimSummary, rejectReason: string) =>
     rejectMutation.mutate(
       { claimId: claim.claimId, payload: { rejectReason } },
-      { onSuccess: () => handleDone('클레임을 거부했습니다.'), onError: handleFailed },
+      { onSuccess: () => handleDone('요청을 거부했습니다.'), onError: handleFailed },
     );
 
   const emptyTitle = getEmptyTitle(type, status);
@@ -171,7 +175,7 @@ export default function AdminOrderClaimsPage() {
         </p>
       </div>
 
-      <div role="tablist" aria-label="클레임 종류" className="mb-2 flex gap-1">
+      <div role="tablist" aria-label="취소·반품 종류" className="mb-2 flex gap-1">
         {CLAIM_TABS.map((tab) => {
           const pendingCount =
             counts && countActionableClaims(pickClaimCounts(counts, tab.type), tab.type);
@@ -191,7 +195,7 @@ export default function AdminOrderClaimsPage() {
               {tab.label}
               {pendingCount !== undefined && pendingCount > 0 && (
                 <span
-                  aria-label={`처리할 클레임 ${pendingCount}건`}
+                  aria-label={`처리할 요청 ${pendingCount}건`}
                   className="rounded-full bg-accent px-1.5 text-xs leading-5 text-accent-content"
                 >
                   {pendingCount}
@@ -213,7 +217,11 @@ export default function AdminOrderClaimsPage() {
       {(isPending || isMovingToFallbackPage) && <TableSkeleton columns={8} />}
 
       {!isPending && !isMovingToFallbackPage && isError && (
-        <QueryErrorState error={error} onRetry={refetch} title="클레임을 불러오지 못했습니다" />
+        <QueryErrorState
+          error={error}
+          onRetry={refetch}
+          title="취소·반품 목록을 불러오지 못했습니다"
+        />
       )}
 
       {!isPending && !isMovingToFallbackPage && !isError && data && data.content.length === 0 && (
@@ -276,8 +284,9 @@ export default function AdminOrderClaimsPage() {
 
       {claim && action === 'reject' && (
         <AdminReasonModal
-          title="클레임 거부"
-          description={`${claim.productOrderNumber} 클레임을 거부합니다. 상품주문은 원래 단계로 돌아갑니다.`}
+          title="요청 거부"
+          description="이 요청을 거부합니다. 상품주문은 원래 단계로 돌아갑니다."
+          productOrderNumber={claim.productOrderNumber}
           label="거부 사유"
           submitLabel="거부"
           required

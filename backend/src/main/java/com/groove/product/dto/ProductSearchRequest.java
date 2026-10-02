@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.groove.global.common.PageLimits;
 import com.groove.product.entity.CatalogNoNormalizer;
 import com.groove.product.entity.EditionType;
 
@@ -11,9 +12,10 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 public record ProductSearchRequest(
-		String keyword,
+		@Size(max = 100, message = "검색어는 100자 이하여야 합니다.") String keyword,
 		Long artistId,
 		List<Long> genreIds,
 		Long labelId,
@@ -25,7 +27,7 @@ public record ProductSearchRequest(
 		@DecimalMin("0") BigDecimal minPrice,
 		@DecimalMin("0") BigDecimal maxPrice,
 		String sort,
-		@PositiveOrZero Integer page,
+		@PositiveOrZero @Max(PageLimits.MAX_PAGE) Integer page,
 		@Min(1) @Max(100) Integer size
 ) {
 

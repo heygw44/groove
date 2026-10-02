@@ -35,11 +35,7 @@ export function AdminClaimStatusChips({
   ];
 
   return (
-    <div
-      role="group"
-      aria-label="클레임 상태"
-      className="-mx-1 mb-4 flex gap-1 overflow-x-auto p-1"
-    >
+    <div role="group" aria-label="처리 상태" className="-mx-1 mb-4 flex gap-1 overflow-x-auto p-1">
       {chips.map((chip) => {
         const isSelected = chip.key === value;
         return (

@@ -20,7 +20,7 @@ describe('QueryErrorState', () => {
     render(<QueryErrorState error={error} />);
 
     // then
-    expect(screen.getByText('삭제되었거나 존재하지 않는 상품입니다.')).toBeInTheDocument();
+    expect(screen.getByText('상품을 찾을 수 없습니다.')).toBeInTheDocument();
   });
 
   it('onRetry 가 있으면 다시 시도 버튼이 뜨고 클릭 시 호출된다', async () => {

@@ -15,6 +15,7 @@ import com.groove.product.service.AlbumService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 
 @Tag(name = "Admin Album", description = "관리자 앨범 조회")
@@ -28,7 +29,7 @@ public class AdminAlbumController {
 	@Operation(summary = "앨범 목록 검색")
 	@GetMapping
 	public ApiResponse<PageResponse<AdminAlbumSummaryResponse>> getList(
-			@RequestParam(required = false) String keyword,
+			@RequestParam(required = false) @Size(max = 100) String keyword,
 			@PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
 		return ApiResponse.ok(albumService.getAdminList(keyword, pageable));
 	}

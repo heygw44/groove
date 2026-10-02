@@ -49,7 +49,8 @@
 	<sql id="adminMembersWhere">
 		<where>
 			<if test="keyword != null and keyword != ''">
-				AND (m.email LIKE CONCAT('%', #{keyword}, '%') OR m.nickname LIKE CONCAT('%', #{keyword}, '%'))
+				<bind name="likeKeyword" value="@com.groove.global.util.LikeEscaper@escape(keyword)"/>
+				AND (m.email LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!' OR m.nickname LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!')
 			</if>
 			<if test="status != null">
 				AND m.status = #{status}

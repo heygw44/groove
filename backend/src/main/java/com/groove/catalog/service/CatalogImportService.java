@@ -64,7 +64,7 @@ public class CatalogImportService {
 		CatalogImportResult result = transactionTemplate.execute(status -> {
 			CatalogImportResult registered = registrar.register(item);
 			adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_IMPORT, AdminAuditTargetType.PRODUCT,
-					registered.productId(), "discogsReleaseId=" + releaseId);
+					registered.productId(), "Discogs 음반 " + releaseId);
 			eventPublisher.publishEvent(new NewPressingEvent(registered.albumId(), registered.albumTitle()));
 			return registered;
 		});

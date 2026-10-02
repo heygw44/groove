@@ -1,7 +1,9 @@
 package com.groove.order.service;
 
 import java.util.List;
+import java.util.Set;
 
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,15 +41,21 @@ public class AdminOrderClaimService {
 	private final OrderClaimRepository orderClaimRepository;
 	private final OrderClaimWriter writer;
 	private final OrderClaimRefundHook refundHook;
+	private final OrderClaimRefundReader orderClaimRefundReader;
 	private final OrderItemRepository orderItemRepository;
 	private final ProductImageRepository productImageRepository;
 	private final AdminAuditLogService adminAuditLogService;
 
 	@Transactional(readOnly = true)
 	public PageResponse<AdminOrderClaimSummaryResponse> getList(AdminOrderClaimSearchRequest request) {
-		return PageResponse.from(orderClaimRepository
-				.search(request.type(), request.status(), request.toPageable())
-				.map(AdminOrderClaimSummaryResponse::from));
+		Page<OrderClaim> claims = orderClaimRepository.search(request.type(), request.status(), request.toPageable());
+		List<Long> itemIds = claims.getContent().stream()
+				.map(claim -> claim.getOrderItem().getId())
+				.toList();
+		// 결과불명으로 환불이 대기 중인 클레임은 큐에서 진행 중 표시를 해야 관리자가 재처리를 시도하지 않는다.
+		Set<Long> pendingRefundItemIds = orderClaimRefundReader.findPendingRefundOrderItemIds(itemIds);
+		return PageResponse.from(claims.map(claim -> AdminOrderClaimSummaryResponse.from(claim,
+				pendingRefundItemIds.contains(claim.getOrderItem().getId()))));
 	}
 
 	@Transactional(readOnly = true)
@@ -66,7 +74,7 @@ public class AdminOrderClaimService {
 		Long itemId = item.getId();
 		String productOrderNumber = item.getProductOrderNumber();
 		refundHook.refund(orderId, claimId, item.getRefundableAmount(), claim.getReason(), claim.getRefundAccount());
-		record(adminId, orderId, "클레임 승인(취소): " + productOrderNumber);
+		record(adminId, orderId, "취소승인: " + productOrderNumber);
 		return buildItemResponse(itemId);
 	}
 
@@ -74,7 +82,8 @@ public class AdminOrderClaimService {
 	public AdminOrderItemResponse reject(Long adminId, Long claimId, AdminOrderClaimRejectRequest request) {
 		OrderClaim claim = writer.reject(claimId, request.rejectReason());
 		Long orderId = claim.getOrderItem().getOrder().getId();
-		record(adminId, orderId, "클레임 거부: " + claim.getOrderItem().getProductOrderNumber());
+		String label = claim.getType() == OrderClaimType.RETURN ? "반품거부: " : "취소거부: ";
+		record(adminId, orderId, label + claim.getOrderItem().getProductOrderNumber());
 		return buildItemResponse(claim.getOrderItem().getId());
 	}
 
@@ -82,7 +91,7 @@ public class AdminOrderClaimService {
 	public AdminOrderItemResponse collect(Long adminId, Long claimId) {
 		OrderClaim claim = writer.startCollecting(claimId);
 		Long orderId = claim.getOrderItem().getOrder().getId();
-		record(adminId, orderId, "반품 수거 시작: " + claim.getOrderItem().getProductOrderNumber());
+		record(adminId, orderId, "수거시작: " + claim.getOrderItem().getProductOrderNumber());
 		return buildItemResponse(claim.getOrderItem().getId());
 	}
 
@@ -97,7 +106,7 @@ public class AdminOrderClaimService {
 		Long itemId = item.getId();
 		String productOrderNumber = item.getProductOrderNumber();
 		refundHook.refund(orderId, claimId, item.getRefundableAmount(), claim.getReason(), claim.getRefundAccount());
-		record(adminId, orderId, "반품 수거 완료: " + productOrderNumber);
+		record(adminId, orderId, "반품완료: " + productOrderNumber);
 		return buildItemResponse(itemId);
 	}
 
@@ -107,9 +116,10 @@ public class AdminOrderClaimService {
 	 */
 	public AdminOrderItemResponse cancelItemBySale(Long adminId, Long itemId, AdminOrderItemCancelRequest request) {
 		String reason = request == null ? null : request.reason();
-		Long orderId = orderItemRepository.findById(itemId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND))
-				.getOrder().getId();
+		OrderItem item = orderItemRepository.findById(itemId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND));
+		Long orderId = item.getOrder().getId();
+		String productOrderNumber = item.getProductOrderNumber();
 		OrderClaimRequestResult result = writer.requestAdminCancel(orderId, itemId, reason);
 		try {
 			refundHook.refund(orderId, result.claimId(), result.refundAmount(), reason, null);
@@ -122,7 +132,7 @@ public class AdminOrderClaimService {
 			}
 			throw ex;
 		}
-		record(adminId, orderId, "판매취소: itemId=" + itemId);
+		record(adminId, orderId, "판매취소: " + productOrderNumber);
 		return buildItemResponse(itemId);
 	}
 

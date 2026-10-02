@@ -127,6 +127,8 @@ export interface AdminOrderClaimSummary {
   productName: string;
   reason?: string;
   requestedAt: string;
+  /** 환불 결과가 결제사에서 아직 확정되지 않은 동안 true. */
+  refundInProgress: boolean;
 }
 
 export interface AdminOrderClaimStatusCounts {

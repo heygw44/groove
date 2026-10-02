@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -35,6 +36,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.dto.AdminMemberActivitySummary;
 import com.groove.member.dto.AdminMemberDetailResponse;
+import com.groove.member.dto.AdminMemberRecentOrderResponse;
 import com.groove.member.dto.AdminMemberSearchRequest;
 import com.groove.member.dto.AdminMemberStatusChangeRequest;
 import com.groove.member.dto.AdminMemberSummaryResponse;
@@ -43,7 +45,12 @@ import com.groove.member.entity.MemberRole;
 import com.groove.member.entity.MemberStatus;
 import com.groove.member.mapper.MemberQueryMapper;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.dto.OrderSummaryResponse;
+import com.groove.order.entity.Order;
+import com.groove.order.entity.OrderStatus;
 import com.groove.order.mapper.OrderQueryMapper;
+import com.groove.payment.entity.Payment;
+import com.groove.payment.repository.PaymentRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AdminMemberServiceTest {
@@ -61,6 +68,9 @@ class AdminMemberServiceTest {
 	OrderQueryMapper orderQueryMapper;
 
 	@Mock
+	PaymentRepository paymentRepository;
+
+	@Mock
 	SessionRevoker sessionRevoker;
 
 	@Mock
@@ -75,7 +85,7 @@ class AdminMemberServiceTest {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-04T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		adminMemberService = new AdminMemberService(memberRepository, memberQueryMapper, orderQueryMapper,
-				sessionRevoker, adminAuditLogService, clock);
+				paymentRepository, sessionRevoker, adminAuditLogService, clock);
 	}
 
 	@Nested
@@ -141,6 +151,40 @@ class AdminMemberServiceTest {
 			assertThat(response.totalPaymentAmount()).isEqualByComparingTo("90000");
 			assertThat(response.usableCouponCount()).isEqualTo(1L);
 			assertThat(response.recentOrders()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("최근 주문의 취소 금액은 결제에서 가져오고 결제가 없으면 0 이다")
+		void mapsCanceledAmountFromPaymentOrZero() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(memberQueryMapper.findActivitySummary(eq(MEMBER_ID), any()))
+					.willReturn(new AdminMemberActivitySummary(2L, new BigDecimal("50000"), 0L));
+			given(orderQueryMapper.findMyOrders(any())).willReturn(List.of(
+					orderSummary(10L, "ORD-10"), orderSummary(11L, "ORD-11")));
+			Order paidOrder = mock(Order.class);
+			given(paidOrder.getId()).willReturn(10L);
+			Payment payment = mock(Payment.class);
+			given(payment.getOrder()).willReturn(paidOrder);
+			given(payment.getCanceledAmount()).willReturn(new BigDecimal("20000"));
+			given(paymentRepository.findAllByOrderIdIn(List.of(10L, 11L))).willReturn(List.of(payment));
+
+			// when
+			List<AdminMemberRecentOrderResponse> recentOrders = adminMemberService.getDetail(MEMBER_ID)
+					.recentOrders();
+
+			// then
+			assertThat(recentOrders).hasSize(2);
+			assertThat(recentOrders.get(0).orderNumber()).isEqualTo("ORD-10");
+			assertThat(recentOrders.get(0).canceledAmount()).isEqualByComparingTo("20000");
+			assertThat(recentOrders.get(1).canceledAmount()).isEqualByComparingTo("0");
+			assertThat(recentOrders.get(1).finalAmount()).isEqualByComparingTo("30000");
+		}
+
+		private OrderSummaryResponse orderSummary(Long id, String orderNumber) {
+			return new OrderSummaryResponse(id, orderNumber, OrderStatus.PAID, new BigDecimal("30000"),
+					BigDecimal.ZERO, null, "Kind of Blue", 1, null, now);
 		}
 
 		@Test
@@ -257,7 +301,7 @@ class AdminMemberServiceTest {
 			assertThat(response.status()).isEqualTo(MemberStatus.SUSPENDED);
 			verify(sessionRevoker).revokeAll(MEMBER_ID);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "활성 → 정지");
 		}
 
 		@Test
@@ -278,7 +322,7 @@ class AdminMemberServiceTest {
 			assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
 			verify(sessionRevoker, never()).revokeAll(anyLong());
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "SUSPENDED->ACTIVE");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "정지 → 활성");
 		}
 
 		@Test
@@ -298,7 +342,7 @@ class AdminMemberServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED (반복 어뷰징 신고)");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "활성 → 정지 (반복 어뷰징 신고)");
 		}
 
 		@Test
@@ -318,7 +362,7 @@ class AdminMemberServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "활성 → 정지");
 		}
 	}
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -24,6 +25,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.member.dto.MemberResponse;
 import com.groove.member.dto.MemberUpdateRequest;
+import com.groove.member.dto.MemberWithdrawRequest;
 import com.groove.member.dto.PasswordChangeRequest;
 import com.groove.member.entity.Member;
 import com.groove.member.entity.MemberRole;
@@ -44,11 +46,15 @@ class MemberServiceTest {
 	@Mock
 	PasswordEncoder passwordEncoder;
 
+	@Mock
+	PasswordAttemptGuard passwordAttemptGuard;
+
 	MemberService memberService;
 
 	@BeforeEach
 	void setUp() {
-		memberService = new MemberService(memberRepository, sessionRevoker, passwordEncoder);
+		memberService = new MemberService(memberRepository, sessionRevoker, passwordEncoder,
+				passwordAttemptGuard);
 	}
 
 	@Nested
@@ -156,6 +162,26 @@ class MemberServiceTest {
 					.isEqualTo(ErrorCode.MEMBER_PASSWORD_MISMATCH);
 			verify(passwordEncoder, never()).encode(any());
 			verify(sessionRevoker, never()).revokeAll(any());
+			verify(passwordAttemptGuard).recordFailure(MEMBER_ID);
+		}
+
+		@Test
+		@DisplayName("잠겨 있으면 MEMBER_PASSWORD_LOCKED 예외를 던지고 비밀번호를 대조하지 않는다")
+		void throwsWhenLocked() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			willThrow(new BusinessException(ErrorCode.MEMBER_PASSWORD_LOCKED))
+					.given(passwordAttemptGuard).checkNotLocked(MEMBER_ID);
+			PasswordChangeRequest request = new PasswordChangeRequest("password1", "new-password1");
+
+			// when & then
+			assertThatThrownBy(() -> memberService.changePassword(MEMBER_ID, request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_PASSWORD_LOCKED);
+			verify(passwordEncoder, never()).matches(any(), any());
+			verify(sessionRevoker, never()).revokeAll(any());
 		}
 
 		@Test
@@ -173,6 +199,7 @@ class MemberServiceTest {
 
 			// then
 			assertThat(member.getPassword()).isEqualTo("new-encoded");
+			verify(passwordAttemptGuard).reset(MEMBER_ID);
 			verify(sessionRevoker).revokeAll(MEMBER_ID);
 		}
 	}
@@ -188,12 +215,51 @@ class MemberServiceTest {
 			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 
+			given(passwordEncoder.matches("password1", member.getPassword())).willReturn(true);
+
 			// when
-			memberService.withdraw(MEMBER_ID);
+			memberService.withdraw(MEMBER_ID, new MemberWithdrawRequest("password1"));
 
 			// then
 			assertThat(member.getStatus()).isEqualTo(MemberStatus.WITHDRAWN);
+			verify(passwordAttemptGuard).reset(MEMBER_ID);
 			verify(sessionRevoker).revokeAll(MEMBER_ID);
+		}
+
+		@Test
+		@DisplayName("비밀번호가 일치하지 않으면 MEMBER_PASSWORD_MISMATCH 예외를 던지고 탈퇴하지 않는다")
+		void throwsWhenPasswordMismatch() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			given(passwordEncoder.matches("wrong-password", member.getPassword())).willReturn(false);
+
+			// when & then
+			assertThatThrownBy(() -> memberService.withdraw(MEMBER_ID, new MemberWithdrawRequest("wrong-password")))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_PASSWORD_MISMATCH);
+			assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+			verify(passwordAttemptGuard).recordFailure(MEMBER_ID);
+			verify(sessionRevoker, never()).revokeAll(any());
+		}
+
+		@Test
+		@DisplayName("잠겨 있으면 MEMBER_PASSWORD_LOCKED 예외를 던지고 탈퇴하지 않는다")
+		void throwsWhenLocked() {
+			// given
+			Member member = MemberFixture.withId(MemberFixture.create(), MEMBER_ID);
+			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
+			willThrow(new BusinessException(ErrorCode.MEMBER_PASSWORD_LOCKED))
+					.given(passwordAttemptGuard).checkNotLocked(MEMBER_ID);
+
+			// when & then
+			assertThatThrownBy(() -> memberService.withdraw(MEMBER_ID, new MemberWithdrawRequest("password1")))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_PASSWORD_LOCKED);
+			assertThat(member.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+			verify(passwordEncoder, never()).matches(any(), any());
 		}
 
 		@Test
@@ -204,7 +270,7 @@ class MemberServiceTest {
 			given(memberRepository.findById(MEMBER_ID)).willReturn(Optional.of(member));
 
 			// when & then
-			assertThatThrownBy(() -> memberService.withdraw(MEMBER_ID))
+			assertThatThrownBy(() -> memberService.withdraw(MEMBER_ID, new MemberWithdrawRequest("password1")))
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_WITHDRAWN);

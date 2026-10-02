@@ -17,5 +17,10 @@ export const passwordChangeSchema = z
     message: '비밀번호가 일치하지 않습니다.',
   });
 
+export const withdrawSchema = z.object({
+  password: z.string().min(1, '비밀번호를 입력해주세요.'),
+});
+
 export type NicknameFormValues = z.infer<typeof nicknameSchema>;
 export type PasswordChangeFormValues = z.infer<typeof passwordChangeSchema>;
+export type WithdrawFormValues = z.infer<typeof withdrawSchema>;

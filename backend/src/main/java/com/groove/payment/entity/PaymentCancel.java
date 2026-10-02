@@ -13,6 +13,7 @@ import org.hibernate.type.SqlTypes;
 import com.groove.global.common.BaseTimeEntity;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.payment.client.dto.RefundAccountInfo;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -85,6 +86,16 @@ public class PaymentCancel extends BaseTimeEntity {
 	@Column(name = "order_claim_id")
 	private Long orderClaimId;
 
+	/** 가상계좌 전액취소를 대사가 같은 계좌로 다시 보낼 수 있게 요청 시점에 보관한다. 확정·실패하면 비운다. */
+	@Column(name = "refund_account_bank_code", length = 10)
+	private String refundAccountBankCode;
+
+	@Column(name = "refund_account_number", length = 64)
+	private String refundAccountNumber;
+
+	@Column(name = "refund_account_holder_name", length = 100)
+	private String refundAccountHolderName;
+
 	private PaymentCancel(Payment payment, String idempotencyKey, BigDecimal cancelAmount, String reason,
 			LocalDateTime requestedAt, Long orderClaimId) {
 		this.payment = payment;
@@ -98,7 +109,15 @@ public class PaymentCancel extends BaseTimeEntity {
 
 	public static PaymentCancel request(Payment payment, String idempotencyKey, BigDecimal cancelAmount,
 			String reason, LocalDateTime requestedAt) {
-		return new PaymentCancel(payment, idempotencyKey, cancelAmount, reason, requestedAt, null);
+		return request(payment, idempotencyKey, cancelAmount, reason, requestedAt, null);
+	}
+
+	public static PaymentCancel request(Payment payment, String idempotencyKey, BigDecimal cancelAmount,
+			String reason, LocalDateTime requestedAt, RefundAccountInfo refundAccount) {
+		PaymentCancel paymentCancel = new PaymentCancel(payment, idempotencyKey, cancelAmount, reason, requestedAt,
+				null);
+		paymentCancel.applyRefundAccount(refundAccount);
+		return paymentCancel;
 	}
 
 	public static PaymentCancel requestForClaim(Payment payment, String idempotencyKey, BigDecimal cancelAmount,
@@ -113,6 +132,7 @@ public class PaymentCancel extends BaseTimeEntity {
 		this.tossTransactionKey = transactionKey;
 		this.doneAt = doneTime;
 		this.status = PaymentCancelStatus.DONE;
+		clearRefundAccount();
 	}
 
 	public void fail() {
@@ -120,6 +140,30 @@ public class PaymentCancel extends BaseTimeEntity {
 			throw new BusinessException(ErrorCode.PAYMENT_INVALID_STATUS);
 		}
 		this.status = PaymentCancelStatus.FAILED;
+		clearRefundAccount();
+	}
+
+	public RefundAccountInfo getRefundAccount() {
+		if (this.refundAccountBankCode == null) {
+			return null;
+		}
+		return new RefundAccountInfo(this.refundAccountBankCode, this.refundAccountNumber,
+				this.refundAccountHolderName);
+	}
+
+	private void applyRefundAccount(RefundAccountInfo refundAccount) {
+		if (refundAccount == null) {
+			return;
+		}
+		this.refundAccountBankCode = refundAccount.bankCode();
+		this.refundAccountNumber = refundAccount.accountNumber();
+		this.refundAccountHolderName = refundAccount.holderName();
+	}
+
+	private void clearRefundAccount() {
+		this.refundAccountBankCode = null;
+		this.refundAccountNumber = null;
+		this.refundAccountHolderName = null;
 	}
 
 	private String truncate(String value) {

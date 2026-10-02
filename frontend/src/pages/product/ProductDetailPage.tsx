@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/common/Badge';
@@ -8,6 +8,7 @@ import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { StarRatingDisplay } from '@/components/common/StarRating';
 import { AlbumWatchButton } from '@/components/notification/AlbumWatchButton';
 import { AlbumPressingsSection } from '@/components/product/AlbumPressingsSection';
+import { MobilePurchaseBar } from '@/components/product/MobilePurchaseBar';
 import { PressingSpecTable } from '@/components/product/PressingSpecTable';
 import { ProductDetailSkeleton } from '@/components/product/ProductDetailSkeleton';
 import { ProductImageGallery } from '@/components/product/ProductImageGallery';
@@ -26,6 +27,8 @@ export default function ProductDetailPage() {
   const { id: idParam } = useParams();
   const isValidId = idParam !== undefined && ID_PATTERN.test(idParam);
   const id = isValidId ? Number(idParam) : -1;
+
+  const purchasePanelRef = useRef<HTMLDivElement>(null);
 
   const { data: product, isPending, isError, error, refetch } = useProduct(id);
 
@@ -113,7 +116,9 @@ export default function ProductDetailPage() {
             )}
           </a>
 
-          <ProductPurchasePanel product={product} />
+          <div ref={purchasePanelRef} tabIndex={-1} className="outline-none">
+            <ProductPurchasePanel product={product} />
+          </div>
         </div>
       </div>
 
@@ -141,6 +146,10 @@ export default function ProductDetailPage() {
         averageRating={product.averageRating}
         reviewCount={product.reviewCount ?? 0}
       />
+
+      {/* 고정 바에 마지막 내용이 가려지지 않게 모바일에서만 자리를 비운다. */}
+      <div className="h-20 md:hidden" aria-hidden />
+      <MobilePurchaseBar product={product} panelRef={purchasePanelRef} />
     </PageContainer>
   );
 }

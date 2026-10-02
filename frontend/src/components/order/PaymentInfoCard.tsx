@@ -2,6 +2,7 @@ import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 import { PaymentStatusBadge } from '@/components/payment/PaymentStatusBadge';
 import type { OrderPayment } from '@/types/payment';
 import { formatServerDateTime } from '@/utils/formatDate';
+import { formatPrice } from '@/utils/formatPrice';
 import { getPaymentMethodLabel, isCancellationPending } from '@/utils/paymentStatus';
 
 interface PaymentInfoCardProps {
@@ -34,14 +35,30 @@ export function PaymentInfoCard({
         <div className="mt-4 space-y-1.5 border-t border-line pt-4 text-sm">
           {payment && isCancellationPending(payment.status) && (
             <p className="flex items-center gap-2">
-              <span className="text-content-muted">결제 상태</span>
+              <span className="text-content-muted">결제상태</span>
               <PaymentStatusBadge status={payment.status} />
             </p>
           )}
           <p className="flex items-center justify-between gap-2">
-            <span className="text-content-muted">결제 수단</span>
+            <span className="text-content-muted">결제수단</span>
             <span className="font-medium">{getPaymentMethodLabel(payment)}</span>
           </p>
+          {payment && payment.canceledAmount > 0 && (
+            <>
+              <p className="flex items-center justify-between gap-2">
+                <span className="text-content-muted">환불금액</span>
+                <span className="font-medium tabular-nums">
+                  -{formatPrice(payment.canceledAmount)}
+                </span>
+              </p>
+              <p className="flex items-center justify-between gap-2">
+                <span className="text-content-muted">남은 결제금액</span>
+                <span className="font-medium tabular-nums">
+                  {formatPrice(payment.amount - payment.canceledAmount)}
+                </span>
+              </p>
+            </>
+          )}
           {payment?.approvedAt && (
             <p className="flex items-center justify-between gap-2">
               <span className="text-content-muted">승인 시각</span>

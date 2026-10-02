@@ -71,7 +71,7 @@ export function buildOrderName(items: { productName: string }[]): string {
   if (!first) {
     return '';
   }
-  return rest.length === 0 ? first.productName : `${first.productName} 외 ${rest.length}건`;
+  return rest.length === 0 ? first.productName : `${first.productName} 외 ${rest.length}개`;
 }
 
 export function getTossFailMessage(code?: string, fallback?: string): string {

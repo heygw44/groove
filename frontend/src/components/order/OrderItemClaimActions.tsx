@@ -15,7 +15,11 @@ import {
 import type { OrderItem, RefundAccount } from '@/types/order';
 import type { OrderPayment } from '@/types/payment';
 import { getErrorMessage } from '@/utils/apiError';
-import { getOrderCancelSuccessMessage, isCancellationPending } from '@/utils/paymentStatus';
+import {
+  getOrderCancelSuccessMessage,
+  getOrderItemCancelSuccessMessage,
+  isCancellationPending,
+} from '@/utils/paymentStatus';
 
 type OpenDialog = 'cancel' | 'return' | 'withdraw' | 'confirm' | null;
 
@@ -49,14 +53,14 @@ const getCancelDialogProps = ({
     return {
       pending,
       title: '주문을 취소하시겠습니까?',
-      description: '취소하면 되돌릴 수 없습니다. 이 상품의 결제 금액만 환불됩니다.',
+      description: '취소하면 되돌릴 수 없습니다. 이 상품의 결제금액만 환불됩니다.',
       confirmLabel: '주문취소',
     };
   }
   return {
     pending,
     title: '취소를 요청하시겠습니까?',
-    description: '배송 준비 중인 상품은 확인 후 취소됩니다. 요청은 수거 전까지 철회할 수 있습니다.',
+    description: '배송준비 중인 상품은 확인 후 취소됩니다. 요청은 수거 전까지 철회할 수 있습니다.',
     confirmLabel: '취소요청',
   };
 };
@@ -93,9 +97,12 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
     pending: isAwaitingDeposit ? cancelOrderMutation.isPending : cancelMutation.isPending,
   });
 
-  const callbacks = (successMessage: string) => ({
-    onSuccess: () => {
-      showToast('success', successMessage);
+  const callbacks = <T,>(getSuccessMessage: string | ((response: T) => string)) => ({
+    onSuccess: (response: T) => {
+      showToast(
+        'success',
+        typeof getSuccessMessage === 'function' ? getSuccessMessage(response) : getSuccessMessage,
+      );
       closeDialog();
     },
     onError: (error: unknown) => {
@@ -119,19 +126,16 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
       );
       return;
     }
-    const successMessage = isImmediateCancel
-      ? '주문을 취소했습니다.'
-      : '취소 요청이 접수됐습니다. 승인되면 취소됩니다.';
     cancelMutation.mutate(
       { orderId, itemId: item.id, reason, refundAccount },
-      callbacks(successMessage),
+      callbacks(getOrderItemCancelSuccessMessage),
     );
   };
 
   const handleReturn = (reason?: string, refundAccount?: RefundAccount) => {
     returnMutation.mutate(
       { orderId, itemId: item.id, reason, refundAccount },
-      callbacks('반품 요청이 접수됐습니다.'),
+      callbacks('반품요청이 접수되었습니다.'),
     );
   };
 
@@ -153,7 +157,7 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
     <>
       {item.refundInProgress && (
         <p className="text-sm text-content-muted">
-          <span className="font-medium">환불 처리 중</span> 결제사 환불 결과를 확인하고 있습니다.
+          <span className="font-medium">환불 처리 중</span> · 환불 결과를 확인하고 있습니다.
         </p>
       )}
       {canCancel && (
@@ -173,7 +177,7 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
       )}
       {canWithdraw && (
         <Button variant="secondary" size="sm" onClick={() => setOpenDialog('withdraw')}>
-          요청 철회
+          요청철회
         </Button>
       )}
       {canConfirm && (
@@ -202,8 +206,8 @@ export function OrderItemClaimActions({ orderId, item, payment }: OrderItemClaim
         onConfirm={handleWithdraw}
         pending={withdrawMutation.isPending}
         title="요청을 철회하시겠습니까?"
-        description="취소·반품 요청을 거두고 주문 상태를 그대로 유지합니다."
-        confirmLabel="요청 철회"
+        description="취소·반품요청을 거두고 주문 상태를 그대로 유지합니다."
+        confirmLabel="요청철회"
       />
       <ConfirmDialog
         open={openDialog === 'confirm'}

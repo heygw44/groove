@@ -139,7 +139,8 @@
 				AND o.status = #{status}
 			</if>
 			<if test="keyword != null and keyword != ''">
-				AND (m.email LIKE CONCAT('%', #{keyword}, '%') OR o.order_number LIKE CONCAT('%', #{keyword}, '%'))
+				<bind name="likeKeyword" value="@com.groove.global.util.LikeEscaper@escape(keyword)"/>
+				AND (m.email LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!' OR o.order_number LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!')
 			</if>
 			<if test="fromAt != null">
 				AND o.created_at &gt;= #{fromAt}
@@ -197,9 +198,10 @@
 				)
 			</if>
 			<if test="keyword != null and keyword != ''">
-				AND (m.email LIKE CONCAT('%', #{keyword}, '%')
-					OR o.order_number LIKE CONCAT('%', #{keyword}, '%')
-					OR oi.product_order_number LIKE CONCAT('%', #{keyword}, '%'))
+				<bind name="likeKeyword" value="@com.groove.global.util.LikeEscaper@escape(keyword)"/>
+				AND (m.email LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!'
+					OR o.order_number LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!'
+					OR oi.product_order_number LIKE CONCAT('%', #{likeKeyword}, '%') ESCAPE '!')
 			</if>
 			<if test="fromAt != null">
 				AND oi.created_at &gt;= #{fromAt}

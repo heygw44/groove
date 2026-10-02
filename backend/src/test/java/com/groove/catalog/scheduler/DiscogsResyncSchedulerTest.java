@@ -2,6 +2,15 @@ package com.groove.catalog.scheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -17,13 +26,23 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.groove.catalog.client.PressingLookupClient;
+import com.groove.catalog.config.CatalogFreshnessProperties;
+import com.groove.catalog.config.CatalogResyncProperties;
+import com.groove.catalog.mapper.DiscogsResyncMapper;
+import com.groove.catalog.service.DiscogsResyncLock;
+import com.groove.catalog.service.DiscogsResyncService;
 import com.groove.catalog.support.FakePressingLookupClient;
 import com.groove.catalog.support.ProductCatalogChangedEventRecorder;
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.DiscogsFixture;
+import com.groove.global.alert.AlertNotifier;
+import com.groove.global.common.BusinessException;
+import com.groove.global.common.ErrorCode;
+import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.EditionType;
@@ -61,6 +80,27 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 	@Autowired
 	private Clock clock;
 
+	@Autowired
+	private DiscogsResyncMapper discogsResyncMapper;
+
+	@Autowired
+	private DiscogsResyncService discogsResyncService;
+
+	@Autowired
+	private DiscogsResyncLock discogsResyncLock;
+
+	@Autowired
+	private CatalogResyncProperties resyncProperties;
+
+	@Autowired
+	private CatalogFreshnessProperties freshnessProperties;
+
+	@Autowired
+	private ApplicationEventPublisher eventPublisher;
+
+	@Autowired
+	private ShutdownSignal shutdownSignal;
+
 	private FakePressingLookupClient fake;
 	private final List<Long> createdProductIds = new ArrayList<>();
 
@@ -92,6 +132,12 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 		product = productRepository.save(product);
 		createdProductIds.add(product.getId());
 		return product;
+	}
+
+	// 컨텍스트를 새로 띄우면 공유 DB 가 재생성되므로 빈을 갈아끼우지 않고 협력 객체만 바꾼 스케줄러를 직접 만든다.
+	private DiscogsResyncScheduler schedulerWith(DiscogsResyncService service, PressingLookupClient client) {
+		return new DiscogsResyncScheduler(discogsResyncMapper, service, discogsResyncLock, client, resyncProperties,
+				freshnessProperties, eventPublisher, shutdownSignal, clock, mock(AlertNotifier.class));
 	}
 
 	@Nested
@@ -143,10 +189,96 @@ class DiscogsResyncSchedulerTest extends IntegrationTestSupport {
 
 			Product reloadedOk = productRepository.findById(okProduct.getId()).orElseThrow();
 			assertThat(reloadedOk.getDiscogsSyncedAt()).isAfter(stale);
+			assertThat(reloadedOk.getDiscogsResyncFailedAt()).isNull();
 
 			Optional<Product> reloadedFailing = productRepository.findById(failingProduct.getId());
 			assertThat(reloadedFailing).isPresent();
 			assertThat(reloadedFailing.get().getDiscogsSyncedAt()).isEqualTo(stale);
+			assertThat(reloadedFailing.get().getDiscogsResyncFailedAt()).isNotNull();
+		}
+
+		@Test
+		@DisplayName("실패 시각이 남은 상품은 쿨다운 동안 다시 호출하지 않는다")
+		void skipsFailedProductDuringCooldown() {
+			// given
+			long failingReleaseId = 92_100_001L;
+			persistStaleProduct("Cooldown", failingReleaseId, staleInstant());
+			fake.failTransiently(failingReleaseId, -1);
+			discogsResyncScheduler.resyncPriority();
+
+			// when
+			discogsResyncScheduler.resyncPriority();
+
+			// then
+			assertThat(fake.releaseCalls(failingReleaseId)).isEqualTo(1);
+		}
+
+		@Test
+		@DisplayName("레이트리밋 실패는 행 문제가 아니라 실패 시각을 남기지 않는다")
+		void doesNotRecordFailureWhenRateLimited() {
+			// given
+			Product product = persistStaleProduct("RateLimited", 92_200_001L, staleInstant());
+			PressingLookupClient rateLimitedClient = mock(PressingLookupClient.class);
+			given(rateLimitedClient.getRelease(anyLong()))
+					.willThrow(new BusinessException(ErrorCode.CATALOG_RATE_LIMITED));
+			DiscogsResyncService service = mock(DiscogsResyncService.class, delegatesTo(discogsResyncService));
+
+			// when
+			schedulerWith(service, rateLimitedClient).resyncPriority();
+
+			// then
+			verify(service, never()).markResyncFailed(any(), any());
+			Product reloaded = productRepository.findById(product.getId()).orElseThrow();
+			assertThat(reloaded.getDiscogsResyncFailedAt()).isNull();
+		}
+
+		@Test
+		@DisplayName("실패 기록이 예외를 던져도 나머지 후보를 계속 처리한다")
+		void continuesProcessingWhenFailureRecordingThrows() {
+			// given
+			LocalDateTime stale = staleInstant();
+			long failingReleaseId = 92_300_001L;
+			long okReleaseId = 92_300_002L;
+			Product failingProduct = persistStaleProduct("RecordFails", failingReleaseId, stale);
+			Product okProduct = persistStaleProduct("RecordOk", okReleaseId, stale);
+			fake.failTransiently(failingReleaseId, -1);
+			fake.addRelease(DiscogsFixture.releaseResponse(okReleaseId, 21247L, "Miles Davis", "Columbia", "CS 8163",
+					List.of(), "5012394144777", List.of("Jazz"), List.of(), 1959));
+			DiscogsResyncService service = mock(DiscogsResyncService.class, delegatesTo(discogsResyncService));
+			doThrow(new IllegalStateException("boom")).when(service)
+					.markResyncFailed(eq(failingProduct.getId()), any());
+
+			// when & then
+			assertThatCode(() -> schedulerWith(service, pressingLookupClient).resyncPriority())
+					.doesNotThrowAnyException();
+
+			verify(service).markResyncFailed(eq(failingProduct.getId()), any());
+			Product reloadedOk = productRepository.findById(okProduct.getId()).orElseThrow();
+			assertThat(reloadedOk.getDiscogsSyncedAt()).isAfter(stale);
+		}
+
+		@Test
+		@DisplayName("404 참조 해제가 예외를 던져도 나머지 후보를 계속 처리한다")
+		void continuesProcessingWhenMarkReleaseNotFoundThrows() {
+			// given
+			LocalDateTime stale = staleInstant();
+			long notFoundReleaseId = 92_400_001L;
+			long okReleaseId = 92_400_002L;
+			Product notFoundProduct = persistStaleProduct("ClearFails", notFoundReleaseId, stale);
+			Product okProduct = persistStaleProduct("ClearOk", okReleaseId, stale);
+			fake.markNotFound(notFoundReleaseId);
+			fake.addRelease(DiscogsFixture.releaseResponse(okReleaseId, 21247L, "Miles Davis", "Columbia", "CS 8163",
+					List.of(), "5012394144777", List.of("Jazz"), List.of(), 1959));
+			DiscogsResyncService service = mock(DiscogsResyncService.class, delegatesTo(discogsResyncService));
+			doThrow(new IllegalStateException("boom")).when(service)
+					.markReleaseNotFound(eq(notFoundProduct.getId()), any());
+
+			// when & then
+			assertThatCode(() -> schedulerWith(service, pressingLookupClient).resyncPriority())
+					.doesNotThrowAnyException();
+
+			Product reloadedOk = productRepository.findById(okProduct.getId()).orElseThrow();
+			assertThat(reloadedOk.getDiscogsSyncedAt()).isAfter(stale);
 		}
 
 		@Test

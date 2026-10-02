@@ -96,6 +96,29 @@ class AdminAlbumControllerTest {
 		}
 
 		@Test
+		@DisplayName("keyword 가 100자이면 200 을 반환한다")
+		void acceptsKeywordOfMaxLength() throws Exception {
+			// given
+			given(albumService.getAdminList(any(), any())).willReturn(
+					PageResponse.from(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0)));
+
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/albums").param("keyword", "a".repeat(100))
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isOk());
+		}
+
+		@Test
+		@DisplayName("keyword 가 100자를 초과하면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenKeywordTooLong() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/albums").param("keyword", "a".repeat(101))
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
 		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
 		void returnsForbiddenWhenNotAdmin() throws Exception {
 			// when & then
