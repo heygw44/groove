@@ -221,7 +221,7 @@ class AdminLimitedDropServiceTest {
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_UPDATE),
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("closeAt");
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 마감 시각");
 			verify(stockService, never()).adjust(any(), any());
 			verify(limitedDropMetaCache).evict(DROP_ID);
 		}
@@ -245,11 +245,11 @@ class AdminLimitedDropServiceTest {
 			assertThat(stockCaptor.getValue().quantity()).isEqualTo(200);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_UPDATE),
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).contains("totalQuantity");
+			assertThat(detailCaptor.getValue()).contains("총 수량");
 		}
 
 		@Test
-		@DisplayName("모든 필드가 null이면 감사 로그 detail이 빈 문자열이고 기존 값을 유지한다")
+		@DisplayName("모든 필드가 null이면 감사 로그 detail이 변경 없음이고 기존 값을 유지한다")
 		void keepsValuesAndRecordsEmptyDetailWhenAllFieldsNull() {
 			// given
 			LimitedDrop drop = LimitedDropFixture.withId(LimitedDropFixture.scheduled(product), DROP_ID);
@@ -267,7 +267,7 @@ class AdminLimitedDropServiceTest {
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_UPDATE),
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEmpty();
+			assertThat(detailCaptor.getValue()).isEqualTo("변경: 없음");
 			assertThat(drop.getTotalQuantity()).isEqualTo(originalTotalQuantity);
 			assertThat(drop.getPerMemberLimit()).isEqualTo(originalPerMemberLimit);
 			assertThat(drop.getOpenAt()).isEqualTo(originalOpenAt);
@@ -307,7 +307,7 @@ class AdminLimitedDropServiceTest {
 			verify(limitedDropRedisService).initStock(DROP_ID, drop.getTotalQuantity());
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_OPEN),
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("SCHEDULED->OPEN");
+			assertThat(detailCaptor.getValue()).isEqualTo("예정 → 진행중");
 			assertThat(response.status()).isEqualTo(LimitedDropStatus.OPEN);
 			verify(limitedDropMetaCache).evict(DROP_ID);
 		}
@@ -380,7 +380,7 @@ class AdminLimitedDropServiceTest {
 			inOrder.verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_CLOSE),
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
 			inOrder.verify(limitedDropStatFlusher).flushAndClear(drop);
-			assertThat(detailCaptor.getValue()).isEqualTo("OPEN->CLOSED");
+			assertThat(detailCaptor.getValue()).isEqualTo("진행중 → 마감");
 			assertThat(response.status()).isEqualTo(LimitedDropStatus.CLOSED);
 		}
 
@@ -400,7 +400,7 @@ class AdminLimitedDropServiceTest {
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.LIMITED_DROP_CLOSE),
 					eq(AdminAuditTargetType.LIMITED_DROP), eq(DROP_ID), detailCaptor.capture());
-			assertThat(detailCaptor.getValue()).isEqualTo("SOLD_OUT->CLOSED");
+			assertThat(detailCaptor.getValue()).isEqualTo("매진 → 마감");
 		}
 
 		@Test

@@ -3,6 +3,8 @@ package com.groove.limited.service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,16 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AdminLimitedDropService {
 
+	private static final Map<LimitedDropStatus, String> STATUS_LABELS = Map.of(
+			LimitedDropStatus.SCHEDULED, "예정",
+			LimitedDropStatus.OPEN, "진행중",
+			LimitedDropStatus.SOLD_OUT, "매진",
+			LimitedDropStatus.CLOSED, "마감");
+	private static final Map<String, String> FIELD_LABELS = Map.of(
+			"totalQuantity", "총 수량",
+			"perMemberLimit", "1인 구매 한도",
+			"openAt", "오픈 시각",
+			"closeAt", "마감 시각");
 	private static final String CREATE_STOCK_REASON = "한정반 드롭 등록";
 	private static final String UPDATE_STOCK_REASON = "한정반 드롭 수정";
 
@@ -96,7 +108,7 @@ public class AdminLimitedDropService {
 		}
 
 		adminAuditLogService.record(adminId, AdminAuditAction.LIMITED_DROP_UPDATE, AdminAuditTargetType.LIMITED_DROP,
-				dropId, String.join(",", changedFields));
+				dropId, "변경: " + toLabels(changedFields));
 
 		return AdminLimitedDropResponse.from(drop);
 	}
@@ -118,7 +130,8 @@ public class AdminLimitedDropService {
 		limitedDropRedisService.initStock(drop.getId(), drop.remainingQuantity());
 
 		adminAuditLogService.record(adminId, AdminAuditAction.LIMITED_DROP_OPEN, AdminAuditTargetType.LIMITED_DROP,
-				dropId, "SCHEDULED->OPEN");
+				dropId, STATUS_LABELS.get(LimitedDropStatus.SCHEDULED) + " → "
+						+ STATUS_LABELS.get(LimitedDropStatus.OPEN));
 
 		return AdminLimitedDropResponse.from(drop);
 	}
@@ -140,7 +153,7 @@ public class AdminLimitedDropService {
 		drop.close();
 
 		adminAuditLogService.record(adminId, AdminAuditAction.LIMITED_DROP_CLOSE, AdminAuditTargetType.LIMITED_DROP,
-				dropId, previous.name() + "->" + LimitedDropStatus.CLOSED.name());
+				dropId, STATUS_LABELS.get(previous) + " → " + STATUS_LABELS.get(LimitedDropStatus.CLOSED));
 
 		// 감사 로그 실패로 롤백되기 전에 Redis 키를 지우면 집계가 통째로 날아가므로 감사 로그 뒤에 flush 한다.
 		limitedDropStatFlusher.flushAndClear(drop);
@@ -160,6 +173,15 @@ public class AdminLimitedDropService {
 		List<LimitedPurchase> purchases = limitedPurchaseRepository.findAllWithMemberAndOrderByDropId(dropId);
 
 		return AdminLimitedDropDetailResponse.from(drop, redisRemaining, purchases);
+	}
+
+	private String toLabels(List<String> changedFields) {
+		if (changedFields.isEmpty()) {
+			return "없음";
+		}
+		return changedFields.stream()
+				.map(field -> FIELD_LABELS.getOrDefault(field, field))
+				.collect(Collectors.joining(", "));
 	}
 
 	private <T> T coalesce(T newValue, T currentValue, String fieldName, List<String> changedFields) {

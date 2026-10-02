@@ -257,7 +257,7 @@ class AdminMemberServiceTest {
 			assertThat(response.status()).isEqualTo(MemberStatus.SUSPENDED);
 			verify(sessionRevoker).revokeAll(MEMBER_ID);
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "활성 → 정지");
 		}
 
 		@Test
@@ -278,7 +278,7 @@ class AdminMemberServiceTest {
 			assertThat(response.status()).isEqualTo(MemberStatus.ACTIVE);
 			verify(sessionRevoker, never()).revokeAll(anyLong());
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "SUSPENDED->ACTIVE");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "정지 → 활성");
 		}
 
 		@Test
@@ -298,7 +298,7 @@ class AdminMemberServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED (반복 어뷰징 신고)");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "활성 → 정지 (반복 어뷰징 신고)");
 		}
 
 		@Test
@@ -318,7 +318,7 @@ class AdminMemberServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(ADMIN_ID, AdminAuditAction.MEMBER_STATUS_CHANGE,
-					AdminAuditTargetType.MEMBER, MEMBER_ID, "ACTIVE->SUSPENDED");
+					AdminAuditTargetType.MEMBER, MEMBER_ID, "활성 → 정지");
 		}
 	}
 }

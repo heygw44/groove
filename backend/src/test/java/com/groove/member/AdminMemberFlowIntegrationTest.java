@@ -105,7 +105,7 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 
 			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
 			assertThat(logs).extracting(AdminAuditLog::getAction).contains(AdminAuditAction.MEMBER_STATUS_CHANGE);
-			assertThat(logs).extracting(AdminAuditLog::getDetail).contains("ACTIVE->SUSPENDED");
+			assertThat(logs).extracting(AdminAuditLog::getDetail).contains("활성 → 정지");
 
 			// when: 활성화
 			mockMvc.perform(patch("/api/v1/admin/members/" + memberId + "/status")

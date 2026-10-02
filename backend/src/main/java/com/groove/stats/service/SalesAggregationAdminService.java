@@ -48,7 +48,7 @@ public class SalesAggregationAdminService {
 
 		adminAuditLogService.record(adminId, AdminAuditAction.SALES_AGGREGATION_RUN,
 				AdminAuditTargetType.SALES_AGGREGATION, null,
-				"from=" + period.from() + ",to=" + period.to());
+				"기간: " + period.from() + " ~ " + period.to());
 
 		return new SalesAggregationResponse(aggregatedDays[0]);
 	}

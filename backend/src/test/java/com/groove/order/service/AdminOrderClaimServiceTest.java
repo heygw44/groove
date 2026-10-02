@@ -211,7 +211,7 @@ class AdminOrderClaimServiceTest {
 			// then
 			verify(refundHook).refund(ORDER_ID, CLAIM_ID, item.getRefundableAmount(), "사유", null);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), any());
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("취소승인: " + item.getProductOrderNumber()));
 			assertThat(response.productOrderNumber()).isEqualTo(item.getProductOrderNumber());
 		}
 
@@ -349,7 +349,7 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), any());
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("취소거부: " + item.getProductOrderNumber()));
 			assertThat(response.productOrderNumber()).isEqualTo(item.getProductOrderNumber());
 		}
 	}
@@ -372,7 +372,7 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
-					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), any());
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("수거시작: " + item.getProductOrderNumber()));
 		}
 	}
 
@@ -395,6 +395,8 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(refundHook).refund(ORDER_ID, CLAIM_ID, item.getRefundableAmount(), "사유", null);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("반품완료: " + item.getProductOrderNumber()));
 		}
 
 		@Test
@@ -469,6 +471,8 @@ class AdminOrderClaimServiceTest {
 
 			// then
 			verify(refundHook).refund(ORDER_ID, CLAIM_ID, item.getRefundableAmount(), "재고 확인 불가", null);
+			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.ORDER_STATUS_CHANGE),
+					eq(AdminAuditTargetType.ORDER), eq(ORDER_ID), eq("판매취소: " + item.getProductOrderNumber()));
 		}
 
 		@Test

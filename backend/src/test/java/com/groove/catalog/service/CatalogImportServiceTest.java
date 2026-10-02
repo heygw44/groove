@@ -138,7 +138,7 @@ class CatalogImportServiceTest {
 			assertThat(response.albumId()).isEqualTo(310L);
 			verify(client, times(1)).getRelease(249504L);
 			verify(adminAuditLogService).record(1L, AdminAuditAction.PRODUCT_IMPORT, AdminAuditTargetType.PRODUCT,
-					733L, "discogsReleaseId=249504");
+					733L, "Discogs 음반 249504");
 			verify(eventPublisher).publishEvent(eventCaptor.capture());
 			assertThat(eventCaptor.getValue().albumId()).isEqualTo(310L);
 			assertThat(eventCaptor.getValue().albumTitle()).isEqualTo("Kind Of Blue");

@@ -15,22 +15,22 @@ public enum ErrorCode {
 
 	// COMMON
 	COMMON_INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
-	COMMON_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "요청 값 검증에 실패했습니다."),
-	COMMON_METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "허용되지 않은 HTTP 메서드입니다."),
-	COMMON_RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
-	COMMON_CONFLICT(HttpStatus.CONFLICT, "요청이 현재 상태와 충돌합니다. 다시 시도해주세요."),
+	COMMON_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "입력한 내용을 다시 확인해주세요."),
+	COMMON_METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "잘못된 요청입니다."),
+	COMMON_RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 정보를 찾을 수 없습니다."),
+	COMMON_CONFLICT(HttpStatus.CONFLICT, "정보가 방금 바뀌었습니다. 새로고침 후 다시 시도해주세요."),
 	COMMON_INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
 
 	// AUTH
-	AUTH_UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
+	AUTH_UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
 	AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
-	AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "인증 정보가 올바르지 않습니다."),
+	AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "로그인 정보가 올바르지 않습니다. 다시 로그인해주세요."),
 	AUTH_EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다."),
 	AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
 	AUTH_REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다. 다시 로그인해주세요."),
 	AUTH_REFRESH_TOKEN_MISMATCH(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_SESSION_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인 유지 기간이 끝났습니다. 다시 로그인해주세요."),
-	AUTH_MEMBER_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 회원입니다."),
+	AUTH_MEMBER_SUSPENDED(HttpStatus.FORBIDDEN, "이용이 정지된 계정입니다."),
 	AUTH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_LOGIN_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."),
 
@@ -55,27 +55,27 @@ public enum ErrorCode {
 
 	// ===== CATALOG =====
 	CATALOG_LOOKUP_FAILED(HttpStatus.BAD_GATEWAY, "Discogs 조회 중 오류가 발생했습니다."),
-	CATALOG_RELEASE_NOT_FOUND(HttpStatus.NOT_FOUND, "Discogs 릴리즈를 찾을 수 없습니다."),
+	CATALOG_RELEASE_NOT_FOUND(HttpStatus.NOT_FOUND, "Discogs 음반을 찾을 수 없습니다."),
 	CATALOG_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Discogs 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."),
-	CATALOG_ALREADY_IMPORTED(HttpStatus.CONFLICT, "이미 등록된 릴리즈입니다."),
-	CATALOG_IMPORT_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "적재 작업을 찾을 수 없습니다."),
-	CATALOG_IMPORT_JOB_RUNNING(HttpStatus.CONFLICT, "같은 마스터 릴리즈의 적재 작업이 이미 실행 중입니다."),
+	CATALOG_ALREADY_IMPORTED(HttpStatus.CONFLICT, "이미 등록된 음반입니다."),
+	CATALOG_IMPORT_JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "수집 이력을 찾을 수 없습니다."),
+	CATALOG_IMPORT_JOB_RUNNING(HttpStatus.CONFLICT, "같은 음반의 수집이 이미 실행 중입니다."),
 
 	// ===== STOCK =====
 	STOCK_NOT_FOUND(HttpStatus.NOT_FOUND, "재고 정보를 찾을 수 없습니다."),
 	STOCK_INSUFFICIENT(HttpStatus.CONFLICT, "재고가 부족합니다."),
-	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 처리 중 충돌이 발생했습니다. 다시 시도해주세요."),
+	STOCK_CONFLICT(HttpStatus.CONFLICT, "재고 정보가 방금 바뀌었습니다. 다시 시도해주세요."),
 
 	// ===== LIMITED =====
-	LIMITED_DROP_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 한정반 드롭이 등록된 상품입니다."),
-	LIMITED_DROP_NOT_FOUND(HttpStatus.NOT_FOUND, "한정반 드롭을 찾을 수 없습니다."),
+	LIMITED_DROP_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 한정반 판매가 등록된 상품입니다."),
+	LIMITED_DROP_NOT_FOUND(HttpStatus.NOT_FOUND, "한정반 판매를 찾을 수 없습니다."),
 	LIMITED_NOT_OPEN(HttpStatus.BAD_REQUEST, "아직 오픈되지 않은 한정반입니다."),
 	LIMITED_CLOSED(HttpStatus.BAD_REQUEST, "종료된 한정반입니다."),
-	LIMITED_SOLD_OUT(HttpStatus.CONFLICT, "한정반 수량이 모두 소진되었습니다."),
+	LIMITED_SOLD_OUT(HttpStatus.CONFLICT, "한정반이 매진되었습니다."),
 	LIMITED_ALREADY_PURCHASED(HttpStatus.CONFLICT, "이미 구매한 한정반입니다."),
-	LIMITED_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "회원당 구매 가능 수량을 초과했습니다."),
+	LIMITED_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "1인 구매 한도를 초과했습니다."),
 	LIMITED_INVALID_STATUS(HttpStatus.CONFLICT, "처리할 수 없는 한정반 상태입니다."),
-	LIMITED_BUSY(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+	LIMITED_BUSY(HttpStatus.SERVICE_UNAVAILABLE, "요청이 몰려 잠시 처리할 수 없습니다. 잠시 후 다시 시도해주세요."),
 
 	// ===== CART =====
 	CART_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "장바구니 항목을 찾을 수 없습니다."),
@@ -105,14 +105,14 @@ public enum ErrorCode {
 	PAYMENT_KEY_MISMATCH(HttpStatus.CONFLICT, "결제 키가 주문과 일치하지 않습니다."),
 	PAYMENT_RESULT_UNKNOWN(HttpStatus.SERVICE_UNAVAILABLE, "결제 처리 결과를 확인하고 있습니다."),
 	PAYMENT_METHOD_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "이 주문에는 사용할 수 없는 결제수단입니다."),
-	PAYMENT_REFUND_ACCOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "환불 계좌 정보가 필요합니다."),
+	PAYMENT_REFUND_ACCOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "환불계좌 정보가 필요합니다."),
 	PAYMENT_DEPOSIT_SECRET_MISMATCH(HttpStatus.BAD_REQUEST, "입금 확인 정보가 일치하지 않습니다."),
-	PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE(HttpStatus.BAD_REQUEST, "취소 금액이 남은 결제 금액을 초과합니다."),
+	PAYMENT_CANCEL_AMOUNT_EXCEEDS_BALANCE(HttpStatus.BAD_REQUEST, "취소 금액이 남은 결제금액을 초과합니다."),
 	PAYMENT_CANCEL_IN_PROGRESS(HttpStatus.CONFLICT, "이미 진행 중인 취소 요청이 있습니다."),
 
 	// ===== WISHLIST =====
-	WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 위시리스트에 등록된 상품입니다."),
-	WISHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "위시리스트에 없는 상품입니다."),
+	WISHLIST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 찜한 상품입니다."),
+	WISHLIST_NOT_FOUND(HttpStatus.NOT_FOUND, "찜 목록에 없는 상품입니다."),
 
 	// ===== COUPON =====
 	COUPON_ISSUE_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "쿠폰 코드 입력 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."),
