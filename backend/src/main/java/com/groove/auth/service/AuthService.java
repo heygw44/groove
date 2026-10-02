@@ -22,6 +22,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.config.AuthSessionProperties;
 import com.groove.global.config.JwtProperties;
 import com.groove.member.entity.Member;
+import com.groove.member.entity.MemberRole;
 import com.groove.member.repository.MemberRepository;
 
 /** 회원가입/로그인/토큰 재발급을 담당한다. */
@@ -89,6 +90,10 @@ public class AuthService {
 	}
 
 	public AuthTokens reissue(String refreshToken) {
+		return reissue(refreshToken, Duration.ZERO);
+	}
+
+	public AuthTokens reissue(String refreshToken, Duration clientIdle) {
 		if (!StringUtils.hasText(refreshToken)) {
 			throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND);
 		}
@@ -101,12 +106,18 @@ public class AuthService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 		member.validateActive();
 
+		// 백그라운드 폴링이 서버 유휴 시계를 계속 되살리지 않도록, 관리자는 클라이언트가 보고한 무입력 시간으로 판정한다.
+		if (member.getRole() == MemberRole.ADMIN && clientIdle.compareTo(sessionProperties.adminIdleTimeout()) >= 0) {
+			refreshTokenRepository.delete(memberId, sessionId);
+			throw new BusinessException(ErrorCode.AUTH_SESSION_IDLE);
+		}
+
 		String newToken = jwtProvider.createRefreshToken(memberId, sessionId);
 		long now = clock.millis();
 		long legacyAbsExp = now + sessionProperties.absoluteExpiry(member.getRole()).toMillis();
 		RefreshRotation rotation =
 				refreshTokenRepository.rotate(memberId, sessionId, refreshToken, newToken, now, legacyAbsExp,
-						member.getRole());
+						member.getRole(), clientIdle);
 		switch (rotation.result()) {
 			case NOT_FOUND -> throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND);
 			case REUSED -> throw new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_MISMATCH);

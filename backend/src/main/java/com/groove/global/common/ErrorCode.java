@@ -30,6 +30,7 @@ public enum ErrorCode {
 	AUTH_REFRESH_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다. 다시 로그인해주세요."),
 	AUTH_REFRESH_TOKEN_MISMATCH(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_SESSION_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인 유지 기간이 끝났습니다. 다시 로그인해주세요."),
+	AUTH_SESSION_IDLE(HttpStatus.UNAUTHORIZED, "오랫동안 활동이 없어 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_MEMBER_SUSPENDED(HttpStatus.FORBIDDEN, "이용이 정지된 계정입니다."),
 	AUTH_TOKEN_REVOKED(HttpStatus.UNAUTHORIZED, "보안을 위해 로그아웃되었습니다. 다시 로그인해주세요."),
 	AUTH_LOGIN_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."),
