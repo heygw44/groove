@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -533,6 +534,8 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		private Product highRatedFewReviews;
 		private Product lowRatedManyReviews;
 		private Product noReviews;
+		// nanoTime 나머지는 macOS 에서 마이크로초 단위라 한 테스트 안 주문번호가 겹친다.
+		private final AtomicInteger orderSeq = new AtomicInteger();
 
 		@BeforeEach
 		void setUpRatingProducts() {
@@ -573,7 +576,7 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 		private void addPaidOrder(Product product, int quantity) {
 			Member buyer = MemberFixture.create("smtr-buyer-" + System.nanoTime() + "@groove.com");
 			em.persist(buyer);
-			Order order = OrderFixture.create(buyer, "20260905-SMTR" + System.nanoTime() % 100000);
+			Order order = OrderFixture.create(buyer, "20260905-SMTR" + orderSeq.incrementAndGet());
 			order.addItem(em.find(Product.class, product.getId()), quantity);
 			OrderFixture.markPaid(order);
 			OrderFixture.markItemsStatus(order, OrderItemStatus.PAID);
