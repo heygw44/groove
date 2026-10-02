@@ -114,6 +114,22 @@ class DiscogsResyncServiceTest {
 		}
 
 		@Test
+		@DisplayName("성공하면 이전 재검증 실패 시각을 비운다")
+		void clearsResyncFailedAtOnSuccess() {
+			// given
+			product.markDiscogsResyncFailed(LocalDateTime.now(clock).minusMinutes(30));
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+			DiscogsReleaseResponse release = DiscogsFixture.releaseResponse(RELEASE_ID, 21247L, "Miles Davis",
+					"Columbia", "CS 8163", List.of(), "5012394144777", List.of("Jazz"), List.of(), 1959);
+
+			// when
+			discogsResyncService.apply(PRODUCT_ID, RELEASE_ID, release);
+
+			// then
+			assertThat(product.getDiscogsResyncFailedAt()).isNull();
+		}
+
+		@Test
 		@DisplayName("릴리즈 id 가 요청과 다르면(병합) 참조 id 를 새 id 로 갱신한다")
 		void updatesReleaseIdOnRedirect() {
 			// given
@@ -185,9 +201,10 @@ class DiscogsResyncServiceTest {
 	class MarkReleaseNotFound {
 
 		@Test
-		@DisplayName("discogsReleaseId 와 discogsSyncedAt 을 null 로 만든다")
+		@DisplayName("discogsReleaseId·discogsSyncedAt·재검증 실패 시각을 null 로 만든다")
 		void clearsReleaseReference() {
 			// given
+			product.markDiscogsResyncFailed(LocalDateTime.now(clock).minusMinutes(30));
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
 
 			// when
@@ -196,7 +213,42 @@ class DiscogsResyncServiceTest {
 			// then
 			assertThat(product.getDiscogsReleaseId()).isNull();
 			assertThat(product.getDiscogsSyncedAt()).isNull();
+			assertThat(product.getDiscogsResyncFailedAt()).isNull();
 			verify(productRepository, never()).existsByDiscogsReleaseId(anyLong());
+		}
+	}
+
+	@Nested
+	@DisplayName("markResyncFailed()")
+	class MarkResyncFailed {
+
+		@Test
+		@DisplayName("실패 시각을 남기고 discogsSyncedAt 은 건드리지 않는다")
+		void recordsFailedAtWithoutTouchingSyncedAt() {
+			// given
+			LocalDateTime syncedAt = product.getDiscogsSyncedAt();
+			LocalDateTime failedAt = LocalDateTime.now(clock);
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+			// when
+			discogsResyncService.markResyncFailed(PRODUCT_ID, failedAt);
+
+			// then
+			assertThat(product.getDiscogsResyncFailedAt()).isEqualTo(failedAt);
+			assertThat(product.getDiscogsSyncedAt()).isEqualTo(syncedAt);
+		}
+
+		@Test
+		@DisplayName("상품이 없으면 PRODUCT_NOT_FOUND 예외를 던진다")
+		void throwsWhenProductNotFound() {
+			// given
+			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
+
+			// when & then
+			assertThatThrownBy(() -> discogsResyncService.markResyncFailed(PRODUCT_ID, LocalDateTime.now(clock)))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
 		}
 	}
 }

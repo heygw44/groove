@@ -9,6 +9,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -27,6 +29,7 @@ class DiscogsResyncMapperTest extends MybatisTestSupport {
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 9, 0, 0);
 	private static final LocalDateTime STALE_BEFORE = NOW.minusHours(6);
 	private static final LocalDateTime VIEW_SINCE = NOW.minusDays(7);
+	private static final LocalDateTime RETRY_BEFORE = NOW.minusHours(1);
 
 	@Autowired
 	private DiscogsResyncMapper discogsResyncMapper;
@@ -69,8 +72,8 @@ class DiscogsResyncMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<DiscogsResyncCandidate> result = discogsResyncMapper.findCandidates(NOW, VIEW_SINCE, false, false,
-					100);
+			List<DiscogsResyncCandidate> result = discogsResyncMapper.findCandidates(NOW, RETRY_BEFORE, VIEW_SINCE,
+					false, false, 100);
 
 			// then
 			assertThat(result).extracting(DiscogsResyncCandidate::productId)
@@ -90,8 +93,8 @@ class DiscogsResyncMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<DiscogsResyncCandidate> result = discogsResyncMapper.findCandidates(STALE_BEFORE, VIEW_SINCE, false,
-					false, 100);
+			List<DiscogsResyncCandidate> result = discogsResyncMapper.findCandidates(STALE_BEFORE, RETRY_BEFORE,
+					VIEW_SINCE, false, false, 100);
 
 			// then
 			assertThat(result).extracting(DiscogsResyncCandidate::productId)
@@ -112,10 +115,10 @@ class DiscogsResyncMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<DiscogsResyncCandidate> visibleOnly = discogsResyncMapper.findCandidates(NOW, VIEW_SINCE, true,
-					false, 100);
-			List<DiscogsResyncCandidate> includingHidden = discogsResyncMapper.findCandidates(NOW, VIEW_SINCE, false,
-					false, 100);
+			List<DiscogsResyncCandidate> visibleOnly = discogsResyncMapper.findCandidates(NOW, RETRY_BEFORE,
+					VIEW_SINCE, true, false, 100);
+			List<DiscogsResyncCandidate> includingHidden = discogsResyncMapper.findCandidates(NOW, RETRY_BEFORE,
+					VIEW_SINCE, false, false, 100);
 
 			// then
 			assertThat(visibleOnly).extracting(DiscogsResyncCandidate::productId)
@@ -139,8 +142,8 @@ class DiscogsResyncMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<DiscogsResyncCandidate> result = discogsResyncMapper.findCandidates(NOW, VIEW_SINCE, false, true,
-					100);
+			List<DiscogsResyncCandidate> result = discogsResyncMapper.findCandidates(NOW, RETRY_BEFORE, VIEW_SINCE,
+					false, true, 100);
 
 			// then
 			List<Long> order = result.stream().map(DiscogsResyncCandidate::productId).toList();
@@ -159,13 +162,40 @@ class DiscogsResyncMapperTest extends MybatisTestSupport {
 			em.clear();
 
 			// when
-			List<Long> order = discogsResyncMapper.findCandidates(NOW, VIEW_SINCE, false, false, 1000).stream()
+			List<Long> order = discogsResyncMapper.findCandidates(NOW, RETRY_BEFORE, VIEW_SINCE, false, false, 1000)
+					.stream()
 					.map(DiscogsResyncCandidate::productId)
 					.filter(id -> id.equals(oldest.getId()) || id.equals(newer.getId()))
 					.toList();
 
 			// then
 			assertThat(order).containsExactly(oldest.getId(), newer.getId());
+		}
+
+		@ParameterizedTest(name = "viewPriority={0}")
+		@ValueSource(booleans = {true, false})
+		@DisplayName("최근에 재검증이 실패한 상품은 쿨다운 동안 빼고, 쿨다운이 지났거나 실패 이력이 없으면 포함한다")
+		void excludesRecentlyFailedProductsUntilCooldownPasses(boolean viewPriority) {
+			// given
+			artist = ArtistFixture.create("DRM Artist Cooldown " + viewPriority);
+			em.persist(artist);
+			long releaseBase = viewPriority ? 5010L : 5020L;
+			Product coolingDown = persistWithRelease("DRM Cooling Down", releaseBase, null);
+			coolingDown.markDiscogsResyncFailed(RETRY_BEFORE.plusMinutes(1));
+			Product cooledDown = persistWithRelease("DRM Cooled Down", releaseBase + 1, null);
+			cooledDown.markDiscogsResyncFailed(RETRY_BEFORE.minusMinutes(1));
+			Product neverFailed = persistWithRelease("DRM Never Failed", releaseBase + 2, null);
+			em.flush();
+			em.clear();
+
+			// when
+			List<DiscogsResyncCandidate> result = discogsResyncMapper.findCandidates(NOW, RETRY_BEFORE, VIEW_SINCE,
+					false, viewPriority, 1000);
+
+			// then
+			assertThat(result).extracting(DiscogsResyncCandidate::productId)
+					.contains(cooledDown.getId(), neverFailed.getId())
+					.doesNotContain(coolingDown.getId());
 		}
 	}
 
