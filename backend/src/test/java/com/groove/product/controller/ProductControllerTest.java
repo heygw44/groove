@@ -146,6 +146,27 @@ class ProductControllerTest {
 		}
 
 		@Test
+		@DisplayName("keyword 가 100자이면 200 을 반환한다")
+		void acceptsSearchKeywordOfMaxLength() throws Exception {
+			// given
+			given(productService.search(any(), isNull())).willReturn(
+					PageResponse.from(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0)));
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products").param("keyword", "a".repeat(100)))
+					.andExpect(status().isOk());
+		}
+
+		@Test
+		@DisplayName("keyword 가 100자를 초과하면 400 COMMON_VALIDATION_FAILED 를 반환한다")
+		void returnsBadRequestWhenSearchKeywordTooLong() throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/products").param("keyword", "a".repeat(101)))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+		}
+
+		@Test
 		@DisplayName("쿼리 파라미터가 ProductSearchRequest 로 바인딩된다")
 		void bindsQueryParametersToRequest() throws Exception {
 			// given

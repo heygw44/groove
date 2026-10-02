@@ -12,9 +12,10 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 public record ProductSearchRequest(
-		String keyword,
+		@Size(max = 100, message = "검색어는 100자 이하여야 합니다.") String keyword,
 		Long artistId,
 		List<Long> genreIds,
 		Long labelId,

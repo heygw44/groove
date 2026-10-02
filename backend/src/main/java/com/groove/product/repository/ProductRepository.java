@@ -35,16 +35,16 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 			WHERE (:status IS NULL OR p.status = :status)
 			AND (:albumId IS NULL OR p.album.id = :albumId)
 			AND (:keyword IS NULL
-				OR LOWER(p.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-				OR LOWER(a.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
+				OR LOWER(p.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
+				OR LOWER(a.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!')
 			""",
 			countQuery = """
 			SELECT COUNT(p) FROM Product p JOIN p.artist a
 			WHERE (:status IS NULL OR p.status = :status)
 			AND (:albumId IS NULL OR p.album.id = :albumId)
 			AND (:keyword IS NULL
-				OR LOWER(p.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
-				OR LOWER(a.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
+				OR LOWER(p.title) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!'
+				OR LOWER(a.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ESCAPE '!')
 			""")
 	Page<AdminProductSummaryResponse> findAdminSummaries(@Param("status") ProductStatus status,
 			@Param("albumId") Long albumId, @Param("keyword") String keyword, Pageable pageable);

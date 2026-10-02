@@ -9,6 +9,7 @@ import org.springframework.util.StringUtils;
 
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.global.util.LikeEscaper;
 import com.groove.product.dto.ArtistResponse;
 import com.groove.product.dto.GenreResponse;
 import com.groove.product.dto.LabelResponse;
@@ -43,7 +44,7 @@ public class ProductReferenceService {
 	}
 
 	public List<ArtistResponse> searchArtists(String keyword) {
-		String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+		String normalizedKeyword = StringUtils.hasText(keyword) ? LikeEscaper.escape(keyword.trim()) : null;
 		return artistRepository.searchByKeyword(normalizedKeyword, PageRequest.of(0, ARTIST_LIMIT)).stream()
 				.map(ArtistResponse::from)
 				.toList();

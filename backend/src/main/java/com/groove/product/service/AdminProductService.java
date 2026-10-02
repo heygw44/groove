@@ -22,6 +22,7 @@ import com.groove.admin.service.AdminAuditLogService;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
+import com.groove.global.util.LikeEscaper;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.inventory.service.StockService;
@@ -229,7 +230,7 @@ public class AdminProductService {
 
 	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Long albumId, String keyword,
 			Pageable pageable) {
-		String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+		String normalizedKeyword = StringUtils.hasText(keyword) ? LikeEscaper.escape(keyword.trim()) : null;
 		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, albumId,
 				normalizedKeyword, pageable);
 		return PageResponse.from(page);

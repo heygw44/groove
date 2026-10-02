@@ -29,6 +29,7 @@ import com.groove.product.service.AdminProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 
 @Tag(name = "Admin Product", description = "관리자 상품 관리")
@@ -78,7 +79,7 @@ public class AdminProductController {
 	public ApiResponse<PageResponse<AdminProductSummaryResponse>> getList(
 			@RequestParam(required = false) ProductStatus status,
 			@RequestParam(required = false) Long albumId,
-			@RequestParam(required = false) String keyword,
+			@RequestParam(required = false) @Size(max = 100) String keyword,
 			@PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 		return ApiResponse.ok(adminProductService.getList(status, albumId, keyword, pageable));
 	}

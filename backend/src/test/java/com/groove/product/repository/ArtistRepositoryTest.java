@@ -7,9 +7,12 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 
+import com.groove.global.util.LikeEscaper;
 import com.groove.product.entity.Artist;
 import com.groove.support.DataJpaTestSupport;
 
@@ -53,6 +56,25 @@ class ArtistRepositoryTest extends DataJpaTestSupport {
 
 			// then
 			assertThat(found).extracting(Artist::getId).contains(artist.getId());
+		}
+
+		@ParameterizedTest
+		@CsvSource({
+			"50% Wild-ART-5, 50% Wild-ART-5, 50 Wild-ART-5",
+			"Snake_Eyes-ART-6, Snake_Eyes-ART-6, SnakeXEyes-ART-6"
+		})
+		@DisplayName("keyword 의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalName, String lookalikeName) {
+			// given
+			Artist literal = artistRepository.save(Artist.create(literalName, null, null));
+			Artist lookalike = artistRepository.save(Artist.create(lookalikeName, null, null));
+			flushAndClear();
+
+			// when
+			List<Artist> found = artistRepository.searchByKeyword(LikeEscaper.escape(keyword), PageRequest.of(0, 20));
+
+			// then
+			assertThat(found).extracting(Artist::getId).contains(literal.getId()).doesNotContain(lookalike.getId());
 		}
 
 		@Test

@@ -4,6 +4,7 @@ import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
 import { MEMBER_ROLE_LABELS, MEMBER_STATUS_LABELS } from '@/constants/adminAudit';
+import { KEYWORD_INPUT_MAX_LENGTH } from '@/constants/search';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { MemberRole, MemberStatus } from '@/types/member';
 import type { AdminMemberFilters } from '@/utils/adminMemberFilters';
@@ -85,6 +86,7 @@ export function AdminMemberFilterBar({ filters, onChange }: AdminMemberFilterBar
       <Input
         placeholder="이메일 또는 닉네임"
         value={keyword}
+        maxLength={KEYWORD_INPUT_MAX_LENGTH}
         onChange={(event) => setKeyword(event.target.value)}
         className="w-56"
       />

@@ -35,12 +35,13 @@ const profileFixture: TasteProfile = {
 interface RenderOptions {
   profile?: TasteProfile | null;
   path?: string;
+  role?: Member['role'];
 }
 
-const renderModal = ({ profile = null, path = '/' }: RenderOptions = {}) => {
+const renderModal = ({ profile = null, path = '/', role = 'USER' }: RenderOptions = {}) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(tasteProfileKeys.mine, profile);
-  useAuthStore.setState({ accessToken: 't', member, isBootstrapping: false });
+  useAuthStore.setState({ accessToken: 't', member: { ...member, role }, isBootstrapping: false });
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -162,6 +163,14 @@ describe('TasteOnboardingModal', () => {
   it.each(['/login', '/signup'])('인증 화면 %s 에서는 모달을 보여주지 않는다', (path) => {
     // given & when
     renderModal({ profile: null, path });
+
+    // then
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it.each(['/', '/admin'])('관리자는 %s 에서 모달을 보지 않는다', (path) => {
+    // given & when
+    renderModal({ profile: null, path, role: 'ADMIN' });
 
     // then
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

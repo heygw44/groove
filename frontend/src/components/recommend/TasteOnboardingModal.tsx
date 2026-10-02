@@ -38,6 +38,7 @@ const writeDismissed = () => {
 export function TasteOnboardingModal() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const isBootstrapping = useAuthStore((state) => state.isBootstrapping);
+  const role = useAuthStore((state) => state.member?.role);
   const { pathname } = useLocation();
   const { data: profile } = useTasteProfile();
   const [dismissed, setDismissed] = useState(() => readDismissed());
@@ -49,6 +50,7 @@ export function TasteOnboardingModal() {
 
   const open =
     Boolean(accessToken) &&
+    role !== 'ADMIN' &&
     !isBootstrapping &&
     profile === null &&
     !dismissed &&

@@ -11,6 +11,8 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,6 +25,7 @@ import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.ReviewFixture;
+import com.groove.global.util.LikeEscaper;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
 import com.groove.member.entity.Member;
@@ -392,6 +395,28 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			assertThat(page.getTotalElements()).isGreaterThanOrEqualTo(2L);
 		}
 
+		@ParameterizedTest
+		@CsvSource({
+			"50% Wc7, 50% Wc7 Record, 50 Wc7 Record",
+			"Snake_Eyes Wc7, Snake_Eyes Wc7 Record, SnakeXEyes Wc7 Record"
+		})
+		@DisplayName("keyword 의 % 와 _ 는 와일드카드가 아니라 문자 그대로 매칭한다")
+		void matchesWildcardCharactersLiterally(String keyword, String literalTitle, String lookalikeTitle) {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product literal = saveProduct(artist, literalTitle);
+			Product lookalike = saveProduct(artist, lookalikeTitle);
+			flushAndClear();
+
+			// when
+			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null, null,
+					LikeEscaper.escape(keyword), PageRequest.of(0, 100));
+
+			// then
+			List<Long> ids = page.getContent().stream().map(AdminProductSummaryResponse::id).toList();
+			assertThat(ids).contains(literal.getId()).doesNotContain(lookalike.getId());
+		}
+
 		@Test
 		@DisplayName("keyword 와 status 를 함께 지정하면 두 조건을 모두 만족하는 상품만 조회된다")
 		void combinesKeywordWithStatus() {
@@ -595,6 +620,14 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 		private void setItemStatus(Order order, OrderItemStatus status) {
 			order.getItems().forEach(item -> ReflectionTestUtils.setField(item, "status", status));
 		}
+	}
+
+	private Product saveProduct(Artist artist, String title) {
+		Product product = ProductFixture.create(artist, title);
+		albumRepository.save(product.getAlbum());
+		product = productRepository.save(product);
+		stockRepository.save(Stock.create(product, 5));
+		return product;
 	}
 
 	private void flushAndClear() {
