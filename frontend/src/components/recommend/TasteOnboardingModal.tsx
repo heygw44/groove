@@ -52,7 +52,7 @@ export function TasteOnboardingModal() {
       open={open}
       onClose={dismiss}
       title="좋아하는 앨범을 알려주세요"
-      description="취향을 알려주면 홈에서 취향에 맞는 앨범을 추천해드립니다."
+      description="취향을 알려주시면 홈에서 취향에 맞는 앨범을 추천합니다."
       placement="bottom"
       size="md"
       footer={

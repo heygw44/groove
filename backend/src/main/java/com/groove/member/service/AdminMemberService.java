@@ -3,6 +3,7 @@ package com.groove.member.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,10 @@ import lombok.RequiredArgsConstructor;
 public class AdminMemberService {
 
 	private static final int RECENT_ORDER_LIMIT = 5;
+	private static final Map<MemberStatus, String> STATUS_LABELS = Map.of(
+			MemberStatus.ACTIVE, "활성",
+			MemberStatus.SUSPENDED, "정지",
+			MemberStatus.WITHDRAWN, "탈퇴");
 
 	private final MemberRepository memberRepository;
 	private final MemberQueryMapper memberQueryMapper;
@@ -92,7 +97,7 @@ public class AdminMemberService {
 	}
 
 	private String buildStatusChangeDetail(MemberStatus previous, MemberStatus next, String reason) {
-		String transition = previous.name() + "->" + next.name();
+		String transition = STATUS_LABELS.get(previous) + " → " + STATUS_LABELS.get(next);
 		if (reason == null || reason.isBlank()) {
 			return transition;
 		}

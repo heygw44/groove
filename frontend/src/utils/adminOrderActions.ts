@@ -82,7 +82,7 @@ export const CLAIM_STATUSES_BY_TYPE: Record<OrderClaimType, readonly OrderClaimS
 
 export const CLAIM_TYPE_DESCRIPTION: Record<OrderClaimType, string> = {
   CANCEL:
-    '배송 준비 중 상품의 취소요청을 승인하면 바로 환불됩니다. 결제완료 상품은 구매자가 즉시 취소해 취소완료로 바로 쌓입니다.',
+    '배송준비 중 상품의 취소요청을 승인하면 바로 환불됩니다. 결제완료 상품은 구매자가 즉시 취소해 취소완료로 바로 쌓입니다.',
   RETURN:
     '배송완료 후 7일 안에 들어온 반품요청입니다. 수거를 시작하고, 상품이 도착하면 반품완료로 처리해 환불합니다.',
 };

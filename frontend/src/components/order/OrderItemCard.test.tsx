@@ -148,12 +148,12 @@ describe('OrderItemCard', () => {
     expect(screen.getByText('주문 금액 9,000원')).toBeInTheDocument();
   });
 
-  it('진행 중 상품은 결제 금액으로 보여준다', () => {
+  it('진행 중 상품은 결제금액으로 보여준다', () => {
     // given & when
     renderCard(baseItem);
 
     // then
-    expect(screen.getByText('결제 금액 10,000원')).toBeInTheDocument();
+    expect(screen.getByText('결제금액 10,000원')).toBeInTheDocument();
   });
 
   it.each(['CANCELED', 'CANCELED_BY_NOPAYMENT', 'RETURNED'] as const)(
@@ -185,7 +185,7 @@ describe('OrderItemCard', () => {
     renderCard({ ...baseItem, status: 'PREPARING', availableActions: [] });
 
     // then
-    ['주문취소', '취소요청', '반품요청', '요청 철회', '구매확정'].forEach((name) => {
+    ['주문취소', '취소요청', '반품요청', '요청철회', '구매확정'].forEach((name) => {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     });
   });
@@ -236,7 +236,7 @@ describe('OrderItemCard', () => {
     expect(cancelOrderItem).not.toHaveBeenCalled();
   });
 
-  it('CANCEL_REQUEST 이면 취소 요청 버튼으로 요청한다', async () => {
+  it('CANCEL_REQUEST 이면 취소요청 버튼으로 요청한다', async () => {
     // given
     const user = userEvent.setup();
     renderCard({ ...baseItem, status: 'PREPARING', availableActions: ['CANCEL_REQUEST'] });
@@ -250,7 +250,7 @@ describe('OrderItemCard', () => {
     await waitFor(() => expect(cancelOrderItem).toHaveBeenCalledWith(1, 11, undefined));
   });
 
-  it('RETURN_REQUEST 이면 반품 요청 API 를 호출한다', async () => {
+  it('RETURN_REQUEST 이면 반품요청 API 를 호출한다', async () => {
     // given
     const user = userEvent.setup();
     renderCard({ ...baseItem, status: 'DELIVERED', availableActions: ['RETURN_REQUEST'] });
@@ -265,7 +265,7 @@ describe('OrderItemCard', () => {
     await waitFor(() => expect(returnOrderItem).toHaveBeenCalledWith(1, 11, { reason: '파손' }));
   });
 
-  it('WITHDRAW_CLAIM 이면 claimId 로 요청 철회 API 를 호출한다', async () => {
+  it('WITHDRAW_CLAIM 이면 claimId 로 요청철회 API 를 호출한다', async () => {
     // given
     const user = userEvent.setup();
     renderCard({
@@ -278,9 +278,9 @@ describe('OrderItemCard', () => {
     });
 
     // when
-    await user.click(screen.getByRole('button', { name: '요청 철회' }));
+    await user.click(screen.getByRole('button', { name: '요청철회' }));
     const dialog = screen.getByRole('dialog', { name: '요청을 철회하시겠습니까?' });
-    await user.click(within(dialog).getByRole('button', { name: '요청 철회' }));
+    await user.click(within(dialog).getByRole('button', { name: '요청철회' }));
 
     // then
     await waitFor(() => expect(withdrawOrderClaim).toHaveBeenCalledWith(77));
@@ -291,7 +291,7 @@ describe('OrderItemCard', () => {
     renderCard({ ...baseItem, availableActions: ['WITHDRAW_CLAIM'] });
 
     // then
-    expect(screen.queryByRole('button', { name: '요청 철회' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '요청철회' })).not.toBeInTheDocument();
   });
 
   it('CONFIRM 이면 구매확정 API 를 호출한다', async () => {

@@ -34,12 +34,12 @@ export function PaymentInfoCard({
         <div className="mt-4 space-y-1.5 border-t border-line pt-4 text-sm">
           {payment && isCancellationPending(payment.status) && (
             <p className="flex items-center gap-2">
-              <span className="text-content-muted">결제 상태</span>
+              <span className="text-content-muted">결제상태</span>
               <PaymentStatusBadge status={payment.status} />
             </p>
           )}
           <p className="flex items-center justify-between gap-2">
-            <span className="text-content-muted">결제 수단</span>
+            <span className="text-content-muted">결제수단</span>
             <span className="font-medium">{getPaymentMethodLabel(payment)}</span>
           </p>
           {payment?.approvedAt && (

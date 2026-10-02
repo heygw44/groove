@@ -127,7 +127,7 @@ describe('AdminOrderClaimsPage', () => {
   });
 
   it.each([
-    ['CANCELED', '취소 클레임을 승인했습니다.'],
+    ['CANCELED', '취소요청을 승인했습니다.'],
     ['PAID', '처리를 접수했습니다. 환불 결과를 확인하고 있습니다.'],
   ] as const)('승인 결과 상태가 %s 면 토스트는 "%s" 다', async (status, message) => {
     // given

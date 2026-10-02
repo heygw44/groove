@@ -74,7 +74,7 @@ public class AdminOrderClaimService {
 		Long itemId = item.getId();
 		String productOrderNumber = item.getProductOrderNumber();
 		refundHook.refund(orderId, claimId, item.getRefundableAmount(), claim.getReason(), claim.getRefundAccount());
-		record(adminId, orderId, "클레임 승인(취소): " + productOrderNumber);
+		record(adminId, orderId, "취소승인: " + productOrderNumber);
 		return buildItemResponse(itemId);
 	}
 
@@ -82,7 +82,8 @@ public class AdminOrderClaimService {
 	public AdminOrderItemResponse reject(Long adminId, Long claimId, AdminOrderClaimRejectRequest request) {
 		OrderClaim claim = writer.reject(claimId, request.rejectReason());
 		Long orderId = claim.getOrderItem().getOrder().getId();
-		record(adminId, orderId, "클레임 거부: " + claim.getOrderItem().getProductOrderNumber());
+		String label = claim.getType() == OrderClaimType.RETURN ? "반품거부: " : "취소거부: ";
+		record(adminId, orderId, label + claim.getOrderItem().getProductOrderNumber());
 		return buildItemResponse(claim.getOrderItem().getId());
 	}
 
@@ -90,7 +91,7 @@ public class AdminOrderClaimService {
 	public AdminOrderItemResponse collect(Long adminId, Long claimId) {
 		OrderClaim claim = writer.startCollecting(claimId);
 		Long orderId = claim.getOrderItem().getOrder().getId();
-		record(adminId, orderId, "반품 수거 시작: " + claim.getOrderItem().getProductOrderNumber());
+		record(adminId, orderId, "수거시작: " + claim.getOrderItem().getProductOrderNumber());
 		return buildItemResponse(claim.getOrderItem().getId());
 	}
 
@@ -105,7 +106,7 @@ public class AdminOrderClaimService {
 		Long itemId = item.getId();
 		String productOrderNumber = item.getProductOrderNumber();
 		refundHook.refund(orderId, claimId, item.getRefundableAmount(), claim.getReason(), claim.getRefundAccount());
-		record(adminId, orderId, "반품 수거 완료: " + productOrderNumber);
+		record(adminId, orderId, "반품완료: " + productOrderNumber);
 		return buildItemResponse(itemId);
 	}
 
@@ -115,9 +116,10 @@ public class AdminOrderClaimService {
 	 */
 	public AdminOrderItemResponse cancelItemBySale(Long adminId, Long itemId, AdminOrderItemCancelRequest request) {
 		String reason = request == null ? null : request.reason();
-		Long orderId = orderItemRepository.findById(itemId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND))
-				.getOrder().getId();
+		OrderItem item = orderItemRepository.findById(itemId)
+				.orElseThrow(() -> new BusinessException(ErrorCode.COMMON_RESOURCE_NOT_FOUND));
+		Long orderId = item.getOrder().getId();
+		String productOrderNumber = item.getProductOrderNumber();
 		OrderClaimRequestResult result = writer.requestAdminCancel(orderId, itemId, reason);
 		try {
 			refundHook.refund(orderId, result.claimId(), result.refundAmount(), reason, null);
@@ -130,7 +132,7 @@ public class AdminOrderClaimService {
 			}
 			throw ex;
 		}
-		record(adminId, orderId, "판매취소: itemId=" + itemId);
+		record(adminId, orderId, "판매취소: " + productOrderNumber);
 		return buildItemResponse(itemId);
 	}
 

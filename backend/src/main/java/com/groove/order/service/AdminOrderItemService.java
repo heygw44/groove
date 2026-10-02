@@ -2,9 +2,9 @@ package com.groove.order.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,7 +79,7 @@ public class AdminOrderItemService {
 		List<OrderItem> items = orderItemRepository.findAllById(orderItemIds);
 		LocalDateTime now = LocalDateTime.now(clock);
 
-		Set<Long> changedOrderIds = new LinkedHashSet<>();
+		Map<Long, List<String>> changedNumbersByOrderId = new LinkedHashMap<>();
 		int processed = 0;
 		for (OrderItem item : items) {
 			if (cancelRequestedOrderIds.contains(item.getOrder().getId())) {
@@ -87,10 +87,11 @@ public class AdminOrderItemService {
 			}
 			if (item.confirmPreparing(now)) {
 				processed++;
-				changedOrderIds.add(item.getOrder().getId());
+				changedNumbersByOrderId.computeIfAbsent(item.getOrder().getId(), id -> new ArrayList<>())
+						.add(item.getProductOrderNumber());
 			}
 		}
-		auditOrders(adminId, changedOrderIds, "PAID->PREPARING");
+		auditOrders(adminId, changedNumbersByOrderId, "발주확인");
 		return toResult(processed, orderItemIds.size());
 	}
 
@@ -108,7 +109,7 @@ public class AdminOrderItemService {
 		List<OrderItem> items = orderItemRepository.findAllById(orderItemIds);
 		LocalDateTime now = LocalDateTime.now(clock);
 
-		Set<Long> changedOrderIds = new LinkedHashSet<>();
+		Map<Long, List<String>> changedNumbersByOrderId = new LinkedHashMap<>();
 		int processed = 0;
 		for (OrderItem item : items) {
 			if (cancelRequestedOrderIds.contains(item.getOrder().getId())) {
@@ -118,10 +119,11 @@ public class AdminOrderItemService {
 			String trackingNumber = trackingNumbersByItemId.get(item.getId());
 			if (item.startShipping(courierCode, trackingNumber, now)) {
 				processed++;
-				changedOrderIds.add(item.getOrder().getId());
+				changedNumbersByOrderId.computeIfAbsent(item.getOrder().getId(), id -> new ArrayList<>())
+						.add(item.getProductOrderNumber());
 			}
 		}
-		auditOrders(adminId, changedOrderIds, "PAID/PREPARING->SHIPPING");
+		auditOrders(adminId, changedNumbersByOrderId, "발송처리");
 		return toResult(processed, orderItemIds.size());
 	}
 
@@ -132,15 +134,16 @@ public class AdminOrderItemService {
 		List<OrderItem> items = orderItemRepository.findAllById(orderItemIds);
 		LocalDateTime now = LocalDateTime.now(clock);
 
-		Set<Long> changedOrderIds = new LinkedHashSet<>();
+		Map<Long, List<String>> changedNumbersByOrderId = new LinkedHashMap<>();
 		int processed = 0;
 		for (OrderItem item : items) {
 			if (item.completeDelivery(now)) {
 				processed++;
-				changedOrderIds.add(item.getOrder().getId());
+				changedNumbersByOrderId.computeIfAbsent(item.getOrder().getId(), id -> new ArrayList<>())
+						.add(item.getProductOrderNumber());
 			}
 		}
-		auditOrders(adminId, changedOrderIds, "SHIPPING->DELIVERED");
+		auditOrders(adminId, changedNumbersByOrderId, "배송완료");
 		return toResult(processed, orderItemIds.size());
 	}
 
@@ -163,11 +166,10 @@ public class AdminOrderItemService {
 				PaymentStatus.CANCEL_REQUESTED));
 	}
 
-	private void auditOrders(Long adminId, Set<Long> changedOrderIds, String detail) {
-		for (Long orderId : changedOrderIds) {
-			adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE, AdminAuditTargetType.ORDER,
-					orderId, detail);
-		}
+	private void auditOrders(Long adminId, Map<Long, List<String>> changedNumbersByOrderId, String action) {
+		changedNumbersByOrderId.forEach((orderId, productOrderNumbers) ->
+				adminAuditLogService.record(adminId, AdminAuditAction.ORDER_STATUS_CHANGE,
+						AdminAuditTargetType.ORDER, orderId, action + ": " + String.join(", ", productOrderNumbers)));
 	}
 
 	private CourierCode parseCourierCode(String value) {

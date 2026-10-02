@@ -152,7 +152,7 @@ describe('buildOrderName()', () => {
         { productName: 'Kind of Blue' },
         { productName: 'Blue Train' },
       ]),
-    ).toBe('A Love Supreme 외 2건');
+    ).toBe('A Love Supreme 외 2개');
   });
 
   it('상품이 없으면 빈 문자열을 반환한다', () => {
@@ -187,7 +187,7 @@ describe('getPaymentConfirmErrorMessage()', () => {
     const message = getPaymentConfirmErrorMessage(error);
 
     // then
-    expect(message).toBe('주문 시간이 지나 결제가 자동 취소됐습니다.');
+    expect(message).toBe('주문 시간이 지나 결제가 자동 취소되었습니다.');
   });
 
   it('그 밖의 코드면 전역 에러 메시지를 그대로 반환한다', () => {

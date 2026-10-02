@@ -16,7 +16,7 @@ const buildPayment = (overrides: Partial<OrderPayment> = {}): OrderPayment => ({
 });
 
 describe('PaymentInfoCard', () => {
-  it('결제 전(PENDING)이면 결제 수단으로 결제 전을 보여준다', () => {
+  it('결제 전(PENDING)이면 결제수단으로 결제 전을 보여준다', () => {
     // given & when
     render(<PaymentInfoCard totalAmount={30000} discountAmount={3000} finalAmount={27000} />);
 
@@ -109,7 +109,7 @@ describe('PaymentInfoCard', () => {
     expect(screen.getByText('승인 시각')).toBeInTheDocument();
   });
 
-  it('취소 처리 중(CANCEL_REQUESTED)이면 결제 상태 배지를 함께 보여준다', () => {
+  it('취소 처리 중(CANCEL_REQUESTED)이면 결제상태 배지를 함께 보여준다', () => {
     // given
     const payment = buildPayment({ status: 'CANCEL_REQUESTED' });
 

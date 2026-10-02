@@ -99,7 +99,7 @@ export default function AdminDashboardPage() {
             <StatCard label="오늘 주문" value={`${summaryQuery.data.todayOrderCount}건`} />
             <StatCard label="오늘 신규 회원" value={`${summaryQuery.data.todayNewMemberCount}명`} />
             <StatCard
-              label="입금 대기"
+              label="입금대기"
               value={`${summaryQuery.data.depositWaitingCount}건`}
               to="/admin/orders?statusGroup=PAYMENT_WAITING"
             />

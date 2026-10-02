@@ -11,9 +11,7 @@ export default function RecentViewsPage() {
   return (
     <div>
       <h2 className="text-xl font-bold">최근 본 상품</h2>
-      <p className="mt-1 text-sm text-content-muted">
-        최근에 본 순서대로 최대 20개를 보여드립니다.
-      </p>
+      <p className="mt-1 text-sm text-content-muted">최근에 본 순서대로 최대 20개를 보여줍니다.</p>
 
       {isPending && (
         <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">

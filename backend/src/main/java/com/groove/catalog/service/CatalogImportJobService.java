@@ -78,7 +78,7 @@ public class CatalogImportJobService {
 		}
 
 		adminAuditLogService.record(adminId, AdminAuditAction.CATALOG_IMPORT_JOB_START,
-				AdminAuditTargetType.CATALOG_IMPORT_JOB, execution.getId(), "discogsMasterId=" + masterId);
+				AdminAuditTargetType.CATALOG_IMPORT_JOB, execution.getId(), "Discogs 마스터 " + masterId);
 
 		return new CatalogImportJobStartResponse(execution.getId());
 	}

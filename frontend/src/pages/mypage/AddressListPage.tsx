@@ -80,7 +80,7 @@ export default function AddressListPage() {
         <div>
           <h2 className="text-[17px] font-bold tracking-tight">배송지</h2>
           <p className="mt-1.5 text-sm text-content-muted">
-            등록된 배송지 {addresses.length} / {MAX_ADDRESS_COUNT}개
+            등록된 배송지 {addresses.length}개 / 최대 {MAX_ADDRESS_COUNT}개
           </p>
         </div>
         {/* 서버도 막지만, 다 채운 뒤에 실패를 알려주는 건 늦다. */}

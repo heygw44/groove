@@ -146,14 +146,16 @@ describe('OrderCompletePage', () => {
     renderPage();
 
     // then
-    expect(screen.getByText('주문이 접수되었습니다. 입금을 기다리고 있어요')).toBeInTheDocument();
+    expect(
+      screen.getByText('주문이 접수되었습니다. 입금을 기다리고 있습니다.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('무통장입금 계좌 안내')).toBeInTheDocument();
     expect(screen.getByText('신한은행')).toBeInTheDocument();
     expect(screen.getByText('110-1234-5678')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '복사' })).toBeInTheDocument();
   });
 
-  it('결제 정보가 아직 없으면 확인 중 안내를 보여준다', () => {
+  it('결제정보가 아직 없으면 확인 중 안내를 보여준다', () => {
     // given
     mockOrder(buildOrder({ payment: undefined }));
 

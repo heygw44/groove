@@ -48,7 +48,7 @@ function getAmountLabel(status: OrderItem['status'], payment?: OrderPayment) {
   if (ENDED_BY_REFUND_STATUSES.includes(status)) {
     return '환불 금액';
   }
-  return '결제 금액';
+  return '결제금액';
 }
 
 function OrderItemThumbnail({ url }: { url: string | null }) {

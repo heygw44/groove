@@ -31,7 +31,7 @@ export function OrderPriceSummary({
         </span>
       </div>
       <div className="flex items-center justify-between border-t border-line pt-2.5 text-base font-bold">
-        <span>총 결제 금액</span>
+        <span>총 결제금액</span>
         <span className="tabular-nums">{formatPrice(finalAmount)}</span>
       </div>
     </div>

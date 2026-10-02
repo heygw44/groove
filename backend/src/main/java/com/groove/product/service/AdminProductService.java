@@ -5,7 +5,9 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -48,6 +50,27 @@ import lombok.RequiredArgsConstructor;
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class AdminProductService {
+
+	private static final Map<String, String> FIELD_LABELS = Map.ofEntries(
+			Map.entry("title", "제목"),
+			Map.entry("artist", "아티스트"),
+			Map.entry("label", "레이블"),
+			Map.entry("releaseDate", "발매일"),
+			Map.entry("pressingInfo", "사양"),
+			Map.entry("colorVariant", "컬러반"),
+			Map.entry("country", "제작 국가"),
+			Map.entry("pressingYear", "제작 연도"),
+			Map.entry("catalogNo", "카탈로그 번호"),
+			Map.entry("barcode", "바코드"),
+			Map.entry("editionType", "에디션"),
+			Map.entry("price", "가격"),
+			Map.entry("description", "설명"),
+			Map.entry("genres", "장르"),
+			Map.entry("images", "이미지"));
+	private static final Map<ProductStatus, String> STATUS_LABELS = Map.of(
+			ProductStatus.ON_SALE, "판매중",
+			ProductStatus.SOLD_OUT, "품절",
+			ProductStatus.HIDDEN, "숨김");
 
 	private final ProductRepository productRepository;
 	private final AlbumRepository albumRepository;
@@ -161,7 +184,7 @@ public class AdminProductService {
 				.orElseThrow(() -> new BusinessException(ErrorCode.STOCK_NOT_FOUND));
 
 		adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_UPDATE, AdminAuditTargetType.PRODUCT,
-				productId, String.join(",", changedFields));
+				productId, "변경: " + toLabels(changedFields));
 		eventPublisher.publishEvent(new ProductCatalogChangedEvent());
 
 		return AdminProductResponse.from(product, stock.getQuantity());
@@ -197,7 +220,7 @@ public class AdminProductService {
 		product.restore(stock.getQuantity());
 
 		adminAuditLogService.record(adminId, AdminAuditAction.PRODUCT_RESTORE, AdminAuditTargetType.PRODUCT,
-				productId, product.getStatus().name());
+				productId, "복구: " + STATUS_LABELS.get(product.getStatus()));
 		eventPublisher.publishEvent(new ProductCatalogChangedEvent());
 
 		return AdminProductResponse.from(product, stock.getQuantity());
@@ -206,6 +229,15 @@ public class AdminProductService {
 	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Long albumId, Pageable pageable) {
 		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, albumId, pageable);
 		return PageResponse.from(page);
+	}
+
+	private String toLabels(List<String> changedFields) {
+		if (changedFields.isEmpty()) {
+			return "없음";
+		}
+		return changedFields.stream()
+				.map(field -> FIELD_LABELS.getOrDefault(field, field))
+				.collect(Collectors.joining(", "));
 	}
 
 	private Album resolveAlbum(ProductCreateRequest request, Artist artist) {

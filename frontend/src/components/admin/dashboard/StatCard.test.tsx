@@ -34,7 +34,7 @@ describe('StatCard', () => {
     // given & when
     render(
       <MemoryRouter>
-        <StatCard label="입금 대기" value="3건" to="/admin/orders?statusGroup=PAYMENT_WAITING" />
+        <StatCard label="입금대기" value="3건" to="/admin/orders?statusGroup=PAYMENT_WAITING" />
       </MemoryRouter>,
     );
 

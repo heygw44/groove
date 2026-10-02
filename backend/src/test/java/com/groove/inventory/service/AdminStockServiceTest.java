@@ -61,7 +61,7 @@ class AdminStockServiceTest {
 			// then
 			assertThat(response.quantity()).isEqualTo(15);
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.STOCK_ADJUST),
-					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), eq("IN:10->15"));
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), eq("입고 10 → 15"));
 		}
 
 		@Test
@@ -80,7 +80,7 @@ class AdminStockServiceTest {
 			// then
 			verify(stockService).adjust(eq(PRODUCT_ID), any());
 			verify(adminAuditLogService).record(eq(ADMIN_ID), eq(AdminAuditAction.STOCK_ADJUST),
-					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), eq("OUT:10->7"));
+					eq(AdminAuditTargetType.PRODUCT), eq(PRODUCT_ID), eq("출고 10 → 7"));
 		}
 	}
 }
