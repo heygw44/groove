@@ -295,7 +295,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 			flushAndClear();
 
 			// when
-			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null, null,
+			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null, null, null,
 					PageRequest.of(0, 100));
 
 			// then
@@ -326,7 +326,7 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 
 			// when
 			Page<AdminProductSummaryResponse> hiddenPage = productRepository.findAdminSummaries(
-					ProductStatus.HIDDEN, null, PageRequest.of(0, 100));
+					ProductStatus.HIDDEN, null, null, PageRequest.of(0, 100));
 
 			// then
 			List<Long> hiddenIds = hiddenPage.getContent().stream()
@@ -353,12 +353,68 @@ class ProductRepositoryTest extends DataJpaTestSupport {
 
 			// when
 			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null,
-					savedBase.getAlbum().getId(), PageRequest.of(0, 100));
+					savedBase.getAlbum().getId(), null, PageRequest.of(0, 100));
 
 			// then
 			List<Long> ids = page.getContent().stream().map(AdminProductSummaryResponse::id).toList();
 			assertThat(ids).contains(savedBase.getId());
 			assertThat(ids).doesNotContain(savedOther.getId());
+		}
+
+		@Test
+		@DisplayName("keyword 가 상품명이나 아티스트명에 포함되면 대소문자 무관하게 조회된다")
+		void filtersByKeywordOnTitleOrArtistName() {
+			// given
+			Artist matchedArtist = artistRepository.save(ArtistFixture.create("Zq9Artist Quartet"));
+			Product byArtist = ProductFixture.create(matchedArtist, "Unrelated Title A");
+			albumRepository.save(byArtist.getAlbum());
+			byArtist = productRepository.save(byArtist);
+			stockRepository.save(Stock.create(byArtist, 5));
+			Artist otherArtist = artistRepository.save(ArtistFixture.create());
+			Product byTitle = ProductFixture.create(otherArtist, "Zq9Title Sessions");
+			albumRepository.save(byTitle.getAlbum());
+			byTitle = productRepository.save(byTitle);
+			stockRepository.save(Stock.create(byTitle, 5));
+			Product unmatched = ProductFixture.create(otherArtist, "Plain Other Record");
+			albumRepository.save(unmatched.getAlbum());
+			unmatched = productRepository.save(unmatched);
+			stockRepository.save(Stock.create(unmatched, 5));
+			flushAndClear();
+
+			// when
+			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(null, null, "zQ9",
+					PageRequest.of(0, 100));
+
+			// then
+			List<Long> ids = page.getContent().stream().map(AdminProductSummaryResponse::id).toList();
+			assertThat(ids).contains(byArtist.getId(), byTitle.getId());
+			assertThat(ids).doesNotContain(unmatched.getId());
+			assertThat(page.getTotalElements()).isGreaterThanOrEqualTo(2L);
+		}
+
+		@Test
+		@DisplayName("keyword 와 status 를 함께 지정하면 두 조건을 모두 만족하는 상품만 조회된다")
+		void combinesKeywordWithStatus() {
+			// given
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product onSale = ProductFixture.create(artist, "Kw7Combo On Sale");
+			albumRepository.save(onSale.getAlbum());
+			onSale = productRepository.save(onSale);
+			stockRepository.save(Stock.create(onSale, 5));
+			Product hidden = ProductFixture.create(artist, "Kw7Combo Hidden");
+			hidden.hide();
+			albumRepository.save(hidden.getAlbum());
+			hidden = productRepository.save(hidden);
+			stockRepository.save(Stock.create(hidden, 5));
+			flushAndClear();
+
+			// when
+			Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(ProductStatus.HIDDEN,
+					null, "kw7combo", PageRequest.of(0, 100));
+
+			// then
+			List<Long> ids = page.getContent().stream().map(AdminProductSummaryResponse::id).toList();
+			assertThat(ids).containsExactly(hidden.getId());
 		}
 	}
 

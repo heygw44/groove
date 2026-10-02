@@ -155,8 +155,8 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 	class FindAggregatedAt {
 
 		@Test
-		@DisplayName("기간 내 가장 오래된 aggregated_at 을 반환한다")
-		void returnsOldestAggregatedAtInRange() {
+		@DisplayName("기간 내 가장 최근 aggregated_at 을 반환한다")
+		void returnsLatestAggregatedAtInRange() {
 			// given
 			LocalDateTime older = LocalDateTime.of(2031, 3, 2, 3, 0);
 			LocalDateTime newer = LocalDateTime.of(2031, 3, 3, 3, 30);
@@ -171,7 +171,7 @@ class AdminStatsMapperTest extends MybatisTestSupport {
 			LocalDateTime result = adminStatsMapper.findAggregatedAt(FAR_PERIOD_FROM, FAR_PERIOD_TO);
 
 			// then
-			assertThat(result.truncatedTo(ChronoUnit.SECONDS)).isEqualTo(older.truncatedTo(ChronoUnit.SECONDS));
+			assertThat(result.truncatedTo(ChronoUnit.SECONDS)).isEqualTo(newer.truncatedTo(ChronoUnit.SECONDS));
 		}
 
 		@Test

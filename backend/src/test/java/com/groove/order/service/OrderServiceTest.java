@@ -693,6 +693,7 @@ class OrderServiceTest {
 			assertThat(response.payment()).isNotNull();
 			assertThat(response.payment().method()).isEqualTo(PaymentFixture.METHOD);
 			assertThat(response.payment().approvedAt()).isEqualTo(PaymentFixture.APPROVED_AT);
+			assertThat(response.payment().canceledAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 		}
 
 		@Test
@@ -713,6 +714,7 @@ class OrderServiceTest {
 			// then
 			assertThat(response.payment()).isNotNull();
 			assertThat(response.payment().status()).isEqualTo(PaymentStatus.PARTIAL_CANCELED);
+			assertThat(response.payment().canceledAmount()).isEqualByComparingTo(BigDecimal.ONE);
 		}
 
 		@Test
