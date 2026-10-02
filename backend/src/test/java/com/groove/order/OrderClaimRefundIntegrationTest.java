@@ -411,7 +411,7 @@ class OrderClaimRefundIntegrationTest extends IntegrationTestSupport {
 			albumRepository.save(createdProduct.getAlbum());
 			Product product = productRepository.save(createdProduct);
 			stockRepository.saveAndFlush(StockFixture.create(product, 5));
-			LimitedDrop drop = LimitedDropFixture.scheduled(product, 5, 2);
+			LimitedDrop drop = LimitedDropFixture.scheduled(product, 5, 1);
 			drop.open();
 			LocalDateTime now = LocalDateTime.now(clock);
 			LimitedDropFixture.withOpenAt(drop, now.minusHours(1));

@@ -18,7 +18,6 @@ export const createAdminLimitedDropFormSchema = (now: Date = getServerNow()) =>
     .object({
       productId: z.string().min(1, '상품을 선택해주세요.'),
       totalQuantity: z.string().regex(/^\d{1,9}$/, '1 이상의 숫자로 입력해주세요.'),
-      perMemberLimit: z.string().regex(/^\d{1,2}$/, '1~5 사이의 숫자로 입력해주세요.'),
       openAt: z.string().min(1, '오픈 시각을 입력해주세요.'),
       closeAt: z.string().min(1, '마감 시각을 입력해주세요.'),
     })
@@ -28,15 +27,6 @@ export const createAdminLimitedDropFormSchema = (now: Date = getServerNow()) =>
           code: z.ZodIssueCode.custom,
           path: ['totalQuantity'],
           message: '1 이상의 숫자로 입력해주세요.',
-        });
-      }
-
-      const perMemberLimit = Number(values.perMemberLimit);
-      if (perMemberLimit < 1 || perMemberLimit > 5) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['perMemberLimit'],
-          message: '1~5 사이의 숫자로 입력해주세요.',
         });
       }
 
@@ -64,7 +54,6 @@ export type AdminLimitedDropFormValues = z.infer<
 export const EMPTY_ADMIN_LIMITED_DROP_FORM_VALUES: AdminLimitedDropFormValues = {
   productId: '',
   totalQuantity: '',
-  perMemberLimit: '1',
   openAt: '',
   closeAt: '',
 };
@@ -74,7 +63,6 @@ export const toAdminLimitedDropFormValues = (
 ): AdminLimitedDropFormValues => ({
   productId: String(drop.productId),
   totalQuantity: String(drop.totalQuantity),
-  perMemberLimit: String(drop.perMemberLimit),
   // datetime-local 입력값 형식(YYYY-MM-DDTHH:mm)에 맞춰 초 단위를 자른다.
   openAt: drop.openAt.slice(0, 16),
   closeAt: drop.closeAt.slice(0, 16),
@@ -88,7 +76,6 @@ export const toAdminLimitedDropCreatePayload = (
 ): AdminLimitedDropCreateRequest => ({
   productId: Number(values.productId),
   totalQuantity: Number(values.totalQuantity),
-  perMemberLimit: Number(values.perMemberLimit),
   openAt: toLocalDateTime(values.openAt),
   closeAt: toLocalDateTime(values.closeAt),
 });
@@ -107,11 +94,6 @@ export const toAdminLimitedDropUpdatePayload = (
   const totalQuantity = Number(values.totalQuantity);
   if (totalQuantity !== drop.totalQuantity) {
     payload.totalQuantity = totalQuantity;
-  }
-
-  const perMemberLimit = Number(values.perMemberLimit);
-  if (perMemberLimit !== drop.perMemberLimit) {
-    payload.perMemberLimit = perMemberLimit;
   }
 
   const openAt = toLocalDateTime(values.openAt);

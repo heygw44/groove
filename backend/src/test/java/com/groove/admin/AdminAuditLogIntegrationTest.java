@@ -123,7 +123,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 
 			// when: 한정반 강제 오픈
 			Product limitedProduct = seedProduct(50);
-			LimitedDropCreateRequest dropRequest = new LimitedDropCreateRequest(limitedProduct.getId(), 50, 2,
+			LimitedDropCreateRequest dropRequest = new LimitedDropCreateRequest(limitedProduct.getId(), 50, 1,
 					LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 			MvcResult dropResult = mockMvc.perform(post("/api/v1/admin/limited-drops")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)

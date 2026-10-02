@@ -154,7 +154,7 @@ class OrderExpirationIntegrationTest extends IntegrationTestSupport {
 	}
 
 	private Long prepareOpenDrop(Product product, int totalQuantity) {
-		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, totalQuantity);
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, 1);
 		drop.open();
 		LocalDateTime now = LocalDateTime.now(clock);
 		LimitedDropFixture.withOpenAt(drop, now.minusHours(1));

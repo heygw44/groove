@@ -460,7 +460,7 @@ class NPlusOneRegressionTest extends IntegrationTestSupport {
 	private LimitedDrop createScheduledDrop() throws Exception {
 		String adminBearer = adminBearer();
 		Product product = seedProduct(100);
-		LimitedDropCreateRequest createRequest = new LimitedDropCreateRequest(product.getId(), 100, 2,
+		LimitedDropCreateRequest createRequest = new LimitedDropCreateRequest(product.getId(), 100, 1,
 				LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 		MvcResult createResult = mockMvc.perform(post("/api/v1/admin/limited-drops")
 						.header(HttpHeaders.AUTHORIZATION, adminBearer)

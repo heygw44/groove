@@ -108,7 +108,7 @@ class AdminLimitedDropServiceTest {
 	}
 
 	private LimitedDropCreateRequest createRequest() {
-		return new LimitedDropCreateRequest(PRODUCT_ID, 100, 2, LocalDateTime.now().plusDays(1),
+		return new LimitedDropCreateRequest(PRODUCT_ID, 100, 1, LocalDateTime.now().plusDays(1),
 				LocalDateTime.now().plusDays(2));
 	}
 

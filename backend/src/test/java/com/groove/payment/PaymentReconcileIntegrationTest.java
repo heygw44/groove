@@ -809,7 +809,7 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 	}
 
 	private Long prepareOpenDrop(Product product, int totalQuantity) {
-		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, totalQuantity);
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, 1);
 		drop.open();
 		LimitedDropFixture.withOpenAt(drop, now().minusHours(1));
 		LimitedDropFixture.withCloseAt(drop, now().plusHours(1));

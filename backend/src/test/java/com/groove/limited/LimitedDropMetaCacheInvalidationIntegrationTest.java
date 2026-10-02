@@ -71,7 +71,7 @@ class LimitedDropMetaCacheInvalidationIntegrationTest extends IntegrationTestSup
 			Product product = productRepository.save(createdProduct);
 			stockRepository.saveAndFlush(StockFixture.create(product, 10));
 			LocalDateTime now = LocalDateTime.now();
-			LimitedDrop scheduled = LimitedDropFixture.scheduled(product, 10, 2);
+			LimitedDrop scheduled = LimitedDropFixture.scheduled(product, 10, 1);
 			LimitedDropFixture.withOpenAt(scheduled, now.minusMinutes(1));
 			LimitedDrop drop = limitedDropRepository.saveAndFlush(scheduled);
 			Long dropId = drop.getId();

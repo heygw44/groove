@@ -1509,7 +1509,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 		Product product = productRepository.save(createdProduct);
 		stockRepository.saveAndFlush(StockFixture.create(product, totalQuantity));
 
-		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, Math.min(2, totalQuantity));
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, 1);
 		drop.open();
 		// 서비스는 Asia/Seoul Clock 을 쓰므로 시스템 시각으로 잡으면 UTC 러너에서 드롭이 마감된 것으로 판정된다.
 		LocalDateTime now = LocalDateTime.now(clock);
@@ -1531,7 +1531,7 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 		Product product = productRepository.save(createdProduct);
 		stockRepository.saveAndFlush(StockFixture.create(product, totalQuantity));
 
-		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, Math.min(2, totalQuantity));
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, 1);
 		drop.open();
 		// 서비스는 Asia/Seoul Clock 을 쓰므로 시스템 시각으로 잡으면 UTC 러너에서 드롭이 마감된 것으로 판정된다.
 		LocalDateTime now = LocalDateTime.now(clock);

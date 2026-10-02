@@ -16,7 +16,6 @@ const formValues = (
   ...EMPTY_ADMIN_LIMITED_DROP_FORM_VALUES,
   productId: '1',
   totalQuantity: '100',
-  perMemberLimit: '2',
   openAt: '2026-09-10T10:00',
   closeAt: '2026-09-11T10:00',
   ...overrides,
@@ -28,7 +27,7 @@ const drop = (overrides: Partial<AdminLimitedDropSummary> = {}): AdminLimitedDro
   productTitle: 'Kind of Blue',
   totalQuantity: 100,
   soldCount: 0,
-  perMemberLimit: 2,
+  perMemberLimit: 1,
   openAt: '2026-09-10T10:00:00',
   closeAt: '2026-09-11T10:00:00',
   status: 'SCHEDULED',
@@ -46,30 +45,6 @@ describe('createAdminLimitedDropFormSchema()', () => {
 
     // when & then
     expect(schema.safeParse(values).success).toBe(false);
-  });
-
-  it('1인 한도가 0이면 실패한다', () => {
-    // given
-    const values = formValues({ perMemberLimit: '0' });
-
-    // when & then
-    expect(schema.safeParse(values).success).toBe(false);
-  });
-
-  it('1인 한도가 6이면 실패한다', () => {
-    // given
-    const values = formValues({ perMemberLimit: '6' });
-
-    // when & then
-    expect(schema.safeParse(values).success).toBe(false);
-  });
-
-  it('1인 한도가 5이면 통과한다', () => {
-    // given
-    const values = formValues({ perMemberLimit: '5' });
-
-    // when & then
-    expect(schema.safeParse(values).success).toBe(true);
   });
 
   it('오픈 시각이 현재 시각 이전이면 실패한다', () => {
@@ -137,14 +112,30 @@ describe('toAdminLimitedDropCreatePayload()', () => {
     expect(payload).toEqual({
       productId: 1,
       totalQuantity: 100,
-      perMemberLimit: 2,
       openAt: '2026-09-10T10:00:00',
       closeAt: '2026-09-11T10:00:00',
     });
+    expect(payload).not.toHaveProperty('perMemberLimit');
   });
 });
 
 describe('toAdminLimitedDropUpdatePayload()', () => {
+  it('모든 값을 바꿔도 perMemberLimit은 담지 않는다', () => {
+    // given
+    const original = drop();
+    const values = {
+      ...toAdminLimitedDropFormValues(original),
+      totalQuantity: '200',
+      closeAt: '2026-09-15T10:00',
+    };
+
+    // when
+    const payload = toAdminLimitedDropUpdatePayload(original, values);
+
+    // then
+    expect(payload).not.toHaveProperty('perMemberLimit');
+  });
+
   it('바뀐 값이 없으면 undefined를 반환한다', () => {
     // given
     const original = drop();

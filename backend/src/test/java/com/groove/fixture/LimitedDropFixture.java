@@ -11,7 +11,7 @@ import com.groove.product.entity.Product;
 public final class LimitedDropFixture {
 
 	private static final int DEFAULT_TOTAL_QUANTITY = 100;
-	private static final int DEFAULT_PER_MEMBER_LIMIT = 2;
+	private static final int DEFAULT_PER_MEMBER_LIMIT = 1;
 
 	private LimitedDropFixture() {
 	}
