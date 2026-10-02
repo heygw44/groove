@@ -47,12 +47,16 @@ class PaymentLateResultApplierTest {
 	@Mock
 	private PaymentClient paymentClient;
 
+	@Mock
+	private LimitedVirtualAccountCloser limitedVirtualAccountCloser;
+
 	private PaymentLateResultApplier applier;
 	private PaymentReconcileCandidate candidate;
 
 	@BeforeEach
 	void setUp() {
-		applier = new PaymentLateResultApplier(reconcileService, compensator, paymentClient);
+		applier = new PaymentLateResultApplier(reconcileService, compensator, paymentClient,
+				limitedVirtualAccountCloser);
 		candidate = new PaymentReconcileCandidate(PAYMENT_ID, ORDER_ID, TOSS_ORDER_ID);
 	}
 
@@ -74,6 +78,22 @@ class PaymentLateResultApplierTest {
 			// then
 			assertThat(outcome.needsCompensation()).isFalse();
 			assertThat(outcome.needsCancelRetry()).isFalse();
+			verifyNoInteractions(compensator, paymentClient, limitedVirtualAccountCloser);
+		}
+
+		@Test
+		@DisplayName("한정반 가상계좌 폐쇄가 필요한 결과면 같은 detail 태그로 폐쇄를 위임한다")
+		void delegatesVirtualAccountCloseWithDetail() {
+			// given
+			PaymentLookupResult lookup = doneLookup();
+			given(reconcileService.applyLate(candidate, lookup, "webhook"))
+					.willReturn(PaymentReconcileOutcome.needsVirtualAccountClose(PAYMENT_KEY));
+
+			// when
+			applier.apply(candidate, lookup, "webhook");
+
+			// then
+			verify(limitedVirtualAccountCloser).close(candidate, PAYMENT_KEY, "webhook");
 			verifyNoInteractions(compensator, paymentClient);
 		}
 

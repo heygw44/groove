@@ -25,6 +25,7 @@ import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
+import com.groove.payment.service.LimitedVirtualAccountCloser;
 import com.groove.payment.service.PaymentCancelRetrier;
 import com.groove.payment.service.PaymentCompensationRetrier;
 import com.groove.payment.service.PaymentCompensator;
@@ -44,6 +45,14 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class PaymentReconcileScheduler {
 
+	// 후보마다 토스 HTTP 를 타고 대사 named lock 을 쥔 채 돌므로, 한 회차 재시도를 batchSize×10 건으로 묶는다.
+	// 이보다 많은 행이 REQUESTED 로 밀려 있으면 이미 수동 확인 알림이 나간 장애 상황이다.
+	private static final int MAX_REFUND_RETRY_ROUNDS = 10;
+
+	// 첫 바퀴는 nullable 파라미터 대신 모든 행보다 앞선 센티널 커서로 조회한다.
+	private static final LocalDateTime INITIAL_CURSOR_REQUESTED_AT = LocalDateTime.of(1970, 1, 1, 0, 0);
+	private static final long INITIAL_CURSOR_ID = 0L;
+
 	private final PaymentReconcileService reconcileService;
 	private final PaymentReconcileLock reconcileLock;
 	private final PaymentClient paymentClient;
@@ -56,6 +65,7 @@ public class PaymentReconcileScheduler {
 	private final ShutdownSignal shutdownSignal;
 	private final Clock clock;
 	private final AlertNotifier alertNotifier;
+	private final LimitedVirtualAccountCloser limitedVirtualAccountCloser;
 
 	@Scheduled(fixedDelayString = "${groove.payment.reconcile.interval}", initialDelay = 45_000)
 	public void reconcile() {
@@ -93,6 +103,9 @@ public class PaymentReconcileScheduler {
 				if (outcome.needsCancelRetry()) {
 					retryCancel(candidate, outcome.paymentKey(), outcome.idempotencyKey(),
 							outcome.refundAccount());
+				}
+				if (outcome.needsVirtualAccountClose()) {
+					limitedVirtualAccountCloser.close(candidate, outcome.paymentKey(), null);
 				}
 			} catch (RuntimeException e) {
 				failed++;
@@ -134,13 +147,40 @@ public class PaymentReconcileScheduler {
 	/** payment_compensation 회수 다음, 같은 named lock 안에서 결과불명 부분취소(payment_cancel)를 회수한다. */
 	private void reconcileRefundRetries(LocalDateTime now) {
 		LocalDateTime retryBefore = now.minus(reconcileProperties.refundRetryGrace());
-		List<PaymentCancelRetryCandidate> candidates = paymentCancelRepository.findRetryCandidates(retryBefore,
-				Limit.of(reconcileProperties.batchSize()));
+		LocalDateTime afterRequestedAt = INITIAL_CURSOR_REQUESTED_AT;
+		long afterId = INITIAL_CURSOR_ID;
+		int candidateTotal = 0;
+		int processed = 0;
+		for (int round = 0; round < MAX_REFUND_RETRY_ROUNDS; round++) {
+			if (shutdownSignal.isShuttingDown()) {
+				log.info("셧다운 신호로 부분취소 재시도 회수 중단 processed={}", processed);
+				break;
+			}
+			List<PaymentCancelRetryCandidate> candidates = paymentCancelRepository.findRetryCandidates(retryBefore,
+					afterRequestedAt, afterId, Limit.of(reconcileProperties.batchSize()));
+			if (candidates.isEmpty()) {
+				break;
+			}
+			candidateTotal += candidates.size();
+			processed += retryRefundRound(candidates);
+			// 수동 확인 대상·결과불명 행은 REQUESTED 로 남아 커서 없이 다시 조회하면 매번 앞자리를 차지해 뒤 정상 건을
+			// 굶긴다. 이번 바퀴 후보는 모두 시도했으니 마지막 후보 뒤로 커서를 옮긴다.
+			PaymentCancelRetryCandidate last = candidates.get(candidates.size() - 1);
+			afterRequestedAt = last.requestedAt();
+			afterId = last.paymentCancelId();
+			if (candidates.size() < reconcileProperties.batchSize()) {
+				break;
+			}
+		}
+		if (processed > 0) {
+			log.info("부분취소 재시도 회수 완료 candidates={} processed={}", candidateTotal, processed);
+		}
+	}
+
+	private int retryRefundRound(List<PaymentCancelRetryCandidate> candidates) {
 		int processed = 0;
 		for (PaymentCancelRetryCandidate candidate : candidates) {
 			if (shutdownSignal.isShuttingDown()) {
-				log.info("셧다운 신호로 부분취소 재시도 회수 중단 processed={} remaining={}", processed,
-						candidates.size() - processed);
 				break;
 			}
 			try {
@@ -150,9 +190,7 @@ public class PaymentReconcileScheduler {
 			}
 			processed++;
 		}
-		if (processed > 0) {
-			log.info("부분취소 재시도 회수 완료 candidates={} processed={}", candidates.size(), processed);
-		}
+		return processed;
 	}
 
 	private void retryCancel(PaymentReconcileCandidate candidate, String paymentKey, String idempotencyKey,

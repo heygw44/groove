@@ -44,7 +44,8 @@ public interface PaymentCancelRepository extends JpaRepository<PaymentCancel, Lo
 	 * 결과불명으로 REQUESTED 에 남아 requestedAt 이 오래된 부분취소 재시도 후보. payment.status 를
 	 * DONE/PARTIAL_CANCELED 로 좁히는 이유: 전액취소(PaymentCancelWriter)의 REQUESTED 행은 결제가 항상
 	 * CANCEL_REQUESTED 인 동안만 존재하고, 그 재시도는 이미 대사 스케줄러의 기존 취소 재시도 경로가 매 주기
-	 * 맡고 있어 여기서 다시 집어가면 안 된다.
+	 * 맡고 있어 여기서 다시 집어가면 안 된다. 수동 확인으로 넘긴 행·결과불명 행은 REQUESTED 로 남아 계속 앞자리를
+	 * 차지하므로 (requestedAt, id) 커서 뒤의 행만 조회해 뒤쪽 정상 건까지 한 회차 안에 닿게 한다.
 	 */
 	@Query("""
 			select new com.groove.payment.dto.PaymentCancelRetryCandidate(pc.id, p.id, p.paymentKey, p.tossOrderId,
@@ -54,8 +55,10 @@ public interface PaymentCancelRepository extends JpaRepository<PaymentCancel, Lo
 			and p.status in (com.groove.payment.entity.PaymentStatus.DONE,
 				com.groove.payment.entity.PaymentStatus.PARTIAL_CANCELED)
 			and pc.requestedAt <= :retryBefore
+			and (pc.requestedAt > :afterRequestedAt
+				or (pc.requestedAt = :afterRequestedAt and pc.id > :afterId))
 			order by pc.requestedAt asc, pc.id asc
 			""")
 	List<PaymentCancelRetryCandidate> findRetryCandidates(@Param("retryBefore") LocalDateTime retryBefore,
-			Limit limit);
+			@Param("afterRequestedAt") LocalDateTime afterRequestedAt, @Param("afterId") Long afterId, Limit limit);
 }

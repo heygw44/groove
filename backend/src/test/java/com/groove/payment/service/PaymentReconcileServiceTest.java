@@ -208,11 +208,12 @@ class PaymentReconcileServiceTest {
 		}
 
 		@Test
-		@DisplayName("한정반 주문의 가상계좌 발급은 반영하지 않고 MANUAL_REVIEW 로 남긴다")
-		void manualReviewsIssueVirtualAccountForLimitedOrder() {
+		@DisplayName("한정반 주문의 가상계좌 발급은 반영하지 않고 아무것도 쓰지 않은 채 계좌 폐쇄를 요청한다")
+		void requestsVirtualAccountCloseForLimitedOrder() {
 			// given
 			Order order = orderWithStatus(OrderStatus.PENDING);
 			Payment payment = readyPayment(order);
+			payment.markUnknown("가상계좌 폐쇄 실패");
 			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
 			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
 			given(limitedPurchaseRepository.existsByOrderId(ORDER_ID)).willReturn(true);
@@ -222,13 +223,16 @@ class PaymentReconcileServiceTest {
 					"가상계좌", AMOUNT, null, null, null, null, null, virtualAccount);
 
 			// when
-			service.apply(candidate(), lookup);
+			PaymentReconcileOutcome outcome = service.apply(candidate(), lookup);
 
 			// then
+			assertThat(outcome.needsVirtualAccountClose()).isTrue();
+			assertThat(outcome.paymentKey()).isEqualTo(PAYMENT_KEY);
 			verify(writer, never()).issueVirtualAccount(any(), any(), any(), any());
-			verify(alertNotifier).notify(any(Alert.class));
-			assertThat(payment.getReconcileAttempts()).isEqualTo(1);
-			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			verify(logRepository, never()).save(any());
+			verifyNoInteractions(alertNotifier);
+			assertThat(payment.getReconcileAttempts()).isZero();
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
 		}
 
 		@Test
@@ -551,6 +555,211 @@ class PaymentReconcileServiceTest {
 			PaymentReconcileLog log = capturedLog();
 			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.SKIPPED);
 			assertThat(log.getDetail()).isEqualTo("TOSS 통신 실패");
+		}
+	}
+
+	@Nested
+	@DisplayName("recordLimitedVirtualAccountClose()")
+	class RecordLimitedVirtualAccountClose {
+
+		@Test
+		@DisplayName("폐쇄에 성공하면 UNKNOWN 결제를 FAILED 로 확정하고 FAILED 로 남긴다")
+		void failsUnknownPaymentWhenCloseSucceeded() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.markUnknown("가상계좌 폐쇄 실패");
+			givenLocked(order, payment);
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), null, null);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+			assertThat(payment.getFailReason()).isEqualTo(LimitedVirtualAccountCloser.REASON);
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.FAILED);
+			assertThat(log.getTossStatus()).isEqualTo("CANCELED");
+			verifyNoInteractions(alertNotifier);
+		}
+
+		@Test
+		@DisplayName("폐쇄에 성공하면 이미 FAILED 인 결제는 그대로 두고 CANCELED 로 남긴다")
+		void keepsFailedPaymentWhenCloseSucceeded() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.fail("대사 상한 초과");
+			givenLocked(order, payment);
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), null, "webhook");
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+			assertThat(payment.getFailReason()).isEqualTo("대사 상한 초과");
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.CANCELED);
+			assertThat(log.getDetail()).isEqualTo("webhook");
+		}
+
+		@Test
+		@DisplayName("결과 불명으로 폐쇄에 실패하면 상한 전에는 miss 처리하고 상태를 유지한 채 SKIPPED 로 남긴다")
+		void recordsMissWhenCloseResultUnknownBelowLimit() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.markUnknown("가상계좌 폐쇄 실패");
+			givenLocked(order, payment);
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "토스 타임아웃");
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), failure, "webhook");
+
+			// then
+			verify(alertNotifier).notify(any(Alert.class));
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+			assertThat(payment.getReconcileAttempts()).isEqualTo(1);
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.SKIPPED);
+			assertThat(log.getTossStatus()).isEqualTo("WAITING_FOR_DEPOSIT");
+			assertThat(log.getDetail()).isEqualTo("webhook: 토스 타임아웃");
+		}
+
+		@Test
+		@DisplayName("결과 불명이 상한에 도달해도 결제를 FAILED 로 바꾸지 않고 수동 폐쇄 MANUAL_REVIEW 로 남긴다")
+		void keepsUnresolvedWhenCloseResultUnknownAtLimit() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.markUnknown("가상계좌 폐쇄 실패");
+			ReflectionTestUtils.setField(payment, "reconcileAttempts", 9);
+			givenLocked(order, payment);
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, "토스 타임아웃");
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), failure, "webhook");
+
+			// then
+			ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+			verify(alertNotifier).notify(alertCaptor.capture());
+			assertThat(alertCaptor.getValue().summary()).contains("한정반 가상계좌 폐쇄 상한 도달");
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+			assertThat(payment.getReconcileAttempts()).isEqualTo(10);
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			assertThat(log.getDetail()).isEqualTo("한정반 가상계좌 폐쇄 상한 도달, 수동 폐쇄 필요");
+		}
+
+		@Test
+		@DisplayName("토스가 폐쇄를 거절하면 상한 전에는 miss 처리하고 상태를 유지한 채 MANUAL_REVIEW 로 남긴다")
+		void recordsMissWhenCloseRejectedBelowLimit() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.markUnknown("가상계좌 폐쇄 실패");
+			givenLocked(order, payment);
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "토스 거절");
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), failure, null);
+
+			// then
+			verify(alertNotifier).notify(any(Alert.class));
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+			assertThat(payment.getReconcileAttempts()).isEqualTo(1);
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			assertThat(log.getTossStatus()).isEqualTo("WAITING_FOR_DEPOSIT");
+			assertThat(log.getDetail()).isEqualTo("토스 거절");
+		}
+
+		@Test
+		@DisplayName("토스 거절이 상한에 도달해도 결제를 FAILED 로 바꾸지 않고 수동 폐쇄 MANUAL_REVIEW 로 남긴다")
+		void keepsUnresolvedWhenCloseRejectedAtLimit() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.markUnknown("가상계좌 폐쇄 실패");
+			ReflectionTestUtils.setField(payment, "reconcileAttempts", 9);
+			givenLocked(order, payment);
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "토스 거절");
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), failure, null);
+
+			// then
+			ArgumentCaptor<Alert> alertCaptor = ArgumentCaptor.forClass(Alert.class);
+			verify(alertNotifier).notify(alertCaptor.capture());
+			assertThat(alertCaptor.getValue().summary()).contains("한정반 가상계좌 폐쇄 상한 도달");
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNKNOWN);
+			assertThat(payment.getReconcileAttempts()).isEqualTo(10);
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			assertThat(log.getDetail()).isEqualTo("한정반 가상계좌 폐쇄 상한 도달, 수동 폐쇄 필요");
+		}
+
+		@Test
+		@DisplayName("폐쇄에 실패하면 FAILED 결제는 알림 후 재시도 횟수 없이 MANUAL_REVIEW 로만 남긴다")
+		void logsOnlyWhenCloseFailedOnFailedPayment() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.fail("대사 상한 초과");
+			givenLocked(order, payment);
+			BusinessException failure = new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED, "토스 거절");
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), failure, null);
+
+			// then
+			verify(alertNotifier).notify(any(Alert.class));
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+			assertThat(payment.getReconcileAttempts()).isZero();
+			PaymentReconcileLog log = capturedLog();
+			assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
+			assertThat(log.getDetail()).isEqualTo("토스 거절");
+		}
+
+		@Test
+		@DisplayName("결제가 이미 승인됐으면 아무것도 쓰지 않는다")
+		void doesNothingWhenPaymentDone() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PAID);
+			Payment payment = donePayment(order);
+			givenLocked(order, payment);
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(), null, null);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+			verify(logRepository, never()).save(any());
+			verifyNoInteractions(alertNotifier);
+		}
+
+		@Test
+		@DisplayName("결제가 입금대기로 반영됐으면 폐쇄 실패여도 아무것도 쓰지 않는다")
+		void doesNothingWhenPaymentWaitingForDeposit() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = waitingForDepositPayment(order);
+			givenLocked(order, payment);
+
+			// when
+			service.recordLimitedVirtualAccountClose(candidate(),
+					new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN), null);
+
+			// then
+			assertThat(payment.getStatus()).isEqualTo(PaymentStatus.WAITING_FOR_DEPOSIT);
+			assertThat(payment.getReconcileAttempts()).isZero();
+			verify(logRepository, never()).save(any());
+			verifyNoInteractions(alertNotifier);
+		}
+
+		private void givenLocked(Order order, Payment payment) {
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
 		}
 	}
 
