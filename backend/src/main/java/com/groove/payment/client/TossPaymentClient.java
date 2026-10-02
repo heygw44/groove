@@ -313,7 +313,10 @@ public class TossPaymentClient implements PaymentClient {
 	private PaymentConfirmResult absorbAlreadyProcessed(String paymentKey, String orderId, BigDecimal amount,
 			TossAlreadyProcessedException cause) {
 		PaymentLookupResult lookup = lookup(orderId);
-		boolean matches = lookup.status() == PaymentLookupStatus.DONE
+		boolean waitingForDeposit = lookup.status() == PaymentLookupStatus.WAITING_FOR_DEPOSIT;
+		boolean statusMatches = lookup.status() == PaymentLookupStatus.DONE
+				|| (waitingForDeposit && hasVirtualAccountSecret(lookup.virtualAccount()));
+		boolean matches = statusMatches
 				&& paymentKey.equals(lookup.paymentKey())
 				&& lookup.totalAmount() != null
 				&& amount.compareTo(lookup.totalAmount()) == 0;
@@ -323,7 +326,12 @@ public class TossPaymentClient implements PaymentClient {
 			throw new BusinessException(ErrorCode.PAYMENT_RESULT_UNKNOWN, cause.getMessage());
 		}
 		return new PaymentConfirmResult(lookup.paymentKey(), orderId, lookup.method(), lookup.totalAmount(),
-				lookup.approvedAt());
+				lookup.approvedAt(), lookup.status(), lookup.easyPayProvider(),
+				waitingForDeposit ? lookup.virtualAccount() : null);
+	}
+
+	private boolean hasVirtualAccountSecret(VirtualAccountInfo virtualAccount) {
+		return virtualAccount != null && virtualAccount.secret() != null && !virtualAccount.secret().isBlank();
 	}
 
 	private PaymentLookupResult toLookupResult(TossPaymentResponse response) {
@@ -331,8 +339,10 @@ public class TossPaymentClient implements PaymentClient {
 		TossPaymentResponse.Cancel lastCancel = response.lastCancel();
 		LocalDateTime canceledAt = lastCancel == null ? null : toServerTime(lastCancel.canceledAt());
 		String lastCancelTransactionKey = lastCancel == null ? null : lastCancel.transactionKey();
+		String easyPayProvider = response.easyPay() == null ? null : response.easyPay().provider();
 		return new PaymentLookupResult(status, response.paymentKey(), response.method(), response.totalAmount(),
-				toServerTime(response.approvedAt()), canceledAt, response.balanceAmount(), lastCancelTransactionKey);
+				toServerTime(response.approvedAt()), canceledAt, response.balanceAmount(), lastCancelTransactionKey,
+				easyPayProvider, toVirtualAccountInfo(response.virtualAccount(), response.secret()));
 	}
 
 	private VirtualAccountInfo toVirtualAccountInfo(TossPaymentResponse.VirtualAccount virtualAccount, String secret) {

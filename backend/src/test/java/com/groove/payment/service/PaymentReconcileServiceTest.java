@@ -35,14 +35,17 @@ import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.member.entity.Member;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.PaymentCancelResult;
+import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.client.dto.RefundAccountInfo;
+import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.config.PaymentReconcileProperties;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.entity.Payment;
@@ -78,6 +81,9 @@ class PaymentReconcileServiceTest {
 	@Mock
 	private AlertNotifier alertNotifier;
 
+	@Mock
+	private LimitedPurchaseRepository limitedPurchaseRepository;
+
 	private PaymentReconcileService service;
 
 	private Clock clock;
@@ -91,7 +97,7 @@ class PaymentReconcileServiceTest {
 		PaymentReconcileProperties properties = new PaymentReconcileProperties(Duration.ofSeconds(60),
 				Duration.ofMinutes(2), 50, 10, Duration.ofMinutes(1));
 		service = new PaymentReconcileService(paymentRepository, orderRepository, writer, cancelWriter, logRepository,
-				properties, clock, alertNotifier);
+				properties, clock, alertNotifier, limitedPurchaseRepository);
 		member = MemberFixture.withId(MemberFixture.create(), 1L);
 	}
 
@@ -150,6 +156,79 @@ class PaymentReconcileServiceTest {
 			assertThat(outcome.needsCompensation()).isFalse();
 			verify(writer).approve(eq(ORDER_ID), eq(PAYMENT_ID), eq(PAYMENT_KEY), any());
 			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.APPROVED);
+		}
+
+		@Test
+		@DisplayName("승인 반영 시 토스 조회의 간편결제 사업자를 함께 넘긴다")
+		void passesEasyPayProviderOnApprove() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.DONE, PAYMENT_KEY, "간편결제",
+					AMOUNT, now.minusMinutes(5), null, null, null, "토스페이", null);
+
+			// when
+			service.apply(candidate(), lookup);
+
+			// then
+			ArgumentCaptor<PaymentConfirmResult> captor = ArgumentCaptor.forClass(PaymentConfirmResult.class);
+			verify(writer).approve(eq(ORDER_ID), eq(PAYMENT_ID), eq(PAYMENT_KEY), captor.capture());
+			assertThat(captor.getValue().easyPayProvider()).isEqualTo("토스페이");
+			assertThat(captor.getValue().status()).isEqualTo(PaymentLookupStatus.DONE);
+			assertThat(captor.getValue().virtualAccount()).isNull();
+		}
+
+		@Test
+		@DisplayName("토스가 입금대기이고 우리 결제가 UNKNOWN 이면 가상계좌 발급을 반영하고 ISSUED 로 남긴다")
+		void appliesIssueVirtualAccountDecision() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			payment.markUnknown("응답 유실");
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(limitedPurchaseRepository.existsByOrderId(ORDER_ID)).willReturn(false);
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동",
+					now.plusHours(24), "secret");
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.WAITING_FOR_DEPOSIT, PAYMENT_KEY,
+					"가상계좌", AMOUNT, null, null, null, null, null, virtualAccount);
+
+			// when
+			PaymentReconcileOutcome outcome = service.apply(candidate(), lookup);
+
+			// then
+			assertThat(outcome.needsCompensation()).isFalse();
+			ArgumentCaptor<PaymentConfirmResult> captor = ArgumentCaptor.forClass(PaymentConfirmResult.class);
+			verify(writer).issueVirtualAccount(eq(ORDER_ID), eq(PAYMENT_ID), eq(PAYMENT_KEY), captor.capture());
+			assertThat(captor.getValue().status()).isEqualTo(PaymentLookupStatus.WAITING_FOR_DEPOSIT);
+			assertThat(captor.getValue().virtualAccount()).isEqualTo(virtualAccount);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.ISSUED);
+		}
+
+		@Test
+		@DisplayName("한정반 주문의 가상계좌 발급은 반영하지 않고 MANUAL_REVIEW 로 남긴다")
+		void manualReviewsIssueVirtualAccountForLimitedOrder() {
+			// given
+			Order order = orderWithStatus(OrderStatus.PENDING);
+			Payment payment = readyPayment(order);
+			given(orderRepository.findByIdForUpdate(ORDER_ID)).willReturn(Optional.of(order));
+			given(paymentRepository.findById(PAYMENT_ID)).willReturn(Optional.of(payment));
+			given(limitedPurchaseRepository.existsByOrderId(ORDER_ID)).willReturn(true);
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동",
+					now.plusHours(24), "secret");
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.WAITING_FOR_DEPOSIT, PAYMENT_KEY,
+					"가상계좌", AMOUNT, null, null, null, null, null, virtualAccount);
+
+			// when
+			service.apply(candidate(), lookup);
+
+			// then
+			verify(writer, never()).issueVirtualAccount(any(), any(), any(), any());
+			verify(alertNotifier).notify(any(Alert.class));
+			assertThat(payment.getReconcileAttempts()).isEqualTo(1);
+			assertThat(capturedLog().getAction()).isEqualTo(PaymentReconcileAction.MANUAL_REVIEW);
 		}
 
 		@Test

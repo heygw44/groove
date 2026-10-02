@@ -12,11 +12,13 @@ import com.groove.global.alert.Alert;
 import com.groove.global.alert.AlertNotifier;
 import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
+import com.groove.limited.repository.LimitedPurchaseRepository;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentConfirmResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
+import com.groove.payment.client.dto.PaymentLookupStatus;
 import com.groove.payment.config.PaymentReconcileProperties;
 import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.entity.Payment;
@@ -51,6 +53,7 @@ public class PaymentReconcileService {
 	private final PaymentReconcileProperties properties;
 	private final Clock clock;
 	private final AlertNotifier alertNotifier;
+	private final LimitedPurchaseRepository limitedPurchaseRepository;
 
 	public List<PaymentReconcileCandidate> findCandidates(LocalDateTime now) {
 		LocalDateTime before = now.minus(properties.grace());
@@ -101,8 +104,22 @@ public class PaymentReconcileService {
 			case APPROVE -> {
 				writer.approve(candidate.orderId(), candidate.paymentId(), lookup.paymentKey(),
 						new PaymentConfirmResult(lookup.paymentKey(), candidate.tossOrderId(), lookup.method(),
-								lookup.totalAmount(), lookup.approvedAt()));
+								lookup.totalAmount(), lookup.approvedAt(), PaymentLookupStatus.DONE,
+								lookup.easyPayProvider(), null));
 				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.APPROVED, detail);
+				yield PaymentReconcileOutcome.applied();
+			}
+			case ISSUE_VIRTUAL_ACCOUNT -> {
+				if (limitedPurchaseRepository.existsByOrderId(candidate.orderId())) {
+					// 한정반은 가상계좌를 받지 않는다. 토스 cancel 은 트랜잭션 밖에서 불러야 해
+					// 여기선 닫지 않고 수동 확인으로 넘긴다.
+					yield manualReview(candidate, payment, beforeStatus, tossStatus, detail, false);
+				}
+				writer.issueVirtualAccount(candidate.orderId(), candidate.paymentId(), lookup.paymentKey(),
+						new PaymentConfirmResult(lookup.paymentKey(), candidate.tossOrderId(), lookup.method(),
+								lookup.totalAmount(), lookup.approvedAt(), PaymentLookupStatus.WAITING_FOR_DEPOSIT,
+								lookup.easyPayProvider(), lookup.virtualAccount()));
+				writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.ISSUED, detail);
 				yield PaymentReconcileOutcome.applied();
 			}
 			case FAIL -> {
@@ -137,22 +154,8 @@ public class PaymentReconcileService {
 				}
 				yield PaymentReconcileOutcome.applied();
 			}
-			case MANUAL_REVIEW -> {
-				log.error("대사 결과 수동 확인 필요: paymentId={}, orderId={}, tossStatus={}", candidate.paymentId(),
-						candidate.orderId(), tossStatus);
-				alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
-						"대사 결과 수동 확인 필요: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId()
-								+ ", tossStatus=" + tossStatus,
-						"paymentId=" + candidate.paymentId()));
-				if (partialCancelDriftCandidate) {
-					// 자동으로 금액을 맞추지 않는다 - 상한(recordMiss)을 태우면 이미 확정된 결제가 fail() 로
-					// 되돌아갈 수 있어, 로그만 남기고 payment.status·reconcile_attempts 는 건드리지 않는다.
-					writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
-				} else {
-					recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
-				}
-				yield PaymentReconcileOutcome.applied();
-			}
+			case MANUAL_REVIEW -> manualReview(candidate, payment, beforeStatus, tossStatus, detail,
+					partialCancelDriftCandidate);
 			// 토스 cancel 은 트랜잭션 밖에서 호출해야 하므로 여기서는 상태를 바꾸지 않는다.
 			case COMPENSATE -> PaymentReconcileOutcome.needsCompensation(lookup.paymentKey(), lookup.approvedAt());
 			case COMPLETE_CANCEL -> {
@@ -165,6 +168,24 @@ public class PaymentReconcileService {
 			case RETRY_CANCEL -> PaymentReconcileOutcome.needsCancelRetry(lookup.paymentKey(),
 					cancelWriter.requestedIdempotencyKey(payment), cancelWriter.requestedRefundAccount(payment));
 		};
+	}
+
+	private PaymentReconcileOutcome manualReview(PaymentReconcileCandidate candidate, Payment payment,
+			PaymentStatus beforeStatus, String tossStatus, String detail, boolean partialCancelDriftCandidate) {
+		log.error("대사 결과 수동 확인 필요: paymentId={}, orderId={}, tossStatus={}", candidate.paymentId(),
+				candidate.orderId(), tossStatus);
+		alertNotifier.notify(Alert.critical("payment.reconcile-manual-review",
+				"대사 결과 수동 확인 필요: paymentId=" + candidate.paymentId() + ", orderId=" + candidate.orderId()
+						+ ", tossStatus=" + tossStatus,
+				"paymentId=" + candidate.paymentId()));
+		if (partialCancelDriftCandidate) {
+			// 자동으로 금액을 맞추지 않는다 - 상한(recordMiss)을 태우면 이미 확정된 결제가 fail() 로
+			// 되돌아갈 수 있어, 로그만 남기고 payment.status·reconcile_attempts 는 건드리지 않는다.
+			writeLog(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
+		} else {
+			recordMiss(payment, beforeStatus, tossStatus, PaymentReconcileAction.MANUAL_REVIEW, detail);
+		}
+		return PaymentReconcileOutcome.applied();
 	}
 
 	@Transactional

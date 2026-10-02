@@ -24,6 +24,10 @@ public final class PaymentReconcileRule {
 			return decideCancelRequested(orderStatus, lookup.status());
 		}
 		PaymentLookupStatus status = lookup.status();
+		if (status == PaymentLookupStatus.WAITING_FOR_DEPOSIT && isVirtualAccountIssuable(paymentStatus, orderStatus)
+				&& hasVirtualAccountSecret(lookup)) {
+			return decideIssueVirtualAccount(paymentAmount, lookup);
+		}
 		if (status == PaymentLookupStatus.DONE) {
 			return decideForDone(orderStatus, paymentAmount, lookup);
 		}
@@ -72,6 +76,26 @@ public final class PaymentReconcileRule {
 		}
 		BigDecimal expectedBalance = paymentAmount.subtract(canceledAmount);
 		return expectedBalance.compareTo(tossBalanceAmount) == 0;
+	}
+
+	/** 가상계좌 발급 응답을 못 받아 우리 쪽이 아직 입금대기로 넘어가지 못한 결제다. */
+	private static boolean isVirtualAccountIssuable(PaymentStatus paymentStatus, OrderStatus orderStatus) {
+		boolean ourStatusEligible = paymentStatus == PaymentStatus.READY || paymentStatus == PaymentStatus.UNKNOWN
+				|| paymentStatus == PaymentStatus.FAILED;
+		return ourStatusEligible && orderStatus == OrderStatus.PENDING;
+	}
+
+	private static boolean hasVirtualAccountSecret(PaymentLookupResult lookup) {
+		return lookup.virtualAccount() != null && lookup.virtualAccount().secret() != null
+				&& !lookup.virtualAccount().secret().isBlank();
+	}
+
+	private static PaymentReconcileDecision decideIssueVirtualAccount(BigDecimal paymentAmount,
+			PaymentLookupResult lookup) {
+		if (lookup.totalAmount() == null || paymentAmount.compareTo(lookup.totalAmount()) != 0) {
+			return PaymentReconcileDecision.MANUAL_REVIEW;
+		}
+		return PaymentReconcileDecision.ISSUE_VIRTUAL_ACCOUNT;
 	}
 
 	private static PaymentReconcileDecision decideCancelRequested(OrderStatus orderStatus,

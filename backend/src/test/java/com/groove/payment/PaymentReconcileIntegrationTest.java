@@ -56,6 +56,7 @@ import com.groove.payment.client.dto.PaymentCancelCommand;
 import com.groove.payment.client.dto.PaymentCancelResult;
 import com.groove.payment.client.dto.PaymentLookupResult;
 import com.groove.payment.client.dto.PaymentLookupStatus;
+import com.groove.payment.client.dto.VirtualAccountInfo;
 import com.groove.payment.entity.Payment;
 import com.groove.payment.entity.PaymentCancel;
 import com.groove.payment.entity.PaymentCancelStatus;
@@ -167,6 +168,34 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 			Product reloadedProduct = productRepository.findById(seeded.product().getId()).orElseThrow();
 			assertThat(reloadedProduct.getSoldQuantity()).isEqualTo(1L);
 			assertThat(lastLogAction(payment.getId())).isEqualTo(PaymentReconcileAction.APPROVED);
+		}
+
+		@Test
+		@DisplayName("UNKNOWN 결제에 토스가 입금대기(가상계좌 정보 있음) 이면 입금대기로 반영하고 만료를 입금기한까지 늘린다")
+		void issuesVirtualAccountForUnknownPaymentWhenTossWaitingForDeposit() {
+			// given
+			SeededOrder seeded = seedPendingOrder(5, 1);
+			Payment payment = seedPayment(seeded.orderId(), PaymentStatus.UNKNOWN, oldUpdatedAt());
+			LocalDateTime dueDate = now().plusDays(3).truncatedTo(ChronoUnit.SECONDS);
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동", dueDate,
+					"secret-recon");
+			given(paymentClient.lookup(seeded.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.WAITING_FOR_DEPOSIT, "toss-key-va", "가상계좌", seeded.finalAmount(), null, null,
+					null, null, null, virtualAccount));
+
+			// when
+			paymentReconcileScheduler.reconcile();
+
+			// then
+			Payment reloadedPayment = paymentRepository.findById(payment.getId()).orElseThrow();
+			assertThat(reloadedPayment.getStatus()).isEqualTo(PaymentStatus.WAITING_FOR_DEPOSIT);
+			assertThat(reloadedPayment.getPaymentKey()).isEqualTo("toss-key-va");
+			assertThat(reloadedPayment.getVaAccountNumber()).isEqualTo("12345678901234");
+			assertThat(reloadedPayment.getVaDueDate()).isEqualTo(dueDate);
+			Order reloadedOrder = orderRepository.findById(seeded.orderId()).orElseThrow();
+			assertThat(reloadedOrder.getStatus()).isEqualTo(OrderStatus.PENDING);
+			assertThat(reloadedOrder.getExpiresAt()).isEqualTo(dueDate);
+			assertThat(lastLogAction(payment.getId())).isEqualTo(PaymentReconcileAction.ISSUED);
 		}
 
 		@Test
