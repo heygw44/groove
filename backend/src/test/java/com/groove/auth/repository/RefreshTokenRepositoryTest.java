@@ -255,6 +255,42 @@ class RefreshTokenRepositoryTest extends IntegrationTestSupport {
 		}
 
 		@Test
+		@DisplayName("관리자 세션에 클라이언트 무입력 시간을 넘기면 세션 TTL 에서 그만큼 줄이고 인덱스 TTL 은 줄이지 않는다")
+		void shortensAdminSessionTtlByClientIdleButNotIndex() {
+			// given
+			refreshTokenRepository.save(memberId, sessionId, "token-a", farFutureAbsExp, now, MemberRole.ADMIN);
+
+			// when
+			refreshTokenRepository.rotate(memberId, sessionId, "token-a", "token-b", System.currentTimeMillis(),
+					farFutureAbsExp, MemberRole.ADMIN, Duration.ofMinutes(1));
+
+			// then
+			Duration expectedSessionTtl = sessionProperties.adminIdleTimeout().minusMinutes(1);
+			Long sessionTtl = redisTemplate.getExpire(sessionKey, TimeUnit.MILLISECONDS);
+			Long indexTtl = redisTemplate.getExpire(indexKey, TimeUnit.MILLISECONDS);
+			assertThat(sessionTtl).isBetween(expectedSessionTtl.minusSeconds(5).toMillis(),
+					expectedSessionTtl.toMillis());
+			assertThat(indexTtl).isBetween(sessionProperties.adminIdleTimeout().minusSeconds(5).toMillis(),
+					sessionProperties.adminIdleTimeout().toMillis());
+		}
+
+		@Test
+		@DisplayName("일반 회원 세션은 클라이언트 무입력 시간을 무시하고 refresh 만료를 따른다")
+		void ignoresClientIdleForUser() {
+			// given
+			refreshTokenRepository.save(memberId, sessionId, "token-a", farFutureAbsExp, now, MemberRole.USER);
+
+			// when
+			refreshTokenRepository.rotate(memberId, sessionId, "token-a", "token-b", System.currentTimeMillis(),
+					farFutureAbsExp, MemberRole.USER, Duration.ofMinutes(1));
+
+			// then
+			Long sessionTtl = redisTemplate.getExpire(sessionKey, TimeUnit.MILLISECONDS);
+			assertThat(sessionTtl).isBetween(jwtProperties.refreshTokenExpiry().minusSeconds(5).toMillis(),
+					jwtProperties.refreshTokenExpiry().toMillis());
+		}
+
+		@Test
 		@DisplayName("알 수 없는 토큰이면 세션을 폐기한다")
 		void discardsSessionWhenPresentedIsUnknown() {
 			// given

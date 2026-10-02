@@ -236,7 +236,7 @@ class AuthControllerTest {
 			// given
 			Duration maxAge = Duration.ofHours(12);
 			AuthTokens tokens = new AuthTokens("new-access", "new-refresh", 1800L, maxAge);
-			given(authService.reissue("old")).willReturn(tokens);
+			given(authService.reissue(eq("old"), any())).willReturn(tokens);
 
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "old")))
@@ -246,12 +246,59 @@ class AuthControllerTest {
 					.andExpect(cookie().maxAge("refreshToken", (int) maxAge.toSeconds()));
 		}
 
+		@ParameterizedTest
+		@CsvSource({"300,300", "0,0", "-5,0", "abc,0", "99999999,86400"})
+		@DisplayName("X-Client-Idle-Seconds 헤더를 0 이상 하루 이하로 보정해 서비스에 넘긴다")
+		void passesClampedClientIdle(String header, long expectedSeconds) throws Exception {
+			// given
+			given(authService.reissue(eq("old"), any()))
+					.willReturn(new AuthTokens("new-access", "new-refresh", 1800L, Duration.ofHours(12)));
+
+			// when
+			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "old"))
+					.header("X-Client-Idle-Seconds", header))
+					.andExpect(status().isOk());
+
+			// then
+			verify(authService).reissue("old", Duration.ofSeconds(expectedSeconds));
+		}
+
+		@Test
+		@DisplayName("헤더가 없으면 무입력 시간 0 으로 서비스에 넘긴다")
+		void passesZeroWhenHeaderMissing() throws Exception {
+			// given
+			given(authService.reissue(eq("old"), any()))
+					.willReturn(new AuthTokens("new-access", "new-refresh", 1800L, Duration.ofHours(12)));
+
+			// when
+			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "old")))
+					.andExpect(status().isOk());
+
+			// then
+			verify(authService).reissue("old", Duration.ZERO);
+		}
+
+		@Test
+		@DisplayName("유휴 만료면 401 AUTH_SESSION_IDLE 과 만료된 쿠키를 반환한다")
+		void returnsUnauthorizedWhenSessionIdle() throws Exception {
+			// given
+			willThrow(new BusinessException(ErrorCode.AUTH_SESSION_IDLE))
+					.given(authService).reissue(eq("idle"), any());
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "idle"))
+							.header("X-Client-Idle-Seconds", "1500"))
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_SESSION_IDLE")))
+					.andExpect(cookie().maxAge("refreshToken", 0));
+		}
+
 		@Test
 		@DisplayName("쿠키가 없으면 401 AUTH_REFRESH_TOKEN_NOT_FOUND 와 만료된 쿠키를 반환한다")
 		void returnsUnauthorizedWhenCookieMissing() throws Exception {
 			// given
 			willThrow(new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_NOT_FOUND))
-					.given(authService).reissue(isNull());
+					.given(authService).reissue(isNull(), any());
 
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue"))
@@ -259,7 +306,7 @@ class AuthControllerTest {
 					.andExpect(jsonPath("$.error.code", is("AUTH_REFRESH_TOKEN_NOT_FOUND")))
 					.andExpect(cookie().value("refreshToken", ""))
 					.andExpect(cookie().maxAge("refreshToken", 0));
-			verify(authService).reissue(isNull());
+			verify(authService).reissue(isNull(), any());
 		}
 
 		@Test
@@ -267,7 +314,7 @@ class AuthControllerTest {
 		void returnsUnauthorizedWhenTokenMismatch() throws Exception {
 			// given
 			willThrow(new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_MISMATCH))
-					.given(authService).reissue(eq("stolen"));
+					.given(authService).reissue(eq("stolen"), any());
 
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "stolen")))
@@ -281,7 +328,7 @@ class AuthControllerTest {
 		void returnsUnauthorizedWhenSessionExpired() throws Exception {
 			// given
 			willThrow(new BusinessException(ErrorCode.AUTH_SESSION_EXPIRED))
-					.given(authService).reissue(eq("expired-session"));
+					.given(authService).reissue(eq("expired-session"), any());
 
 			// when & then
 			mockMvc.perform(post("/api/v1/auth/reissue").cookie(new Cookie("refreshToken", "expired-session")))

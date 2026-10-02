@@ -1,11 +1,14 @@
 package com.groove.auth.controller;
 
+import java.time.Duration;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,6 +27,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -36,6 +40,9 @@ import lombok.extern.slf4j.Slf4j;
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
+	static final String CLIENT_IDLE_HEADER = "X-Client-Idle-Seconds";
+	private static final long MAX_CLIENT_IDLE_SECONDS = 86_400L;
 
 	private final AuthService authService;
 	private final RefreshTokenCookieFactory cookieFactory;
@@ -60,9 +67,11 @@ public class AuthController {
 	@SecurityRequirements
 	@PostMapping("/reissue")
 	public ResponseEntity<ApiResponse<TokenResponse>> reissue(
-			@CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false) String refreshToken) {
+			@CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false) String refreshToken,
+			@Parameter(description = "마지막 사용자 입력 이후 경과 초(탭 전체 기준). 관리자 유휴 만료 판정에만 쓴다.")
+			@RequestHeader(name = CLIENT_IDLE_HEADER, required = false) String clientIdleSeconds) {
 		try {
-			AuthTokens tokens = authService.reissue(refreshToken);
+			AuthTokens tokens = authService.reissue(refreshToken, parseClientIdle(clientIdleSeconds));
 			return tokenResponse(tokens);
 		} catch (BusinessException e) {
 			// 재발급이 던지는 예외는 전부 되살릴 수 없는 상태(토큰 없음·위조·만료, 세션 없음·재사용·절대 만료,
@@ -84,6 +93,18 @@ public class AuthController {
 		return ResponseEntity.ok()
 				.header(HttpHeaders.SET_COOKIE, cookieFactory.expire().toString())
 				.body(ApiResponse.ok());
+	}
+
+	private static Duration parseClientIdle(String value) {
+		if (value == null) {
+			return Duration.ZERO;
+		}
+		try {
+			long seconds = Long.parseLong(value.trim());
+			return Duration.ofSeconds(Math.min(Math.max(seconds, 0L), MAX_CLIENT_IDLE_SECONDS));
+		} catch (NumberFormatException e) {
+			return Duration.ZERO;
+		}
 	}
 
 	private ResponseEntity<ApiResponse<TokenResponse>> tokenResponse(AuthTokens tokens) {
