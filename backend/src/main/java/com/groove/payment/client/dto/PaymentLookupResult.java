@@ -16,16 +16,27 @@ public record PaymentLookupResult(
 		LocalDateTime approvedAt,
 		LocalDateTime canceledAt,
 		BigDecimal balanceAmount,
-		String lastCancelTransactionKey
+		String lastCancelTransactionKey,
+		String easyPayProvider,
+		VirtualAccountInfo virtualAccount
 ) {
+
+	/** 간편결제 사업자·가상계좌 정보가 필요 없는 호출을 위한 생성자. */
+	public PaymentLookupResult(PaymentLookupStatus status, String paymentKey, String method, BigDecimal totalAmount,
+			LocalDateTime approvedAt, LocalDateTime canceledAt, BigDecimal balanceAmount,
+			String lastCancelTransactionKey) {
+		this(status, paymentKey, method, totalAmount, approvedAt, canceledAt, balanceAmount,
+				lastCancelTransactionKey, null, null);
+	}
 
 	/** 취소 잔액 대사가 필요 없는 기존 호출(승인·일반 조회 흐름)을 위한 축약 생성자. */
 	public PaymentLookupResult(PaymentLookupStatus status, String paymentKey, String method, BigDecimal totalAmount,
 			LocalDateTime approvedAt, LocalDateTime canceledAt) {
-		this(status, paymentKey, method, totalAmount, approvedAt, canceledAt, null, null);
+		this(status, paymentKey, method, totalAmount, approvedAt, canceledAt, null, null, null, null);
 	}
 
 	public static PaymentLookupResult notFound() {
-		return new PaymentLookupResult(PaymentLookupStatus.NOT_FOUND, null, null, null, null, null, null, null);
+		return new PaymentLookupResult(PaymentLookupStatus.NOT_FOUND, null, null, null, null, null, null, null, null,
+				null);
 	}
 }
