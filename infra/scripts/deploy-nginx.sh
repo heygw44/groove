@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 저장소의 nginx 설정을 서버에 반영한다. 변경이 없으면 아무것도 안 하고,
+# 저장소의 nginx 설정(nginx.conf, groove.conf, 보안 헤더 스니펫)을 서버에 반영한다. 변경이 없으면 아무것도 안 하고,
 # nginx -t 가 실패하면 백업으로 되돌려 컨테이너 재기동 단계가 돌지 않게 한다.
 # 호출자가 /opt/groove 로 cd 한 뒤 실행한다.
 set -euo pipefail
@@ -8,6 +8,7 @@ SRC_DIR="${SRC_DIR:-/opt/groove/nginx}"
 NGINX_CONF="/etc/nginx/nginx.conf"
 SITE_CONF="/etc/nginx/sites-available/groove.conf"
 RATELIMIT_ALLOW="/etc/nginx/groove-ratelimit-allow.conf"
+HEADERS_CONF="/etc/nginx/snippets/groove-security-headers.conf"
 
 # 이번 실행에서 실제로 덮어쓴 대상만 담는다 — 복원 대상을 이걸로 한정해야
 # 이전 배포가 남긴 다른 파일의 .bak 을 엉뚱하게 다시 덮어쓰지 않는다.
@@ -51,8 +52,15 @@ restore_backups() {
 	done
 }
 
+# groove.conf 가 include 하는 스니펫 디렉터리. Ubuntu 기본 이미지엔 있지만 없을 수도 있다.
+sudo mkdir -p /etc/nginx/snippets
+
 changed=0
 if deploy_file "${SRC_DIR}/nginx.conf" "$NGINX_CONF"; then
+	changed=1
+fi
+# groove.conf 보다 먼저 둬야 nginx -t 가 include 대상을 찾는다.
+if deploy_file "${SRC_DIR}/groove-security-headers.conf" "$HEADERS_CONF"; then
 	changed=1
 fi
 if deploy_file "${SRC_DIR}/groove.conf" "$SITE_CONF"; then
