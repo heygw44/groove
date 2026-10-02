@@ -1,4 +1,4 @@
-import type { OrderSummary } from '@/types/order';
+import type { OrderStatus } from '@/types/order';
 
 import type { MemberRole, MemberStatus } from './member';
 
@@ -13,9 +13,20 @@ export interface AdminMemberSummary {
   createdAt: string;
 }
 
+export interface AdminMemberRecentOrder {
+  id: number;
+  orderNumber: string;
+  status: OrderStatus;
+  finalAmount: number;
+  canceledAmount: number;
+  representativeProductName: string;
+  itemCount: number;
+  createdAt: string;
+}
+
 export interface AdminMemberDetail extends AdminMemberSummary {
   usableCouponCount: number;
-  recentOrders: OrderSummary[];
+  recentOrders: AdminMemberRecentOrder[];
 }
 
 export interface AdminMemberListParams {

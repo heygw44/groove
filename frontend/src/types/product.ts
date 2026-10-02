@@ -179,6 +179,7 @@ export type ProductFormSource = Pick<
 
 export interface AdminProductListParams {
   status?: ProductStatus;
+  keyword?: string;
   page?: number;
   size?: number;
   sort?: string;

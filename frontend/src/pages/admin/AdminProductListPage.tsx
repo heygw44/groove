@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
+import { AdminProductFilterBar } from '@/components/admin/AdminProductFilterBar';
 import { AdminProductTable } from '@/components/admin/AdminProductTable';
 import { StockAdjustModal } from '@/components/admin/StockAdjustModal';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -8,7 +9,6 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { LinkButton } from '@/components/common/LinkButton';
 import { Pagination } from '@/components/common/Pagination';
 import { QueryErrorState } from '@/components/common/QueryErrorState';
-import { Select } from '@/components/common/Select';
 import { TableSkeleton } from '@/components/common/TableSkeleton';
 import { useToast } from '@/components/common/toastContext';
 import { useHideProduct, useRestoreProduct } from '@/hooks/mutations/useAdminProductMutations';
@@ -16,23 +16,16 @@ import { useAdminProducts } from '@/hooks/queries/useAdminProducts';
 import type { AdminProductSummary, ProductStatus } from '@/types/product';
 import { getErrorMessage } from '@/utils/apiError';
 
-const STATUS_OPTIONS: { value: ProductStatus | ''; label: string }[] = [
-  { value: '', label: '전체' },
-  { value: 'ON_SALE', label: '판매중' },
-  { value: 'SOLD_OUT', label: '품절' },
-  { value: 'HIDDEN', label: '숨김' },
-];
-
-const STATUS_VALUES = new Set<string>(
-  STATUS_OPTIONS.map((option) => option.value).filter((value): value is ProductStatus =>
-    Boolean(value),
-  ),
-);
+const PRODUCT_STATUSES = new Set<string>(['ON_SALE', 'SOLD_OUT', 'HIDDEN']);
 
 const PAGE_SIZE = 20;
+const KEYWORD_MAX_LENGTH = 100;
 
 const parseStatus = (value: string | null): ProductStatus | undefined =>
-  value && STATUS_VALUES.has(value) ? (value as ProductStatus) : undefined;
+  value && PRODUCT_STATUSES.has(value) ? (value as ProductStatus) : undefined;
+
+const parseKeyword = (value: string | null): string =>
+  (value ?? '').trim().slice(0, KEYWORD_MAX_LENGTH);
 
 const parsePage = (value: string | null): number => {
   if (value === null || !/^\d+$/.test(value)) {
@@ -44,6 +37,7 @@ const parsePage = (value: string | null): number => {
 export default function AdminProductListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const status = parseStatus(searchParams.get('status'));
+  const keyword = parseKeyword(searchParams.get('keyword'));
   const page = parsePage(searchParams.get('page'));
 
   const [adjusting, setAdjusting] = useState<AdminProductSummary | undefined>(undefined);
@@ -53,23 +47,39 @@ export default function AdminProductListPage() {
   const { showToast } = useToast();
   const { data, isPending, isError, error, isPlaceholderData, refetch } = useAdminProducts({
     status,
+    keyword: keyword === '' ? undefined : keyword,
     page,
     size: PAGE_SIZE,
   });
   const hideMutation = useHideProduct();
   const restoreMutation = useRestoreProduct();
 
-  const updateStatus = (next: ProductStatus | '') => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
-      if (next) {
-        params.set('status', next);
-      } else {
-        params.delete('status');
-      }
-      params.delete('page');
-      return params;
-    });
+  const updateFilters = (
+    next: { keyword?: string; status?: ProductStatus },
+    options?: { replace?: boolean },
+  ) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if ('keyword' in next) {
+          if (next.keyword) {
+            params.set('keyword', next.keyword);
+          } else {
+            params.delete('keyword');
+          }
+        }
+        if ('status' in next) {
+          if (next.status) {
+            params.set('status', next.status);
+          } else {
+            params.delete('status');
+          }
+        }
+        params.delete('page');
+        return params;
+      },
+      { replace: options?.replace },
+    );
   };
 
   const updatePage = (nextPage: number) => {
@@ -125,21 +135,11 @@ export default function AdminProductListPage() {
             {isPending ? '불러오는 중…' : `총 ${data?.totalElements ?? 0}개`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select
-            aria-label="상태 필터"
-            value={status ?? ''}
-            onChange={(event) => updateStatus(event.target.value as ProductStatus | '')}
-            className="w-32"
-          >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-          <LinkButton to="/admin/products/new">상품 등록</LinkButton>
-        </div>
+        <LinkButton to="/admin/products/new">상품 등록</LinkButton>
+      </div>
+
+      <div className="mb-4">
+        <AdminProductFilterBar filters={{ keyword, status }} onChange={updateFilters} />
       </div>
 
       {isPending && <TableSkeleton columns={7} />}
@@ -149,7 +149,10 @@ export default function AdminProductListPage() {
       )}
 
       {!isPending && !isError && data && data.content.length === 0 && (
-        <EmptyState title="조건에 맞는 상품이 없습니다" />
+        <EmptyState
+          title={keyword === '' ? '조건에 맞는 상품이 없습니다' : '검색 결과가 없습니다'}
+          description={keyword === '' ? undefined : '다른 검색어를 입력해주세요.'}
+        />
       )}
 
       {!isPending && !isError && data && data.content.length > 0 && (
