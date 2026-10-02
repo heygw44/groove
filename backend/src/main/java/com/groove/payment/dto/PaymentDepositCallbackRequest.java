@@ -3,6 +3,7 @@ package com.groove.payment.dto;
 import java.time.OffsetDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 /**
  * 토스 입금 웹훅(DEPOSIT_CALLBACK) 본문. PAYMENT_STATUS_CHANGED 와 달리 eventType 도 data 래핑도 없는
@@ -10,7 +11,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PaymentDepositCallbackRequest(
-		OffsetDateTime createdAt,
+		@JsonDeserialize(using = TossWebhookDateTimeDeserializer.class) OffsetDateTime createdAt,
 		String secret,
 		String status,
 		String transactionKey,
