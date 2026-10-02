@@ -64,6 +64,12 @@ public class DiscogsResyncService {
 		log.warn("Discogs 릴리즈를 찾을 수 없어 재검증 대상에서 제외한다 productId={} discogsReleaseId={}", productId, discogsReleaseId);
 	}
 
+	/** 재검증 실패 시각을 남긴다. discogs_synced_at 은 그대로라 신선도 판정은 바뀌지 않고 후보 쿨다운에만 쓰인다. */
+	@Transactional
+	public void markResyncFailed(Long productId, LocalDateTime failedAt) {
+		findProduct(productId).markDiscogsResyncFailed(failedAt);
+	}
+
 	private Product findProduct(Long productId) {
 		return productRepository.findById(productId)
 				.orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));

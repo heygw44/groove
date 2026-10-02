@@ -26,11 +26,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.groove.fixture.AddressFixture;
 import com.groove.fixture.ArtistFixture;
+import com.groove.fixture.LimitedDropFixture;
 import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
@@ -39,6 +41,12 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.repository.StockRepository;
+import com.groove.limited.dto.LimitedPurchaseResponse;
+import com.groove.limited.entity.LimitedDrop;
+import com.groove.limited.repository.LimitedDropRepository;
+import com.groove.limited.repository.LimitedPurchaseRepository;
+import com.groove.limited.service.LimitedDropRedisService;
+import com.groove.limited.service.LimitedPurchaseService;
 import com.groove.member.entity.Address;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.AddressRepository;
@@ -67,6 +75,7 @@ import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentReconcileLogRepository;
 import com.groove.payment.repository.PaymentRepository;
 import com.groove.payment.scheduler.PaymentReconcileScheduler;
+import com.groove.payment.service.LimitedVirtualAccountCloser;
 import com.groove.payment.service.PaymentCancelWriter;
 import com.groove.payment.service.PaymentCompensator;
 import com.groove.payment.service.PaymentRefundRequest;
@@ -138,6 +147,21 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private Clock clock;
+
+	@Autowired
+	private LimitedDropRepository limitedDropRepository;
+
+	@Autowired
+	private LimitedPurchaseRepository limitedPurchaseRepository;
+
+	@Autowired
+	private LimitedPurchaseService limitedPurchaseService;
+
+	@Autowired
+	private LimitedDropRedisService limitedDropRedisService;
+
+	@Autowired
+	private StringRedisTemplate redisTemplate;
 
 	@MockitoBean
 	private PaymentClient paymentClient;
@@ -580,6 +604,60 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 		}
 
 		@Test
+		@DisplayName("한정반 UNKNOWN 결제에 토스가 입금대기면 계좌를 닫아 FAILED 로 확정하고 만료 주기에 재고·한정 슬롯이 복구된다")
+		void closesLimitedVirtualAccountThenExpiresAndRestoresLimitedSlot() {
+			// given
+			Product product = seedProduct(5);
+			Long dropId = prepareOpenDrop(product, 5);
+			Member member = memberRepository.save(MemberFixture.create("recon-" + UUID.randomUUID() + "@groove.com"));
+			Address address = addressRepository.save(AddressFixture.create(member));
+			LimitedPurchaseResponse purchase = limitedPurchaseService.purchase(dropId, member.getId(),
+					address.getId());
+			Payment payment = seedPayment(purchase.orderId(), PaymentStatus.UNKNOWN, oldUpdatedAt());
+			String paymentKey = "toss-key-limited-va-" + UUID.randomUUID();
+			VirtualAccountInfo virtualAccount = new VirtualAccountInfo("088", "12345678901234", "홍길동",
+					now().plusDays(3).truncatedTo(ChronoUnit.SECONDS), "secret-limited");
+			given(paymentClient.lookup(purchase.orderNumber())).willReturn(new PaymentLookupResult(
+					PaymentLookupStatus.WAITING_FOR_DEPOSIT, paymentKey, "가상계좌", purchase.finalAmount(), null, null,
+					null, null, null, virtualAccount));
+			given(paymentClient.cancel(eq(paymentKey), eq(LimitedVirtualAccountCloser.REASON)))
+					.willReturn(PaymentCancelResult.of(paymentKey, "CANCELED", now()));
+
+			try {
+				// when
+				paymentReconcileScheduler.reconcile();
+
+				// then
+				verify(paymentClient, times(1)).cancel(eq(paymentKey), eq(LimitedVirtualAccountCloser.REASON));
+				Payment reloadedPayment = paymentRepository.findById(payment.getId()).orElseThrow();
+				assertThat(reloadedPayment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+				assertThat(reloadedPayment.getFailReason()).isEqualTo(LimitedVirtualAccountCloser.REASON);
+				assertThat(paymentCancelRepository.findByPaymentIdOrderByIdAsc(payment.getId())).isEmpty();
+				PaymentReconcileLog log = lastLog(payment.getId());
+				assertThat(log.getAction()).isEqualTo(PaymentReconcileAction.FAILED);
+				assertThat(log.getTossStatus()).isEqualTo("CANCELED");
+				assertThat(orderRepository.findById(purchase.orderId()).orElseThrow().getStatus())
+						.isEqualTo(OrderStatus.PENDING);
+
+				// when
+				expireOrderNow(purchase.orderId());
+				orderExpirationScheduler.expireOrders();
+
+				// then
+				assertThat(orderRepository.findById(purchase.orderId()).orElseThrow().getStatus())
+						.isEqualTo(OrderStatus.CANCELED);
+				assertThat(stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity()).isEqualTo(5);
+				assertThat(limitedPurchaseRepository.findByOrderId(purchase.orderId())).isEmpty();
+				assertThat(limitedDropRepository.findById(dropId).orElseThrow().getSoldCount()).isZero();
+				assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("5");
+				assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(dropId),
+						member.getId().toString())).isFalse();
+			} finally {
+				limitedDropRedisService.clear(dropId);
+			}
+		}
+
+		@Test
 		@DisplayName("READY/UNKNOWN 결제가 걸린 기한 지난 주문은 건너뛰고, 결제 없는 기한 지난 주문은 만료한다")
 		void skipsOrderWithUnresolvedPaymentButExpiresOrderWithoutPayment() {
 			// given
@@ -670,15 +748,31 @@ class PaymentReconcileIntegrationTest extends IntegrationTestSupport {
 	private SeededOrder seedPendingOrder(int stockQuantity, int purchaseQuantity) {
 		Member member = memberRepository.save(MemberFixture.create("recon-" + UUID.randomUUID() + "@groove.com"));
 		Address address = addressRepository.save(AddressFixture.create(member));
+		Product product = seedProduct(stockQuantity);
+		OrderCreateResponse response = orderService.create(member.getId(),
+				OrderFixture.directRequest(product.getId(), purchaseQuantity, address.getId()));
+		return new SeededOrder(member.getId(), product, response.orderId(), response.orderNumber(),
+				response.finalAmount());
+	}
+
+	private Product seedProduct(int stockQuantity) {
 		Artist artist = artistRepository.save(ArtistFixture.create());
 		Product createdProduct = ProductFixture.create(artist);
 		albumRepository.save(createdProduct.getAlbum());
 		Product product = productRepository.save(createdProduct);
 		stockRepository.saveAndFlush(StockFixture.create(product, stockQuantity));
-		OrderCreateResponse response = orderService.create(member.getId(),
-				OrderFixture.directRequest(product.getId(), purchaseQuantity, address.getId()));
-		return new SeededOrder(member.getId(), product, response.orderId(), response.orderNumber(),
-				response.finalAmount());
+		return product;
+	}
+
+	private Long prepareOpenDrop(Product product, int totalQuantity) {
+		LimitedDrop drop = LimitedDropFixture.scheduled(product, totalQuantity, totalQuantity);
+		drop.open();
+		LimitedDropFixture.withOpenAt(drop, now().minusHours(1));
+		LimitedDropFixture.withCloseAt(drop, now().plusHours(1));
+		limitedDropRepository.saveAndFlush(drop);
+		limitedDropRedisService.clear(drop.getId());
+		limitedDropRedisService.initStock(drop.getId(), totalQuantity);
+		return drop.getId();
 	}
 
 	private record SeededOrder(Long memberId, Product product, Long orderId, String orderNumber,

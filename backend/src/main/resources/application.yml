@@ -200,6 +200,8 @@ groove:
       max-calls-per-run: 150  # 5분 x 150 = 30 req/min = Discogs 60 req/min 버킷의 50%(나머지는 관리자 조회용 유보)
       sweep-cron: "0 15 2 * * *"
       view-window: 7d
+      # 실패한 행을 후보에서 빼 두는 시간. 앞쪽 실패 행이 매 실행 예산을 태워 뒤의 정상 행이 굶지 않게 한다(TTL 6h 보다 짧게).
+      failure-cooldown: 1h
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

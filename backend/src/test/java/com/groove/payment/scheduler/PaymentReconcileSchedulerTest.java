@@ -3,8 +3,10 @@ package com.groove.payment.scheduler;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
@@ -13,7 +15,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +45,7 @@ import com.groove.payment.dto.PaymentReconcileCandidate;
 import com.groove.payment.repository.PaymentCancelRepository;
 import com.groove.payment.repository.PaymentCompensationRepository;
 import com.groove.payment.service.CompensationResult;
+import com.groove.payment.service.LimitedVirtualAccountCloser;
 import com.groove.payment.service.PaymentCancelRetrier;
 import com.groove.payment.service.PaymentCompensationRetrier;
 import com.groove.payment.service.PaymentCompensator;
@@ -52,6 +57,9 @@ import com.groove.payment.service.PaymentReconcileService;
 class PaymentReconcileSchedulerTest {
 
 	private static final String RETRY_KEY = "cancel-tviva-key-2";
+	private static final int BATCH_SIZE = 50;
+	private static final int MAX_REFUND_RETRY_ROUNDS = 10;
+	private static final LocalDateTime INITIAL_CURSOR = LocalDateTime.of(1970, 1, 1, 0, 0);
 
 	@Mock
 	private PaymentReconcileService reconcileService;
@@ -83,6 +91,9 @@ class PaymentReconcileSchedulerTest {
 	@Mock
 	private AlertNotifier alertNotifier;
 
+	@Mock
+	private LimitedVirtualAccountCloser limitedVirtualAccountCloser;
+
 	private PaymentReconcileScheduler scheduler;
 
 	private Clock clock;
@@ -93,10 +104,10 @@ class PaymentReconcileSchedulerTest {
 		clock = Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 		now = LocalDateTime.now(clock);
 		PaymentReconcileProperties reconcileProperties = new PaymentReconcileProperties(Duration.ofSeconds(60),
-				Duration.ofMinutes(2), 50, 10, Duration.ofMinutes(1));
+				Duration.ofMinutes(2), BATCH_SIZE, 10, Duration.ofMinutes(1));
 		scheduler = new PaymentReconcileScheduler(reconcileService, reconcileLock, paymentClient, compensator,
 				compensationRepository, compensationRetrier, paymentCancelRepository, paymentCancelRetrier,
-				reconcileProperties, shutdownSignal, clock, alertNotifier);
+				reconcileProperties, shutdownSignal, clock, alertNotifier, limitedVirtualAccountCloser);
 	}
 
 	@Nested
@@ -202,6 +213,27 @@ class PaymentReconcileSchedulerTest {
 			// then
 			verify(paymentClient).cancel(retryCommand());
 			verify(reconcileService).recordCancelRetry(candidate, cancelResult, null);
+		}
+
+		@Test
+		@DisplayName("한정반 가상계좌 폐쇄가 필요한 결과면 detail 없이 폐쇄를 위임한다")
+		void delegatesVirtualAccountCloseWhenOutcomeNeedsIt() {
+			// given
+			stubLockToRunTask();
+			PaymentReconcileCandidate candidate = new PaymentReconcileCandidate(1L, 10L, "toss-1");
+			given(reconcileService.findCandidates(now)).willReturn(List.of(candidate));
+			PaymentLookupResult lookup = new PaymentLookupResult(PaymentLookupStatus.WAITING_FOR_DEPOSIT, "tviva-key",
+					"가상계좌", BigDecimal.ZERO, null, null);
+			given(paymentClient.lookup("toss-1")).willReturn(lookup);
+			given(reconcileService.apply(candidate, lookup))
+					.willReturn(PaymentReconcileOutcome.needsVirtualAccountClose("tviva-key"));
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(limitedVirtualAccountCloser).close(candidate, "tviva-key", null);
+			verify(compensator, never()).cancelApproved(any(), any(), any(), any());
 		}
 
 		@Test
@@ -385,7 +417,8 @@ class PaymentReconcileSchedulerTest {
 			given(reconcileService.findCandidates(now)).willReturn(List.of());
 			PaymentCancelRetryCandidate candidate = new PaymentCancelRetryCandidate(1L, 10L, "tviva-refund", "toss-1",
 					BigDecimal.TEN, "cancel-tviva-refund-1", "부분 반품", now.minusMinutes(2), null);
-			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), eq(INITIAL_CURSOR), eq(0L),
+					any()))
 					.willReturn(List.of(candidate));
 
 			// when
@@ -405,7 +438,8 @@ class PaymentReconcileSchedulerTest {
 					BigDecimal.TEN, "cancel-tviva-refund-1-1", "부분 반품", now.minusMinutes(2), null);
 			PaymentCancelRetryCandidate second = new PaymentCancelRetryCandidate(2L, 20L, "tviva-refund-2", "toss-2",
 					BigDecimal.TEN, "cancel-tviva-refund-2-1", "부분 반품", now.minusMinutes(2), null);
-			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), any()))
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), eq(INITIAL_CURSOR), eq(0L),
+					any()))
 					.willReturn(List.of(first, second));
 			willThrow(new IllegalStateException("boom")).given(paymentCancelRetrier).retry(first);
 
@@ -414,6 +448,102 @@ class PaymentReconcileSchedulerTest {
 
 			// then: 예외를 던지지 않고 나머지 후보도 처리한다.
 			verify(paymentCancelRetrier).retry(second);
+		}
+
+		@Test
+		@DisplayName("첫 페이지가 꽉 차면 마지막 후보 뒤 커서로 다음 페이지를 조회해 뒤쪽 후보도 재시도한다")
+		void retriesCandidatesBehindFullPageOfStuckRows() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			List<PaymentCancelRetryCandidate> stuckPage = refundPage(1L, BATCH_SIZE, now.minusMinutes(30));
+			PaymentCancelRetryCandidate last = stuckPage.get(BATCH_SIZE - 1);
+			PaymentCancelRetryCandidate healthy = refundCandidate(100L, now.minusMinutes(5));
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), eq(INITIAL_CURSOR), eq(0L),
+					any()))
+					.willReturn(stuckPage);
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), eq(last.requestedAt()),
+					eq(last.paymentCancelId()), any()))
+					.willReturn(List.of(healthy));
+			willThrow(new IllegalStateException("boom")).given(paymentCancelRetrier).retry(stuckPage.get(0));
+
+			// when
+			scheduler.reconcile();
+
+			// then: 실패·무변경으로 REQUESTED 에 남는 앞 페이지가 뒤 후보를 가리지 않는다.
+			verify(paymentCancelRetrier).retry(healthy);
+		}
+
+		@Test
+		@DisplayName("조회 결과가 배치 크기보다 작으면 다음 페이지를 조회하지 않는다")
+		void stopsWhenPageIsShorterThanBatch() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), eq(INITIAL_CURSOR), eq(0L),
+					any()))
+					.willReturn(refundPage(1L, 2, now.minusMinutes(5)));
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(paymentCancelRepository, times(1)).findRetryCandidates(any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("페이지가 계속 꽉 차도 최대 회차까지만 조회한다")
+		void stopsAtMaxRounds() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			given(paymentCancelRepository.findRetryCandidates(any(), any(), any(), any()))
+					.willReturn(refundPage(1L, BATCH_SIZE, now.minusMinutes(5)));
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(paymentCancelRepository, times(MAX_REFUND_RETRY_ROUNDS))
+					.findRetryCandidates(any(), any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("셧다운 신호가 오면 남은 후보와 다음 페이지를 처리하지 않는다")
+		void stopsWhenShuttingDown() {
+			// given
+			stubLockToRunTask();
+			given(reconcileService.findCandidates(now)).willReturn(List.of());
+			AtomicBoolean shuttingDown = new AtomicBoolean(false);
+			given(shutdownSignal.isShuttingDown()).willAnswer(invocation -> shuttingDown.get());
+			List<PaymentCancelRetryCandidate> page = refundPage(1L, BATCH_SIZE, now.minusMinutes(5));
+			given(paymentCancelRepository.findRetryCandidates(eq(now.minusMinutes(1)), eq(INITIAL_CURSOR), eq(0L),
+					any()))
+					.willReturn(page);
+			willAnswer(invocation -> {
+				shuttingDown.set(true);
+				return null;
+			}).given(paymentCancelRetrier).retry(page.get(0));
+
+			// when
+			scheduler.reconcile();
+
+			// then
+			verify(paymentCancelRetrier, never()).retry(page.get(1));
+			verify(paymentCancelRepository, times(1)).findRetryCandidates(any(), any(), any(), any());
+		}
+
+		private List<PaymentCancelRetryCandidate> refundPage(long firstId, int size, LocalDateTime requestedAt) {
+			List<PaymentCancelRetryCandidate> page = new ArrayList<>();
+			for (long id = firstId; id < firstId + size; id++) {
+				page.add(refundCandidate(id, requestedAt));
+			}
+			return page;
+		}
+
+		private PaymentCancelRetryCandidate refundCandidate(long id, LocalDateTime requestedAt) {
+			return new PaymentCancelRetryCandidate(id, id * 10, "tviva-refund-" + id, "toss-" + id, BigDecimal.TEN,
+					"cancel-tviva-refund-" + id + "-1", "부분 반품", requestedAt, null);
 		}
 	}
 

@@ -32,6 +32,9 @@ import lombok.extern.slf4j.Slf4j;
  * 후보 선정 쿼리가 discogs_synced_at 오름차순이라 이번에 처리 못한 행이 다음 실행 맨 앞에 자동으로 서므로
  * "재시작 지점 복원"이라는 Batch 의 값어치가 여기서는 무효하다.
  *
+ * <p>실패한 행은 discogs_synced_at 이 그대로라 맨 앞에 계속 서서 뒤의 정상 행을 굶긴다. 그래서 실패 시각을
+ * 따로 남기고 쿨다운(failureCooldown) 동안 후보에서 뺀다. 레이트리밋은 행 문제가 아니라 남기지 않는다.</p>
+ *
  * <p>HTTP 호출({@link PressingLookupClient#getRelease})은 반드시 트랜잭션 밖에서 한다. 레이트리밋 대기와
  * 429 60초 블록을 여기서 흡수해야 그 시간 동안 DB 커넥션을 쥐지 않는다. 적용은 별도 빈({@link DiscogsResyncService})
  * 을 호출해 트랜잭션 하나로 완결한다 - 자기호출로는 {@code @Transactional} 이 걸리지 않는다.</p>
@@ -81,13 +84,14 @@ public class DiscogsResyncScheduler {
 	private void runPriority() {
 		LocalDateTime now = LocalDateTime.now(clock);
 		LocalDateTime staleBefore = now.minus(freshnessProperties.ttl());
+		LocalDateTime retryBefore = now.minus(properties.failureCooldown());
 		LocalDateTime viewSince = now.minus(properties.viewWindow());
 		checkBudgetAlert(staleBefore);
 
 		long startedAt = System.currentTimeMillis();
-		List<DiscogsResyncCandidate> candidates = discogsResyncMapper.findCandidates(staleBefore, viewSince, true,
-				true, properties.maxCallsPerRun());
-		ResyncSummary summary = processCandidates(candidates);
+		List<DiscogsResyncCandidate> candidates = discogsResyncMapper.findCandidates(staleBefore, retryBefore,
+				viewSince, true, true, properties.maxCallsPerRun());
+		ResyncSummary summary = processCandidates(candidates, now);
 		logSummary("우선순위 재검증", candidates.size(), summary, System.currentTimeMillis() - startedAt);
 		publishChangedEventIfAny(summary);
 	}
@@ -95,6 +99,7 @@ public class DiscogsResyncScheduler {
 	private void runSweep() {
 		LocalDateTime now = LocalDateTime.now(clock);
 		LocalDateTime staleBefore = now.minus(freshnessProperties.ttl());
+		LocalDateTime retryBefore = now.minus(properties.failureCooldown());
 		checkBudgetAlert(staleBefore);
 
 		long startedAt = System.currentTimeMillis();
@@ -107,18 +112,19 @@ public class DiscogsResyncScheduler {
 				log.info("셧다운 신호로 야간 스윕 중단 candidates={} success={} failed={}", candidateTotal, success, failed);
 				break;
 			}
-			List<DiscogsResyncCandidate> candidates = discogsResyncMapper.findCandidates(staleBefore, null, false,
-					false, properties.maxCallsPerRun());
+			List<DiscogsResyncCandidate> candidates = discogsResyncMapper.findCandidates(staleBefore, retryBefore,
+					null, false, false, properties.maxCallsPerRun());
 			if (candidates.isEmpty()) {
 				break;
 			}
 			candidateTotal += candidates.size();
-			ResyncSummary summary = processCandidates(candidates);
+			ResyncSummary summary = processCandidates(candidates, now);
 			success += summary.success();
 			failed += summary.failed();
 			changed += summary.changed();
-			// 실패한 행은 discogs_synced_at 이 그대로라 다음 조회에 또 잡힌다. 한 바퀴에서 하나도 성공하지
-			// 못했다면 Discogs 쪽이 죽은 것이므로, 같은 후보를 MAX_LOOPS 만큼 되풀이해 예산을 태우지 않는다.
+			// 실패한 행은 쿨다운으로 다음 조회에서 빠지므로 매 바퀴 새 행이 온다. 그런데도 한 바퀴 전부 실패했다면
+			// 행 문제가 아니라 Discogs 쪽이 죽은 것이므로(레이트리밋은 쿨다운을 안 남겨 같은 행이 또 온다) 예산을 더
+			// 태우지 않고 멈춘다.
 			if (summary.success() == 0) {
 				log.warn("야간 스윕에서 진전이 없어 중단한다 attempted={} failed={}", candidates.size(), summary.failed());
 				break;
@@ -132,7 +138,7 @@ public class DiscogsResyncScheduler {
 		publishChangedEventIfAny(total);
 	}
 
-	private ResyncSummary processCandidates(List<DiscogsResyncCandidate> candidates) {
+	private ResyncSummary processCandidates(List<DiscogsResyncCandidate> candidates, LocalDateTime now) {
 		int success = 0;
 		int failed = 0;
 		int changed = 0;
@@ -153,18 +159,43 @@ public class DiscogsResyncScheduler {
 			} catch (BusinessException e) {
 				failed++;
 				if (e.getErrorCode() == ErrorCode.CATALOG_RELEASE_NOT_FOUND) {
-					discogsResyncService.markReleaseNotFound(candidate.productId(), candidate.discogsReleaseId());
+					markReleaseNotFoundSafely(candidate);
 				} else {
 					log.warn("Discogs 재검증 실패 productId={} discogsReleaseId={}", candidate.productId(),
 							candidate.discogsReleaseId(), e);
+					// 레이트리밋은 Discogs 전체 신호라 행에 남기면 멀쩡한 행까지 쿨다운에 걸린다.
+					if (e.getErrorCode() != ErrorCode.CATALOG_RATE_LIMITED) {
+						recordFailureSafely(candidate, now);
+					}
 				}
 			} catch (RuntimeException e) {
 				failed++;
 				log.warn("Discogs 재검증 실패 productId={} discogsReleaseId={}", candidate.productId(),
 						candidate.discogsReleaseId(), e);
+				recordFailureSafely(candidate, now);
 			}
 		}
 		return new ResyncSummary(success, failed, changed);
+	}
+
+	// 후처리 쓰기가 실패해도 한 행 때문에 페이지 전체가 멈추면 안 되므로 여기서 삼킨다.
+	private void markReleaseNotFoundSafely(DiscogsResyncCandidate candidate) {
+		try {
+			discogsResyncService.markReleaseNotFound(candidate.productId(), candidate.discogsReleaseId());
+		} catch (RuntimeException e) {
+			log.warn("Discogs 릴리즈 참조 해제 실패 productId={} discogsReleaseId={}", candidate.productId(),
+					candidate.discogsReleaseId(), e);
+		}
+	}
+
+	// 기록에 실패하면 이 행은 다음 실행에도 맨 앞에 서지만, 그것 때문에 남은 행 처리를 멈추지는 않는다.
+	private void recordFailureSafely(DiscogsResyncCandidate candidate, LocalDateTime now) {
+		try {
+			discogsResyncService.markResyncFailed(candidate.productId(), now);
+		} catch (RuntimeException e) {
+			log.warn("Discogs 재검증 실패 기록 실패 productId={} discogsReleaseId={}", candidate.productId(),
+					candidate.discogsReleaseId(), e);
+		}
 	}
 
 	// 건별 발행은 ProductFeatureCache 를 계속 버리게 되므로 실행 끝에 변경 건수가 있을 때 한 번만 발행한다.

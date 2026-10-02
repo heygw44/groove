@@ -112,6 +112,10 @@ public class Product extends BaseTimeEntity {
 	@Column(name = "discogs_synced_at")
 	private LocalDateTime discogsSyncedAt;
 
+	// 재검증 실패 시각. discogs_synced_at 은 신선도 판정용이라 실패로 건드리지 않고 여기에 따로 남긴다.
+	@Column(name = "discogs_resync_failed_at")
+	private LocalDateTime discogsResyncFailedAt;
+
 	@Column(nullable = false, precision = 10, scale = 2)
 	private BigDecimal price;
 
@@ -274,12 +278,19 @@ public class Product extends BaseTimeEntity {
 		this.barcode = barcode;
 		this.editionType = editionType;
 		this.discogsSyncedAt = syncedAt;
+		this.discogsResyncFailedAt = null;
+	}
+
+	/** Discogs 재검증 실패를 남긴다. 쿨다운 동안 후보에서 빠져 같은 행이 매 실행 예산을 태우지 않는다. */
+	public void markDiscogsResyncFailed(LocalDateTime failedAt) {
+		this.discogsResyncFailedAt = failedAt;
 	}
 
 	/** Discogs 릴리즈가 삭제됐을 때(404) 호출한다. 상품 자체는 자체 데이터 상품으로 남고 후보 조회에서 영구히 빠진다. */
 	public void clearDiscogsRelease() {
 		this.discogsReleaseId = null;
 		this.discogsSyncedAt = null;
+		this.discogsResyncFailedAt = null;
 	}
 
 	/** Discogs 릴리즈 병합(리다이렉트)으로 참조 id 가 바뀌었을 때만 호출한다. */

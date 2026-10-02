@@ -28,6 +28,7 @@ public class PaymentLateResultApplier {
 	private final PaymentReconcileService reconcileService;
 	private final PaymentCompensator compensator;
 	private final PaymentClient paymentClient;
+	private final LimitedVirtualAccountCloser limitedVirtualAccountCloser;
 
 	public PaymentReconcileOutcome apply(PaymentReconcileCandidate candidate, PaymentLookupResult lookup,
 			String detail) {
@@ -40,6 +41,9 @@ public class PaymentLateResultApplier {
 		if (outcome.needsCancelRetry()) {
 			retryCancel(candidate, outcome.paymentKey(), outcome.idempotencyKey(),
 					outcome.refundAccount());
+		}
+		if (outcome.needsVirtualAccountClose()) {
+			limitedVirtualAccountCloser.close(candidate, outcome.paymentKey(), detail);
 		}
 		return outcome;
 	}

@@ -61,7 +61,7 @@ public class PaymentConfirmService {
 
 	/** 승인 전이라 한정반인지 알 수 없었다 - 확인되는 즉시 토스 계좌를 닫는다. */
 	private void rejectLimitedVirtualAccount(Long paymentId, String paymentKey) {
-		String reason = "한정반 가상계좌 결제 불가";
+		String reason = LimitedVirtualAccountCloser.REASON;
 		try {
 			paymentClient.cancel(paymentKey, reason);
 			writer.fail(paymentId, reason);

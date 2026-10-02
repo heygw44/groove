@@ -3,6 +3,7 @@ package com.groove.order.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Limit;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.groove.fixture.ArtistFixture;
 import com.groove.fixture.MemberFixture;
@@ -18,6 +20,8 @@ import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.dto.OrderItemConfirmCandidate;
+import com.groove.order.dto.OrderItemDeliverCandidate;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderItemClaimStatus;
@@ -244,8 +248,10 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 	}
 
 	@Nested
-	@DisplayName("findIdsByStatusAndShippedAtBefore()")
-	class FindIdsByStatusAndShippedAtBefore {
+	@DisplayName("findDeliverCandidates()")
+	class FindDeliverCandidates {
+
+		private static final LocalDateTime INITIAL_CURSOR = LocalDateTime.of(1970, 1, 1, 0, 0);
 
 		@Test
 		@DisplayName("SHIPPING 이고 발송 시각이 cutoff 이전이면 대상에 포함한다")
@@ -262,39 +268,97 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			Long itemId = order.getItems().get(0).getId();
 
 			// when
-			List<Long> result = orderItemRepository.findIdsByStatusAndShippedAtBefore(OrderItemStatus.SHIPPING,
-					cutoff, Limit.of(100));
+			List<OrderItemDeliverCandidate> result = orderItemRepository.findDeliverCandidates(
+					OrderItemStatus.SHIPPING, cutoff, INITIAL_CURSOR, 0L, Limit.of(100));
 
 			// then
-			assertThat(result).contains(itemId);
+			assertThat(result).contains(new OrderItemDeliverCandidate(itemId, cutoff.minusDays(1)));
 		}
 
 		@Test
-		@DisplayName("발송 시각이 cutoff 이후면 대상에서 제외한다")
-		void excludesShippedAfterCutoff() {
+		@DisplayName("발송 시각이 cutoff 이후이거나 SHIPPING 이 아니면 대상에서 제외한다")
+		void excludesAfterCutoffOrNotShipping() {
 			// given
 			LocalDateTime cutoff = LocalDateTime.of(2033, 6, 2, 0, 0);
-			Member member = memberRepository.save(MemberFixture.create("order-item-repo-autodeliver2@groove.com"));
-			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-autodeliver2"));
-			Product product = productRepository.save(persistableProduct(artist, "자동배송완료 제외 상품"));
-			Order order = OrderFixture.createWithItem(member, product, 1);
-			OrderFixture.markItemsStatus(order, OrderItemStatus.SHIPPING);
-			OrderFixture.markFirstItemShippedAt(order, cutoff.plusDays(1));
-			orderRepository.saveAndFlush(order);
-			Long itemId = order.getItems().get(0).getId();
+			List<Long> ids = saveShippingItems("autodeliver2", cutoff.plusDays(1), cutoff.minusDays(1));
+			OrderItem delivered = orderItemRepository.findById(ids.get(1)).orElseThrow();
+			ReflectionTestUtils.setField(delivered, "status", OrderItemStatus.DELIVERED);
+			orderItemRepository.saveAndFlush(delivered);
 
 			// when
-			List<Long> result = orderItemRepository.findIdsByStatusAndShippedAtBefore(OrderItemStatus.SHIPPING,
-					cutoff, Limit.of(100));
+			List<OrderItemDeliverCandidate> result = orderItemRepository.findDeliverCandidates(
+					OrderItemStatus.SHIPPING, cutoff, INITIAL_CURSOR, 0L, Limit.of(100));
 
 			// then
-			assertThat(result).doesNotContain(itemId);
+			assertThat(result).extracting(OrderItemDeliverCandidate::id).doesNotContainAnyElementsOf(ids);
+		}
+
+		@Test
+		@DisplayName("커서 뒤의 후보만 발송 시각, id 순으로 돌려주고 같은 시각이면 커서 id 보다 큰 행만 포함한다")
+		void returnsOnlyCandidatesAfterCursorInOrder() {
+			// given
+			LocalDateTime cutoff = LocalDateTime.of(2033, 6, 10, 0, 0);
+			LocalDateTime early = cutoff.minusDays(3);
+			LocalDateTime tie = cutoff.minusDays(2);
+			LocalDateTime late = cutoff.minusDays(1);
+			// 저장 순서상 id 는 late < tieFirst < tieSecond < early 지만 정렬은 발송 시각이 우선이다.
+			List<Long> ids = saveShippingItems("autodeliver-cursor", late, tie, tie, early);
+			Long lateId = ids.get(0);
+			Long tieFirstId = ids.get(1);
+			Long tieSecondId = ids.get(2);
+
+			// when
+			List<OrderItemDeliverCandidate> result = orderItemRepository.findDeliverCandidates(
+					OrderItemStatus.SHIPPING, cutoff, tie, tieFirstId, Limit.of(100));
+
+			// then
+			assertThat(result).filteredOn(candidate -> ids.contains(candidate.id()))
+					.containsExactly(new OrderItemDeliverCandidate(tieSecondId, tie),
+							new OrderItemDeliverCandidate(lateId, late));
+		}
+
+		@Test
+		@DisplayName("커서보다 앞선 행이 없으면 발송 시각, id 순으로 limit 만큼만 돌려준다")
+		void returnsPageInOrderWithinLimit() {
+			// given
+			LocalDateTime cutoff = LocalDateTime.of(2033, 6, 20, 0, 0);
+			LocalDateTime tie = cutoff.minusDays(2);
+			LocalDateTime late = cutoff.minusDays(1);
+			List<Long> ids = saveShippingItems("autodeliver-first", late, tie, tie);
+
+			// when
+			List<OrderItemDeliverCandidate> result = orderItemRepository.findDeliverCandidates(
+					OrderItemStatus.SHIPPING, cutoff, tie.minusSeconds(1), 0L, Limit.of(2));
+
+			// then
+			assertThat(result).containsExactly(new OrderItemDeliverCandidate(ids.get(1), tie),
+					new OrderItemDeliverCandidate(ids.get(2), tie));
+		}
+
+		private List<Long> saveShippingItems(String key, LocalDateTime... shippedAts) {
+			Member member = memberRepository.save(MemberFixture.create("order-item-repo-" + key + "@groove.com"));
+			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-" + key));
+			List<Product> products = new ArrayList<>();
+			for (int i = 0; i < shippedAts.length; i++) {
+				products.add(productRepository.save(persistableProduct(artist, key + " 상품 " + i)));
+			}
+			Order order = OrderFixture.createWithItems(member, products);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.SHIPPING);
+			for (int i = 0; i < shippedAts.length; i++) {
+				ReflectionTestUtils.setField(order.getItems().get(i), "shippedAt", shippedAts[i]);
+			}
+			orderRepository.saveAndFlush(order);
+			return order.getItems().stream().map(OrderItem::getId).toList();
 		}
 	}
 
 	@Nested
-	@DisplayName("findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress()")
-	class FindIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress {
+	@DisplayName("findConfirmCandidates()")
+	class FindConfirmCandidates {
+
+		private static final LocalDateTime INITIAL_CURSOR = LocalDateTime.of(1970, 1, 1, 0, 0);
+		private static final List<OrderItemClaimStatus> IN_PROGRESS = List.of(OrderItemClaimStatus.CANCEL_REQUEST,
+				OrderItemClaimStatus.RETURN_REQUEST, OrderItemClaimStatus.COLLECTING);
 
 		@Test
 		@DisplayName("DELIVERED 이고 배송완료 시각이 cutoff 이전이며 클레임이 없으면 대상에 포함한다")
@@ -311,14 +375,11 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			Long itemId = order.getItems().get(0).getId();
 
 			// when
-			List<Long> result = orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
-					OrderItemStatus.DELIVERED, cutoff,
-					List.of(OrderItemClaimStatus.CANCEL_REQUEST, OrderItemClaimStatus.RETURN_REQUEST,
-							OrderItemClaimStatus.COLLECTING),
-					Limit.of(100));
+			List<OrderItemConfirmCandidate> result = orderItemRepository.findConfirmCandidates(
+					OrderItemStatus.DELIVERED, cutoff, IN_PROGRESS, INITIAL_CURSOR, 0L, Limit.of(100));
 
 			// then
-			assertThat(result).contains(itemId);
+			assertThat(result).contains(new OrderItemConfirmCandidate(itemId, cutoff.minusDays(1)));
 		}
 
 		@Test
@@ -337,14 +398,87 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 			Long itemId = order.getItems().get(0).getId();
 
 			// when
-			List<Long> result = orderItemRepository.findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(
-					OrderItemStatus.DELIVERED, cutoff,
-					List.of(OrderItemClaimStatus.CANCEL_REQUEST, OrderItemClaimStatus.RETURN_REQUEST,
-							OrderItemClaimStatus.COLLECTING),
-					Limit.of(100));
+			List<OrderItemConfirmCandidate> result = orderItemRepository.findConfirmCandidates(
+					OrderItemStatus.DELIVERED, cutoff, IN_PROGRESS, INITIAL_CURSOR, 0L, Limit.of(100));
 
 			// then
-			assertThat(result).doesNotContain(itemId);
+			assertThat(result).extracting(OrderItemConfirmCandidate::id).doesNotContain(itemId);
+		}
+
+		@Test
+		@DisplayName("배송완료 시각이 cutoff 이후이거나 DELIVERED 가 아니면 대상에서 제외한다")
+		void excludesAfterCutoffOrNotDelivered() {
+			// given
+			LocalDateTime cutoff = LocalDateTime.of(2033, 7, 3, 0, 0);
+			List<Long> ids = saveDeliveredItems("autoconfirm3", cutoff.plusDays(1), cutoff.minusDays(1));
+			OrderItem shipping = orderItemRepository.findById(ids.get(1)).orElseThrow();
+			ReflectionTestUtils.setField(shipping, "status", OrderItemStatus.SHIPPING);
+			orderItemRepository.saveAndFlush(shipping);
+
+			// when
+			List<OrderItemConfirmCandidate> result = orderItemRepository.findConfirmCandidates(
+					OrderItemStatus.DELIVERED, cutoff, IN_PROGRESS, INITIAL_CURSOR, 0L, Limit.of(100));
+
+			// then
+			assertThat(result).extracting(OrderItemConfirmCandidate::id).doesNotContainAnyElementsOf(ids);
+		}
+
+		@Test
+		@DisplayName("커서 뒤의 후보만 배송완료 시각, id 순으로 돌려주고 같은 시각이면 커서 id 보다 큰 행만 포함한다")
+		void returnsOnlyCandidatesAfterCursorInOrder() {
+			// given
+			LocalDateTime cutoff = LocalDateTime.of(2033, 8, 1, 0, 0);
+			LocalDateTime early = cutoff.minusDays(3);
+			LocalDateTime tie = cutoff.minusDays(2);
+			LocalDateTime late = cutoff.minusDays(1);
+			// 저장 순서상 id 는 late < tieFirst < tieSecond < early 지만 정렬은 배송완료 시각이 우선이다.
+			List<Long> ids = saveDeliveredItems("autoconfirm-cursor", late, tie, tie, early);
+			Long lateId = ids.get(0);
+			Long tieFirstId = ids.get(1);
+			Long tieSecondId = ids.get(2);
+
+			// when
+			List<OrderItemConfirmCandidate> result = orderItemRepository.findConfirmCandidates(
+					OrderItemStatus.DELIVERED, cutoff, IN_PROGRESS, tie, tieFirstId, Limit.of(100));
+
+			// then
+			assertThat(result).filteredOn(candidate -> ids.contains(candidate.id()))
+					.containsExactly(new OrderItemConfirmCandidate(tieSecondId, tie),
+							new OrderItemConfirmCandidate(lateId, late));
+		}
+
+		@Test
+		@DisplayName("커서보다 앞선 행이 없으면 배송완료 시각, id 순으로 limit 만큼만 돌려준다")
+		void returnsPageInOrderWithinLimit() {
+			// given
+			LocalDateTime cutoff = LocalDateTime.of(2033, 9, 1, 0, 0);
+			LocalDateTime tie = cutoff.minusDays(2);
+			LocalDateTime late = cutoff.minusDays(1);
+			List<Long> ids = saveDeliveredItems("autoconfirm-first", late, tie, tie);
+
+			// when
+			List<OrderItemConfirmCandidate> result = orderItemRepository.findConfirmCandidates(
+					OrderItemStatus.DELIVERED, cutoff, IN_PROGRESS, tie.minusSeconds(1), 0L, Limit.of(2));
+
+			// then
+			assertThat(result).containsExactly(new OrderItemConfirmCandidate(ids.get(1), tie),
+					new OrderItemConfirmCandidate(ids.get(2), tie));
+		}
+
+		private List<Long> saveDeliveredItems(String key, LocalDateTime... deliveredAts) {
+			Member member = memberRepository.save(MemberFixture.create("order-item-repo-" + key + "@groove.com"));
+			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-" + key));
+			List<Product> products = new ArrayList<>();
+			for (int i = 0; i < deliveredAts.length; i++) {
+				products.add(productRepository.save(persistableProduct(artist, key + " 상품 " + i)));
+			}
+			Order order = OrderFixture.createWithItems(member, products);
+			OrderFixture.markItemsStatus(order, OrderItemStatus.DELIVERED);
+			for (int i = 0; i < deliveredAts.length; i++) {
+				ReflectionTestUtils.setField(order.getItems().get(i), "deliveredAt", deliveredAts[i]);
+			}
+			orderRepository.saveAndFlush(order);
+			return order.getItems().stream().map(OrderItem::getId).toList();
 		}
 	}
 
