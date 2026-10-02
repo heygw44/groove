@@ -77,6 +77,7 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 			Member admin = memberRepository.save(MemberFixture.createAdmin("admin-flow-" + UUID.randomUUID()
 					+ "@groove.com"));
 			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+			sleepUntilNextSecond();
 
 			// when: 정지
 			mockMvc.perform(patch("/api/v1/admin/members/" + memberId + "/status")
@@ -99,9 +100,11 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_MEMBER_SUSPENDED")));
 
+			// 정지 전에 다음 초까지 기다렸으므로 기존 토큰은 폐기 시각보다 먼저 발급돼 필터에서 401 로 막힌다.
+			// 같은 초에 발급된 토큰이 필터를 통과하는 경우는 AccessTokenRevocationCheckerTest 가 맡는다.
 			mockMvc.perform(get("/api/v1/members/me").header(HttpHeaders.AUTHORIZATION, accessToken))
-					.andExpect(status().isForbidden())
-					.andExpect(jsonPath("$.error.code", is("AUTH_MEMBER_SUSPENDED")));
+					.andExpect(status().isUnauthorized())
+					.andExpect(jsonPath("$.error.code", is("AUTH_TOKEN_REVOKED")));
 
 			List<AdminAuditLog> logs = adminAuditLogRepository.findAllByAdminIdOrderByIdAsc(admin.getId());
 			assertThat(logs).extracting(AdminAuditLog::getAction).contains(AdminAuditAction.MEMBER_STATUS_CHANGE);
@@ -226,5 +229,11 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 						.content(objectMapper.writeValueAsString(request)))
 				.andExpect(status().isOk())
 				.andReturn();
+	}
+
+	/** iat 가 초 단위라 로그인과 정지가 같은 초에 겹치면 기존 토큰이 폐기 검사를 통과해 거부 경로가 갈린다. */
+	private void sleepUntilNextSecond() throws InterruptedException {
+		long millisIntoSecond = System.currentTimeMillis() % 1000;
+		Thread.sleep(1000 - millisIntoSecond + 50);
 	}
 }
