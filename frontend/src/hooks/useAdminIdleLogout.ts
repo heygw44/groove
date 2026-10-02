@@ -11,6 +11,7 @@ import { useAuthStore } from '@/store/authStore';
 import { postAuthMessage, subscribeAuthMessage } from '@/utils/authChannel';
 import { getIdlePhase } from '@/utils/idlePhase';
 import { buildLoginUrl, currentPath } from '@/utils/loginUrl';
+import { getLastUserActivity, recordUserActivity } from '@/utils/userActivity';
 
 interface UseAdminIdleLogoutResult {
   warningOpen: boolean;
@@ -24,13 +25,12 @@ export function useAdminIdleLogout(): UseAdminIdleLogoutResult {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
 
   /* Date.now() 는 impure 라 렌더 중에 못 읽는다 - 마운트 이펙트에서 채운다. */
-  const lastActivityRef = useRef(0);
   const lastRecordedRef = useRef(0);
   const expiredRef = useRef(false);
 
   useEffect(() => {
     const now = Date.now();
-    lastActivityRef.current = now;
+    recordUserActivity(now);
     lastRecordedRef.current = now;
   }, []);
 
@@ -57,7 +57,7 @@ export function useAdminIdleLogout(): UseAdminIdleLogoutResult {
       }
       const now = Date.now();
       /* 절전·백그라운드 탭에서 깨어난 직후일 수 있으므로, 갱신 전 현재 상태를 먼저 본다. */
-      const { phase } = getIdlePhase(now, lastActivityRef.current);
+      const { phase } = getIdlePhase(now, getLastUserActivity());
       if (phase === 'expired') {
         void expire();
         return;
@@ -65,7 +65,7 @@ export function useAdminIdleLogout(): UseAdminIdleLogoutResult {
       if (!bypassThrottle && now - lastRecordedRef.current < ACTIVITY_THROTTLE_MS) {
         return;
       }
-      lastActivityRef.current = now;
+      recordUserActivity(now);
       lastRecordedRef.current = now;
       postAuthMessage({ type: 'activity', at: now });
       setWarningOpen(false);
@@ -78,7 +78,7 @@ export function useAdminIdleLogout(): UseAdminIdleLogoutResult {
       if (expiredRef.current) {
         return;
       }
-      const { phase, remainingMs } = getIdlePhase(Date.now(), lastActivityRef.current);
+      const { phase, remainingMs } = getIdlePhase(Date.now(), getLastUserActivity());
       if (phase === 'expired') {
         void expire();
         return;
@@ -120,8 +120,8 @@ export function useAdminIdleLogout(): UseAdminIdleLogoutResult {
     () =>
       subscribeAuthMessage((message) => {
         if (message.type === 'activity') {
-          lastActivityRef.current = Math.max(lastActivityRef.current, message.at);
-          const { phase } = getIdlePhase(Date.now(), lastActivityRef.current);
+          recordUserActivity(message.at);
+          const { phase } = getIdlePhase(Date.now(), getLastUserActivity());
           if (phase === 'active') {
             setWarningOpen(false);
           }

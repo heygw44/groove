@@ -84,6 +84,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   AUTH_MEMBER_SUSPENDED: '이용이 정지된 계정입니다.',
   AUTH_LOGIN_LOCKED:
     '비밀번호를 여러 번 잘못 입력해 잠시 로그인이 제한되었습니다. 잠시 후 다시 시도해주세요.',
+  AUTH_SESSION_IDLE: '오래 사용하지 않아 로그아웃되었습니다. 다시 로그인해주세요.',
   AUTH_RATE_LIMITED: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.',
   MEMBER_PASSWORD_LOCKED:
     '비밀번호를 여러 번 잘못 입력해 잠시 확인이 제한되었습니다. 잠시 후 다시 시도해주세요.',
