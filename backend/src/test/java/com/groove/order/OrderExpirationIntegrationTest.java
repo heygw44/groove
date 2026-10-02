@@ -2,17 +2,26 @@ package com.groove.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -29,6 +38,9 @@ import com.groove.fixture.MemberFixture;
 import com.groove.fixture.OrderFixture;
 import com.groove.fixture.ProductFixture;
 import com.groove.fixture.StockFixture;
+import com.groove.global.alert.Alert;
+import com.groove.global.alert.AlertNotifier;
+import com.groove.global.lifecycle.ShutdownSignal;
 import com.groove.inventory.entity.Stock;
 import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.repository.StockHistoryRepository;
@@ -47,6 +59,8 @@ import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderStatus;
 import com.groove.order.repository.OrderRepository;
 import com.groove.order.scheduler.OrderExpirationScheduler;
+import com.groove.order.service.OrderExpirationLock;
+import com.groove.order.service.OrderExpirationService;
 import com.groove.order.service.OrderService;
 import com.groove.product.entity.Artist;
 import com.groove.product.entity.Product;
@@ -107,6 +121,15 @@ class OrderExpirationIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	private Clock clock;
+
+	@Autowired
+	private OrderExpirationService orderExpirationService;
+
+	@Autowired
+	private OrderExpirationLock orderExpirationLock;
+
+	@Autowired
+	private ShutdownSignal shutdownSignal;
 
 	private Long limitedDropId;
 
@@ -266,6 +289,53 @@ class OrderExpirationIntegrationTest extends IntegrationTestSupport {
 			assertThat(redisTemplate.opsForValue().get(LimitedDropRedisService.stockKey(dropId))).isEqualTo("5");
 			assertThat(redisTemplate.opsForSet().isMember(LimitedDropRedisService.buyersKey(dropId),
 					member.getId().toString())).isFalse();
+		}
+
+		@Test
+		@DisplayName("앞에 배치 크기 이상의 실패 주문이 있어도 한 번의 실행으로 뒤의 정상 주문을 만료하고 실패를 알린다")
+		void expiresHealthyOrderBehindFailingBatch() {
+			// given
+			LocalDateTime base = LocalDateTime.of(2000, 1, 1, 0, 0);
+			Member failingMember = createMember();
+			List<Order> failingOrders = new ArrayList<>();
+			for (int i = 0; i < OrderExpirationScheduler.BATCH_SIZE; i++) {
+				Order failing = OrderFixture.create(failingMember,
+						"20000101-EXP" + UUID.randomUUID().toString().substring(0, 8));
+				failingOrders.add(OrderFixture.withExpiresAt(failing, base));
+			}
+			List<Long> failingIds = orderRepository.saveAllAndFlush(failingOrders).stream().map(Order::getId)
+					.toList();
+
+			Member member = createMember();
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Product product = createProductWithStock(5);
+			OrderCreateResponse response = orderService.create(member.getId(),
+					OrderFixture.directRequest(product.getId(), 1, address.getId()));
+			Order healthy = orderRepository.findById(response.orderId()).orElseThrow();
+			OrderFixture.withExpiresAt(healthy, base.plusMinutes(1));
+			orderRepository.saveAndFlush(healthy);
+
+			// 컨텍스트를 새로 띄우면 공유 DB 가 재생성되므로 빈을 갈아끼우지 않고 스케줄러를 직접 만든다.
+			OrderExpirationService failingService = mock(OrderExpirationService.class,
+					delegatesTo(orderExpirationService));
+			doThrow(new IllegalStateException("boom")).when(failingService)
+					.expire(argThat(failingIds::contains), any());
+			AlertNotifier alertNotifier = mock(AlertNotifier.class);
+			OrderExpirationScheduler scheduler = new OrderExpirationScheduler(orderRepository, failingService,
+					orderExpirationLock, shutdownSignal, clock, alertNotifier);
+
+			// when
+			scheduler.expireOrders();
+
+			// then
+			Order canceled = orderRepository.findById(healthy.getId()).orElseThrow();
+			assertThat(canceled.getStatus()).isEqualTo(OrderStatus.CANCELED);
+			assertThat(canceled.getCancelReason()).isEqualTo(Order.EXPIRED_CANCEL_REASON);
+			assertThat(stockRepository.findByProductId(product.getId()).orElseThrow().getQuantity()).isEqualTo(5);
+			ArgumentCaptor<Alert> captor = ArgumentCaptor.forClass(Alert.class);
+			verify(alertNotifier).notify(captor.capture());
+			assertThat(captor.getValue().key()).isEqualTo("order.expiration-failed");
+			assertThat(captor.getValue().targetId()).isEqualTo("orderId=" + failingIds.get(0));
 		}
 	}
 }

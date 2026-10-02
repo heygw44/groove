@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.groove.order.dto.OrderExpirationCandidate;
 import com.groove.order.entity.Order;
 import com.groove.order.entity.OrderSource;
 import com.groove.order.entity.OrderStatus;
@@ -50,17 +51,21 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 	// 결제가 READY/UNKNOWN 인 주문은 대사가 결론을 낼 때까지 만료 대상에서 뺀다 - 안 그러면 스킵되는 행이
 	// 배치 슬롯을 계속 차지해 만료할 다른 주문이 굶는다. NOT EXISTS 서브쿼리 대신 LEFT JOIN ... IS NULL 로
 	// 쓴 이유: MySQL 이 전자를 semijoin materialization 으로 풀어 payment 를 전부 훑는다. 후자는 uk_payment_order 를 탄다.
+	// 그 밖의 이유로 실패·보류돼 PENDING 으로 남는 행도 앞자리를 차지하므로 (expiresAt, id) keyset 커서 뒤만 조회한다.
 	@Query("""
-			select o.id from Order o
+			select new com.groove.order.dto.OrderExpirationCandidate(o.id, o.expiresAt) from Order o
 			left join Payment p on p.order.id = o.id and p.status in :unresolvedPaymentStatuses
 			where o.status = :status and o.expiresAt <= :now and p.id is null
+			and (o.expiresAt > :afterExpiresAt or (o.expiresAt = :afterExpiresAt and o.id > :afterId))
 			order by o.expiresAt asc, o.id asc
 			""")
-	List<Long> findIdsByStatusAndExpiresAtBefore(@Param("status") OrderStatus status, @Param("now") LocalDateTime now,
-			@Param("unresolvedPaymentStatuses") Collection<PaymentStatus> unresolvedPaymentStatuses, Limit limit);
+	List<OrderExpirationCandidate> findExpirationCandidates(@Param("status") OrderStatus status,
+			@Param("now") LocalDateTime now,
+			@Param("unresolvedPaymentStatuses") Collection<PaymentStatus> unresolvedPaymentStatuses,
+			@Param("afterExpiresAt") LocalDateTime afterExpiresAt, @Param("afterId") Long afterId, Limit limit);
 
 	// 주문서 재제출 전, 같은 회원의 이전 미확정 주문(한정반 제외)을 찾는다. 결제가 READY/UNKNOWN 이면 대사가
-	// 끝날 때까지 건드리지 않는다 - LEFT JOIN ... IS NULL 을 쓰는 이유는 findIdsByStatusAndExpiresAtBefore 와 같다.
+	// 끝날 때까지 건드리지 않는다 - LEFT JOIN ... IS NULL 을 쓰는 이유는 findExpirationCandidates 와 같다.
 	@Query("""
 			select o.id from Order o
 			left join Payment p on p.order.id = o.id and p.status in :unresolvedPaymentStatuses

@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.groove.order.dto.OrderItemConfirmCandidate;
+import com.groove.order.dto.OrderItemDeliverCandidate;
 import com.groove.order.entity.OrderItem;
 import com.groove.order.entity.OrderItemClaimStatus;
 import com.groove.order.entity.OrderItemStatus;
@@ -37,16 +39,26 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
 	@Query("select oi.order.id from OrderItem oi where oi.id = :id")
 	Optional<Long> findOrderIdById(@Param("id") Long id);
 
-	@Query("select oi.id from OrderItem oi where oi.status = :status and oi.shippedAt <= :cutoff "
+	// 처리 못 한 행이 앞에 남아도 뒤 후보로 넘어가도록 (shippedAt, id) keyset 커서 뒤만 조회한다.
+	@Query("select new com.groove.order.dto.OrderItemDeliverCandidate(oi.id, oi.shippedAt) from OrderItem oi "
+			+ "where oi.status = :status and oi.shippedAt <= :cutoff "
+			+ "and (oi.shippedAt > :afterShippedAt "
+			+ "or (oi.shippedAt = :afterShippedAt and oi.id > :afterId)) "
 			+ "order by oi.shippedAt asc, oi.id asc")
-	List<Long> findIdsByStatusAndShippedAtBefore(@Param("status") OrderItemStatus status,
-			@Param("cutoff") LocalDateTime cutoff, Limit limit);
+	List<OrderItemDeliverCandidate> findDeliverCandidates(@Param("status") OrderItemStatus status,
+			@Param("cutoff") LocalDateTime cutoff, @Param("afterShippedAt") LocalDateTime afterShippedAt,
+			@Param("afterId") Long afterId, Limit limit);
 
-	@Query("select oi.id from OrderItem oi where oi.status = :status and oi.deliveredAt <= :cutoff "
+	// 처리 못 한 행이 앞에 남아도 뒤 후보로 넘어가도록 (deliveredAt, id) keyset 커서 뒤만 조회한다.
+	@Query("select new com.groove.order.dto.OrderItemConfirmCandidate(oi.id, oi.deliveredAt) from OrderItem oi "
+			+ "where oi.status = :status and oi.deliveredAt <= :cutoff "
 			+ "and (oi.claimStatus is null or oi.claimStatus not in :inProgressClaimStatuses) "
+			+ "and (oi.deliveredAt > :afterDeliveredAt "
+			+ "or (oi.deliveredAt = :afterDeliveredAt and oi.id > :afterId)) "
 			+ "order by oi.deliveredAt asc, oi.id asc")
-	List<Long> findIdsByStatusAndDeliveredAtBeforeAndClaimNotInProgress(@Param("status") OrderItemStatus status,
+	List<OrderItemConfirmCandidate> findConfirmCandidates(@Param("status") OrderItemStatus status,
 			@Param("cutoff") LocalDateTime cutoff,
 			@Param("inProgressClaimStatuses") Collection<OrderItemClaimStatus> inProgressClaimStatuses,
+			@Param("afterDeliveredAt") LocalDateTime afterDeliveredAt, @Param("afterId") Long afterId,
 			Limit limit);
 }
