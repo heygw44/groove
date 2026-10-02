@@ -82,6 +82,7 @@ describe('OrderCompletePage', () => {
           amount: 10000,
           approvedAt: '2026-09-28T00:01:00',
           easyPayProvider: null,
+          canceledAmount: 0,
           virtualAccount: null,
         },
       }),
@@ -108,6 +109,7 @@ describe('OrderCompletePage', () => {
           amount: 10000,
           approvedAt: '2026-09-28T00:01:00',
           easyPayProvider: '네이버페이',
+          canceledAmount: 0,
           virtualAccount: null,
         },
       }),
@@ -132,6 +134,7 @@ describe('OrderCompletePage', () => {
           amount: 10000,
           approvedAt: '2026-09-28T00:01:00',
           easyPayProvider: null,
+          canceledAmount: 0,
           virtualAccount: {
             bankCode: '88',
             accountNumber: '110-1234-5678',

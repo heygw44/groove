@@ -61,6 +61,7 @@ const buildOrder = (overrides: Partial<OrderDetail> = {}): OrderDetail => ({
     amount: 10000,
     approvedAt: '2026-09-13T00:01:00',
     easyPayProvider: null,
+    canceledAmount: 0,
     virtualAccount: null,
   },
   ...overrides,
@@ -150,6 +151,7 @@ describe('OrderDetailPage', () => {
         amount: 10000,
         approvedAt: '',
         easyPayProvider: null,
+        canceledAmount: 0,
         virtualAccount: {
           bankCode: '020',
           accountNumber: '110123456789',
@@ -178,6 +180,7 @@ describe('OrderDetailPage', () => {
         amount: 10000,
         approvedAt: '2026-09-13T00:01:00',
         easyPayProvider: null,
+        canceledAmount: 0,
         virtualAccount: null,
       },
     });
