@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 
 import { Input } from '@/components/common/Input';
 import { Spinner } from '@/components/common/Spinner';
+import { KEYWORD_INPUT_MAX_LENGTH } from '@/constants/search';
 import { useAdminAlbums } from '@/hooks/queries/useAdminAlbums';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { AdminAlbumSummary } from '@/types/product';
@@ -81,6 +82,7 @@ export function AlbumSearchSelect({
         disabled={disabled}
         placeholder="앨범 검색"
         value={keyword}
+        maxLength={KEYWORD_INPUT_MAX_LENGTH}
         onChange={(event) => setKeyword(event.target.value)}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}

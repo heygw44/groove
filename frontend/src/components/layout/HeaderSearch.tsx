@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Input } from '@/components/common/Input';
 import { Spinner } from '@/components/common/Spinner';
+import { SUGGESTION_KEYWORD_MAX_LENGTH } from '@/constants/search';
 import { useSearchSuggestions } from '@/hooks/queries/useSearchSuggestions';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { ArtistSuggestion, ProductSuggestion } from '@/types/search';
@@ -148,6 +149,7 @@ export function HeaderSearch({ autoFocus = false, className = '' }: HeaderSearch
         aria-autocomplete="list"
         placeholder="앨범, 아티스트 검색"
         value={keyword}
+        maxLength={SUGGESTION_KEYWORD_MAX_LENGTH}
         onChange={(event) => {
           setKeyword(event.target.value);
           setActiveIndex(null);

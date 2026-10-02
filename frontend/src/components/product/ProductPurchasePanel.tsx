@@ -76,7 +76,20 @@ export function ProductPurchasePanel({ product }: ProductPurchasePanelProps) {
       return;
     }
     // 서버가 위시에 담을 때 알림을 함께 켠다.
-    toggleWishlistMutation.mutate({ productId: product.id, wishlisted: false }, handlers);
+    toggleWishlistMutation.mutate(
+      { productId: product.id, wishlisted: false },
+      {
+        ...handlers,
+        onError: (error) => {
+          // 이미 담긴 행이면 알림만 꺼져 있는 경우라 알림 켜기로 이어간다.
+          if (getErrorCode(error) === 'WISHLIST_ALREADY_EXISTS') {
+            changeAlertMutation.mutate({ productId: product.id, alertEnabled: true }, handlers);
+            return;
+          }
+          handlers.onError(error);
+        },
+      },
+    );
   };
 
   const handleToggleAlert = () => {

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
+import { KEYWORD_INPUT_MAX_LENGTH } from '@/constants/search';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { OrderStatusGroup } from '@/types/order';
 import type { AdminOrderFilters } from '@/utils/adminOrderFilters';
@@ -89,6 +90,7 @@ export function AdminOrderItemFilterBar({ filters, onChange }: AdminOrderItemFil
       <Input
         placeholder="주문번호·상품주문번호·회원 이메일"
         value={keyword}
+        maxLength={KEYWORD_INPUT_MAX_LENGTH}
         onChange={(event) => setKeyword(event.target.value)}
         className="w-72"
       />

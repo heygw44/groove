@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { AxiosError, type AxiosResponse } from 'axios';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -102,6 +103,43 @@ describe('ProductPurchasePanel 재입고 알림', () => {
 
     // then
     expect(showToast).toHaveBeenCalledWith('success', '재입고 알림을 신청했습니다.');
+  });
+
+  it('이미 위시에 담긴 행이면 오류 없이 알림만 켠다', async () => {
+    // given
+    const user = userEvent.setup();
+    const conflict = new AxiosError('conflict', 'ERR_BAD_REQUEST', undefined, undefined, {
+      status: 409,
+      data: { error: { code: 'WISHLIST_ALREADY_EXISTS', message: '이미 담겼습니다.' } },
+    } as AxiosResponse);
+    toggleMutate.mockImplementation((_vars, options) => options.onError(conflict));
+    alertMutate.mockImplementation((_vars, options) => options.onSuccess());
+    renderPanel(buildProduct({ wishlisted: false }));
+
+    // when
+    await user.click(screen.getByRole('button', { name: '재입고 알림 받기' }));
+
+    // then
+    expect(alertMutate).toHaveBeenCalledWith(
+      { productId: 7, alertEnabled: true },
+      expect.any(Object),
+    );
+    expect(showToast).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith('success', '재입고 알림을 신청했습니다.');
+  });
+
+  it('그 밖의 위시 추가 실패는 오류 토스트를 띄운다', async () => {
+    // given
+    const user = userEvent.setup();
+    toggleMutate.mockImplementation((_vars, options) => options.onError(new Error('boom')));
+    renderPanel(buildProduct({ wishlisted: false }));
+
+    // when
+    await user.click(screen.getByRole('button', { name: '재입고 알림 받기' }));
+
+    // then
+    expect(alertMutate).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith('error', expect.any(String));
   });
 
   it('로그아웃 상태면 로그인 화면으로 보낸다', async () => {

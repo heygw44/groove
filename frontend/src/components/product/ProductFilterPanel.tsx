@@ -9,6 +9,7 @@ import {
   PRESSING_COUNTRIES,
   PRESSING_COUNTRY_LABELS,
 } from '@/constants/product';
+import { KEYWORD_INPUT_MAX_LENGTH } from '@/constants/search';
 import { useGenres, useLabels } from '@/hooks/queries/useReferences';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { EditionType } from '@/types/catalog';
@@ -122,6 +123,7 @@ export function ProductFilterPanel({
           id={`${uid}-keyword`}
           placeholder="앨범명, 아티스트명"
           value={keyword}
+          maxLength={KEYWORD_INPUT_MAX_LENGTH}
           onChange={(event) => setKeyword(event.target.value)}
         />
       </div>

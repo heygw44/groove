@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
+import { KEYWORD_INPUT_MAX_LENGTH } from '@/constants/search';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { ProductStatus } from '@/types/product';
 
@@ -76,6 +77,7 @@ export function AdminProductFilterBar({ filters, onChange }: AdminProductFilterB
       <Input
         placeholder="제목 또는 아티스트"
         value={keyword}
+        maxLength={KEYWORD_INPUT_MAX_LENGTH}
         onChange={(event) => setKeyword(event.target.value)}
         className="w-56"
       />
