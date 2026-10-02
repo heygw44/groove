@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { OrderDetail, OrderItem } from '@/types/order';
-import type { OrderPayment, PaymentStatus } from '@/types/payment';
+import type { OrderPayment } from '@/types/payment';
 import {
   PAYMENT_STATUSES,
   PAYMENT_STATUS_BADGE,
@@ -12,7 +12,6 @@ import {
   getOrderCancelSuccessMessage,
   getOrderItemCancelSuccessMessage,
   getPaymentMethodLabel,
-  isReconcilePending,
   requiresRefundAccount,
 } from '@/utils/paymentStatus';
 
@@ -42,24 +41,6 @@ describe('PAYMENT_STATUS_LABEL / PAYMENT_STATUS_BADGE PARTIAL_CANCELED', () => {
     // given & when & then
     expect(PAYMENT_STATUS_LABEL.PARTIAL_CANCELED).toBe('부분취소');
     expect(PAYMENT_STATUS_BADGE.PARTIAL_CANCELED).toBe('accent');
-  });
-});
-
-describe('isReconcilePending()', () => {
-  it.each<[PaymentStatus, boolean]>([
-    ['READY', false],
-    ['DONE', false],
-    ['PARTIAL_CANCELED', false],
-    ['CANCELED', false],
-    ['FAILED', false],
-    ['UNKNOWN', true],
-    ['CANCEL_REQUESTED', true],
-  ])('%s 상태는 대사 대기 여부가 %s 이다', (status, expected) => {
-    // given & when
-    const result = isReconcilePending(status);
-
-    // then
-    expect(result).toBe(expected);
   });
 });
 
@@ -137,7 +118,7 @@ describe('requiresRefundAccount()', () => {
     expect(requiresRefundAccount(buildPayment({ status, virtualAccount }))).toBe(expected);
   });
 
-  it('가상계좌가 아니거나 결제 정보가 없으면 false 를 반환한다', () => {
+  it('가상계좌가 아니거나 결제정보가 없으면 false 를 반환한다', () => {
     // when & then
     expect(requiresRefundAccount(buildPayment({ status: 'DONE' }))).toBe(false);
     expect(requiresRefundAccount(undefined)).toBe(false);
@@ -152,9 +133,9 @@ describe('getOrderItemCancelSuccessMessage()', () => {
     [{ status: 'CANCELED' }, '주문을 취소했습니다.'],
     [
       { status: 'PAID', refundInProgress: true },
-      '취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.',
+      '취소요청이 접수되었습니다. 환불까지 시간이 조금 걸릴 수 있습니다.',
     ],
-    [{ status: 'PREPARING' }, '취소 요청이 접수됐습니다. 승인되면 취소됩니다.'],
+    [{ status: 'PREPARING' }, '취소요청이 접수되었습니다. 승인되면 취소됩니다.'],
   ] as const)('%j 응답이면 "%s" 를 돌려준다', (overrides, expected) => {
     // when & then
     expect(getOrderItemCancelSuccessMessage(buildItem(overrides))).toBe(expected);
@@ -164,7 +145,7 @@ describe('getOrderItemCancelSuccessMessage()', () => {
 describe('관리자 클레임 처리 메시지', () => {
   it('승인은 CANCELED 일 때만 승인 완료로 안내한다', () => {
     // when & then
-    expect(getAdminClaimApproveMessage({ status: 'CANCELED' })).toBe('취소 클레임을 승인했습니다.');
+    expect(getAdminClaimApproveMessage({ status: 'CANCELED' })).toBe('취소요청을 승인했습니다.');
     expect(getAdminClaimApproveMessage({ status: 'PREPARING' })).toContain('환불 결과를 확인');
   });
 
@@ -192,11 +173,11 @@ describe('getOrderCancelSuccessMessage()', () => {
 
     // when & then
     expect(getOrderCancelSuccessMessage(order)).toBe(
-      '일부 상품만 취소됐습니다. 남은 상품을 확인해 주세요.',
+      '일부 상품만 취소되었습니다. 남은 상품을 확인해주세요.',
     );
   });
 
-  it('남은 취소 액션이 없으면 취소 완료로 안내한다', () => {
+  it('남은 취소 액션이 없으면 취소완료로 안내한다', () => {
     // given
     const order = { items: [buildItem({ status: 'CANCELED' })] } as OrderDetail;
 

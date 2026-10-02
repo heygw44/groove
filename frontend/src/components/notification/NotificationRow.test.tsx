@@ -103,7 +103,7 @@ describe('NotificationRow', () => {
 
     // then
     expect(
-      screen.getByRole('button', { name: 'Kind of Blue 재입고됐습니다 알림 삭제' }),
+      screen.getByRole('button', { name: 'Kind of Blue 재입고되었습니다 알림 삭제' }),
     ).toBeInTheDocument();
   });
 

@@ -48,7 +48,7 @@ const renderActions = (item: OrderItem, payment?: OrderPayment) => {
 };
 
 describe('OrderItemClaimActions', () => {
-  it('입금대기 상품의 취소를 확정하면 주문 취소 API 를 부르고 상품 취소 API 는 부르지 않는다', async () => {
+  it('입금대기 상품의 취소를 확정하면 주문취소 API 를 부르고 상품 취소 API 는 부르지 않는다', async () => {
     // given
     const user = userEvent.setup();
     renderActions({ ...baseItem, status: 'PAYMENT_WAITING' });
@@ -64,7 +64,7 @@ describe('OrderItemClaimActions', () => {
     expect(cancelOrderItem).not.toHaveBeenCalled();
   });
 
-  it('결제완료 상품의 취소를 확정하면 상품 취소 API 를 부르고 주문 취소 API 는 부르지 않는다', async () => {
+  it('결제완료 상품의 취소를 확정하면 상품 취소 API 를 부르고 주문취소 API 는 부르지 않는다', async () => {
     // given
     const user = userEvent.setup();
     renderActions(baseItem);
@@ -88,7 +88,7 @@ describe('OrderItemClaimActions', () => {
     expect(screen.queryByRole('button', { name: '상품 취소' })).not.toBeInTheDocument();
   });
 
-  it('주문 취소 응답이 CANCEL_REQUESTED 면 접수 안내 토스트를 보여준다', async () => {
+  it('주문취소 응답이 CANCEL_REQUESTED 면 접수 안내 토스트를 보여준다', async () => {
     // given
     const user = userEvent.setup();
     vi.mocked(cancelOrder).mockResolvedValueOnce({
@@ -104,7 +104,7 @@ describe('OrderItemClaimActions', () => {
 
     // then
     expect(
-      await screen.findByText('취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.'),
+      await screen.findByText('취소요청이 접수되었습니다. 환불까지 시간이 조금 걸릴 수 있습니다.'),
     ).toBeInTheDocument();
     expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();
   });
@@ -112,11 +112,11 @@ describe('OrderItemClaimActions', () => {
   it.each([
     [
       { status: 'PAID', claimStatus: 'CANCEL_REQUEST', refundInProgress: true },
-      '취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.',
+      '취소요청이 접수되었습니다. 환불까지 시간이 조금 걸릴 수 있습니다.',
     ],
     [
       { status: 'PREPARING', claimStatus: 'CANCEL_REQUEST', refundInProgress: false },
-      '취소 요청이 접수됐습니다. 승인되면 취소됩니다.',
+      '취소요청이 접수되었습니다. 승인되면 취소됩니다.',
     ],
   ])('취소 응답이 %j 면 "%s" 토스트를 보여준다', async (response, message) => {
     // given
@@ -159,7 +159,7 @@ describe('OrderItemClaimActions', () => {
 
     // then
     expect(screen.getByText('환불 처리 중')).toBeInTheDocument();
-    expect(screen.getByText(/결제사 환불 결과를 확인하고 있습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/환불 결과를 확인하고 있습니다/)).toBeInTheDocument();
   });
 
   it('환불이 미확정이 아니면 환불 처리 중 안내를 보이지 않는다', () => {
@@ -170,7 +170,7 @@ describe('OrderItemClaimActions', () => {
     expect(screen.queryByText('환불 처리 중')).not.toBeInTheDocument();
   });
 
-  it('주문 취소 응답에 환불 미확정 상품이 있으면 나머지 상품 재취소 안내 토스트를 보여준다', async () => {
+  it('주문취소 응답에 환불 미확정 상품이 있으면 나머지 상품 재취소 안내 토스트를 보여준다', async () => {
     // given
     const user = userEvent.setup();
     vi.mocked(cancelOrder).mockResolvedValueOnce({
@@ -187,7 +187,7 @@ describe('OrderItemClaimActions', () => {
     // then
     expect(
       await screen.findByText(
-        '일부 상품의 환불 결과를 확인하고 있습니다. 확인되면 나머지 상품을 다시 취소해 주세요.',
+        '일부 상품의 환불이 아직 끝나지 않았습니다. 환불이 끝나면 나머지 상품을 다시 취소해주세요.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText('주문을 취소했습니다.')).not.toBeInTheDocument();

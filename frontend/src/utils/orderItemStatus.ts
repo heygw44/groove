@@ -24,7 +24,7 @@ export const ORDER_ITEM_STATUS_LABEL: Record<OrderItemStatus, string> = {
   PURCHASE_CONFIRMED: '구매확정',
   CANCELED: '취소완료',
   RETURNED: '반품완료',
-  CANCELED_BY_NOPAYMENT: '미입금취소',
+  CANCELED_BY_NOPAYMENT: '입금기한 만료 취소',
 };
 
 export const ORDER_ITEM_STATUS_BADGE: Record<OrderItemStatus, BadgeVariant> = {

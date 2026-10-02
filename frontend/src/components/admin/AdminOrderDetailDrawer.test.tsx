@@ -69,7 +69,7 @@ describe('AdminOrderDetailDrawer', () => {
     expect(screen.getByText(/김그루브/)).toBeInTheDocument();
   });
 
-  it('paymentStatus 가 대사 대기 상태면 결제 상태 배지와 대사 대기 안내를 보여준다', async () => {
+  it('paymentStatus 가 UNKNOWN 이면 결과 확인 중 배지를 보여준다', async () => {
     // given
     const detail = buildDetail({ paymentStatus: 'UNKNOWN' });
 
@@ -78,7 +78,6 @@ describe('AdminOrderDetailDrawer', () => {
 
     // then
     expect(await screen.findByText('결과 확인 중')).toBeInTheDocument();
-    expect(screen.getByText('대사 대기')).toBeInTheDocument();
   });
 
   it('paymentStatus 가 CANCEL_REQUESTED 면 취소 처리 중 배지를 보여준다', async () => {
@@ -92,7 +91,7 @@ describe('AdminOrderDetailDrawer', () => {
     expect(await screen.findByText('취소 처리 중')).toBeInTheDocument();
   });
 
-  it('paymentStatus 가 없으면 결제 상태 배지를 그리지 않는다', async () => {
+  it('paymentStatus 가 없으면 결제상태 배지를 그리지 않는다', async () => {
     // given
     const detail = buildDetail({ status: 'CANCELED' });
 
@@ -102,7 +101,6 @@ describe('AdminOrderDetailDrawer', () => {
     // then
     expect(await screen.findByText(detail.memberEmail)).toBeInTheDocument();
     expect(screen.queryByText('취소 처리 중')).not.toBeInTheDocument();
-    expect(screen.queryByText('대사 대기')).not.toBeInTheDocument();
   });
 
   it('시스템 취소 사유 코드는 문구로 바꿔 보여준다', async () => {
@@ -117,7 +115,7 @@ describe('AdminOrderDetailDrawer', () => {
     renderDrawer(detail);
 
     // then
-    expect(await screen.findByText(/입금 기한 만료/)).toBeInTheDocument();
+    expect(await screen.findByText(/입금기한 만료/)).toBeInTheDocument();
     expect(screen.queryByText(/EXPIRED/)).not.toBeInTheDocument();
   });
 });

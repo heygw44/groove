@@ -43,7 +43,7 @@ describe('LoginPage', () => {
 
     // then
     expect(screen.getByRole('status')).toHaveTextContent(
-      '비밀번호가 변경되어 다시 로그인해 주세요.',
+      '비밀번호가 변경되어 다시 로그인해주세요.',
     );
   });
 
@@ -53,7 +53,7 @@ describe('LoginPage', () => {
 
     // then
     expect(screen.getByRole('status')).toHaveTextContent(
-      '오랫동안 활동이 없어 로그아웃되었습니다. 다시 로그인해 주세요.',
+      '오랫동안 활동이 없어 로그아웃되었습니다. 다시 로그인해주세요.',
     );
   });
 
@@ -63,7 +63,7 @@ describe('LoginPage', () => {
 
     // then
     expect(screen.getByRole('status')).toHaveTextContent(
-      '로그인 유지 기간이 끝났습니다. 다시 로그인해 주세요.',
+      '로그인 유지 기간이 끝났습니다. 다시 로그인해주세요.',
     );
   });
 
@@ -86,7 +86,7 @@ describe('LoginPage', () => {
   it.each([
     [
       'AUTH_LOGIN_LOCKED',
-      '로그인에 여러 번 실패해 로그인이 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.',
+      '비밀번호를 여러 번 잘못 입력해 잠시 로그인이 제한되었습니다. 잠시 후 다시 시도해주세요.',
     ],
     ['AUTH_RATE_LIMITED', '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'],
   ])('%s 로 거절되면 제한 안내를 보여준다', async (code, message) => {

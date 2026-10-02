@@ -3,7 +3,7 @@ export const TOSS_FAIL_MESSAGES: Record<string, string> = {
   PAY_PROCESS_CANCELED: '결제를 취소했습니다.',
   PAY_PROCESS_ABORTED: '결제 진행 중 오류가 발생했습니다.',
   REJECT_CARD_COMPANY: '카드사에서 결제를 거절했습니다.',
-  USER_CANCEL: '결제창을 닫아 취소되었습니다.',
+  USER_CANCEL: '결제창을 닫아 결제가 취소되었습니다.',
 };
 
 /**
@@ -11,6 +11,6 @@ export const TOSS_FAIL_MESSAGES: Record<string, string> = {
  * 공유하니 여기서만 덮어쓴다.
  */
 export const PAYMENT_CONFIRM_ERROR_MESSAGES: Record<string, string> = {
-  ORDER_EXPIRED: '주문 시간이 지나 결제가 자동 취소됐습니다.',
+  ORDER_EXPIRED: '주문 시간이 지나 결제가 자동 취소되었습니다.',
   PAYMENT_METHOD_NOT_ALLOWED: '한정반은 무통장입금으로 결제할 수 없습니다.',
 };

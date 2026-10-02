@@ -25,7 +25,7 @@ function getCompleteTitle(orderStatus: OrderStatus, paymentStatus?: PaymentStatu
     return '취소된 주문입니다';
   }
   if (paymentStatus === 'WAITING_FOR_DEPOSIT') {
-    return '주문이 접수되었습니다. 입금을 기다리고 있어요';
+    return '주문이 접수되었습니다. 입금을 기다리고 있습니다.';
   }
   return '주문이 완료되었습니다';
 }

@@ -36,7 +36,7 @@ export function OrderCancelDialog({
   payment,
   title = '주문을 취소하시겠습니까?',
   description = '취소하면 되돌릴 수 없습니다.',
-  confirmLabel = '주문 취소',
+  confirmLabel = '주문취소',
 }: OrderCancelDialogProps) {
   const [reason, setReason] = useState('');
   const [refundAccount, setRefundAccount] = useState<RefundAccount>(EMPTY_REFUND_ACCOUNT);
@@ -93,7 +93,7 @@ export function OrderCancelDialog({
       <div>
         {showGenericRefundNotice && (
           <p className="mb-3 rounded-md border border-line bg-surface-muted px-3 py-2.5 text-sm text-content-muted">
-            결제 금액은 결제 수단으로 환불됩니다.
+            결제금액은 결제수단으로 환불됩니다.
           </p>
         )}
         {isWaitingForDeposit && (

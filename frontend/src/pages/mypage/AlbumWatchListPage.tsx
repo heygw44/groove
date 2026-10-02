@@ -82,7 +82,7 @@ export default function AlbumWatchListPage() {
         {!isPending && !isError && data && data.content.length === 0 && (
           <EmptyState
             title="구독한 앨범이 없습니다"
-            description="앨범 상세에서 새 에디션 알림을 구독해보세요."
+            description="앨범 상세에서 새 에디션 알림 받기를 눌러주세요."
             action={
               <LinkButton to="/products" variant="secondary">
                 상품 보러 가기

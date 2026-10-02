@@ -36,20 +36,14 @@ export const PAYMENT_STATUS_BADGE: Record<PaymentStatus, BadgeVariant> = {
   WAITING_FOR_DEPOSIT: 'accent',
 };
 
-const RECONCILE_PENDING_STATUSES = new Set<PaymentStatus>(['UNKNOWN', 'CANCEL_REQUESTED']);
-
 export const CANCEL_REQUESTED_MESSAGES = {
-  memberReason: '취소 결과를 확인하고 있어 다시 취소할 수 없습니다.',
-  success: '취소 요청이 접수됐습니다. 환불 확인까지 잠시 걸릴 수 있습니다.',
+  memberReason: '환불 결과를 확인하고 있어 지금은 다시 취소할 수 없습니다.',
+  success: '취소요청이 접수되었습니다. 환불까지 시간이 조금 걸릴 수 있습니다.',
 } as const;
 
 const ORDER_CANCEL_SUCCESS_MESSAGE = '주문을 취소했습니다.';
 const PARTIAL_REFUND_UNCONFIRMED_MESSAGE =
-  '일부 상품의 환불 결과를 확인하고 있습니다. 확인되면 나머지 상품을 다시 취소해 주세요.';
-
-/** 토스 결과가 DB 에 아직 확정되지 않아 대사 스케줄러가 처리해야 하는 상태인지. */
-export const isReconcilePending = (status: PaymentStatus): boolean =>
-  RECONCILE_PENDING_STATUSES.has(status);
+  '일부 상품의 환불이 아직 끝나지 않았습니다. 환불이 끝나면 나머지 상품을 다시 취소해주세요.';
 
 export const isCancellationPending = (status?: PaymentStatus): boolean =>
   status === 'CANCEL_REQUESTED';
@@ -57,8 +51,8 @@ export const isCancellationPending = (status?: PaymentStatus): boolean =>
 export const hasRefundInProgress = (items: OrderItem[]): boolean =>
   items.some((item) => item.refundInProgress);
 
-const PARTIAL_CANCELED_MESSAGE = '일부 상품만 취소됐습니다. 남은 상품을 확인해 주세요.';
-const ITEM_CANCEL_REQUESTED_MESSAGE = '취소 요청이 접수됐습니다. 승인되면 취소됩니다.';
+const PARTIAL_CANCELED_MESSAGE = '일부 상품만 취소되었습니다. 남은 상품을 확인해주세요.';
+const ITEM_CANCEL_REQUESTED_MESSAGE = '취소요청이 접수되었습니다. 승인되면 취소됩니다.';
 const ADMIN_REFUND_CONFIRMING_MESSAGE = '처리를 접수했습니다. 환불 결과를 확인하고 있습니다.';
 
 const hasCancelAction = (items: OrderItem[]): boolean =>
@@ -78,7 +72,7 @@ export const getOrderItemCancelSuccessMessage = (item: OrderItem): string => {
 export const getAdminClaimApproveMessage = (
   result: Pick<AdminOrderItemResult, 'status'>,
 ): string =>
-  result.status === 'CANCELED' ? '취소 클레임을 승인했습니다.' : ADMIN_REFUND_CONFIRMING_MESSAGE;
+  result.status === 'CANCELED' ? '취소요청을 승인했습니다.' : ADMIN_REFUND_CONFIRMING_MESSAGE;
 
 export const getAdminClaimCompleteMessage = (
   result: Pick<AdminOrderItemResult, 'status'>,

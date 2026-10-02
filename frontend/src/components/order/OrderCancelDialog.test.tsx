@@ -24,7 +24,7 @@ describe('OrderCancelDialog', () => {
     render(<OrderCancelDialog open onClose={vi.fn()} onConfirm={onConfirm} />);
 
     // when
-    await user.click(screen.getByRole('button', { name: '주문 취소' }));
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
 
     // then
     expect(onConfirm).toHaveBeenCalledWith(undefined);
@@ -42,7 +42,7 @@ describe('OrderCancelDialog', () => {
     );
 
     // then
-    expect(screen.getByText('결제 금액은 결제 수단으로 환불됩니다.')).toBeInTheDocument();
+    expect(screen.getByText('결제금액은 결제수단으로 환불됩니다.')).toBeInTheDocument();
   });
 
   it('가상계좌 입금대기면 계좌를 닫을 뿐 환불이 필요 없다는 안내를 보여준다', () => {
@@ -92,7 +92,7 @@ describe('OrderCancelDialog', () => {
 
     // then
     expect(screen.getByLabelText('은행')).toBeInTheDocument();
-    expect(screen.queryByText('결제 금액은 결제 수단으로 환불됩니다.')).not.toBeInTheDocument();
+    expect(screen.queryByText('결제금액은 결제수단으로 환불됩니다.')).not.toBeInTheDocument();
   });
 
   it('가상계좌 입금완료(DONE)면 환불계좌 입력 없이는 취소를 막는다', async () => {
@@ -117,7 +117,7 @@ describe('OrderCancelDialog', () => {
     );
 
     // when
-    await user.click(screen.getByRole('button', { name: '주문 취소' }));
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
 
     // then
     expect(onConfirm).not.toHaveBeenCalled();
@@ -149,7 +149,7 @@ describe('OrderCancelDialog', () => {
     await user.selectOptions(screen.getByLabelText('은행'), '20');
     await user.type(screen.getByLabelText('계좌번호'), '110abc123456789');
     await user.type(screen.getByLabelText('예금주'), '김그루브');
-    await user.click(screen.getByRole('button', { name: '주문 취소' }));
+    await user.click(screen.getByRole('button', { name: '주문취소' }));
 
     // then
     expect(onConfirm).toHaveBeenCalledWith(undefined, {

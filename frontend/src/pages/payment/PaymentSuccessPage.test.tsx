@@ -123,7 +123,7 @@ describe('PaymentSuccessPage', () => {
     // given
     mockConfirmPaymentError(
       'PAYMENT_RESULT_UNKNOWN',
-      '결제 결과를 확인하고 있습니다. 잠시 후 주문 내역에서 확인해 주세요.',
+      '결제 결과를 확인하고 있습니다. 잠시 후 주문 내역에서 확인해주세요.',
     );
 
     // when
@@ -216,6 +216,6 @@ describe('PaymentSuccessPage', () => {
 
     // then
     expect(await screen.findByText('결제 승인에 실패했습니다')).toBeInTheDocument();
-    expect(screen.getByText('주문 시간이 지나 결제가 자동 취소됐습니다.')).toBeInTheDocument();
+    expect(screen.getByText('주문 시간이 지나 결제가 자동 취소되었습니다.')).toBeInTheDocument();
   });
 });

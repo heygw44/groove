@@ -14,7 +14,7 @@ export function OrderCard({ order }: OrderCardProps) {
   const hasItems = order.items.length > 0;
   const fallbackLabel =
     order.itemCount > 1
-      ? `${order.representativeProductName} 외 ${order.itemCount - 1}건`
+      ? `${order.representativeProductName} 외 ${order.itemCount - 1}개`
       : order.representativeProductName;
 
   return (

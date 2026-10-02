@@ -23,7 +23,7 @@ export function AdminOrderItemBulkResultNotice({
         {result.skipped > 0 && (
           <span className="text-danger">
             {' '}
-            · 건너뜀 {result.skipped}건 (상태가 맞지 않거나 진행 중인 클레임이 있는 상품주문)
+            · 건너뜀 {result.skipped}건 (상태가 맞지 않거나 진행 중인 취소·반품이 있는 상품주문)
           </span>
         )}
       </p>

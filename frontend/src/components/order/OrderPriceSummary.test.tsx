@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { OrderPriceSummary } from '@/components/order/OrderPriceSummary';
 
 describe('OrderPriceSummary', () => {
-  it('상품 금액·할인 금액·총 결제 금액을 보여준다', () => {
+  it('상품 금액·할인 금액·총 결제금액을 보여준다', () => {
     // given & when
     render(<OrderPriceSummary totalAmount={30000} discountAmount={3000} finalAmount={27000} />);
 

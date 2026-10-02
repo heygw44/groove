@@ -16,7 +16,7 @@ export function RemainingGauge({ remaining, total, className = '' }: RemainingGa
         />
       </div>
       <p className="mt-1.5 text-xs text-content-muted">
-        남은 수량 {remaining} / {total}
+        남은 수량 {remaining}개 / {total}개
       </p>
     </div>
   );

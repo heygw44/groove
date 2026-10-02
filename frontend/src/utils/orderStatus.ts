@@ -22,8 +22,8 @@ export const ORDER_STATUS_BADGE: Record<OrderStatus, BadgeVariant> = {
 
 // 구매자 입력 사유가 'constructor' 같은 프로토타입 키와 겹쳐도 안전하도록 Map 으로 둔다.
 const SYSTEM_CANCEL_REASON_LABEL = new Map<string, string>([
-  ['EXPIRED', '입금 기한 만료'],
-  ['SUPERSEDED', '다른 결제로 대체'],
+  ['EXPIRED', '입금기한 만료'],
+  ['SUPERSEDED', '다른 결제로 변경'],
 ]);
 
 /** 시스템이 남긴 취소 사유 코드는 문구로 바꾸고, 구매자가 입력한 사유는 그대로 돌려준다. */

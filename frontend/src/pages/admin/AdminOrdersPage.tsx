@@ -266,7 +266,8 @@ export default function AdminOrdersPage() {
       {cancelTarget && (
         <AdminReasonModal
           title="판매취소"
-          description={`${cancelTarget.productOrderNumber} 를 판매취소하고 즉시 환불합니다.`}
+          description="선택한 상품주문을 판매취소하고 즉시 환불합니다."
+          productOrderNumber={cancelTarget.productOrderNumber}
           label="취소 사유(선택)"
           submitLabel="판매취소"
           required={false}
