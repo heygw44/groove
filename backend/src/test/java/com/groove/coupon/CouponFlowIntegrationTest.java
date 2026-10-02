@@ -94,7 +94,7 @@ class CouponFlowIntegrationTest extends IntegrationTestSupport {
 							.param("orderAmount", "50000"))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data[0].couponCode", is(code)))
-					.andExpect(jsonPath("$.data[0].expectedDiscount", is(5000.0)));
+					.andExpect(jsonPath("$.data[0].expectedDiscount", is(5000)));
 
 			// then
 			Coupon reloaded = couponRepository.findByCode(code).orElseThrow();

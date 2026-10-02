@@ -139,7 +139,8 @@ public class Coupon extends BaseTimeEntity {
 				? this.discountValue
 				: calculateRateDiscount(orderAmount);
 
-		return discount.min(orderAmount).setScale(2, RoundingMode.DOWN);
+		// 결제(Toss)는 원 단위 정수만 받으므로 할인액은 원 미만을 버린다.
+		return discount.min(orderAmount).setScale(0, RoundingMode.DOWN);
 	}
 
 	public void issueOne() {
@@ -212,7 +213,7 @@ public class Coupon extends BaseTimeEntity {
 
 	private BigDecimal calculateRateDiscount(BigDecimal orderAmount) {
 		BigDecimal rateDiscount = orderAmount.multiply(this.discountValue)
-				.divide(BigDecimal.valueOf(100), 2, RoundingMode.DOWN);
+				.divide(BigDecimal.valueOf(100), 0, RoundingMode.DOWN);
 		if (this.maxDiscountAmount == null) {
 			return rateDiscount;
 		}

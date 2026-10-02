@@ -347,6 +347,40 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 			assertThat(reloadedOrder.getStatus()).isEqualTo(OrderStatus.PAID);
 			limitedDropRedisService.clear(dropId);
 		}
+
+		@Test
+		@DisplayName("정률 쿠폰 할인이 원 미만으로 떨어지면 원 단위로 버림해 정수 금액으로 승인된다")
+		void confirmsWholeWonAmountWhenRateCouponDiscountHasFraction() throws Exception {
+			// given: 25,950원 상품에 7% 쿠폰을 쓰면 할인액 1,816.5원이 1,816원으로 버림된다
+			Member member = signup();
+			String accessToken = login(member.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(member));
+			Artist artist = artistRepository.save(ArtistFixture.create());
+			Product createdProduct = ProductFixture.create(artist, "Whole Won", new BigDecimal("25950"));
+			albumRepository.save(createdProduct.getAlbum());
+			Product product = productRepository.save(createdProduct);
+			stockRepository.save(StockFixture.create(product, 5));
+			CouponOrderInfo orderInfo = createOrderWithCoupon(accessToken, product.getId(), 1, address.getId(),
+					DiscountType.RATE, BigDecimal.valueOf(7));
+			String paymentKey = uniquePaymentKey();
+			stubConfirmSuccess(paymentKey, orderInfo.orderNumber(), new BigDecimal("24134"));
+
+			// when
+			mockMvc.perform(post("/api/v1/payments/confirm")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(
+									confirmRequest(paymentKey, orderInfo.orderNumber(), 24134L))))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.status", is("DONE")));
+
+			// then
+			Order order = orderRepository.findById(orderInfo.orderId()).orElseThrow();
+			assertThat(order.getDiscountAmount()).isEqualByComparingTo("1816");
+			assertThat(order.getFinalAmount()).isEqualByComparingTo("24134");
+			assertThat(order.getFinalAmount().stripTrailingZeros().scale()).isLessThanOrEqualTo(0);
+			assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+		}
 	}
 
 	@Nested
@@ -1379,8 +1413,14 @@ class PaymentFlowIntegrationTest extends IntegrationTestSupport {
 
 	private CouponOrderInfo createOrderWithCoupon(String accessToken, Long productId, int quantity, Long addressId)
 			throws Exception {
+		return createOrderWithCoupon(accessToken, productId, quantity, addressId, DiscountType.FIXED,
+				new BigDecimal("5000"));
+	}
+
+	private CouponOrderInfo createOrderWithCoupon(String accessToken, Long productId, int quantity, Long addressId,
+			DiscountType discountType, BigDecimal discountValue) throws Exception {
 		String code = "CANCEL" + UUID.randomUUID().toString().replace("-", "").substring(0, 10).toUpperCase();
-		couponRepository.save(Coupon.create(code, "결제 취소 테스트 쿠폰", DiscountType.FIXED, new BigDecimal("5000"),
+		couponRepository.save(Coupon.create(code, "결제 취소 테스트 쿠폰", discountType, discountValue,
 				BigDecimal.ZERO, null, null, LocalDateTime.now(clock).plusDays(7)));
 		MvcResult issueResult = mockMvc.perform(post("/api/v1/coupons/issue")
 						.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
