@@ -37,37 +37,49 @@ export function ProductImageUploader({
   const { showToast } = useToast();
   const uploadMutation = useUploadImage();
   const inputRef = useRef<HTMLInputElement>(null);
+  const isUploadingRef = useRef(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadingName, setUploadingName] = useState<string | undefined>(undefined);
 
   const isUploading = uploadingName !== undefined;
+  const isFull = value.length >= MAX_IMAGE_COUNT;
+  const isInputBlocked = disabled || isFull || isUploading;
 
   const uploadFiles = async (files: File[]) => {
-    const remainingSlots = MAX_IMAGE_COUNT - value.length;
-    if (files.length > remainingSlots) {
-      showToast('error', `이미지는 최대 ${MAX_IMAGE_COUNT}장까지 등록할 수 있습니다.`);
+    if (isUploadingRef.current) {
+      return;
     }
-    const targets = files.slice(0, Math.max(remainingSlots, 0));
+    isUploadingRef.current = true;
 
-    const uploaded: string[] = [];
-    for (const file of targets) {
-      const validationError = validateFile(file);
-      if (validationError) {
-        showToast('error', validationError);
-        continue;
+    try {
+      const remainingSlots = MAX_IMAGE_COUNT - value.length;
+      if (files.length > remainingSlots) {
+        showToast('error', `이미지는 최대 ${MAX_IMAGE_COUNT}장까지 등록할 수 있습니다.`);
       }
-      setUploadingName(file.name);
-      try {
-        const result = await uploadMutation.mutateAsync(file);
-        uploaded.push(result.url);
-      } catch (error) {
-        showToast('error', getErrorMessage(error));
-      }
-    }
-    setUploadingName(undefined);
+      const targets = files.slice(0, Math.max(remainingSlots, 0));
 
-    if (uploaded.length > 0) {
-      onChange([...value, ...uploaded]);
+      const uploaded: string[] = [];
+      for (const file of targets) {
+        const validationError = validateFile(file);
+        if (validationError) {
+          showToast('error', validationError);
+          continue;
+        }
+        setUploadingName(file.name);
+        try {
+          const result = await uploadMutation.mutateAsync(file);
+          uploaded.push(result.url);
+        } catch (error) {
+          showToast('error', getErrorMessage(error));
+        }
+      }
+      setUploadingName(undefined);
+
+      if (uploaded.length > 0) {
+        onChange([...value, ...uploaded]);
+      }
+    } finally {
+      isUploadingRef.current = false;
     }
   };
 
@@ -83,9 +95,10 @@ export function ProductImageUploader({
     event.preventDefault();
     setIsDragOver(false);
     const files = Array.from(event.dataTransfer.files);
-    if (files.length > 0) {
-      void uploadFiles(files);
+    if (isInputBlocked || files.length === 0) {
+      return;
     }
+    void uploadFiles(files);
   };
 
   const move = (index: number, direction: -1 | 1) => {
@@ -102,18 +115,16 @@ export function ProductImageUploader({
     onChange(value.filter((_, i) => i !== index));
   };
 
-  const isFull = value.length >= MAX_IMAGE_COUNT;
-
   return (
     <div>
       <div
         role="button"
         tabIndex={0}
-        onClick={() => !disabled && !isFull && inputRef.current?.click()}
+        onClick={() => !isInputBlocked && inputRef.current?.click()}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            if (!disabled && !isFull) {
+            if (!isInputBlocked) {
               inputRef.current?.click();
             }
           }
@@ -124,9 +135,9 @@ export function ProductImageUploader({
         }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
-        aria-disabled={disabled || isFull ? true : undefined}
+        aria-disabled={isInputBlocked ? true : undefined}
         className={`flex h-28 flex-col items-center justify-center gap-1.5 rounded-md border border-dashed text-sm ${
-          disabled || isFull
+          isInputBlocked
             ? 'cursor-not-allowed border-line text-content-subtle'
             : 'cursor-pointer text-content-muted hover:bg-surface-muted'
         } ${isDragOver ? 'border-content bg-surface-muted' : 'border-line-strong'}`}
@@ -149,7 +160,7 @@ export function ProductImageUploader({
           type="file"
           accept="image/jpeg,image/png,image/webp"
           multiple
-          disabled={disabled || isFull}
+          disabled={isInputBlocked}
           onChange={handleFileInputChange}
           className="hidden"
         />
@@ -173,7 +184,7 @@ export function ProductImageUploader({
                 <button
                   type="button"
                   onClick={() => move(index, -1)}
-                  disabled={disabled || index === 0}
+                  disabled={disabled || isUploading || index === 0}
                   aria-label={`${index + 1}번째 이미지 앞으로 이동`}
                   className="flex h-6 w-6 items-center justify-center rounded-full bg-content/70 text-xs text-surface disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -182,7 +193,7 @@ export function ProductImageUploader({
                 <button
                   type="button"
                   onClick={() => move(index, 1)}
-                  disabled={disabled || index === value.length - 1}
+                  disabled={disabled || isUploading || index === value.length - 1}
                   aria-label={`${index + 1}번째 이미지 뒤로 이동`}
                   className="flex h-6 w-6 items-center justify-center rounded-full bg-content/70 text-xs text-surface disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -191,7 +202,7 @@ export function ProductImageUploader({
                 <button
                   type="button"
                   onClick={() => remove(index)}
-                  disabled={disabled}
+                  disabled={disabled || isUploading}
                   aria-label={`${index + 1}번째 이미지 삭제`}
                   className="flex h-6 w-6 items-center justify-center rounded-full bg-content/70 text-xs text-surface disabled:cursor-not-allowed disabled:opacity-40"
                 >
