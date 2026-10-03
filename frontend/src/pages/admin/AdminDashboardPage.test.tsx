@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,10 +40,10 @@ const SUMMARY: AdminStatsSummary = {
 
 const pendingQuery = { isPending: true, isError: false, data: undefined };
 
-const renderPage = () =>
+const renderPage = (initialEntry = '/admin') =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <AdminDashboardPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -73,6 +73,47 @@ describe('AdminDashboardPage', () => {
       const link = screen.getByRole('link', { name: /반품 처리 대기/ });
       expect(link).toHaveAttribute('href', '/admin/order-claims?type=RETURN&status=ALL');
       expect(link).toHaveTextContent('3건');
+    });
+  });
+
+  describe('인기 상품 정렬', () => {
+    it('?sort=sales 로 열면 매출순으로 인기 상품을 조회한다', () => {
+      // given & when
+      renderPage('/admin?sort=sales');
+
+      // then
+      expect(useAdminPopularProducts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'sales' }),
+      );
+    });
+
+    it('잘못된 sort 값이면 수량순으로 조회한다', () => {
+      // given & when
+      renderPage('/admin?sort=bogus');
+
+      // then
+      expect(useAdminPopularProducts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'quantity' }),
+      );
+    });
+
+    it('정렬을 바꿔도 기간 파라미터가 유지된다', () => {
+      // given
+      vi.mocked(useAdminPopularProducts).mockReturnValue({
+        isPending: false,
+        isError: false,
+        isPlaceholderData: false,
+        data: { aggregatedAt: '2026-08-31T00:00:00', items: [] },
+      } as unknown as ReturnType<typeof useAdminPopularProducts>);
+      renderPage('/admin?from=2026-08-01&to=2026-08-31');
+
+      // when
+      fireEvent.click(screen.getByRole('button', { name: '매출순' }));
+
+      // then
+      expect(useAdminPopularProducts).toHaveBeenLastCalledWith(
+        expect.objectContaining({ from: '2026-08-01', to: '2026-08-31', sort: 'sales' }),
+      );
     });
   });
 });
