@@ -14,6 +14,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
@@ -166,6 +168,25 @@ class ProductTest {
 			assertThat(product.getPrice()).isEqualByComparingTo("52000.00");
 			assertThat(product.getDescription()).isEqualTo("변경된 설명");
 		}
+
+		@ParameterizedTest
+		@DisplayName("barcode 를 변경하면 공백·하이픈을 빼고 저장하고 빈 값은 null 로 저장한다")
+		@CsvSource(nullValues = "NULL", value = {
+			"0-12345-67890-5, 012345678905",
+			"'0 12345 67890 5', 012345678905",
+			"'   ', NULL"
+		})
+		void normalizesBarcode(String barcode, String expected) {
+			// given
+			Product product = ProductFixture.create(ArtistFixture.create());
+
+			// when
+			product.updateInfo("A Love Supreme", product.getArtist(), null, LocalDate.of(2025, 3, 1), null, null,
+					null, null, null, barcode, EditionType.STANDARD, new BigDecimal("52000.00"), null);
+
+			// then
+			assertThat(product.getBarcode()).isEqualTo(expected);
+		}
 	}
 
 	@Nested
@@ -248,6 +269,27 @@ class ProductTest {
 
 			// then
 			assertThat(product.getCatalogNoNormalized()).isNull();
+		}
+
+		@ParameterizedTest
+		@DisplayName("barcode 는 공백·하이픈을 빼고 저장하고 빈 값은 null 로 저장한다")
+		@CsvSource(nullValues = "NULL", value = {
+			"0-12345-67890-5, 012345678905",
+			"'0 12345 67890 5', 012345678905",
+			"'   ', NULL",
+			"NULL, NULL"
+		})
+		void normalizesBarcode(String barcode, String expected) {
+			// given
+			Artist artist = ArtistFixture.create();
+			Album album = AlbumFixture.create(artist);
+
+			// when
+			Product product = Product.create(album, "Kind of Blue", artist, null, LocalDate.of(1959, 8, 17),
+					"180g", "Black", "US", 1959, null, barcode, EditionType.ORIGINAL, new BigDecimal("45000"), "설명");
+
+			// then
+			assertThat(product.getBarcode()).isEqualTo(expected);
 		}
 
 		@Test

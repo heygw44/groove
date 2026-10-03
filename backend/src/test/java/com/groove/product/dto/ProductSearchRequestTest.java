@@ -22,7 +22,9 @@ class ProductSearchRequestTest {
 			"8809012345678, 8809012345678, NULL",
 			"CS-8163, NULL, CS8163",
 			"'Kind of Blue', NULL, NULL",
-			"1989, NULL, 1989"
+			"1989, NULL, 1989",
+			"0-12345-67890-5, 012345678905, 012345678905",
+			"'0 12345 67890 5', 012345678905, NULL"
 		})
 		void classifiesKeywordIntoBarcodeOrCatalogNo(String keyword, String expectedBarcode,
 				String expectedCatalogNo) {

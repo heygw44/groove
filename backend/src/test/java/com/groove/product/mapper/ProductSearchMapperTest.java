@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +32,8 @@ import com.groove.product.dto.ProductSuggestionResponse;
 import com.groove.product.dto.ProductSummaryResponse;
 import com.groove.product.entity.Album;
 import com.groove.product.entity.Artist;
+import com.groove.product.entity.BarcodeNormalizer;
+import com.groove.product.entity.CatalogNoNormalizer;
 import com.groove.product.entity.EditionType;
 import com.groove.product.entity.Genre;
 import com.groove.product.entity.Label;
@@ -136,15 +137,17 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 				maxPrice, sort, page, size, memberId);
 	}
 
+	/** ProductSearchRequest.toCondition 의 keyword 판별 규칙을 그대로 따른다. */
 	private static String extractBarcode(String keyword) {
-		return keyword != null && keyword.matches("^\\d{8,14}$") ? keyword : null;
+		String normalized = BarcodeNormalizer.normalize(keyword);
+		return normalized != null && normalized.matches("^\\d{8,14}$") ? normalized : null;
 	}
 
 	private static String extractCatalogNoNormalized(String keyword) {
 		if (keyword == null || keyword.matches("^\\d{8,14}$") || !keyword.matches("^[A-Za-z0-9-]+$")) {
 			return null;
 		}
-		return keyword.toUpperCase(Locale.ROOT).replaceAll("[\\s-]", "");
+		return CatalogNoNormalizer.normalize(keyword);
 	}
 
 	private static ProductSearchCondition scopedCondition(ProductSortType sort, int page, int size) {
@@ -762,6 +765,51 @@ class ProductSearchMapperTest extends MybatisTestSupport {
 
 			// then
 			assertThat(count).isEqualTo(result.size());
+		}
+
+		@ParameterizedTest
+		@DisplayName("하이픈을 섞어 등록한 바코드는 숫자만 또는 하이픈 섞인 keyword 로 정확일치 검색된다")
+		@CsvSource({"099900000005", "0-99900-00000-5"})
+		void matchesHyphenRegisteredBarcodeByNormalizedKeyword(String keyword) {
+			// given
+			Product hyphenBarcode = persistPressing("SMTP Hyphen Barcode", "SMTP-HB1", "0-99900-00000-5");
+			ProductSearchCondition cond = pressingCondition(keyword, null, null, null, null, null, null, null,
+					null, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).containsExactly(hyphenBarcode.getId());
+		}
+
+		@Test
+		@DisplayName("하이픈 섞인 숫자 카탈로그 번호 keyword 는 바코드 분기에서도 카탈로그 번호 정확일치로 검색된다")
+		void matchesHyphenatedNumericCatalogNo() {
+			// given
+			Product numericCatalog = persistPressing("SMTP Numeric Catalog", "7559-61071-1", null);
+			ProductSearchCondition cond = pressingCondition("7559-61071-1", null, null, null, null, null, null,
+					null, null, null, null, ProductSortType.LATEST, 0, 20, null);
+
+			// when
+			List<ProductSummaryResponse> result = productSearchMapper.searchProducts(cond);
+
+			// then
+			assertThat(result).extracting(ProductSummaryResponse::id).contains(numericCatalog.getId());
+		}
+
+		/** 대표 프레싱 축약에 묻히지 않도록 별도 앨범으로 등록한다. */
+		private Product persistPressing(String title, String catalogNo, String barcode) {
+			Artist artist = ArtistFixture.create(title + " Artist");
+			em.persist(artist);
+			Album ownAlbum = AlbumFixture.create(artist, title + " Album");
+			em.persist(ownAlbum);
+			Product product = ProductFixture.createPressing(ownAlbum, artist, title, new BigDecimal("30000"), "US",
+					1990, catalogNo, barcode, EditionType.STANDARD);
+			em.persist(product);
+			em.flush();
+			em.clear();
+			return product;
 		}
 	}
 

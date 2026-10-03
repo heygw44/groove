@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import com.groove.global.common.PageLimits;
+import com.groove.product.entity.BarcodeNormalizer;
 import com.groove.product.entity.CatalogNoNormalizer;
 import com.groove.product.entity.EditionType;
 
@@ -46,15 +47,22 @@ public record ProductSearchRequest(
 				resolvedSize, memberId);
 	}
 
-	/** 숫자 8~14자리는 바코드 정확일치 대상이다(LIKE 는 적용하지 않는다). */
+	/**
+	 * 공백·하이픈을 뺀 값이 숫자 8~14자리면 바코드 정확일치 대상이다(LIKE 는 적용하지 않는다).
+	 * 저장값과 같은 규칙으로 정규화해야 하이픈을 섞어 등록한 바코드도 숫자만으로 찾힌다.
+	 */
 	private static String extractBarcode(String keyword) {
-		if (keyword == null || !BARCODE_PATTERN.matcher(keyword).matches()) {
+		String normalized = BarcodeNormalizer.normalize(keyword);
+		if (normalized == null || !BARCODE_PATTERN.matcher(normalized).matches()) {
 			return null;
 		}
-		return keyword;
+		return normalized;
 	}
 
-	/** 영숫자·하이픈 조합은 정규화한 값으로 카탈로그 번호 정확일치를 제목/아티스트명 LIKE 와 OR 로 함께 검색한다. */
+	/**
+	 * 영숫자·하이픈 조합은 정규화한 값으로 카탈로그 번호 정확일치를 함께 검색한다. 원문이 순수 숫자 8~14자리면 바코드로만 본다.
+	 * 하이픈 섞인 숫자(예: 7559-61071-1)는 바코드 후보이면서 카탈로그 번호로도 남겨 바코드 분기에서 OR 로 본다.
+	 */
 	private static String extractCatalogNoNormalized(String keyword) {
 		if (keyword == null || BARCODE_PATTERN.matcher(keyword).matches()
 				|| !CATALOG_NO_PATTERN.matcher(keyword).matches()) {

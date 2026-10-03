@@ -166,7 +166,7 @@ public class Product extends BaseTimeEntity {
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
 		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
-		this.barcode = barcode;
+		this.barcode = BarcodeNormalizer.normalize(barcode);
 		this.editionType = editionType == null ? EditionType.STANDARD : editionType;
 		this.price = price;
 		this.status = status;
@@ -261,7 +261,7 @@ public class Product extends BaseTimeEntity {
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
 		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
-		this.barcode = barcode;
+		this.barcode = BarcodeNormalizer.normalize(barcode);
 		this.editionType = editionType;
 		this.price = price;
 		this.description = description;
@@ -277,7 +277,7 @@ public class Product extends BaseTimeEntity {
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
 		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
-		this.barcode = barcode;
+		this.barcode = BarcodeNormalizer.normalize(barcode);
 		this.editionType = editionType;
 		this.discogsSyncedAt = syncedAt;
 		this.discogsResyncFailedAt = null;
