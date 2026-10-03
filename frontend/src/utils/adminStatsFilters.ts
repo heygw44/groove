@@ -1,4 +1,4 @@
-import type { StatsPeriodParams } from '@/types/adminStats';
+import type { PopularProductSort, StatsPeriodParams } from '@/types/adminStats';
 
 export type StatsPeriodPreset = '7d' | '30d';
 
@@ -67,6 +67,32 @@ export const serializeStatsPeriod = (period: StatsPeriodParams): URLSearchParams
   }
 
   return params;
+};
+
+const POPULAR_PRODUCT_SORTS: readonly PopularProductSort[] = ['quantity', 'sales'];
+export const DEFAULT_POPULAR_PRODUCT_SORT: PopularProductSort = 'quantity';
+
+const isPopularProductSort = (value: string | null): value is PopularProductSort =>
+  POPULAR_PRODUCT_SORTS.some((sort) => sort === value);
+
+/** 허용되지 않은 값이면 기본값(수량순)을 쓴다. */
+export const parsePopularProductSort = (searchParams: URLSearchParams): PopularProductSort => {
+  const value = searchParams.get('sort');
+  return isPopularProductSort(value) ? value : DEFAULT_POPULAR_PRODUCT_SORT;
+};
+
+/** 기본값은 URL 에서 생략해 다른 필터들과 같은 직렬화 규칙을 따른다. */
+export const applyPopularProductSort = (
+  params: URLSearchParams,
+  sort: PopularProductSort,
+): URLSearchParams => {
+  const next = new URLSearchParams(params);
+  if (sort === DEFAULT_POPULAR_PRODUCT_SORT) {
+    next.delete('sort');
+  } else {
+    next.set('sort', sort);
+  }
+  return next;
 };
 
 /** 프리셋은 오늘을 포함한 최근 N 일이다(7d → 오늘 포함 7일, 30d → 오늘 포함 30일). */

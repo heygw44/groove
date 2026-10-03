@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { AsOfBadge } from '@/components/admin/dashboard/AsOfBadge';
@@ -22,6 +21,8 @@ import {
 } from '@/hooks/queries/useAdminStats';
 import type { AdminStatsSummary, PopularProductSort } from '@/types/adminStats';
 import {
+  applyPopularProductSort,
+  parsePopularProductSort,
   parseStatsPeriod,
   resolvePresetPeriod,
   serializeStatsPeriod,
@@ -44,7 +45,7 @@ function buildTodaySalesCard(summary: AdminStatsSummary) {
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [sort, setSort] = useState<PopularProductSort>('quantity');
+  const sort = parsePopularProductSort(searchParams);
 
   const parsedPeriod = parseStatsPeriod(searchParams);
   const period =
@@ -53,7 +54,13 @@ export default function AdminDashboardPage() {
       : resolvePresetPeriod('30d', getServerNow());
 
   const handlePeriodChange = (next: { from: string; to: string }) => {
-    setSearchParams(serializeStatsPeriod(next));
+    setSearchParams((current) =>
+      applyPopularProductSort(serializeStatsPeriod(next), parsePopularProductSort(current)),
+    );
+  };
+
+  const handleSortChange = (nextSort: PopularProductSort) => {
+    setSearchParams((current) => applyPopularProductSort(current, nextSort));
   };
 
   const handleRefresh = () => {
@@ -178,7 +185,7 @@ export default function AdminDashboardPage() {
               <PopularProductTable
                 items={popularProductsQuery.data.items}
                 sort={sort}
-                onSortChange={setSort}
+                onSortChange={handleSortChange}
               />
             </div>
           )}

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyPopularProductSort,
   formatDuration,
   isValidStatsPeriod,
+  parsePopularProductSort,
   parseStatsPeriod,
   resolvePresetPeriod,
   serializeStatsPeriod,
@@ -157,5 +159,44 @@ describe('formatDuration()', () => {
 
     // then
     expect(result).toBe(expected);
+  });
+});
+
+describe('parsePopularProductSort()', () => {
+  it.each<[string, string, string]>([
+    ['매출순', 'sort=sales', 'sales'],
+    ['수량순', 'sort=quantity', 'quantity'],
+    ['값이 없으면 수량순', '', 'quantity'],
+    ['잘못된 값이면 수량순', 'sort=bogus', 'quantity'],
+  ])('%s', (_, query, expected) => {
+    // given
+    const searchParams = new URLSearchParams(query);
+
+    // when & then
+    expect(parsePopularProductSort(searchParams)).toBe(expected);
+  });
+});
+
+describe('applyPopularProductSort()', () => {
+  it('기본값이 아닌 정렬은 기존 파라미터를 유지한 채 담는다', () => {
+    // given
+    const params = new URLSearchParams({ from: '2026-08-01', to: '2026-08-31' });
+
+    // when
+    const next = applyPopularProductSort(params, 'sales');
+
+    // then
+    expect(next.toString()).toBe('from=2026-08-01&to=2026-08-31&sort=sales');
+  });
+
+  it('기본 정렬이면 sort 파라미터를 제거한다', () => {
+    // given
+    const params = new URLSearchParams({ from: '2026-08-01', sort: 'sales' });
+
+    // when
+    const next = applyPopularProductSort(params, 'quantity');
+
+    // then
+    expect(next.toString()).toBe('from=2026-08-01');
   });
 });

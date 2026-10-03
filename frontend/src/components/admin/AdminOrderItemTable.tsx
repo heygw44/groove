@@ -15,7 +15,9 @@ interface AdminOrderItemTableProps {
   selectionDisabled?: boolean;
 }
 
-const REFUND_ACCOUNT_REQUIRED_NOTICE = '구매자 환불계좌가 필요합니다';
+const VIRTUAL_ACCOUNT_SALE_CANCEL_GUIDE =
+  '무통장입금 결제는 판매취소할 수 없습니다. 구매자에게 환불계좌를 넣어 직접 취소하도록 안내해주세요.';
+const VIRTUAL_ACCOUNT_SALE_CANCEL_HINT = '무통장입금은 판매취소 불가';
 
 const HEADERS = [
   '상품주문번호 / 주문번호',
@@ -120,7 +122,7 @@ export function AdminOrderItemTable({
                       disabled={isSaleCancelBlockedByRefundAccount(item)}
                       title={
                         isSaleCancelBlockedByRefundAccount(item)
-                          ? REFUND_ACCOUNT_REQUIRED_NOTICE
+                          ? VIRTUAL_ACCOUNT_SALE_CANCEL_GUIDE
                           : undefined
                       }
                       onClick={() => onCancel(item)}
@@ -128,7 +130,9 @@ export function AdminOrderItemTable({
                       판매취소
                     </Button>
                     {isSaleCancelBlockedByRefundAccount(item) && (
-                      <span className="text-xs text-content-muted">구매자 환불계좌 필요</span>
+                      <span className="text-xs text-content-muted">
+                        {VIRTUAL_ACCOUNT_SALE_CANCEL_HINT}
+                      </span>
                     )}
                   </div>
                 )}

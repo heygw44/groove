@@ -49,7 +49,7 @@ describe('AdminOrderItemTable', () => {
 
     // then
     expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('구매자 환불계좌 필요')).not.toBeInTheDocument();
+    expect(screen.queryByText('무통장입금은 판매취소 불가')).not.toBeInTheDocument();
   });
 
   it('가상계좌 결제 상품은 판매취소 버튼이 비활성화되고 안내를 보인다', () => {
@@ -59,8 +59,11 @@ describe('AdminOrderItemTable', () => {
     // then
     const button = screen.getByRole('button', { name: '상품주문 ORD-1-01 판매취소' });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', '구매자 환불계좌가 필요합니다');
-    expect(screen.getByText('구매자 환불계좌 필요')).toBeInTheDocument();
+    expect(button).toHaveAttribute(
+      'title',
+      '무통장입금 결제는 판매취소할 수 없습니다. 구매자에게 환불계좌를 넣어 직접 취소하도록 안내해주세요.',
+    );
+    expect(screen.getByText('무통장입금은 판매취소 불가')).toBeInTheDocument();
   });
 
   it('판매취소할 수 없는 상태면 가상계좌여도 버튼과 안내를 숨긴다', () => {
@@ -69,7 +72,7 @@ describe('AdminOrderItemTable', () => {
 
     // then
     expect(screen.queryByRole('button', { name: /판매취소/ })).not.toBeInTheDocument();
-    expect(screen.queryByText('구매자 환불계좌 필요')).not.toBeInTheDocument();
+    expect(screen.queryByText('무통장입금은 판매취소 불가')).not.toBeInTheDocument();
   });
 
   it('상품주문번호 아래에 주문번호 버튼이 함께 보인다', () => {
