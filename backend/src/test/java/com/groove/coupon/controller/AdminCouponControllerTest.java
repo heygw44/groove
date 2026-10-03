@@ -22,6 +22,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -241,12 +243,26 @@ class AdminCouponControllerTest {
 					LocalDateTime.now().plusDays(7), CouponStatus.ACTIVE, null);
 			PageResponse<AdminCouponSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(summary), PageRequest.of(0, 20), 1));
-			given(adminCouponService.getList(any(), any())).willReturn(pageResponse);
+			given(adminCouponService.getList(any())).willReturn(pageResponse);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/coupons").header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.content[0].id", is(COUPON_ID.intValue())));
+		}
+
+		@ParameterizedTest
+		@CsvSource({"0, 2000", "21474837, 100"})
+		@DisplayName("페이지 번호나 크기가 상한을 넘으면 400 COMMON_VALIDATION_FAILED 를 반환하고 서비스는 호출되지 않는다")
+		void returnsBadRequestWhenPagingExceedsLimit(String page, String size) throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/coupons")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.param("page", page)
+							.param("size", size))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminCouponService, never()).getList(any());
 		}
 
 		@Test
@@ -256,7 +272,7 @@ class AdminCouponControllerTest {
 			mockMvc.perform(get("/api/v1/admin/coupons").header(HttpHeaders.AUTHORIZATION, userToken()))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(adminCouponService, never()).getList(any(), any());
+			verify(adminCouponService, never()).getList(any());
 		}
 
 		@Test
@@ -266,7 +282,7 @@ class AdminCouponControllerTest {
 			mockMvc.perform(get("/api/v1/admin/coupons"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(adminCouponService, never()).getList(any(), any());
+			verify(adminCouponService, never()).getList(any());
 		}
 	}
 

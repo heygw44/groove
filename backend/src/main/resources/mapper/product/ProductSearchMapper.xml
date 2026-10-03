@@ -102,9 +102,15 @@
 		<where>
 			p.status &lt;&gt; 'HIDDEN'
 			<choose>
-				<!-- 바코드는 숫자 8~14자리일 때만 정확일치만 적용한다(idx_product_barcode 사용, LIKE 는 풀스캔이라 적용하지 않는다). -->
+				<!-- keyword 에서 공백·하이픈을 뺀 값이 숫자 8~14자리면 바코드 정확일치(저장값과 같은 정규화, idx_product_barcode 사용).
+				     하이픈 섞인 숫자는 카탈로그 번호일 수도 있어 catalog_no_normalized 정확일치도 OR 로 본다.
+				     LIKE 는 풀스캔이라 적용하지 않는다. -->
 				<when test="barcode != null">
-					AND p.barcode = #{barcode}
+					AND (p.barcode = #{barcode}
+					<if test="catalogNoNormalized != null">
+						OR p.catalog_no_normalized = #{catalogNoNormalized}
+					</if>
+					)
 				</when>
 				<when test="keyword != null and keyword != ''">
 					<bind name="likeKeyword" value="@com.groove.global.util.LikeEscaper@escape(keyword)"/>

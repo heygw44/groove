@@ -28,11 +28,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.coupon.dto.AdminCouponResponse;
+import com.groove.coupon.dto.AdminCouponSearchRequest;
 import com.groove.coupon.dto.AdminCouponSummaryResponse;
 import com.groove.coupon.dto.CouponCreateRequest;
 import com.groove.coupon.dto.CouponUpdateRequest;
@@ -405,10 +407,10 @@ class AdminCouponServiceTest {
 	class GetList {
 
 		@Test
-		@DisplayName("상태와 페이지 정보를 그대로 리포지토리에 전달한다")
+		@DisplayName("상태와 기본 페이지 정보(0페이지·20건·최신순)를 리포지토리에 전달한다")
 		void passesStatusAndPageableIntoRepository() {
 			// given
-			Pageable pageable = PageRequest.of(0, 20);
+			Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt", "id"));
 			AdminCouponSummaryResponse summary = new AdminCouponSummaryResponse(COUPON_ID, "WELCOME1000", "테스트 쿠폰",
 					DiscountType.FIXED, BigDecimal.valueOf(1000), BigDecimal.ZERO, null, null, 0, 0L,
 					LocalDateTime.now().plusDays(7), CouponStatus.ACTIVE, LocalDateTime.now());
@@ -416,8 +418,8 @@ class AdminCouponServiceTest {
 			given(couponRepository.findAdminSummaries(eq(CouponStatus.ACTIVE), eq(pageable))).willReturn(page);
 
 			// when
-			PageResponse<AdminCouponSummaryResponse> result = adminCouponService.getList(CouponStatus.ACTIVE,
-					pageable);
+			PageResponse<AdminCouponSummaryResponse> result = adminCouponService.getList(
+					new AdminCouponSearchRequest(CouponStatus.ACTIVE, null, null));
 
 			// then
 			assertThat(result.content()).containsExactly(summary);
@@ -428,12 +430,12 @@ class AdminCouponServiceTest {
 		@DisplayName("상태가 없으면 null 로 리포지토리에 전달한다")
 		void passesNullStatusWhenAbsent() {
 			// given
-			Pageable pageable = PageRequest.of(0, 20);
+			Pageable pageable = PageRequest.of(1, 50, Sort.by(Sort.Direction.DESC, "createdAt", "id"));
 			given(couponRepository.findAdminSummaries(isNull(), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			adminCouponService.getList(null, pageable);
+			adminCouponService.getList(new AdminCouponSearchRequest(null, 1, 50));
 
 			// then
 			verify(couponRepository).findAdminSummaries(null, pageable);

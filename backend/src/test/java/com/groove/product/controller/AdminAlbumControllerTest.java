@@ -1,8 +1,8 @@
 package com.groove.product.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,6 +15,9 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -32,6 +35,7 @@ import com.groove.global.config.RestAuthenticationEntryPoint;
 import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
+import com.groove.product.dto.AdminAlbumSearchRequest;
 import com.groove.product.dto.AdminAlbumSummaryResponse;
 import com.groove.product.service.AlbumService;
 
@@ -69,7 +73,8 @@ class AdminAlbumControllerTest {
 			AdminAlbumSummaryResponse summary = new AdminAlbumSummaryResponse(1L, "Kind of Blue", "Miles Davis", 1959);
 			PageResponse<AdminAlbumSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(summary), PageRequest.of(0, 20), 1));
-			given(albumService.getAdminList(any(), any())).willReturn(pageResponse);
+			given(albumService.getAdminList(any())).willReturn(pageResponse);
+			ArgumentCaptor<AdminAlbumSearchRequest> captor = ArgumentCaptor.forClass(AdminAlbumSearchRequest.class);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/albums").header(HttpHeaders.AUTHORIZATION, adminToken()))
@@ -78,6 +83,9 @@ class AdminAlbumControllerTest {
 					.andExpect(jsonPath("$.data.content[0].title", is("Kind of Blue")))
 					.andExpect(jsonPath("$.data.content[0].artistName", is("Miles Davis")))
 					.andExpect(jsonPath("$.data.content[0].originalReleaseYear", is(1959)));
+			verify(albumService).getAdminList(captor.capture());
+			assertThat(captor.getValue().toPageable().getPageNumber()).isZero();
+			assertThat(captor.getValue().toPageable().getPageSize()).isEqualTo(20);
 		}
 
 		@Test
@@ -86,20 +94,22 @@ class AdminAlbumControllerTest {
 			// given
 			PageResponse<AdminAlbumSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-			given(albumService.getAdminList(any(), any())).willReturn(pageResponse);
+			given(albumService.getAdminList(any())).willReturn(pageResponse);
+			ArgumentCaptor<AdminAlbumSearchRequest> captor = ArgumentCaptor.forClass(AdminAlbumSearchRequest.class);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/albums").param("keyword", "Blue")
 							.header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk());
-			verify(albumService).getAdminList(eq("Blue"), any());
+			verify(albumService).getAdminList(captor.capture());
+			assertThat(captor.getValue().keyword()).isEqualTo("Blue");
 		}
 
 		@Test
 		@DisplayName("keyword 가 100자이면 200 을 반환한다")
 		void acceptsKeywordOfMaxLength() throws Exception {
 			// given
-			given(albumService.getAdminList(any(), any())).willReturn(
+			given(albumService.getAdminList(any())).willReturn(
 					PageResponse.from(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0)));
 
 			// when & then
@@ -118,6 +128,18 @@ class AdminAlbumControllerTest {
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 		}
 
+		@ParameterizedTest
+		@CsvSource({"0, 2000", "21474837, 100"})
+		@DisplayName("page 또는 size 가 상한을 넘으면 400 COMMON_VALIDATION_FAILED 를 반환하고 서비스는 호출되지 않는다")
+		void returnsBadRequestWhenPagingOutOfRange(String page, String size) throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/albums").param("page", page).param("size", size)
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(albumService, never()).getAdminList(any());
+		}
+
 		@Test
 		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
 		void returnsForbiddenWhenNotAdmin() throws Exception {
@@ -125,7 +147,7 @@ class AdminAlbumControllerTest {
 			mockMvc.perform(get("/api/v1/admin/albums").header(HttpHeaders.AUTHORIZATION, userToken()))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(albumService, never()).getAdminList(any(), any());
+			verify(albumService, never()).getAdminList(any());
 		}
 
 		@Test
@@ -135,7 +157,7 @@ class AdminAlbumControllerTest {
 			mockMvc.perform(get("/api/v1/admin/albums"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(albumService, never()).getAdminList(any(), any());
+			verify(albumService, never()).getAdminList(any());
 		}
 	}
 }

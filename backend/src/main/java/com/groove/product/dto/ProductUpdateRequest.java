@@ -11,6 +11,7 @@ import com.groove.product.entity.EditionType;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -19,6 +20,7 @@ import jakarta.validation.constraints.Size;
  */
 public record ProductUpdateRequest(
 		@Size(max = 200, message = "제목은 200자 이하여야 합니다.")
+		@Pattern(regexp = "(?s).*\\S.*", message = "제목은 공백일 수 없습니다.")
 		String title,
 
 		Long artistId,

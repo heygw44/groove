@@ -9,7 +9,6 @@ import java.util.stream.Collectors;
 
 import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +16,7 @@ import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
 import com.groove.admin.service.AdminAuditLogService;
 import com.groove.coupon.dto.AdminCouponResponse;
+import com.groove.coupon.dto.AdminCouponSearchRequest;
 import com.groove.coupon.dto.AdminCouponSummaryResponse;
 import com.groove.coupon.dto.CouponCreateRequest;
 import com.groove.coupon.dto.CouponUpdateRequest;
@@ -119,8 +119,9 @@ public class AdminCouponService {
 				null);
 	}
 
-	public PageResponse<AdminCouponSummaryResponse> getList(CouponStatus status, Pageable pageable) {
-		Page<AdminCouponSummaryResponse> page = couponRepository.findAdminSummaries(status, pageable);
+	public PageResponse<AdminCouponSummaryResponse> getList(AdminCouponSearchRequest request) {
+		Page<AdminCouponSummaryResponse> page = couponRepository.findAdminSummaries(request.status(),
+				request.toPageable());
 		return PageResponse.from(page);
 	}
 

@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -28,6 +27,7 @@ import com.groove.inventory.repository.StockRepository;
 import com.groove.inventory.service.StockService;
 import com.groove.notification.service.PriceDropEvent;
 import com.groove.product.dto.AdminProductResponse;
+import com.groove.product.dto.AdminProductSearchRequest;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
 import com.groove.product.dto.ProductUpdateRequest;
@@ -228,11 +228,11 @@ public class AdminProductService {
 		return AdminProductResponse.from(product, stock.getQuantity());
 	}
 
-	public PageResponse<AdminProductSummaryResponse> getList(ProductStatus status, Long albumId, String keyword,
-			Pageable pageable) {
+	public PageResponse<AdminProductSummaryResponse> getList(AdminProductSearchRequest request) {
+		String keyword = request.keyword();
 		String normalizedKeyword = StringUtils.hasText(keyword) ? LikeEscaper.escape(keyword.trim()) : null;
-		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(status, albumId,
-				normalizedKeyword, pageable);
+		Page<AdminProductSummaryResponse> page = productRepository.findAdminSummaries(request.status(),
+				request.albumId(), normalizedKeyword, request.toPageable());
 		return PageResponse.from(page);
 	}
 

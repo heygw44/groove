@@ -128,10 +128,12 @@ public class Product extends BaseTimeEntity {
 	@Column(columnDefinition = "TEXT")
 	private String description;
 
-	@Column(name = "avg_rating", precision = 2, scale = 1)
+	// 리뷰 집계 비정규화 컬럼. ProductRepository.refreshReviewStats 로만 갱신하므로 updatable=false 로 막아
+	// 관리자 수정·상태 변경의 전 컬럼 UPDATE 가 동시에 커밋된 리뷰 집계를 옛 값으로 되쓰지 못하게 한다.
+	@Column(name = "avg_rating", precision = 2, scale = 1, updatable = false)
 	private BigDecimal averageRating;
 
-	@Column(name = "review_count", nullable = false)
+	@Column(name = "review_count", nullable = false, updatable = false)
 	@ColumnDefault("0")
 	private int reviewCount;
 
@@ -164,7 +166,7 @@ public class Product extends BaseTimeEntity {
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
 		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
-		this.barcode = barcode;
+		this.barcode = BarcodeNormalizer.normalize(barcode);
 		this.editionType = editionType == null ? EditionType.STANDARD : editionType;
 		this.price = price;
 		this.status = status;
@@ -259,7 +261,7 @@ public class Product extends BaseTimeEntity {
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
 		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
-		this.barcode = barcode;
+		this.barcode = BarcodeNormalizer.normalize(barcode);
 		this.editionType = editionType;
 		this.price = price;
 		this.description = description;
@@ -275,7 +277,7 @@ public class Product extends BaseTimeEntity {
 		this.pressingYear = pressingYear;
 		this.catalogNo = catalogNo;
 		this.catalogNoNormalized = CatalogNoNormalizer.normalize(catalogNo);
-		this.barcode = barcode;
+		this.barcode = BarcodeNormalizer.normalize(barcode);
 		this.editionType = editionType;
 		this.discogsSyncedAt = syncedAt;
 		this.discogsResyncFailedAt = null;

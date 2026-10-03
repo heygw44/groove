@@ -20,6 +20,7 @@ import com.groove.catalog.dto.CatalogImportItem;
 import com.groove.catalog.dto.CatalogLookupResponse;
 import com.groove.catalog.dto.CatalogReleaseDetailResponse;
 import com.groove.catalog.dto.DiscogsResyncFields;
+import com.groove.product.entity.BarcodeNormalizer;
 import com.groove.product.entity.EditionType;
 
 /** Discogs 원본 응답을 카탈로그 DTO 로 옮기는 순수 변환 로직. */
@@ -169,9 +170,8 @@ public class DiscogsReleaseMapper {
 		return identifiers.stream()
 				.filter(identifier -> BARCODE_TYPE.equalsIgnoreCase(identifier.type()))
 				.map(DiscogsReleaseResponse.Identifier::value)
-				.filter(value -> value != null)
-				.map(value -> value.replaceAll("[\\s-]", ""))
-				.filter(value -> !value.isBlank())
+				.map(BarcodeNormalizer::normalize)
+				.filter(Objects::nonNull)
 				.findFirst()
 				.orElse(null);
 	}

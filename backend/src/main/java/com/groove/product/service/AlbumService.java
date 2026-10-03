@@ -3,7 +3,6 @@ package com.groove.product.service;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -13,6 +12,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.global.util.LikeEscaper;
 import com.groove.notification.repository.AlbumWatchRepository;
+import com.groove.product.dto.AdminAlbumSearchRequest;
 import com.groove.product.dto.AdminAlbumSummaryResponse;
 import com.groove.product.dto.AlbumDetailResponse;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -42,9 +42,11 @@ public class AlbumService {
 		return AlbumDetailResponse.from(album, pressings, watched);
 	}
 
-	public PageResponse<AdminAlbumSummaryResponse> getAdminList(String keyword, Pageable pageable) {
+	public PageResponse<AdminAlbumSummaryResponse> getAdminList(AdminAlbumSearchRequest request) {
+		String keyword = request.keyword();
 		String normalizedKeyword = StringUtils.hasText(keyword) ? LikeEscaper.escape(keyword.trim()) : null;
-		Page<AdminAlbumSummaryResponse> page = albumRepository.searchByKeyword(normalizedKeyword, pageable)
+		Page<AdminAlbumSummaryResponse> page = albumRepository.searchByKeyword(normalizedKeyword,
+				request.toPageable())
 				.map(AdminAlbumSummaryResponse::from);
 		return PageResponse.from(page);
 	}
