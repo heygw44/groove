@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
@@ -9,6 +9,7 @@ import { ReviewItem } from '@/components/review/ReviewItem';
 import { REVIEW_PAGE_SIZE, REVIEW_SORT_OPTIONS } from '@/constants/review';
 import { useReviews } from '@/hooks/queries/useReviews';
 import type { Review, ReviewSort } from '@/types/review';
+import { getFallbackPage } from '@/utils/pagination';
 
 interface ReviewListProps {
   productId: number;
@@ -16,6 +17,8 @@ interface ReviewListProps {
   page: number;
   onSortChange: (sort: ReviewSort) => void;
   onPageChange: (page: number) => void;
+  /** 현재 페이지가 비면(마지막 리뷰 삭제 등) 마지막 유효 페이지로 옮긴다. 사용자 이동이 아니라 스크롤 없음. */
+  onFallbackPage: (page: number) => void;
   editingId?: number;
   onEdit: (review: Review) => void;
   onDelete: (review: Review) => void;
@@ -28,6 +31,7 @@ export function ReviewList({
   page,
   onSortChange,
   onPageChange,
+  onFallbackPage,
   editingId,
   onEdit,
   onDelete,
@@ -38,6 +42,17 @@ export function ReviewList({
     page,
     size: REVIEW_PAGE_SIZE,
   });
+  const fallbackPage =
+    data && !isPlaceholderData
+      ? getFallbackPage(page, data.content.length, data.totalPages)
+      : undefined;
+  const isMovingToFallbackPage = fallbackPage !== undefined;
+
+  useEffect(() => {
+    if (fallbackPage !== undefined) {
+      onFallbackPage(fallbackPage);
+    }
+  }, [fallbackPage, onFallbackPage]);
 
   return (
     <div>
@@ -57,17 +72,17 @@ export function ReviewList({
       </div>
 
       <div className="mt-3">
-        {isPending && (
+        {(isPending || isMovingToFallbackPage) && (
           <div className="flex min-h-40 items-center justify-center">
             <Spinner />
           </div>
         )}
 
-        {!isPending && isError && (
+        {!isPending && !isMovingToFallbackPage && isError && (
           <QueryErrorState error={error} onRetry={refetch} title="리뷰를 불러오지 못했습니다" />
         )}
 
-        {!isPending && !isError && data && data.content.length === 0 && (
+        {!isPending && !isMovingToFallbackPage && !isError && data && data.content.length === 0 && (
           <EmptyState title="아직 작성된 리뷰가 없습니다" />
         )}
 
