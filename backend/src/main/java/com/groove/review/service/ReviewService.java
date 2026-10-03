@@ -11,6 +11,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.entity.OrderItemClaimStatus;
 import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.entity.Product;
@@ -99,9 +100,10 @@ public class ReviewService {
 		Review review = findOwnedReview(reviewId, memberId);
 		review.update(request.rating(), request.title(), request.content());
 		Long productId = review.getProduct().getId();
-		ReviewResponse response = ReviewResponse.from(review, memberId);
 		productRepository.refreshReviewStats(productId);
-		return response;
+		// 통계 갱신이 flush 후 영속성 컨텍스트를 비워 review 는 준영속이 된다. 다시 읽어야 DB 에 저장된
+		// updatedAt(DATETIME(6))이 그대로 실려 이후 목록 응답과 같고, 지연로딩도 안전하다.
+		return ReviewResponse.from(findOwnedReview(reviewId, memberId), memberId);
 	}
 
 	@Transactional
@@ -122,10 +124,10 @@ public class ReviewService {
 				OrderItemStatus.REVIEWABLE);
 	}
 
-	/** 배송중·배송완료라 구매확정만 남은 상태인지. */
+	/** 배송중·배송완료라 구매확정만 남은 상태인지. 구매확정 액션과 같은 기준으로 클레임 진행 중이면 제외한다. */
 	private boolean isAwaitingPurchaseConfirm(Long productId, Long memberId) {
-		return orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(memberId, productId,
-				OrderItemStatus.AWAITING_PURCHASE_CONFIRM);
+		return orderItemRepository.existsByMemberIdAndProductIdAndStatusInExcludingClaims(memberId, productId,
+				OrderItemStatus.AWAITING_PURCHASE_CONFIRM, OrderItemClaimStatus.IN_PROGRESS);
 	}
 
 	private Product findProduct(Long productId) {

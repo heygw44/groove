@@ -22,6 +22,14 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
 	boolean existsByOrderMemberIdAndProductIdAndStatusIn(Long memberId, Long productId,
 			Collection<OrderItemStatus> statuses);
 
+	// claimStatus null 은 클레임 없음이라 제외하면 안 된다. 파생 쿼리 NotIn 은 NULL 행을 떨어뜨리므로 직접 쓴다.
+	@Query("select case when count(oi) > 0 then true else false end from OrderItem oi "
+			+ "where oi.order.member.id = :memberId and oi.product.id = :productId and oi.status in :statuses "
+			+ "and (oi.claimStatus is null or oi.claimStatus not in :excludedClaimStatuses)")
+	boolean existsByMemberIdAndProductIdAndStatusInExcludingClaims(@Param("memberId") Long memberId,
+			@Param("productId") Long productId, @Param("statuses") Collection<OrderItemStatus> statuses,
+			@Param("excludedClaimStatuses") Collection<OrderItemClaimStatus> excludedClaimStatuses);
+
 	/** 취소·반품 클레임 처리 직후 응답을 만들 때 쓴다. product 를 함께 가져와 추가 지연로딩이 없게 한다. */
 	@EntityGraph(attributePaths = {"product"})
 	Optional<OrderItem> findWithProductById(Long id);

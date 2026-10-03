@@ -16,7 +16,8 @@ public enum OrderItemClaimStatus {
 	RETURN_DONE,
 	RETURN_REJECT;
 
-	private static final List<OrderItemClaimStatus> IN_PROGRESS = List.of(CANCEL_REQUEST, RETURN_REQUEST,
+	/** 진행 중 클레임 집합. 구매확정 액션 정책({@link OrderItemActionPolicy})이 진행 중으로 보는 집합과 같다. */
+	public static final List<OrderItemClaimStatus> IN_PROGRESS = List.of(CANCEL_REQUEST, RETURN_REQUEST,
 			COLLECTING);
 
 	/** 발송·배송완료·구매확정 같은 이행 전이가 건너뛰어야 할 진행 중 클레임인지. null 은 클레임 없음이라 false. */

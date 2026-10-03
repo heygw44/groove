@@ -35,6 +35,7 @@ import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.member.entity.Member;
 import com.groove.member.repository.MemberRepository;
+import com.groove.order.entity.OrderItemClaimStatus;
 import com.groove.order.entity.OrderItemStatus;
 import com.groove.order.repository.OrderItemRepository;
 import com.groove.product.entity.Artist;
@@ -320,8 +321,8 @@ class ReviewServiceTest {
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
 					OrderItemStatus.REVIEWABLE)).willReturn(false);
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
-					OrderItemStatus.AWAITING_PURCHASE_CONFIRM)).willReturn(false);
+			given(orderItemRepository.existsByMemberIdAndProductIdAndStatusInExcludingClaims(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.AWAITING_PURCHASE_CONFIRM, OrderItemClaimStatus.IN_PROGRESS)).willReturn(false);
 
 			// when
 			ReviewEligibilityResponse response = reviewService.checkEligibility(PRODUCT_ID, MEMBER_ID);
@@ -338,8 +339,8 @@ class ReviewServiceTest {
 			given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
 			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
 					OrderItemStatus.REVIEWABLE)).willReturn(false);
-			given(orderItemRepository.existsByOrderMemberIdAndProductIdAndStatusIn(MEMBER_ID, PRODUCT_ID,
-					OrderItemStatus.AWAITING_PURCHASE_CONFIRM)).willReturn(true);
+			given(orderItemRepository.existsByMemberIdAndProductIdAndStatusInExcludingClaims(MEMBER_ID, PRODUCT_ID,
+					OrderItemStatus.AWAITING_PURCHASE_CONFIRM, OrderItemClaimStatus.IN_PROGRESS)).willReturn(true);
 
 			// when
 			ReviewEligibilityResponse response = reviewService.checkEligibility(PRODUCT_ID, MEMBER_ID);

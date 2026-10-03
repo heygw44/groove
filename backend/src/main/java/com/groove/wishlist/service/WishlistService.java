@@ -48,7 +48,8 @@ public class WishlistService {
 		Page<Wishlist> page = wishlistRepository.findAllByMemberIdAndProductStatusNot(memberId,
 				ProductStatus.HIDDEN, request.toPageable());
 		if (page.isEmpty()) {
-			return PageResponse.of(List.of(), page.getNumber(), page.getSize(), 0);
+			// 범위를 벗어난 페이지도 count 쿼리 결과는 유효하므로 실제 총 개수를 그대로 내려준다
+			return PageResponse.of(List.of(), page.getNumber(), page.getSize(), page.getTotalElements());
 		}
 
 		List<Long> productIds = page.getContent().stream()

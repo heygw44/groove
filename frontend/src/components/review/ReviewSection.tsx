@@ -199,6 +199,7 @@ export function ReviewSection({ productId, averageRating, reviewCount }: ReviewS
           page={page}
           onSortChange={handleSortChange}
           onPageChange={handlePageChange}
+          onFallbackPage={setPage}
           editingId={editingId}
           onEdit={(review) => setEditingId(review.id)}
           onDelete={(review) => setDeleting(review)}

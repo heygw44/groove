@@ -42,6 +42,7 @@ import com.groove.order.dto.AdminOrderItemConfirmRequest;
 import com.groove.order.dto.AdminOrderItemDeliverRequest;
 import com.groove.order.dto.AdminOrderItemShipRequest;
 import com.groove.order.dto.OrderCreateRequest;
+import com.groove.order.dto.OrderReturnRequest;
 import com.groove.order.entity.Order;
 import com.groove.order.repository.OrderRepository;
 import com.groove.product.entity.Artist;
@@ -160,6 +161,79 @@ class ReviewFlowIntegrationTest extends IntegrationTestSupport {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.averageRating").doesNotExist())
 					.andExpect(jsonPath("$.data.reviewCount", is(0)));
+		}
+	}
+
+	@Nested
+	@DisplayName("update()")
+	class Update {
+
+		@Test
+		@DisplayName("리뷰를 수정하면 응답의 수정 시각이 이후 목록 조회의 수정 시각과 같다")
+		void returnsPersistedUpdatedAt() throws Exception {
+			// given
+			Member buyer = signup();
+			String buyerToken = login(buyer.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(buyer));
+			Product product = seedProduct(5);
+			long orderId = createOrder(buyerToken, product.getId(), address.getId());
+			deliverOrder(orderId);
+			confirmPurchase(orderId, buyerToken);
+			MvcResult createResult = mockMvc.perform(post("/api/v1/products/{productId}/reviews", product.getId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(ReviewFixture.createRequest())))
+					.andExpect(status().isCreated())
+					.andReturn();
+			long reviewId = objectMapper.readTree(createResult.getResponse().getContentAsString())
+					.path("data").path("id").asLong();
+
+			// when
+			MvcResult updateResult = mockMvc.perform(patch("/api/v1/reviews/{id}", reviewId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new ReviewUpdateRequest(3, "수정", "수정한 내용"))))
+					.andExpect(status().isOk())
+					.andReturn();
+			String updatedAt = objectMapper.readTree(updateResult.getResponse().getContentAsString())
+					.path("data").path("updatedAt").asText();
+
+			// then
+			mockMvc.perform(get("/api/v1/products/{productId}/reviews", product.getId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.content[0].id").value(reviewId))
+					.andExpect(jsonPath("$.data.content[0].updatedAt", is(updatedAt)));
+		}
+	}
+
+	@Nested
+	@DisplayName("checkEligibility()")
+	class CheckEligibility {
+
+		@Test
+		@DisplayName("배송완료 상품주문에 반품을 요청하면 PURCHASE_CONFIRM_REQUIRED 대신 PURCHASE_REQUIRED 를 반환한다")
+		void returnsPurchaseRequiredWhenReturnRequested() throws Exception {
+			// given
+			Member buyer = signup();
+			String buyerToken = login(buyer.getEmail());
+			Address address = addressRepository.save(AddressFixture.create(buyer));
+			Product product = seedProduct(5);
+			long orderId = createOrder(buyerToken, product.getId(), address.getId());
+			deliverOrder(orderId);
+			long itemId = orderRepository.findWithItemsById(orderId).orElseThrow().getItems().get(0).getId();
+			mockMvc.perform(post("/api/v1/orders/{orderId}/items/{itemId}/return", orderId, itemId)
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new OrderReturnRequest("사이즈가 안 맞음"))))
+					.andExpect(status().isOk());
+
+			// when & then
+			mockMvc.perform(get("/api/v1/products/{productId}/reviews/eligibility", product.getId())
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.eligible", is(false)))
+					.andExpect(jsonPath("$.data.reason", is("PURCHASE_REQUIRED")));
 		}
 	}
 

@@ -10,6 +10,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Limit;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -123,6 +125,84 @@ class OrderItemRepositoryTest extends DataJpaTestSupport {
 
 			// then
 			assertThat(exists).isFalse();
+		}
+	}
+
+	@Nested
+	@DisplayName("existsByMemberIdAndProductIdAndStatusInExcludingClaims()")
+	class ExistsByMemberIdAndProductIdAndStatusInExcludingClaims {
+
+		@Test
+		@DisplayName("DELIVERED 이고 클레임이 없으면 true 를 반환한다")
+		void returnsTrueWhenDeliveredWithoutClaim() {
+			// given
+			OrderItem item = saveItem("no-claim", OrderItemStatus.DELIVERED, null);
+
+			// when
+			boolean exists = existsAwaitingConfirm(item);
+
+			// then
+			assertThat(exists).isTrue();
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = OrderItemClaimStatus.class, names = {"CANCEL_REQUEST", "RETURN_REQUEST", "COLLECTING"})
+		@DisplayName("DELIVERED 여도 진행 중인 클레임이 있으면 false 를 반환한다")
+		void returnsFalseWhenClaimInProgress(OrderItemClaimStatus claimStatus) {
+			// given
+			OrderItem item = saveItem("in-progress-" + claimStatus.ordinal(), OrderItemStatus.DELIVERED, claimStatus);
+
+			// when
+			boolean exists = existsAwaitingConfirm(item);
+
+			// then
+			assertThat(exists).isFalse();
+		}
+
+		@Test
+		@DisplayName("DELIVERED 이고 끝난 클레임만 있으면 true 를 반환한다")
+		void returnsTrueWhenClaimFinished() {
+			// given
+			OrderItem item = saveItem("finished-claim", OrderItemStatus.DELIVERED, OrderItemClaimStatus.RETURN_REJECT);
+
+			// when
+			boolean exists = existsAwaitingConfirm(item);
+
+			// then
+			assertThat(exists).isTrue();
+		}
+
+		@Test
+		@DisplayName("상태가 목록에 없으면 false 를 반환한다")
+		void returnsFalseWhenStatusNotInList() {
+			// given
+			OrderItem item = saveItem("confirmed", OrderItemStatus.PURCHASE_CONFIRMED, null);
+
+			// when
+			boolean exists = existsAwaitingConfirm(item);
+
+			// then
+			assertThat(exists).isFalse();
+		}
+
+		private boolean existsAwaitingConfirm(OrderItem item) {
+			return orderItemRepository.existsByMemberIdAndProductIdAndStatusInExcludingClaims(
+					item.getOrder().getMember().getId(), item.getProduct().getId(),
+					OrderItemStatus.AWAITING_PURCHASE_CONFIRM, OrderItemClaimStatus.IN_PROGRESS);
+		}
+
+		private OrderItem saveItem(String key, OrderItemStatus status, OrderItemClaimStatus claimStatus) {
+			Member member = memberRepository.save(
+					MemberFixture.create("order-item-repo-awaiting-" + key + "@groove.com"));
+			Artist artist = artistRepository.save(ArtistFixture.create("order-item-repo-awaiting-" + key));
+			Product product = productRepository.save(persistableProduct(artist, "구매확정 대기 " + key));
+			Order order = OrderFixture.createWithItem(member, product, 1);
+			OrderFixture.markItemsStatus(order, status);
+			if (claimStatus != null) {
+				OrderFixture.markFirstItemClaimStatus(order, claimStatus);
+			}
+			orderRepository.saveAndFlush(order);
+			return order.getItems().get(0);
 		}
 	}
 

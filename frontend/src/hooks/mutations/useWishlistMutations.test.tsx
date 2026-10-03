@@ -6,8 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { addWishlist, changeWishlistAlert } from '@/api/wishlist';
 import { useChangeWishlistAlert, useToggleWishlist } from '@/hooks/mutations/useWishlistMutations';
-import { productKeys } from '@/hooks/queries/queryKeys';
-import type { ProductDetail } from '@/types/product';
+import { albumKeys, productKeys, recentViewKeys } from '@/hooks/queries/queryKeys';
+import type { AlbumDetail } from '@/types/catalog';
+import type { ProductDetail, ProductSummary } from '@/types/product';
+import type { WishlistItem } from '@/types/wishlist';
 
 vi.mock('@/api/wishlist', () => ({
   addWishlist: vi.fn(),
@@ -16,6 +18,28 @@ vi.mock('@/api/wishlist', () => ({
 }));
 
 const PRODUCT_ID = 7;
+const OTHER_ID = 8;
+const ALBUM_ID = 3;
+
+const summaryFixture = (id: number) => ({ id, wishlisted: false }) as ProductSummary;
+
+const seedCardCaches = (queryClient: QueryClient) => {
+  queryClient.setQueryData(recentViewKeys.all, [
+    summaryFixture(PRODUCT_ID),
+    summaryFixture(OTHER_ID),
+  ]);
+  queryClient.setQueryData(albumKeys.detail(ALBUM_ID), {
+    id: ALBUM_ID,
+    pressings: [summaryFixture(PRODUCT_ID), summaryFixture(OTHER_ID)],
+  } as AlbumDetail);
+};
+
+const cardHearts = (queryClient: QueryClient) => ({
+  recent: queryClient.getQueryData<ProductSummary[]>(recentViewKeys.all)?.map((p) => p.wishlisted),
+  pressings: queryClient
+    .getQueryData<AlbumDetail>(albumKeys.detail(ALBUM_ID))
+    ?.pressings.map((p) => p.wishlisted),
+});
 
 const apiError = (status: number, code: string) =>
   new AxiosError('error', 'ERR_BAD_REQUEST', undefined, undefined, {
@@ -59,6 +83,36 @@ describe('useToggleWishlist', () => {
     expect(detail?.wishlisted).toBe(true);
     expect(detail?.alertEnabled).not.toBe(true);
     expect(detailInvalidated(invalidate)).toBe(true);
+  });
+
+  it('위시에 담으면 최근 본 상품과 다른 에디션 카드의 하트도 해당 상품만 바뀐다', async () => {
+    // given
+    vi.mocked(addWishlist).mockResolvedValue({} as WishlistItem);
+    const { queryClient, wrapper } = setup(detailFixture({ wishlisted: false }));
+    seedCardCaches(queryClient);
+    const { result } = renderHook(() => useToggleWishlist(), { wrapper });
+
+    // when
+    result.current.mutate({ productId: PRODUCT_ID, wishlisted: false });
+
+    // then
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(cardHearts(queryClient)).toEqual({ recent: [true, false], pressings: [true, false] });
+  });
+
+  it('일반 오류로 실패하면 최근 본 상품과 다른 에디션 카드의 하트를 되돌린다', async () => {
+    // given
+    vi.mocked(addWishlist).mockRejectedValue(apiError(500, 'INTERNAL_SERVER_ERROR'));
+    const { queryClient, wrapper } = setup(detailFixture({ wishlisted: false }));
+    seedCardCaches(queryClient);
+    const { result } = renderHook(() => useToggleWishlist(), { wrapper });
+
+    // when
+    result.current.mutate({ productId: PRODUCT_ID, wishlisted: false });
+
+    // then
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(cardHearts(queryClient)).toEqual({ recent: [false, false], pressings: [false, false] });
   });
 });
 
