@@ -155,6 +155,37 @@ class WishlistFlowIntegrationTest extends IntegrationTestSupport {
 		}
 	}
 
+	@Nested
+	@DisplayName("GET /api/v1/wishlist 페이징")
+	class Paging {
+
+		@Test
+		@DisplayName("마지막 페이지를 넘어선 페이지를 요청하면 빈 목록과 함께 실제 총 개수를 반환한다")
+		void returnsRealTotalWhenPageOutOfRange() throws Exception {
+			// given
+			String accessToken = signupAndLogin();
+			for (int i = 0; i < 3; i++) {
+				Product product = seedProduct();
+				mockMvc.perform(post("/api/v1/wishlist")
+								.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(objectMapper.writeValueAsString(new WishlistAddRequest(product.getId()))))
+						.andExpect(status().isCreated());
+			}
+
+			// when & then
+			mockMvc.perform(get("/api/v1/wishlist")
+							.param("page", "5")
+							.param("size", "2")
+							.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.content", hasSize(0)))
+					.andExpect(jsonPath("$.data.page", is(5)))
+					.andExpect(jsonPath("$.data.totalElements", is(3)))
+					.andExpect(jsonPath("$.data.totalPages", is(2)));
+		}
+	}
+
 	private Product seedProduct() {
 		Artist artist = artistRepository.save(ArtistFixture.create());
 		Product product = ProductFixture.create(artist);
