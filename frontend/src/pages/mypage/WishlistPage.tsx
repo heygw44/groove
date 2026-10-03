@@ -10,7 +10,9 @@ import { WishlistCard, WishlistCardSkeleton } from '@/components/wishlist/Wishli
 import { useAddCartItem } from '@/hooks/mutations/useCartMutations';
 import { useToggleWishlist } from '@/hooks/mutations/useWishlistMutations';
 import { useWishlist } from '@/hooks/queries/useWishlist';
+import { useFallbackPageRedirect } from '@/hooks/useFallbackPageRedirect';
 import { getErrorCode, getErrorMessage } from '@/utils/apiError';
+import { getFallbackPage } from '@/utils/pagination';
 
 const PAGE_SIZE = 12;
 
@@ -29,6 +31,13 @@ export default function WishlistPage() {
     page,
     size: PAGE_SIZE,
   });
+  // 마지막 페이지의 찜을 모두 해제하면 빈 페이지가 되므로 남은 마지막 페이지로 옮긴다.
+  const fallbackPage =
+    data && !isPlaceholderData
+      ? getFallbackPage(page, data.content.length, data.totalPages)
+      : undefined;
+  const isMovingToFallbackPage = fallbackPage !== undefined;
+  useFallbackPageRedirect(fallbackPage);
   const toggleWishlistMutation = useToggleWishlist();
   const addCartItemMutation = useAddCartItem();
 
@@ -73,7 +82,7 @@ export default function WishlistPage() {
       </p>
 
       <div className="mt-3">
-        {isPending && (
+        {(isPending || isMovingToFallbackPage) && (
           <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: PAGE_SIZE }, (_, index) => (
               <WishlistCardSkeleton key={index} />
@@ -81,11 +90,11 @@ export default function WishlistPage() {
           </div>
         )}
 
-        {!isPending && isError && (
+        {!isPending && !isMovingToFallbackPage && isError && (
           <QueryErrorState error={error} onRetry={refetch} title="찜 목록을 불러오지 못했습니다." />
         )}
 
-        {!isPending && !isError && data && data.content.length === 0 && (
+        {!isPending && !isMovingToFallbackPage && !isError && data && data.content.length === 0 && (
           <EmptyState
             title="찜한 상품이 없습니다"
             action={
@@ -96,7 +105,7 @@ export default function WishlistPage() {
           />
         )}
 
-        {!isPending && !isError && data && data.content.length > 0 && (
+        {!isPending && !isMovingToFallbackPage && !isError && data && data.content.length > 0 && (
           <div className={isPlaceholderData ? 'opacity-60' : ''}>
             <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
               {data.content.map((item) => (
