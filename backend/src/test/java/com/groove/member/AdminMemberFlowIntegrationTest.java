@@ -2,6 +2,7 @@ package com.groove.member;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -30,6 +32,7 @@ import com.groove.auth.dto.SignupRequest;
 import com.groove.auth.jwt.JwtProvider;
 import com.groove.fixture.MemberFixture;
 import com.groove.member.dto.AdminMemberStatusChangeRequest;
+import com.groove.member.dto.MemberWithdrawRequest;
 import com.groove.member.entity.Member;
 import com.groove.member.entity.MemberRole;
 import com.groove.member.entity.MemberStatus;
@@ -40,6 +43,8 @@ import jakarta.servlet.http.Cookie;
 
 @AutoConfigureMockMvc
 class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
+
+	private static final String PASSWORD = "password1";
 
 	@Autowired
 	MockMvc mockMvc;
@@ -55,6 +60,9 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 
 	@Autowired
 	AdminAuditLogRepository adminAuditLogRepository;
+
+	@Autowired
+	PasswordEncoder passwordEncoder;
 
 	@Nested
 	@DisplayName("회원 정지 → 로그인·재발급·내 정보 조회 거부 → 활성화 흐름")
@@ -167,6 +175,28 @@ class AdminMemberFlowIntegrationTest extends IntegrationTestSupport {
 									new AdminMemberStatusChangeRequest(MemberStatus.SUSPENDED, null))))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("ADMIN_CANNOT_MODIFY_ADMIN")));
+		}
+
+		@Test
+		@DisplayName("관리자가 스스로 탈퇴하려 하면 403 AUTH_FORBIDDEN 을 반환하고 상태를 유지한다")
+		void rejectsWithdrawingSelf() throws Exception {
+			// given
+			Member admin = memberRepository.save(
+					Member.createAdmin("admin-withdraw-" + UUID.randomUUID() + "@groove.com",
+							passwordEncoder.encode(PASSWORD), "관리자"));
+			String adminToken = "Bearer " + jwtProvider.createAccessToken(admin.getId(), MemberRole.ADMIN);
+
+			// when
+			mockMvc.perform(delete("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, adminToken)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new MemberWithdrawRequest(PASSWORD))))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+
+			// then
+			Member reloaded = memberRepository.findById(admin.getId()).orElseThrow();
+			assertThat(reloaded.getStatus()).isEqualTo(MemberStatus.ACTIVE);
 		}
 	}
 

@@ -24,6 +24,9 @@ export default function MyPage() {
     );
   }
 
+  // 관리자가 탈퇴하면 다시 로그인할 수 없어 서버도 거부한다
+  const canWithdraw = member.role !== 'ADMIN';
+
   return (
     <>
       <SectionCard title="계정 정보">
@@ -47,7 +50,7 @@ export default function MyPage() {
         <PasswordChangeForm />
       </SectionCard>
 
-      <WithdrawSection />
+      {canWithdraw && <WithdrawSection />}
     </>
   );
 }
