@@ -60,10 +60,10 @@ export default function OrderFormPage() {
     selectedId ?? (addresses?.find((address) => address.isDefault) ?? addresses?.[0])?.id;
   const allowVirtualAccount = draft?.kind !== 'limited';
 
-  const { submit, isSubmitting, pendingOrder, submittedRef } = useOrderFormSubmit({
+  const { submit, isSubmitting, pendingOrder, reusableOrder, submittedRef } = useOrderFormSubmit({
     draft,
     addressId: effectiveSelectedId,
-    memberCouponId: selectedCoupon?.memberCouponId ?? null,
+    coupon: selectedCoupon,
     orderName: buildOrderName(source.items.map((item) => ({ productName: item.title }))),
     onCouponRejected: () => setSelectedCoupon(null),
     initialPendingOrder: restoredDraft?.pendingOrder ?? null,
@@ -84,7 +84,8 @@ export default function OrderFormPage() {
 
   const totalAmount = source.items.reduce((sum, item) => sum + item.lineAmount, 0);
   const discountAmount = source.couponAllowed ? (selectedCoupon?.expectedDiscount ?? 0) : 0;
-  const finalAmount = pendingOrder?.amount ?? Math.max(0, totalAmount - discountAmount);
+  // 결제창이 받을 금액과 같은 주문에서 가져온다 - 재사용할 주문이 없으면 새로 계산한 금액이다.
+  const finalAmount = reusableOrder?.amount ?? Math.max(0, totalAmount - discountAmount);
   // 한정반은 구매 직후 drop.purchased 가 true 로 바뀌어 "구매 완료" 로 막히는데, 그건 방금
   // 만든 내 주문 때문이지 다시 막을 이유가 아니다(pendingOrder 가 있으면 이 막힘을 무시한다).
   const isLimitedBlocked =
@@ -167,6 +168,7 @@ export default function OrderFormPage() {
               selected={selectedCoupon}
               onSelect={setSelectedCoupon}
               restoreCouponId={restoredDraft?.memberCouponId ?? undefined}
+              heldCoupon={pendingOrder?.coupon ?? null}
             />
           ) : (
             <div>

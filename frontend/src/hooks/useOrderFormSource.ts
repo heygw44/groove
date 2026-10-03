@@ -43,7 +43,9 @@ export function useOrderFormSource(draft: OrderDraft | null): OrderFormSource {
 
   const cartItems = cartQuery.data?.items ?? [];
   const cartOrderItems =
-    draft?.kind === 'cart' ? cartItems.filter((item) => draft.cartItemIds.includes(item.id)) : [];
+    draft?.kind === 'cart'
+      ? cartItems.filter((item) => draft.items.some((d) => d.cartItemId === item.id))
+      : [];
 
   let items: OrderSummaryItem[] = [];
   if (draft?.kind === 'cart') {
@@ -110,14 +112,21 @@ export function useOrderFormSource(draft: OrderDraft | null): OrderFormSource {
       return true;
     }
     if (draft.kind === 'cart') {
-      return cartQuery.data !== undefined && cartOrderItems.length !== draft.cartItemIds.length;
+      // 서버는 현재 장바구니로 주문을 만들므로 수량이 달라졌어도 장바구니로 돌려보낸다.
+      if (cartQuery.data === undefined) {
+        return false;
+      }
+      const fetched = cartQuery.data.items;
+      return draft.items.some(
+        (d) => fetched.find((item) => item.id === d.cartItemId)?.quantity !== d.quantity,
+      );
     }
     if (draft.kind === 'limited') {
       // 드롭이 삭제됐거나(404) 조회 자체가 실패하면 상세로 돌아가 최신 상태를 다시 보게 한다.
       return limitedQuery.isError;
     }
     return false;
-  }, [draft, cartQuery.data, cartOrderItems.length, limitedQuery.isError]);
+  }, [draft, cartQuery.data, limitedQuery.isError]);
 
   const returnTo = draft?.kind === 'limited' ? '/limited-drops' : '/cart';
   const invalidMessage =
