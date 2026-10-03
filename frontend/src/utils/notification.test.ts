@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { NotificationItem } from '@/types/notification';
+import type { NotificationItem, NotificationType } from '@/types/notification';
 import {
   buildNotificationLink,
   buildNotificationMessage,
@@ -48,6 +48,30 @@ describe('buildNotificationMessage()', () => {
 
     // then
     expect(message).toBe('Nevermind의 새 에디션이 등록되었습니다');
+  });
+
+  it('STATS_MISMATCH 이면 서버가 만든 문장을 그대로 쓴다', () => {
+    // given
+    const titleSnapshot = '매출 대사 불일치 3일 발생 (2026-08-28 ~ 2026-10-01)';
+    const notification = item({ type: 'STATS_MISMATCH', titleSnapshot });
+
+    // when
+    const message = buildNotificationMessage(notification);
+
+    // then
+    expect(message).toBe(titleSnapshot);
+  });
+
+  it('모르는 유형이면 예외 없이 기본 문구를 만든다', () => {
+    // given
+    const notification = item({ type: 'FUTURE_TYPE' as unknown as NotificationType });
+
+    // when
+    const build = () => buildNotificationMessage(notification);
+
+    // then
+    expect(build).not.toThrow();
+    expect(build()).toBe('Kind of Blue 관련 알림이 도착했습니다');
   });
 });
 
@@ -100,6 +124,14 @@ describe('buildNotificationLink()', () => {
 
     // when & then
     expect(buildNotificationLink(notification)).toBeUndefined();
+  });
+
+  it('STATS_MISMATCH 이면 관리자 대시보드 대사 로그 섹션 링크를 만든다', () => {
+    // given
+    const notification = item({ type: 'STATS_MISMATCH' });
+
+    // when & then
+    expect(buildNotificationLink(notification)).toBe('/admin#reconcile-logs');
   });
 });
 

@@ -1,4 +1,4 @@
-export type NotificationType = 'RESTOCK' | 'PRICE_DROP' | 'NEW_PRESSING';
+export type NotificationType = 'RESTOCK' | 'PRICE_DROP' | 'NEW_PRESSING' | 'STATS_MISMATCH';
 
 /** 서버가 non_null 로 직렬화해 해당 없는 필드는 키 자체가 빠진다. */
 export interface NotificationItem {
