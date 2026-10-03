@@ -27,7 +27,6 @@ import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import com.groove.admin.entity.AdminAuditAction;
@@ -47,6 +46,7 @@ import com.groove.inventory.repository.StockRepository;
 import com.groove.inventory.service.StockService;
 import com.groove.notification.service.PriceDropEvent;
 import com.groove.product.dto.AdminProductResponse;
+import com.groove.product.dto.AdminProductSearchRequest;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
 import com.groove.product.dto.ProductUpdateRequest;
@@ -964,7 +964,9 @@ class AdminProductServiceTest {
 		void passesAlbumIdIntoRepository() {
 			// given
 			Long albumId = 5L;
-			Pageable pageable = PageRequest.of(0, 20);
+			AdminProductSearchRequest request = new AdminProductSearchRequest(ProductStatus.ON_SALE, albumId, null,
+					null, null);
+			Pageable pageable = request.toPageable();
 			AdminProductSummaryResponse summary = new AdminProductSummaryResponse(PRODUCT_ID, "Kind of Blue",
 					"Miles Davis", null, new BigDecimal("45000.00"), ProductStatus.ON_SALE, null, 10, null);
 			Page<AdminProductSummaryResponse> page = new PageImpl<>(List.of(summary), pageable, 1);
@@ -972,8 +974,7 @@ class AdminProductServiceTest {
 					.willReturn(page);
 
 			// when
-			PageResponse<AdminProductSummaryResponse> result = adminProductService.getList(ProductStatus.ON_SALE,
-					albumId, null, pageable);
+			PageResponse<AdminProductSummaryResponse> result = adminProductService.getList(request);
 
 			// then
 			assertThat(result.content()).containsExactly(summary);
@@ -984,12 +985,13 @@ class AdminProductServiceTest {
 		@DisplayName("albumId 가 없으면 null 로 리포지토리에 전달한다")
 		void passesNullAlbumIdWhenAbsent() {
 			// given
-			Pageable pageable = PageRequest.of(0, 20);
+			AdminProductSearchRequest request = new AdminProductSearchRequest(null, null, null, null, null);
+			Pageable pageable = request.toPageable();
 			given(productRepository.findAdminSummaries(isNull(), isNull(), isNull(), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			adminProductService.getList(null, null, null, pageable);
+			adminProductService.getList(request);
 
 			// then
 			verify(productRepository).findAdminSummaries(null, null, null, pageable);
@@ -999,12 +1001,13 @@ class AdminProductServiceTest {
 		@DisplayName("keyword 앞뒤 공백을 제거해 리포지토리에 전달한다")
 		void trimsKeyword() {
 			// given
-			Pageable pageable = PageRequest.of(0, 20);
+			AdminProductSearchRequest request = new AdminProductSearchRequest(null, null, "  miles ", null, null);
+			Pageable pageable = request.toPageable();
 			given(productRepository.findAdminSummaries(isNull(), isNull(), eq("miles"), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			adminProductService.getList(null, null, "  miles ", pageable);
+			adminProductService.getList(request);
 
 			// then
 			verify(productRepository).findAdminSummaries(null, null, "miles", pageable);
@@ -1014,12 +1017,13 @@ class AdminProductServiceTest {
 		@DisplayName("keyword 가 공백뿐이면 null 로 리포지토리에 전달한다")
 		void passesNullWhenKeywordBlank() {
 			// given
-			Pageable pageable = PageRequest.of(0, 20);
+			AdminProductSearchRequest request = new AdminProductSearchRequest(null, null, "   ", null, null);
+			Pageable pageable = request.toPageable();
 			given(productRepository.findAdminSummaries(isNull(), isNull(), isNull(), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			adminProductService.getList(null, null, "   ", pageable);
+			adminProductService.getList(request);
 
 			// then
 			verify(productRepository).findAdminSummaries(null, null, null, pageable);

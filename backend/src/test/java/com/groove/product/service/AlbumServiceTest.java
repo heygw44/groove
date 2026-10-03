@@ -21,7 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.groove.fixture.AlbumFixture;
 import com.groove.fixture.ArtistFixture;
@@ -29,6 +29,7 @@ import com.groove.global.common.BusinessException;
 import com.groove.global.common.ErrorCode;
 import com.groove.global.common.PageResponse;
 import com.groove.notification.repository.AlbumWatchRepository;
+import com.groove.product.dto.AdminAlbumSearchRequest;
 import com.groove.product.dto.AdminAlbumSummaryResponse;
 import com.groove.product.dto.AlbumDetailResponse;
 import com.groove.product.dto.ProductSummaryResponse;
@@ -159,12 +160,13 @@ class AlbumServiceTest {
 			// given
 			Artist artist = ArtistFixture.withId(ArtistFixture.create("Miles Davis"), 1L);
 			Album album = AlbumFixture.withId(AlbumFixture.create(artist, "Kind Of Blue"), 5L);
-			PageRequest pageable = PageRequest.of(0, 20);
+			AdminAlbumSearchRequest request = new AdminAlbumSearchRequest("  Kind  ", null, null);
+			Pageable pageable = request.toPageable();
 			given(albumRepository.searchByKeyword(eq("Kind"), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(album), pageable, 1));
 
 			// when
-			PageResponse<AdminAlbumSummaryResponse> response = albumService.getAdminList("  Kind  ", pageable);
+			PageResponse<AdminAlbumSummaryResponse> response = albumService.getAdminList(request);
 
 			// then
 			assertThat(response.content()).hasSize(1);
@@ -178,12 +180,13 @@ class AlbumServiceTest {
 		@DisplayName("keyword 가 공백뿐이면 null 로 전달해 전체를 조회한다")
 		void passesNullWhenKeywordIsBlank() {
 			// given
-			PageRequest pageable = PageRequest.of(0, 20);
+			AdminAlbumSearchRequest request = new AdminAlbumSearchRequest("   ", null, null);
+			Pageable pageable = request.toPageable();
 			given(albumRepository.searchByKeyword(isNull(), eq(pageable)))
 					.willReturn(new PageImpl<>(List.of(), pageable, 0));
 
 			// when
-			PageResponse<AdminAlbumSummaryResponse> response = albumService.getAdminList("   ", pageable);
+			PageResponse<AdminAlbumSummaryResponse> response = albumService.getAdminList(request);
 
 			// then
 			assertThat(response.content()).isEmpty();

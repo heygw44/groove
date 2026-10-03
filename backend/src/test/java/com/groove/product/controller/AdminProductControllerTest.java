@@ -22,6 +22,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.openapitools.jackson.nullable.JsonNullable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +50,7 @@ import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.member.entity.MemberRole;
 import com.groove.product.dto.AdminProductResponse;
+import com.groove.product.dto.AdminProductSearchRequest;
 import com.groove.product.dto.AdminProductSummaryResponse;
 import com.groove.product.dto.ProductCreateRequest;
 import com.groove.product.dto.ProductUpdateRequest;
@@ -340,6 +343,39 @@ class AdminProductControllerTest {
 			verify(adminProductService).update(eq(1L), eq(PRODUCT_ID), captor.capture());
 			assertThat(captor.getValue().labelId()).isEqualTo(JsonNullable.undefined());
 		}
+
+		@Test
+		@DisplayName("title 이 공백뿐이면 400 COMMON_VALIDATION_FAILED 를 반환하고 서비스는 호출되지 않는다")
+		void returnsBadRequestWhenTitleBlank() throws Exception {
+			// when & then
+			mockMvc.perform(patch("/api/v1/admin/products/{id}", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"title\":\"   \"}"))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")))
+					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("title")));
+			verify(adminProductService, never()).update(any(), any(), any());
+		}
+
+		@Test
+		@DisplayName("title 키가 없으면 검증을 통과해 200 을 반환한다")
+		void acceptsRequestWithoutTitle() throws Exception {
+			// given
+			given(adminProductService.update(eq(1L), eq(PRODUCT_ID), any())).willReturn(sampleResponse());
+			ArgumentCaptor<ProductUpdateRequest> captor = ArgumentCaptor.forClass(ProductUpdateRequest.class);
+
+			// when
+			mockMvc.perform(patch("/api/v1/admin/products/{id}", PRODUCT_ID)
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content("{\"price\":1000}"))
+					.andExpect(status().isOk());
+
+			// then
+			verify(adminProductService).update(eq(1L), eq(PRODUCT_ID), captor.capture());
+			assertThat(captor.getValue().title()).isNull();
+		}
 	}
 
 	@Nested
@@ -391,12 +427,16 @@ class AdminProductControllerTest {
 					"https://cdn.groove.com/0.jpg", 10, null);
 			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(summary), PageRequest.of(0, 20), 1));
-			given(adminProductService.getList(any(), any(), any(), any())).willReturn(pageResponse);
+			given(adminProductService.getList(any())).willReturn(pageResponse);
+			ArgumentCaptor<AdminProductSearchRequest> captor = ArgumentCaptor.forClass(AdminProductSearchRequest.class);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/products").header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.content[0].id", is(PRODUCT_ID.intValue())));
+			verify(adminProductService).getList(captor.capture());
+			assertThat(captor.getValue().toPageable().getPageNumber()).isZero();
+			assertThat(captor.getValue().toPageable().getPageSize()).isEqualTo(20);
 		}
 
 		@Test
@@ -405,13 +445,15 @@ class AdminProductControllerTest {
 			// given
 			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-			given(adminProductService.getList(any(), any(), any(), any())).willReturn(pageResponse);
+			given(adminProductService.getList(any())).willReturn(pageResponse);
+			ArgumentCaptor<AdminProductSearchRequest> captor = ArgumentCaptor.forClass(AdminProductSearchRequest.class);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/products").param("albumId", "5")
 							.header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk());
-			verify(adminProductService).getList(eq(null), eq(5L), eq(null), any());
+			verify(adminProductService).getList(captor.capture());
+			assertThat(captor.getValue().albumId()).isEqualTo(5L);
 		}
 
 		@Test
@@ -420,20 +462,22 @@ class AdminProductControllerTest {
 			// given
 			PageResponse<AdminProductSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-			given(adminProductService.getList(any(), any(), any(), any())).willReturn(pageResponse);
+			given(adminProductService.getList(any())).willReturn(pageResponse);
+			ArgumentCaptor<AdminProductSearchRequest> captor = ArgumentCaptor.forClass(AdminProductSearchRequest.class);
 
 			// when & then
 			mockMvc.perform(get("/api/v1/admin/products").param("keyword", "miles")
 							.header(HttpHeaders.AUTHORIZATION, adminToken()))
 					.andExpect(status().isOk());
-			verify(adminProductService).getList(eq(null), eq(null), eq("miles"), any());
+			verify(adminProductService).getList(captor.capture());
+			assertThat(captor.getValue().keyword()).isEqualTo("miles");
 		}
 
 		@Test
 		@DisplayName("keyword 가 100자이면 200 을 반환한다")
 		void acceptsKeywordOfMaxLength() throws Exception {
 			// given
-			given(adminProductService.getList(any(), any(), any(), any())).willReturn(
+			given(adminProductService.getList(any())).willReturn(
 					PageResponse.from(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0)));
 
 			// when & then
@@ -452,6 +496,18 @@ class AdminProductControllerTest {
 					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
 		}
 
+		@ParameterizedTest
+		@CsvSource({"0, 2000", "21474837, 100"})
+		@DisplayName("page 또는 size 가 상한을 넘으면 400 COMMON_VALIDATION_FAILED 를 반환하고 서비스는 호출되지 않는다")
+		void returnsBadRequestWhenPagingOutOfRange(String page, String size) throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/products").param("page", page).param("size", size)
+							.header(HttpHeaders.AUTHORIZATION, adminToken()))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminProductService, never()).getList(any());
+		}
+
 		@Test
 		@DisplayName("일반 회원이면 403 AUTH_FORBIDDEN 을 반환하고 서비스는 호출되지 않는다")
 		void returnsForbiddenWhenNotAdmin() throws Exception {
@@ -459,7 +515,7 @@ class AdminProductControllerTest {
 			mockMvc.perform(get("/api/v1/admin/products").header(HttpHeaders.AUTHORIZATION, userToken()))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(adminProductService, never()).getList(any(), any(), any(), any());
+			verify(adminProductService, never()).getList(any());
 		}
 
 		@Test
@@ -469,7 +525,7 @@ class AdminProductControllerTest {
 			mockMvc.perform(get("/api/v1/admin/products"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(adminProductService, never()).getList(any(), any(), any(), any());
+			verify(adminProductService, never()).getList(any());
 		}
 	}
 
