@@ -12,6 +12,9 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.support.CronExpression;
 
 import com.groove.stats.service.AggregationLock;
 import com.groove.stats.service.SalesAggregationService;
@@ -139,6 +143,37 @@ class SalesAggregationSchedulerTest {
 
 			// then
 			verify(salesAggregationService, never()).aggregateDate(any());
+		}
+
+		@Test
+		@DisplayName("15분 증분은 야간 재집계·대사와 같은 시각에 시작하지 않는다")
+		void neverStartsWithNightlyOrReconcileJobs() {
+			// given
+			ZonedDateTime dayStart = ZonedDateTime.of(2031, 3, 15, 0, 0, 0, 0, ZONE);
+
+			// when
+			List<ZonedDateTime> todayFires = fireTimesOn(SalesAggregationScheduler.TODAY_CRON, dayStart);
+			List<ZonedDateTime> nightlyFires = fireTimesOn(SalesAggregationScheduler.NIGHTLY_CRON, dayStart);
+			List<ZonedDateTime> reconcileFires = fireTimesOn(SalesReconcileScheduler.RECONCILE_CRON, dayStart);
+
+			// then
+			assertThat(todayFires).hasSize(96);
+			assertThat(nightlyFires).hasSize(1);
+			assertThat(reconcileFires).hasSize(1);
+			assertThat(todayFires).doesNotContainAnyElementsOf(nightlyFires)
+					.doesNotContainAnyElementsOf(reconcileFires);
+		}
+
+		private List<ZonedDateTime> fireTimesOn(String cron, ZonedDateTime dayStart) {
+			CronExpression expression = CronExpression.parse(cron);
+			ZonedDateTime dayEnd = dayStart.plusDays(1);
+			List<ZonedDateTime> fires = new ArrayList<>();
+			ZonedDateTime next = expression.next(dayStart.minusSeconds(1));
+			while (next != null && next.isBefore(dayEnd)) {
+				fires.add(next);
+				next = expression.next(next);
+			}
+			return fires;
 		}
 	}
 }

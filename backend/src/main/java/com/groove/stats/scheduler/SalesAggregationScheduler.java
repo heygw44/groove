@@ -22,13 +22,15 @@ import lombok.extern.slf4j.Slf4j;
 public class SalesAggregationScheduler {
 
 	static final int REAGGREGATE_WINDOW_DAYS = 7;
+	static final String NIGHTLY_CRON = "0 30 3 * * *";
+	static final String TODAY_CRON = "0 5/15 * * * *";
 
 	private final SalesAggregationService salesAggregationService;
 	private final AggregationLock aggregationLock;
 	private final Clock clock;
 
 	/** 최근 며칠의 취소/환불을 반영해 [D-7, D-1] 을 다시 덮어쓴다. */
-	@Scheduled(cron = "0 30 3 * * *", zone = "Asia/Seoul")
+	@Scheduled(cron = NIGHTLY_CRON, zone = "Asia/Seoul")
 	public void reaggregateRecentDays() {
 		LocalDate today = LocalDate.now(clock);
 		LocalDate from = today.minusDays(REAGGREGATE_WINDOW_DAYS);
@@ -36,8 +38,12 @@ public class SalesAggregationScheduler {
 		runWindow("야간 재집계", from, to);
 	}
 
-	/** 15분 증분. "오차 허용 지표" 의 오차 상한을 정의한다 — 오늘 매출은 최대 15분 지연으로 정확해진다. */
-	@Scheduled(cron = "0 */15 * * * *", zone = "Asia/Seoul")
+	/**
+	 * 15분 증분. "오차 허용 지표" 의 오차 상한을 정의한다 — 오늘 매출은 최대 15분 지연으로 정확해진다.
+	 * 야간 재집계(03:30)·대사(05:00)와 대기 없는 {@link AggregationLock} 을 공유하므로, 같은 초에 시작해
+	 * 늦은 쪽이 그날 통째로 건너뛰지 않도록 5분 어긋난 매시 05·20·35·50분에 돈다.
+	 */
+	@Scheduled(cron = TODAY_CRON, zone = "Asia/Seoul")
 	public void aggregateToday() {
 		LocalDate today = LocalDate.now(clock);
 		runWindow("오늘 증분", today, today);
