@@ -18,6 +18,8 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -152,6 +154,44 @@ class GlobalExceptionHandlerTest {
 			// then
 			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.COMMON_RESOURCE_NOT_FOUND.name());
+		}
+	}
+
+	@Nested
+	@DisplayName("handleUnsupportedMediaType()")
+	class HandleUnsupportedMediaType {
+
+		@Test
+		@DisplayName("지원하지 않는 Content-Type 이면 415 COMMON_UNSUPPORTED_MEDIA_TYPE 을 반환한다")
+		void returnsUnsupportedMediaType() {
+			// given
+			HttpMediaTypeNotSupportedException exception = new HttpMediaTypeNotSupportedException("text/plain");
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleUnsupportedMediaType(exception);
+
+			// then
+			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.COMMON_UNSUPPORTED_MEDIA_TYPE.name());
+		}
+	}
+
+	@Nested
+	@DisplayName("handleNotAcceptable()")
+	class HandleNotAcceptable {
+
+		@Test
+		@DisplayName("응답 가능한 형식이 없으면 406 COMMON_NOT_ACCEPTABLE 을 반환한다")
+		void returnsNotAcceptable() {
+			// given
+			HttpMediaTypeNotAcceptableException exception = new HttpMediaTypeNotAcceptableException("text/csv");
+
+			// when
+			ResponseEntity<ApiResponse<Void>> response = globalExceptionHandler.handleNotAcceptable(exception);
+
+			// then
+			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_ACCEPTABLE);
+			assertThat(response.getBody().error().code()).isEqualTo(ErrorCode.COMMON_NOT_ACCEPTABLE.name());
 		}
 	}
 

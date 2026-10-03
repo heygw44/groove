@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NotificationRow } from '@/components/notification/NotificationRow';
-import type { NotificationItem } from '@/types/notification';
+import type { NotificationItem, NotificationType } from '@/types/notification';
+import { formatServerDateTime } from '@/utils/formatDate';
 
 const baseItem: NotificationItem = {
   id: 1,
@@ -25,6 +26,10 @@ const renderRow = (item: NotificationItem, onRead = vi.fn(), onDelete = vi.fn())
 });
 
 describe('NotificationRow', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('안 읽은 항목을 클릭하면 onRead 가 해당 id 로 불린다', async () => {
     // given
     const user = userEvent.setup();
@@ -113,5 +118,57 @@ describe('NotificationRow', () => {
 
     // when & then
     expect(container.querySelectorAll('a button').length).toBe(0);
+  });
+
+  it('유형이 섞인 목록도 예외 없이 모든 문구를 렌더한다', () => {
+    // given
+    const items: NotificationItem[] = [
+      baseItem,
+      {
+        id: 2,
+        type: 'STATS_MISMATCH',
+        titleSnapshot: '매출 대사 불일치 3일 발생 (2026-08-28 ~ 2026-10-01)',
+        createdAt: '2026-10-02T09:00:00',
+      },
+      {
+        id: 3,
+        type: 'FUTURE_TYPE' as unknown as NotificationType,
+        titleSnapshot: 'Blue Train',
+        createdAt: '2026-10-02T09:00:00',
+      },
+    ];
+
+    // when
+    render(
+      <MemoryRouter>
+        {items.map((item) => (
+          <NotificationRow key={item.id} item={item} onRead={vi.fn()} onDelete={vi.fn()} />
+        ))}
+      </MemoryRouter>,
+    );
+
+    // then
+    expect(screen.getByText('Kind of Blue 재입고되었습니다')).toBeInTheDocument();
+    expect(screen.getByText('Blue Train 관련 알림이 도착했습니다')).toBeInTheDocument();
+    expect(
+      screen
+        .getByText('매출 대사 불일치 3일 발생 (2026-08-28 ~ 2026-10-01)')
+        .closest('a')
+        ?.getAttribute('href'),
+    ).toBe('/admin#reconcile-logs');
+  });
+
+  it('KST 가 아닌 시간대에서도 생성 시각을 KST 기준으로 변환해 보여준다', () => {
+    // given
+    vi.stubEnv('TZ', 'UTC');
+    const item: NotificationItem = { ...baseItem, createdAt: '2026-10-02T09:00:00' };
+
+    // when
+    renderRow(item);
+
+    // then
+    const expected = formatServerDateTime('2026-10-02T09:00:00');
+    expect(expected).toContain('00:00');
+    expect(screen.getByText(expected)).toBeInTheDocument();
   });
 });

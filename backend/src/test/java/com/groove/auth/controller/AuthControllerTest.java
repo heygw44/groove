@@ -224,6 +224,21 @@ class AuthControllerTest {
 					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("email")))
 					.andExpect(jsonPath("$.error.fieldErrors[*].field", hasItem("password")));
 		}
+
+		@Test
+		@DisplayName("Content-Type 이 text/plain 이면 415 와 COMMON_UNSUPPORTED_MEDIA_TYPE 을 반환한다")
+		void returnsUnsupportedMediaTypeWhenTextPlain() throws Exception {
+			// given
+			String body = objectMapper.writeValueAsString(new LoginRequest("groover@groove.com", "password1"));
+
+			// when & then
+			mockMvc.perform(post("/api/v1/auth/login")
+							.contentType(MediaType.TEXT_PLAIN)
+							.content(body))
+					.andExpect(status().isUnsupportedMediaType())
+					.andExpect(jsonPath("$.error.code", is("COMMON_UNSUPPORTED_MEDIA_TYPE")));
+			verify(authService, never()).login(any());
+		}
 	}
 
 	@Nested

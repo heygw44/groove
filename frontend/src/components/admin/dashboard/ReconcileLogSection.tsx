@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { ReconcileLogTable } from '@/components/admin/dashboard/ReconcileLogTable';
 import { Pagination } from '@/components/common/Pagination';
 import { QueryErrorState } from '@/components/common/QueryErrorState';
 import { TableSkeleton } from '@/components/common/TableSkeleton';
+import { RECONCILE_LOGS_SECTION_ID } from '@/constants/adminReconcile';
 import { useAdminReconcileLogs } from '@/hooks/queries/useAdminStats';
 
 const PAGE_SIZE = 20;
@@ -11,6 +13,8 @@ const PAGE_SIZE = 20;
 type RepairedFilter = 'unresolved' | 'all';
 
 export function ReconcileLogSection() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const { hash } = useLocation();
   const [filter, setFilter] = useState<RepairedFilter>('unresolved');
   const [page, setPage] = useState(0);
 
@@ -20,13 +24,24 @@ export function ReconcileLogSection() {
     size: PAGE_SIZE,
   });
 
+  // 알림·경고 배너의 #reconcile-logs 링크는 SPA 라 브라우저가 스크롤해 주지 않는다.
+  useEffect(() => {
+    if (hash === `#${RECONCILE_LOGS_SECTION_ID}`) {
+      sectionRef.current?.scrollIntoView({ block: 'start' });
+    }
+  }, [hash]);
+
   const changeFilter = (next: RepairedFilter) => {
     setFilter(next);
     setPage(0);
   };
 
   return (
-    <section id="reconcile-logs" className="flex scroll-mt-6 flex-col gap-4">
+    <section
+      ref={sectionRef}
+      id={RECONCILE_LOGS_SECTION_ID}
+      className="flex scroll-mt-6 flex-col gap-4"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-sm font-bold text-content">집계 대사 로그</h3>
         <div className="flex gap-1 rounded-md bg-surface-muted p-0.5 text-sm">

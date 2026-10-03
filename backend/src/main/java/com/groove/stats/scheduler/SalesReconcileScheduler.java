@@ -16,7 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * 최근 {@value #RECONCILE_WINDOW_DAYS}일을 날짜 단위로 대사한다. 야간 재집계(03:30) 결과를 검증해야 하므로
- * 그 뒤인 05:00 에 돈다. 재집계와 같은 {@link AggregationLock} 을 공유해 동시 실행을 막는다.
+ * 그 뒤인 05:00 에 돈다. 재집계와 같은 {@link AggregationLock} 을 공유해 동시 실행을 막는다. 15분 증분은
+ * 5분 어긋나 돌므로 이 시각과 겹치지 않는다.
  */
 @Slf4j
 @Component
@@ -24,13 +25,14 @@ import lombok.extern.slf4j.Slf4j;
 public class SalesReconcileScheduler {
 
 	static final int RECONCILE_WINDOW_DAYS = 35;
+	static final String RECONCILE_CRON = "0 0 5 * * *";
 
 	private final SalesReconcileService salesReconcileService;
 	private final StatsAlertDispatcher statsAlertDispatcher;
 	private final AggregationLock aggregationLock;
 	private final Clock clock;
 
-	@Scheduled(cron = "0 0 5 * * *", zone = "Asia/Seoul")
+	@Scheduled(cron = RECONCILE_CRON, zone = "Asia/Seoul")
 	public void reconcileRecentDays() {
 		boolean acquired = aggregationLock.runExclusively(this::runReconcile);
 		if (!acquired) {

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import type { NotificationItem } from '@/types/notification';
-import { formatDateTime } from '@/utils/formatDate';
+import { formatServerDateTime } from '@/utils/formatDate';
 import {
   buildNotificationLink,
   buildNotificationMessage,
@@ -32,7 +32,7 @@ export function NotificationRow({ item, onRead, onDelete }: NotificationRowProps
         {unread && <span className="sr-only">읽지 않음. </span>}
         {message}
       </p>
-      <p className="mt-1 text-xs text-content-subtle">{formatDateTime(item.createdAt)}</p>
+      <p className="mt-1 text-xs text-content-subtle">{formatServerDateTime(item.createdAt)}</p>
     </>
   );
 
