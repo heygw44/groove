@@ -60,6 +60,9 @@ import com.groove.support.IntegrationTestSupport;
 class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 
 	private static final String FORWARDED_IP = "203.0.113.7";
+	private static final String FORGED_IP = "198.51.100.66";
+	// 요청자가 헤더를 위조했을 때 Nginx 가 만드는 모양: 요청자 값 뒤에 Nginx 가 실제 접속 주소를 덧붙인다.
+	private static final String FORWARDED_FOR = FORGED_IP + ", " + FORWARDED_IP;
 
 	@Autowired
 	MockMvc mockMvc;
@@ -96,7 +99,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 	class RecordsAcrossAdminPaths {
 
 		@Test
-		@DisplayName("상품 숨김·쿠폰 등록·한정반 오픈·재고 조정 모두 IP 를 포함한 감사 로그를 남긴다")
+		@DisplayName("상품 숨김·쿠폰 등록·한정반 오픈·재고 조정 모두 위조한 X-Forwarded-For 가 아닌 실제 접속 IP 를 감사 로그에 남긴다")
 		void recordsIpAddressAcrossAdminPaths() throws Exception {
 			// given
 			Member admin = memberRepository.save(
@@ -107,7 +110,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 			Product hideTarget = seedProduct(10);
 			mockMvc.perform(delete("/api/v1/admin/products/{id}", hideTarget.getId())
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
-							.header("X-Forwarded-For", FORWARDED_IP))
+							.header("X-Forwarded-For", FORWARDED_FOR))
 					.andExpect(status().isOk());
 
 			// when: 쿠폰 등록
@@ -116,7 +119,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 					BigDecimal.valueOf(1000), null, null, 10, LocalDateTime.now().plusDays(7));
 			mockMvc.perform(post("/api/v1/admin/coupons")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
-							.header("X-Forwarded-For", FORWARDED_IP)
+							.header("X-Forwarded-For", FORWARDED_FOR)
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(couponRequest)))
 					.andExpect(status().isCreated());
@@ -127,7 +130,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 					LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2));
 			MvcResult dropResult = mockMvc.perform(post("/api/v1/admin/limited-drops")
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
-							.header("X-Forwarded-For", FORWARDED_IP)
+							.header("X-Forwarded-For", FORWARDED_FOR)
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(dropRequest)))
 					.andExpect(status().isCreated())
@@ -136,7 +139,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 					.path("data").path("id").asLong();
 			mockMvc.perform(patch("/api/v1/admin/limited-drops/{id}/open", dropId)
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
-							.header("X-Forwarded-For", FORWARDED_IP))
+							.header("X-Forwarded-For", FORWARDED_FOR))
 					.andExpect(status().isOk());
 
 			// when: 재고 조정
@@ -144,7 +147,7 @@ class AdminAuditLogIntegrationTest extends IntegrationTestSupport {
 			StockAdjustRequest stockRequest = StockFixture.adjustRequest(StockChangeType.IN, 5);
 			mockMvc.perform(patch("/api/v1/admin/products/{productId}/stock", stockTarget.getId())
 							.header(HttpHeaders.AUTHORIZATION, adminToken)
-							.header("X-Forwarded-For", FORWARDED_IP)
+							.header("X-Forwarded-For", FORWARDED_FOR)
 							.contentType(MediaType.APPLICATION_JSON)
 							.content(objectMapper.writeValueAsString(stockRequest)))
 					.andExpect(status().isOk());
