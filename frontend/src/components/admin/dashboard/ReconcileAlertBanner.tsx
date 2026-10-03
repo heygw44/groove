@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 
+import { RECONCILE_LOGS_SECTION_ID } from '@/constants/adminReconcile';
 import { useAdminReconcileLogs } from '@/hooks/queries/useAdminStats';
 
 /**
@@ -20,7 +21,7 @@ export function ReconcileAlertBanner() {
         집계 불일치 {data.totalElements}건이 자동 복구되지 않았습니다.
       </p>
       <Link
-        to="#reconcile-logs"
+        to={`#${RECONCILE_LOGS_SECTION_ID}`}
         className="shrink-0 text-sm font-medium text-danger underline underline-offset-2 hover:text-danger/80"
       >
         확인하기

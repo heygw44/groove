@@ -21,3 +21,6 @@ export const RECONCILE_AMOUNT_METRICS = new Set<ReconcileMetric>([
   'DAILY_CANCEL_AMOUNT',
   'PRODUCT_SALES_AMOUNT',
 ]);
+
+/** 대시보드 대사 로그 섹션의 id. 알림 링크·경고 배너가 `/admin#…` 해시로 이 섹션을 가리킨다. */
+export const RECONCILE_LOGS_SECTION_ID = 'reconcile-logs';
