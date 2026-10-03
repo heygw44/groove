@@ -8,7 +8,7 @@ import PaymentFailPage from '@/pages/payment/PaymentFailPage';
 import { saveOrderFormDraft, type OrderFormDraftRecord } from '@/utils/orderDraft';
 
 const buildDraftRecord = (overrides: Partial<OrderFormDraftRecord> = {}): OrderFormDraftRecord => ({
-  source: { kind: 'cart', cartItemIds: [1] },
+  source: { kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] },
   addressId: 5,
   memberCouponId: null,
   method: 'CARD',
@@ -19,6 +19,7 @@ const buildDraftRecord = (overrides: Partial<OrderFormDraftRecord> = {}): OrderF
     fingerprint: 'fp',
     addressId: 5,
     expiresAtMs: null,
+    coupon: null,
   },
   ...overrides,
 });

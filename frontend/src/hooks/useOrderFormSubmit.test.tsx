@@ -7,7 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/components/common/Toast';
 import { useOrderFormSubmit } from '@/hooks/useOrderFormSubmit';
 import { useAuthStore } from '@/store/authStore';
-import type { OrderDraft, PendingOrder } from '@/utils/orderDraft';
+import type { AvailableCoupon } from '@/types/coupon';
+import {
+  buildOrderFingerprint,
+  type OrderDraft,
+  type PendingOrder,
+  type PurchasableOrderDraft,
+} from '@/utils/orderDraft';
 import { getServerNowMs } from '@/utils/serverTime';
 
 const createOrder = vi.fn();
@@ -53,7 +59,7 @@ const createWrapper = () => {
 interface Props {
   draft: OrderDraft | null;
   addressId: number | undefined;
-  memberCouponId: number | null;
+  coupon: AvailableCoupon | null;
   orderName: string;
   onCouponRejected: () => void;
   initialPendingOrder?: PendingOrder | null;
@@ -64,6 +70,23 @@ const renderSubmit = (initialProps: Props) =>
     wrapper: createWrapper(),
     initialProps,
   });
+
+const buildCoupon = (overrides: Partial<AvailableCoupon> = {}): AvailableCoupon => ({
+  memberCouponId: 9,
+  couponCode: 'WELCOME',
+  couponName: '웰컴 쿠폰',
+  discountType: 'FIXED',
+  discountValue: 1000,
+  minOrderAmount: 0,
+  expiresAt: '2026-12-31T23:59:59',
+  expectedDiscount: 1000,
+  ...overrides,
+});
+
+const cartDraft = (quantity = 1): PurchasableOrderDraft => ({
+  kind: 'cart',
+  items: [{ cartItemId: 1, quantity }],
+});
 
 beforeEach(() => {
   createOrder.mockReset();
@@ -92,9 +115,9 @@ describe('useOrderFormSubmit()', () => {
       finalAmount: 10000,
     });
     const { result } = renderSubmit({
-      draft: { kind: 'cart', cartItemIds: [1] },
+      draft: cartDraft(),
       addressId: 5,
-      memberCouponId: null,
+      coupon: null,
       orderName: '앨범',
       onCouponRejected: vi.fn(),
     });
@@ -127,9 +150,9 @@ describe('useOrderFormSubmit()', () => {
     updateOrderShippingAddress.mockResolvedValue({});
 
     const { result, rerender } = renderSubmit({
-      draft: { kind: 'cart', cartItemIds: [1] },
+      draft: cartDraft(),
       addressId: 5,
-      memberCouponId: null,
+      coupon: null,
       orderName: '앨범',
       onCouponRejected: vi.fn(),
     });
@@ -139,9 +162,9 @@ describe('useOrderFormSubmit()', () => {
     await waitFor(() => expect(openPaymentWindow).toHaveBeenCalledTimes(1));
 
     rerender({
-      draft: { kind: 'cart', cartItemIds: [1] },
+      draft: cartDraft(),
       addressId: 6,
-      memberCouponId: null,
+      coupon: null,
       orderName: '앨범',
       onCouponRejected: vi.fn(),
     });
@@ -175,9 +198,9 @@ describe('useOrderFormSubmit()', () => {
       });
 
     const { result, rerender } = renderSubmit({
-      draft: { kind: 'cart', cartItemIds: [1] },
+      draft: cartDraft(),
       addressId: 5,
-      memberCouponId: null,
+      coupon: null,
       orderName: '앨범',
       onCouponRejected: vi.fn(),
     });
@@ -188,9 +211,9 @@ describe('useOrderFormSubmit()', () => {
 
     // 쿠폰을 적용해 지문이 바뀐다
     rerender({
-      draft: { kind: 'cart', cartItemIds: [1] },
+      draft: cartDraft(),
       addressId: 5,
-      memberCouponId: 9,
+      coupon: buildCoupon(),
       orderName: '앨범',
       onCouponRejected: vi.fn(),
     });
@@ -224,9 +247,9 @@ describe('useOrderFormSubmit()', () => {
       });
 
     const { result } = renderSubmit({
-      draft: { kind: 'cart', cartItemIds: [1] },
+      draft: cartDraft(),
       addressId: 5,
-      memberCouponId: null,
+      coupon: null,
       orderName: '앨범',
       onCouponRejected: vi.fn(),
     });
@@ -250,12 +273,12 @@ describe('useOrderFormSubmit()', () => {
       orderId: 1,
       orderNumber: 'ORD-1',
       finalAmount: 9900,
-      expiresAt: '2026-09-28T00:00:00',
+      expiresAt: '2026-09-28T00:10:00',
     });
     const { result } = renderSubmit({
       draft: { kind: 'limited', dropId: 9 },
       addressId: 5,
-      memberCouponId: null,
+      coupon: null,
       orderName: '한정반 앨범',
       onCouponRejected: vi.fn(),
     });
@@ -282,14 +305,14 @@ describe('useOrderFormSubmit()', () => {
       orderId: 1,
       orderNumber: 'ORD-1',
       finalAmount: 9900,
-      expiresAt: '2026-09-28T00:00:00',
+      expiresAt: '2026-09-28T00:10:00',
     });
     updateOrderShippingAddress.mockResolvedValue({});
 
     const { result, rerender } = renderSubmit({
       draft: { kind: 'limited', dropId: 9 },
       addressId: 5,
-      memberCouponId: null,
+      coupon: null,
       orderName: '한정반 앨범',
       onCouponRejected: vi.fn(),
     });
@@ -301,7 +324,7 @@ describe('useOrderFormSubmit()', () => {
     rerender({
       draft: { kind: 'limited', dropId: 9 },
       addressId: 6,
-      memberCouponId: null,
+      coupon: null,
       orderName: '한정반 앨범',
       onCouponRejected: vi.fn(),
     });
@@ -316,22 +339,19 @@ describe('useOrderFormSubmit()', () => {
   it('sessionStorage 초안에서 복원한 pendingOrder 는 새로 만들지 않고 바로 재사용한다', async () => {
     // given
     const { result } = renderSubmit({
-      draft: { kind: 'cart', cartItemIds: [1] },
+      draft: cartDraft(),
       addressId: 5,
-      memberCouponId: null,
+      coupon: null,
       orderName: '앨범',
       onCouponRejected: vi.fn(),
       initialPendingOrder: {
         orderId: 1,
         orderNumber: 'ORD-1',
         amount: 10000,
-        fingerprint: JSON.stringify({
-          kind: 'cart',
-          cartItemIds: [1],
-          memberCouponId: null,
-        }),
+        fingerprint: buildOrderFingerprint(cartDraft(), null),
         addressId: 5,
         expiresAtMs: null,
+        coupon: null,
       },
     });
 
@@ -343,6 +363,148 @@ describe('useOrderFormSubmit()', () => {
     expect(createOrder).not.toHaveBeenCalled();
     expect(openPaymentWindow).toHaveBeenCalledWith(
       expect.objectContaining({ orderId: 1, method: 'CARD' }),
+    );
+  });
+
+  it('쿠폰을 유지한 채 다시 결제하면 같은 주문과 같은 할인 금액으로 결제창을 연다', async () => {
+    // given
+    const coupon = buildCoupon();
+    createOrder.mockResolvedValue({
+      orderId: 1,
+      orderNumber: 'ORD-1',
+      totalAmount: 10000,
+      discountAmount: 1000,
+      finalAmount: 9000,
+    });
+    const props: Props = {
+      draft: cartDraft(),
+      addressId: 5,
+      coupon,
+      orderName: '앨범',
+      onCouponRejected: vi.fn(),
+    };
+    const { result, rerender } = renderSubmit(props);
+
+    // when - 결제창을 닫고 같은 쿠폰으로 다시 결제한다
+    act(() => result.current.submit('CARD'));
+    await waitFor(() => expect(openPaymentWindow).toHaveBeenCalledTimes(1));
+    act(() => result.current.submit('CARD'));
+    await waitFor(() => expect(openPaymentWindow).toHaveBeenCalledTimes(2));
+
+    // then
+    expect(createOrder).toHaveBeenCalledTimes(1);
+    expect(openPaymentWindow).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ orderId: 1, amount: 9000 }),
+    );
+    expect(result.current.pendingOrder?.coupon).toEqual(coupon);
+    expect(result.current.reusableOrder).toMatchObject({ orderId: 1, amount: 9000 });
+
+    // 쿠폰을 바꾸면 재사용할 주문이 없다
+    rerender({ ...props, coupon: buildCoupon({ memberCouponId: 10 }) });
+    expect(result.current.reusableOrder).toBeNull();
+  });
+
+  it('만료된 한정반 pendingOrder 는 재사용하지 않고 선착순 구매를 다시 시도한다', async () => {
+    // given
+    purchaseLimitedDrop.mockResolvedValue({
+      orderId: 2,
+      orderNumber: 'ORD-2',
+      finalAmount: 9900,
+      expiresAt: '2026-09-28T00:10:00',
+    });
+    const { result } = renderSubmit({
+      draft: { kind: 'limited', dropId: 9 },
+      addressId: 5,
+      coupon: null,
+      orderName: '한정반 앨범',
+      onCouponRejected: vi.fn(),
+      initialPendingOrder: {
+        orderId: 1,
+        orderNumber: 'ORD-1',
+        amount: 9900,
+        fingerprint: 'limited',
+        addressId: 5,
+        expiresAtMs: new Date('2026-09-27T23:50:00+09:00').getTime(),
+        coupon: null,
+      },
+    });
+
+    // when
+    act(() => result.current.submit('CARD'));
+    await waitFor(() => expect(openPaymentWindow).toHaveBeenCalledTimes(1));
+
+    // then
+    expect(purchaseLimitedDrop).toHaveBeenCalledTimes(1);
+    expect(openPaymentWindow).not.toHaveBeenCalledWith(expect.objectContaining({ orderId: 1 }));
+    expect(openPaymentWindow).toHaveBeenCalledWith(expect.objectContaining({ orderId: 2 }));
+  });
+
+  it('만료 전 한정반 pendingOrder 는 구매하지 않고 그대로 재사용한다', async () => {
+    // given
+    const { result } = renderSubmit({
+      draft: { kind: 'limited', dropId: 9 },
+      addressId: 5,
+      coupon: null,
+      orderName: '한정반 앨범',
+      onCouponRejected: vi.fn(),
+      initialPendingOrder: {
+        orderId: 1,
+        orderNumber: 'ORD-1',
+        amount: 9900,
+        fingerprint: 'limited',
+        addressId: 5,
+        expiresAtMs: new Date('2026-09-28T00:10:00+09:00').getTime(),
+        coupon: null,
+      },
+    });
+
+    // when
+    act(() => result.current.submit('CARD'));
+    await waitFor(() => expect(openPaymentWindow).toHaveBeenCalledTimes(1));
+
+    // then
+    expect(purchaseLimitedDrop).not.toHaveBeenCalled();
+    expect(openPaymentWindow).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 1, amount: 9900 }),
+    );
+  });
+
+  it('장바구니 수량이 바뀐 채 다시 들어오면 이전 주문을 쓰지 않고 새 주문 금액으로 결제창을 연다', async () => {
+    // given
+    createOrder.mockResolvedValue({
+      orderId: 2,
+      orderNumber: 'ORD-2',
+      totalAmount: 20000,
+      discountAmount: 0,
+      finalAmount: 20000,
+    });
+    const { result } = renderSubmit({
+      draft: cartDraft(2),
+      addressId: 5,
+      coupon: null,
+      orderName: '앨범',
+      onCouponRejected: vi.fn(),
+      initialPendingOrder: {
+        orderId: 1,
+        orderNumber: 'ORD-1',
+        amount: 10000,
+        fingerprint: buildOrderFingerprint(cartDraft(1), null),
+        addressId: 5,
+        expiresAtMs: null,
+        coupon: null,
+      },
+    });
+    expect(result.current.reusableOrder).toBeNull();
+
+    // when
+    act(() => result.current.submit('CARD'));
+    await waitFor(() => expect(openPaymentWindow).toHaveBeenCalledTimes(1));
+
+    // then
+    expect(createOrder).toHaveBeenCalledTimes(1);
+    expect(openPaymentWindow).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 2, amount: 20000 }),
     );
   });
 });

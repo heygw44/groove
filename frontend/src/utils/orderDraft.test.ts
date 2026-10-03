@@ -14,33 +14,43 @@ import {
 } from '@/utils/orderDraft';
 
 describe('parseOrderDraft()', () => {
-  it('양의 정수 배열인 cartItemIds 는 장바구니 draft 로 판단한다', () => {
+  it('cartItemId·quantity 가 양의 정수인 cartItems 는 장바구니 draft 로 판단한다', () => {
     // given
-    const state = { cartItemIds: [1, 2, 3] };
+    const state = {
+      cartItems: [
+        { cartItemId: 1, quantity: 2 },
+        { cartItemId: 3, quantity: 1 },
+      ],
+    };
 
     // when
     const result = parseOrderDraft(state);
 
     // then
-    expect(result).toEqual({ kind: 'cart', cartItemIds: [1, 2, 3] });
+    expect(result).toEqual({
+      kind: 'cart',
+      items: [
+        { cartItemId: 1, quantity: 2 },
+        { cartItemId: 3, quantity: 1 },
+      ],
+    });
   });
 
-  it('빈 cartItemIds 배열은 무효로 판단한다', () => {
-    // given
-    const state = { cartItemIds: [] };
-
-    // when
-    const result = parseOrderDraft(state);
-
-    // then
-    expect(result).toBeNull();
-  });
-
-  it('cartItemIds 에 양의 정수가 아닌 값이 있으면 무효로 판단한다', () => {
-    // given
-    const state = { cartItemIds: [1, -2] };
-
-    // when
+  it.each([
+    { cartItems: [] },
+    { cartItems: [{ cartItemId: 1, quantity: 0 }] },
+    { cartItems: [{ cartItemId: -1, quantity: 1 }] },
+    { cartItems: [{ cartItemId: 1 }] },
+    { cartItems: [1, 2] },
+    {
+      cartItems: [
+        { cartItemId: 1, quantity: 1 },
+        { cartItemId: 1, quantity: 2 },
+      ],
+    },
+    { cartItemIds: [1, 2] },
+  ])('유효하지 않은 장바구니 state(%o)는 무효로 판단한다', (state) => {
+    // given & when
     const result = parseOrderDraft(state);
 
     // then
@@ -103,7 +113,13 @@ describe('parseOrderDraft()', () => {
 describe('toOrderCreateRequest()', () => {
   it('장바구니 draft 는 cartItemIds 와 addressId 를 담는다', () => {
     // given
-    const draft: PurchasableOrderDraft = { kind: 'cart', cartItemIds: [1, 2] };
+    const draft: PurchasableOrderDraft = {
+      kind: 'cart',
+      items: [
+        { cartItemId: 1, quantity: 2 },
+        { cartItemId: 2, quantity: 1 },
+      ],
+    };
 
     // when
     const result = toOrderCreateRequest(draft, 5);
@@ -125,7 +141,13 @@ describe('toOrderCreateRequest()', () => {
 
   it('장바구니 draft 에 memberCouponId 를 넘기면 그대로 담긴다', () => {
     // given
-    const draft: PurchasableOrderDraft = { kind: 'cart', cartItemIds: [1, 2] };
+    const draft: PurchasableOrderDraft = {
+      kind: 'cart',
+      items: [
+        { cartItemId: 1, quantity: 1 },
+        { cartItemId: 2, quantity: 1 },
+      ],
+    };
 
     // when
     const result = toOrderCreateRequest(draft, 5, 7);
@@ -149,34 +171,73 @@ describe('toOrderCreateRequest()', () => {
 describe('orderDraftToLocationState()', () => {
   it('parseOrderDraft 의 결과를 원래 location.state 모양으로 되돌린다', () => {
     // given & when & then
-    expect(orderDraftToLocationState({ kind: 'cart', cartItemIds: [1, 2] })).toEqual({
-      cartItemIds: [1, 2],
-    });
+    expect(
+      orderDraftToLocationState({ kind: 'cart', items: [{ cartItemId: 1, quantity: 2 }] }),
+    ).toEqual({ cartItems: [{ cartItemId: 1, quantity: 2 }] });
     expect(orderDraftToLocationState({ kind: 'direct', productId: 10, quantity: 2 })).toEqual({
       productId: 10,
       quantity: 2,
     });
     expect(orderDraftToLocationState({ kind: 'limited', dropId: 7 })).toEqual({ dropId: 7 });
   });
+
+  it('장바구니 draft 는 parseOrderDraft 를 거쳐 같은 draft 로 돌아온다', () => {
+    // given
+    const draft = {
+      kind: 'cart' as const,
+      items: [
+        { cartItemId: 1, quantity: 2 },
+        { cartItemId: 4, quantity: 3 },
+      ],
+    };
+
+    // when
+    const result = parseOrderDraft(orderDraftToLocationState(draft));
+
+    // then
+    expect(result).toEqual(draft);
+  });
 });
 
 describe('isSameOrderDraftSource()', () => {
-  it('cartItemIds 구성이 같으면(순서 달라도) 같은 draft 로 본다', () => {
+  it('cartItemId·quantity 구성이 같으면(순서 달라도) 같은 draft 로 본다', () => {
     // given & when & then
     expect(
       isSameOrderDraftSource(
-        { kind: 'cart', cartItemIds: [1, 2] },
-        { kind: 'cart', cartItemIds: [2, 1] },
+        {
+          kind: 'cart',
+          items: [
+            { cartItemId: 1, quantity: 2 },
+            { cartItemId: 2, quantity: 1 },
+          ],
+        },
+        {
+          kind: 'cart',
+          items: [
+            { cartItemId: 2, quantity: 1 },
+            { cartItemId: 1, quantity: 2 },
+          ],
+        },
       ),
     ).toBe(true);
   });
 
-  it('cartItemIds 구성이 다르면 다른 draft 로 본다', () => {
+  it('cartItemId 구성이 다르면 다른 draft 로 본다', () => {
     // given & when & then
     expect(
       isSameOrderDraftSource(
-        { kind: 'cart', cartItemIds: [1, 2] },
-        { kind: 'cart', cartItemIds: [1, 3] },
+        { kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] },
+        { kind: 'cart', items: [{ cartItemId: 3, quantity: 1 }] },
+      ),
+    ).toBe(false);
+  });
+
+  it('장바구니 항목의 수량만 달라도 다른 draft 로 본다', () => {
+    // given & when & then
+    expect(
+      isSameOrderDraftSource(
+        { kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] },
+        { kind: 'cart', items: [{ cartItemId: 1, quantity: 2 }] },
       ),
     ).toBe(false);
   });
@@ -185,7 +246,7 @@ describe('isSameOrderDraftSource()', () => {
     // given & when & then
     expect(
       isSameOrderDraftSource(
-        { kind: 'cart', cartItemIds: [1] },
+        { kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] },
         { kind: 'direct', productId: 1, quantity: 1 },
       ),
     ).toBe(false);
@@ -219,19 +280,55 @@ describe('isSameOrderDraftSource()', () => {
 });
 
 describe('buildOrderFingerprint()', () => {
-  it('cartItemIds 순서가 달라도 같은 지문을 만든다', () => {
+  it('장바구니 항목 순서가 달라도 같은 지문을 만든다', () => {
     // given & when
-    const a = buildOrderFingerprint({ kind: 'cart', cartItemIds: [1, 2] }, null);
-    const b = buildOrderFingerprint({ kind: 'cart', cartItemIds: [2, 1] }, null);
+    const a = buildOrderFingerprint(
+      {
+        kind: 'cart',
+        items: [
+          { cartItemId: 1, quantity: 2 },
+          { cartItemId: 2, quantity: 1 },
+        ],
+      },
+      null,
+    );
+    const b = buildOrderFingerprint(
+      {
+        kind: 'cart',
+        items: [
+          { cartItemId: 2, quantity: 1 },
+          { cartItemId: 1, quantity: 2 },
+        ],
+      },
+      null,
+    );
 
     // then
     expect(a).toBe(b);
   });
 
+  it('장바구니 항목의 수량이 다르면 다른 지문을 만든다', () => {
+    // given & when
+    const a = buildOrderFingerprint(
+      { kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] },
+      null,
+    );
+    const b = buildOrderFingerprint(
+      { kind: 'cart', items: [{ cartItemId: 1, quantity: 2 }] },
+      null,
+    );
+
+    // then
+    expect(a).not.toBe(b);
+  });
+
   it('쿠폰이 다르면 다른 지문을 만든다', () => {
     // given & when
-    const a = buildOrderFingerprint({ kind: 'cart', cartItemIds: [1] }, null);
-    const b = buildOrderFingerprint({ kind: 'cart', cartItemIds: [1] }, 7);
+    const a = buildOrderFingerprint(
+      { kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] },
+      null,
+    );
+    const b = buildOrderFingerprint({ kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] }, 7);
 
     // then
     expect(a).not.toBe(b);
@@ -251,7 +348,7 @@ describe('buildOrderFingerprint()', () => {
 
 describe('sessionStorage 주문서 초안', () => {
   const buildRecord = (overrides: Partial<OrderFormDraftRecord> = {}): OrderFormDraftRecord => ({
-    source: { kind: 'cart', cartItemIds: [1] },
+    source: { kind: 'cart', items: [{ cartItemId: 1, quantity: 1 }] },
     addressId: 5,
     memberCouponId: null,
     method: 'CARD',
@@ -262,6 +359,7 @@ describe('sessionStorage 주문서 초안', () => {
       fingerprint: 'fp',
       addressId: 5,
       expiresAtMs: null,
+      coupon: null,
     },
     ...overrides,
   });
@@ -326,6 +424,70 @@ describe('sessionStorage 주문서 초안', () => {
 
     // then
     expect(result).toEqual(record);
+  });
+
+  it('pendingOrder 에 건 쿠폰 스냅샷도 그대로 읽어온다', () => {
+    // given
+    const record = buildRecord({
+      memberCouponId: 9,
+      pendingOrder: {
+        orderId: 1,
+        orderNumber: 'ORD-1',
+        amount: 9000,
+        fingerprint: 'fp',
+        addressId: 5,
+        expiresAtMs: null,
+        coupon: {
+          memberCouponId: 9,
+          couponCode: 'WELCOME',
+          couponName: '웰컴 쿠폰',
+          expiresAt: '2026-12-31T23:59:59',
+          expectedDiscount: 1000,
+          discountType: 'FIXED',
+          discountValue: 1000,
+          minOrderAmount: 0,
+        },
+      },
+    });
+
+    // when
+    saveOrderFormDraft(record);
+    const result = loadOrderFormDraft();
+
+    // then
+    expect(result).toEqual(record);
+  });
+
+  it('pendingOrder 의 쿠폰 스냅샷이 깨졌으면 null 을 반환한다', () => {
+    // given
+    const record = buildRecord();
+    sessionStorage.setItem(
+      'groove:orderFormDraft',
+      JSON.stringify({
+        ...record,
+        pendingOrder: { ...record.pendingOrder, coupon: { memberCouponId: 9 } },
+      }),
+    );
+
+    // when
+    const result = loadOrderFormDraft();
+
+    // then
+    expect(result).toBeNull();
+  });
+
+  it('예전 cartItemIds 모양으로 저장된 초안은 null 을 반환한다', () => {
+    // given
+    sessionStorage.setItem(
+      'groove:orderFormDraft',
+      JSON.stringify({ ...buildRecord(), source: { kind: 'cart', cartItemIds: [1] } }),
+    );
+
+    // when
+    const result = loadOrderFormDraft();
+
+    // then
+    expect(result).toBeNull();
   });
 
   it('clearOrderFormDraft 는 저장된 초안을 지운다', () => {

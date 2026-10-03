@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CouponSection } from '@/components/order/CouponSection';
 import { useAvailableCoupons } from '@/hooks/queries/useAvailableCoupons';
@@ -36,6 +36,68 @@ const mockCoupons = (coupons: AvailableCoupon[] | undefined) => {
 };
 
 describe('CouponSection', () => {
+  beforeEach(() => {
+    showToast.mockClear();
+  });
+
+  it('선택한 쿠폰이 이 주문서의 PENDING 주문에 묶인 쿠폰이면 목록에 없어도 해제하지 않는다', () => {
+    // given - 주문 생성 시 사용 처리돼 재조회 목록에서 빠졌다
+    const held = buildCoupon();
+    mockCoupons([buildCoupon({ memberCouponId: 2, couponName: '다른 쿠폰' })]);
+    const onSelect = vi.fn();
+
+    // when
+    render(
+      <CouponSection orderAmount={20000} selected={held} onSelect={onSelect} heldCoupon={held} />,
+    );
+
+    // then
+    expect(onSelect).not.toHaveBeenCalledWith(null);
+    expect(showToast).not.toHaveBeenCalled();
+    expect(screen.getByText('웰컴 쿠폰')).toBeInTheDocument();
+  });
+
+  it('선택한 쿠폰이 목록에 없고 묶인 쿠폰도 아니면 해제하고 알린다', () => {
+    // given
+    mockCoupons([buildCoupon({ memberCouponId: 2, couponName: '다른 쿠폰' })]);
+    const onSelect = vi.fn();
+
+    // when
+    render(
+      <CouponSection
+        orderAmount={20000}
+        selected={buildCoupon()}
+        onSelect={onSelect}
+        heldCoupon={buildCoupon({ memberCouponId: 3 })}
+      />,
+    );
+
+    // then
+    expect(onSelect).toHaveBeenCalledWith(null);
+    expect(showToast).toHaveBeenCalledWith('info', expect.any(String));
+  });
+
+  it('restoreCouponId 가 목록에 없는 묶인 쿠폰과 일치하면 그 쿠폰을 선택한다', () => {
+    // given
+    const held = buildCoupon();
+    mockCoupons([]);
+    const onSelect = vi.fn();
+
+    // when
+    render(
+      <CouponSection
+        orderAmount={20000}
+        selected={null}
+        onSelect={onSelect}
+        restoreCouponId={1}
+        heldCoupon={held}
+      />,
+    );
+
+    // then
+    expect(onSelect).toHaveBeenCalledWith(held);
+  });
+
   it('restoreCouponId 와 일치하는 쿠폰이 목록에 있으면 자동으로 선택한다', () => {
     // given
     const coupon = buildCoupon();

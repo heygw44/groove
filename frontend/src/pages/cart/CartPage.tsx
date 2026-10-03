@@ -76,7 +76,10 @@ export default function CartPage() {
   };
 
   const handleOrder = () => {
-    navigate('/orders/new', { state: { cartItemIds: [...effectiveSelected] } });
+    const cartItems = items
+      .filter((item) => effectiveSelected.has(item.id))
+      .map((item) => ({ cartItemId: item.id, quantity: item.quantity }));
+    navigate('/orders/new', { state: { cartItems } });
   };
 
   if (isPending) {

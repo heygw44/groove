@@ -1,8 +1,14 @@
+import type { AvailableCoupon } from '@/types/coupon';
 import type { OrderCreateRequest } from '@/types/order';
 import type { PaymentMethodOption } from '@/types/payment';
 
+export interface CartDraftItem {
+  cartItemId: number;
+  quantity: number;
+}
+
 export type OrderDraft =
-  | { kind: 'cart'; cartItemIds: number[] }
+  | { kind: 'cart'; items: CartDraftItem[] }
   | { kind: 'direct'; productId: number; quantity: number }
   | { kind: 'limited'; dropId: number };
 
@@ -12,20 +18,35 @@ export type PurchasableOrderDraft = Exclude<OrderDraft, { kind: 'limited'; dropI
 const isPositiveInteger = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value > 0;
 
+const isCartDraftItem = (value: unknown): value is CartDraftItem => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const { cartItemId, quantity } = value as { cartItemId?: unknown; quantity?: unknown };
+  return isPositiveInteger(cartItemId) && isPositiveInteger(quantity);
+};
+
+const sortCartItems = (items: readonly CartDraftItem[]): CartDraftItem[] =>
+  [...items].sort((x, y) => x.cartItemId - y.cartItemId);
+
 /** 장바구니/상품 상세/한정반 상세에서 navigate 로 넘긴 location.state 를 검증한다. */
 export const parseOrderDraft = (state: unknown): OrderDraft | null => {
   if (typeof state !== 'object' || state === null) {
     return null;
   }
 
-  if ('cartItemIds' in state) {
-    const { cartItemIds } = state as { cartItemIds: unknown };
+  if ('cartItems' in state) {
+    const { cartItems } = state as { cartItems: unknown };
     if (
-      Array.isArray(cartItemIds) &&
-      cartItemIds.length > 0 &&
-      cartItemIds.every(isPositiveInteger)
+      Array.isArray(cartItems) &&
+      cartItems.length > 0 &&
+      cartItems.every(isCartDraftItem) &&
+      new Set(cartItems.map((item) => item.cartItemId)).size === cartItems.length
     ) {
-      return { kind: 'cart', cartItemIds };
+      return {
+        kind: 'cart',
+        items: cartItems.map(({ cartItemId, quantity }) => ({ cartItemId, quantity })),
+      };
     }
     return null;
   }
@@ -52,7 +73,7 @@ export const parseOrderDraft = (state: unknown): OrderDraft | null => {
 /** parseOrderDraft 의 역변환. 주문서를 다시 열 때 navigate 의 location.state 로 그대로 넘긴다. */
 export const orderDraftToLocationState = (draft: OrderDraft): Record<string, unknown> => {
   if (draft.kind === 'cart') {
-    return { cartItemIds: draft.cartItemIds };
+    return { cartItems: draft.items.map(({ cartItemId, quantity }) => ({ cartItemId, quantity })) };
   }
   if (draft.kind === 'direct') {
     return { productId: draft.productId, quantity: draft.quantity };
@@ -60,15 +81,21 @@ export const orderDraftToLocationState = (draft: OrderDraft): Record<string, unk
   return { dropId: draft.dropId };
 };
 
-/** 두 draft 가 같은 상품 구성을 가리키는지(수량·쿠폰은 별도 취급). */
+/** 두 draft 가 같은 상품·수량 구성을 가리키는지(쿠폰은 별도 취급). 장바구니는 순서를 무시한다. */
 export const isSameOrderDraftSource = (a: OrderDraft, b: OrderDraft): boolean => {
   if (a.kind !== b.kind) {
     return false;
   }
   if (a.kind === 'cart' && b.kind === 'cart') {
-    const left = [...a.cartItemIds].sort((x, y) => x - y);
-    const right = [...b.cartItemIds].sort((x, y) => x - y);
-    return left.length === right.length && left.every((id, index) => id === right[index]);
+    const left = sortCartItems(a.items);
+    const right = sortCartItems(b.items);
+    return (
+      left.length === right.length &&
+      left.every(
+        (item, index) =>
+          item.cartItemId === right[index].cartItemId && item.quantity === right[index].quantity,
+      )
+    );
   }
   if (a.kind === 'direct' && b.kind === 'direct') {
     return a.productId === b.productId && a.quantity === b.quantity;
@@ -82,12 +109,17 @@ export const toOrderCreateRequest = (
   memberCouponId: number | null = null,
 ): OrderCreateRequest =>
   draft.kind === 'cart'
-    ? { cartItemIds: draft.cartItemIds, addressId, memberCouponId }
+    ? {
+        cartItemIds: draft.items.map((item) => item.cartItemId),
+        addressId,
+        memberCouponId,
+      }
     : { productId: draft.productId, quantity: draft.quantity, addressId, memberCouponId };
 
 /**
- * "상품+쿠폰이 같으면 같은 주문" 판정에 쓰는 지문. 한정반은 재구매가 막혀 있어
- * 이 지문을 비교하지 않고 항상 같은 주문을 재사용한다(호출부에서 따로 분기).
+ * "상품·수량+쿠폰이 같으면 같은 주문" 판정에 쓰는 지문. 한정반은 재구매가 막혀 있어
+ * 이 지문을 비교하지 않고, 만료시각(expiresAtMs) 전까지만 같은 주문을 재사용한다(호출부에서 따로 분기).
+ * 만료 뒤에는 주문서가 새 구매를 요청한다.
  */
 export const buildOrderFingerprint = (
   draft: PurchasableOrderDraft,
@@ -96,7 +128,7 @@ export const buildOrderFingerprint = (
   draft.kind === 'cart'
     ? JSON.stringify({
         kind: draft.kind,
-        cartItemIds: [...draft.cartItemIds].sort((a, b) => a - b),
+        items: sortCartItems(draft.items).map((item) => [item.cartItemId, item.quantity]),
         memberCouponId,
       })
     : JSON.stringify({
@@ -111,11 +143,16 @@ export interface PendingOrder {
   orderId: number;
   orderNumber: string;
   amount: number;
-  /** 한정반이면 항상 무시하고 재사용한다(호출부에서 지문 비교를 건너뛴다). */
+  /** 한정반이면 지문 비교를 건너뛰고 expiresAtMs 전까지만 재사용한다(만료 뒤엔 새 구매를 요청). */
   fingerprint: string;
   addressId: number;
   /** 응답에 expiresAt 이 없으면 null - 만료 판정 없이 계속 재사용한다. */
   expiresAtMs: number | null;
+  /**
+   * 이 주문에 건 쿠폰. 서버가 주문 생성 때 사용 처리해 적용 가능 목록에서 빠지므로,
+   * 주문서가 선택을 풀지 않고 계속 고를 수 있게 스냅샷으로 들고 있는다. 한정반은 항상 null.
+   */
+  coupon: AvailableCoupon | null;
 }
 
 export interface OrderFormDraftRecord {
@@ -142,6 +179,27 @@ const isPaymentMethodOption = (value: unknown): value is PaymentMethodOption =>
 const isPositiveNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
 
+const isNonNegativeNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+const isAvailableCoupon = (value: unknown): value is AvailableCoupon => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    isPositiveInteger(record.memberCouponId) &&
+    typeof record.couponCode === 'string' &&
+    typeof record.couponName === 'string' &&
+    typeof record.expiresAt === 'string' &&
+    isNonNegativeNumber(record.expectedDiscount) &&
+    (record.discountType === 'FIXED' || record.discountType === 'RATE') &&
+    isNonNegativeNumber(record.discountValue) &&
+    isNonNegativeNumber(record.minOrderAmount) &&
+    (record.maxDiscountAmount === undefined || isNonNegativeNumber(record.maxDiscountAmount))
+  );
+};
+
 const isPendingOrder = (value: unknown): value is PendingOrder => {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -154,7 +212,8 @@ const isPendingOrder = (value: unknown): value is PendingOrder => {
     isPositiveNumber(record.amount) &&
     typeof record.fingerprint === 'string' &&
     isPositiveInteger(record.addressId) &&
-    (record.expiresAtMs === null || typeof record.expiresAtMs === 'number')
+    (record.expiresAtMs === null || typeof record.expiresAtMs === 'number') &&
+    (record.coupon === null || isAvailableCoupon(record.coupon))
   );
 };
 
@@ -163,8 +222,12 @@ const isOrderFormDraftRecord = (value: unknown): value is OrderFormDraftRecord =
     return false;
   }
   const record = value as Record<string, unknown>;
-  const source = parseOrderDraft(record.source);
-  if (source === null) {
+  // 저장된 source 는 OrderDraft 모양이다. 장바구니만 키 이름(items ↔ cartItems)이 location.state 와 다르다.
+  const rawSource = record.source as { kind?: unknown; items?: unknown } | null | undefined;
+  const source = parseOrderDraft(
+    rawSource?.kind === 'cart' ? { cartItems: rawSource.items } : rawSource,
+  );
+  if (source === null || source.kind !== rawSource?.kind) {
     return false;
   }
   if (!isPositiveInteger(record.addressId)) {

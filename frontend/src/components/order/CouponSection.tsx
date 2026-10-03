@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
@@ -15,6 +15,11 @@ interface CouponSectionProps {
   onSelect: (coupon: AvailableCoupon | null) => void;
   /** 결제 실패 후 주문서로 돌아왔을 때 자동으로 다시 선택할 쿠폰 id. 목록이 오면 한 번만 시도한다. */
   restoreCouponId?: number;
+  /**
+   * 이 주문서의 PENDING 주문에 이미 적용된 쿠폰. 서버가 주문 생성 시 사용 처리해 적용 가능
+   * 목록에서는 빠지지만, 같은 주문을 다시 결제할 수 있도록 선택을 유지·재선택할 수 있게 한다.
+   */
+  heldCoupon?: AvailableCoupon | null;
 }
 
 export function CouponSection({
@@ -22,36 +27,55 @@ export function CouponSection({
   selected,
   onSelect,
   restoreCouponId,
+  heldCoupon = null,
 }: CouponSectionProps) {
   const { showToast } = useToast();
   const { data: coupons, isPending, isError, refetch } = useAvailableCoupons(orderAmount);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const hasRestoredRef = useRef(false);
 
+  const selectableCoupons = useMemo(() => {
+    if (coupons === undefined) {
+      return undefined;
+    }
+    if (
+      heldCoupon === null ||
+      coupons.some((coupon) => coupon.memberCouponId === heldCoupon.memberCouponId)
+    ) {
+      return coupons;
+    }
+    return [...coupons, heldCoupon];
+  }, [coupons, heldCoupon]);
+
   // 재조회 결과에 선택된 쿠폰이 더 이상 없으면(만료·사용됨) 자동으로 해제한다.
+  // 이 주문서의 PENDING 주문에 묶인 쿠폰(heldCoupon)은 목록에 남아 있는 것으로 본다.
   useEffect(() => {
-    if (coupons === undefined || selected === null) {
+    if (selectableCoupons === undefined || selected === null) {
       return;
     }
-    const stillAvailable = coupons.some(
+    const stillAvailable = selectableCoupons.some(
       (coupon) => coupon.memberCouponId === selected.memberCouponId,
     );
     if (!stillAvailable) {
       onSelect(null);
       showToast('info', '선택한 쿠폰을 더 이상 적용할 수 없어 해제했습니다.');
     }
-  }, [coupons, selected, onSelect, showToast]);
+  }, [selectableCoupons, selected, onSelect, showToast]);
 
   useEffect(() => {
-    if (hasRestoredRef.current || coupons === undefined || restoreCouponId === undefined) {
+    if (
+      hasRestoredRef.current ||
+      selectableCoupons === undefined ||
+      restoreCouponId === undefined
+    ) {
       return;
     }
     hasRestoredRef.current = true;
-    const restored = coupons.find((coupon) => coupon.memberCouponId === restoreCouponId);
+    const restored = selectableCoupons.find((coupon) => coupon.memberCouponId === restoreCouponId);
     if (restored) {
       onSelect(restored);
     }
-  }, [coupons, restoreCouponId, onSelect]);
+  }, [selectableCoupons, restoreCouponId, onSelect]);
 
   return (
     <div>
@@ -90,13 +114,13 @@ export function CouponSection({
 
         {!isPending && !isError && !selected && (
           <div className="flex items-center gap-3">
-            {coupons && coupons.length > 0 ? (
+            {selectableCoupons && selectableCoupons.length > 0 ? (
               <>
                 <Button variant="secondary" onClick={() => setIsModalOpen(true)}>
                   쿠폰 선택
                 </Button>
                 <span className="text-sm text-content-muted">
-                  적용 가능한 쿠폰 {coupons.length}장
+                  적용 가능한 쿠폰 {selectableCoupons.length}장
                 </span>
               </>
             ) : (
@@ -109,7 +133,7 @@ export function CouponSection({
       <CouponSelectModal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        coupons={coupons ?? []}
+        coupons={selectableCoupons ?? []}
         selectedId={selected?.memberCouponId}
         onApply={onSelect}
       />
