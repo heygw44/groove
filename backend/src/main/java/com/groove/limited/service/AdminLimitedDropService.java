@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +20,7 @@ import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.service.StockService;
 import com.groove.limited.dto.AdminLimitedDropDetailResponse;
 import com.groove.limited.dto.AdminLimitedDropResponse;
+import com.groove.limited.dto.AdminLimitedDropSearchRequest;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
 import com.groove.limited.dto.LimitedDropCreateRequest;
 import com.groove.limited.dto.LimitedDropUpdateRequest;
@@ -161,8 +161,8 @@ public class AdminLimitedDropService {
 		return AdminLimitedDropResponse.from(drop);
 	}
 
-	public PageResponse<AdminLimitedDropSummaryResponse> getList(LimitedDropStatus status, Pageable pageable) {
-		return PageResponse.from(limitedDropRepository.findAdminSummaries(status, pageable));
+	public PageResponse<AdminLimitedDropSummaryResponse> getList(AdminLimitedDropSearchRequest request) {
+		return PageResponse.from(limitedDropRepository.findAdminSummaries(request.status(), request.toPageable()));
 	}
 
 	public AdminLimitedDropDetailResponse getDetail(Long dropId) {

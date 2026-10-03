@@ -21,13 +21,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -44,6 +44,7 @@ import com.groove.global.config.SecurityConfig;
 import com.groove.global.config.WebConfig;
 import com.groove.limited.dto.AdminLimitedDropDetailResponse;
 import com.groove.limited.dto.AdminLimitedDropResponse;
+import com.groove.limited.dto.AdminLimitedDropSearchRequest;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
 import com.groove.limited.dto.AdminLimitedPurchaseResponse;
 import com.groove.limited.dto.LimitedDropCreateRequest;
@@ -210,8 +211,9 @@ class AdminLimitedDropControllerTest {
 					LimitedDropStatus.OPEN, LocalDateTime.now());
 			PageResponse<AdminLimitedDropSummaryResponse> pageResponse = PageResponse.from(
 					new PageImpl<>(List.of(summary)));
-			given(adminLimitedDropService.getList(any(), any())).willReturn(pageResponse);
-			ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+			given(adminLimitedDropService.getList(any())).willReturn(pageResponse);
+			ArgumentCaptor<AdminLimitedDropSearchRequest> requestCaptor =
+					ArgumentCaptor.forClass(AdminLimitedDropSearchRequest.class);
 
 			// when
 			mockMvc.perform(get("/api/v1/admin/limited-drops")
@@ -223,8 +225,23 @@ class AdminLimitedDropControllerTest {
 					.andExpect(jsonPath("$.data.content[0].id", is(DROP_ID.intValue())));
 
 			// then
-			verify(adminLimitedDropService).getList(eq(LimitedDropStatus.OPEN), pageableCaptor.capture());
-			assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(5);
+			verify(adminLimitedDropService).getList(requestCaptor.capture());
+			assertThat(requestCaptor.getValue().status()).isEqualTo(LimitedDropStatus.OPEN);
+			assertThat(requestCaptor.getValue().toPageable().getPageSize()).isEqualTo(5);
+		}
+
+		@ParameterizedTest
+		@CsvSource({"0, 2000", "21474837, 100"})
+		@DisplayName("페이지 번호나 크기가 상한을 넘으면 400 COMMON_VALIDATION_FAILED를 반환하고 서비스는 호출되지 않는다")
+		void returnsBadRequestWhenPagingExceedsLimit(String page, String size) throws Exception {
+			// when & then
+			mockMvc.perform(get("/api/v1/admin/limited-drops")
+							.header(HttpHeaders.AUTHORIZATION, adminToken())
+							.param("page", page)
+							.param("size", size))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.error.code", is("COMMON_VALIDATION_FAILED")));
+			verify(adminLimitedDropService, never()).getList(any());
 		}
 
 		@Test
@@ -234,7 +251,7 @@ class AdminLimitedDropControllerTest {
 			mockMvc.perform(get("/api/v1/admin/limited-drops").header(HttpHeaders.AUTHORIZATION, userToken()))
 					.andExpect(status().isForbidden())
 					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
-			verify(adminLimitedDropService, never()).getList(any(), any());
+			verify(adminLimitedDropService, never()).getList(any());
 		}
 
 		@Test
@@ -244,7 +261,7 @@ class AdminLimitedDropControllerTest {
 			mockMvc.perform(get("/api/v1/admin/limited-drops"))
 					.andExpect(status().isUnauthorized())
 					.andExpect(jsonPath("$.error.code", is("AUTH_UNAUTHORIZED")));
-			verify(adminLimitedDropService, never()).getList(any(), any());
+			verify(adminLimitedDropService, never()).getList(any());
 		}
 	}
 

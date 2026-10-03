@@ -28,6 +28,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import com.groove.admin.entity.AdminAuditAction;
 import com.groove.admin.entity.AdminAuditTargetType;
@@ -46,6 +47,7 @@ import com.groove.inventory.entity.StockChangeType;
 import com.groove.inventory.service.StockService;
 import com.groove.limited.dto.AdminLimitedDropDetailResponse;
 import com.groove.limited.dto.AdminLimitedDropResponse;
+import com.groove.limited.dto.AdminLimitedDropSearchRequest;
 import com.groove.limited.dto.AdminLimitedDropSummaryResponse;
 import com.groove.limited.dto.LimitedDropCreateRequest;
 import com.groove.limited.dto.LimitedDropUpdateRequest;
@@ -445,13 +447,13 @@ class AdminLimitedDropServiceTest {
 			AdminLimitedDropSummaryResponse summary = new AdminLimitedDropSummaryResponse(DROP_ID, PRODUCT_ID,
 					product.getTitle(), 100, 0, 2, LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(2),
 					LimitedDropStatus.OPEN, LocalDateTime.now());
-			Pageable pageable = PageRequest.of(0, 20);
+			Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt", "id"));
 			Page<AdminLimitedDropSummaryResponse> page = new PageImpl<>(List.of(summary));
 			given(limitedDropRepository.findAdminSummaries(LimitedDropStatus.OPEN, pageable)).willReturn(page);
 
 			// when
 			PageResponse<AdminLimitedDropSummaryResponse> response = adminLimitedDropService.getList(
-					LimitedDropStatus.OPEN, pageable);
+					new AdminLimitedDropSearchRequest(LimitedDropStatus.OPEN, null, null));
 
 			// then
 			assertThat(response.content()).hasSize(1);
