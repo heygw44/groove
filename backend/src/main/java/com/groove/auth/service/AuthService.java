@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.UUID;
 
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,7 +66,15 @@ public class AuthService {
 			throw new BusinessException(ErrorCode.MEMBER_EMAIL_DUPLICATE);
 		}
 		Member member = Member.create(request.email(), passwordEncoder.encode(request.password()), request.nickname());
-		return SignupResponse.from(memberRepository.save(member));
+		Member saved;
+		try {
+			saved = memberRepository.saveAndFlush(member);
+		} catch (DataIntegrityViolationException | CannotAcquireLockException e) {
+			// 선검사만으로는 동시 가입 레이스를 못 막아 유니크 제약 위반을 여기서 한 번 더 잡는다.
+			// InnoDB 는 같은 유니크 키로 INSERT 가 몰리면 중복키 대신 데드락을 내므로 락 획득 실패도 같이 잡는다.
+			throw new BusinessException(ErrorCode.MEMBER_EMAIL_DUPLICATE);
+		}
+		return SignupResponse.from(saved);
 	}
 
 	public AuthTokens login(LoginRequest request) {

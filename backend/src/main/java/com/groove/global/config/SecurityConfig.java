@@ -79,6 +79,8 @@ public class SecurityConfig {
 								.permitAll()
 						.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 						.requestMatchers(HttpMethod.POST, "/api/v1/files/**").hasRole("ADMIN")
+						// 관리자가 스스로 탈퇴하면 다시 로그인할 수 없고 관리자 API 로도 되살릴 수 없다
+						.requestMatchers(HttpMethod.DELETE, "/api/v1/members/me").hasRole("USER")
 						.anyRequest().authenticated())
 				.addFilterBefore(new JwtAuthenticationFilter(jwtProvider, revocationCheckerProvider.getIfAvailable()),
 						UsernamePasswordAuthenticationFilter.class);

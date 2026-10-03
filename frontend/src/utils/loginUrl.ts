@@ -17,6 +17,19 @@ export const buildLoginUrl = ({ reason, redirect }: LoginUrlOptions = {}) => {
   return query ? `/login?${query}` : '/login';
 };
 
+/**
+ * 로그인 화면의 redirect 를 회원가입 화면으로 그대로 넘긴다. 최종 소비자인 로그인 화면이
+ * getSafeRedirect 로 거르므로 여기서는 검사하지 않는다.
+ */
+export const buildSignupUrl = (redirect?: string | null) => {
+  const params = new URLSearchParams();
+  if (redirect) {
+    params.set('redirect', redirect);
+  }
+  const query = params.toString();
+  return query ? `/signup?${query}` : '/signup';
+};
+
 export const currentPath = () => `${window.location.pathname}${window.location.search}`;
 
 /**

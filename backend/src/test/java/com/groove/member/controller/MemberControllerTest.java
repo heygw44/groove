@@ -263,6 +263,22 @@ class MemberControllerTest {
 		}
 
 		@Test
+		@DisplayName("관리자 토큰으로 호출하면 403 AUTH_FORBIDDEN 을 반환하고 탈퇴를 처리하지 않는다")
+		void returnsForbiddenForAdmin() throws Exception {
+			// given
+			String adminBearer = "Bearer " + jwtProvider.createAccessToken(1L, MemberRole.ADMIN);
+
+			// when & then
+			mockMvc.perform(delete("/api/v1/members/me")
+							.header(HttpHeaders.AUTHORIZATION, adminBearer)
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(objectMapper.writeValueAsString(new MemberWithdrawRequest("password1"))))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.error.code", is("AUTH_FORBIDDEN")));
+			verify(memberService, never()).withdraw(any(), any());
+		}
+
+		@Test
 		@DisplayName("토큰 없이 호출하면 401 AUTH_UNAUTHORIZED 를 반환한다")
 		void returnsUnauthorizedWithoutToken() throws Exception {
 			// when & then

@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/common/Button';
 import { Field } from '@/components/common/Field';
@@ -10,8 +10,10 @@ import { useToast } from '@/components/common/toastContext';
 import { useSignup } from '@/hooks/mutations/useAuthMutations';
 import { signupSchema, type SignupFormValues } from '@/schemas/auth';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
+import { buildLoginUrl } from '@/utils/loginUrl';
 
 export default function SignupPage() {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const signupMutation = useSignup();
@@ -26,24 +28,30 @@ export default function SignupPage() {
     defaultValues: { email: '', password: '', passwordConfirm: '', nickname: '' },
   });
 
-  const onSubmit = handleSubmit((values) => {
+  /* 로그인 화면에서 받은 redirect 를 이어 넘겨, 가입 후 로그인하면 원래 화면으로 돌아가게 한다. */
+  const loginUrl = buildLoginUrl({ redirect: searchParams.get('redirect') ?? undefined });
+
+  /*
+   * mutateAsync 를 기다려야 응답이 올 때까지 isSubmitting 이 유지되고,
+   * 버튼 loading 이 풀리지 않아 연속 클릭으로 가입 요청이 중복되지 않는다.
+   */
+  const onSubmit = handleSubmit(async (values) => {
     const payload = {
       email: values.email,
       password: values.password,
       nickname: values.nickname,
     };
-    signupMutation.mutate(payload, {
-      /* 가입 응답에 토큰이 없어 자동 로그인은 하지 않는다. */
-      onSuccess: () => {
-        showToast('success', '가입이 완료되었습니다. 로그인해주세요.');
-        navigate('/login', { replace: true });
-      },
-      onError: (error) => {
-        if (!applyFieldErrors(error, setError)) {
-          setError('root.serverError', { message: getErrorMessage(error) });
-        }
-      },
-    });
+    try {
+      await signupMutation.mutateAsync(payload);
+    } catch (error) {
+      if (!applyFieldErrors(error, setError)) {
+        setError('root.serverError', { message: getErrorMessage(error) });
+      }
+      return;
+    }
+    /* 가입 응답에 토큰이 없어 자동 로그인은 하지 않는다. */
+    showToast('success', '가입이 완료되었습니다. 로그인해주세요.');
+    navigate(loginUrl, { replace: true });
   });
 
   return (
@@ -120,7 +128,7 @@ export default function SignupPage() {
         </form>
 
         <p className="mt-5 border-t border-line pt-4 text-center text-sm text-content-muted">
-          이미 계정이 있으신가요? <Link to="/login">로그인</Link>
+          이미 계정이 있으신가요? <Link to={loginUrl}>로그인</Link>
         </p>
       </div>
     </div>

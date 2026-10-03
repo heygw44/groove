@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,10 +27,13 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.groove.auth.dto.AuthTokens;
@@ -90,6 +94,12 @@ class AuthServiceTest {
 				jwtProperties, sessionProperties, clock, loginAttemptGuard);
 	}
 
+	private static Stream<RuntimeException> memberInsertConflicts() {
+		return Stream.of(
+				new DataIntegrityViolationException("Duplicate entry for key 'uk_member_email'"),
+				new CannotAcquireLockException("deadlock found"));
+	}
+
 	@Nested
 	@DisplayName("signup()")
 	class Signup {
@@ -102,14 +112,14 @@ class AuthServiceTest {
 			given(memberRepository.existsByEmail(request.email())).willReturn(false);
 			given(passwordEncoder.encode(request.password())).willReturn("encoded");
 			willAnswer(invocation -> MemberFixture.withId(invocation.getArgument(0), 1L))
-					.given(memberRepository).save(any(Member.class));
+					.given(memberRepository).saveAndFlush(any(Member.class));
 
 			// when
 			SignupResponse response = authService.signup(request);
 
 			// then
 			ArgumentCaptor<Member> captor = ArgumentCaptor.forClass(Member.class);
-			verify(memberRepository).save(captor.capture());
+			verify(memberRepository).saveAndFlush(captor.capture());
 			Member savedMember = captor.getValue();
 			assertThat(savedMember.getPassword()).isEqualTo("encoded");
 			assertThat(savedMember.getStatus()).isEqualTo(MemberStatus.ACTIVE);
@@ -132,7 +142,24 @@ class AuthServiceTest {
 					.isInstanceOf(BusinessException.class)
 					.extracting("errorCode")
 					.isEqualTo(ErrorCode.MEMBER_EMAIL_DUPLICATE);
-			verify(memberRepository, never()).save(any());
+			verify(memberRepository, never()).saveAndFlush(any());
+		}
+
+		@ParameterizedTest(name = "{0}")
+		@MethodSource("com.groove.auth.service.AuthServiceTest#memberInsertConflicts")
+		@DisplayName("선검사를 통과해도 INSERT 가 유니크 제약/락 획득에 실패하면 MEMBER_EMAIL_DUPLICATE 예외를 던진다")
+		void throwsWhenInsertConflictsAfterPreCheck(RuntimeException conflict) {
+			// given
+			SignupRequest request = new SignupRequest("groover@groove.com", "password1", "그루버");
+			given(memberRepository.existsByEmail(request.email())).willReturn(false);
+			given(passwordEncoder.encode(request.password())).willReturn("encoded");
+			willThrow(conflict).given(memberRepository).saveAndFlush(any(Member.class));
+
+			// when & then
+			assertThatThrownBy(() -> authService.signup(request))
+					.isInstanceOf(BusinessException.class)
+					.extracting("errorCode")
+					.isEqualTo(ErrorCode.MEMBER_EMAIL_DUPLICATE);
 		}
 	}
 
