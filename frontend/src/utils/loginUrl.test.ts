@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildLoginUrl, getSafeRedirect } from '@/utils/loginUrl';
+import { buildLoginUrl, buildSignupUrl, getSafeRedirect } from '@/utils/loginUrl';
 
 describe('buildLoginUrl()', () => {
   it('옵션이 없으면 /login 을 반환한다', () => {
@@ -17,6 +17,24 @@ describe('buildLoginUrl()', () => {
 
     // then
     expect(url).toBe('/login?reason=idle&redirect=%2Fmypage%3Ftab%3Dorders');
+  });
+});
+
+describe('buildSignupUrl()', () => {
+  it.each([undefined, null, ''])('redirect 가 %s 면 /signup 을 반환한다', (redirect) => {
+    // when
+    const url = buildSignupUrl(redirect);
+
+    // then
+    expect(url).toBe('/signup');
+  });
+
+  it('redirect 를 쿼리로 인코딩한다', () => {
+    // when
+    const url = buildSignupUrl('/mypage?tab=orders');
+
+    // then
+    expect(url).toBe('/signup?redirect=%2Fmypage%3Ftab%3Dorders');
   });
 });
 

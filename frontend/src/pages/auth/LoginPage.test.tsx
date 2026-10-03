@@ -83,6 +83,25 @@ describe('LoginPage', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  it('redirect 가 있으면 회원가입 링크에 redirect 를 이어 붙인다', () => {
+    // when
+    renderPage('?redirect=/cart');
+
+    // then
+    expect(screen.getByRole('link', { name: '회원가입' })).toHaveAttribute(
+      'href',
+      '/signup?redirect=%2Fcart',
+    );
+  });
+
+  it('redirect 가 없으면 회원가입 링크는 /signup 이다', () => {
+    // when
+    renderPage('');
+
+    // then
+    expect(screen.getByRole('link', { name: '회원가입' })).toHaveAttribute('href', '/signup');
+  });
+
   it.each([
     [
       'AUTH_LOGIN_LOCKED',

@@ -10,7 +10,7 @@ import { LOGIN_NOTICE_MESSAGES } from '@/constants/authMessages';
 import { useLogin } from '@/hooks/mutations/useAuthMutations';
 import { loginSchema, type LoginFormValues } from '@/schemas/auth';
 import { applyFieldErrors, getErrorMessage } from '@/utils/apiError';
-import { getSafeRedirect } from '@/utils/loginUrl';
+import { buildSignupUrl, getSafeRedirect } from '@/utils/loginUrl';
 
 export default function LoginPage() {
   const [searchParams] = useSearchParams();
@@ -86,7 +86,8 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-5 border-t border-line pt-4 text-center text-sm text-content-muted">
-          아직 계정이 없으신가요? <Link to="/signup">회원가입</Link>
+          아직 계정이 없으신가요?{' '}
+          <Link to={buildSignupUrl(searchParams.get('redirect'))}>회원가입</Link>
         </p>
       </div>
     </div>
